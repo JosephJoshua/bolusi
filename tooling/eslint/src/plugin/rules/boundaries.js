@@ -1,7 +1,18 @@
-// bolusi/boundaries (08-stack-and-repo §3.3 matrix + §3.4 platform-free lists + §2.6 bans).
-// Whole-repo rule; the importer's workspace is derived from the file path.
-// Includes the forTenant-only / no-raw-db-handle lock: deep imports into @bolusi/db-server
-// are forbidden — the public entry (forTenant) is the only way in (FR-1039).
+// bolusi/boundaries — whole-repo rule; the importer's workspace is derived from the file path.
+// IMPLEMENTED DEPTH (deny-list half of 08 §3.3/§3.4/§2.6):
+//   1. §2.6 banned packages everywhere (@hono/node-ws, expo-background-fetch,
+//      expo-file-system/legacy, kysely-expo)
+//   2. DB-driver locks (op-sqlite → db-client only; pg → db-server only;
+//      better-sqlite3 → harness only)
+//   3. */screens subpaths importable only from apps/mobile
+//   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
+//   5. nothing imports @bolusi/mobile
+//   6. §3.4 platform-free deny prefixes for core/schemas/i18n/modules-manifest
+//   7. forTenant-only / no-raw-db-handle lock: no deep imports into @bolusi/db-server (FR-1039)
+// NOT YET IMPLEMENTED: the full §3.3 POSITIVE allow-matrix ("anything not listed is
+// forbidden" — e.g. schemas importing @bolusi/core would pass today). Owner: task 28
+// (security-sweep) hardens this rule to the full matrix, or earlier if a task adds a
+// new inter-package edge that the deny-list cannot see.
 
 const FORBIDDEN_EVERYWHERE = new Map([
   ['@hono/node-ws', 'deprecated — upgradeWebSocket comes from @hono/node-server 2.x (08 §2.6)'],
