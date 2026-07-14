@@ -29,6 +29,14 @@ export default tseslint.config(
     },
   },
   {
+    // CommonJS config files (metro.config.cjs) legitimately use require().
+    name: 'bolusi/cjs-configs',
+    files: ['**/*.cjs'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     // RuleTester fixtures are adversarial by design: the invalid-code strings inside
     // these suites intentionally contain the exact patterns the rules hunt for.
     name: 'bolusi/rule-fixture-exemption',
