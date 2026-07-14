@@ -63,11 +63,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # SEC-SECRET-02's fixture test shells out to gitleaks.
-      - name: install gitleaks
+      # SEC-SECRET-02's fixture test shells out to gitleaks. Release artifact is
+      # checksum-pinned (verified against gitleaks_8.30.1_checksums.txt at bootstrap).
+      - name: install gitleaks (checksum-pinned)
         run: |
-          curl -sL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
+          curl -sL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
+          rm gitleaks.tgz
       - run: pnpm test
 
   # Stage 6 — JCS + crypto vectors on the Hermes VM matching the pinned RN version.
@@ -84,6 +88,24 @@ jobs:
     needs: install
     steps:
       - run: echo "placeholder — Hermes vector lane lands with task 03 (see job comment for the verified candidate paths)"
+
+  # Stage 7 — Ed25519 interop (noble sign→verify vs the @bolusi/test-support fixture set).
+  # EVERY-PR PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md);
+  # deferral recorded in 08 §7.
+  ed25519-interop:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - run: echo "placeholder — Ed25519 interop vectors land with task 03 (noble side of the quick-crypto interop contract)"
+
+  # Stage 8 — server integration vs PGlite (pnpm test:server).
+  # EVERY-PR PLACEHOLDER — wired by task 12 (ai-docs/tasks/12-server-app.md);
+  # deferral recorded in 08 §7.
+  server-integration:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - run: echo "placeholder — server integration suite lands with task 12 (pnpm test:server)"
 
   # Gitleaks job (security-guide §10, SEC-SECRET-02): full-history scan.
   gitleaks:
