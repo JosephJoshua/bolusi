@@ -1,0 +1,32 @@
+{
+  "name": "@bolusi/db-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kysely + PostgresDialect, migrations, codegen types, RLS policies, forTenant — the ONLY exported way to query tenant tables (08 §3.2, FR-1039)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "db:migrate": "kysely migrate latest"
+  },
+  "dependencies": {
+    "@bolusi/core": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "kysely": "catalog:",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*",
+    "kysely-ctl": "catalog:",
+    "kysely-codegen": "catalog:",
+    "@types/pg": "catalog:",
+    "@types/node": "catalog:"
+  }
+}

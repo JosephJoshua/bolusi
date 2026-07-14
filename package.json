@@ -1,0 +1,50 @@
+{
+  "name": "bolusi",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
+    "typecheck": "tsc -b && pnpm --filter @bolusi/mobile typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:server": "node scripts/not-implemented.mjs test:server 12-server-app",
+    "test:rls": "node scripts/not-implemented.mjs test:rls 05-db-server",
+    "test:appliers": "node scripts/not-implemented.mjs test:appliers 11-module-contract",
+    "chaos": "node scripts/not-implemented.mjs chaos 26-chaos-harness",
+    "simulate": "node scripts/not-implemented.mjs simulate 26-chaos-harness",
+    "db:up": "docker compose up -d --wait",
+    "db:migrate": "pnpm --filter @bolusi/db-server db:migrate",
+    "db:seed": "node scripts/not-implemented.mjs db:seed 05-db-server",
+    "db:codegen": "node scripts/not-implemented.mjs db:codegen 05-db-server",
+    "dev": "pnpm run --parallel \"/^dev:/\"",
+    "dev:tsc": "tsc -b --watch --preserveWatchOutput",
+    "dev:server": "pnpm --filter @bolusi/server dev",
+    "dev:mobile": "pnpm --filter @bolusi/mobile dev"
+  },
+  "devDependencies": {
+    "@bolusi/eslint-config": "workspace:*",
+    "@bolusi/tsconfig": "workspace:*",
+    "eslint": "catalog:",
+    "lint-staged": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "4.4.3"
+    },
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  },
+  "lint-staged": {
+    "*": "prettier --ignore-unknown --write"
+  }
+}

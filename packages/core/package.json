@@ -1,0 +1,24 @@
+{
+  "name": "@bolusi/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Op log, projection engine, command runtime, sync client core, JCS, UUIDv7 — PURE TS, all effects behind ports (08 §3.2)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@bolusi/schemas": "workspace:*",
+    "canonicalize": "catalog:",
+    "kysely": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*"
+  }
+}

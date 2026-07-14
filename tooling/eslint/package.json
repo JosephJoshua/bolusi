@@ -1,0 +1,20 @@
+{
+  "name": "@bolusi/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared ESLint flat config + eslint-plugin-bolusi custom rules (08-stack-and-repo §5.2)",
+  "exports": {
+    ".": "./src/index.js",
+    "./plugin": "./src/plugin/index.js"
+  },
+  "dependencies": {
+    "typescript-eslint": "catalog:"
+  },
+  "peerDependencies": {
+    "eslint": ">=9 <10"
+  },
+  "devDependencies": {
+    "eslint": "catalog:"
+  }
+}

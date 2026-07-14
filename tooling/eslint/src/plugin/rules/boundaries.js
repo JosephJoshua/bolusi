@@ -1,0 +1,152 @@
+// bolusi/boundaries (08-stack-and-repo §3.3 matrix + §3.4 platform-free lists + §2.6 bans).
+// Whole-repo rule; the importer's workspace is derived from the file path.
+// Includes the forTenant-only / no-raw-db-handle lock: deep imports into @bolusi/db-server
+// are forbidden — the public entry (forTenant) is the only way in (FR-1039).
+
+const FORBIDDEN_EVERYWHERE = new Map([
+  ['@hono/node-ws', 'deprecated — upgradeWebSocket comes from @hono/node-server 2.x (08 §2.6)'],
+  ['expo-background-fetch', 'deprecated — use expo-background-task (08 §2.6)'],
+  ['expo-file-system/legacy', 'legacy re-exports throw at runtime in SDK 57 (08 §2.2)'],
+  ['kysely-expo', 'rejected — we own the op-sqlite dialect shim (08 §2.6)'],
+]);
+
+// DB drivers may be imported only by their owning wrapper (08 §3.3 hard rule 2).
+const DB_DRIVER_OWNERS = new Map([
+  ['@op-engineering/op-sqlite', 'packages/db-client'],
+  ['pg', 'packages/db-server'],
+  ['better-sqlite3', 'packages/harness'],
+]);
+
+// Platform-free workspaces (08 §3.3 hard rule 3). modules screens files are exempt.
+const PLATFORM_FREE = new Set([
+  'packages/core',
+  'packages/schemas',
+  'packages/i18n',
+  'packages/modules',
+]);
+const PLATFORM_FORBIDDEN = [
+  /^node:/,
+  /^react-native($|\/|-)/,
+  /^expo($|\/|-)/,
+  /^@expo\//,
+  /^pg$/,
+  /^hono($|\/)/,
+  /^@hono\//,
+  /^ws$/,
+  /^@op-engineering\//,
+];
+
+function workspaceOf(filename) {
+  const normalized = String(filename ?? '').replace(/\\/g, '/');
+  const match = normalized.match(/(?:^|\/)(apps|packages|tooling)\/([^/]+)\//);
+  return match ? `${match[1]}/${match[2]}` : null;
+}
+
+/** @type {import('eslint').Rule.RuleModule} */
+export default {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Import-boundary matrix (ai-docs/08-stack-and-repo.md §3.3–3.4): platform-free packages, DB-driver locks, screens split, type-only app edge',
+    },
+    messages: {
+      forbiddenEverywhere: "'{{source}}' is forbidden: {{reason}}",
+      dbDriver:
+        "Only {{owner}} may import the DB driver '{{source}}' (08-stack-and-repo §3.3 — nothing outside the wrappers touches a driver).",
+      screensOutsideMobile:
+        "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
+      serverImport:
+        "'{{source}}': @bolusi/server may be value-imported only by @bolusi/harness; the sole app→app edge is a type-only import of '@bolusi/server/client' (08-stack-and-repo §4.3).",
+      appImport: "'{{source}}': nothing imports the mobile app (08-stack-and-repo §3.3).",
+      platformFree:
+        "'{{source}}' is platform-bound; {{workspace}} is platform-free — no node:*, react-native*, expo*, pg, hono*, ws, @op-engineering/* (08-stack-and-repo §3.4).",
+      dbServerDeepImport:
+        "'{{source}}': deep imports into @bolusi/db-server are forbidden — forTenant() on the public entry is the ONLY way to query tenant tables; the raw db handle is not exported (FR-1039, 08-stack-and-repo §3.2).",
+    },
+    schema: [],
+  },
+  create(context) {
+    const workspace = workspaceOf(context.filename);
+    const filename = String(context.filename ?? '').replace(/\\/g, '/');
+
+    function check(node, source, importKind) {
+      // 1. Banned packages, anywhere.
+      const banReason = FORBIDDEN_EVERYWHERE.get(source);
+      if (banReason) {
+        context.report({
+          node,
+          messageId: 'forbiddenEverywhere',
+          data: { source, reason: banReason },
+        });
+        return;
+      }
+      // 2. DB-driver locks.
+      const driverKey = source.startsWith('@op-engineering/')
+        ? '@op-engineering/op-sqlite'
+        : source;
+      const owner = DB_DRIVER_OWNERS.get(driverKey);
+      if (owner && workspace !== owner) {
+        context.report({ node, messageId: 'dbDriver', data: { source, owner } });
+        return;
+      }
+      // 3. */screens subpaths only from apps/mobile.
+      if (/\/screens(\/|$)/.test(source) && workspace !== 'apps/mobile') {
+        context.report({ node, messageId: 'screensOutsideMobile', data: { source } });
+        return;
+      }
+      // 4. @bolusi/server: harness-only value import; type-only ./client subpath elsewhere.
+      if (source === '@bolusi/server' || source.startsWith('@bolusi/server/')) {
+        const allowed =
+          workspace === 'packages/harness' ||
+          (importKind === 'type' && source === '@bolusi/server/client');
+        if (!allowed) {
+          context.report({ node, messageId: 'serverImport', data: { source } });
+          return;
+        }
+      }
+      // 5. Nothing imports the mobile app.
+      if (source === '@bolusi/mobile' || source.startsWith('@bolusi/mobile/')) {
+        context.report({ node, messageId: 'appImport', data: { source } });
+        return;
+      }
+      // 6. Platform-free workspaces (modules screens files exempt).
+      if (
+        workspace &&
+        PLATFORM_FREE.has(workspace) &&
+        !(workspace === 'packages/modules' && /\/screens\//.test(filename)) &&
+        PLATFORM_FORBIDDEN.some((re) => re.test(source))
+      ) {
+        context.report({ node, messageId: 'platformFree', data: { source, workspace } });
+        return;
+      }
+      // 7. forTenant-only / no-raw-db-handle import lock.
+      if (source.startsWith('@bolusi/db-server/') && workspace !== 'packages/db-server') {
+        context.report({ node, messageId: 'dbServerDeepImport', data: { source } });
+      }
+    }
+
+    return {
+      ImportDeclaration(node) {
+        if (typeof node.source.value === 'string') {
+          check(node, node.source.value, node.importKind ?? 'value');
+        }
+      },
+      ImportExpression(node) {
+        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
+          check(node, node.source.value, 'value');
+        }
+      },
+      ExportNamedDeclaration(node) {
+        if (node.source && typeof node.source.value === 'string') {
+          check(node, node.source.value, node.exportKind ?? 'value');
+        }
+      },
+      ExportAllDeclaration(node) {
+        if (node.source && typeof node.source.value === 'string') {
+          check(node, node.source.value, node.exportKind ?? 'value');
+        }
+      },
+    };
+  },
+};

@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/schemas" },
+    { "path": "packages/i18n" },
+    { "path": "packages/core" },
+    { "path": "packages/ui" },
+    { "path": "packages/modules" },
+    { "path": "packages/db-client" },
+    { "path": "packages/db-server" },
+    { "path": "packages/test-support" },
+    { "path": "packages/harness" },
+    { "path": "apps/server" }
+  ]
+}

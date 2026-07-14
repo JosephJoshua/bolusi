@@ -1,0 +1,18 @@
+{
+  "extends": "@bolusi/tsconfig/node.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/db-server" },
+    { "path": "../../packages/i18n" },
+    { "path": "../../packages/modules" },
+    { "path": "../../packages/schemas" }
+  ]
+}

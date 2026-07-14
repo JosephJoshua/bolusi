@@ -1,0 +1,22 @@
+{
+  "name": "@bolusi/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zod schemas: op envelope, sync/auth DTOs, WS messages, error envelope (08 §3.2)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*"
+  }
+}

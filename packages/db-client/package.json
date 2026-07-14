@@ -1,0 +1,25 @@
+{
+  "name": "@bolusi/db-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "op-sqlite wrapper (the ONLY importer of @op-engineering/op-sqlite) + custom Kysely dialect; expo-sqlite stays a swap target (08 §3.2)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@bolusi/core": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "kysely": "catalog:",
+    "kysely-generic-sqlite": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*"
+  }
+}

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Mandatory pre-commit hook (CLAUDE.md §2.10) — installed via the root `prepare` script
+# (`git config core.hooksPath .githooks`). Never bypass with --no-verify.
+set -e
+
+# 1. Formatting on staged files (08-stack-and-repo §5.3).
+pnpm exec lint-staged
+
+# 2. Secret scan on the staged diff (security-guide §10, SEC-SECRET-02).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner
+else
+  echo "pre-commit: gitleaks not found on PATH." >&2
+  echo "Install it (https://github.com/gitleaks/gitleaks) — the secret scan is mandatory (security-guide §10)." >&2
+  exit 1
+fi
