@@ -1,0 +1,25 @@
+# deps / build
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# secrets / env — never commit
+.env
+.env.*
+!.env.example
+*.local
+secrets.*
+!secrets.*.example
+
+# terraform / infra state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.auto.tfvars
+!*.auto.tfvars.example
+
+# os / editor
+.DS_Store
+*.log

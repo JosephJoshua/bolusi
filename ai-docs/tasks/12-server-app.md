@@ -1,0 +1,49 @@
+# TASK 12 — server-app (Hono skeleton, middleware chain, error envelope, RPC AppType)
+**Status:** todo
+**Depends on:** 02, 05
+
+## Goal
+Deliver `@bolusi/server` (`apps/server`): the Hono 4.12.30 app on Node 22 with the **normative middleware chain of api/00 §13** — `requestId` → server-time → access-log → `compress` → per-IP limit (login only) → `bearerAuth({ verifyToken })` (both `bdt_`/`bcs_` token kinds, hashed lookup, context set) → per-device rate limit → `bodyLimit` (per-route-class wire caps, §5.3) → custom streaming gzip-request-decompression with an aborting decompressed-byte cap (§5.2) → `zValidator` with the shared 422 hook (§7.1). It maps every failure to the §6/§7 error envelope (`onError`, `notFound`, middleware `onError` hooks included), stamps `X-Server-Time` and `X-Request-Id` on every response, and mounts the eight sub-routers (`auth`, `devices`, `users`, `tenant`, `sync`, `media`, `push`, `realtime`) under `/v1` as empty/stub chained routers — real handlers land in tasks 13/16/19/20/21. It exports `AppType` from the types-only subpath `@bolusi/server/client` with an `hc<AppType>` smoke test, and ships the request-scoped tenant helper that derives `tenantId` exclusively from the bearer context and opens a `@bolusi/db-server` `forTenant` transaction (`set_config('app.tenant_id', $1, true)` first statement). The gzip middleware is a declared security surface (api/00 §5.2): its adversarial tests ship in this task, before review. Out of scope: endpoint bodies, WS/SSE implementation (task 20 — only the reduced middleware chain for those routes is wired here), and the §8.2 `Idempotency-Key` store (task 13).
+
+## Docs to read
+- `api/00-conventions.md` — **all** (this task implements it; §3, §3.1, §5–§7, §11, §13, §14 are the core).
+- `08-stack-and-repo.md` — §3.2 (`@bolusi/server`, `@bolusi/db-server`, `@bolusi/schemas` rows), §3.3 (apps/server import edges), §4.3 (`AppType` / `@bolusi/server/client` subpath flow, referenced by §3.2).
+- `10-db-schema.md` — §6 (RLS layers, transaction-local `set_config`, `bolusi_app` role, fail-closed GUC).
+- `security-guide.md` — §2.1 (test-title/ID conventions), §4 (sync-endpoint checklist rows that bind to the middleware; SEC-SYNC test definitions shipped here).
+- `testing-guide.md` — §2.1 (L3/L4 layers: PGlite + in-process `app.fetch`), §3.6 **CHAOS-10 only** (G1–G5 case matrix this task must cover as integration tests).
+
+## Skills
+- `superpowers:test-driven-development` — always.
+- `superpowers:verification-before-completion` — run the suites and read the output before claiming done.
+- `context7-mcp` — verify hono 4.12.30 / `@hono/node-server` 2.0.8 / `@hono/zod-validator` 0.8.0 APIs (`bearerAuth`, `bodyLimit`, `request-id`, `hc`) against current docs before use; pins per api/00 §2.
+- Worktree isolation per CLAUDE.md §2.3 — first step: `git branch --show-current`; STOP if on main.
+
+## Files / modules touched
+- `apps/server/` (`@bolusi/server`) — new package: `src/app.ts` (composition, `onError`/`notFound` envelope mapping), `src/middleware/server-time.ts`, `src/middleware/access-log.ts`, `src/middleware/gzip-decompress.ts`, `src/middleware/rate-limit.ts` (injectable store interface; in-memory impl), `src/middleware/auth.ts` (`verifyToken`), `src/middleware/validator-hook.ts` (shared 422 hook), `src/tenant.ts` (request-scoped `forTenant` helper), `src/routes/{auth,devices,users,tenant,sync,media,push,realtime}.ts` (chained sub-routers), `src/client.ts` (→ built `@bolusi/server/client`, `export type { AppType }` only), `package.json` (pinned deps, `exports` map), `tsconfig.json` (composite, NodeNext), tests under `apps/server/`.
+- Root `tsconfig.json` — add the `apps/server` project reference if task 01 did not.
+- `packages/db-server` — **consume only** (`forTenant`); no changes expected.
+- `packages/schemas` — **consume only** (error-envelope + DTO schemas from task 02). **Contended package** (CLAUDE.md §4): if a schema gap is found, stop and serialize that change; do not edit as a side effect.
+
+## Acceptance
+- **Observable done-condition:** `pnpm --filter @bolusi/server build` (via `tsc -b`) emits `dist/` incl. `client.d.ts`; the app serves via `@hono/node-server`; all tests below pass in Node CI via in-process `app.fetch` (L3/L4 style — no sockets).
+- **Middleware-order integration tests** (order per api/00 §13 is load-bearing; prove it with spies on the later stages):
+  - invalid bearer + oversized body → `401` (auth fires before `bodyLimit`; body never read);
+  - wire bytes > cap with `Content-Encoding: gzip` → `413 BODY_TOO_LARGE`, decompression middleware never invoked;
+  - bomb within wire cap → `413 DECOMPRESSED_TOO_LARGE`, `zValidator` never invoked;
+  - route-class caps exactly per §5.3: `/v1/sync/push` 1 MiB wire / 10 MiB decompressed; default routes 256 KiB / 1 MiB — both `413` codes carry `details.limitBytes`;
+  - realtime routes (`/v1/realtime`, `/v1/realtime/sse`) carry only the reduced chain (§13 last line: steps 1–3 minus compress, plus 5–7; no body middleware) — asserted on the route composition or by probe.
+- **bearerAuth / 401-code tests:** missing or unparseable header → `AUTH_TOKEN_MISSING`; unknown/expired token (either kind) → `AUTH_TOKEN_INVALID`; token of a revoked device → `DEVICE_REVOKED`; `verifyToken` looks up by token hash with constant-time comparison and sets `device`/`controlSession` context (§3); `POST /v1/auth/login` is the only exempt route (request without bearer must NOT yield `AUTH_TOKEN_MISSING` there); tokens never appear in access-log output (test asserts log lines contain code+path+requestId+deviceId and no `Authorization` value or body).
+- **Gzip middleware unit + integration tests** (security surface — these ship before review, CLAUDE.md §2.5): absent/`identity` encoding → pass-through; valid gzip → decompressed stream presented downstream, header stripped, handler receives intact JSON; `deflate`, `br`, `gzip, gzip` → `415 UNSUPPORTED_ENCODING`; malformed and truncated gzip → `400 MALFORMED_REQUEST`, no unhandled rejection; cap enforced **while streaming** (count-and-abort, never inflate-then-measure).
+- **Named SEC tests (security-guide §4.2), titles embedding the ID verbatim, run against the production chain on the sync mount (stub handler; task 16 inherits and keeps them green):**
+  - `SEC-SYNC-01` — unauthenticated push/pull → `401`, validator spy proves no body processing;
+  - `SEC-SYNC-04` — ~50 KiB wire body inflating past 10 MiB → `413` at the cap; bounded memory asserted (stream aborted, not fully inflated);
+  - `SEC-SYNC-08` — truncated gzip stream → `400`, no unhandled rejection, resources released;
+  - `SEC-SYNC-10` — `Content-Encoding: gzip` on uncompressed JSON → `400`, no hang/pass-through.
+- **CHAOS-10 (testing-guide §3.6) G1–G5 matrix** implemented as integration tests in this task (G1 bomb `413`; G2 truncated `400`; G3 non-gzip bytes `400`; G4 wire-cap `413` before decompression; G5 valid gzip → reaches handler, and the immediately-following G5 re-run succeeds — server survives). The harness-scenario packaging is task 26; the case coverage lands here.
+- **Error-envelope conformance tests:** every 4xx/5xx body parses against the `@bolusi/schemas` error-envelope schema with the §7 registry code for its status; unknown route → `404 NOT_FOUND` envelope; unhandled throw → `500 INTERNAL` with `details.requestId` == `X-Request-Id`; no 2xx body ever contains `error`; `zValidator` failure → `422 VALIDATION_FAILED` via the shared hook with `details.issues[*] = {path, code, message}` and **no input echo** (never zValidator's default 400).
+- **Header tests:** `X-Server-Time` (integer ms) present on 200, 401, 404, 413, 422, 429, 500; `X-Request-Id` is a UUIDv7 per request.
+- **Rate-limit wiring tests:** exceeding the per-device bucket (default 120/min, aggregate 600/min, token bucket per §11) → `429` with `RATE_LIMITED`, `details.retryAfterSeconds`, and a `Retry-After` header on **every** 429; per-IP limiter applies to `/v1/auth/login` pre-auth; limiter store is behind an interface (constructor-injected) — asserted by swapping a fake store in tests.
+- **Tenant helper tests:** the helper derives `tenantId` only from bearer context (a body-supplied tenant id is never read by it — unit test); it opens a transaction whose first statement is `select set_config('app.tenant_id', $1, true)` (asserted via statement spy/log against PGlite per testing-guide §2.1 L3); handlers reach tenant tables only through it (no raw `pg`/raw-handle import in `apps/server` — boundary lint green). Full RLS adversarial coverage (SEC-TENANT-*) stays with tasks 05/28.
+- **RPC tests:** `@bolusi/server/client` built output contains type exports only (test asserts zero runtime exports); `hc<AppType>('…', { fetch: app.fetch-adapter })` smoke test typechecks and round-trips against a mounted stub route; all eight sub-routers are chained (not handler-assigned) and mounted under `/v1`.
+- **Idempotency where relevant:** replaying any middleware-rejected request (401/413/400/415) leaves no state anywhere — stub handlers never execute on rejected requests (spy assertion).
+- **Lint/CI gates:** `tsc -b` green repo-wide; ESLint boundary config green for `apps/server` (imports only per 08 §3.3, `import type`-only for the app→app edge); deps pinned exactly per api/00 §2 (hono 4.12.30, @hono/node-server 2.0.8, @hono/zod-validator 0.8.0, zod 4.4.3); duplicate-zod-major lockfile check passes; SEC test titles greppable for SEC-META-01; pre-commit hooks pass (no `--no-verify`).
