@@ -4,3 +4,4 @@ export * from './primitives.js';
 export * from './envelope.js';
 export * from './bookkeeping.js';
 export * from './rejection-codes.js';
+export * from './sync.js';
