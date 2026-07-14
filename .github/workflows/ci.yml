@@ -1,0 +1,128 @@
+# CI pipeline skeleton (08-stack-and-repo §5.6). Stages 1–4 gate every PR now;
+# stages 6–12 are named placeholders wired by their owning tasks (linked per job).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Stage 1 — install: frozen lockfile + single-zod + forbidden-packages checks.
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-single-zod.mjs
+      - run: node scripts/check-forbidden-packages.mjs
+
+  # Stage 2 — lint + boundaries (all four bolusi rules at error).
+  lint:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  # Stage 3 — typecheck (tsc -b + mobile --noEmit).
+  typecheck:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  # Stage 4 — unit (includes stage 5: JCS vectors on Node once task 03 lands them,
+  # and SEC-META-01 / SEC-SECRET-02 from @bolusi/test-support).
+  unit:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # SEC-SECRET-02's fixture test shells out to gitleaks.
+      - name: install gitleaks
+        run: |
+          curl -sL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+      - run: pnpm test
+
+  # Stage 6 — JCS + crypto vectors on the Hermes VM matching the pinned RN version.
+  # PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md).
+  # Candidate paths verified at bootstrap (08 §7):
+  #   (a) preferred: compile the standalone vector bundle with `hermesc` from the
+  #       `hermes-compiler` npm package RN 0.86 depends on (linux64 binary verified
+  #       working at bootstrap) — but that package ships NO host Hermes VM to EXECUTE
+  #       the bytecode, so execution needs a built hermes CLI, or
+  #   (b) guaranteed fallback: run the same suite inside the Android-emulator job.
+  # Task 03 picks the mechanism and records it in 08 §5.6/§7.
+  jcs-vectors-hermes:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - run: echo "placeholder — Hermes vector lane lands with task 03 (see job comment for the verified candidate paths)"
+
+  # Gitleaks job (security-guide §10, SEC-SECRET-02): full-history scan.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Stage 9 — RLS witness vs dockerized postgres:16. MERGE-GATE PLACEHOLDER —
+  # wired by task 05 (ai-docs/tasks/05-db-server.md); runs `pnpm test:rls`.
+  rls-witness:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - run: echo "merge-gate placeholder — RLS witness lands with task 05 (pnpm test:rls)"
+
+  # Stage 10 — dual-dialect appliers. MERGE-GATE PLACEHOLDER —
+  # wired by task 11 (ai-docs/tasks/11-module-contract.md); runs `pnpm test:appliers`.
+  dual-dialect-appliers:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - run: echo "merge-gate placeholder — applier suite lands with task 11 (pnpm test:appliers)"
+
+  # Stage 11 — chaos harness. MERGE-GATE PLACEHOLDER —
+  # wired by task 26 (ai-docs/tasks/26-chaos-harness.md); runs `pnpm chaos`.
+  chaos-harness:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - run: echo "merge-gate placeholder — chaos scenarios land with task 26 (pnpm chaos)"
+
+  # Stage 12 — device lane (EAS dev-client build + on-device smoke). PLACEHOLDER —
+  # wired by task 27 (ai-docs/tasks/27-device-gates.md); fingerprint-triggered on native change.
+  device-lane:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "placeholder — device lane lands with task 27 (EAS build + on-device smoke)"
