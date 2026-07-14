@@ -8,7 +8,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 
 | id | title | status | depends on |
 | -- | ----- | ------ | ---------- |
-| 01 | repo-scaffold (pnpm monorepo, toolchain, CI, lint rules) | todo | — |
+| 01 | repo-scaffold (pnpm monorepo, toolchain, CI, lint rules) | in-progress | — |
 | 02 | schemas package (op envelope, API DTOs, error/WS schemas) | todo | 01 |
 | 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | todo | 01, 02 |
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | todo | 01 |
