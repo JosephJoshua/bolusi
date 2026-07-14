@@ -1,64 +1,122 @@
 // SEC-META-01 (security-guide §2.1.4): mechanically enforce "tests ship with the surface".
-// Parses security-guide.md for SEC ids; each id needs either a verbatim-id test title in the
-// repo or a pending-allowlist entry naming its owning (not-done) task file.
-import { readFileSync, readdirSync } from 'node:fs';
+// Real audit: every SEC id in security-guide.md needs a verbatim test TITLE in a committed
+// test file, or a pending-allowlist entry naming its (existing, not-done) owning task file.
+// Negative tests below prove the detection logic cannot be satisfied by comments, untracked
+// files, or dangling allowlist entries.
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 
 import { expect, test } from 'vitest';
 
+import { auditSecCoverage, collectTrackedTestFiles, extractTestTitles } from './sec-meta.js';
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
-const ID_PATTERN = /SEC-[A-Z]+-[0-9]+/g;
-const TEST_FILE_PATTERN = /\.test\.(ts|tsx|js|jsx|mjs)$/;
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.expo', 'ai-docs', 'android', 'ios']);
 
-function collectTestFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name)) collectTestFiles(join(dir, entry.name), out);
-    } else if (TEST_FILE_PATTERN.test(entry.name)) {
-      out.push(join(dir, entry.name));
-    }
-  }
-  return out;
-}
-
-test('SEC-META-01 every security-guide SEC id has a verbatim test or a pending-task allowlist entry', () => {
-  const guide = readFileSync(join(REPO_ROOT, 'ai-docs/security-guide.md'), 'utf8');
-  const requiredIds = [...new Set(guide.match(ID_PATTERN) ?? [])].sort();
-  expect(requiredIds.length).toBeGreaterThan(0);
-
+function loadAllowlist(): Record<string, string> {
   const allowlist: Record<string, string> = JSON.parse(
     readFileSync(new URL('./sec-pending-allowlist.json', import.meta.url), 'utf8'),
   );
   delete allowlist['$comment'];
+  return allowlist;
+}
 
-  const testFileContents = collectTestFiles(REPO_ROOT).map((file) => readFileSync(file, 'utf8'));
+test('SEC-META-01 every security-guide SEC id has a verbatim test title or a pending-task allowlist entry', () => {
+  const guideText = readFileSync(join(REPO_ROOT, 'ai-docs/security-guide.md'), 'utf8');
+  const testTitles = collectTrackedTestFiles(REPO_ROOT).flatMap((file) =>
+    extractTestTitles(readFileSync(join(REPO_ROOT, file), 'utf8')),
+  );
 
-  const missing: string[] = [];
-  const staleAllowlist: string[] = [];
+  const result = auditSecCoverage({
+    guideText,
+    allowlist: loadAllowlist(),
+    testTitles,
+    readTaskFile: (path) => {
+      try {
+        return readFileSync(join(REPO_ROOT, path), 'utf8');
+      } catch {
+        return null;
+      }
+    },
+  });
 
-  for (const id of requiredIds) {
-    const tested = testFileContents.some((content) => content.includes(id));
-    if (tested) continue;
+  expect(result.missing, 'SEC ids with neither a test title nor an allowlist entry').toEqual([]);
+  expect(result.staleAllowlist, 'allowlist entries pointing at done tasks').toEqual([]);
+  expect(result.badOwners, 'allowlist entries with invalid owning-task files').toEqual([]);
+  expect(result.unknownEntries, 'allowlist entries not present in security-guide.md').toEqual([]);
+});
 
-    const owningTask = allowlist[id];
-    if (!owningTask) {
-      missing.push(id);
-      continue;
-    }
-    const taskFile = readFileSync(join(REPO_ROOT, owningTask), 'utf8');
-    const status = taskFile.match(/\*\*Status:\*\*\s*(\S+)/)?.[1];
-    if (status === 'done') {
-      staleAllowlist.push(`${id} → ${owningTask} (task is done but the test never shipped)`);
-    }
+test('a SEC id mentioned only in a comment or fixture string is NOT counted as tested', () => {
+  const source = [
+    '// SEC-FAKE-01 mentioned in a comment must not count',
+    "const fixture = 'SEC-FAKE-01 in a plain string must not count';",
+    "test('some unrelated behavior', () => {});",
+  ].join('\n');
+  const titles = extractTestTitles(source);
+  expect(titles).toEqual(['some unrelated behavior']);
+
+  const result = auditSecCoverage({
+    guideText: 'requires SEC-FAKE-01',
+    allowlist: {},
+    testTitles: titles,
+    readTaskFile: () => null,
+  });
+  expect(result.missing).toEqual(['SEC-FAKE-01']);
+});
+
+test('title extraction covers test/it/describe with modifiers and template literals', () => {
+  const source = [
+    "it.only('SEC-FAKE-02 via it.only', () => {});",
+    'describe(`SEC-FAKE-03 via template`, () => {});',
+    'test.each([[1]])("SEC-FAKE-04 via each", () => {});',
+  ].join('\n');
+  expect(extractTestTitles(source)).toEqual([
+    'SEC-FAKE-02 via it.only',
+    'SEC-FAKE-03 via template',
+    'SEC-FAKE-04 via each',
+  ]);
+});
+
+test('untracked decoy test files are invisible to the committed-file walk', () => {
+  const decoyPath = join(REPO_ROOT, 'packages/test-support/src/__decoy-untracked.test.ts');
+  writeFileSync(decoyPath, "test('SEC-DECOY-99 planted title', () => {});\n");
+  try {
+    const tracked = collectTrackedTestFiles(REPO_ROOT);
+    expect(tracked.length).toBeGreaterThan(0);
+    expect(tracked.some((file) => file.includes('__decoy-untracked'))).toBe(false);
+  } finally {
+    unlinkSync(decoyPath);
   }
+});
 
-  expect(missing, 'SEC ids with neither a test nor an allowlist entry').toEqual([]);
-  expect(staleAllowlist, 'allowlist entries pointing at done tasks').toEqual([]);
+test('allowlist entries with missing, malformed, or silent owner task files fail the audit', () => {
+  const guideText = 'SEC-FAKE-05 SEC-FAKE-06 SEC-FAKE-07';
+  const result = auditSecCoverage({
+    guideText,
+    allowlist: {
+      'SEC-FAKE-05': 'ai-docs/tasks/99-nonexistent.md',
+      'SEC-FAKE-06': 'somewhere/else.md',
+      'SEC-FAKE-07': 'ai-docs/tasks/02-schemas.md',
+    },
+    testTitles: [],
+    readTaskFile: (path) =>
+      path === 'ai-docs/tasks/02-schemas.md' ? '**Status:** todo\nno id mentioned here' : null,
+  });
+  expect(result.badOwners).toEqual([
+    'SEC-FAKE-05 → ai-docs/tasks/99-nonexistent.md (task file does not exist)',
+    'SEC-FAKE-06 → somewhere/else.md (not an ai-docs/tasks/NN-*.md path)',
+    'SEC-FAKE-07 → ai-docs/tasks/02-schemas.md (task file never mentions the id)',
+  ]);
+});
 
-  // Guard the allowlist itself: every entry must name a real id from the guide.
-  const requiredSet = new Set(requiredIds);
-  const unknownEntries = Object.keys(allowlist).filter((id) => !requiredSet.has(id));
-  expect(unknownEntries, 'allowlist entries not present in security-guide.md').toEqual([]);
+test('an allowlist entry whose owning task is done counts as stale', () => {
+  const result = auditSecCoverage({
+    guideText: 'SEC-FAKE-08',
+    allowlist: { 'SEC-FAKE-08': 'ai-docs/tasks/02-schemas.md' },
+    testTitles: [],
+    readTaskFile: () => '**Status:** done\nSEC-FAKE-08 belongs here',
+  });
+  expect(result.staleAllowlist).toEqual([
+    'SEC-FAKE-08 → ai-docs/tasks/02-schemas.md (task is done but the test never shipped)',
+  ]);
 });
