@@ -7,8 +7,9 @@ import { routes } from './app.js';
 
 const port = Number(process.env['PORT'] ?? 3000);
 
-serve({ fetch: routes.fetch, port });
-console.log(`@bolusi/server shell listening on :${port}`);
+serve({ fetch: routes.fetch, port }, (info) => {
+  console.log(`@bolusi/server shell listening on :${info.port}`);
+});
 
 export { routes } from './app.js';
 export type { AppType } from './app.js';

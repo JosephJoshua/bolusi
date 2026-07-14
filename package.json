@@ -21,7 +21,7 @@
     "db:migrate": "pnpm --filter @bolusi/db-server db:migrate",
     "db:seed": "node scripts/not-implemented.mjs db:seed 05-db-server",
     "db:codegen": "node scripts/not-implemented.mjs db:codegen 05-db-server",
-    "dev": "pnpm run --parallel \"/^dev:/\"",
+    "dev": "pnpm run \"/^dev:/\"",
     "dev:tsc": "tsc -b --watch --preserveWatchOutput",
     "dev:server": "pnpm --filter @bolusi/server dev",
     "dev:mobile": "pnpm --filter @bolusi/mobile dev"
