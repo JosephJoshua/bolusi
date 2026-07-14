@@ -5,7 +5,8 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - '5432:5432'
+      # loopback only — the dev database is never exposed on the LAN
+      - '127.0.0.1:5432:5432'
     environment:
       POSTGRES_USER: bolusi
       POSTGRES_PASSWORD: bolusi
