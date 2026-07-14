@@ -1,0 +1,1 @@
+# Migrations land with task 05 (db-server). Dir exists so kysely-ctl wiring runs from task 01.
