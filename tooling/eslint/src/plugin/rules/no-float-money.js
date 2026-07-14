@@ -1,7 +1,14 @@
 // bolusi/no-float-money (08-stack-and-repo §5.2; money is integer IDR — 05-operation-log §3).
 // Scope (set by the shared config): packages/schemas + packages/modules.
-// Fires on: z.number() chains missing .int(), parseFloat/Number.parseFloat/toFixed on
-// money-named identifiers, and non-integer numeric literals.
+// Prongs:
+//   1. z.number() chains missing .int()            — everywhere the rule is enabled.
+//   2. parseFloat/Number.parseFloat/toFixed on
+//      money-named identifiers                     — everywhere the rule is enabled.
+//   3. non-integer numeric literals                — SCHEMA FILES ONLY (opt-in via the
+//      `numericLiterals` option; UI code like `opacity: 0.5` is legitimate).
+// Schema-file convention (documented in 08 §5.2): all of packages/schemas/src/**, plus
+// packages/modules files named *.schema.ts(x) or schema|schemas|ops|operations|commands|
+// queries.ts — the shared config wires prong 3 to exactly those globs.
 
 const MONEY_NAME = /(amount|price|cost|total|fee|idr)/i;
 
@@ -41,9 +48,19 @@ export default {
       nonIntegerLiteral:
         'Non-integer numeric literal in a schema file — money is integer IDR (05-operation-log §3).',
     },
-    schema: [],
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          numericLiterals: { type: 'boolean' },
+        },
+        additionalProperties: false,
+      },
+    ],
   },
   create(context) {
+    const numericLiterals = context.options[0]?.numericLiterals ?? true;
+
     return {
       CallExpression(node) {
         const callee = node.callee;
@@ -89,7 +106,7 @@ export default {
         }
       },
       Literal(node) {
-        if (typeof node.value === 'number' && !Number.isInteger(node.value)) {
+        if (numericLiterals && typeof node.value === 'number' && !Number.isInteger(node.value)) {
           context.report({ node, messageId: 'nonIntegerLiteral' });
         }
       },

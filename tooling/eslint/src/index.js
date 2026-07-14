@@ -47,10 +47,27 @@ export default tseslint.config(
     },
   },
   {
+    // Zod-shape + money-identifier prongs everywhere in schemas/modules; the
+    // numeric-literal prong is off here (UI code like `opacity: 0.5` is legitimate).
     name: 'bolusi/money',
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {
-      'bolusi/no-float-money': 'error',
+      'bolusi/no-float-money': ['error', { numericLiterals: false }],
+    },
+  },
+  {
+    // Schema-file convention (08 §5.2): the numeric-literal prong fires only here.
+    // All of packages/schemas is schema by definition; in packages/modules the
+    // payload/command/query schema files are *.schema.ts(x) or
+    // schema|schemas|ops|operations|commands|queries.ts — later tasks name files accordingly.
+    name: 'bolusi/money-schema-files',
+    files: [
+      'packages/schemas/src/**/*.{ts,tsx}',
+      'packages/modules/src/**/*.schema.{ts,tsx}',
+      'packages/modules/src/**/{schema,schemas,ops,operations,commands,queries}.ts',
+    ],
+    rules: {
+      'bolusi/no-float-money': ['error', { numericLiterals: true }],
     },
   },
   {

@@ -46,10 +46,42 @@ tester.run('no-float-money', rule, {
       // 2 is an integer literal, so only the toFixed report fires
       errors: [{ messageId: 'floatOnMoney' }],
     },
-    // non-integer numeric literal in a schema file
+    // non-integer numeric literal in a schema file (literal prong on by default)
     {
       code: `const surcharge = 0.5;`,
       errors: [{ messageId: 'nonIntegerLiteral' }],
+    },
+  ],
+});
+
+// The shared config disables the numeric-literal prong outside schema files (F1):
+// screens/UI code with fractional literals must pass while the other prongs stay live.
+tester.run('no-float-money (non-schema files: numericLiterals off)', rule, {
+  valid: [
+    {
+      code: `const style = { opacity: 0.5 };`,
+      options: [{ numericLiterals: false }],
+      filename: '/repo/packages/modules/src/notes/screens/NoteCard.tsx',
+    },
+    {
+      code: `const image = { quality: 0.7 };`,
+      options: [{ numericLiterals: false }],
+      filename: '/repo/packages/modules/src/notes/screens/CameraSheet.tsx',
+    },
+  ],
+  invalid: [
+    // the Zod and money-identifier prongs still fire with the literal prong off
+    {
+      code: `const priceIdr = z.number();`,
+      options: [{ numericLiterals: false }],
+      filename: '/repo/packages/modules/src/notes/screens/NoteCard.tsx',
+      errors: [{ messageId: 'zNumberWithoutInt' }],
+    },
+    {
+      code: `const x = parseFloat(amount);`,
+      options: [{ numericLiterals: false }],
+      filename: '/repo/packages/modules/src/notes/screens/NoteCard.tsx',
+      errors: [{ messageId: 'floatOnMoney' }],
     },
   ],
 });
