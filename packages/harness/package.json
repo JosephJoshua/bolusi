@@ -1,0 +1,32 @@
+{
+  "name": "@bolusi/harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chaos harness + N-device simulator — test-only machinery, runs on Node (08 §3.2; scenarios owned by testing-guide)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@bolusi/core": "workspace:*",
+    "@bolusi/modules": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "@bolusi/test-support": "workspace:*",
+    "@bolusi/server": "workspace:*",
+    "better-sqlite3": "catalog:",
+    "@electric-sql/pglite": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*",
+    "@types/node": "catalog:"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

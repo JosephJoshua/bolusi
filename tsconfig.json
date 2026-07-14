@@ -1,0 +1,35 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/schemas/tsconfig.build.json"
+    },
+    {
+      "path": "packages/i18n/tsconfig.build.json"
+    },
+    {
+      "path": "packages/core/tsconfig.build.json"
+    },
+    {
+      "path": "packages/ui/tsconfig.build.json"
+    },
+    {
+      "path": "packages/modules/tsconfig.build.json"
+    },
+    {
+      "path": "packages/db-client/tsconfig.build.json"
+    },
+    {
+      "path": "packages/db-server/tsconfig.build.json"
+    },
+    {
+      "path": "packages/test-support/tsconfig.build.json"
+    },
+    {
+      "path": "packages/harness/tsconfig.build.json"
+    },
+    {
+      "path": "apps/server/tsconfig.build.json"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+# build output / deps
+node_modules/
+dist/
+.expo/
+pnpm-lock.yaml
+
+# specs are not reformatted as an implementation side effect (CLAUDE.md §4)
+ai-docs/
+CLAUDE.md

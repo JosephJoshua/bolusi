@@ -1,0 +1,30 @@
+{
+  "name": "@bolusi/test-support",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Golden vectors, determinism kit, fakes, driver-conformance suite — test-only, never imported by shipping source (08 §3.2)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@bolusi/core": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "@noble/curves": "catalog:",
+    "@noble/hashes": "catalog:",
+    "kysely": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*",
+    "@types/node": "catalog:"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

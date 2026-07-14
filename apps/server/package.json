@@ -1,0 +1,44 @@
+{
+  "name": "@bolusi/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hono app on Node 22 — sub-routers, middleware chain, WS/SSE, push sender (08 §3.2; endpoints owned by api/00)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bolusi/core": "workspace:*",
+    "@bolusi/db-server": "workspace:*",
+    "@bolusi/i18n": "workspace:*",
+    "@bolusi/modules": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "@hono/node-server": "catalog:",
+    "@hono/zod-validator": "catalog:",
+    "@noble/curves": "catalog:",
+    "@noble/hashes": "catalog:",
+    "hono": "catalog:",
+    "ws": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
+    "tsx": "catalog:"
+  }
+}

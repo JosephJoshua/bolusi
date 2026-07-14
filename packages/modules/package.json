@@ -1,0 +1,35 @@
+{
+  "name": "@bolusi/modules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "defineModule manifests (04-module-contract). Split exports: ./notes = platform-free manifest, ./notes/screens = RN (08 §3.2)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./notes": {
+      "types": "./dist/notes/index.d.ts",
+      "default": "./dist/notes/index.js"
+    },
+    "./notes/screens": {
+      "types": "./dist/notes/screens/index.d.ts",
+      "default": "./dist/notes/screens/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@bolusi/core": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
+    "@bolusi/i18n": "workspace:*"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

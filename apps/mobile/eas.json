@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "dev",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "test": {
+      "extends": "preview",
+      "channel": "test",
+      "env": {
+        "BOLUSI_TEST_HARNESS": "1"
+      }
+    },
+    "production": {
+      "channel": "production"
+    }
+  }
+}

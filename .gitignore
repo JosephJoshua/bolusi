@@ -5,6 +5,13 @@ build/
 .next/
 *.tsbuildinfo
 
+# expo / metro
+.expo/
+.expo-shared/
+android/
+ios/
+*.orig.*
+
 # secrets / env — never commit
 .env
 .env.*
