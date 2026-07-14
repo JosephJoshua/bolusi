@@ -5,3 +5,5 @@ export * from './envelope.js';
 export * from './bookkeeping.js';
 export * from './rejection-codes.js';
 export * from './sync.js';
+export * from './errors.js';
+export * from './ws.js';
