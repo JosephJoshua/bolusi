@@ -9,7 +9,7 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "typecheck": "tsc -b && pnpm --filter @bolusi/mobile typecheck",
+    "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
     "test": "vitest run",
     "test:server": "node scripts/not-implemented.mjs test:server 12-server-app",

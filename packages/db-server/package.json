@@ -14,7 +14,8 @@
     "dist"
   ],
   "scripts": {
-    "db:migrate": "kysely migrate latest"
+    "db:migrate": "kysely migrate latest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@bolusi/core": "workspace:*",

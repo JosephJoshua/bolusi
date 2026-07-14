@@ -1,15 +1,35 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/schemas" },
-    { "path": "packages/i18n" },
-    { "path": "packages/core" },
-    { "path": "packages/ui" },
-    { "path": "packages/modules" },
-    { "path": "packages/db-client" },
-    { "path": "packages/db-server" },
-    { "path": "packages/test-support" },
-    { "path": "packages/harness" },
-    { "path": "apps/server" }
+    {
+      "path": "packages/schemas/tsconfig.build.json"
+    },
+    {
+      "path": "packages/i18n/tsconfig.build.json"
+    },
+    {
+      "path": "packages/core/tsconfig.build.json"
+    },
+    {
+      "path": "packages/ui/tsconfig.build.json"
+    },
+    {
+      "path": "packages/modules/tsconfig.build.json"
+    },
+    {
+      "path": "packages/db-client/tsconfig.build.json"
+    },
+    {
+      "path": "packages/db-server/tsconfig.build.json"
+    },
+    {
+      "path": "packages/test-support/tsconfig.build.json"
+    },
+    {
+      "path": "packages/harness/tsconfig.build.json"
+    },
+    {
+      "path": "apps/server/tsconfig.build.json"
+    }
   ]
 }

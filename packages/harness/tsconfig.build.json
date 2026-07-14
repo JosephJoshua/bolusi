@@ -1,0 +1,28 @@
+{
+  "extends": "@bolusi/tsconfig/node.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "references": [
+    {
+      "path": "../core/tsconfig.build.json"
+    },
+    {
+      "path": "../modules/tsconfig.build.json"
+    },
+    {
+      "path": "../schemas/tsconfig.build.json"
+    },
+    {
+      "path": "../test-support/tsconfig.build.json"
+    },
+    {
+      "path": "../../apps/server/tsconfig.build.json"
+    }
+  ]
+}

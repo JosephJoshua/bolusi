@@ -1,0 +1,16 @@
+{
+  "extends": "@bolusi/tsconfig/base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "references": [
+    {
+      "path": "../schemas/tsconfig.build.json"
+    }
+  ]
+}

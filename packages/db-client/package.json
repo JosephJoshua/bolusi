@@ -21,5 +21,8 @@
   },
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
   }
 }
