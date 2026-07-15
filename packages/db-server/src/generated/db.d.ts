@@ -92,6 +92,7 @@ export interface Devices {
   kind: Generated<string>;
   lastHash: string | null;
   lastPullCursor: Generated<Int8>;
+  lastSeenAt: Int8 | null;
   lastSeq: Generated<Int8>;
   lastSyncAt: Int8 | null;
   name: string | null;

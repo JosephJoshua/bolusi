@@ -124,6 +124,9 @@ CREATE TABLE devices (
   enrolled_at        bigint NOT NULL,
   enrolled_by        uuid,                            -- user id; NULL for system device
   last_sync_at       bigint,
+  last_seen_at       bigint,                          -- device-token lifecycle (api/02-auth §8):
+                                                      -- throttled write, ≤ once / 5 min / device;
+                                                      -- surfaced by GET /v1/devices (§7.1)
   last_pull_cursor   bigint NOT NULL DEFAULT 0,       -- conflict detection + skew window
   last_seq           bigint NOT NULL DEFAULT 0,       -- chain head cache (derived from operations; rebuildable)
   last_hash          char(64),                        -- chain head cache
