@@ -31,7 +31,17 @@ services:
       - bolusi-pgdata:/var/lib/postgresql/data
       - ./scripts/pg-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U bolusi -d postgres']
+      # `-h 127.0.0.1` is load-bearing — do NOT drop it back to a bare `pg_isready`.
+      # The postgres image's first boot runs a TEMPORARY server (with listen_addresses='')
+      # to execute /docker-entrypoint-initdb.d, then fast-shutdowns it and starts the real
+      # one. A socket-only `pg_isready` answers "is *a* postgres on the socket?" — the temp
+      # server says yes — so `compose up --wait` reported healthy ~8s before TCP served
+      # anything, and `db:up` exited 0 into a dead port. Observed: db:up EXIT=0, then
+      # `pg_isready -h 127.0.0.1` -> "no response" on the very next call, and a test:rls
+      # dying with "Connection terminated unexpectedly". The temp server never listens on
+      # TCP, so checking over TCP is what makes the healthcheck answer the question a
+      # client actually asks. Task 34's init script lengthens that window, it did not open it.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U bolusi -d postgres']
       interval: 2s
       timeout: 3s
       retries: 30
