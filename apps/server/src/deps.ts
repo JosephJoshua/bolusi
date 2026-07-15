@@ -3,6 +3,7 @@
 // fakes (rate-limit stores, token verifier, forTenant, clock) and later tasks (13/16/…) drop in
 // real implementations without reshaping the skeleton.
 import { forTenant as dbForTenant, type ForTenant } from '@bolusi/db-server';
+import type { CryptoPort } from '@bolusi/core';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
@@ -18,6 +19,8 @@ import {
   type DeviceRateLimits,
   type RateLimitStore,
 } from './middleware/rate-limit.js';
+import { serverCryptoPort, type OpRegistry } from './oplog/index.js';
+import { InProcessPokeHub, type PokeHub } from './realtime/poke-hub.js';
 import { uuidv7 } from './uuidv7.js';
 
 /** Body-size caps by route class (api/00 §5.3). */
@@ -50,6 +53,17 @@ export const DEFAULT_DEVICE_RATE_LIMITS: DeviceRateLimits = {
 // it is a dep so task 13 sets the real value without touching the chain.
 export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
 
+/**
+ * The default server op registry (05 §8): EMPTY until a module registers its op types (the platform
+ * module lands with task 17, notes with task 25). With no registered type, every pushed op resolves
+ * `unknown` → `UNKNOWN_TYPE` — the honest v0 state of a server that folds no modules yet. Tests
+ * inject a registry covering the op types they push; tasks 17/25 replace this with the assembled
+ * `@bolusi/core` module registry adapter.
+ */
+export const EMPTY_OP_REGISTRY: OpRegistry = {
+  resolve: () => ({ kind: 'unknown' }),
+};
+
 export interface ServerDeps {
   readonly now: () => number;
   readonly newRequestId: () => string;
@@ -70,6 +84,14 @@ export interface ServerDeps {
   readonly accessLogSink: AccessLogSink;
   readonly bodyCaps: (path: string) => BodyCaps;
   readonly clientIp: (c: Context<AppEnv>) => string;
+  /** Ed25519 verify + SHA-256 over JCS bytes for the push pipeline (05 §3; task 16 sync push). */
+  readonly serverCrypto: CryptoPort;
+  /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
+  readonly newOpLogId: () => string;
+  /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Empty by default. */
+  readonly opRegistry: OpRegistry;
+  /** In-process scoped `sync.poke` hub (api/00 §12.1); default has zero subscribers (task 20 subs). */
+  readonly pokeHub: PokeHub;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -107,6 +129,10 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     accessLogSink: overrides.accessLogSink ?? consoleAccessLogSink,
     bodyCaps: overrides.bodyCaps ?? defaultBodyCaps,
     clientIp: overrides.clientIp ?? defaultClientIp,
+    serverCrypto: overrides.serverCrypto ?? serverCryptoPort,
+    newOpLogId: overrides.newOpLogId ?? (() => uuidv7(now())),
+    opRegistry: overrides.opRegistry ?? EMPTY_OP_REGISTRY,
+    pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };

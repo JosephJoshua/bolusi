@@ -7,6 +7,7 @@ import { zUuidV7 } from '@bolusi/schemas';
 import { WIRE_CAP_SYNC_PUSH } from '../../src/deps.js';
 import { enrollDevice, makeTestApp, type TestHarness } from '../helpers/app.js';
 import { makeFixture } from '../helpers/fixtures.js';
+import { makeSyncHarness } from './sync/helpers.js';
 
 const PUSH = 'http://srv.test/v1/sync/push';
 const DEVICES = 'http://srv.test/v1/devices';
@@ -26,17 +27,23 @@ function deviceAuth(h: TestHarness, seed: string): { auth: string; deviceId: str
 async function responseWithStatus(status: number): Promise<Response> {
   switch (status) {
     case 200: {
-      // /v1/devices is a real (DB-backed) handler now; probe the still-stub /v1/sync/push for a
-      // DB-free 200.
-      const h = makeTestApp();
-      const { auth, deviceId } = deviceAuth(h, `hdr-200`);
-      return h.app.request(
-        new Request(PUSH, {
-          method: 'POST',
-          headers: { Authorization: auth, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId, ops: [] }),
-        }),
-      );
+      // The sync push handler is a real DB-backed handler now (task 16); an empty (valid) push over
+      // a migrated PGlite DB + seeded device accepts nothing → 200. Detach the headers into a fresh
+      // Response so the harness can close (the assertions read only headers, never the body).
+      const h = await makeSyncHarness();
+      try {
+        const dev = await h.seedDevice(1200);
+        const res = await h.app.request(
+          new Request(PUSH, {
+            method: 'POST',
+            headers: { Authorization: dev.auth, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: dev.world.deviceId, ops: [] }),
+          }),
+        );
+        return new Response(null, { status: res.status, headers: res.headers });
+      } finally {
+        await h.close();
+      }
     }
     case 401:
       return makeTestApp().app.request(DEVICES);

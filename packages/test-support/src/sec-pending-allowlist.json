@@ -1,12 +1,7 @@
 {
   "$comment": "SEC-META-01 pending allowlist: every security-guide SEC id without a shipped test MUST map to its owning task file (security-guide \u00a72.1.4). Entries are removed when the owning task ships the test; task 28 requires this file empty. The meta-test fails if a named task's Status is done.",
   "SEC-OPLOG-09": "ai-docs/tasks/15-sync-client.md",
-  "SEC-SYNC-02": "ai-docs/tasks/16-sync-server.md",
-  "SEC-SYNC-03": "ai-docs/tasks/16-sync-server.md",
-  "SEC-SYNC-05": "ai-docs/tasks/16-sync-server.md",
-  "SEC-SYNC-06": "ai-docs/tasks/02-schemas.md",
-  "SEC-SYNC-07": "ai-docs/tasks/08-projection-engine.md",
-  "SEC-SYNC-09": "ai-docs/tasks/16-sync-server.md",
+  "SEC-SYNC-02": "ai-docs/tasks/15-sync-client.md",
   "SEC-AUTH-09": "ai-docs/tasks/28-security-sweep.md",
   "SEC-AUTH-10": "ai-docs/tasks/27-device-gates.md",
   "SEC-MEDIA-01": "ai-docs/tasks/18-media-client.md",

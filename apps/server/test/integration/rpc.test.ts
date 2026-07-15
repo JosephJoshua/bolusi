@@ -2,11 +2,12 @@
 // exports); `hc<AppType>` typechecks and round-trips against the mounted stub routes; all eight
 // sub-routers are chained and mounted under /v1.
 import { hc } from 'hono/client';
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import type { AppType } from '../../src/app.js';
 import { enrollDevice, makeTestApp, type TestHarness } from '../helpers/app.js';
 import { makeFixture } from '../helpers/fixtures.js';
+import { makeSyncHarness, type SyncHarness } from './sync/helpers.js';
 
 describe('@bolusi/server/client is types-only', () => {
   test('the built client.js has zero runtime exports', async () => {
@@ -20,24 +21,29 @@ describe('@bolusi/server/client is types-only', () => {
 });
 
 describe('hc<AppType> smoke test', () => {
-  test('typechecks and round-trips a mounted stub route via app.fetch', async () => {
-    const h = makeTestApp();
-    const fx = makeFixture('rpc-hc');
-    const auth = enrollDevice(h, {
-      deviceId: fx.deviceId,
-      tenantId: fx.tenantId,
-      storeId: fx.storeId,
-      token: fx.deviceToken,
-    });
+  // The sync push handler is no longer a stub (task 16): it runs the task-07 pipeline inside a
+  // forTenant transaction, so the RPC round-trip needs a real (PGlite) DB with a seeded device.
+  let h: SyncHarness;
+  beforeEach(async () => {
+    h = await makeSyncHarness();
+  });
+  afterEach(async () => {
+    await h.close();
+  });
 
+  test('typechecks and round-trips a mounted sync route via app.fetch', async () => {
+    const dev = await h.seedDevice(101);
     const client = hc<AppType>('http://srv.test', {
       // Route hc's requests into the in-process app (no sockets).
       fetch: (async (input: string | URL | Request, init?: RequestInit) =>
         h.app.request(input, init)) as typeof fetch,
-      headers: { Authorization: auth },
+      headers: { Authorization: dev.auth },
     });
 
-    const res = await client.v1.sync.push.$post({ json: { deviceId: fx.deviceId, ops: [] } });
+    // An empty batch transports fine and accepts nothing → HTTP 200, results: [] (api/00 §6).
+    const res = await client.v1.sync.push.$post({
+      json: { deviceId: dev.world.deviceId, ops: [] },
+    });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ results: [], serverTime: expect.any(Number) });

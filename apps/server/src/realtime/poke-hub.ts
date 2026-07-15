@@ -1,0 +1,63 @@
+// In-process scoped poke hub (api/00 §12.1 `sync.poke`; api/01-sync §4.1 scope). Task 16 emits a
+// poke when a push accepts ≥1 op, scoped to the accepted ops' pull scope (tenant + store-or-null).
+// Task 20's WS/SSE transports SUBSCRIBE here and fan a poke out to the connections whose device
+// pull-scope matches; PER-CONNECTION coalescing (≤1 poke/connection/second, §12.1) is task 20's,
+// NOT here — this hub only publishes the scoped events.
+//
+// The default production hub has ZERO subscribers, so a running server with no realtime transport
+// mounted publishes into the void (a no-op) — the acceptance's "server runs with zero subscribers".
+
+/** A pull scope (api/01-sync §4.1): a tenant and either a store or null (tenant-scoped). */
+export interface PokeScope {
+  readonly tenantId: string;
+  readonly storeId: string | null;
+}
+
+export type PokeListener = (scope: PokeScope) => void;
+
+/**
+ * Publish/subscribe seam. `publish` is called by the push handler with the DISTINCT scopes of the
+ * batch's accepted ops; `subscribe` is called by task 20 to receive them. Correctness never
+ * depends on delivery (api/01-sync §8) — a dropped poke costs only pull latency.
+ */
+export interface PokeHub {
+  publish(scopes: readonly PokeScope[]): void;
+  subscribe(listener: PokeListener): () => void;
+}
+
+/** Stable key for de-duplicating scopes within one publish. `|` cannot occur in a UUID, so it
+ *  separates the two ids unambiguously (a tenant-scoped poke has an empty store half). */
+function scopeKey(scope: PokeScope): string {
+  return `${scope.tenantId}|${scope.storeId ?? ''}`;
+}
+
+/** The v0 single-process hub. Subscribers are notified synchronously, once per distinct scope. */
+export class InProcessPokeHub implements PokeHub {
+  readonly #listeners = new Set<PokeListener>();
+
+  publish(scopes: readonly PokeScope[]): void {
+    if (scopes.length === 0) return;
+    const seen = new Set<string>();
+    for (const scope of scopes) {
+      const key = scopeKey(scope);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // A listener throwing must not abort the push response nor starve other listeners: realtime
+      // is best-effort (api/01-sync §8). Swallow per-listener errors.
+      for (const listener of this.#listeners) {
+        try {
+          listener(scope);
+        } catch {
+          /* best-effort fan-out; a poke is never load-bearing */
+        }
+      }
+    }
+  }
+
+  subscribe(listener: PokeListener): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+}

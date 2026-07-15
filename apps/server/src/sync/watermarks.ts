@@ -1,0 +1,64 @@
+// The SERVER embedding of the projection watermark store (04-module-contract §4.3; 10-db §8).
+//
+// task 08 (projection-engine) defined the `WatermarkStore` port and shipped the CLIENT
+// implementation over `projection_watermarks (module_id PK, applied_server_seq + applied_local_seq)`
+// (10-db §9.1), and recorded that "the server table (10-db §8, applied_server_seq only) … lands with
+// tasks 07/16". This is that server implementation, over the server table whose PK is
+// `(tenant_id, module_id)` and which has NO `applied_local_seq` column: server-side, projections
+// apply synchronously inside the push transaction, so `applied_server_seq` is rebuild bookkeeping
+// only and there is no own-device append seq to track (04 §4.3, 10-db §8). It satisfies the same
+// port the engine's `applyPulledOp` calls, so the engine drives it unchanged; task 17 wires the
+// conflict projection through it inside task 16's push transaction.
+//
+// The engine computes the advancement (contiguity via `highestContiguousServerSeq` over the op
+// log); this store only reads/persists the scalar, keeping the monotonic MAX invariant at the
+// store (04 §4.3) even if a caller ever passes a lower value. The CASE (not `GREATEST`/`MAX(a,b)`)
+// and the table-qualified column are the same dialect-neutrality constraints watermarks.ts (task
+// 11) documents: Postgres has no two-arg `max()` and rejects an unqualified column on the right of
+// `SET`.
+import { sql, type Kysely } from 'kysely';
+
+import type { WatermarkStore } from '@bolusi/core';
+
+/**
+ * A server watermark store bound to one tenant. `tenantId` is the composite-PK partition and the
+ * RLS predicate value — the store always runs inside a `forTenant` transaction (10-db §6), so the
+ * write's `tenant_id` must equal `app.tenant_id` or RLS `WITH CHECK` rejects it.
+ */
+export function createServerWatermarkStore<DB>(db: Kysely<DB>, tenantId: string): WatermarkStore {
+  return {
+    async read(moduleId: string) {
+      const result = await sql<{ appliedServerSeq: string | number }>`
+        SELECT applied_server_seq FROM projection_watermarks
+        WHERE tenant_id = ${tenantId} AND module_id = ${moduleId}
+      `.execute(db);
+      const row = result.rows[0];
+      // Postgres returns bigint as a STRING (it can exceed JS's safe-integer range); a serverSeq
+      // fits in a double for any plausible history, so normalize to number here. `applied_local_seq`
+      // has no server column — the port's server shape reports 0 (10-db §8).
+      return {
+        appliedServerSeq: row === undefined ? 0 : Number(row.appliedServerSeq),
+        appliedLocalSeq: 0,
+      };
+    },
+
+    async advanceServerSeq(moduleId: string, value: number): Promise<void> {
+      await sql`
+        INSERT INTO projection_watermarks (tenant_id, module_id, applied_server_seq)
+        VALUES (${tenantId}, ${moduleId}, ${value})
+        ON CONFLICT (tenant_id, module_id) DO UPDATE
+        SET applied_server_seq = CASE
+          WHEN projection_watermarks.applied_server_seq > excluded.applied_server_seq
+          THEN projection_watermarks.applied_server_seq
+          ELSE excluded.applied_server_seq
+        END
+      `.execute(db);
+    },
+
+    // The server table has no `applied_local_seq` column (10-db §8): own-device appends are a
+    // client concern. The engine only calls this on the append path, which the server never runs.
+    async advanceLocalSeq(): Promise<void> {
+      /* no-op: server projections have no local-append seq (10-db §8, 04 §4.3) */
+    },
+  };
+}
