@@ -1,6 +1,6 @@
 {
-  "$comment": "SEC-META-01 pending allowlist: every security-guide SEC id without a shipped test MUST map to its owning task file (security-guide \u00a72.1.4). Entries are removed when the owning task ships the test; task 28 requires this file empty. The meta-test fails if a named task's Status is done.",
-  "SEC-OPLOG-01": "ai-docs/tasks/03-crypto-canonical.md",
+  "$comment": "SEC-META-01 pending allowlist: every security-guide SEC id without a shipped test MUST map to its owning task file (security-guide §2.1.4). Entries are removed when the owning task ships the test; task 28 requires this file empty. The meta-test fails if a named task's Status is done.",
+  "SEC-OPLOG-01": "ai-docs/tasks/07-oplog-server.md",
   "SEC-OPLOG-02": "ai-docs/tasks/06-oplog-client.md",
   "SEC-OPLOG-03": "ai-docs/tasks/07-oplog-server.md",
   "SEC-OPLOG-04": "ai-docs/tasks/07-oplog-server.md",
@@ -18,7 +18,7 @@
   "SEC-SYNC-08": "ai-docs/tasks/12-server-app.md",
   "SEC-SYNC-09": "ai-docs/tasks/16-sync-server.md",
   "SEC-SYNC-10": "ai-docs/tasks/12-server-app.md",
-  "SEC-AUTH-01": "ai-docs/tasks/03-crypto-canonical.md",
+  "SEC-AUTH-01": "ai-docs/tasks/14-auth-client.md",
   "SEC-AUTH-02": "ai-docs/tasks/14-auth-client.md",
   "SEC-AUTH-03": "ai-docs/tasks/14-auth-client.md",
   "SEC-AUTH-04": "ai-docs/tasks/14-auth-client.md",
