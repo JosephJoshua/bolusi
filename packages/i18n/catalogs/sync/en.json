@@ -27,6 +27,7 @@
     "body": "Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner."
   },
   "action": {
-    "syncNow": "Sync Now"
+    "syncNow": "Sync Now",
+    "pullToRefresh": "Pull to refresh"
   }
 }

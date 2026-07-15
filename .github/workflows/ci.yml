@@ -165,14 +165,35 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:ed25519-interop
 
-  # Stage 8 — server integration vs PGlite (pnpm test:server).
-  # EVERY-PR PLACEHOLDER — wired by task 12 (ai-docs/tasks/12-server-app.md);
-  # deferral recorded in 08 §7.
+  # Stage 8 — server integration vs PGlite (08 §5.6). Every-PR gate: the Hono app's
+  # integration suite (22 files / 162 tests) against the real middleware chain, incl. the
+  # SEC-SYNC gzip/auth adversarial tests (security-guide §4.2).
+  #
+  # NO postgres service container BY DESIGN — and this is load-bearing, not an omission.
+  # Every DB-backed test here boots its own in-process PGlite (`new PGlite()` via
+  # PGliteDialect, apps/server/test/helpers/{media-db,pglite-tenant}.ts). The suite opens no
+  # TCP connection and reads no DATABASE_URL: verified by running it with DATABASE_URL
+  # pointed at a black hole — 22/22 files still passed. Adding a service container here
+  # would be cargo-cult: it would sit idle and imply a real-PG witness this lane does NOT
+  # provide. The real-Postgres-16 witness is stage 9 (rls-witness), which 08 §2.5 requires
+  # precisely because WASM must not be the only RLS witness. Nothing in this job may be read
+  # as evidence about real-PG behaviour.
+  #
+  # `tsc -b` is inside `test:server` per the 08 §5.6 normative convention (cross-package dist
+  # imports must build first), so `needs: install` alone is sufficient on a cold runner.
   server-integration:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "placeholder — server integration suite lands with task 12 (pnpm test:server)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: server integration suite vs in-process PGlite
+        run: pnpm test:server
 
   # Gitleaks job (security-guide §10, SEC-SECRET-02): full-history scan.
   gitleaks:

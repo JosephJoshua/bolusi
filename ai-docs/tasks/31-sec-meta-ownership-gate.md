@@ -24,6 +24,14 @@ None are armed by task 03's merge (their owner isn't task 03), but all three det
 
 Fix the gate so ownership is **declared**, not inferred from prose, and correct the three rows. Ownership must be a fact the task file states in a machine-checkable way — not something a substring match guesses at.
 
+**Update 2026-07-15 (b) — the flaw has now been *demonstrated*, not just reasoned about, and two more rows surfaced.**
+
+- **SEC-AUTH-06 was armed and is now defused** (found by task 09). The allowlist pointed it at **task 09**, whose file *disclaims* it — the exact mention-vs-ownership flaw, in the wild for the second time. Task 09 **proved the time-bomb before touching it**: it flipped its Status to `done` in a scratch run and watched `staleAllowlist` fire — *"SEC-AUTH-06 → 09 (task is done but the test never shipped)"* — then repointed the row to **task 14**, whose file explicitly claims it ("SEC ids shipped IN this task: … SEC-AUTH-06 (client arm)"), and re-ran the simulation green. That is the first time anyone has *watched* this gate detonate rather than predicted it, and it confirms the timing critique above: the blast lands on whoever flips the status, never on whoever introduced the row.
+- **SEC-AUTH-11 is still ambiguous** (reported by task 09, deliberately not resolved): it sits on **task 10** while **task 14** also claims a "client arm". Same claim-vs-disclaim ambiguity, unresolved — resolve it in this task's audit.
+- **Task 13 repointed SEC-RT-02 → task 20** (it was mis-mapped to 13; task 20's file ships it). Another pre-emptive defusal, same root cause.
+
+**Tally so far: five rows across four tasks (SEC-OPLOG-02/05/09, SEC-AUTH-06, SEC-RT-02) were mis-pointed, each found by the task that would have been blamed.** Every one was caught by an agent volunteering it, not by the gate. That is the argument for the ship-not-mention mechanism: the gate has never once caught its own bug.
+
 ## Docs to read
 
 - `security-guide.md` — §2.1 item 4 (SEC-META-01's mandate: a verbatim-ID **test title** must exist, or an allowlist entry naming the owner).

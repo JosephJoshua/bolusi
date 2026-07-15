@@ -1,5 +1,6 @@
 {
   "list": {
+    "banner": "{count, plural, one {# conflict needs a decision} other {# conflicts need a decision}}",
     "title": "Conflicts"
   },
   "status": {

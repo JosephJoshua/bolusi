@@ -27,6 +27,7 @@
     "body": "Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko."
   },
   "action": {
-    "syncNow": "Kirim Sekarang"
+    "syncNow": "Kirim Sekarang",
+    "pullToRefresh": "Tarik untuk memperbarui"
   }
 }

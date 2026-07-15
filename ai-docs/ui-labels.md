@@ -121,9 +121,8 @@ Surfaces per PRD-011 §6 (switcher, PIN pad, idle lock, enrollment, revocation, 
 | `auth.enroll.success` | Perangkat berhasil didaftarkan | Device enrolled |
 | `auth.revoked.title` | Perangkat Diblokir | Device Revoked |
 | `auth.revoked.body` | Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang. | This device has been revoked and can no longer be used. Contact the store owner to enroll it again. |
-| `auth.switchStore` | Ganti Toko | Switch Store |
 
-`auth.switchStore` is **v1** — the store switcher (FR-1034) is deferred (roadmap); in v0 a device is enrolled to exactly one store and the key is not rendered.
+**No store-switcher label in v0.** The store switcher (FR-1034) is deferred to v1 (roadmap R22); in v0 a device is enrolled to exactly one store, so the label is never rendered. It is therefore **not seeded here** — this doc owns v0 surfaces (see the ownership note above), and a v1 string in the v0 seed would ship dead copy in the app bundle. It previously sat here as `auth.switchStore`, a 2-segment key that 07-i18n §3.1 forbids; the right `<namespace>.<screen-or-area>.<label>` name depends on the screen the switcher actually lands on, which is not designed yet, so inventing one now would be a guess. The copy (`Ganti Toko` / `Switch Store`) is recorded in roadmap R22 and lands with the feature.
 
 ## role — role display names (`role.<roleKey>.name`)
 
@@ -139,7 +138,7 @@ Permission display strings use the derived keys `permission.<module>.<action>.na
 
 ## sync — status, staleness, rejected changes (`sync.*`)
 
-States per `Operation.syncStatus` machine and api/01-sync §6–7. Staleness `{relative}` is computed server-relative (api/01-sync §7), formatted via `core.time.*`. `sync.banner.warning` / `sync.banner.stale` are keyed to the staleness **level names** of 03-state-machines §8 (which owns the thresholds) — never to durations, and the copy stays threshold-agnostic so a threshold change never invalidates a string. `sync.chip.*` are the sync-status chips of design-system §3.5 — the canonical pending/rejected markers on every list row and detail header. `sync.quarantine.*` is the loud surfacing of quarantined operations (pull-side verification failure, api/01-sync §4): those changes are held out of view, not applied.
+States per `Operation.syncStatus` machine and api/01-sync §6–7. Staleness `{relative}` is computed server-relative (api/01-sync §7), formatted via `core.time.*`. `sync.banner.warning` / `sync.banner.stale` are keyed to the staleness **level names** of 03-state-machines §8 (which owns the thresholds) — never to durations, and the copy stays threshold-agnostic so a threshold change never invalidates a string. `sync.chip.*` are the sync-status chips of design-system §3.5 — the canonical pending/rejected markers on every list row and detail header. `sync.quarantine.*` is the loud surfacing of quarantined operations (pull-side verification failure, api/01-sync §4): those changes are held out of view, not applied. `sync.action.*` are the user-initiated affordances (the sync-now button, the pull-to-refresh hint) — deliberately **not** `sync.banner.*`, which is reserved for the staleness level names above.
 
 | Key | id-ID | en |
 | --- | ----- | -- |
@@ -161,15 +160,15 @@ States per `Operation.syncStatus` machine and api/01-sync §6–7. Staleness `{r
 | `sync.quarantine.title` | Perubahan Ditahan | Changes On Hold |
 | `sync.quarantine.body` | Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko. | Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner. |
 | `sync.action.syncNow` | Kirim Sekarang | Sync Now |
-| `sync.pullToRefresh` | Tarik untuk memperbarui | Pull to refresh |
+| `sync.action.pullToRefresh` | Tarik untuk memperbarui | Pull to refresh |
 
 ## conflict — surfacing and decisions (`conflict.*`)
 
-States per Conflict machine: `detected → auto_resolved | surfaced; surfaced → acknowledged` (store-owner decision recorded as a new operation).
+States per Conflict machine: `detected → auto_resolved | surfaced; surfaced → acknowledged` (store-owner decision recorded as a new operation). `conflict.list.banner` is the count banner that taps through to the conflict list — the same shape as `sync.rejected.banner`, and keyed to the list it opens rather than to a `banner` area of its own.
 
 | Key | id-ID | en |
 | --- | ----- | -- |
-| `conflict.banner` | {count} data bentrok butuh keputusan | {count, plural, one {# conflict needs a decision} other {# conflicts need a decision}} |
+| `conflict.list.banner` | {count} data bentrok butuh keputusan | {count, plural, one {# conflict needs a decision} other {# conflicts need a decision}} |
 | `conflict.list.title` | Data Bentrok | Conflicts |
 | `conflict.status.surfaced` | Butuh keputusan | Needs a decision |
 | `conflict.status.autoResolved` | Digabung otomatis | Merged automatically |

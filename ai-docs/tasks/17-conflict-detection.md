@@ -33,6 +33,14 @@ Deliver the v0 conflict machinery end to end. Server side: the detection engine 
 - `packages/test-support/src/fixtures/` — CHAOS-07 fixture: seeded op scripts for sub-cases (i)/(ii)/(iii) + expected classification table (consumed by task 26).
 - No DB migrations. No `@bolusi/schemas` changes (payload Zod lives in the manifest).
 
+## Inherited finding — the system-device private key's storage path (from task 13's review, 2026-07-15)
+
+You are the consumer of the system-device signing key, so you own closing this. Task 13's `provision-tenant` CLI currently **prints the system-device private key to stdout** (labeled, alongside the one-time password). review-02 flagged it as a MINOR non-blocker for an operator-run v0 provisioning step, but pushed back on the posture: **stdout lands in terminal scrollback, shell-history-adjacent tooling, and any CI/log capture** — a private key there is not a habit to normalize.
+
+The cheap hardening, either is acceptable: write the key to a file with mode **0600**, or require an explicit **`--print-key`** flag so the *default* path never emits it. Whichever you choose, state which and why.
+
+Constraints: this is a real security surface, so CLAUDE.md §2.5 applies — the change ships adversarial tests before review, and per §2.11 the guard is falsified (prove the default path does NOT emit the key: make it emit, watch the test go red, restore). Do not silently widen scope into task 13's CLI beyond this key-handling change. If `provision-tenant` has since moved or been refactored, adapt and say so.
+
 ## Acceptance
 
 - **Detection matrix** (integration tests driving the real push pipeline; each row a named test):

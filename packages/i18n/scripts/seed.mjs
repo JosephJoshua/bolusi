@@ -27,24 +27,13 @@ export const RESERVED_NAMESPACES = [
 /** Locales the seed carries. `zh` is scaffold-only — no catalog files (07-i18n §1). */
 export const SEEDED_LOCALES = ['id', 'en'];
 
-/**
- * ui-labels.md rows that are deliberately NOT seeded, each with its reason.
- *
- * TODO(spec-conflict): all three are 2-segment keys, which 07-i18n §3.1 forbids (">= 3
- * segments", and none of them is a §3.1 derived-key exception). The grammar gate is
- * implemented to the spec, so seeding them would fail `pnpm i18n:check`. Renaming them is a
- * change to ui-labels.md, and CLAUDE.md §4 says spec changes are their own task — so they are
- * parked here rather than renamed or silently dropped. Resolve by renaming in ui-labels.md
- * (e.g. `sync.action.pullToRefresh`, `conflict.list.banner`), then deleting the entry here.
- */
-export const SEED_DEFERRED_KEYS = new Map([
-  [
-    'auth.switchStore',
-    '2-segment key (07-i18n §3.1 requires >=3); also v1-deferred — the store switcher (FR-1034) is not rendered in v0',
-  ],
-  ['sync.pullToRefresh', '2-segment key (07-i18n §3.1 requires >=3) — needs a ui-labels.md rename'],
-  ['conflict.banner', '2-segment key (07-i18n §3.1 requires >=3) — needs a ui-labels.md rename'],
-]);
+// There is deliberately no deferred/parked-key list here (task 30). One used to exist, holding
+// the three 2-segment keys that 07-i18n §3.1 forbids — but parking a key skips it in
+// buildCatalogs, so it never reaches a catalog and the key-grammar gate, which reads catalogs,
+// never saw it. `pnpm i18n:check` was green *because* the violating keys were hidden from the
+// gate that exists to flag them (CLAUDE.md §2.11 — a guard whose failure mode is "silently
+// checks nothing"). The keys were renamed in ui-labels.md instead. If a future row conflicts
+// with the spec, let the gate fail and fix the doc — do not re-introduce a bypass.
 
 const ROW_RE = /^\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/;
 
@@ -101,7 +90,6 @@ export function buildCatalogs(rows) {
     const segments = row.key.split('.');
     const namespace = segments[0];
     if (!RESERVED_NAMESPACES.includes(namespace)) continue;
-    if (SEED_DEFERRED_KEYS.has(row.key)) continue;
     for (const locale of SEEDED_LOCALES) {
       setNested(catalogs[namespace][locale], segments.slice(1), row[locale]);
     }
@@ -130,9 +118,6 @@ function main() {
     }
   }
   console.log(`i18n:seed: wrote ${written} catalog files from ai-docs/ui-labels.md`);
-  for (const [key, reason] of SEED_DEFERRED_KEYS) {
-    console.log(`i18n:seed: deferred \`${key}\` — ${reason}`);
-  }
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

@@ -14,14 +14,14 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | done | 01 |
 | 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | done | 01 |
 | 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | done | 02, 03, 04 |
-| 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | todo | 02, 03, 05 |
+| 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | in-progress | 02, 03, 05 |
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | done | 04, 06 |
-| 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | in-progress | 02, 04 |
-| 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | todo | 06, 08, 09 |
+| 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | done | 02, 04 |
+| 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | in-progress | 06, 08, 09 |
 | 11 | module-contract (defineModule, queries layer, registration) | todo | 08, 10 |
 | 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | done | 02, 05 |
-| 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | in-progress | 05, 12 |
-| 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | todo | 03, 04, 09, 13 |
+| 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | done | 05, 12 |
+| 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | todo | 03, 04, 09, 10, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | todo | 07, 12, 13 |
 | 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16 |
@@ -37,11 +37,15 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26 |
-| 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | todo | 02 |
-| 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | todo | 22 |
+| 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | in-progress | 02 |
+| 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
-| 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | todo | 12 |
+| 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
+| 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | in-progress | 05 |
+| 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | in-progress | 08 |
+| 36 | three CI jobs labelled *merge gate* pass trivially; full workflow sweep (from task 32) | todo | 11, 26 |
+| 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

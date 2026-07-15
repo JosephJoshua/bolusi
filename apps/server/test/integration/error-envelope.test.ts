@@ -14,7 +14,6 @@ import { gzipJson } from '../helpers/gzip.js';
 
 const PUSH = 'http://srv.test/v1/sync/push';
 const DEVICES = 'http://srv.test/v1/devices';
-const LOGIN = 'http://srv.test/v1/auth/login';
 
 function deviceAuth(
   h: ReturnType<typeof makeTestApp>,
@@ -107,12 +106,21 @@ describe('every 4xx/5xx body is a valid §7 envelope with the registry code for 
   });
 
   test('500 INTERNAL for an unhandled throw, echoing the request id', async () => {
+    // task 13 made /v1/auth/login a real handler; the unhandled-throw probe uses the still-stub
+    // /v1/sync/push (onStub throws → onError maps to 500).
     const h = makeTestApp({
       onStub: () => {
         throw new Error('boom from a stub');
       },
     });
-    const res = await h.app.request(LOGIN, { method: 'POST' });
+    const { auth, deviceId } = deviceAuth(h, 'env-500');
+    const res = await h.app.request(
+      new Request(PUSH, {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, ops: [] }),
+      }),
+    );
     expect(res.status).toBe(500);
     const body = await readError(res);
     const parsed = zErrorEnvelope.safeParse(body);

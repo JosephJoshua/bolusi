@@ -5,12 +5,14 @@ import config, { bolusi } from './index.js';
 
 test('all bolusi custom rules are registered at error in the flat config', () => {
   // `no-token-literals` added task 23 (design-system §7 lint (a)).
+  // `permission-module-prefix` added task 09 (02-permissions §2 CI lint).
   expect(Object.keys(bolusi.rules).sort()).toEqual([
     'boundaries',
     'no-float-money',
     'no-hardcoded-strings',
     'no-op-table-update',
     'no-token-literals',
+    'permission-module-prefix',
   ]);
 
   const ruleLevel = (ruleId) => {
@@ -26,6 +28,7 @@ test('all bolusi custom rules are registered at error in the flat config', () =>
   expect(ruleLevel('bolusi/no-float-money')).toBe('error');
   expect(ruleLevel('bolusi/no-hardcoded-strings')).toBe('error');
   expect(ruleLevel('bolusi/no-token-literals')).toBe('error');
+  expect(ruleLevel('bolusi/permission-module-prefix')).toBe('error');
 });
 
 test('repo-wide rules are not scoped to a files subset', () => {
@@ -142,6 +145,46 @@ test('no-hardcoded-strings now covers packages/ui but exempts its tests (§7 lin
   expect(
     await lintAt('const el = <Text>Simpan</Text>;\n', 'packages/ui/src/components/Button.test.tsx'),
   ).not.toContain('bolusi/no-hardcoded-strings');
+});
+
+// Added task 09. The 02-permissions §2 lint is repo-wide, and its ONE exemption is the assembly
+// suite that must construct a rejected manifest to prove it is rejected. An exemption that
+// silently covered more than that file would disarm the lint for real manifests, so the scope is
+// asserted through the REAL flat config rather than by reading the config object back.
+test('permission-module-prefix fires on real manifests and is exempted only in the assembly suite', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const lintAt = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((m) => m.ruleId);
+  };
+
+  const crossPrefix = `defineModule({ id: 'notes', permissions: { 'auth.user_create': { scope: 'store' } } });\n`;
+  const crossModuleRequire = `defineModule({ id: 'notes', commands: { c: { permission: 'auth.user_create' } } });\n`;
+  const ownPrefix = `defineModule({ id: 'notes', permissions: { 'notes.create': { scope: 'store' } }, commands: { c: { permission: 'notes.create' } } });\n`;
+
+  // Where module manifests actually live — both prongs fire.
+  expect(await lintAt(crossPrefix, 'packages/modules/src/notes/manifest.ts')).toContain(
+    'bolusi/permission-module-prefix',
+  );
+  expect(await lintAt(crossModuleRequire, 'packages/modules/src/notes/manifest.ts')).toContain(
+    'bolusi/permission-module-prefix',
+  );
+  // A correct manifest is clean (T-14b: the rule is not simply always-on).
+  expect(await lintAt(ownPrefix, 'packages/modules/src/notes/manifest.ts')).not.toContain(
+    'bolusi/permission-module-prefix',
+  );
+
+  // The exemption covers the assembly suite...
+  expect(await lintAt(crossPrefix, 'packages/core/test/authz/registry.test.ts')).not.toContain(
+    'bolusi/permission-module-prefix',
+  );
+  // ...and NOTHING else — not core src, not core's other authz tests.
+  expect(await lintAt(crossPrefix, 'packages/core/test/authz/evaluate.test.ts')).toContain(
+    'bolusi/permission-module-prefix',
+  );
+  expect(await lintAt(crossPrefix, 'packages/core/src/authz/registry.ts')).toContain(
+    'bolusi/permission-module-prefix',
+  );
 });
 
 test('no-token-literals covers packages/ui but exempts tokens.ts (§7 lint (a))', async () => {
