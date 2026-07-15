@@ -10,7 +10,7 @@
 | Server DB | PostgreSQL **16+** (required: `UNIQUE NULLS NOT DISTINCT`) |
 | Query builder | `kysely` **0.29.3 EXACT** (no caret — 0.x minors break; `Migrator`/`FileMigrationProvider` import from `'kysely/migration'`), `pg` + built-in `PostgresDialect`, Node 22 LTS (kysely engines `>=22`) |
 | Migrations | `kysely-ctl` **0.21.0**; TS migrations in `packages/db-server/migrations`, ordered `NNNN_name.ts`, each exporting `up`/`down`. Raw SQL from this doc goes through `sql` template literals verbatim. |
-| Server types | `kysely-codegen` **0.20.0** with `--camel-case` against the migrated dev DB; output committed to `packages/db-server/src/generated/db.d.ts`. Runtime uses `CamelCasePlugin` so TS names are camelCase over the snake_case DDL below. CI re-runs codegen and fails on diff. |
+| Server types | `kysely-codegen` **0.20.0** with `--camel-case` against the migrated dev DB; output committed to `packages/db-server/src/generated/db.d.ts`. Runtime uses **`new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })`** so TS names are camelCase over the snake_case DDL below — the option is REQUIRED, not a preference (§11.3). CI re-runs codegen and fails on diff. |
 | Client DB | `@op-engineering/op-sqlite` **17.1.2**, package.json flags `{"op-sqlite": {"sqlcipher": true, "performanceMode": true}}`, EAS dev builds (never Expo Go). **Single connection app-wide** (op-sqlite hard rule). All access behind a thin wrapper in `packages/db-client` (`@bolusi/db-client`) so expo-sqlite remains a swap target. |
 | Client Kysely dialect | custom shim over `kysely-generic-sqlite` **2.0.0** (no official op-sqlite dialect exists) wrapping the single shared connection. |
 | Client types | same kysely-codegen 0.20.0, run in CI against a scratch SQLite file built by applying the client migrations via `better-sqlite3` (dev-only dep); output committed to `packages/db-client/src/generated/db.d.ts`. |
@@ -931,9 +931,9 @@ CREATE TABLE user_prefs (
 
 1. Edit **this doc** (schema change = spec change).
 2. Server: write the migration in `packages/db-server/migrations` (kysely-ctl 0.21.0; programmatic use imports `Migrator` from `'kysely/migration'`). Projection-table migrations may also be expressed as drop-and-rebuild via the projection engine — the log is the source of truth (05-operation-log §1), so projection DDL changes never need data migrations, only a rebuild.
-3. Run `kysely-ctl migrate:latest` against the dev DB → run kysely-codegen 0.20.0 (`--camel-case`) → commit generated types. CI regenerates and diffs.
+3. Run `kysely-ctl migrate:latest` against the dev DB → run kysely-codegen 0.20.0 (`--camel-case`) → commit generated types. CI regenerates and diffs. The runtime half is **`new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })`** — mandatory, because codegen's camelizer and the plugin's default snake_caser are **NOT inverses**: `op_a_id` → codegen `opAId` → plugin default `op_aid`, a column that does not exist (it bites `conflicts.op_a_id`/`op_b_id`, §8). The mismatch type-checks and fails only at runtime, so the server suite pins it two ways: every generated property is re-derived against the live catalog, and the broken default is asserted so the option cannot be "simplified" away.
 4. Client: add the embedded migration; CI builds a scratch SQLite DB from all client migrations, runs kysely-codegen against it, diffs committed types.
-5. Never edit generated type files by hand; never define a table interface manually.
+5. Never edit generated type files by hand; never define a table interface manually. **Reformatting counts as editing:** every generated output directory MUST be listed in `.prettierignore`. Otherwise the pre-commit formatter rewrites the committed file, the next codegen run "drifts" back to raw output, and the CI codegen-diff gate (§11.3) becomes permanently unsatisfiable — a gate that can never go green trains everyone to ignore it.
 6. DB migrations serialize globally across parallel agents (CLAUDE.md §4).
 
 ## 12. Explicitly NOT in any database
