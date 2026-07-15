@@ -47,8 +47,24 @@ function gzipReq(url: string, body: Uint8Array, auth: string): Request {
   });
 }
 
-describe('SEC-SYNC-02 revoked device rejected (server legs)', () => {
-  test('SEC-SYNC-02 a revoked device token → 401 DEVICE_REVOKED on push and pull', async () => {
+// ── Revoked-device SERVER legs — the id is DELIBERATELY ABSENT from these titles ──────────────
+//
+// The surface id is SEC-SYNC-02 (security-guide §4.2), but it has TWO legs: the 401 +
+// DEVICE_REVOKED half proven here, and a CLIENT half — "ops pushed in the same window →
+// DEVICE_REVOKED, kept client-side as `rejected`" (security-guide.md:99) — which lands with
+// task 15's sync loop, not here.
+//
+// SEC-META-01 counts an id as shipped when a test TITLE contains it verbatim (`title.includes(id)`)
+// — it cannot read this comment (proved by sec-meta.test.ts:49). So a verbatim title here would
+// mark the id fully shipped, and with its allowlist row gone the client-side `rejected`
+// persistence requirement would be invisible forever (task 28 requires the allowlist EMPTY, so it
+// could never come back). Naming the id correctly in a test that covers half of it is how a real
+// security requirement gets quietly retired.
+//
+// So: titles carry no id, and the pending-allowlist row (SEC-SYNC-02 → ai-docs/tasks/15-sync-client.md)
+// is what keeps the outstanding leg visible. Do not "tidy" the id back into these titles.
+describe('revoked device rejected (server legs — see the comment above for the surface id)', () => {
+  test('a revoked device token → 401 DEVICE_REVOKED on push and pull', async () => {
     const revoked = await h.seedDevice(50, { deviceStatus: 'revoked' });
     const pushRes = await h.push(revoked.auth, revoked.world.deviceId, [revoked.builder.genesis()]);
     expect(pushRes.status).toBe(401);
@@ -58,7 +74,7 @@ describe('SEC-SYNC-02 revoked device rejected (server legs)', () => {
     expect((await readError(pullRes)).error.code).toBe('DEVICE_REVOKED');
   });
 
-  test('SEC-SYNC-02 positive control: an active device pushes successfully', async () => {
+  test('positive control: an active device pushes successfully', async () => {
     const active = await h.seedDevice(51);
     const res = await h.push(active.auth, active.world.deviceId, [active.builder.genesis()]);
     expect(res.status).toBe(200);
