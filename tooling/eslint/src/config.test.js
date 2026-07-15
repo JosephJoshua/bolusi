@@ -1,18 +1,28 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { ESLint } from 'eslint';
 import { expect, test } from 'vitest';
 
 import config, { bolusi } from './index.js';
 
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
 test('all bolusi custom rules are registered at error in the flat config', () => {
   // `no-token-literals` added task 23 (design-system §7 lint (a)).
   // `permission-module-prefix` added task 09 (02-permissions §2 CI lint).
+  // `no-clock-in-handlers` + `runtime-emission-allowlist` added task 10 (04-module-contract
+  // §5.1/§5.2).
   expect(Object.keys(bolusi.rules).sort()).toEqual([
     'boundaries',
+    'no-clock-in-handlers',
     'no-float-money',
     'no-hardcoded-strings',
     'no-op-table-update',
     'no-token-literals',
     'permission-module-prefix',
+    'runtime-emission-allowlist',
   ]);
 
   const ruleLevel = (ruleId) => {
@@ -29,6 +39,8 @@ test('all bolusi custom rules are registered at error in the flat config', () =>
   expect(ruleLevel('bolusi/no-hardcoded-strings')).toBe('error');
   expect(ruleLevel('bolusi/no-token-literals')).toBe('error');
   expect(ruleLevel('bolusi/permission-module-prefix')).toBe('error');
+  expect(ruleLevel('bolusi/no-clock-in-handlers')).toBe('error');
+  expect(ruleLevel('bolusi/runtime-emission-allowlist')).toBe('error');
 });
 
 test('repo-wide rules are not scoped to a files subset', () => {
@@ -185,6 +197,94 @@ test('permission-module-prefix fires on real manifests and is exempted only in t
   expect(await lintAt(crossPrefix, 'packages/core/src/authz/registry.ts')).toContain(
     'bolusi/permission-module-prefix',
   );
+});
+
+// Added task 10. The two §5 rules, proven through the REAL flat config: the rule's own RuleTester
+// fixtures prove it MATCHES, but only the config decides whether it ever runs on a real path.
+test('no-clock-in-handlers fires on module command files and nowhere else (04 §5.2)', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const lintAt = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((m) => m.ruleId);
+  };
+
+  const clockInHandler = `export const commands = { c: { handler: (i, ctx) => ({ ops: [], at: Date.now() }) } };\n`;
+  const pureHandler = `export const commands = { c: { handler: (i, ctx) => ({ ops: [ctx.op({ entityId: ctx.newId() })] }) } };\n`;
+
+  // Where command handlers live — both file-naming conventions.
+  expect(await lintAt(clockInHandler, 'packages/modules/src/notes/commands.ts')).toContain(
+    'bolusi/no-clock-in-handlers',
+  );
+  expect(await lintAt(clockInHandler, 'packages/modules/src/notes/notes.commands.ts')).toContain(
+    'bolusi/no-clock-in-handlers',
+  );
+  // A pure handler is clean — the rule is not simply always-on (T-14b).
+  expect(await lintAt(pureHandler, 'packages/modules/src/notes/commands.ts')).not.toContain(
+    'bolusi/no-clock-in-handlers',
+  );
+  // Screens legitimately read the clock — they are not handlers.
+  expect(await lintAt(clockInHandler, 'packages/modules/src/notes/screens/List.tsx')).not.toContain(
+    'bolusi/no-clock-in-handlers',
+  );
+  // So does the runtime itself: it is the one place that owns the stamp point.
+  expect(await lintAt(clockInHandler, 'packages/core/src/runtime/execute.ts')).not.toContain(
+    'bolusi/no-clock-in-handlers',
+  );
+});
+
+test('runtime-emission-allowlist fires repo-wide on a non-command append (04 §5.1)', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const lintAt = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((m) => m.ruleId);
+  };
+
+  const unsanctioned = `await runtime.emitRuntimeOp({ type: 'notes.note_created', payload: {} });\n`;
+  const sanctioned = `await runtime.emitRuntimeOp({ type: 'auth.session_ended', payload: {} });\n`;
+  const directAppend = `await appendLocalOps({ store, drafts, context });\n`;
+
+  // Prong A, wherever it is written — the rule is unscoped for a reason.
+  for (const path of [
+    'packages/modules/src/notes/commands.ts',
+    'apps/mobile/src/screens/Notes.tsx',
+    'packages/core/src/authz/denials.ts',
+  ]) {
+    expect(await lintAt(unsanctioned, path), path).toContain('bolusi/runtime-emission-allowlist');
+  }
+  // A sanctioned type is clean (T-14b).
+  expect(await lintAt(sanctioned, 'packages/core/src/authz/denials.ts')).not.toContain(
+    'bolusi/runtime-emission-allowlist',
+  );
+
+  // Prong B: the command runtime may reach the append path; nobody else may.
+  expect(await lintAt(directAppend, 'packages/core/src/runtime/execute.ts')).not.toContain(
+    'bolusi/runtime-emission-allowlist',
+  );
+  expect(await lintAt(directAppend, 'packages/modules/src/notes/commands.ts')).toContain(
+    'bolusi/runtime-emission-allowlist',
+  );
+  expect(await lintAt(directAppend, 'apps/mobile/src/sneaky.ts')).toContain(
+    'bolusi/runtime-emission-allowlist',
+  );
+});
+
+// The config passes the closed set to the rule (so the rule holds no copy), which makes the config
+// itself the second place the five are written. Anchor it to the SAME source of truth core's
+// constant is pinned to — 04 §5.1 — so the two cannot drift apart without the spec moving.
+test('the configured sanctioned set is exactly 04 §5.1`s five', () => {
+  const doc = readFileSync(join(REPO_ROOT, 'ai-docs', '04-module-contract.md'), 'utf8');
+  const [, afterHeading] = doc.split('**Sanctioned runtime emissions.**');
+  expect(afterHeading, '04 §5.1 sanctioned-emissions paragraph not found').toBeDefined();
+  const [paragraph] = afterHeading.split('\n\n');
+  const fromSpec = [...paragraph.matchAll(/`(auth\.[a-z_]+)`/g)].map((m) => m[1]);
+
+  // The parse's own denominator (T-14): a reformat that made this find 0 or 2 types would
+  // otherwise let the comparison below pass against a starved list.
+  expect(fromSpec, 'the §5.1 parse found the wrong number of types').toHaveLength(5);
+
+  const block = config.find((b) => Array.isArray(b.rules?.['bolusi/runtime-emission-allowlist']));
+  const configured = block.rules['bolusi/runtime-emission-allowlist'][1].sanctionedTypes;
+  expect([...configured].sort()).toEqual([...fromSpec].sort());
 });
 
 test('no-token-literals covers packages/ui but exempts tokens.ts (§7 lint (a))', async () => {
