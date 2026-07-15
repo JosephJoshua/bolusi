@@ -1,0 +1,32 @@
+{
+  "chip": {
+    "pending": "Not sent yet",
+    "rejected": "Rejected"
+  },
+  "status": {
+    "upToDate": "All changes sent",
+    "syncing": "Syncing…",
+    "pending": "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
+    "pendingMedia": "{count, plural, one {# photo not sent yet} other {# photos not sent yet}}",
+    "offline": "No connection. Changes are saved on this device.",
+    "reconnected": "Back online",
+    "lastSynced": "Last connected {relative}"
+  },
+  "banner": {
+    "warning": "Last connected {relative}. This may not be the latest data.",
+    "stale": "No connection for a long time. What you see here could be far behind."
+  },
+  "rejected": {
+    "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
+    "title": "Rejected Changes",
+    "explain": "The changes below were rejected by the server and will not be sent. They stay saved on this device as a record.",
+    "technicalDetails": "Technical details"
+  },
+  "quarantine": {
+    "title": "Changes On Hold",
+    "body": "Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner."
+  },
+  "action": {
+    "syncNow": "Sync Now"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "action": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Try Again",
+    "delete": "Delete",
+    "confirm": "Yes, Continue",
+    "back": "Back",
+    "close": "Close",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "ok": "OK",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "status": {
+    "loading": "Loading…",
+    "empty": "Nothing here yet",
+    "saved": "Saved"
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",
+    "hoursAgo": "{count, plural, one {# hour ago} other {# hours ago}}",
+    "daysAgo": "{count, plural, one {# day ago} other {# days ago}}",
+    "durationSeconds": "{count, plural, one {# second} other {# seconds}}",
+    "durationMinutes": "{count, plural, one {# minute} other {# minutes}}"
+  },
+  "settings": {
+    "language": "Language"
+  },
+  "language": {
+    "id": "Bahasa Indonesia",
+    "en": "English"
+  },
+  "errors": {
+    "INVALID_TRANSITION": "This can’t be done anymore because the record changed. Check the record again.",
+    "PERMISSION_DENIED": "Your account doesn’t have permission to do this.",
+    "VALIDATION_FAILED": "Something isn’t filled in right. Please check the form.",
+    "ENTITY_NOT_FOUND": "That record can’t be found.",
+    "NOT_AUTHENTICATED": "Sign in to continue.",
+    "DEVICE_NOT_ENROLLED": "This device isn’t enrolled yet. Enroll it first.",
+    "USER_DEACTIVATED": "Your account has been deactivated. Contact the store owner.",
+    "PIN_RATE_LIMITED": "Too many wrong PIN tries. Wait a moment, then try again.",
+    "PIN_LOCKED": "PIN locked. Ask the store owner to unlock it or set a new PIN.",
+    "LAST_ADMIN_PROTECTED": "Not allowed. There must always be at least one active main owner.",
+    "ROLE_IN_USE": "This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.",
+    "IDEMPOTENCY_CONFLICT": "This request clashed with an earlier one. Try again.",
+    "RATE_LIMITED": "Too many requests. Wait a moment, then try again.",
+    "UNEXPECTED": "Something went wrong. Try again.",
+    "NETWORK": "Connection problem. Your changes are still saved on this device."
+  },
+  "rejection": {
+    "BAD_SIGNATURE": "This change failed verification and was rejected by the server. Report this to the store owner.",
+    "CHAIN_BROKEN": "This device’s change history is broken. Sending has stopped. Contact the store owner right away.",
+    "CHAIN_GAP": "Some changes were missing. They’re being resent automatically.",
+    "CHAIN_HALTED": "On hold because an earlier change has a problem.",
+    "DEVICE_REVOKED": "This device has been revoked, so the change was rejected. Enroll this device again.",
+    "SCHEMA_INVALID": "The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.",
+    "SCOPE_VIOLATION": "This change doesn’t belong to this store or account, so it was rejected. Report it to the store owner.",
+    "UNKNOWN_TYPE": "This device’s app needs an update before this change can be sent."
+  }
+}
