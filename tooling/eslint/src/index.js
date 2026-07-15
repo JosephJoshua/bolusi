@@ -28,6 +28,14 @@ export default tseslint.config(
       '**/coverage/**',
       '**/android/**',
       '**/ios/**',
+      // Agent worktrees are full checkouts of OTHER branches living inside this one
+      // (.claude/worktrees/agent-*). Without this, `pnpm lint` on main walks into whatever
+      // branches happen to be checked out and reports THEIR diagnostics as main's — so the
+      // gate's result depends on which agents are running, which is not a gate. Observed:
+      // main lint EXIT=1 with all 15 error-files under .claude/worktrees and zero in main's
+      // own source, flagging peers' legitimate in-package exemptions (i18n's own Intl
+      // formatters, no-op-table-update's own rule fixtures).
+      '**/.claude/**',
     ],
   },
   ...tseslint.configs.recommended,
