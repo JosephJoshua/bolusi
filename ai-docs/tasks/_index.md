@@ -40,10 +40,11 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | in-progress | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | in-progress | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
-| 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | in-progress | 12 |
+| 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | todo | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | todo | 08 |
+| 36 | three CI jobs labelled *merge gate* pass trivially; full workflow sweep (from task 32) | todo | 11, 26 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
