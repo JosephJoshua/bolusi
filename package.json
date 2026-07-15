@@ -11,6 +11,7 @@
     "prepare": "git config core.hooksPath .githooks",
     "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
+    "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
     "test": "vitest run",
     "test:server": "node scripts/not-implemented.mjs test:server 12-server-app",
     "test:rls": "node scripts/not-implemented.mjs test:rls 05-db-server",

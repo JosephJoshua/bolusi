@@ -1,0 +1,34 @@
+{
+  "switcher": {
+    "title": "Who’s using this?",
+    "instruction": "Tap your name",
+    "addUser": "Add User",
+    "idleLocked": "Locked after sitting idle. Your work is safe."
+  },
+  "pin": {
+    "title": "Enter PIN",
+    "wrong": "Wrong PIN. Try again.",
+    "attemptsLeft": "{count, plural, one {# try left} other {# tries left}}",
+    "wait": "Too many wrong tries. Wait {duration}.",
+    "lockedOut": "PIN locked. Ask the store owner to unlock it.",
+    "forgot": "Forgot your PIN? Ask the store owner to set a new one.",
+    "setup": {
+      "title": "Create a New PIN",
+      "repeat": "Repeat the PIN",
+      "mismatch": "The PINs don’t match. Try again."
+    }
+  },
+  "enroll": {
+    "title": "Enroll This Device",
+    "instruction": "Sign in with your account. This device will be enrolled for your store.",
+    "identifierField": "Account name",
+    "passwordField": "Password",
+    "submit": "Sign In",
+    "needsConnection": "Enrolling a device needs an internet connection.",
+    "success": "Device enrolled"
+  },
+  "revoked": {
+    "title": "Device Revoked",
+    "body": "This device has been revoked and can no longer be used. Contact the store owner to enroll it again."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "conflict": {
+    "title": "Ada data bentrok",
+    "body": "Ada data bentrok yang butuh keputusan pemilik toko. Ketuk untuk melihat."
+  },
+  "device": {
+    "title": "Peringatan perangkat",
+    "body": "Ada masalah pada salah satu perangkat toko. Ketuk untuk memeriksa."
+  }
+}

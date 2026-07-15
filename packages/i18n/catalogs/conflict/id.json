@@ -1,0 +1,22 @@
+{
+  "list": {
+    "title": "Data Bentrok"
+  },
+  "status": {
+    "surfaced": "Butuh keputusan",
+    "autoResolved": "Digabung otomatis",
+    "acknowledged": "Sudah diputuskan"
+  },
+  "detail": {
+    "instruction": "Dua perubahan bentrok. Pilih mana yang benar."
+  },
+  "action": {
+    "decide": "Putuskan"
+  },
+  "decision": {
+    "saved": "Keputusan tersimpan"
+  },
+  "autoResolved": {
+    "toast": "Dua perubahan digabung otomatis"
+  }
+}
