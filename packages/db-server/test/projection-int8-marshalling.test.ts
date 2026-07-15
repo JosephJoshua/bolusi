@@ -105,25 +105,77 @@ describe('highestContiguousServerSeq over the real op log', () => {
     expect(await highestContiguousServerSeq(testDb.db, 4)).toBe(6);
   });
 
-  test('an op-log value beyond 2^53 fails LOUDLY instead of silently rounding', async () => {
-    // The claim the fix's shape rests on (task 46): `server_seq` is a bigint, so it is not JS's
-    // job to decide it fits in a double. A plain `Number()` would round 2^53+1 down to 2^53 and
-    // hand back a WRONG watermark with no error — the same silent-wrong-answer failure this task
-    // fixes, wearing a different hat one magnitude up. This makes that claim checkable rather
-    // than a comment: exceed the range and the walk must refuse.
-    const beyond = 9_007_199_254_740_993n; // 2^53 + 1 — not representable as a JS number
-    await seedOperation(testDb.db, tenant, beyond);
-
-    await expect(highestContiguousServerSeq(testDb.db, 9_007_199_254_740_992)).rejects.toThrow(
-      /server_seq/,
-    );
-  });
-
   test('LAST — filling the hole lets the walk cross it in one pass', async () => {
     // Inserts, so it must run after the read-only cases above. 4 arrives (a late pull), and the
     // watermark that was pinned at 3 can now reach 6 in a single walk.
     await seedOperation(testDb.db, tenant, 4n);
 
     expect(await highestContiguousServerSeq(testDb.db, 0)).toBe(6);
+  });
+});
+
+// The 2^53 boundary. `MAX_SAFE` is 2^53 − 1 = ...991, so ...992 is the first value a JS number
+// cannot hold exactly. Seeded contiguously from ...990 so a walk can actually REACH ...992, plus a
+// lone ...988 (with ...989 absent) to give the positive control something to stop after.
+//
+// WHY THESE EXACT NUMBERS, AND THE BUG THAT LIVED HERE (review F1 — worth reading before editing):
+// this block first passed `from = 9_007_199_254_740_992` and asserted `/server_seq/`. That `from`
+// is ITSELF 2^53, i.e. not a safe integer, so the walk threw on its own `from` parameter at its
+// first statement and never read a row — while the loose `/server_seq/` oracle matched that
+// unrelated error just as happily as the intended one (T-13: the oracle was looser than the
+// claim). The seeded row was dead weight: deleting it left the suite 8/8 green.
+//
+// The sharp part: that test was NOT born inert. Against the first cut of the fix — which narrowed
+// per row — the seeded row WAS read and DID throw, and the test is what caught that flaw. Fixing
+// the flaw (walk in bigint, narrow once at the end) moved the throw from "per row" to "on the way
+// out", and the test silently stopped reaching it. A guard that stopped working BECAUSE the fix
+// landed: the shape changed underneath it and nothing re-asked what it still proved. Hence the
+// distinct oracles below — each error is now pinned to the claim that owns it.
+const SAFE_MAX = 9_007_199_254_740_991n; // 2^53 − 1
+const FIRST_UNSAFE = 9_007_199_254_740_992n; // 2^53
+
+describe("the 2^53 boundary — the claim the fix's shape rests on", () => {
+  beforeAll(async () => {
+    for (const serverSeq of [
+      9_007_199_254_740_988n,
+      9_007_199_254_740_990n,
+      SAFE_MAX,
+      FIRST_UNSAFE,
+    ]) {
+      await seedOperation(testDb.db, tenant, serverSeq);
+    }
+  }, 120_000);
+
+  test('POSITIVE CONTROL — a walk that stays inside the safe range returns normally', async () => {
+    // Guards the guard: without this, "it throws" could just mean "big numbers throw", and the
+    // test below would pass for a fix that refused everything near the boundary. From ...987 the
+    // walk takes ...988 and stops (…989 is absent), landing exactly on MAX_SAFE − 3. No throw.
+    expect(await highestContiguousServerSeq(testDb.db, 9_007_199_254_740_987)).toBe(
+      9_007_199_254_740_988,
+    );
+  });
+
+  test('a watermark that would land ON 2^53 refuses instead of silently rounding', async () => {
+    // THE CLAIM. `from` is ...989 — a SAFE integer, so the walk runs — and ...990/991/992 are
+    // contiguous above it, so the walk legitimately arrives at 2^53 and must narrow it on the way
+    // out. A plain `Number()` would round it and hand back a wrong watermark with no error: task
+    // 46 again, one magnitude up. The oracle is `/exceeds/`, NOT `/server_seq/`: only the
+    // narrowing error says that, so this can no longer be satisfied by the `from`-param guard.
+    //
+    // Load-bearing by construction: delete the ...992 seed and the walk stops at MAX_SAFE, returns
+    // 9007199254740991 happily, and this line goes red.
+    await expect(highestContiguousServerSeq(testDb.db, 9_007_199_254_740_989)).rejects.toThrow(
+      /exceeds/,
+    );
+  });
+
+  test('a `from` that is itself unsafe refuses before reading anything', async () => {
+    // The OTHER error, pinned to its own claim so it can never again stand in for the one above.
+    // A caller handing in an already-rounded watermark is corrupt input, and every reachable way
+    // to trigger this (a pre-rounded `from`, NaN, a non-integral value) means the data is already
+    // wrong — so refusing is the only answer that cannot corrupt a watermark silently.
+    await expect(highestContiguousServerSeq(testDb.db, Number(FIRST_UNSAFE))).rejects.toThrow(
+      /not a safe integer/,
+    );
   });
 });

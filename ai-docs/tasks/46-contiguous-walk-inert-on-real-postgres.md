@@ -94,6 +94,33 @@ as-string precondition is a test, so the file fails loudly the day that stops be
 going green for the wrong reason. Falsified: cast removed → 4 red on real PG16, green on PGlite with the
 bug fully present. T-8 + §2.4 amended to state the gate covers dialect, not driver marshalling.
 
+The seam is **exported** (`int8ToBigInt`/`int8ToNumber`/`Int8Value` from `@bolusi/core`) specifically so
+task 47's `createServerWatermarkStore` can adopt it instead of re-rolling its own `Number(...)`. A private
+normaliser would have guaranteed the copy — i.e. re-created this bug — which is the opposite of the point.
+
+**Sweep denominator (corrected):** **65** raw `sql<>` call sites in `@bolusi/core` + `@bolusi/db-server` at
+this branch's merge-base; **66** after this change (the new test adds one). Not 70 — that was a naive
+line-grep counting this change's own 4 *comment* mentions of `sql<`. **21** assert a `number` field.
+
+### The 2^53 test was inert, and went inert *because the fix landed* (review F1)
+
+Worth reading before touching that block. It first passed `from = 2^53` — which is itself **not** a safe
+integer (`MAX_SAFE` = 2^53 − 1), so the walk threw on its own `from` parameter at its first statement and
+never read a row; the loose `/server_seq/` oracle matched that unrelated error just as happily as the
+intended one (T-13). Proven inert: deleting the seeded row left the suite 8/8 green.
+
+It was **not born inert**. Against the first cut of the fix — which narrowed per row — the seeded row *was*
+read and *did* throw, and this test is what caught that flaw. Fixing the flaw (walk in bigint, narrow once
+on the way out) moved the throw from "per row" to "on the way out", and the test silently stopped reaching
+it. **A guard that stopped working because the fix landed**: the shape changed underneath it and nothing
+re-asked what it still proved. Distinct from every prior instance in T-11, which never worked at all.
+
+Now: `from = ...989` (safe) with contiguous ...990/991/992, oracle tightened to `/exceeds/`, a positive
+control (a safe walk returns ...988 without throwing, so "it throws" cannot degenerate into "big numbers
+throw"), and the `from`-param guard pinned to its own `/not a safe integer/` claim. Falsified three ways on
+real PG16: narrowing throw removed → red; **seeded row deleted → red** (the check that proves it is not
+inert again); both restored → 10/10 green.
+
 ### Residual finding — NOT fixed here, needs an owner (task 17 is the natural one)
 
 `oplog-source.ts`'s `RawOpRow` / `reconstructOperation` is **client-shaped by construction** and cannot
