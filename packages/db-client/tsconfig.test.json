@@ -1,0 +1,13 @@
+{
+  // Test + tooling typecheck ONLY. These files legitimately touch Node (better-sqlite3,
+  // node:fs) — shipping source may not, which is why they get their own program.
+  //
+  // tsconfig.json keeps `src` on the react-native base with `types: []`, so a `node:*`
+  // import in shipping source cannot even resolve there (08 §3.4, the tsconfig lock).
+  // Splitting the programs is what makes that lock real rather than aspirational.
+  "extends": "@bolusi/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src", "test", "scripts"]
+}

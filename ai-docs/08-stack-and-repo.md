@@ -158,7 +158,7 @@ An edge means "may import". Anything not listed is forbidden.
 | `db-server` | `core`, `schemas`, `kysely`, `pg` |
 | `apps/server` | `core`, `modules` (manifest subpaths ONLY, never `*/screens`), `schemas`, `db-server`, `i18n`, hono stack, noble |
 | `apps/mobile` | `core`, `modules` (incl. screens), `schemas`, `db-client`, `i18n`, `ui`, Expo/RN stack, quick-crypto; **type-only** `@bolusi/server/client` (§4.3) |
-| `test-support` | `core`, `schemas`, `kysely` (types), noble (DB drivers are injected by the runner, never imported) |
+| `test-support` | `core`, `schemas`, `kysely` (types), `db-client` (**type-only**), noble (DB drivers are injected by the runner, never imported) |
 | `harness` | `core`, `modules` (manifest only), `schemas`, `test-support`, `@bolusi/server` (in-process, test-only), better-sqlite3, PGlite, noble |
 
 Hard rules:
@@ -169,6 +169,7 @@ Hard rules:
 4. The only app→app edge is `mobile` → `server` and it is **type-only** (§4.3).
 5. Spec docs are not edited as an implementation side effect (CLAUDE.md §4) — same applies to this boundary table.
 6. `test-support` and `harness` are **test-only**: shipping source never imports them — they appear only in test files, the harness itself, and CI entry points.
+7. The `test-support` → `db-client` edge is **type-only** (ratified with task 04). The driver-conformance suite (testing-guide §2.3) must be typed against `DbDriver` — the ONE driver interface, owned by `db-client` — because re-declaring that shape in `test-support` would violate the single-implementation rule (CLAUDE.md §2.8). The driver handle itself is still injected by the runner, so rule 2 stands: `test-support` imports no DB driver. **Enforced by `bolusi/boundaries` (`dbClientTypeOnly`)**, which rejects any non-`import type` of `@bolusi/db-client` from `test-support` — the same shape as the `@bolusi/server/client` edge (§4.3). Note what does NOT enforce it, since it looks like it should: `consistent-type-imports` does not fire on a genuine value import, and `verbatimModuleSyntax` only preserves what you wrote. Residual exposure is low regardless — db-client is a `devDependency` of `test-support`, and hard rule 6 keeps `test-support` out of shipping source entirely — but the lint rule is what makes "type-only" true rather than intended.
 
 ### 3.4 How platform-freeness is enforced (three locks)
 

@@ -7,3 +7,8 @@ pnpm-lock.yaml
 # specs are not reformatted as an implementation side effect (CLAUDE.md §4)
 ai-docs/
 CLAUDE.md
+
+# kysely-codegen output (10-db §11.5: never hand-edited — and prettier is a hand-edit by
+# proxy). CI regenerates these and runs `git diff --exit-code`; reformatting them on
+# commit would make that gate fail on every PR.
+packages/db-client/src/generated/db.ts
