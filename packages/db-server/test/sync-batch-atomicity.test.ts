@@ -1,12 +1,11 @@
 // The atomic-batch-apply contract (task 16 §39, from the task-08 projection-engine review) on the
-// REAL engine lane.
+// REAL engine lane — driving the REAL store.
 //
-// WHY THIS FILE LIVES IN db-server AND NOT NEXT TO THE SYNC ROUTER: this package is the only one
-// whose suite re-runs against real Postgres 16 (`pnpm test:rls`, CI stage 9 — test-db.ts). The
-// apps/server copy of this contract (test/integration/sync/batch-atomicity.test.ts) runs the same
-// property on PGlite, which embeds PostgreSQL **18**; production and the merge gate pin **16**.
-// Running it here re-runs it on 16, so a rollback/contiguity divergence between the two engines
-// cannot hide behind the fast loop — the same drift check test-db.ts's header describes.
+// WHY THIS FILE LIVES IN db-server: this package is the only one whose suite re-runs against real
+// PostgreSQL 16 (`pnpm test:rls`, CI stage 9 — test-db.ts). The apps/server copy of this contract
+// (test/integration/sync/batch-atomicity.test.ts) runs the same property on PGlite, which embeds
+// PostgreSQL **18**; production and the merge gate pin **16**. Running it here re-runs it on 16, so
+// a rollback/contiguity divergence between the two engines cannot hide behind the fast loop.
 //
 // THE PROPERTY. `applied_server_seq` advances to the highest CONTIGUOUS serverSeq PRESENT IN THE
 // LOG (04 §4.3), not the highest applied. So once a batch is inserted, ONE apply computes a
@@ -18,27 +17,33 @@
 // no tenant predicate of their own (oplog-source.ts) — are scoped by RLS, not by luck. Each case
 // gets its OWN tenant, so its serverSeq stream starts at 1.
 //
-// ── WHY THE WATERMARK IS ADVANCED EXPLICITLY HERE, NOT BY `highestContiguousServerSeq` ─────────
+// ── WHAT TASK 47 CHANGED HERE, AND WHY THE MIRROR IS GONE ──────────────────────────────────────
 //
-// This lane found a REAL BUG in @bolusi/core (reported, not fixed here — `@bolusi/core` is
-// contended and task 14 is live in it): `highestContiguousServerSeq` compares
-// `row.serverSeq === watermark + 1`, but on REAL Postgres the `pg` driver returns `bigint` as a
-// **string** (`"1"`, typeof string), so the strict comparison is always false and the function
-// returns `from` unchanged — i.e. the server-side `applied_server_seq` NEVER advances on the
-// production engine. PGlite returns a number, so every existing lane (better-sqlite3 in core,
-// PGlite in applier-conformance) passes; only real PG16 exposes it. `createSqlWatermarkStore.read`
-// already normalizes with `Number(...)` for exactly this reason — the contiguity walk was missed.
+// This file used to hand-copy `createServerWatermarkStore` as a local `serverWatermarkStore`
+// MIRROR, because the original lived in apps/server and `packages/*` may not import `apps/*`
+// (08 §3.3 rule 1). Its header asked that "the two must be kept in sync". They were not kept in
+// sync by anything except that sentence, and the measurement was brutal: neutering PRODUCTION
+// `advanceServerSeq` left this lane 95/95 GREEN, because this lane never ran it. The test proved
+// PostgreSQL 16 implements rollback — a fact not in dispute — and nothing about the code it named.
 //
-// That is task 08's computation, not task 16's contract. So this file advances the watermark
-// through the STORE directly (the value the engine WOULD compute, and DOES compute on PGlite —
-// see apps/server/test/integration/sync/batch-atomicity.test.ts, which drives the real engine
-// end-to-end). What is proven HERE, on the pinned engine, is task 16's actual property: that the
-// op INSERTs, the projection APPLY and the watermark advance commit — or roll back — as ONE unit.
+// The store now lives in `../src/watermarks.ts` (a db-server concern; its only imports are kysely
+// and @bolusi/core, both edges 08 §3.3 already grants). This file imports it. There is nothing to
+// keep in sync, so nothing can drift — the guard is closed BY CONSTRUCTION, not by discipline
+// (CLAUDE.md §2.11).
 //
-// MIRROR — the watermark statements below mirror apps/server/src/sync/watermarks.ts
-// (`createServerWatermarkStore`). db-server cannot value-import @bolusi/server (08 §3.3 boundary,
-// and it would invert the dependency), so the two must be kept in sync; they ARE the server
-// `projection_watermarks` contract (10-db §8).
+// ── AND WHY THE WATERMARK IS NO LONGER ADVANCED BY HAND ────────────────────────────────────────
+//
+// The old file also called `advanceServerSeq(MODULE_ID, 3)` with a literal 3, because on real
+// Postgres `highestContiguousServerSeq` compared an int8 STRING to a number and never advanced
+// (the bug this lane found, now fixed as task 46's int8 seam). A hardcoded 3 cannot detect a
+// watermark computed wrongly: it asserts that the number the test just wrote is the number the
+// test just wrote. With 46 landed, the ENGINE computes the value on this driver, so every case
+// below drives `applyPulledOp` and lets the real path produce the watermark. The 3s asserted here
+// are now OUTPUTS of production code, not inputs to it.
+//
+// This lane is also the only thing that executes `highestContiguousServerSeq` on ANY engine:
+// applier-conformance (T-8) calls only `applyAppendedOp`, and the contiguity walk is reachable
+// solely from the PULL branch (engine.ts:154). See task 47's T-8 scope note.
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
@@ -48,12 +53,13 @@ import {
   type ModuleProjectionManifest,
   type ProjectionApplier,
   type RebuildStore,
-  type WatermarkStore,
 } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import type { DB } from '../src/generated/db.js';
 import { APP_ROLE } from '../src/schema/security.js';
+// THE POINT OF THIS FILE: the production store, on the production driver.
+import { createServerWatermarkStore } from '../src/watermarks.js';
 import { seedTenant, uuid, type TenantFixture } from './helpers/fixtures.js';
 import { createTestDb, ENGINE, type TestDb } from './helpers/test-db.js';
 
@@ -100,36 +106,10 @@ const unusedRebuildStore: RebuildStore = {
   writeVersion: () => Promise.reject(new Error('rebuild not exercised')),
 };
 
-/** MIRROR of apps/server/src/sync/watermarks.ts — the server `projection_watermarks` shape. */
-function serverWatermarkStore(db: Kysely<never>, tenantId: string): WatermarkStore {
-  return {
-    async read(moduleId: string) {
-      const result = await sql<{ appliedServerSeq: string | number }>`
-        SELECT applied_server_seq FROM projection_watermarks
-        WHERE tenant_id = ${tenantId} AND module_id = ${moduleId}
-      `.execute(db);
-      const row = result.rows[0];
-      return {
-        appliedServerSeq: row === undefined ? 0 : Number(row.appliedServerSeq),
-        appliedLocalSeq: 0,
-      };
-    },
-    async advanceServerSeq(moduleId: string, value: number) {
-      await sql`
-        INSERT INTO projection_watermarks (tenant_id, module_id, applied_server_seq)
-        VALUES (${tenantId}, ${moduleId}, ${value})
-        ON CONFLICT (tenant_id, module_id) DO UPDATE
-        SET applied_server_seq = CASE
-          WHEN projection_watermarks.applied_server_seq > excluded.applied_server_seq
-          THEN projection_watermarks.applied_server_seq
-          ELSE excluded.applied_server_seq
-        END
-      `.execute(db);
-    },
-    async advanceLocalSeq() {
-      /* no applied_local_seq column server-side (10-db §8) */
-    },
-  };
+/** The PRODUCTION store, bound to a tenant-scoped handle — the same call apps/server makes.
+ *  `Transaction<DB>` extends `Kysely<DB>`, so this one parameter type accepts both handles. */
+function store(trx: Kysely<DB>) {
+  return createServerWatermarkStore(trx, tenant.tenantId);
 }
 
 function makeEngine(trx: Transaction<DB>): ProjectionEngine<ProbeDb> {
@@ -138,7 +118,7 @@ function makeEngine(trx: Transaction<DB>): ProjectionEngine<ProbeDb> {
   return new ProjectionEngine<ProbeDb>({
     db: trx as unknown as Kysely<ProbeDb>,
     registry,
-    watermarks: serverWatermarkStore(trx as unknown as Kysely<never>, tenant.tenantId),
+    watermarks: store(trx), // production read() + advanceServerSeq(), driven by the engine
     makeRebuildStore: () => unusedRebuildStore,
   });
 }
@@ -203,6 +183,7 @@ async function insertOp(
     .execute();
 }
 
+/** Read the watermark row RAW (not through the store) — an independent oracle (T-12). */
 async function durableWatermark(): Promise<number> {
   const row = await testDb.db
     .selectFrom('projectionWatermarks')
@@ -266,6 +247,79 @@ describe('fixture validity (T-14b) + engine attribution (T-14d)', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// THE COVERAGE THIS FILE EXISTS TO PROVIDE (task 47). The contract tests below drive the store
+// through the engine, which is the honest shape but also an INDIRECT one: if the store regressed,
+// they would fail with a confusing number. These name the store's own behaviour directly, so a
+// break points at the line that broke.
+//
+// THE DENOMINATOR (T-14): `createServerWatermarkStore` exports exactly THREE functions —
+// `read`, `advanceServerSeq`, `advanceLocalSeq`. All three are executed here, on real PG16.
+// "The lane runs" is not "the lane covers this", so the count is asserted, not asserted-about.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+describe('the production store itself, on the production driver (task 47)', () => {
+  test('DENOMINATOR — the store surface is exactly the three functions this file exercises', () => {
+    const s = createServerWatermarkStore(testDb.db, tenant.tenantId);
+    expect(Object.keys(s).sort()).toEqual(['advanceLocalSeq', 'advanceServerSeq', 'read']);
+    // Not zero, and not a surface that grew a function nobody here runs.
+    expect(Object.values(s).every((f) => typeof f === 'function')).toBe(true);
+  });
+
+  test('read() returns a NUMBER, not an int8 string — the seam is load-bearing on real pg', async () => {
+    // THE FALSIFICATION TARGET. `applied_server_seq` is bigint (10-db §5) and the real `pg` driver
+    // hands int8 back as a STRING. Delete `int8ToNumber` from the store's read() and this goes RED
+    // here with 'string' !== 'number' — the assertion task 46's bug needed and did not have.
+    // PGlite CANNOT express this (it marshals int8 to a number, T-14f), which is exactly why this
+    // test lives in the lane that pins PG16.
+    await testDb.appForTenant(tenant.tenantId, async (trx) => {
+      await store(trx).advanceServerSeq(MODULE_ID, 7);
+    });
+    const state = await testDb.appForTenant(tenant.tenantId, (trx) => store(trx).read(MODULE_ID));
+
+    expect(typeof state.appliedServerSeq).toBe('number');
+    expect(state.appliedServerSeq).toBe(7);
+    // The arithmetic the watermark is FOR. A string here makes `+ 1` concatenate: "7" + 1 = "71",
+    // which is why a string watermark is not a cosmetic defect (task 46).
+    expect(state.appliedServerSeq + 1).toBe(8);
+    // A missing row reads as 0, not NaN/undefined (the store's documented empty case).
+    expect(
+      (await testDb.appForTenant(tenant.tenantId, (t) => store(t).read('absent_module')))
+        .appliedServerSeq,
+    ).toBe(0);
+  });
+
+  test('advanceServerSeq() is monotonic — a lower value cannot regress the watermark (04 §4.3)', async () => {
+    // The CASE upsert, on the engine whose `max()` is an aggregate. This is the invariant the
+    // store keeps independently of what the engine computes, so it gets its own assertion.
+    await testDb.appForTenant(tenant.tenantId, async (trx) => {
+      const s = store(trx);
+      await s.advanceServerSeq(MODULE_ID, 5); // insert path
+      await s.advanceServerSeq(MODULE_ID, 9); // conflict path, higher  → moves up
+      expect((await s.read(MODULE_ID)).appliedServerSeq).toBe(9);
+      await s.advanceServerSeq(MODULE_ID, 2); // conflict path, lower   → must NOT regress
+      expect((await s.read(MODULE_ID)).appliedServerSeq).toBe(9);
+      await s.advanceServerSeq(MODULE_ID, 9); // conflict path, equal   → stays
+      expect((await s.read(MODULE_ID)).appliedServerSeq).toBe(9);
+    });
+    expect(await durableWatermark()).toBe(9);
+  });
+
+  test('advanceLocalSeq() is a no-op — the server table has no applied_local_seq column (10-db §8)', async () => {
+    // The third function. It is a no-op by design, and "by design" is a claim: if it ever grew a
+    // write, this lane is where the missing column would raise. Asserting it writes NOTHING is
+    // what makes the denominator 3/3 rather than 2/3-and-a-shrug.
+    await testDb.appForTenant(tenant.tenantId, async (trx) => {
+      const s = store(trx);
+      await s.advanceServerSeq(MODULE_ID, 4);
+      await s.advanceLocalSeq(MODULE_ID, 99);
+      const state = await s.read(MODULE_ID);
+      expect(state.appliedServerSeq).toBe(4); // untouched by the local-seq call
+      expect(state.appliedLocalSeq).toBe(0); // the port's server shape always reports 0
+    });
+    expect(await durableWatermark()).toBe(4);
+  });
+});
+
 describe('LOAD-BEARING: insert + apply + watermark commit in ONE transaction (task 16 §39)', () => {
   test('ATOMIC — an abort mid-batch rolls the watermark back together with the un-applied ops', async () => {
     const ops = [probeOp(1, 'a'), probeOp(2, 'b'), probeOp(3, 'c')];
@@ -273,14 +327,15 @@ describe('LOAD-BEARING: insert + apply + watermark commit in ONE transaction (ta
     await expect(
       testDb.appForTenant(tenant.tenantId, async (trx) => {
         for (const [i, op] of ops.entries()) await insertOp(trx, op, i + 1);
+        // ONE apply. The ENGINE computes the watermark from log presence and drives the store —
+        // no hand-written value. On this driver that exercises production read() +
+        // highestContiguousServerSeq (task 46) + production advanceServerSeq().
         await makeEngine(trx).applyPulledOp(ops[0] as SignedOperation);
-        // The watermark the engine WOULD compute once the whole batch is in the log: the TOP of the
-        // batch (contiguity is computed from log PRESENCE, not from what was applied). This is the
-        // state that becomes a permanent lie if it is allowed to commit without ops 2–3 folded.
-        await serverWatermarkStore(
-          trx as unknown as Kysely<never>,
-          tenant.tenantId,
-        ).advanceServerSeq(MODULE_ID, 3);
+
+        // In-transaction the watermark has ALREADY jumped to the TOP OF THE BATCH (3) — computed,
+        // not asserted: contiguity comes from the three ops being in the log, while only ONE was
+        // folded. This is the state that becomes a permanent lie if it commits.
+        expect((await store(trx).read(MODULE_ID)).appliedServerSeq).toBe(3);
         throw new Error('crash mid-batch');
       }),
     ).rejects.toThrow('crash mid-batch');
@@ -296,16 +351,30 @@ describe('LOAD-BEARING: insert + apply + watermark commit in ONE transaction (ta
     await testDb.appForTenant(tenant.tenantId, async (trx) => {
       for (const [i, op] of ops.entries()) await insertOp(trx, op, i + 1);
       const engine = makeEngine(trx);
-      for (const op of ops) await engine.applyPulledOp(op);
-      await serverWatermarkStore(trx as unknown as Kysely<never>, tenant.tenantId).advanceServerSeq(
-        MODULE_ID,
-        3,
-      );
+      for (const op of ops) await engine.applyPulledOp(op); // engine advances the watermark itself
     });
     // watermark N means "every op with serverSeq ≤ N is folded" — and here it tells the truth.
     expect(await durableWatermark()).toBe(3);
     expect(await countOps()).toBe(3);
     expect(await countProbeRows()).toBe(3);
+  });
+
+  test('CONTIGUITY — a GAP in the log holds the watermark below the batch top', async () => {
+    // The other half of what the hardcoded 3 could never see: the watermark is not "the top of
+    // whatever arrived", it is the top of the CONTIGUOUS prefix. Insert serverSeq 1 and 3 (2 is
+    // missing, still in flight) and the computed watermark must stop at 1. A store or walk that
+    // returned the max would say 3 and strand op 2 forever.
+    const first = probeOp(1, 'g1');
+    const third = probeOp(3, 'g3');
+    await testDb.appForTenant(tenant.tenantId, async (trx) => {
+      await insertOp(trx, first, 1);
+      await insertOp(trx, third, 3); // gap at 2
+      const engine = makeEngine(trx);
+      await engine.applyPulledOp(first);
+      await engine.applyPulledOp(third);
+    });
+    expect(await durableWatermark()).toBe(1); // NOT 3 — contiguity stops at the gap
+    expect(await countProbeRows()).toBe(2); // both ops folded; only the watermark is held back
   });
 
   test('FALSIFICATION — committing per-op advances the watermark past un-applied ops: the silent skip', async () => {
@@ -315,14 +384,10 @@ describe('LOAD-BEARING: insert + apply + watermark commit in ONE transaction (ta
     await testDb.appForTenant(tenant.tenantId, async (trx) => {
       for (const [i, op] of ops.entries()) await insertOp(trx, op, i + 1);
     });
-    // … then apply ONE op — and its watermark — in their own transaction, and COMMIT. Then "crash"
-    // before ops 2 and 3 are ever folded.
+    // … then apply ONE op — and its engine-computed watermark — in their own transaction, and
+    // COMMIT. Then "crash" before ops 2 and 3 are ever folded.
     await testDb.appForTenant(tenant.tenantId, async (trx) => {
       await makeEngine(trx).applyPulledOp(ops[0] as SignedOperation);
-      await serverWatermarkStore(trx as unknown as Kysely<never>, tenant.tenantId).advanceServerSeq(
-        MODULE_ID,
-        3,
-      );
     });
 
     const watermark = await durableWatermark();
