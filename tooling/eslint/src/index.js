@@ -101,13 +101,43 @@ export default tseslint.config(
     },
   },
   {
+    // Scope extended task 23 to add `packages/ui` (08-stack §5.2 / design-system §7 lint (b)): the
+    // design-system package receives resolved strings as props and must itself contain zero
+    // user-visible literals. Test files are excluded — RN component tests legitimately pass literal
+    // placeholder copy as props (testing-guide asserts KEYS/testIDs, never that copy; the copy is
+    // inert fixture data), exactly as the repo already exempts RuleTester fixtures below.
     name: 'bolusi/i18n-strings',
-    files: ['apps/mobile/**/*.{ts,tsx,js,jsx}', 'packages/modules/src/**/screens/**/*.{ts,tsx}'],
+    files: [
+      'apps/mobile/**/*.{ts,tsx,js,jsx}',
+      'packages/modules/src/**/screens/**/*.{ts,tsx}',
+      'packages/ui/src/**/*.{ts,tsx}',
+    ],
+    ignores: ['packages/ui/src/**/*.test.{ts,tsx}'],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
       'bolusi/no-hardcoded-strings': 'error',
+    },
+  },
+  {
+    // Added task 23 — design-system §7 lint (a): color/size literals in `.tsx` are errors outside
+    // tokens.ts. Scope per §7: packages/ui, apps/mobile, packages/modules/**/screens. `tokens.ts`
+    // IS the vocabulary, so it is the single exemption; test files are out of scope (fixtures and
+    // the RN doubles legitimately carry raw values — the package's own package-hygiene suite polices
+    // src separately).
+    name: 'bolusi/token-literals',
+    files: [
+      'packages/ui/src/**/*.{ts,tsx}',
+      'apps/mobile/**/*.{ts,tsx}',
+      'packages/modules/src/**/screens/**/*.{ts,tsx}',
+    ],
+    ignores: ['packages/ui/src/tokens.ts', '**/*.test.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      'bolusi/no-token-literals': 'error',
     },
   },
   {
