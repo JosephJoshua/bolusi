@@ -36,6 +36,9 @@ export default defineConfig({
   test: {
     name: 'mobile',
     environment: 'node',
+    // Boots the REAL i18n instance (see the file) — @bolusi/i18n throws rather than lazily
+    // initialising, and screens resolve labels through it.
+    setupFiles: ['./test/setup.ts'],
     // Colocated `*.test.ts(x)` beside the code (08 §5.4), plus `test/` for config-level suites.
     // `.tsx` is included deliberately: the previous `test/**/*.test.ts` would have silently skipped
     // every screen test this task adds — a lane that runs nothing reports green (T-14c).

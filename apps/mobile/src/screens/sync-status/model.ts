@@ -254,10 +254,12 @@ export function mediaQueue(input: SyncStatusInput): readonly MediaQueueRow[] {
   return input.media.filter((row): row is MediaQueueRow => row.uploadStatus !== 'uploaded');
 }
 
-/** The label key for a rejected row (`core.rejection.<CODE>`, 07-i18n §4.2 derivation). */
-export function rejectionKey(row: RejectedOpRow): string {
-  return `core.rejection.${row.rejectionCode}`;
-}
+// NOTE: there is deliberately NO `rejectionKey()` helper here. `@bolusi/i18n`'s
+// `translateRejectionCode(code)` already owns the `core.rejection.<CODE>` derivation AND the
+// unknown-code fallback + warn-once (07-i18n §4.2/§4.3), so the screen calls that. A local helper
+// that rebuilt the same key would be a second answer to one question (CLAUDE.md §2.8) — and the
+// copy without the fallback would render a raw missing key to a cashier the first time 05 §8 gained
+// a code. `rejection-keys.test.ts` proves every code in the closed set resolves in BOTH catalogs.
 
 /** The label key for a media row's status chip. */
 export const MEDIA_STATUS_KEY = {

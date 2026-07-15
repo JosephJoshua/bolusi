@@ -19,7 +19,6 @@ import {
   MEDIA_STATUS_KEY,
   reassurance,
   REASSURANCE_KEY,
-  rejectionKey,
   showsRejectedSection,
   staleness,
   syncChipState,
@@ -294,26 +293,14 @@ describe('rejected + quarantined surfacing (§8.4 items 4/5)', () => {
     expect(showsRejectedSection(input({ rejected: [rejectedRow('CHAIN_HALTED')] }))).toBe(true);
   });
 
-  test('each row keys core.rejection.<CODE> — never the raw code, never the reason', () => {
-    expect(rejectionKey(rejectedRow('BAD_SIGNATURE'))).toBe('core.rejection.BAD_SIGNATURE');
-    expect(rejectionKey(rejectedRow('SCHEMA_INVALID'))).toBe('core.rejection.SCHEMA_INVALID');
-  });
-
-  test('every code in 05 §8`s closed set produces a key (T-12: the class, not one instance)', () => {
-    const closedSet = [
-      'BAD_SIGNATURE',
-      'CHAIN_BROKEN',
-      'CHAIN_GAP',
-      'CHAIN_HALTED',
-      'DEVICE_REVOKED',
-      'SCHEMA_INVALID',
-      'SCOPE_VIOLATION',
-      'UNKNOWN_TYPE',
-    ];
-    for (const code of closedSet) {
-      expect(rejectionKey(rejectedRow(code))).toBe(`core.rejection.${code}`);
-    }
-    expect(closedSet).toHaveLength(8);
+  test('a row carries its code and its reason separately — the reason is never the message', () => {
+    // The screen renders `translateRejectionCode(row.rejectionCode)` as the message (i18n owns the
+    // `core.rejection.<CODE>` derivation AND the unknown-code fallback), and keeps `rejectionReason`
+    // for the collapsed technical-details slot. That every code in 05 §8's closed set resolves in
+    // BOTH catalogs is proven in rejection-keys.test.ts, against the real catalogs.
+    const row = rejectedRow('BAD_SIGNATURE');
+    expect(row.rejectionCode).toBe('BAD_SIGNATURE');
+    expect(row.rejectionReason).toBe('detail');
   });
 
   test('quarantined ops are their own loud problem — held out of view, not applied', () => {

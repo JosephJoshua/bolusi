@@ -81,6 +81,49 @@ export function switcherState(
   return { kind: 'ready', users: sortByRecency(users) };
 }
 
+/** §8.2's grid is 2 columns. Named once, here, because the chunking and the layout must agree. */
+export const SWITCHER_COLUMNS = 2;
+
+/** A rendered grid row: up to `SWITCHER_COLUMNS` cards, keyed for the virtualized list. */
+export interface SwitcherGridRow {
+  readonly key: string;
+  readonly users: readonly SwitcherUser[];
+}
+
+/**
+ * Chunk the users into grid rows — how this screen gets §8.2's TWO-COLUMN GRID out of a
+ * ONE-COLUMN virtualized primitive, without touching a contended package.
+ *
+ * The problem: design-system §8.2 specifies a 2-column grid of 96 dp avatars, but `@bolusi/ui`'s
+ * `List` (§3.13, the only sanctioned collection primitive) wraps `FlatList` with fixed-height rows
+ * and exposes no `numColumns`. `packages/ui` is CONTENDED this wave (CLAUDE.md §4), so adding the
+ * prop is a coordinated design-system change, not an inline edit.
+ *
+ * The answer: make each LIST ITEM a grid ROW. Virtualization is preserved exactly — `List` still
+ * windows, still gets uniform row heights, still keeps `getItemLayout` legal — and the screen gets
+ * its grid. A `.map()` over all users inside one ScrollView would have been the easy alternative and
+ * is precisely the defect the 2 GB target cannot afford (§0/§3.13): a shop with 30 staff would
+ * mount 30 96 dp avatars at once, and the `bolusi/list-primitive-only` rule this task ships would
+ * not have caught it (it guards the import, not a hand-rolled map).
+ *
+ * The trailing row is short rather than padded with a placeholder: the screen renders an empty
+ * flex spacer, so an odd user count leaves a gap instead of a phantom card.
+ */
+export function toGridRows(
+  users: readonly SwitcherUser[],
+  columns: number = SWITCHER_COLUMNS,
+): readonly SwitcherGridRow[] {
+  const rows: SwitcherGridRow[] = [];
+  for (let index = 0; index < users.length; index += columns) {
+    const slice = users.slice(index, index + columns);
+    // Keyed by the row's FIRST user id, not the index: an index key would make React reuse a card
+    // for a different person when the recency order changes underneath a re-render — on a switcher,
+    // that is the wrong face under the right name.
+    rows.push({ key: slice[0]!.id, users: slice });
+  }
+  return rows;
+}
+
 /** Initials for the Avatar (design-system §3.12) — 1–2 characters, uppercased. */
 export function initialsOf(name: string): string {
   const words = name
