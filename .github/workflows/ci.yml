@@ -74,6 +74,34 @@ jobs:
           rm gitleaks.tgz
       - run: pnpm test
 
+  # Client DB lane (task 04): build, unit + driver-conformance, and the codegen diff.
+  #
+  # The conformance suite (testing-guide §2.3) runs here against the better-sqlite3
+  # in-memory adapter. SQLCipher is OFF in this lane BY DESIGN — better-sqlite3 ships
+  # none, and op-sqlite is a JSI module that cannot run in Node. SEC-DEV-06's on-device
+  # leg (real SQLCipher, DB file bytes) belongs to the device lane (task 27); nothing here
+  # may be read as evidence about encryption at rest.
+  db-client:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -F @bolusi/db-client build
+      - name: unit + driver conformance (better-sqlite3 lane, SQLCipher off by design)
+        run: pnpm -F @bolusi/db-client test
+      # 10-db §11.4: rebuild a scratch SQLite DB from every client migration, regenerate,
+      # and diff. A migration landed without regenerating fails here.
+      - name: client codegen types are up to date (10-db §11.4)
+        run: |
+          pnpm -F @bolusi/db-client db:codegen
+          git diff --exit-code -- packages/db-client/src/generated
+
   # Stage 6 — JCS + crypto vectors on the Hermes VM matching the pinned RN version.
   # PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md).
   # Candidate paths verified at bootstrap (08 §7):
