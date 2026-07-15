@@ -14,6 +14,12 @@
     },
     {
       "path": "../schemas/tsconfig.build.json"
+    },
+    {
+      // Type-only: the driver-conformance suite is typed against db-client's `DbDriver`,
+      // the ONE driver interface. No runtime edge — `verbatimModuleSyntax` + the
+      // type-only import keep db-client out of this package's emitted JS.
+      "path": "../db-client/tsconfig.build.json"
     }
   ]
 }

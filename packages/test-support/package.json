@@ -23,6 +23,7 @@
     "kysely": "catalog:"
   },
   "devDependencies": {
+    "@bolusi/db-client": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "@types/node": "catalog:"
   },

@@ -91,6 +91,51 @@ tester.run('boundaries', rule, {
       code: `import pg from 'pg';`,
       filename: '/repo/packages/db-server/src/pool.ts',
     },
+    // better-sqlite3 backs db-client's CI conformance adapter — test/ files only (§2.5)
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/db-client/test/better-sqlite3-adapter.ts',
+    },
+    // ...and its codegen tooling script (10-db §11.4 builds a scratch DB)
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/db-client/scripts/codegen.ts',
+    },
+    // better-sqlite3 remains the harness's simulated-device driver
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/harness/src/device.ts',
+    },
+    // db-client test/tooling files may use Node builtins; only its shipping source may not
+    {
+      code: `import { mkdtempSync } from 'node:fs';`,
+      filename: '/repo/packages/db-client/scripts/codegen.ts',
+    },
+    {
+      code: `import { tmpdir } from 'node:os';`,
+      filename: '/repo/packages/db-client/test/migrations.test.ts',
+    },
+    // test-support types the conformance suite against db-client's driver interface
+    // (type-only; the driver handle itself is injected by the runner — 08 §3.3 rule 7)
+    {
+      code: `import type { DbDriver } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/driver-conformance/index.ts',
+    },
+    // a type-only re-export is still type-only
+    {
+      code: `export type { DbDriver } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/index.ts',
+    },
+    // the type-only lock is scoped to test-support: db-client's OWN tests value-import it
+    {
+      code: `import { openClientDb } from '@bolusi/db-client';`,
+      filename: '/repo/packages/db-client/test/dialect.test.ts',
+    },
+    // ...and the harness may value-import it (08 §3.3 harness row)
+    {
+      code: `import { openClientDb } from '@bolusi/db-client';`,
+      filename: '/repo/packages/harness/src/device.ts',
+    },
   ],
   invalid: [
     // op-sqlite outside db-client → error (primary fixture)
@@ -178,11 +223,49 @@ tester.run('boundaries', rule, {
       filename: '/repo/apps/server/src/db.ts',
       errors: [{ messageId: 'dbDriver' }],
     },
-    // better-sqlite3 outside harness → driver lock (drivers are injected into test-support)
+    // better-sqlite3 outside its owners → driver lock (drivers are injected into test-support)
     {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/test-support/src/drivers.ts',
       errors: [{ messageId: 'dbDriver' }],
+    },
+    // better-sqlite3 inside db-client SHIPPING SOURCE → test-only lock (08 §2.5).
+    // This is the fixture that keeps the CI adapter out of the device bundle.
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/db-client/src/adapters/better-sqlite3.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    // op-sqlite outside db-client, from the app that actually ships it (primary fixture)
+    {
+      code: `import { open } from '@op-engineering/op-sqlite';`,
+      filename: '/repo/apps/mobile/src/bootstrap.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // db-client is Hermes-only: no Node builtins in shipping source
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/db-client/src/connection.ts',
+      errors: [{ messageId: 'nodeInHermesSource' }],
+    },
+    // test-support → db-client must be TYPE-ONLY (08 §3.3 hard rule 7).
+    // The reviewer's constructed violation: a genuine VALUE import that every other
+    // mechanism (consistent-type-imports, verbatimModuleSyntax, shipping-deps) misses.
+    {
+      code: `import { DbOpenError } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/driver-conformance/index.ts',
+      errors: [{ messageId: 'dbClientTypeOnly' }],
+    },
+    // ...including via a subpath, and via re-export
+    {
+      code: `import { openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';`,
+      filename: '/repo/packages/test-support/src/driver-conformance/index.ts',
+      errors: [{ messageId: 'dbClientTypeOnly' }],
+    },
+    {
+      code: `export { DbError } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/index.ts',
+      errors: [{ messageId: 'dbClientTypeOnly' }],
     },
     // deprecated @hono/node-ws is banned everywhere (08 §2.6)
     {

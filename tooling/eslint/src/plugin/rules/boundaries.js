@@ -3,7 +3,9 @@
 //   1. §2.6 banned packages everywhere (@hono/node-ws, expo-background-fetch,
 //      expo-file-system/legacy, kysely-expo)
 //   2. DB-driver locks (op-sqlite → db-client only; pg → db-server only;
-//      better-sqlite3 → harness only)
+//      better-sqlite3 → harness, plus db-client TEST/TOOLING files only — it is the CI
+//      adapter behind the driver-conformance suite and must never reach shipping source)
+//   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
 //   3. */screens subpaths importable only from apps/mobile
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
 //   5. nothing imports @bolusi/mobile
@@ -24,11 +26,54 @@ const FORBIDDEN_EVERYWHERE = new Map([
 ]);
 
 // DB drivers may be imported only by their owning wrapper (08 §3.3 hard rule 2).
+// `testOnly` owners may import the driver from test/tooling files but NOT from shipping
+// source: better-sqlite3 is test-only (08 §2.5) and backs both the harness's simulated
+// devices and db-client's CI conformance adapter (testing-guide §2.3).
 const DB_DRIVER_OWNERS = new Map([
-  ['@op-engineering/op-sqlite', 'packages/db-client'],
-  ['pg', 'packages/db-server'],
-  ['better-sqlite3', 'packages/harness'],
+  ['@op-engineering/op-sqlite', [{ workspace: 'packages/db-client' }]],
+  ['pg', [{ workspace: 'packages/db-server' }]],
+  [
+    'better-sqlite3',
+    [{ workspace: 'packages/harness' }, { workspace: 'packages/db-client', testOnly: true }],
+  ],
 ]);
+
+// Hermes-only workspaces: shipping source cannot use Node builtins (08 §3.2). Files
+// outside the shipped bundle legitimately do (codegen scripts, the CI test lane).
+const NODE_FREE_SOURCE = new Set(['packages/db-client']);
+
+/**
+ * "Is this file outside the SHIPPED bundle?" — feeds the driver lock and the db-client
+ * node-free lock.
+ *
+ * ### DO NOT MERGE THIS WITH `NODE_LANE_ONLY` (below). They are not the same rule.
+ *
+ * They look interchangeable — both are "test-ish file?" predicates over the same directory
+ * shapes — and they are not. One file from each package proves it, same shape, OPPOSITE
+ * correct answers:
+ *
+ *  - `packages/db-client/test/better-sqlite3-adapter.ts` — non-`.test.ts` helper importing
+ *    better-sqlite3. MUST be exempt here: it runs on Node in CI and is never bundled.
+ *  - `packages/i18n/test/hermes-entry.ts` — non-`.test.ts` helper that RUNS ON HERMES as
+ *    the stage-6 vector entry. MUST NOT be exempt from the platform-free prong.
+ *
+ * Because the questions differ: "may this import a Node-only test driver?" (packaging —
+ * 08 §2.5, answered here) vs "must this survive on Hermes?" (platform — 08 §3.4, answered
+ * by NODE_LANE_ONLY). DRY them and the task-22 hole reopens silently.
+ *
+ * CAVEAT for the node-free prong: this predicate exempts any file under `test/`, so a
+ * Hermes-BUNDLED helper placed in `packages/db-client/test/` would slip the node:* lock.
+ * None exists today (db-client's L6 code is shipping source under `src/adapters/`, and the
+ * on-device suite lives in test-support/apps). If db-client ever gains one, move THIS
+ * prong to `NODE_LANE_ONLY` — do not loosen that constant.
+ */
+function isOutsideShippingSource(filename) {
+  return (
+    /\.test\.[cm]?[jt]sx?$/.test(filename) ||
+    /(?:^|\/)(?:test|tests|scripts)\//.test(filename) ||
+    /\/vitest\.config\.[cm]?[jt]s$/.test(filename)
+  );
+}
 
 // Platform-free workspaces (08 §3.3 hard rule 3). modules screens files are exempt.
 const PLATFORM_FREE = new Set([
@@ -88,6 +133,12 @@ export default {
       forbiddenEverywhere: "'{{source}}' is forbidden: {{reason}}",
       dbDriver:
         "Only {{owner}} may import the DB driver '{{source}}' (08-stack-and-repo §3.3 — nothing outside the wrappers touches a driver).",
+      dbDriverTestOnly:
+        "'{{source}}' is test-only (08-stack-and-repo §2.5) and must never reach shipping source — import it from a test/ or scripts/ file, and inject the driver into the code under test.",
+      nodeInHermesSource:
+        "'{{source}}': {{workspace}} is Hermes-only — Node builtins do not exist on device (08-stack-and-repo §3.2). Files under test/ and scripts/ may use them; shipping source may not.",
+      dbClientTypeOnly:
+        "'{{source}}': @bolusi/test-support may import @bolusi/db-client TYPE-ONLY (08-stack-and-repo §3.3 hard rule 7) — the conformance suite types against the one DbDriver interface, but must carry no runtime edge to it. Use `import type`, and let the runner inject the driver handle.",
       screensOutsideMobile:
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
       serverImport:
@@ -119,9 +170,46 @@ export default {
       const driverKey = source.startsWith('@op-engineering/')
         ? '@op-engineering/op-sqlite'
         : source;
-      const owner = DB_DRIVER_OWNERS.get(driverKey);
-      if (owner && workspace !== owner) {
-        context.report({ node, messageId: 'dbDriver', data: { source, owner } });
+      const owners = DB_DRIVER_OWNERS.get(driverKey);
+      if (owners) {
+        const owned = owners.find((entry) => entry.workspace === workspace);
+        if (!owned) {
+          context.report({
+            node,
+            messageId: 'dbDriver',
+            data: { source, owner: owners.map((entry) => entry.workspace).join(' / ') },
+          });
+          return;
+        }
+        // Owned, but test-only: shipping source in the owning workspace is still barred.
+        if (owned.testOnly && !isOutsideShippingSource(filename)) {
+          context.report({ node, messageId: 'dbDriverTestOnly', data: { source } });
+          return;
+        }
+      }
+
+      // 2b. Hermes-only workspaces: no Node builtins in shipping source.
+      if (
+        workspace &&
+        NODE_FREE_SOURCE.has(workspace) &&
+        /^node:/.test(source) &&
+        !isOutsideShippingSource(filename)
+      ) {
+        context.report({ node, messageId: 'nodeInHermesSource', data: { source, workspace } });
+        return;
+      }
+      // 2c. test-support → db-client is TYPE-ONLY (08 §3.3 hard rule 7).
+      // Nothing else enforces it: `consistent-type-imports` does not fire on a genuine
+      // value import, `verbatimModuleSyntax` only preserves what you write, and the
+      // shipping-deps test reads `dependencies` of shipping workspaces only. Without this
+      // prong, `import { DbOpenError } from '@bolusi/db-client'` in test-support/src would
+      // put a runtime edge into its emitted JS with nothing objecting.
+      if (
+        workspace === 'packages/test-support' &&
+        (source === '@bolusi/db-client' || source.startsWith('@bolusi/db-client/')) &&
+        importKind !== 'type'
+      ) {
+        context.report({ node, messageId: 'dbClientTypeOnly', data: { source } });
         return;
       }
       // 3. */screens subpaths only from apps/mobile.

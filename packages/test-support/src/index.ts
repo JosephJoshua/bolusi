@@ -32,3 +32,7 @@ export {
   shuffle,
   type Prng,
 } from './determinism/prng.js';
+
+// Driver-conformance suite (task 04) — identical statement set against better-sqlite3 in
+// CI and op-sqlite on device (testing-guide §2.3).
+export * from './driver-conformance/index.js';
