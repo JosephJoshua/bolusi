@@ -108,6 +108,37 @@ export async function seedNote(db: Kysely<DB>, tenant: TenantFixture): Promise<s
 }
 
 /**
+ * The op fields a test needs to DECIDE rather than inherit (task 48).
+ *
+ * Everything here is optional and defaults to what `seedOperation` always used, so the existing
+ * `server_seq` walk fixtures are byte-identical to before this interface existed. A test that
+ * probes how a COLUMN marshals back has to own the value in that column — a helper that invented
+ * `seq`, `payload` or `agent_initiated` itself would be deciding the test's input, and an
+ * assertion about a value the fixture chose proves nothing about the value the test meant (T-3).
+ */
+export interface OperationOverrides {
+  /** Per-device counter (05 §2.1). `9` vs `10` is what makes the int8-as-string order invert. */
+  readonly seq?: bigint;
+  /** Same `entityId` across rows groups them for a `readEntityOps` re-fold read. */
+  readonly entityId?: string;
+  /** Equal timestamps across rows force `seq` to be the tie-break that decides the order. */
+  readonly timestampMs?: bigint;
+  /** Written to the `jsonb` column verbatim; the real `pg` driver hands it back PARSED. */
+  readonly payload?: unknown;
+  /** Also `jsonb` server-side — the same class as `payload`, twelve lines away. */
+  readonly location?: unknown;
+  /** `boolean` server-side, `0`/`1` client-side — the fraud-model attribution bit (02 §7). */
+  readonly agentInitiated?: boolean;
+  /**
+   * Only the envelope-conformance case sets this. The default `sig-<uuid>` is deliberate filler
+   * and is NOT valid base64, so an op carrying it can never satisfy `zSignedOperation` — a case
+   * that validates the whole envelope must supply a real one, or it goes red on the signature and
+   * an unrelated failure stands in for the claim (T-13).
+   */
+  readonly signature?: string;
+}
+
+/**
  * Seeds one `operations` row for `tenant` at an exact `serverSeq` — the op log's server
  * bookkeeping column (05 §2.4), which is what the contiguous-serverSeq walk reads.
  *
@@ -116,17 +147,21 @@ export async function seedNote(db: Kysely<DB>, tenant: TenantFixture): Promise<s
  * the column is `bigint` (10-db §5) — passing a JS number here would round silently at 2^53 and
  * quietly weaken any test that probes that boundary.
  *
- * The op is content-free filler (`previous_hash`/`hash` are arbitrary 64-char strings, not a real
- * chain): the walk only reads `server_seq`, and a fake chain here cannot mislead anyone into
- * thinking this file verifies hashes.
+ * `overrides` is for tests that read the op back through a DECODER and must therefore own what
+ * went in (task 48). Omit it and the row is content-free filler exactly as before: the
+ * `previous_hash`/`hash` are arbitrary 64-char strings, not a real chain — the walk only reads
+ * `server_seq`, and a fake chain here cannot mislead anyone into thinking this file verifies
+ * hashes.
  */
 export async function seedOperation(
   db: Kysely<DB>,
   tenant: TenantFixture,
   serverSeq: bigint,
+  overrides: OperationOverrides = {},
 ): Promise<string> {
   const id = uuid();
   const at = BigInt(timestampMs());
+  const location = overrides.location;
 
   await db
     .insertInto('operations')
@@ -136,20 +171,23 @@ export async function seedOperation(
       storeId: tenant.storeId,
       userId: tenant.userId,
       deviceId: tenant.deviceId,
-      seq: BigInt(counter),
+      seq: overrides.seq ?? BigInt(counter),
       type: 'note.created',
       entityType: 'note',
-      entityId: uuid(),
+      entityId: overrides.entityId ?? uuid(),
       schemaVersion: 1,
-      payload: JSON.stringify({ title: `t-${id}` }),
-      timestampMs: at,
-      location: null,
+      // Serialised here, not handed over as an object: a JSON *string* parameter is what the
+      // existing rows have always written into this `jsonb` column, and the point of the tests
+      // that read it back is what the DRIVER does on the way OUT, not on the way in.
+      payload: JSON.stringify(overrides.payload ?? { title: `t-${id}` }),
+      timestampMs: overrides.timestampMs ?? at,
+      location: location === undefined || location === null ? null : JSON.stringify(location),
       source: 'ui',
-      agentInitiated: false,
+      agentInitiated: overrides.agentInitiated ?? false,
       agentConversationId: null,
       previousHash: '0'.repeat(64),
       hash: id.replace(/-/g, '').padEnd(64, '0').slice(0, 64),
-      signature: `sig-${id}`,
+      signature: overrides.signature ?? `sig-${id}`,
       signedCoreJcs: `{"id":"${id}"}`,
       serverSeq,
       receivedAt: at,
