@@ -44,7 +44,8 @@ import {
 } from '@bolusi/test-support';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { createServerWatermarkStore } from '../../../src/sync/watermarks.js';
+import { createServerWatermarkStore } from '@bolusi/db-server';
+
 import { makeSyncHarness, type SeededDevice, type SyncHarness } from './helpers.js';
 
 const MODULE_ID = 'fixture';

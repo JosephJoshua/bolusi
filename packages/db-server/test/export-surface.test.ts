@@ -26,6 +26,10 @@ const EXPECTED_EXPORTS = [
   'findDeviceByTokenHash',
   'findControlSessionByTokenHash',
   'findLoginCredential',
+  // Task 47: the server watermark store (10-db §8). It CONSUMES a tenant-bound handle rather
+  // than producing one, and returns a read/advance store with no `selectFrom` — so the D7
+  // invariant this file guards is unchanged, and the `queryish` assertion below still covers it.
+  'createServerWatermarkStore',
 ].sort();
 
 test('the package exports exactly the documented surface', () => {
