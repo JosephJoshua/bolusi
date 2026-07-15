@@ -20,7 +20,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | todo | 06, 08, 09 |
 | 11 | module-contract (defineModule, queries layer, registration) | todo | 08, 10 |
 | 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | done | 02, 05 |
-| 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | in-progress | 05, 12 |
+| 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | done | 05, 12 |
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | todo | 03, 04, 09, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | todo | 07, 12, 13 |
@@ -43,6 +43,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | in-progress | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | todo | 05 |
+| 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | todo | 08 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
