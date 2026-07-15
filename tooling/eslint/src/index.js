@@ -25,6 +25,10 @@ export default tseslint.config(
     rules: {
       'bolusi/no-op-table-update': 'error',
       'bolusi/boundaries': 'error',
+      // Added task 09 — the 02-permissions §2 CI lint. Whole-repo and unscoped: it fires only on
+      // the module-manifest shape (a literal `id` beside permissions/commands/queries), so it costs
+      // nothing elsewhere and cannot miss a manifest that lands in an unexpected package.
+      'bolusi/permission-module-prefix': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
     },
   },
@@ -44,6 +48,22 @@ export default tseslint.config(
     rules: {
       'bolusi/no-op-table-update': 'off',
       'bolusi/boundaries': 'off',
+    },
+  },
+  {
+    // The permission-registry assembly suite (task 09) proves that a manifest declaring another
+    // module's permission is a STARTUP FAILURE (02-permissions §3.2 rule 4). Asserting that
+    // rejection requires constructing the rejected manifest — the same reason
+    // `packages/db-server/test/append-only.test.ts` is exempted from `no-op-table-update` above: a
+    // test proving something is impossible has to attempt it.
+    //
+    // Scoped to this ONE file, and only this rule. The lint's real targets — module manifests under
+    // packages/modules — are untouched, and the rule's own RuleTester fixtures need no exemption
+    // (their violations live inside string literals, which eslint never parses as code).
+    name: 'bolusi/permission-registry-fixture-exemption',
+    files: ['packages/core/test/authz/registry.test.ts'],
+    rules: {
+      'bolusi/permission-module-prefix': 'off',
     },
   },
   {
