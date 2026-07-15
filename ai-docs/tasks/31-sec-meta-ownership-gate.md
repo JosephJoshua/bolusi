@@ -36,6 +36,14 @@ Fix the gate so ownership is **declared**, not inferred from prose, and correct 
 
 **Tally: seven rows across six tasks (SEC-OPLOG-02/05/07/09, SEC-AUTH-06, SEC-RT-02, SEC-AUTH-11) were mis-pointed — every single one found by the task that would have been blamed, and not one by the gate.** Seven for seven. A gate whose defect rate is 100% against its own purpose, discovered exclusively by the people it would have punished, is not a gate; it is a tax on the honest. That is the argument for ship-not-mention, and for the timing fix: none of these seven would have fired until someone flipped a status to `done`, at which point the blast lands on whoever did the flipping.
 
+**Update 2026-07-15 (e) — instance 10, and a NEW gate defect: `badOwners` cannot read RANGE notation, so a legitimate claim is invisible.**
+
+Task 16 needed to point SEC-SYNC-02's client leg at its real owner and **could not**: tasks 15 and 26 both claim their ids as **`"SEC-SYNC-01..10"`** — a string that does **not literally contain** `SEC-SYNC-02`. `badOwners` does `taskText.includes(id)`, so the gate fired (`"task file never mentions the id"`) against a task that genuinely owns the behavior (`15-sync-client.md:51` — per-op `rejected` marking + surfacing). Task 16 falsified both directions before touching anything: drop the row → `missing: ['SEC-SYNC-02']` EXIT=1; row present + task 15 silent → `badOwners` EXIT=1. It then added a minimal, accurate **"SEC ids owed by THIS surface"** line to task 15 naming the id explicitly. **Approved** — task 15 is `todo` (no contention), and the gate provably required it.
+
+**This is the inverse of the first nine and it matters to your design.** Those were *"prose mentions an id it doesn't own"* (a false claim the gate accepts). This is *"prose claims ids in a form the gate can't parse"* (a **true** claim the gate rejects). So `badOwners` is wrong in **both** directions — it accepts disclaimers and rejects ranges — which is the strongest possible argument that **substring-matching prose was never the right mechanism.** Note the shape of what task 16 had to do: it hand-wrote an explicit, machine-readable ownership line, which is precisely the declarative marker this task exists to build. **The convention is already emerging by hand; formalize it and parse it.** Enumerate every range-notation claim (`grep -nE 'SEC-[A-Z]+-[0-9]+\.\.[0-9]+' ai-docs/tasks/`) — each one is a task whose ownership the gate currently cannot see.
+
+Also worth carrying: task 16 **caught itself re-introducing the id mid-fix** — its first replacement `describe` read *"…server legs of SEC-SYNC-02…"*, which still matched `includes()`. A gate keyed on substrings makes the *fix* for a false claim hard to write correctly, which is its own argument.
+
 ## Docs to read
 
 - `security-guide.md` — §2.1 item 4 (SEC-META-01's mandate: a verbatim-ID **test title** must exist, or an allowlist entry naming the owner).
