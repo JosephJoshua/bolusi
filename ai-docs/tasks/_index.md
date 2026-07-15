@@ -10,10 +10,10 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | -- | ----- | ------ | ---------- |
 | 01 | repo-scaffold (pnpm monorepo, toolchain, CI, lint rules) | done | — |
 | 02 | schemas package (op envelope, API DTOs, error/WS schemas) | done | 01 |
-| 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | in-review | 01, 02 |
+| 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | done | 01, 02 |
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | done | 01 |
 | 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | done | 01 |
-| 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | todo | 02, 03, 04 |
+| 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | in-progress | 02, 03, 04 |
 | 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | todo | 02, 03, 05 |
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | todo | 04, 06 |
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | todo | 02, 04 |
