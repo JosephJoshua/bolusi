@@ -19,7 +19,8 @@
     "kysely": "catalog:"
   },
   "devDependencies": {
-    "@bolusi/tsconfig": "workspace:*"
+    "@bolusi/tsconfig": "workspace:*",
+    "@bolusi/test-support": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

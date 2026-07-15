@@ -1,5 +1,5 @@
 # TASK 03 — crypto + canonicalization (@bolusi/core crypto, JCS, RFC 8785 vectors)
-**Status:** todo
+**Status:** in-review
 **Depends on:** 01, 02
 
 ## Goal
@@ -40,3 +40,41 @@ Deliver the crypto foundation of `@bolusi/core`: the `CryptoPort` interface (`sh
 - **Comparator property tests** (seeded, deterministic): total order on random op triples (antisymmetry, transitivity, totality — ties broken by `deviceId` then `seq`); permutation-invariance (any shuffle of a generated op set sorts to the identical sequence, incl. equal-timestamp and equal-timestamp+deviceId collisions).
 - **SEC-OPLOG-06** — id verbatim in the test title: full RFC 8785 appendix vectors + random-envelope property test (fixed-seed generated envelopes → JCS byte digest identical between the Node run and the Hermes run) executed in CI on both runtimes. This is the only SEC-* id owned by this task (SEC-OPLOG-01/04/05/09 are tasks 07/15 — they consume these primitives). No CHAOS-* scenario belongs to this surface (CHAOS-05/12 exercise it downstream via tasks 07/15/26).
 - **Lint/CI gates:** boundary lint stays green — no `@noble/*`, `node:*`, or platform imports inside `packages/core` (08 §3.4 three locks); `@bolusi/test-support` appears only in test files and CI entry points; the only golden files added are the wire-format vectors (T-5).
+
+## Review-round findings (in-review)
+
+- **JCS guard now rejects the whole non-JSON class, not the types someone listed.** The
+  first guard blacklisted exotic types by name; enumerating the class exposed that `Set`,
+  `Map`, boxed primitives, and `Date` were accepted and their contents vanished from the
+  preimage (`new Set([1,2])` and `new Set([9])` both → `{}`, a collision across distinct
+  data). Replaced with a plain-object whitelist (prototype check). A second door — an
+  **own `toJSON` function**, non-enumerable — bypassed even that: `Object.keys` cannot see
+  a non-enumerable key but canonicalize honours `toJSON` regardless, so the guard validated
+  one value while the preimage was another. Closed with a descriptor probe keyed on
+  `typeof value === 'function'` (matching canonicalize's own trigger): rejects own/inherited
+  `toJSON` **functions** at any enumerability, accepts a `toJSON` **data** key (legitimate
+  wire JSON, `{"toJSON":"note"}`), and does not invoke an accessor `toJSON` (the getter
+  TOCTOU is wire-unreachable and deliberately left as accept). Tests enumerate the class:
+  placement × enumerability for `toJSON`, value × position for the exotic types.
+
+- **Falsification is a re-runnable artifact, not a claim.** `pnpm falsify:crypto`
+  (`scripts/falsify-guards.mjs`) breaks each crypto guard in source, rebuilds (`tsc -b`),
+  runs the specific test that must catch it, asserts it goes red, and restores — 6/6 caught,
+  every mutant BEHAVIOURAL (compiles clean, fails on behaviour). "Caught" requires exactly
+  one outcome: the mutant COMPILED **and** the test then went RED. A non-compiling mutant is
+  a `HOLE`, not a catch — it ran no test, so it proves nothing about what the test detects
+  (this is the guard-of-the-guard: a falsification harness that scored green on a build error
+  could itself pass with no behavioural failure). The harness's own assertions were falsified:
+  a deliberately non-compiling mutant and a compiles-but-test-passes mutant were both reported
+  `HOLE` (exit 1), then removed; gutting a guard's test also reports `HOLE`. Manual/CI-optional,
+  not wired into the every-PR gate.
+
+- **CI build-ordering trap (repo-wide, fixed at the script level).** Unit tests import
+  `@bolusi/core` → `dist/`, but the CI `unit` job (stage 4) ran `pnpm test` with no build
+  and does not depend on `typecheck`, so a cold run resolves nothing (this task is the first
+  to add cross-package `@bolusi/core` dist imports in tests — it would have made stage 4 go
+  red). Fixed by making the root vitest scripts build first: `test` and `test:ed25519-interop`
+  are now `tsc -b && vitest run …`. This also fixes the local dist-vs-src staleness footgun
+  (a `pnpm test` without a prior `tsc -b` used to test stale dist). `ci.yml` (the verifier
+  boundary) was not modified. A broader convention — every vitest CI lane builds first, or
+  `unit needs: [typecheck]` — is left for the coordinator as a cross-cutting call.

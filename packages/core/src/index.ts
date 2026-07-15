@@ -1,2 +1,6 @@
-// Placeholder shell — real contents land in later tasks (ai-docs/tasks/_index.md).
+// @bolusi/core — op log, projection engine, command runtime, sync client core, JCS,
+// UUIDv7. PURE TS; every effect behind an injected port (08-stack-and-repo §3.2).
+// Projection engine / command runtime / sync loop land in later tasks.
 export const PACKAGE_NAME = '@bolusi/core' as const;
+
+export * from './crypto/index.js';
