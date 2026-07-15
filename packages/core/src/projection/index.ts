@@ -30,6 +30,19 @@ export {
 // §2.8). Task 47's `createServerWatermarkStore` in @bolusi/db-server is the immediate consumer.
 export { int8ToBigInt, int8ToNumber, type Int8Value } from './int8.js';
 
+// The other two column classes with the same problem, exported for the same reason and NOT because
+// this package needs them exported (task 48). A `jsonb` column reads back parsed on the server and
+// as TEXT on the client; a `boolean` column reads back `false`/`true` server-side and `0`/`1`
+// client-side. Any server store reading those columns needs these exact seams, and a package that
+// cannot import them will write its own `JSON.parse(...)` or `!== 0` — which is how `payload` and
+// `agent_initiated` broke in the first place, twelve lines apart, in one function.
+export {
+  boolColumnToBoolean,
+  jsonColumnToObject,
+  type BoolColumnValue,
+  type JsonColumnValue,
+} from './columns.js';
+
 export {
   assertManifestColumnsComplete,
   digestModule,

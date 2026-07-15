@@ -16,6 +16,12 @@ import { sql, type Kysely } from 'kysely';
 
 import type { Location, SignedOperation } from '@bolusi/schemas';
 
+import {
+  boolColumnToBoolean,
+  jsonColumnToObject,
+  type BoolColumnValue,
+  type JsonColumnValue,
+} from './columns.js';
 import { int8ToBigInt, int8ToNumber, type Int8Value } from './int8.js';
 
 /** A canonical-order position (05 §4) — the rebuild checkpoint triple (04 §4.3). */
@@ -25,23 +31,42 @@ export interface CanonicalCursor {
   readonly seq: number;
 }
 
-/** The op-log columns a projection read needs, keyed camelCase (CamelCasePlugin result keys). */
+/**
+ * The op-log columns a projection read needs, keyed camelCase (CamelCasePlugin result keys).
+ *
+ * THESE TYPES ARE THE DRIVERS' TRUTH, NOT THE ENVELOPE'S (task 48). `RawOpRow` annotates a raw
+ * `sql<>` result, and such an annotation is an ASSERTION the compiler simply believes — it derives
+ * nothing and checks nothing at runtime. This interface used to describe the CLIENT's marshalling
+ * (`seq: number`, `payload: string`, `agentInitiated: number`) while the same rows on the server
+ * arrive as int8 strings, parsed jsonb and real booleans (10-db §3). `tsc` believed the assertion,
+ * so three separate production bugs typechecked clean and no lane could see them (T-14f).
+ *
+ * kysely-codegen had already derived the truth from the live schema — `db.d.ts` says `seq: Int8`
+ * (`= ColumnType<string, …>`), `payload: Json`, `agentInitiated: Generated<boolean>`. The answer
+ * was in the repo the whole time and a hand-written assertion overrode it. So each field below is
+ * now the UNION the drivers actually produce, which makes the compiler force the normalisation
+ * rather than take our word for it.
+ */
 interface RawOpRow {
   id: string;
   tenantId: string;
   storeId: string | null;
   userId: string;
   deviceId: string;
-  seq: number;
+  /** `bigint` column: STRING on real `pg`, `number` on SQLite/PGlite. `"10" < "9"` is the bug. */
+  seq: Int8Value;
   type: string;
   entityType: string;
   entityId: string;
   schemaVersion: number;
-  payload: string;
-  timestampMs: number;
-  location: string | null;
+  /** `jsonb` server-side (already parsed), TEXT client-side (JSON string). */
+  payload: JsonColumnValue;
+  /** `bigint` column, same as `seq`. */
+  timestampMs: Int8Value;
+  location: JsonColumnValue | null;
   source: string;
-  agentInitiated: number;
+  /** `boolean` server-side, `0`/`1` client-side. `false !== 0` is the bug. */
+  agentInitiated: BoolColumnValue;
   agentConversationId: string | null;
   previousHash: string;
   hash: string;
@@ -61,10 +86,22 @@ export function cursorOf(op: SignedOperation): CanonicalCursor {
 }
 
 /**
- * Rebuild a `SignedOperation` from a stored op-log row: decode `payload`/`location` JSON,
- * map `timestamp_ms → timestamp`, and coerce the SQLite 0/1 `agent_initiated` to boolean.
- * The result is structurally identical to the object the append seam hands in, so an applier
- * sees one op shape regardless of whether it came head-first or through a re-fold.
+ * Rebuild a `SignedOperation` from a stored op-log row: decode `payload`/`location` JSON, map
+ * `timestamp_ms → timestamp`, narrow the int8 counters, and normalise `agent_initiated`.
+ *
+ * The result is structurally identical to the object the append seam hands in — so an applier sees
+ * one op shape regardless of whether it came head-first or through a re-fold, AND regardless of
+ * which driver opened the connection. That second half is the whole point of the three seams below
+ * (task 48): this function is the ONE boundary where a stored row becomes an envelope, so it is
+ * the one place the drivers' differences are allowed to exist. Past it, `SignedOperation` means
+ * what `zSignedOperation` says it means (05 §2.1) — `seq`/`timestamp` are numbers, `payload` and
+ * `location` are objects, `agentInitiated` is a boolean — on every engine.
+ *
+ * Each field goes through the shared normaliser for its COLUMN CLASS rather than an inline cast.
+ * Task 46's finding, quoted because it is the reason this file looks like this: "one function had
+ * the cast, the neighbour twelve lines away didn't" — which is exactly how `seq`, `payload` and
+ * `agent_initiated` came to be wrong in three different ways inside one 20-line function
+ * (CLAUDE.md §2.8).
  */
 function reconstructOperation(row: RawOpRow): SignedOperation {
   return {
@@ -73,16 +110,23 @@ function reconstructOperation(row: RawOpRow): SignedOperation {
     storeId: row.storeId,
     userId: row.userId,
     deviceId: row.deviceId,
-    seq: row.seq,
+    // Narrowed HERE, at the exit, because here is where the value escapes into JS: `seq` is
+    // `z.number().int()` in the envelope, and every consumer past this line does arithmetic and
+    // `<`/`>` on it. `int8ToNumber` throws past 2^53 rather than round (int8.ts) — a rounded `seq`
+    // is a wrong `seq` returned with no error, and `seq` is a canonical-order key.
+    seq: int8ToNumber(row.seq, 'operations.seq'),
     type: row.type,
     entityType: row.entityType,
     entityId: row.entityId,
     schemaVersion: row.schemaVersion,
-    payload: JSON.parse(row.payload) as SignedOperation['payload'],
-    timestamp: row.timestampMs,
-    location: row.location === null ? null : (JSON.parse(row.location) as Location),
+    payload: jsonColumnToObject(row.payload, 'operations.payload') as SignedOperation['payload'],
+    timestamp: int8ToNumber(row.timestampMs, 'operations.timestamp_ms'),
+    location:
+      row.location === null
+        ? null
+        : (jsonColumnToObject(row.location, 'operations.location') as Location),
     source: row.source as SignedOperation['source'],
-    agentInitiated: row.agentInitiated !== 0,
+    agentInitiated: boolColumnToBoolean(row.agentInitiated, 'operations.agent_initiated'),
     agentConversationId: row.agentConversationId,
     previousHash: row.previousHash,
     hash: row.hash,
