@@ -21,6 +21,23 @@ So the ops are appended, chained, signed, and synced — and the projection tabl
 
 **Precedent for the shape:** task 17 owns the **platform** module manifest (`platform.conflict_detected` / `conflict_acknowledged` / `user_locale_changed` + the `conflicts` and `user_prefs` appliers). The decompose gave platform an owner and gave auth none. This task is auth's equivalent.
 
+## SCOPE ADDITION (2026-07-15, from the orphan sweep) — `listPermissionDenials` is yours, and this task's own falsification currently can't run
+
+`02-permissions.md` §7 closes the FR-1045 audit trail with a **named read path**: *"Read via auth query **`listPermissionDenials`**, permission **`auth.audit_view`**, cursor-paginated (04 §6)."* `10-db §10` lists it as a **both**-side query.
+
+**Everything around it was built. The query wasn't:**
+- permission **seeded** — `packages/db-server/migrations/0008_seed_permissions.ts:116`
+- permission **registered** — `apps/server/src/identity/permission-registry.ts:118`
+- an index created **specifically to serve it** — `packages/db-server/migrations/0005_media_push_projections.ts:158-160`, trailing comment literally `// listPermissionDenials (auth.audit_view)`
+- the query itself: exists **only in a test fixture** (`packages/core/test/authz/_fixtures.ts:88`)
+- **zero task files own it** (verified: `grep -rln "listPermissionDenials" ai-docs/tasks/` → nothing)
+
+**And it breaks this task's own Acceptance.** The falsification step above says *"break the applier, watch the audit query go empty/wrong, restore"* — **that presupposes a query that does not exist.** As written, this task's falsification is unexecutable. That's my error in filing it: I specified a check against a read path nobody had built, which is the same shape as the bug this task exists to fix.
+
+**So it is in scope here** — task 17's platform manifest explicitly enumerates `queries.ts` (`listConflicts`); this task had no equivalent line. Ship `listPermissionDenials` in the auth manifest's `queries.ts`: cursor-paginated per `04 §6`, gated by `auth.audit_view` through task 11's query runtime (the gate decides what is **SELECTed** — never sent-then-hidden, `02 §9`). Then the falsification above becomes real: break the applier → the audit query goes empty → restore → it reads back.
+
+**Assert the fixture before believing the read** (T-14b): a query returning nothing proves nothing unless you first assert the denial ops **exist** in the log. That is exactly how a write-only audit trail looks green.
+
 ## Docs to read
 
 - `04-module-contract.md` §1-4 — `defineModule`, the operation registry, appliers (task 11 shipped these; consume, do not rebuild). §2 — appliers are **dialect-neutral**.
