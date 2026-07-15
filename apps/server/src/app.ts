@@ -1,17 +1,130 @@
-// Shell app (08 §4.3: chained sub-routers → export type AppType). Real sub-routers,
-// middleware chain, and the error envelope land with task 12 (server-app).
-// The /health route doubles as the bootstrap witness that @hono/zod-validator 0.8.0
-// and zod 4.4.3 type-check together (08 §7 record).
-import { zValidator } from '@hono/zod-validator';
+// The Hono app: the normative middleware chain (api/00 §13), the §6/§7 error-envelope mapping,
+// and the eight sub-routers mounted under /v1 as chained routers (§14 — chaining is what makes
+// RPC inference work; `AppType` is exported for the type-only `@bolusi/server/client` subpath).
+//
+// Middleware order is load-bearing (§13): bearerAuth cheap-fails before bodyLimit reads bytes;
+// the WIRE cap precedes decompression; the DECOMPRESSED cap precedes parse. Do not reorder.
+import { compress } from 'hono/compress';
+import { bodyLimit } from 'hono/body-limit';
 import { Hono } from 'hono';
-import { z } from 'zod';
+import { requestId } from 'hono/request-id';
 
-const healthQuerySchema = z.object({
-  verbose: z.enum(['0', '1']).optional(),
-});
+import { resolveDeps, type ServerDeps } from './deps.js';
+import type { AppEnv } from './env.js';
+import { ApiError, respondError } from './errors.js';
+import { accessLog } from './middleware/access-log.js';
+import { bearerAuth } from './middleware/auth.js';
+import { gzipDecompress } from './middleware/gzip-decompress.js';
+import { perDeviceRateLimit, perIpRateLimit } from './middleware/rate-limit.js';
+import { serverTime } from './middleware/server-time.js';
+import { createAuthRouter } from './routes/auth.js';
+import { createDevicesRouter } from './routes/devices.js';
+import { createMediaRouter } from './routes/media.js';
+import { createPushRouter } from './routes/push.js';
+import { createRealtimeRouter } from './routes/realtime.js';
+import { createSyncRouter } from './routes/sync.js';
+import { createTenantRouter } from './routes/tenant.js';
+import { createUsersRouter } from './routes/users.js';
 
-export const routes = new Hono().get('/health', zValidator('query', healthQuerySchema), (c) =>
-  c.json({ ok: true as const }),
-);
+const LOGIN_PATH = '/v1/auth/login';
 
+/** Realtime routes carry the reduced chain (§13 last line): no compress, no body middleware. */
+function isRealtime(path: string): boolean {
+  return path === '/v1/realtime' || path.startsWith('/v1/realtime/');
+}
+
+/**
+ * Build the app from injected dependencies. Production uses the defaults (`resolveDeps`); tests
+ * swap fakes. The return value is the fully chained router — `typeof` it is `AppType` (§14).
+ */
+export function createApp(overrides: Partial<ServerDeps> = {}) {
+  const deps = resolveDeps(overrides);
+  const app = new Hono<AppEnv>();
+
+  // Error envelope (§6/§7). A thrown ApiError maps to its registry code; anything else is an
+  // unhandled server error → 500 INTERNAL with the request id (§7).
+  app.onError((err, c) => {
+    if (err instanceof ApiError) {
+      return respondError(c, err.code, err.details);
+    }
+    return respondError(c, 'INTERNAL', { requestId: c.get('requestId') });
+  });
+  app.notFound((c) => respondError(c, 'NOT_FOUND'));
+
+  // §13 step 1: request id (UUIDv7 per request, §5.1).
+  app.use('*', requestId({ generator: () => deps.newRequestId() }));
+  // §13 step 2: stamps X-Server-Time + X-Request-Id on EVERY response (§9).
+  app.use('*', serverTime({ now: deps.now }));
+  // §13 step 3: access log (code+path+requestId+deviceId; never tokens/bodies).
+  app.use('*', accessLog({ sink: deps.accessLogSink }));
+
+  // §13 step 4: response compression — excluded from WS/SSE (§12.1).
+  const compressor = compress();
+  app.use('*', async (c, next) => (isRealtime(c.req.path) ? next() : compressor(c, next)));
+
+  // §13 step 5: per-IP limit, pre-auth, login only.
+  app.use(
+    LOGIN_PATH,
+    perIpRateLimit({
+      store: deps.perIpStore,
+      capacityPerMinute: deps.loginIpPerMinute,
+      now: deps.now,
+      clientIp: deps.clientIp,
+    }),
+  );
+
+  // §13 step 6: bearerAuth on all /v1 routes except the exempt login (§3).
+  const auth = bearerAuth({ verifyToken: deps.verifyToken });
+  app.use('/v1/*', async (c, next) => (c.req.path === LOGIN_PATH ? next() : auth(c, next)));
+
+  // §13 step 7: per-device limit (keyed by the device from step 6; realtime bucket for realtime).
+  app.use(
+    '/v1/*',
+    perDeviceRateLimit({
+      store: deps.perDeviceStore,
+      limits: deps.deviceRateLimits,
+      now: deps.now,
+      isRealtime,
+    }),
+  );
+
+  // §13 steps 8–9: wire-byte cap then decompressed-byte cap. Realtime routes carry no body
+  // middleware (reduced chain). Caps are per route class (§5.3).
+  app.use('/v1/*', async (c, next) => {
+    if (isRealtime(c.req.path)) {
+      await next();
+      return;
+    }
+    const caps = deps.bodyCaps(c.req.path);
+    const gzipOptions =
+      deps.gzipOnProgress !== undefined
+        ? { maxDecompressedBytes: caps.decompressedBytes, onProgress: deps.gzipOnProgress }
+        : { maxDecompressedBytes: caps.decompressedBytes };
+    await bodyLimit({
+      maxSize: caps.wireBytes,
+      onError: () => {
+        throw new ApiError('BODY_TOO_LARGE', { limitBytes: caps.wireBytes });
+      },
+    })(c, async () => {
+      await gzipDecompress(gzipOptions)(c, next);
+    });
+  });
+
+  // §13 steps 10–11: validators live on the routes (shared 422 hook); handlers open the tenant
+  // transaction via the tenant helper (task 16+). Mounted chained under /v1 (§14).
+  return app
+    .route('/v1/auth', createAuthRouter(deps))
+    .route('/v1/devices', createDevicesRouter(deps))
+    .route('/v1/users', createUsersRouter(deps))
+    .route('/v1/tenant', createTenantRouter(deps))
+    .route('/v1/sync', createSyncRouter(deps))
+    .route('/v1/media', createMediaRouter(deps))
+    .route('/v1/push', createPushRouter(deps))
+    .route('/v1/realtime', createRealtimeRouter(deps));
+}
+
+/** The production app instance (default deps): the RPC contract surface + boot handler. */
+export const routes = createApp();
+
+/** The precompiled RPC contract (§14). Consumed type-only via `@bolusi/server/client`. */
 export type AppType = typeof routes;

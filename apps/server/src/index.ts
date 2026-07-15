@@ -1,4 +1,4 @@
-// Package entry — exports ONLY, no side effects: later tasks import the app for
+// Package entry — exports ONLY, no side effects: later tasks and the harness import the app for
 // in-process testing (harness, integration suites). Server boot lives in main.ts.
-export { routes } from './app.js';
+export { routes, createApp } from './app.js';
 export type { AppType } from './app.js';

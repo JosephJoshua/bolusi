@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
     "test": "vitest run",
-    "test:server": "node scripts/not-implemented.mjs test:server 12-server-app",
+    "test:server": "vitest run --project server",
     "test:rls": "BOLUSI_DB_ENGINE=postgres DATABASE_URL=${DATABASE_URL:-postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test} vitest run --project db-server",
     "test:appliers": "node scripts/not-implemented.mjs test:appliers 11-module-contract",
     "chaos": "node scripts/not-implemented.mjs chaos 26-chaos-harness",
