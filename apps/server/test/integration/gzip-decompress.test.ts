@@ -130,9 +130,12 @@ describe('gzip request decompression', () => {
     expect(body.error.details.limitBytes).toBe(CAP);
     // Bound witnesses: decompression DID run past the cap (so the cap, not bodyLimit, tripped)…
     expect(peakDecompressed).toBeGreaterThan(CAP);
-    // …but was aborted immediately — never approaching the bomb's full 200 MiB inflation.
-    expect(peakDecompressed).toBeLessThan(CAP + 8 * 1024 * 1024); // ≤ cap + one chunk of slack
-    expect(peakDecompressed).toBeLessThan(bombDecompressedSize / 4);
+    // …but was aborted at cap + at most one output chunk (~16 KiB measured). A TIGHT 512 KiB
+    // ceiling: above one chunk, below any real over-buffer regression (an abort-at-2×-cap = 2 MiB
+    // blows it; the naive read-all-then-check reports the full 200 MiB and blows it).
+    const ceiling = CAP + 512 * 1024;
+    expect(peakDecompressed).toBeLessThan(ceiling);
+    expect(ceiling).toBeLessThan(2 * CAP); // the ceiling rejects a 2×-cap over-buffer regression
   });
 });
 

@@ -98,10 +98,15 @@ describe('SEC-SYNC-04 gzip bomb bounded', () => {
     expect(body.error.code).toBe('DECOMPRESSED_TOO_LARGE'); // decompressed cap tripped, not the wire cap
     expect(body.error.details.limitBytes).toBe(DECOMPRESSED_CAP_SYNC_PUSH);
     expect(h.stubCalls).not.toContain('sync.push'); // no op processed → no partial acceptance
-    // Bounded work: aborted just past the cap, never approaching the full 50 MiB inflation.
+    // Bounded work: aborted at cap + at most one output chunk (~16 KiB measured). 512 KiB is a
+    // TIGHT ceiling — comfortably above one chunk, far below any real "aborts, but late"
+    // regression. An abort-at-2×-cap would buffer ~20 MiB and blow this; a naive
+    // inflate-then-check reports the full 50 MiB and blows it (falsified — see the task report).
+    const ceiling = DECOMPRESSED_CAP_SYNC_PUSH + 512 * 1024;
     expect(peak).toBeGreaterThan(DECOMPRESSED_CAP_SYNC_PUSH);
-    expect(peak).toBeLessThan(DECOMPRESSED_CAP_SYNC_PUSH + 8 * 1024 * 1024);
-    expect(peak).toBeLessThan(fullInflation / 2);
+    expect(peak).toBeLessThan(ceiling);
+    // Guard-precision self-check: the ceiling must reject a 2×-cap over-buffer, not just full inflation.
+    expect(ceiling).toBeLessThan(2 * DECOMPRESSED_CAP_SYNC_PUSH);
   });
 });
 
