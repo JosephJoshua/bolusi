@@ -31,9 +31,14 @@ const DEVICE = 'device-1';
 
 /**
  * Are the keys live for this `(row, now)`? Composed EXACTLY as `PinScreen` composes it
- * (`PinScreen.tsx:96` — `<PinPad state={pinPadState(view)} …>`), because that composition is the
- * only thing that gates a tap: `PinPad` treats `state === 'locked'` as disabled and never reaches
- * `onComplete` (PinPad.tsx:144/215/216).
+ * (`<PinPad state={pinPadState(view)} …>`), because that composition is the only thing that gates a
+ * tap: `PinPad` treats `state === 'locked'` as disabled — `pressDigit` early-returns before
+ * `onComplete`, and the key is `disabled` with no `onPress`.
+ *
+ * KNOWN GAP, stated rather than implied (T-14/T-16): this asserts the composition, it does not
+ * assert that `PinScreen` PERFORMS it. Nothing renders `PinScreen` — there is no render lane for
+ * mobile — so hardcoding `state="entry"` in the screen leaves every test here green. That is this
+ * decoy's shape one level up, and it is filed as task 65, not fixed here.
  *
  * This is a COMPOSITION of the shipped functions, never a mirror of them. It restates no rule — it
  * calls the code the screen calls, so it cannot agree with a broken mapping. Task 60 replaced a

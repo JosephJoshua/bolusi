@@ -101,8 +101,7 @@ export const PIN_MESSAGE_KEY = {
  *
  * THIS IS THE AFFORDANCE — the single client-side gate, and the only one. `'locked'` is what stops
  * a tap becoming a verify: `PinPad` early-returns from `pressDigit` before `onComplete`, sets
- * `disabled`, and drops the `onPress` handler (PinPad.tsx:144/215/216). There is no second gate in
- * this file on purpose. A screen-side predicate that merely AGREES with this mapping adds no
+ * `disabled`, and drops the `onPress` handler. There is no second gate in this file on purpose. A screen-side predicate that merely AGREES with this mapping adds no
  * enforcement — it adds a way for the two to disagree — and 14's `assertAttemptAllowed`
  * (`core/src/auth/lockout.ts`, called by `verifyPin` before the KDF) is the actual boundary
  * (SEC-AUTH-02: it throws regardless of what any UI decides).

@@ -54,9 +54,9 @@ export interface PinScreenProps {
    * `'locked'` (i.e. `delayed` or `lockedOut`), the pad disables its keys and never reaches
    * `onComplete`. Nothing in this screen re-checks it; the gate is the prop passed at the `<PinPad>`
    * below. This is an AFFORDANCE, not a security boundary: the enforcement is 14's
-   * `assertAttemptAllowed` (`core/src/auth/lockout.ts`), which `verifyPin` calls before the KDF
-   * (`core/src/auth/pin-verify.ts:156`) and which throws regardless of what the UI renders. Both
-   * run on-device — PIN auth is offline (api/02-auth §6.5), so there is no server in this path.
+   * `assertAttemptAllowed` (`core/src/auth/lockout.ts`), which `verifyPin` calls before the KDF and
+   * which throws regardless of what the UI renders. Both run on-device — PIN auth is offline
+   * (api/02-auth §6.5), so there is no server in this path.
    */
   readonly onSubmit: (pin: string) => void;
   readonly onSwitchUser: () => void;

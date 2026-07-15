@@ -73,6 +73,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | todo | 55 |
 | 63 | every mobile screen exports a `*_KEY` label map its tests assert and its screen ignores (`PIN_MESSAGE_KEY`, `SWITCHER_KEY`, `REASSURANCE_KEY`) — `canAttempt`'s class, 3+ more times; §2.8 two copies of each mapping (from task 60's sweep) | todo | 60 |
 | 64 | wire the semantic unused-export sweep — `knip.json` + controls landed with 60, the **dependency and gate did not**; 2 of 4 configs were green-because-blind (from task 60's sweep) | todo | 60 |
+| 65 | nothing renders any mobile screen: hardcode `state="entry"` in `PinScreen` and all 16 of 60's ported tests stay green — 60's decoy one level up; no render lane exists (from task 60) | todo | 60 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
