@@ -50,8 +50,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
-  # Stage 4 — unit (includes stage 5: JCS vectors on Node once task 03 lands them,
-  # and SEC-META-01 / SEC-SECRET-02 from @bolusi/test-support).
+  # Stage 4 — unit. Includes stage 5 (the Node JCS vector suite,
+  # packages/core/test/jcs-vectors — 08 §5.6) and SEC-META-01 / SEC-SECRET-02 from
+  # @bolusi/test-support.
   unit:
     runs-on: ubuntu-latest
     needs: install
@@ -74,29 +75,46 @@ jobs:
           rm gitleaks.tgz
       - run: pnpm test
 
-  # Stage 6 — JCS + crypto vectors on the Hermes VM matching the pinned RN version.
-  # PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md).
-  # Candidate paths verified at bootstrap (08 §7):
-  #   (a) preferred: compile the standalone vector bundle with `hermesc` from the
-  #       `hermes-compiler` npm package RN 0.86 depends on (linux64 binary verified
-  #       working at bootstrap) — but that package ships NO host Hermes VM to EXECUTE
-  #       the bytecode, so execution needs a built hermes CLI, or
-  #   (b) guaranteed fallback: run the same suite inside the Android-emulator job.
-  # Task 03 picks the mechanism and records it in 08 §5.6/§7.
+  # Stage 6 — SEC-OPLOG-06: JCS vectors executed on a real Hermes VM and compared
+  # byte-for-byte against the Node run (08 §5.6; mechanism + version caveat in 08 §7).
+  #
+  # `pnpm test:jcs-hermes` bundles scripts/hermes-vectors/runner.ts standalone
+  # (canonicalize + core serialization + vector data only), compiles it with the
+  # RN-PINNED hermesc from `hermes-compiler`, executes it on Node and on the
+  # checksum-pinned Hermes CLI v0.13.0, and fails on any divergence.
+  #
+  # Version caveat (08 §7 record 6): RN 0.86 pins hermes-v0.17.0, whose git tag ships NO
+  # host-VM release asset, and hermes-compiler ships only a COMPILER. v0.13.0 is the
+  # newest prebuilt host VM. The exact-RN-version proof runs on device in L6 / stage 12
+  # (task 27), which testing-guide §2.1 L7 already requires.
   jcs-vectors-hermes:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "placeholder — Hermes vector lane lands with task 03 (see job comment for the verified candidate paths)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:jcs-hermes
 
-  # Stage 7 — Ed25519 interop (noble sign→verify vs the @bolusi/test-support fixture set).
-  # EVERY-PR PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md);
-  # deferral recorded in 08 §7.
+  # Stage 7 — Ed25519 interop: noble reproduces every @bolusi/test-support vector
+  # (the Node side of the quick-crypto <-> noble RFC 8032 contract, testing-guide §2.2).
+  # The quick-crypto side of the same fixture file runs in stage 12 (task 27).
   ed25519-interop:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "placeholder — Ed25519 interop vectors land with task 03 (noble side of the quick-crypto interop contract)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:ed25519-interop
 
   # Stage 8 — server integration vs PGlite (pnpm test:server).
   # EVERY-PR PLACEHOLDER — wired by task 12 (ai-docs/tasks/12-server-app.md);
