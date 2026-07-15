@@ -44,6 +44,8 @@ Deliver the L6 on-device performance lane: the hidden Harness screen's Part C se
   - Budget-constants test: the pinned constants equal the §4.2 table values (guards silent widening).
   - Flag gating: harness/Part C module is unreachable when `BOLUSI_TEST_HARNESS` is unset, and a static check asserts `eas.json` sets the flag ONLY in the `test` profile (never `production`/`preview`).
   - `harness:device` driver: unit test on the result-JSON parser — any gate red, missing gate, or missing release-variant marker ⇒ non-zero exit (no partial-pass idempotency hole: re-running against a stale/absent logcat capture fails, never reuses a prior result).
+**SEC ids owned by THIS task:** SEC-AUTH-10
+
 - **SEC-\*:** SEC-AUTH-10 (on-device KDF benchmark recorded, output committed as build artifact — satisfied by the P-4 run + committed report + decisions entry; assert the artifact path exists in the driver's post-run check). No other SEC-* belongs to this surface (adversarial sweep is task 28).
 - **CHAOS-\*:** CHAOS-01, CHAOS-03, CHAOS-06, CHAOS-07 at reduced volume execute in the same L6 run (testing-guide §2.6) using 26's scenarios; their pass/fail appears in the same JSON. CHAOS-08 remains Node-side in 26 — P-2 is its device counterpart (§3.5 mapping).
 - **Lint/CI gates:** `pnpm lint` / `pnpm typecheck` / `pnpm test` green (boundary rules: `@bolusi/test-support` imported only from harness/test entry points, 08 §3.4); adds the 08 §5.6 stage-12 device-lane entry (`harness:device` invocation documented in the CI config, triggered on native change/scheduled — not per-PR).
