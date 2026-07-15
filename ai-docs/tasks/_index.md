@@ -17,7 +17,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | in-progress | 02, 03, 05 |
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | done | 04, 06 |
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | done | 02, 04 |
-| 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | in-progress | 06, 08, 09 |
+| 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | done | 06, 08, 09 |
 | 11 | module-contract (defineModule, queries layer, registration) | todo | 08, 10 |
 | 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | done | 02, 05 |
 | 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | done | 05, 12 |
