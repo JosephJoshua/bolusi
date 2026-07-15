@@ -23,7 +23,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | done | 05, 12 |
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | done | 03, 04, 09, 10, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
-| 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | in-progress | 07, 12, 13 |
+| 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | done | 07, 12, 13 |
 | 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16, 46, 47 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | todo | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
