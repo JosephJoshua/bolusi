@@ -1,6 +1,39 @@
 # TASK 31 — SEC-META-01 cannot tell "owns" from "disclaims"; three rows are armed
-**Status:** todo
+**Status:** in-review
 **Depends on:** 03
+
+## Outcome (2026-07-15) — shipped
+
+Ownership is now **declared and parsed**, never inferred from prose. `packages/test-support/src/sec-meta.ts`:
+
+- **The marker.** `**SEC ids owned by THIS task:** SEC-RT-01..05, SEC-SECRET-01` — or `none`. Strict grammar: a comma-separated list of ids/inclusive ranges, no trailing prose. This formalizes the line tasks 14/15/16 were already hand-writing under duress; it was not invented here. **Ranges are first-class**, so task 15/26's `SEC-SYNC-01..10` is now a claim the gate can read.
+- **Malformed ⇒ loud, not empty.** A marker that violates the grammar returns `malformed`, never a zero-id claim — the "silently checks nothing" failure mode of CLAUDE.md §2.11.
+- **Exactly one owner per id** (`ownershipConflicts`). This is what catches the update-(d) inversion: a *stale claim* in one file and a correct disclaimer in another are now a visible conflict rather than invisible agreement.
+- **`titledButPending`** — an id that is both titled by a test and listed as owed fails. The row says "owed", the title says "shipped"; they cannot both be true. This is the partial-coverage detector, and it needs no title→task attribution.
+- **Comments are stripped before titles are extracted.** Found live: `\bit\s*\(` matched the *English word* "it" in `apps/server/test/integration/oplog/sec-oplog-07.test.ts`'s prose — *"does NOT title **it (**"SEC-OPLOG-07 …")"* — so a **comment was being read as a shipped test title**. That is CLAUDE.md §2.11's first listed defect (title-vs-content) alive again, in a third direction nobody had looked for.
+- **Denominator asserted** (T-14): the gate reports `{ids, titles, taskFiles, declaredIds}` and fails below floors. Measured: **56 ids · 1856 titles · 162 tracked test files · 54 task files · 9 declared ids**. The `git ls-files` walk is retained — a filesystem walk would sweep sibling worktrees.
+
+**Timing — fixed.** A wrong owner no longer waits for the `done` flip. `badOwners`, `titledButPending` and `ownershipConflicts` are all status-independent, so a bad row fails **the moment it is written**. Falsified on real data: pointing `SEC-RT-01` at task 03 (`Status: in-review`, *not* done) fires `badOwners` immediately. `staleAllowlist` stays as the backstop.
+
+### The audit — 56 ids, every one verified against its task file and the security-guide
+
+Not taken from the task table on trust; the table was **stale**. The "three armed rows" (SEC-OPLOG-02/05/09) no longer exist — repointed and shipped by tasks 07/15 before this task ran. Live state was 46 titled / 10 pending. **Eight of ten rows were correct** (SEC-AUTH-09→28, SEC-AUTH-10→27, SEC-TENANT-04→28, SEC-SECRET-01→28, SEC-RT-01/02/04/05→20). Two were wrong — **both found by reading, neither by the gate**:
+
+| id | was | now | why |
+| -- | --- | --- | --- |
+| `SEC-MEDIA-01` | 18 (pending) | **row removed** | `18-media-client.md:64` **disclaims** it ("they ship with task 19, not here… No SEC-* id may be marked done by this task"). Task 19 owns `SEC-MEDIA-01..06` (`19:48`) and shipped **both** titles, which match §7.2's full definition. The id is shipped; the row was a dead pointer at a disclaimer — instance **eleven** of the original bug. |
+| `SEC-RT-03` | 02 (pending) | **20** | `02-schemas.md:56` **disclaims** it ("none execute in this task — pure definitions, no runtime surface"); `20-realtime.md:50` claims the WS/SSE legs. Instance **twelve**. |
+
+`SEC-RT-03` also carried a live **partial-coverage retire**: `packages/schemas/test/ws.test.ts:24` titled a *fixture* `(SEC-RT-03 fixture)`, which read as the id being fully shipped and silently retired task 20's WS/SSE audit **and** task 21's push leg. The id is now kept out of that title (task 16's discipline), with the reason in a comment.
+
+### Can a partial-coverage title still claim an id? **Yes — when no row exists. Reported, not papered over.**
+
+`titledButPending` closes the case where a row is live, which is every documented incident. It does **not** close the case where the row is already gone, because retiring an id needs title→task attribution the gate does not have. **This is live right now**, and the audit found it:
+
+- **`SEC-AUTH-06` / `SEC-AUTH-11`** are titled `"… client arm …"` by task 14 with **no row**. security-guide §162/§167 give each a **server leg** (a forged `auth.pin_reset` op pushed anyway → `SCOPE_VIOLATION` at push). The client-arm title retires the whole id, so those server legs are **currently unclaimed and invisible** — the same shape task 14 caught in itself for SEC-AUTH-09 and task 16 did not for SEC-SYNC-02. Not fixed here (shipping server legs is tasks 13/16/28's surface, and 14/16 are in flight); filed as **task 54**.
+- Multi-leg ids spanning tasks (`SEC-RT-03`/`SEC-RT-04` across 20 and 21) cannot be expressed as "retired only when both legs land". Ownership points at task 20, matching the convention the allowlist already used for SEC-RT-04. If task 21 later declares them, `ownershipConflicts` fires — which is the correct outcome: it forces an explicit decision instead of silent double-ownership.
+
+The full closure is `covered(id) = titleExists(id) AND ownerDeclaresShipped(id)`, which needs a `shipped` marker on every owner of the 46 titled ids — ~15 task files, several in flight (14/15/16). Deliberately out of scope; see task 54.
 
 ## Goal
 
