@@ -110,6 +110,7 @@ type LoginRes = {
 - Errors: `401 AUTH_INVALID_CREDENTIALS` (identical body and — via a dummy-verifier argon2id computation for unknown identifiers — statistically identical latency for "no such user" vs "wrong password": no user enumeration), `429 RATE_LIMITED` with `retryAfterSeconds` (§9).
 - A control session authorizes only the endpoints marked `controlSession` in §4.5, evaluated against the session user's permissions (02-permissions), and is usable from any IP within its TTL. It is not a device token and cannot call sync.
 - Users without a password credential get `AUTH_INVALID_CREDENTIALS` — indistinguishable from a wrong password.
+- **Tenant resolution (D14).** `loginIdentifier` carries no tenant (§2: globally unique, no discriminator), so the server must find the user's row **before** it knows the tenant — which `forTenant`'s RLS scope cannot express. Login resolves it through the single sanctioned cross-tenant read, the `SECURITY DEFINER` function `auth_find_login_credential(loginIdentifier)` (10-db-schema §6.4), which returns only `{ tenantId, userId, passwordVerifier, status }` of the one matched row (nothing on no-match — fail closed). The password compare (`timingSafeEqual`) stays in app code; the dummy-verifier computation for an unknown identifier runs regardless (no enumeration oracle). Everything after tenant resolution — the store list, the control-session row insert, the audit row — runs normally under `forTenant(tenantId)`.
 
 ### 4.3 `POST /v1/devices/enroll`
 
@@ -461,6 +462,7 @@ Mechanics:
 
 - Format: `bdt_` + base64url(32 CSPRNG bytes) — prefixed for secret-scanner friendliness. Minted only at enrollment, delivered only in the `EnrollRes` (§4.3 idempotency window is the sole re-delivery).
 - At rest server-side: **SHA-256 hash only**, unique-indexed; auth is hash-then-lookup (`bearerAuth`'s `verifyToken`, api/00-conventions middleware order). A DB dump yields no usable tokens (SEC-DEV-02). Rows carry `deviceId`; check `status = 'active'` on every request.
+- **Tenant resolution (D14).** A `bdt_`/`bcs_` token carries no tenant — it is opaque random bytes — so `verifyToken` must find the `devices` / `control_sessions` row (and read its `tenantId`, `status`, revocation/expiry) **before** the tenant is known. Like login (§4.2), this is the one read that precedes tenant context, done through the sanctioned `SECURITY DEFINER` lookups `auth_find_device_by_token_hash` / `auth_find_control_session_by_token_hash` (10-db-schema §6.4) — each returns only the minimal fields of the single hash-matched row, nothing on no-match. A revoked device → `DEVICE_REVOKED`; an expired/revoked control session → `SESSION_EXPIRED`/`AUTH_TOKEN_INVALID`. Everything downstream runs under `forTenant(tenantId)` with the resolved tenant.
 - `lastSeenAt` is updated at most once per 5 minutes per device (throttled write — no hot row); `lastSyncAt` is owned by sync acceptance (api/01-sync).
 - Never logged, never in URLs; header only.
 

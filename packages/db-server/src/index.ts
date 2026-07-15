@@ -20,6 +20,19 @@ export {
   MIGRATION_FOLDER,
 } from './migrator.js';
 
+// D14 (10-db-schema §6.4) — the auth-entry cross-tenant lookups. These are the ONLY exported
+// paths that read across tenants; each is a fixed, keyed, definer-gated lookup (never a raw
+// handle, never an arbitrary query). Token verification and login need them because they resolve
+// the tenant FROM an opaque credential before the tenant is known (api/02-auth §4.2/§8).
+export {
+  findDeviceByTokenHash,
+  findControlSessionByTokenHash,
+  findLoginCredential,
+  type DeviceAuthRecord,
+  type ControlSessionAuthRecord,
+  type LoginCredentialRecord,
+} from './auth-entry.js';
+
 /**
  * Runs `fn` inside a transaction bound to `tenantId`.
  *

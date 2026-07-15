@@ -5,9 +5,14 @@
 import { forTenant as dbForTenant, type ForTenant } from '@bolusi/db-server';
 import type { Context } from 'hono';
 
+import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
+import { createDbVerifyToken } from './auth/verify-token.js';
+import { noblePasswordKdf, type PasswordKdf } from './crypto/index.js';
 import type { AppEnv } from './env.js';
+import { InMemoryWindowLimitStore, type WindowLimitStore } from './identity/rate-limits.js';
+import { RevocationHooks } from './identity/revocation.js';
 import { consoleAccessLogSink, type AccessLogSink } from './middleware/access-log.js';
-import { createVerifyToken, emptyTokenStore, type VerifyToken } from './middleware/auth.js';
+import { type VerifyToken } from './middleware/auth.js';
 import {
   InMemoryRateLimitStore,
   type DeviceRateLimits,
@@ -50,6 +55,14 @@ export interface ServerDeps {
   readonly newRequestId: () => string;
   readonly forTenant: ForTenant;
   readonly verifyToken: VerifyToken;
+  /** The cross-tenant auth lookups (D14) — used by verifyToken and login (task 13). */
+  readonly authDirectory: AuthDirectory;
+  /** Fixed-window / lockout store for the api/02-auth §9 identity limits (task 13). */
+  readonly identityRateStore: WindowLimitStore;
+  /** On-revoke hook registry — task 20 registers socket-close (SEC-RT-02) into it (task 13). */
+  readonly revocationHooks: RevocationHooks;
+  /** Server password KDF (argon2id) — injected so login is testable + fast (task 13). */
+  readonly passwordKdf: PasswordKdf;
   readonly perIpStore: RateLimitStore;
   readonly perDeviceStore: RateLimitStore;
   readonly loginIpPerMinute: number;
@@ -75,11 +88,18 @@ export function defaultClientIp(c: Context<AppEnv>): string {
 
 export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   const now = overrides.now ?? (() => Date.now());
+  // The auth directory is resolved first: the default verifyToken is the DB-backed token store
+  // over it (task 13 fills task 12's injected seam — its default was an empty store).
+  const authDirectory = overrides.authDirectory ?? dbAuthDirectory;
   return {
     now,
     newRequestId: overrides.newRequestId ?? (() => uuidv7(now())),
     forTenant: overrides.forTenant ?? dbForTenant,
-    verifyToken: overrides.verifyToken ?? createVerifyToken({ store: emptyTokenStore, now }),
+    authDirectory,
+    verifyToken: overrides.verifyToken ?? createDbVerifyToken(authDirectory, now),
+    identityRateStore: overrides.identityRateStore ?? new InMemoryWindowLimitStore(),
+    revocationHooks: overrides.revocationHooks ?? new RevocationHooks(),
+    passwordKdf: overrides.passwordKdf ?? noblePasswordKdf,
     perIpStore: overrides.perIpStore ?? new InMemoryRateLimitStore(),
     perDeviceStore: overrides.perDeviceStore ?? new InMemoryRateLimitStore(),
     loginIpPerMinute: overrides.loginIpPerMinute ?? DEFAULT_LOGIN_IP_PER_MINUTE,

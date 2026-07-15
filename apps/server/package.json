@@ -20,6 +20,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "dev": "tsx watch src/main.ts",
+    "provision-tenant": "tsx src/cli/provision-tenant.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

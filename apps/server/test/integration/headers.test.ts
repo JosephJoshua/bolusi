@@ -10,7 +10,6 @@ import { makeFixture } from '../helpers/fixtures.js';
 
 const PUSH = 'http://srv.test/v1/sync/push';
 const DEVICES = 'http://srv.test/v1/devices';
-const LOGIN = 'http://srv.test/v1/auth/login';
 
 function deviceAuth(h: TestHarness, seed: string): { auth: string; deviceId: string } {
   const fx = makeFixture(seed);
@@ -27,9 +26,17 @@ function deviceAuth(h: TestHarness, seed: string): { auth: string; deviceId: str
 async function responseWithStatus(status: number): Promise<Response> {
   switch (status) {
     case 200: {
+      // /v1/devices is a real (DB-backed) handler now; probe the still-stub /v1/sync/push for a
+      // DB-free 200.
       const h = makeTestApp();
-      const { auth } = deviceAuth(h, `hdr-200`);
-      return h.app.request(DEVICES, { headers: { Authorization: auth } });
+      const { auth, deviceId } = deviceAuth(h, `hdr-200`);
+      return h.app.request(
+        new Request(PUSH, {
+          method: 'POST',
+          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId, ops: [] }),
+        }),
+      );
     }
     case 401:
       return makeTestApp().app.request(DEVICES);
@@ -72,7 +79,14 @@ async function responseWithStatus(status: number): Promise<Response> {
           throw new Error('boom');
         },
       });
-      return h.app.request(LOGIN, { method: 'POST' });
+      const { auth, deviceId } = deviceAuth(h, 'hdr-500');
+      return h.app.request(
+        new Request(PUSH, {
+          method: 'POST',
+          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId, ops: [] }),
+        }),
+      );
     }
     default:
       throw new Error(`unhandled status ${status}`);
