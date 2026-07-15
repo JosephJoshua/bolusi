@@ -60,26 +60,6 @@ export function attemptsLeft(row: PinAttemptRow | null): number {
 }
 
 /**
- * Is an attempt allowed to reach the KDF right now?
- *
- * This MIRRORS 14's `assertAttemptAllowed` gate; it does not replace it. 14's gate is the
- * enforcement (SEC-AUTH-02: no argon2id, no timing oracle, and it throws); this is the AFFORDANCE —
- * what lets the screen keep the keys dark instead of accepting taps that are guaranteed to throw.
- * Both must agree, and both read the same `notBefore` from the same row, so they cannot drift.
- *
- * Belt AND braces on purpose: even if this returned true wrongly, 14's gate still refuses. The
- * reverse — a screen that fires a verify into a closed window — is what this prevents.
- */
-export function canAttempt(row: PinAttemptRow | null, now: number): boolean {
-  const state = derivePinAuthState(row);
-  if (state === 'locked_out') return false;
-  if (state === 'delayed' && row?.notBefore !== null && row !== null) {
-    return now >= row.notBefore;
-  }
-  return true;
-}
-
-/**
  * The view for a `(row, now)` pair. Total: every `PinAuthState` maps to a rendered state, so no
  * combination reaches a blank screen.
  *
@@ -116,7 +96,22 @@ export const PIN_MESSAGE_KEY = {
   lockedOut: 'auth.pin.lockedOut',
 } as const satisfies Record<PinView['kind'], string | null>;
 
-/** design-system §3.3: the PinPad's own state. `delayed` and `lockedOut` both disable the keys. */
+/**
+ * design-system §3.3: the PinPad's own state. `delayed` and `lockedOut` both disable the keys.
+ *
+ * THIS IS THE AFFORDANCE — the single client-side gate, and the only one. `'locked'` is what stops
+ * a tap becoming a verify: `PinPad` early-returns from `pressDigit` before `onComplete`, sets
+ * `disabled`, and drops the `onPress` handler (PinPad.tsx:144/215/216). There is no second gate in
+ * this file on purpose. A screen-side predicate that merely AGREES with this mapping adds no
+ * enforcement — it adds a way for the two to disagree — and 14's `assertAttemptAllowed`
+ * (`core/src/auth/lockout.ts`, called by `verifyPin` before the KDF) is the actual boundary
+ * (SEC-AUTH-02: it throws regardless of what any UI decides).
+ *
+ * So: the `delayed`/`lockedOut` arms below are load-bearing. Break either and the keys go live
+ * inside a lockout window. `model.test.ts` asserts that through this function — not through a
+ * mirror of it — because a test pointed at a predicate nothing calls stays green when this breaks
+ * (that was task 60: 11 sound assertions on a decoy, all green while this line was sabotaged).
+ */
 export function pinPadState(view: PinView): 'entry' | 'error' | 'locked' {
   switch (view.kind) {
     case 'entry':

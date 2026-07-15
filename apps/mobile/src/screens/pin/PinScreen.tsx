@@ -49,7 +49,15 @@ export interface PinScreenProps {
   /** Injected — the caller owns the tick. See the header. */
   readonly now: number;
   readonly lastAttempt: LastAttempt;
-  /** Fires only when the model permits an attempt — see `canAttempt` in model.ts. */
+  /**
+   * Fires on the 6th digit. Gated by ONE thing: `PinPad`'s `state` — when `pinPadState(view)` is
+   * `'locked'` (i.e. `delayed` or `lockedOut`), the pad disables its keys and never reaches
+   * `onComplete`. Nothing in this screen re-checks it; the gate is the prop passed at the `<PinPad>`
+   * below. This is an AFFORDANCE, not a security boundary: the enforcement is 14's
+   * `assertAttemptAllowed` (`core/src/auth/lockout.ts`), which `verifyPin` calls before the KDF
+   * (`core/src/auth/pin-verify.ts:156`) and which throws regardless of what the UI renders. Both
+   * run on-device — PIN auth is offline (api/02-auth §6.5), so there is no server in this path.
+   */
   readonly onSubmit: (pin: string) => void;
   readonly onSwitchUser: () => void;
   readonly syncChip: SyncChipState;

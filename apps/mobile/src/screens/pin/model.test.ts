@@ -17,17 +17,35 @@ import { describe, expect, test } from 'vitest';
 
 import {
   attemptsLeft,
-  canAttempt,
   PIN_MESSAGE_KEY,
   pinPadState,
   pinView,
   showsForgotAffordance,
+  type LastAttempt,
   type PinView,
 } from './model.js';
 
 const NOW = 1_700_000_000_000;
 const USER = 'user-a';
 const DEVICE = 'device-1';
+
+/**
+ * Are the keys live for this `(row, now)`? Composed EXACTLY as `PinScreen` composes it
+ * (`PinScreen.tsx:96` — `<PinPad state={pinPadState(view)} …>`), because that composition is the
+ * only thing that gates a tap: `PinPad` treats `state === 'locked'` as disabled and never reaches
+ * `onComplete` (PinPad.tsx:144/215/216).
+ *
+ * This is a COMPOSITION of the shipped functions, never a mirror of them. It restates no rule — it
+ * calls the code the screen calls, so it cannot agree with a broken mapping. Task 60 replaced a
+ * predicate (`canAttempt`) that DID mirror this logic, correctly, with 11 sound assertions and zero
+ * callers: sabotaging `pinPadState`'s `delayed` arm left every one of them green, because a mirror
+ * is not on the path. Every assertion below therefore goes through here.
+ */
+const keysAreLive = (
+  row: PinAttemptRow | null,
+  now: number,
+  lastAttempt: LastAttempt = 'none',
+): boolean => pinPadState(pinView(row, now, lastAttempt)) !== 'locked';
 
 /** A `pin_attempt_state` row at `failures` consecutive failures, with 14's own window applied. */
 function row(failures: number, notBefore: number | null = null): PinAttemptRow {
@@ -44,14 +62,17 @@ describe('the view renders 14`s derived state — it never re-derives it', () =>
   test('a clean slate is entry, with the keys live', () => {
     expect(pinView(null, NOW)).toEqual({ kind: 'entry' });
     expect(pinPadState(pinView(null, NOW))).toBe('entry');
-    expect(canAttempt(null, NOW)).toBe(true);
+    expect(keysAreLive(null, NOW)).toBe(true);
   });
 
   test('the free band (1..3 failures) stays live — 03 §9.1: attempts 1–3 are free', () => {
     for (let failures = 1; failures < PIN_FREE_ATTEMPTS; failures += 1) {
       const given = row(failures);
       expect(derivePinAuthState(given)).toBe('unlocked');
-      expect(canAttempt(given, NOW)).toBe(true);
+      // Live whether or not the last attempt was wrong: inside the free band a cashier who mistyped
+      // must be able to retype immediately. `error` flashes the dots red — it must never disable.
+      expect(keysAreLive(given, NOW)).toBe(true);
+      expect(keysAreLive(given, NOW, 'wrong')).toBe(true);
       expect(pinView(given, NOW, 'wrong')).toEqual({
         kind: 'wrong',
         attemptsLeft: PIN_HARD_LOCK_THRESHOLD - failures,
@@ -64,6 +85,7 @@ describe('the view renders 14`s derived state — it never re-derives it', () =>
     expect(view).toEqual({ kind: 'wrong', attemptsLeft: PIN_HARD_LOCK_THRESHOLD - 1 });
     expect(PIN_MESSAGE_KEY[view.kind]).toBe('auth.pin.wrong');
     expect(pinPadState(view)).toBe('error');
+    expect(keysAreLive(row(1), NOW, 'wrong')).toBe(true);
   });
 
   test('attemptsLeft tracks the row and never goes negative', () => {
@@ -88,8 +110,10 @@ describe('`delayed` — the countdown, and NO verify call while now < notBefore'
   });
 
   test('inside the window the keys are dead and NO attempt is permitted', () => {
-    expect(canAttempt(delayedRow, NOW)).toBe(false);
-    expect(canAttempt(delayedRow, NOW + firstDelay - 1)).toBe(false);
+    expect(keysAreLive(delayedRow, NOW)).toBe(false);
+    expect(keysAreLive(delayedRow, NOW + firstDelay - 1)).toBe(false);
+    // Dead regardless of the transient `wrong` flag — `lockedOut`/`delayed` outrank it (precedence).
+    expect(keysAreLive(delayedRow, NOW, 'wrong')).toBe(false);
     const view = pinView(delayedRow, NOW);
     expect(view).toEqual({ kind: 'delayed', remainingMs: firstDelay });
     expect(pinPadState(view)).toBe('locked');
@@ -105,7 +129,7 @@ describe('`delayed` — the countdown, and NO verify call while now < notBefore'
   });
 
   test('AT notBefore the window is open again — the wait is finite, as the copy promises', () => {
-    expect(canAttempt(delayedRow, NOW + firstDelay)).toBe(true);
+    expect(keysAreLive(delayedRow, NOW + firstDelay)).toBe(true);
     expect(pinView(delayedRow, NOW + firstDelay)).toEqual({ kind: 'entry' });
   });
 
@@ -114,7 +138,7 @@ describe('`delayed` — the countdown, and NO verify call while now < notBefore'
     // clock back must therefore make the countdown read LONGER, never shorter, and must never
     // re-enable the keys.
     const rolledBack = NOW - firstDelay * 10;
-    expect(canAttempt(delayedRow, rolledBack)).toBe(false);
+    expect(keysAreLive(delayedRow, rolledBack)).toBe(false);
     const view = pinView(delayedRow, rolledBack) as Extract<PinView, { kind: 'delayed' }>;
     expect(view.kind).toBe('delayed');
     expect(view.remainingMs).toBeGreaterThan(firstDelay);
@@ -126,8 +150,8 @@ describe('`delayed` — the countdown, and NO verify call while now < notBefore'
     for (const { consecutiveFailures, delayMs } of PIN_LOCKOUT_SCHEDULE) {
       const gated = row(consecutiveFailures, NOW + delayMs);
       expect(derivePinAuthState(gated), `failures=${consecutiveFailures}`).toBe('delayed');
-      expect(canAttempt(gated, NOW + delayMs - 1)).toBe(false);
-      expect(canAttempt(gated, NOW + delayMs)).toBe(true);
+      expect(keysAreLive(gated, NOW + delayMs - 1), `failures=${consecutiveFailures}`).toBe(false);
+      expect(keysAreLive(gated, NOW + delayMs), `failures=${consecutiveFailures}`).toBe(true);
       covered += 1;
     }
     // The loop's own denominator (T-14): an empty schedule would otherwise report green.
@@ -146,7 +170,7 @@ describe('`locked_out` — the hard lock, and what it must not say', () => {
   test('renders auth.pin.lockedOut with the keys dead and no attempt permitted', () => {
     const view = pinView(lockedRow, NOW);
     expect(view).toEqual({ kind: 'lockedOut' });
-    expect(canAttempt(lockedRow, NOW)).toBe(false);
+    expect(keysAreLive(lockedRow, NOW)).toBe(false);
     expect(pinPadState(view)).toBe('locked');
     expect(PIN_MESSAGE_KEY[view.kind]).toBe('auth.pin.lockedOut');
   });
@@ -163,7 +187,7 @@ describe('`locked_out` — the hard lock, and what it must not say', () => {
     // promise a technician that standing still fixes it, when only the store owner can.
     for (const later of [NOW + 1, NOW + 86_400_000, NOW + 86_400_000 * 365]) {
       expect(pinView(lockedRow, later)).toEqual({ kind: 'lockedOut' });
-      expect(canAttempt(lockedRow, later)).toBe(false);
+      expect(keysAreLive(lockedRow, later), `later=${later}`).toBe(false);
     }
   });
 
@@ -182,13 +206,24 @@ describe('the view is total — no state maps to a blank screen (task 24 accepta
   test('every (failures × window × lastAttempt) combination renders a known state', () => {
     const kinds = new Set<PinView['kind']>();
     let count = 0;
+    let dark = 0;
 
     for (let failures = 0; failures <= PIN_HARD_LOCK_THRESHOLD + 1; failures += 1) {
       for (const notBefore of [null, NOW - 1, NOW, NOW + 1_000]) {
         for (const last of ['none', 'wrong'] as const) {
-          const view = pinView(failures === 0 ? null : row(failures, notBefore), NOW, last);
+          const given = failures === 0 ? null : row(failures, notBefore);
+          const view = pinView(given, NOW, last);
           expect(view).toBeDefined();
-          expect(pinPadState(view)).toBeTruthy();
+          // NOT `toBeTruthy()`: every one of the three pad states is a truthy string, so that
+          // assertion passes just as happily on a mapping that lights the keys inside a lockout
+          // window. Assert the security property instead, across the whole cross-product (T-12):
+          // the keys are live IFF the view is not a lockout state.
+          const shouldBeLocked = view.kind === 'delayed' || view.kind === 'lockedOut';
+          expect(pinPadState(view), `kind=${view.kind}`).toBe(
+            shouldBeLocked ? 'locked' : view.kind === 'wrong' ? 'error' : 'entry',
+          );
+          expect(keysAreLive(given, NOW, last), `kind=${view.kind}`).toBe(!shouldBeLocked);
+          if (shouldBeLocked) dark += 1;
           // Every kind resolves a message slot — `entry` legitimately has none.
           expect(PIN_MESSAGE_KEY).toHaveProperty(view.kind);
           kinds.add(view.kind);
@@ -196,6 +231,10 @@ describe('the view is total — no state maps to a blank screen (task 24 accepta
         }
       }
     }
+
+    // The lockout arm's own denominator (T-14): if a refactor made no combination reach a locked
+    // state, every assertion above would still pass while proving nothing about the dark keys.
+    expect(dark).toBeGreaterThan(0);
 
     // The sweep's own denominator (T-14): without this a zero-iteration loop reports green.
     expect(count).toBe((PIN_HARD_LOCK_THRESHOLD + 2) * 4 * 2);
