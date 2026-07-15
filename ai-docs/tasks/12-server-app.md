@@ -1,5 +1,5 @@
 # TASK 12 — server-app (Hono skeleton, middleware chain, error envelope, RPC AppType)
-**Status:** todo
+**Status:** in-review
 **Depends on:** 02, 05
 
 ## Goal
@@ -47,3 +47,8 @@ Deliver `@bolusi/server` (`apps/server`): the Hono 4.12.30 app on Node 22 with t
 - **RPC tests:** `@bolusi/server/client` built output contains type exports only (test asserts zero runtime exports); `hc<AppType>('…', { fetch: app.fetch-adapter })` smoke test typechecks and round-trips against a mounted stub route; all eight sub-routers are chained (not handler-assigned) and mounted under `/v1`.
 - **Idempotency where relevant:** replaying any middleware-rejected request (401/413/400/415) leaves no state anywhere — stub handlers never execute on rejected requests (spy assertion).
 - **Lint/CI gates:** `tsc -b` green repo-wide; ESLint boundary config green for `apps/server` (imports only per 08 §3.3, `import type`-only for the app→app edge); deps pinned exactly per api/00 §2 (hono 4.12.30, @hono/node-server 2.0.8, @hono/zod-validator 0.8.0, zod 4.4.3); duplicate-zod-major lockfile check passes; SEC test titles greppable for SEC-META-01; pre-commit hooks pass (no `--no-verify`).
+
+## Implementation notes (task 12, in-review — for downstream tasks)
+- **Live tenant-scoped query is NOT proven here — task 16 owns it.** This task's routers are stubs with no live DB query, so the tenant-helper L3 test drives db-server's `set_config('app.tenant_id',$1,true)` *statement shape + GUC value* through a thin PGlite-backed `forTenant` double (`apps/server/test/helpers/pglite-tenant.ts`) that runs the exact production statement; the real `forTenant` (the app's production default) is proven in `packages/db-server/test/for-tenant.test.ts`. **Task 16 (sync-server), which puts the first real tenant-table query behind `withTenant`, owns the end-to-end proof that a live scoped query runs inside the transaction against the real handler** (L3 PGlite + L4 through `app.fetch`).
+- **CI `server-integration` job** still echoes a placeholder; `pnpm test:server` is now real (`vitest run --project server`). Wiring the CI job to it is filed as **task 32** (bootstrap record #9) — not touched here to keep the CI verifier boundary out of this task's scope.
+- **`bearerAuth` is a spec-shaped custom middleware**, not `hono/bearer-auth`: the built-in maps an unparseable header to `400` (§7 requires `401 AUTH_TOKEN_MISSING`), has no third outcome for `DEVICE_REVOKED`, and returns a boolean rather than setting typed `device`/`controlSession` context. The DB-backed `TokenStore` + real `verifyToken` land in **task 13** (the interface is injected; default is an empty store).

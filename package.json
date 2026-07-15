@@ -16,7 +16,7 @@
     "test:jcs-hermes": "node scripts/hermes-vectors/run.mjs",
     "test:ed25519-interop": "tsc -b && vitest run --project test-support",
     "falsify:crypto": "node scripts/falsify-guards.mjs",
-    "test:server": "node scripts/not-implemented.mjs test:server 12-server-app",
+    "test:server": "vitest run --project server",
     "test:rls": "BOLUSI_DB_ENGINE=postgres DATABASE_URL=${DATABASE_URL:-postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test} vitest run --project db-server",
     "test:appliers": "node scripts/not-implemented.mjs test:appliers 11-module-contract",
     "chaos": "node scripts/not-implemented.mjs chaos 26-chaos-harness",

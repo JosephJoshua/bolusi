@@ -18,6 +18,7 @@
     "dist"
   ],
   "scripts": {
+    "build": "tsc -b tsconfig.build.json",
     "dev": "tsx watch src/main.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -37,8 +38,10 @@
   },
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*",
+    "@electric-sql/pglite": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "catalog:",
+    "kysely": "catalog:",
     "tsx": "catalog:"
   }
 }

@@ -19,14 +19,14 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | todo | 02, 04 |
 | 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | todo | 06, 08, 09 |
 | 11 | module-contract (defineModule, queries layer, registration) | todo | 08, 10 |
-| 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | in-progress | 02, 05 |
-| 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | todo | 05, 12 |
+| 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | done | 02, 05 |
+| 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | in-progress | 05, 12 |
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | todo | 03, 04, 09, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | todo | 07, 12, 13 |
 | 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | todo | 03, 04, 22 |
-| 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | todo | 05, 12 |
+| 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | in-progress | 05, 12 |
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
 | 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | todo | 12, 13 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
@@ -40,6 +40,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | todo | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | todo | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
+| 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | todo | 12 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
