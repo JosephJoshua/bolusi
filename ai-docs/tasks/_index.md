@@ -32,9 +32,9 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | in-progress | 14, 22, 23 |
-| 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24, 49 |
+| 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24, 49, 50 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
-| 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26 |
+| 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26, 50 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | done | 02 |
@@ -58,6 +58,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 47 | server watermark store has no production caller and no real-PG16 coverage — 3 gates blind to the same `Number()` (from task 16 review) | todo | 16 |
 | 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | todo | 46 |
 | 49 | **HIGH** the server never applies projections — push transaction drops normative step 6; the handoff ring closes on itself; every server read model is empty (from qa orphan sweep) | todo | 16 |
+| 50 | **HIGH** app bootstrap: DB open + migrations, module registration, transport, sync triggers — shell boots, data layer doesn't (from task 24) | todo | 15, 18, 24 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
