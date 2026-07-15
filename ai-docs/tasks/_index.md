@@ -18,7 +18,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | done | 04, 06 |
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | done | 02, 04 |
 | 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | done | 06, 08, 09 |
-| 11 | module-contract (defineModule, queries layer, registration) | in-progress | 08, 10 |
+| 11 | module-contract (defineModule, queries layer, registration) | done | 08, 10 |
 | 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | done | 02, 05 |
 | 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | done | 05, 12 |
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | todo | 03, 04, 09, 10, 13 |
@@ -50,6 +50,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | todo | 05 |
 | 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | todo | 10 |
 | 41 | tenant-counter lock is taken AFTER the chain-head read it should protect (comment + 10-db §3 claim otherwise); latent, UNIQUE backstops it (from task 07 review) | todo | 07 |
+| 42 | @electric-sql/pglite escapes the DB-driver testOnly lock; watermark Number() comment overstates its evidence (from task 11 review) | todo | 11 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
