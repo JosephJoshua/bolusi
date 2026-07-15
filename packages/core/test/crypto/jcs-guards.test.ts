@@ -149,6 +149,103 @@ describe('canonicalizeJcs — input guards', () => {
     });
   });
 
+  // CLASS test, not instance tests. Everything above pins specific values we reasoned
+  // about; this pins the RULE — "only the JSON data model canonicalizes" — across the
+  // whole non-JSON space and in every structural position. The first version of this
+  // guard passed every instance test above while silently accepting `new Set([1])` as
+  // `{}`, because it enumerated the exotic types someone thought of instead of
+  // whitelisting the two container types JSON actually has. A new exotic type (or a new
+  // position) must fail here without anyone remembering to add a case.
+  describe('the non-JSON class is rejected wholesale, in every position', () => {
+    const nonJson: [string, unknown][] = [
+      ['undefined', undefined],
+      ['NaN', Number.NaN],
+      ['+Infinity', Number.POSITIVE_INFINITY],
+      ['-Infinity', Number.NEGATIVE_INFINITY],
+      ['BigInt', 10n],
+      ['symbol', Symbol('s')],
+      ['function declaration', function named() {}],
+      ['arrow function', () => 1],
+      ['async function', async () => 1],
+      ['generator function', function* gen() {}],
+      ['class constructor', class Ctor {}],
+      ['Date', new Date(0)],
+      ['Map', new Map([['a', 1]])],
+      ['Set', new Set([1])],
+      ['RegExp', /x/],
+      ['Error', new Error('e')],
+      ['Uint8Array', new Uint8Array([1, 2])],
+      ['boxed Number', new Number(5)],
+      ['boxed String', new String('s')],
+      [
+        'class instance',
+        new (class Point {
+          x = 1;
+        })(),
+      ],
+      [
+        'object with prototype toJSON',
+        new (class T {
+          toJSON() {
+            return 'HIJACKED';
+          }
+        })(),
+      ],
+      ['object with own toJSON', { toJSON: () => 'HIJACKED' }],
+    ];
+
+    // Top level, nested in an object, and inside an array — the three shapes a signed
+    // core can put a value in. canonicalize@3 fails differently in each (drop vs
+    // null-coercion vs invalid JSON), so a guard can genuinely cover one and miss another.
+    const positions: [string, (value: unknown) => unknown][] = [
+      ['top level', (value) => value],
+      ['nested in an object', (value) => ({ outer: { inner: value } })],
+      ['inside an array', (value) => ({ list: [1, value] })],
+    ];
+
+    for (const [valueName, value] of nonJson) {
+      for (const [positionName, wrap] of positions) {
+        it(`rejects ${valueName} ${positionName}`, () => {
+          expect(() =>
+            canonicalizeJcs(wrap(value) as Parameters<typeof canonicalizeJcs>[0]),
+          ).toThrow(JcsInputError);
+        });
+      }
+    }
+
+    it('never silently drops a Set/Map — the collision case that motivated the whitelist', () => {
+      // Two DIFFERENT sets serialize to the same `{}` under canonicalize, so distinct
+      // data would hash identically. That is a collision, not merely a lost key.
+      expect(canonicalize({ tags: new Set([1, 2]) })).toBe('{"tags":{}}');
+      expect(canonicalize({ tags: new Set([9, 9, 9]) })).toBe('{"tags":{}}');
+
+      const a = expectRejection({ tags: new Set([1, 2]) });
+      expect(a.code).toBe('NON_PLAIN_OBJECT');
+      expect(a.path).toBe('$.tags');
+    });
+  });
+
+  describe('the JSON data model still canonicalizes', () => {
+    // The other half of a whitelist: proving it did not over-reject.
+    const legal: [string, unknown][] = [
+      ['null', null],
+      ['boolean', true],
+      ['string', 's'],
+      ['integer', 1],
+      ['float', 1.5],
+      ['array', [1, 'a', null]],
+      ['plain object', { a: 1 }],
+      ['null-prototype object', Object.assign(Object.create(null) as object, { a: 1 })],
+      ['deeply nested plain data', { a: { b: [{ c: 1 }] } }],
+    ];
+
+    for (const [name, value] of legal) {
+      it(`accepts ${name}`, () => {
+        expect(() => canonicalizeJcs(value as Parameters<typeof canonicalizeJcs>[0])).not.toThrow();
+      });
+    }
+  });
+
   describe('canonical output', () => {
     it('sorts keys and leaves array order alone', () => {
       expect(canonicalizeJcs({ b: [3, 1, 2], a: 1 })).toBe('{"a":1,"b":[3,1,2]}');
