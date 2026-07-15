@@ -13,6 +13,28 @@ import type { ClientDatabase } from './generated/index.js';
 export const DEFAULT_DATABASE_NAME = 'bolusi.db';
 
 /**
+ * The ONE CamelCasePlugin configuration for the client (10-db §11.4).
+ *
+ * `underscoreBetweenUppercaseLetters: true` is REQUIRED, not a preference. kysely-codegen
+ * and CamelCasePlugin are **not inverses at default options**: codegen turns the column
+ * `op_a_id` into the property `opAId`, but the plugin's DEFAULT `snakeCase('opAId')` is
+ * `'op_aid'` — a column that does not exist. Such a query typechecks and dies at runtime
+ * ("no such column"). The shape that triggers it is a single-letter segment between camel
+ * humps; `conflicts.op_a_id` / `op_b_id` (10-db §9.6) are the live cases.
+ *
+ * Changing this MUST stay in lockstep with `--camel-case` in scripts/codegen.ts, and
+ * `test/codegen-camel-case.test.ts` re-derives every generated property against the real
+ * migrated schema so a regression fails there rather than in the first applier that
+ * touches `conflicts`.
+ *
+ * db-server carries its own copy (`packages/db-server/src/camel-case.ts`) by necessity:
+ * 08 §3.3 hard rule 2 forbids db-client and db-server importing each other, and the
+ * shared normative source is the 10-db §11.4 spec line, guarded by a property-by-property
+ * test on each side.
+ */
+export const CLIENT_CAMEL_CASE_OPTIONS = { underscoreBetweenUppercaseLetters: true } as const;
+
+/**
  * Applied post-open, in this exact order (10-db §9 preamble). Order is part of the spec,
  * not incidental: `journal_mode = WAL` is what makes a single connection sufficient.
  */
@@ -160,7 +182,7 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
   // verbatim snake_case SQL of 10-db §9, which is what the migration runner needs.
   const db = new Kysely<ClientDatabase>({
     dialect: createClientDialect(driver),
-    plugins: [new CamelCasePlugin()],
+    plugins: [new CamelCasePlugin(CLIENT_CAMEL_CASE_OPTIONS)],
   });
 
   const connection: ClientDb = {
