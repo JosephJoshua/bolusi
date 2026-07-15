@@ -37,10 +37,13 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@bolusi/eslint-config": "workspace:*",
+    "@bolusi/test-support": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "@electric-sql/pglite": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "catalog:",
+    "eslint": "catalog:",
     "kysely": "catalog:",
     "tsx": "catalog:"
   }
