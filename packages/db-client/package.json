@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./op-sqlite": {
+      "types": "./dist/adapters/op-sqlite.d.ts",
+      "default": "./dist/adapters/op-sqlite.js"
     }
   },
   "files": [
@@ -16,13 +20,23 @@
   "dependencies": {
     "@bolusi/core": "workspace:*",
     "@bolusi/schemas": "workspace:*",
+    "@op-engineering/op-sqlite": "catalog:",
     "kysely": "catalog:",
     "kysely-generic-sqlite": "catalog:"
   },
   "devDependencies": {
-    "@bolusi/tsconfig": "workspace:*"
+    "@bolusi/test-support": "workspace:*",
+    "@bolusi/tsconfig": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
+    "@types/node": "catalog:",
+    "better-sqlite3": "catalog:",
+    "kysely-codegen": "catalog:",
+    "tsx": "catalog:"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "build": "tsc -b tsconfig.build.json",
+    "db:codegen": "tsx scripts/codegen.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   }
 }

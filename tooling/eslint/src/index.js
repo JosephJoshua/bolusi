@@ -47,6 +47,36 @@ export default tseslint.config(
     },
   },
   {
+    // The op log's append-only ENFORCEMENT, and the tests that prove it (task 05).
+    // `bolusi/no-op-table-update` matches UPDATE/DELETE near `operations` in raw SQL, which
+    // catches two files whose whole purpose is the opposite of mutating the log:
+    //
+    //   migrations/0003_operations.ts — `CREATE TRIGGER operations_no_update BEFORE UPDATE ON
+    //     operations`: the DDL that INSTALLS the prohibition (10-db-schema §5).
+    //   test/append-only.test.ts — the adversarial cases that attempt UPDATE/DELETE and assert
+    //     both the trigger exception and the app role's grant denial (security-guide §3.1's
+    //     "enforced three ways"). A test proving mutation is impossible has to attempt it.
+    //
+    // Scoped to these two exact paths via the rule's documented `allowFiles` option — the log
+    // stays append-only everywhere else, including the rest of packages/db-server.
+    name: 'bolusi/op-log-enforcement-allowlist',
+    files: [
+      'packages/db-server/migrations/0003_operations.ts',
+      'packages/db-server/test/append-only.test.ts',
+    ],
+    rules: {
+      'bolusi/no-op-table-update': [
+        'error',
+        {
+          allowFiles: [
+            'packages/db-server/migrations/0003_operations.ts',
+            'packages/db-server/test/append-only.test.ts',
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Zod-shape + money-identifier prongs everywhere in schemas/modules; the
     // numeric-literal prong is off here (UI code like `opacity: 0.5` is legitimate).
     name: 'bolusi/money',
