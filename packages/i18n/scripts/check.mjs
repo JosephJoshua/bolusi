@@ -25,7 +25,17 @@ import {
 const SOURCE_ROOTS = ['apps', 'packages/modules', 'packages/ui'];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.expo', 'coverage', 'android', 'ios']);
-const T_CALL_RE = /\bt\(\s*'([a-zA-Z][\w.]*)'/g;
+/**
+ * A whole-key `t('a.b.c')` call site.
+ *
+ * The `(?!\s*\+)` tail excludes the derived-key calls the spec *mandates* —
+ * `t('core.errors.' + code)` / `t('core.rejection.' + code)` (07-i18n §3.1, §4.2, §4.3). Without
+ * it the literal is captured as the key `core.errors.`, which is a prefix, not a key, and the
+ * extraction gate reports it missing from the catalog forever. Those keys are not unchecked:
+ * the error-code coverage gate enumerates them from the code registry, which is the whole point
+ * of deriving them.
+ */
+const T_CALL_RE = /\bt\(\s*'([a-zA-Z][\w.]*)'(?!\s*\+)/g;
 
 /** @returns {import('./gates.mjs').CatalogSource[]} */
 function loadReservedCatalogs() {
