@@ -1,0 +1,34 @@
+{
+  "switcher": {
+    "title": "Siapa yang pakai?",
+    "instruction": "Ketuk nama kamu",
+    "addUser": "Tambah Pengguna",
+    "idleLocked": "Layar terkunci karena lama tidak dipakai. Pekerjaanmu aman."
+  },
+  "pin": {
+    "title": "Masukkan PIN",
+    "wrong": "PIN salah. Coba lagi.",
+    "attemptsLeft": "Sisa {count} kesempatan",
+    "wait": "Terlalu banyak salah. Tunggu {duration}.",
+    "lockedOut": "PIN terkunci. Minta pemilik toko untuk membukanya.",
+    "forgot": "Lupa PIN? Minta pemilik toko membuatkan yang baru.",
+    "setup": {
+      "title": "Buat PIN Baru",
+      "repeat": "Ulangi PIN",
+      "mismatch": "PIN tidak sama. Coba lagi."
+    }
+  },
+  "enroll": {
+    "title": "Daftarkan Perangkat Ini",
+    "instruction": "Masuk dengan akun kamu. Perangkat ini akan terdaftar untuk toko kamu.",
+    "identifierField": "Nama akun",
+    "passwordField": "Kata sandi",
+    "submit": "Masuk",
+    "needsConnection": "Pendaftaran perangkat butuh koneksi internet.",
+    "success": "Perangkat berhasil didaftarkan"
+  },
+  "revoked": {
+    "title": "Perangkat Diblokir",
+    "body": "Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang."
+  }
+}

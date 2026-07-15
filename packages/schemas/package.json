@@ -17,9 +17,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@bolusi/tsconfig": "workspace:*"
+    "@bolusi/tsconfig": "workspace:*",
+    "vitest": "catalog:"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   }
 }

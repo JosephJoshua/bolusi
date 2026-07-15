@@ -1,0 +1,22 @@
+{
+  "list": {
+    "title": "Conflicts"
+  },
+  "status": {
+    "surfaced": "Needs a decision",
+    "autoResolved": "Merged automatically",
+    "acknowledged": "Decided"
+  },
+  "detail": {
+    "instruction": "Two changes clash. Choose which one is right."
+  },
+  "action": {
+    "decide": "Decide"
+  },
+  "decision": {
+    "saved": "Decision saved"
+  },
+  "autoResolved": {
+    "toast": "Two changes were merged automatically"
+  }
+}

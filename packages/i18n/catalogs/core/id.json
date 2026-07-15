@@ -1,0 +1,64 @@
+{
+  "action": {
+    "save": "Simpan",
+    "cancel": "Batal",
+    "retry": "Coba Lagi",
+    "delete": "Hapus",
+    "confirm": "Ya, Lanjutkan",
+    "back": "Kembali",
+    "close": "Tutup",
+    "edit": "Ubah",
+    "add": "Tambah",
+    "search": "Cari",
+    "ok": "Oke",
+    "yes": "Ya",
+    "no": "Tidak"
+  },
+  "status": {
+    "loading": "Memuat…",
+    "empty": "Belum ada data",
+    "saved": "Tersimpan"
+  },
+  "time": {
+    "justNow": "baru saja",
+    "minutesAgo": "{count} menit lalu",
+    "hoursAgo": "{count} jam lalu",
+    "daysAgo": "{count} hari lalu",
+    "durationSeconds": "{count} detik",
+    "durationMinutes": "{count} menit"
+  },
+  "settings": {
+    "language": "Bahasa"
+  },
+  "language": {
+    "id": "Bahasa Indonesia",
+    "en": "English"
+  },
+  "errors": {
+    "INVALID_TRANSITION": "Tindakan ini sudah tidak bisa dilakukan karena datanya berubah. Periksa lagi datanya.",
+    "PERMISSION_DENIED": "Akun kamu tidak punya izin untuk ini.",
+    "VALIDATION_FAILED": "Ada isian yang belum benar. Periksa lagi.",
+    "ENTITY_NOT_FOUND": "Data tidak ditemukan.",
+    "NOT_AUTHENTICATED": "Masuk dulu untuk melanjutkan.",
+    "DEVICE_NOT_ENROLLED": "Perangkat ini belum terdaftar. Daftarkan dulu.",
+    "USER_DEACTIVATED": "Akun kamu sudah dinonaktifkan. Hubungi pemilik toko.",
+    "PIN_RATE_LIMITED": "Terlalu banyak PIN salah. Tunggu sebentar, lalu coba lagi.",
+    "PIN_LOCKED": "PIN terkunci. Minta pemilik toko membukanya atau membuatkan PIN baru.",
+    "LAST_ADMIN_PROTECTED": "Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.",
+    "ROLE_IN_USE": "Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.",
+    "IDEMPOTENCY_CONFLICT": "Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.",
+    "RATE_LIMITED": "Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.",
+    "UNEXPECTED": "Terjadi kesalahan. Coba lagi.",
+    "NETWORK": "Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini."
+  },
+  "rejection": {
+    "BAD_SIGNATURE": "Perubahan ini gagal diverifikasi dan ditolak server. Laporkan ke pemilik toko.",
+    "CHAIN_BROKEN": "Riwayat perubahan di perangkat ini rusak. Pengiriman dihentikan. Segera hubungi pemilik toko.",
+    "CHAIN_GAP": "Ada perubahan yang tertinggal. Dikirim ulang otomatis.",
+    "CHAIN_HALTED": "Ditunda karena perubahan sebelumnya bermasalah.",
+    "DEVICE_REVOKED": "Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.",
+    "SCHEMA_INVALID": "Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.",
+    "SCOPE_VIOLATION": "Perubahan ini bukan untuk toko atau akun ini, jadi ditolak. Laporkan ke pemilik toko.",
+    "UNKNOWN_TYPE": "Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim."
+  }
+}
