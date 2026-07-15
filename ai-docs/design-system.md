@@ -52,6 +52,19 @@ Rules:
 - `warning` is never a filled-button color (white-on-amber fails 4.5:1); warnings render as tinted banners/chips with dark text.
 - Semantic meaning is fixed: primary = act, success = completed/confirmed, warning = degraded/attention, danger = destructive/failed/rejected. Never repurpose (e.g. no "danger" for emphasis).
 
+### 1.5 Identity hues (Avatar only)
+
+> **Added 2026-07-15 (task 23)** for §3.12.
+
+A CLOSED 8-hue ramp used **only** by `Avatar` to give each user a stable colour: `#0C4A6E` `#14532D` `#581C87` `#7C2D12` `#831843` `#115E59` `#713F12` `#3F3F46`, all carrying `color.onIdentity` (`#FFFFFF`).
+
+This is an **identity** ramp, not a semantic one, and the distinction is load-bearing:
+
+- These hues carry **no status meaning** and never signal state, so §1.1's "never repurpose" and §6.3's "no colour-only signalling" are untouched — initials are text; the hue only accelerates recognition.
+- Every hue clears 4.5:1 against `onIdentity`, asserted mechanically in `tokens.test.ts`, so no user can be dealt an unreadable disc.
+- All are **dark and saturated**: on a dimmed low-cost LCD in equatorial sun (§0), light tints wash out to the same pale smudge and stop being distinguishable from each other — which would defeat the entire point.
+- **None is red or `color.primary`**: red is `danger` and blue is "act". A person must not read as an error or a button.
+
 ### 1.2 Type scale
 
 Base is deliberately LARGE (body 18) — small screens, low brightness, low-vision-tolerant users. Nothing below 14.
@@ -117,7 +130,7 @@ Weights used: 400/600/700 only. Numeric UI (money, counts) sets `fontVariant: ['
 
 The complete v0 set. Screens compose ONLY these (+ raw `View`/`Text` with tokens). A new component = a change to this doc first.
 
-`Button · TextInput · PinPad · ListRow · Card · Chip · Banner · Toast · EmptyState · LoadingState (Skeleton/Spinner) · ConfirmSheet · AppShell (header + banner slot + bottom action bar)`
+`Button · TextInput · PinPad · List · ListRow · Card · Chip · Banner · Toast · EmptyState · LoadingState (Skeleton/Spinner) · ConfirmSheet · FreshnessCell · Avatar · AppShell (header + banner slot + bottom action bar)`
 
 All user-visible strings on every component arrive as already-localized strings resolved from the label catalog by the screen (`07-i18n.md`); components never contain literals.
 
@@ -180,7 +193,9 @@ The Banner is the ONE ambient escalation surface, rendered in the AppShell banne
 | `warning` | `warningBg` / `warning` | collapsible to header dot, re-expands next screen | Staleness level `warning`; `Conflict.surfaced` awaiting decision |
 | `danger` | `dangerBg` / `#991B1B` | NOT dismissible while cause persists | Staleness level `stale`; any `rejected` op; `Device.revoked`; `User.deactivated` |
 
-Anatomy: icon (mandatory) + message (`type.bodySm`, max 2 lines) + optional single action button (secondary-style, min `touch.min`). Message + action labels from the label catalog.
+Anatomy: leading glyph (mandatory — the §3.11 FreshnessCell for staleness causes, otherwise the variant icon) + message (`type.bodySm`, **max 3 lines**) + optional single action button (secondary-style, min `touch.min`). Message + action labels from the label catalog.
+
+> **Changed 2026-07-15 (task 23): 2 lines → 3.** Evidence, not preference: the real catalog string `sync.banner.stale` in Indonesian is *"Sudah lama tidak terhubung. Data di layar ini bisa jauh tertinggal."* (67 chars), which already fills two `bodySm` lines on a 360 dp screen and **overflows them at the 1.3× font scale §6.5 requires us to survive**. Two lines would truncate the sentence telling a technician their data is stale — the one thing this product promises never to hide. Indonesian runs longer than English here (`Belum terkirim` vs `Not sent yet`; `mendaftarkannya` is a single 15-char word), so banner copy must be sized against the ID catalog, never against English.
 
 **Staleness escalation** — levels and their numeric thresholds are owned by `03-state-machines.md` §8; the numbers live ONLY there and are never restated here. The Banner mapping is:
 
@@ -236,6 +251,52 @@ Single sanctioned exception — **ConfirmSheet**: a bottom sheet for one-tap con
 
 Rationale: modals trap tech-inadept users (unclear dismissal), break Android back-button expectations, and float small touch targets.
 
+### 3.11 FreshnessCell — the staleness-tier instrument (**signature element**)
+
+> **Added 2026-07-15 (task 23).** §8.4 already required a "staleness-tier icon" without specifying one. This section specifies it, and promotes it to the design system's signature element.
+
+A **battery cell** whose FILL encodes the staleness tier. Three discrete states, driven by the level name from `03-state-machines.md` §8 — never an age, never a percentage (a continuous fill would require the thresholds, and §8 is their sole home).
+
+| Level (`03-state-machines.md` §8) | Cell | Tint |
+| --- | --- | --- |
+| `fresh` | full | `textMuted` — quiet |
+| `warning` | half | `warning` |
+| `stale` | **empty** | `danger` |
+
+Rationale (normative — do not relitigate per-screen):
+
+1. **The domain's own instrument.** This is a phone-repair counter; a charge level is the most-read glyph in the building. It is legible pre-literately, in any language — which §0 requires ("tech-inadept", literacy sometimes limited), and which a grey timestamp chip is not.
+2. **Fill, not hue, is the signal.** On a dimmed low-cost LCD in equatorial sun (§0) hue washes out and mid-greys crush; a fill fraction is a shape, and shape survives. Colour only reinforces — so the cell is colourblind-safe and satisfies §6.3 by construction.
+3. **It is literally true of the system.** Local data holds a charge that drains while offline and recharges on sync. The metaphor does not have to be taught.
+4. **Never animates.** Static costs no GPU on the 2 GB target (§7), and leaves `prefers-reduced-motion` nothing to honour here.
+
+Placement: the §3.6 Banner's leading glyph for staleness causes, and the §8.4 status header. Using the same object in both is the point — the escalation reads as ONE instrument getting worse, not three unrelated coloured strips. Drawn with `View`s; no SVG, no new dependency.
+
+### 3.12 Avatar — identity, recognised rather than read
+
+> **Added 2026-07-15 (task 23).** §8.2 said "initials on `surfaceAlt`"; that made every user an identical grey disc, which defeats the purpose PRD-011 §6.1 states.
+
+PRD-011 §6.1: these users identify themselves by **face**, far faster than by reading a name — "a wall of names in an unfamiliar script, for an employee whose literacy may be limited, is a barrier where a face is not." v0 ships no photo-upload UI (roadmap), though the directory carries `photoMediaId` from day one. So the initials fallback must be **good, not an apology**:
+
+- **A stable, distinct hue per user**, derived deterministically from `userId` (not the name — renaming must not repaint a person, and two users with the same initials must still differ). This makes identity a two-channel object (colour + letterform), recognisable in peripheral vision without reading — the whole job of §8.2, whose budget is ≤ 5 s (NFR-1003).
+- Initials are text, so colour is never the only signal (§6.3); the hue is an accelerator, not the information.
+- Hues come from the CLOSED `identityPalette` (§1.5), every member contrast-validated against white.
+- Sizes: `row` 40 (§3.4 leading slot), `header` 48 (§8.1), `switcher` **96** (§8.2 — big enough to be a face, not a bullet point).
+- A photo slots into the same geometry later with zero layout change.
+
+### 3.13 List — the only collection primitive
+
+> **Added 2026-07-15 (task 23).** §7 specified the FlatList CONFIG but named no component, leaving each screen to wire (or forget) it.
+
+Screens render collections through `List` and not a raw `FlatList` / `.map()` — a **convention until enforced by task 24's screen import-boundary lint rule** (no screens exist yet to scope such a rule against, so it lands with them). `List` owns two things structurally:
+
+1. **Virtualization**, so it is not a per-screen decision. A `.map()` over a year of history (`testing-guide` §4.1 `SEED-200K`) dies on the 2 GB target. Owning the primitive means the windowing config is written once — and the engine becomes a one-file swap rather than a 25-screen rewrite.
+2. **The four §5 states as a discriminated union** (`loading | empty | error | unauthorized | ready`). This makes the states first-class and prevents the classic "render `[]` that reads as empty when the truth is denied" bug (FR-1036): a screen cannot render items-or-empty while meaning `unauthorized`, nor pass a partial state, without a compile error. It does **not** force an auth-unaware screen to grow an auth branch — a screen that only passes `ready`/`empty` compiles; making denial reach `List` is the screen's job, enforced screen-side by task 24's exhaustive-mapping pattern.
+
+Row height is `touch.row`, uniform — that is what makes `getItemLayout` legal, so §3.4's fixed row height and this component are one contract.
+
+**Engine (decided task 23, verified against current docs):** RN `FlatList`. It is already virtualized, adds zero dependencies, and fixed-height rows + `getItemLayout` is its best case. `@shopify/flash-list` v2 is rejected for v0: it is a **native** dependency, and `08-stack-and-repo.md` §2.2 is explicit that SDK 57 is fresh and third-party native libs may lag — its declared peer range (`react-native: '*'`) carries no compatibility signal for RN 0.86, and its recycling advantage is largest for variable-height rows, which we do not have. `@legendapp/list` (100% TypeScript, no native module, drop-in FlatList API) is the **pre-vetted swap target** if the on-device perf gate (`testing-guide` §4.2) fails.
+
 ## 4. Offline-first UI rules (normative)
 
 These rules are the visible half of the architecture. Violating them misrepresents the system's own model.
@@ -273,7 +334,7 @@ Every screen (including every future module screen) ships **loading / empty / er
 - **`StyleSheet.create` with token references only.** No styling library in v0 — no NativeWind/Tamagui/styled-components/Restyle. Justification (normative): each adds JS bundle weight and runtime style-resolution work on Hermes, where the 2GB-RAM device budget (NFR-1101, NFR-1103) is already tight; a token file + StyleSheet is zero-dependency and fully sufficient for this palette-closed system. Revisit only via this doc.
 - **No `react-native-reanimated` in v0.** Importing it inflates Android memory ~25–30% under SDK 57/RN 0.86 Hermes (verified stack research, expo caveats). v0 animation budget: `ActivityIndicator` and layout-free opacity via the built-in `Animated` API only. No Lottie.
 - **Lint enforcement** (CI): (a) no color/size literals in `.tsx` outside `tokens.ts`; (b) no JSX string literals — all copy via the label catalog (`07-i18n.md` owns the rule); (c) no `reanimated`/styling-lib imports.
-- **Lists:** RN `FlatList` (no `@shopify/flash-list` dep in v0) with fixed-height rows + `getItemLayout`, `windowSize` ≈ 7, `initialNumToRender` ≈ 10, `removeClippedSubviews` on Android. Cursor pagination via query `nextCursor` (04-module-contract §6) with `onEndReached`.
+- **Lists:** consumed through the §3.13 `List` primitive rather than a raw `FlatList` / `.map()` — a convention until task 24's screen import-boundary rule enforces it (§3.13). `List` wraps RN `FlatList` (no `@shopify/flash-list` dep in v0 — see §3.13 for the verified engine comparison and the pre-vetted swap target) with fixed-height rows + `getItemLayout`, `windowSize` ≈ 7, `initialNumToRender` ≈ 10, `removeClippedSubviews` on Android. Cursor pagination via query `nextCursor` (04-module-contract §6) with `onEndReached`.
 - **Images:** `expo-image` (first-party, disk-cached, downsamples to layout size — required for media thumbnails on 2GB RAM). Never render a full-resolution capture into a thumbnail slot.
 - **Icons:** `@expo/vector-icons` (already in the Expo SDK dependency tree — no new native dep), restricted to a named-icon whitelist exported from `@bolusi/ui` (`Icon` component); direct glyph imports in screens fail review.
 - **Pressables:** `Pressable` with `android_ripple` bounded to the target; no third-party touchable libs.
@@ -303,8 +364,10 @@ Every screen (including every future module screen) ships **loading / empty / er
 ### 8.2 User Switcher (PRD-011 §6.1, FR-1012/13)
 
 - Full-screen; also the idle-lock screen (FR-1015). No header back when acting as lock.
-- Grid of user cards (2 columns): avatar (48), name `type.body`, role name `type.bodySm` `textMuted`. Card height ≥ 88, sorted by most-recently-active.
-- Avatars render **initials on `surfaceAlt`** in v0: the user directory carries `photoMediaId` from day one (`api/02-auth.md` §5.2 bundle), but v0 ships no photo-upload UI (roadmap), so initials are the only v0 rendering — photo support slots into the same 48-dp avatar without layout change.
+- Grid of user cards (2 columns): **Avatar `switcher` (96)**, name `type.body`, role name `type.bodySm` `textMuted`. Card height ≥ 88, sorted by most-recently-active.
+- Avatars render per §3.12: **initials on the user's stable identity hue** (§1.5) — not a uniform grey disc. The directory carries `photoMediaId` from day one (`api/02-auth.md` §5.2 bundle) but v0 ships no photo-upload UI (roadmap), so initials are the only v0 rendering; a photo slots into the same geometry without layout change.
+
+> **Changed 2026-07-15 (task 23).** Previously "initials on `surfaceAlt`, avatar (48)". That made every user an identical grey disc at bullet-point size, which defeats the purpose PRD-011 §6.1 states outright — these users find themselves by face, not by reading a name. On the ONE screen where identity *is* the content, identity gets the space and the colour.
 - Tap card → PIN pad (§8.3). Whole switch ≤ 5 s budget (NFR-1003) — no animations, no confirmation screens.
 - Deactivated users never appear. Mandatory states: loading (skeleton cards), empty (no enrolled users → CTA to Device Enrollment §8.5), error, unauthorized (n/a — pre-auth surface renders error instead).
 

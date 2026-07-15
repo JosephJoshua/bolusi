@@ -53,8 +53,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
-  # Stage 4 — unit (includes stage 5: JCS vectors on Node once task 03 lands them,
-  # and SEC-META-01 / SEC-SECRET-02 from @bolusi/test-support).
+  # Stage 4 — unit. Includes stage 5 (the Node JCS vector suite,
+  # packages/core/test/jcs-vectors — 08 §5.6) and SEC-META-01 / SEC-SECRET-02 from
+  # @bolusi/test-support.
   unit:
     runs-on: ubuntu-latest
     needs: install
@@ -105,39 +106,64 @@ jobs:
           pnpm -F @bolusi/db-client db:codegen
           git diff --exit-code -- packages/db-client/src/generated
 
-  # Stage 6 — JCS + crypto vectors AND the 07-i18n §5.4 i18n vectors on the Hermes VM matching
-  # the pinned RN version.
-  # PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md).
-  # Candidate paths verified at bootstrap (08 §7):
-  #   (a) preferred: compile the standalone vector bundle with `hermesc` from the
-  #       `hermes-compiler` npm package RN 0.86 depends on (linux64 binary verified
-  #       working at bootstrap) — but that package ships NO host Hermes VM to EXECUTE
-  #       the bytecode, so execution needs a built hermes CLI, or
-  #   (b) guaranteed fallback: run the same suite inside the Android-emulator job.
-  # Task 03 picks the mechanism and records it in 08 §5.6/§7.
+  # Stage 6 — SEC-OPLOG-06: JCS vectors executed on a real Hermes VM and compared
+  # byte-for-byte against the Node run (08 §5.6; mechanism + version caveat in 08 §7).
   #
-  # i18n vectors (task 22, release-blocking): entry point is
-  # packages/i18n/test/hermes-entry.ts — a runner-free module that prints a PASS/FAIL line per
-  # §5.4 vector and sets a non-zero exit status on mismatch, so it drops into whichever
-  # mechanism task 03 lands. It runs green on Node today (stage 4, packages/i18n
-  # test/vectors.test.ts); Hermes is UNVERIFIED because it ships only a subset of Intl.
-  # If the plural vector (`t('auth.pin.attemptsLeft', {count: 1})` → "1 try left") is the one
-  # that fails, apply the 07-i18n §2 contingency: add @formatjs/intl-pluralrules — and nothing
-  # else from FormatJS — then re-run and record the outcome in ai-docs/tasks/22-i18n.md.
+  # `pnpm test:jcs-hermes` typechecks scripts/hermes-vectors/runner.ts under the
+  # platform-free lock (types: []), bundles it standalone (canonicalize + core
+  # serialization + vector data only), compiles it with the RN-PINNED hermesc from
+  # `hermes-compiler`, executes it on Node and on the checksum-pinned Hermes CLI
+  # v0.13.0, and fails on any divergence.
+  #
+  # SCOPE — what this stage does and does NOT prove:
+  #   DOES: RFC 8785 canonicalization, incl. ES number->string, is byte-identical on
+  #         Node and a real Hermes VM (Appendix B + 200 seeded envelopes).
+  #   DOES NOT: cover the 07-i18n §5.4 i18n vectors. They are NOT run here and must not
+  #         be wired in. Measured on this VM: `typeof Intl === 'undefined'` — Intl is a
+  #         Hermes BUILD FLAG (HERMES_ENABLE_INTL); RN's Android Hermes enables it
+  #         (Android supplies ICU), this desktop CLI build does not. Running the
+  #         Intl-backed i18n vectors here would manufacture a FALSE FAILURE on a
+  #         formatting suite that is actually correct, and could trip 07-i18n §2's
+  #         @formatjs/intl-pluralrules contingency on a test-VM artifact — i.e. ship an
+  #         unnecessary polyfill to production. The JCS vectors are safe here precisely
+  #         because RFC 8785 number->string is plain ECMAScript with no Intl involved.
+  #         The i18n entry (packages/i18n/test/hermes-entry.ts, task 22 — runner-free,
+  #         prints PASS/FAIL per vector, non-zero exit on mismatch) still needs an
+  #         Intl-enabled Hermes: the Android-emulator lane or L6 / stage 12 (task 27).
+  #         Whoever wires that lane records the outcome in ai-docs/tasks/22-i18n.md.
+  #
+  # Version caveat (08 §7 record 6): RN 0.86 pins hermes-v0.17.0, whose git tag ships NO
+  # host-VM release asset, and hermes-compiler ships only a COMPILER. v0.13.0 is the
+  # newest prebuilt host VM. The exact-RN-version proof runs on device in L6 / stage 12
+  # (task 27), which testing-guide §2.1 L7 already requires.
   jcs-vectors-hermes:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "placeholder — Hermes vector lane lands with task 03 (see job comment for the verified candidate paths and the task-22 i18n vector entry)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:jcs-hermes
 
-  # Stage 7 — Ed25519 interop (noble sign→verify vs the @bolusi/test-support fixture set).
-  # EVERY-PR PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md);
-  # deferral recorded in 08 §7.
+  # Stage 7 — Ed25519 interop: noble reproduces every @bolusi/test-support vector
+  # (the Node side of the quick-crypto <-> noble RFC 8032 contract, testing-guide §2.2).
+  # The quick-crypto side of the same fixture file runs in stage 12 (task 27).
   ed25519-interop:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "placeholder — Ed25519 interop vectors land with task 03 (noble side of the quick-crypto interop contract)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:ed25519-interop
 
   # Stage 8 — server integration vs PGlite (pnpm test:server).
   # EVERY-PR PLACEHOLDER — wired by task 12 (ai-docs/tasks/12-server-app.md);

@@ -3,12 +3,14 @@ import { expect, test } from 'vitest';
 
 import config, { bolusi } from './index.js';
 
-test('all four bolusi custom rules are registered at error in the flat config', () => {
+test('all bolusi custom rules are registered at error in the flat config', () => {
+  // `no-token-literals` added task 23 (design-system §7 lint (a)).
   expect(Object.keys(bolusi.rules).sort()).toEqual([
     'boundaries',
     'no-float-money',
     'no-hardcoded-strings',
     'no-op-table-update',
+    'no-token-literals',
   ]);
 
   const ruleLevel = (ruleId) => {
@@ -23,6 +25,7 @@ test('all four bolusi custom rules are registered at error in the flat config', 
   expect(ruleLevel('bolusi/no-op-table-update')).toBe('error');
   expect(ruleLevel('bolusi/no-float-money')).toBe('error');
   expect(ruleLevel('bolusi/no-hardcoded-strings')).toBe('error');
+  expect(ruleLevel('bolusi/no-token-literals')).toBe('error');
 });
 
 test('repo-wide rules are not scoped to a files subset', () => {
@@ -71,4 +74,53 @@ test('direct Intl use fails outside packages/i18n and passes inside it (07-i18n 
     'no-restricted-syntax',
   );
   expect(await lintAt('packages/i18n/src/formatters.ts')).not.toContain('no-restricted-syntax');
+});
+
+// Added task 23. Prove the two scope changes resolve through the REAL flat config, not just the
+// config object — the packages/ui addition and the tokens.ts exemption are the load-bearing parts.
+test('no-hardcoded-strings now covers packages/ui but exempts its tests (§7 lint (b))', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const lintAt = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((m) => m.ruleId);
+  };
+
+  // A JSX string literal in ui source is an error.
+  expect(
+    await lintAt('const el = <Text>Simpan</Text>;\n', 'packages/ui/src/components/Button.tsx'),
+  ).toContain('bolusi/no-hardcoded-strings');
+  // The catalog path (resolved string as a prop) is clean.
+  expect(
+    await lintAt('const el = <Text>{label}</Text>;\n', 'packages/ui/src/components/Button.tsx'),
+  ).not.toContain('bolusi/no-hardcoded-strings');
+  // Test files carry placeholder copy as inert fixture data and are exempt.
+  expect(
+    await lintAt('const el = <Text>Simpan</Text>;\n', 'packages/ui/src/components/Button.test.tsx'),
+  ).not.toContain('bolusi/no-hardcoded-strings');
+});
+
+test('no-token-literals covers packages/ui but exempts tokens.ts (§7 lint (a))', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const lintAt = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((m) => m.ruleId);
+  };
+
+  const rawHex = 'const s = StyleSheet.create({ box: { backgroundColor: "#1D4ED8" } });\n';
+  const rawDp = 'const s = StyleSheet.create({ box: { height: 56 } });\n';
+  const viaToken = 'const s = StyleSheet.create({ box: { height: touch.primary } });\n';
+
+  expect(await lintAt(rawHex, 'packages/ui/src/components/Button.tsx')).toContain(
+    'bolusi/no-token-literals',
+  );
+  expect(await lintAt(rawDp, 'packages/ui/src/components/Button.tsx')).toContain(
+    'bolusi/no-token-literals',
+  );
+  expect(await lintAt(viaToken, 'packages/ui/src/components/Button.tsx')).not.toContain(
+    'bolusi/no-token-literals',
+  );
+  // tokens.ts IS the vocabulary — exempt.
+  expect(await lintAt(rawHex, 'packages/ui/src/tokens.ts')).not.toContain(
+    'bolusi/no-token-literals',
+  );
 });

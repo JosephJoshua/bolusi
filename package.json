@@ -12,7 +12,10 @@
     "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
     "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
-    "test": "vitest run",
+    "test": "tsc -b && vitest run",
+    "test:jcs-hermes": "node scripts/hermes-vectors/run.mjs",
+    "test:ed25519-interop": "tsc -b && vitest run --project test-support",
+    "falsify:crypto": "node scripts/falsify-guards.mjs",
     "test:server": "vitest run --project server",
     "test:rls": "BOLUSI_DB_ENGINE=postgres DATABASE_URL=${DATABASE_URL:-postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test} vitest run --project db-server",
     "test:appliers": "node scripts/not-implemented.mjs test:appliers 11-module-contract",
@@ -35,7 +38,9 @@
     "lint-staged": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "esbuild": "catalog:",
+    "hermes-compiler": "250829098.0.14"
   },
   "pnpm": {
     "overrides": {

@@ -13,13 +13,27 @@
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "@expo/vector-icons": ">=15",
+    "expo-image": ">=57",
+    "react": ">=19",
+    "react-native": ">=0.86"
+  },
   "dependencies": {
     "@bolusi/i18n": "workspace:*"
   },
   "devDependencies": {
-    "@bolusi/tsconfig": "workspace:*"
+    "@bolusi/tsconfig": "workspace:*",
+    "@expo/vector-icons": "15.1.1",
+    "@types/react": "19.2.17",
+    "expo-image": "57.0.0",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "test-renderer": "1.2.0"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -b tsconfig.build.json",
+    "test": "vitest run"
   }
 }

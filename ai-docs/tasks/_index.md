@@ -10,10 +10,10 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | -- | ----- | ------ | ---------- |
 | 01 | repo-scaffold (pnpm monorepo, toolchain, CI, lint rules) | done | — |
 | 02 | schemas package (op envelope, API DTOs, error/WS schemas) | done | 01 |
-| 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | in-review | 01, 02 |
+| 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | done | 01, 02 |
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | done | 01 |
 | 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | done | 01 |
-| 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | todo | 02, 03, 04 |
+| 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | in-progress | 02, 03, 04 |
 | 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | todo | 02, 03, 05 |
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | todo | 04, 06 |
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | todo | 02, 04 |
@@ -30,7 +30,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
 | 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | todo | 12, 13 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
-| 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | in-progress | 01, 22 |
+| 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | todo | 14, 22, 23 |
 | 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
@@ -40,6 +40,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | todo | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | todo | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
+| 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | todo | 12 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

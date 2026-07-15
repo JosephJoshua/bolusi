@@ -8,10 +8,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./vectors/ed25519.json": "./vectors/ed25519.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "vectors"
   ],
   "dependencies": {
     "@bolusi/core": "workspace:*",
