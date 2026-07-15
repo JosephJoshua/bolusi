@@ -96,10 +96,25 @@ tester.run('boundaries', rule, {
       filename: '/repo/packages/db-client/test/migrations.test.ts',
     },
     // test-support types the conformance suite against db-client's driver interface
-    // (type-only; the driver handle itself is injected by the runner — 08 §3.3)
+    // (type-only; the driver handle itself is injected by the runner — 08 §3.3 rule 7)
     {
       code: `import type { DbDriver } from '@bolusi/db-client';`,
       filename: '/repo/packages/test-support/src/driver-conformance/index.ts',
+    },
+    // a type-only re-export is still type-only
+    {
+      code: `export type { DbDriver } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/index.ts',
+    },
+    // the type-only lock is scoped to test-support: db-client's OWN tests value-import it
+    {
+      code: `import { openClientDb } from '@bolusi/db-client';`,
+      filename: '/repo/packages/db-client/test/dialect.test.ts',
+    },
+    // ...and the harness may value-import it (08 §3.3 harness row)
+    {
+      code: `import { openClientDb } from '@bolusi/db-client';`,
+      filename: '/repo/packages/harness/src/device.ts',
     },
   ],
   invalid: [
@@ -201,6 +216,25 @@ tester.run('boundaries', rule, {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/db-client/src/connection.ts',
       errors: [{ messageId: 'nodeInHermesSource' }],
+    },
+    // test-support → db-client must be TYPE-ONLY (08 §3.3 hard rule 7).
+    // The reviewer's constructed violation: a genuine VALUE import that every other
+    // mechanism (consistent-type-imports, verbatimModuleSyntax, shipping-deps) misses.
+    {
+      code: `import { DbOpenError } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/driver-conformance/index.ts',
+      errors: [{ messageId: 'dbClientTypeOnly' }],
+    },
+    // ...including via a subpath, and via re-export
+    {
+      code: `import { openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';`,
+      filename: '/repo/packages/test-support/src/driver-conformance/index.ts',
+      errors: [{ messageId: 'dbClientTypeOnly' }],
+    },
+    {
+      code: `export { DbError } from '@bolusi/db-client';`,
+      filename: '/repo/packages/test-support/src/index.ts',
+      errors: [{ messageId: 'dbClientTypeOnly' }],
     },
     // deprecated @hono/node-ws is banned everywhere (08 §2.6)
     {

@@ -36,12 +36,36 @@ const DB_DRIVER_OWNERS = new Map([
   ],
 ]);
 
-// Hermes-only workspaces: shipping source cannot use Node builtins (08 §3.2). Their
-// test/tooling files legitimately do (in-memory adapters, codegen scripts).
+// Hermes-only workspaces: shipping source cannot use Node builtins (08 §3.2). Files
+// outside the shipped bundle legitimately do (codegen scripts, the CI test lane).
 const NODE_FREE_SOURCE = new Set(['packages/db-client']);
 
-/** Test + tooling files: excluded from the "shipping source" locks above. */
-function isTestOrToolingFile(filename) {
+/**
+ * "Is this file outside the SHIPPED bundle?" — feeds the driver lock and the db-client
+ * node-free lock.
+ *
+ * ### DO NOT MERGE THIS WITH `NODE_LANE_ONLY` (below). They are not the same rule.
+ *
+ * They look interchangeable — both are "test-ish file?" predicates over the same directory
+ * shapes — and they are not. One file from each package proves it, same shape, OPPOSITE
+ * correct answers:
+ *
+ *  - `packages/db-client/test/better-sqlite3-adapter.ts` — non-`.test.ts` helper importing
+ *    better-sqlite3. MUST be exempt here: it runs on Node in CI and is never bundled.
+ *  - `packages/i18n/test/hermes-entry.ts` — non-`.test.ts` helper that RUNS ON HERMES as
+ *    the stage-6 vector entry. MUST NOT be exempt from the platform-free prong.
+ *
+ * Because the questions differ: "may this import a Node-only test driver?" (packaging —
+ * 08 §2.5, answered here) vs "must this survive on Hermes?" (platform — 08 §3.4, answered
+ * by NODE_LANE_ONLY). DRY them and the task-22 hole reopens silently.
+ *
+ * CAVEAT for the node-free prong: this predicate exempts any file under `test/`, so a
+ * Hermes-BUNDLED helper placed in `packages/db-client/test/` would slip the node:* lock.
+ * None exists today (db-client's L6 code is shipping source under `src/adapters/`, and the
+ * on-device suite lives in test-support/apps). If db-client ever gains one, move THIS
+ * prong to `NODE_LANE_ONLY` — do not loosen that constant.
+ */
+function isOutsideShippingSource(filename) {
   return (
     /\.test\.[cm]?[jt]sx?$/.test(filename) ||
     /(?:^|\/)(?:test|tests|scripts)\//.test(filename) ||
@@ -105,7 +129,9 @@ export default {
       dbDriverTestOnly:
         "'{{source}}' is test-only (08-stack-and-repo §2.5) and must never reach shipping source — import it from a test/ or scripts/ file, and inject the driver into the code under test.",
       nodeInHermesSource:
-        "'{{source}}': {{workspace}} is Hermes-only — Node builtins do not exist on device (08-stack-and-repo §3.2). Test and tooling files may use them; shipping source may not.",
+        "'{{source}}': {{workspace}} is Hermes-only — Node builtins do not exist on device (08-stack-and-repo §3.2). Files under test/ and scripts/ may use them; shipping source may not.",
+      dbClientTypeOnly:
+        "'{{source}}': @bolusi/test-support may import @bolusi/db-client TYPE-ONLY (08-stack-and-repo §3.3 hard rule 7) — the conformance suite types against the one DbDriver interface, but must carry no runtime edge to it. Use `import type`, and let the runner inject the driver handle.",
       screensOutsideMobile:
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
       serverImport:
@@ -149,7 +175,7 @@ export default {
           return;
         }
         // Owned, but test-only: shipping source in the owning workspace is still barred.
-        if (owned.testOnly && !isTestOrToolingFile(filename)) {
+        if (owned.testOnly && !isOutsideShippingSource(filename)) {
           context.report({ node, messageId: 'dbDriverTestOnly', data: { source } });
           return;
         }
@@ -160,9 +186,23 @@ export default {
         workspace &&
         NODE_FREE_SOURCE.has(workspace) &&
         /^node:/.test(source) &&
-        !isTestOrToolingFile(filename)
+        !isOutsideShippingSource(filename)
       ) {
         context.report({ node, messageId: 'nodeInHermesSource', data: { source, workspace } });
+        return;
+      }
+      // 2c. test-support → db-client is TYPE-ONLY (08 §3.3 hard rule 7).
+      // Nothing else enforces it: `consistent-type-imports` does not fire on a genuine
+      // value import, `verbatimModuleSyntax` only preserves what you write, and the
+      // shipping-deps test reads `dependencies` of shipping workspaces only. Without this
+      // prong, `import { DbOpenError } from '@bolusi/db-client'` in test-support/src would
+      // put a runtime edge into its emitted JS with nothing objecting.
+      if (
+        workspace === 'packages/test-support' &&
+        (source === '@bolusi/db-client' || source.startsWith('@bolusi/db-client/')) &&
+        importKind !== 'type'
+      ) {
+        context.report({ node, messageId: 'dbClientTypeOnly', data: { source } });
         return;
       }
       // 3. */screens subpaths only from apps/mobile.
