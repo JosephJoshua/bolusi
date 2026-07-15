@@ -1,7 +1,7 @@
 # TASK 17 — conflict-detection: server rules, system-device emission, platform module, acknowledge
 
 **Status:** todo
-**Depends on:** 07, 08, 16, 46
+**Depends on:** 07, 08, 16, 46, 47
 
 ## Goal
 
