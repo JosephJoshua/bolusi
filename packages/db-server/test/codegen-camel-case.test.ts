@@ -72,6 +72,8 @@ test('every generated table property maps back to a real column', async () => {
   }
 
   const mismatches: string[] = [];
+  let checked = 0;
+
   for (const [tableProp, ifaceName] of tableToInterface) {
     const table = toSnakeCase(tableProp);
     const realColumns = actual.get(table);
@@ -79,8 +81,20 @@ test('every generated table property maps back to a real column', async () => {
       mismatches.push(`table ${tableProp} → ${table} (no such table)`);
       continue;
     }
-    for (const prop of interfaces.get(ifaceName) ?? []) {
+
+    // Anti-vacuity, per interface. `parseInterfaces` is a REGEX over generated text: if
+    // kysely-codegen ever changes its output shape, the parse degrades to zero properties, the
+    // loop below no-ops, and this test goes green having verified nothing. An empty parse is a
+    // broken test, not a passing schema — so say so out loud rather than iterating `?? []`.
+    const props = interfaces.get(ifaceName) ?? [];
+    expect(
+      props.length,
+      `${ifaceName} parsed 0 properties — the generated-type parse broke`,
+    ).toBeGreaterThan(0);
+
+    for (const prop of props) {
       const column = toSnakeCase(prop);
+      checked += 1;
       if (!realColumns.has(column)) {
         mismatches.push(`${table}.${prop} → ${column} (no such column)`);
       }
@@ -88,6 +102,26 @@ test('every generated table property maps back to a real column', async () => {
   }
 
   expect(mismatches).toEqual([]);
+
+  // Anti-vacuity, in aggregate: the whole sweep must have actually mapped the schema. 27 tables
+  // / 216 columns today; the floor is deliberately below that so ordinary schema growth does not
+  // trip it, while a collapsed parse (which yields ~0) still fails loudly.
+  expect(
+    checked,
+    'the sweep checked implausibly few properties — parse likely broke',
+  ).toBeGreaterThan(150);
+});
+
+test('the generated-type parser fails loudly rather than silently matching nothing', () => {
+  // Falsifies the guard above: feed the parser output shaped like a codegen format change and
+  // prove it yields nothing to check, which is what the per-interface assertion now catches.
+  const parsed = parseInterfaces('export interface Conflicts {\n  opAId : string;\n}\n');
+  expect(parsed.get('Conflicts')).toEqual([]); // `opAId :` (space before colon) does not match
+
+  // ...whereas the real committed file parses to real properties.
+  const real = parseInterfaces(readFileSync(GENERATED, 'utf8'));
+  expect(real.get('Conflicts')).toContain('opAId');
+  expect((real.get('Notes') ?? []).length).toBeGreaterThan(0);
 });
 
 test('the plugin maps multi-single-letter columns like op_a_id correctly', async () => {
