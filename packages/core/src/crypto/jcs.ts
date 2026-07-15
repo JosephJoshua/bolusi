@@ -44,6 +44,13 @@ export type JcsInputErrorCode =
   | 'SYMBOL_VALUE'
   /** `function` — canonicalize would emit invalid JSON (`{"a":undefined}`). */
   | 'FUNCTION_VALUE'
+  /**
+   * An exotic object (Map, Set, Date, RegExp, Error, TypedArray, boxed primitive,
+   * class instance...). The JSON data model has only objects and arrays; canonicalize
+   * serializes anything else by its OWN ENUMERABLE KEYS, which for most of these is
+   * none — so `new Set([1])` becomes `{}` and its contents vanish from the preimage.
+   */
+  | 'NON_PLAIN_OBJECT'
   /** A self-referencing structure. */
   | 'CIRCULAR_REFERENCE';
 
@@ -117,6 +124,35 @@ function assertCanonicalizable(value: unknown, path: string, seen: Set<object>):
       assertCanonicalizable(element, `${path}[${index}]`, seen);
     }
   } else {
+    // WHITELIST, not blacklist. The JSON data model has exactly two container types:
+    // arrays and plain objects. Everything else is rejected — enumerating "the exotic
+    // types we happened to think of" is precisely how the Map/Set hole below survived
+    // this guard's first version.
+    //
+    // canonicalize serializes any non-array object by its OWN ENUMERABLE keys, and most
+    // exotic objects have none, so their contents silently vanish from the preimage:
+    //   new Set([1])        -> {}          (contents gone)
+    //   new Map([['a',1]])  -> {}          (contents gone)
+    //   new Number(5)       -> {}          (value gone)
+    //   new Uint8Array([1]) -> {"0":1}     (an object, not an array)
+    // Two devices holding DIFFERENT Sets would hash to IDENTICAL bytes — a collision
+    // across distinct data, strictly worse than the dropped-key bug this guard began as.
+    //
+    // The test is prototype-based so class instances are caught too (`[object Object]`
+    // cannot distinguish them). An object carrying `toJSON` on its prototype is exotic by
+    // this test; a plain object with an OWN `toJSON` is caught by the function prong.
+    // Date is rejected deliberately: it serializes to an ISO string, while the wire
+    // contract is integer ms-epoch and "never ISO strings" (api/00 §2.1, 05 §3).
+    const prototype: unknown = Object.getPrototypeOf(object);
+    if (prototype !== Object.prototype && prototype !== null) {
+      const name = (object as { constructor?: { name?: string } }).constructor?.name;
+      throw new JcsInputError(
+        'NON_PLAIN_OBJECT',
+        path,
+        `${name ?? 'exotic object'} is not JSON data — its contents would be silently dropped or reshaped; convert it to a plain object or array first`,
+      );
+    }
+
     // Own enumerable keys only — exactly the set canonicalize serializes.
     for (const key of Object.keys(object)) {
       assertCanonicalizable((object as Record<string, unknown>)[key], `${path}.${key}`, seen);
