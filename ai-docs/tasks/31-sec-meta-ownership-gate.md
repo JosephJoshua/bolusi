@@ -78,3 +78,13 @@ Also worth carrying: task 16 **caught itself re-introducing the id mid-fix** —
 ## Note
 
 This is the fourth gate this project has shipped that looked green for the wrong reason (after: SEC-META-01's title-vs-content match, the codegen-diff gate made unsatisfiable by prettier, and the boundary rule's platform-free hole). The pattern is consistent enough to state as a rule: **a guard is only load-bearing if someone has watched it go red.** Every check in this task must be falsified before it is believed.
+
+## Related generalization (2026-07-15, from task 46's review) — T-8's denominator is the wrong noun
+
+This task is about a gate whose *matching rule* is wrong. Task 46's review found the sibling: a gate whose **scope** is wrong, and which therefore never claimed the ground it was assumed to cover.
+
+**T-8 says: "every module's appliers run through the shared applier conformance suite against BOTH engines."** It does that faithfully. But `highestContiguousServerSeq` — the function whose int8 bug pinned the production watermark at zero forever — **is not an applier.** It lives in the pull branch (`engine.ts:154`), and applier-conformance calls only `engine.applyAppendedOp` (`_harness.ts:267`). So on the PGlite leg **the function was never executed**, by design, and no one noticed because the gate's name ("both engines") describes a *coverage* the reader infers and the *scope* nobody re-read.
+
+**The generalization worth carrying into whatever mechanism you build here:** a gate's denominator must be stated in the noun the reader will assume. "Appliers covered" reads as "the engine is covered." **T-8's denominator should be *engine entry points exercised*** — with the unreached ones **named**, so absence is visible rather than inferred. That is the same demand this task makes of SEC-META (state ownership; don't infer it from prose), applied to the conformance gate.
+
+Both gates fail the same way in the end: **they answer a question adjacent to the one everyone believes they answer.**

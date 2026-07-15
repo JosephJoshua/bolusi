@@ -32,6 +32,16 @@ Make the real-PG16 lane execute **production** `watermarks.ts`, and delete the m
 
 Task 16 registers no modules, so there is no production code for the guard to protect. The guard has to exist **at the point task 17 wires the first projection into `processPushBatch`'s transaction** — that is when the contract becomes load-bearing and when a savepoint/retry wrapper could silently break it. Fixing it inside task 16 would guard an empty room.
 
+## TWO ADDITIONS from task 46's review (2026-07-15) — read both before starting
+
+**(1) The seam now exists — use it; do NOT re-roll your own cast.** Task 46 built `int8ToBigInt`/`int8ToNumber` in `@bolusi/core` and (per its review) exports them. `createServerWatermarkStore` currently carries **its own** unguarded `Number(row.appliedServerSeq)` — the one my task-16 F1(c) proved is invisible to all three gates. **Adopt the seam.** If you write a second cast, you re-create *"one function had the cast, the neighbour twelve lines away didn't"* — the precise condition task 46 exists to abolish (§2.8), inside the very task filed to fix the coverage hole that hid it.
+
+**No collision with task 46** (verified by review-04): 46 touched `packages/core/src/projection/watermarks.ts` (**client** `createSqlWatermarkStore`); you move `apps/server/src/sync/watermarks.ts` (**server** `createServerWatermarkStore`). Different packages, different functions. They should **converge on the seam**, not conflict.
+
+**(2) The T-8 hole is deeper than the driver — and it's arguably the more important half.** Task 46 found that applier-conformance calls **only** `engine.applyAppendedOp` (`_harness.ts:267`) and never `applyPulledOp`. `highestContiguousServerSeq` is reachable **only** from `engine.ts:154`, inside the pull branch. So on the PGlite leg **the function was never executed at all** — *"the gate didn't just marshal wrong; it never ran the function."*
+
+The root cause is T-8's own scope: **T-8 proves *appliers* are dialect-neutral, and the pull branch is not an applier** — so the gate never claimed this ground, and nobody noticed the ground was unclaimed. When you give the watermark store real coverage, the question to answer is not *"does the store work?"* but **"which engine entry points does any gate actually execute?"** — and name the ones nothing reaches. **T-8's denominator should be engine entry points exercised, not appliers covered** (see `ai-docs/tasks/31-*.md`, which now carries the generalization).
+
 ## Docs to read
 
 - `packages/core/src/projection/watermarks.ts` :36-38 (the `Number()` and its comment — the thing with no coverage).
