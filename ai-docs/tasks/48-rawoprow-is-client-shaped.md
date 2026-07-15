@@ -1,5 +1,5 @@
 # TASK 48 — `RawOpRow` is client-shaped in three ways; the projection engine cannot read server ops
-**Status:** todo
+**Status:** in-review
 **Priority:** **HIGH when task 17 wires the engine server-side** — three separate production bugs, currently unreachable. One of them silently **inverts canonical order**.
 **Depends on:** 46
 **Blocks:** 17
@@ -55,6 +55,70 @@ The third is the quiet one: `agent_initiated` is part of the fraud model's attri
 - **Then close the second hole task 46 found**, or say why not: the applier-conformance gate only calls `applyAppendedOp`, so **the pull branch — the sole caller of `highestContiguousServerSeq` — was never executed on either leg.** The gate didn't merely marshal wrong; **it never ran the function.** If task 17 relies on that path, it needs coverage that executes it.
 - **Or rule the other way, explicitly.** If the projection engine is client-only by design, then say so **in code** and make it unrepresentable server-side — don't leave a decoder that silently mis-reads server rows for the next agent to wire up. State which you chose and why.
 - `pnpm test`, `pnpm test:rls` (real PG16, attributed), `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
+
+## Outcome
+
+**Ruled: fix, not client-only.** Task 49 wires the engine into the server push transaction, so a
+decoder that mis-reads server rows is on its critical path. Fixed at the boundary in task 46's
+shape — each field now goes through the shared normaliser for its COLUMN CLASS, and `RawOpRow`'s
+raw-`sql<>` annotation was widened from the client's marshalling to the union the drivers actually
+produce, so the compiler forces the normalisation instead of believing an assertion. `db.d.ts` had
+already derived all three (`seq: Int8`, `payload: Json`, `agentInitiated: Generated<boolean>`).
+
+Reproduced on real PG 16.14 (attributed), each with its own assertion:
+
+| bug | observed on real `pg` | fails |
+| --- | --- | --- |
+| `seq` int8 → string | `expected [ '10', '9' ] to deeply equal [ 9, 10 ]` | **silently** |
+| `payload` jsonb → parsed | `SyntaxError: "[object Object]" is not valid JSON` | loudly |
+| `agent_initiated` → boolean | `expected true to be false` | **silently** |
+
+**A fourth, same class, twelve lines away: `location` is `jsonb` server-side too** and was
+`JSON.parse`d on the identical assumption. It is not in this task's brief; it is §2.8's point
+about what per-site handling does, found only because the fix was made per-class.
+
+**The loud bug masks the silent ones.** With all three present, `JSON.parse(object)` throws inside
+`readEntityOps` before any ordering or attribution assertion can speak: the first run was 9 red,
+all reporting `SyntaxError`. The inversion is only observable once the jsonb fix is in. Fixing the
+loud bug alone would have surfaced the two silent ones with no test watching — which is exactly
+why task 46 was right to refuse the half-fix.
+
+**Falsified, each fix independently (rebuild between every cycle — see below):**
+
+| fix removed | PGlite | real `pg` PG16 |
+| --- | --- | --- |
+| `seq` int8 | **14/14 GREEN** — the alibi | **4 RED** |
+| `payload`/`location` jsonb | 9 RED | 9 RED |
+| `agent_initiated` bool | 1 RED | 1 RED |
+
+**The task's premise was right about the bugs and wrong about the lanes: PGlite reproduces two of
+the three.** Only the int8 one is PGlite-blind — and it is the silent, order-inverting one, so the
+conclusion (the file must live next to the real driver) holds for the reason that matters. But
+"PGlite reproduces none of these three" is not true, and a future reader should not rely on it.
+
+**A provenance trap worth carrying (§2.1, T-14d's shape).** `@bolusi/core` exports `./dist/*`, and
+`pnpm test:rls` — unlike `pnpm test` — does **not** run `tsc -b`. So an edit to `src` is invisible
+to the rls lane until rebuilt, while source maps still point stack traces at `src`, making a stale
+run look live. The first staged reproduction here was silently testing pristine dist and was
+discarded. **Any falsification on the rls lane is worthless without `npx tsc -b` in the cycle** —
+without it, "fix removed → still red" and "fix restored → green" are both readings of the same
+unchanged bundle. Each cycle above asserts the reverted line is present in `dist` before running.
+
+**T-14g (touched an existing test's fixture):** `seedOperation` gained an optional `overrides` —
+additive, so task 46's calls are byte-identical. Proven still load-bearing rather than assumed:
+broke its subject (the walk's `int8ToBigInt`) → `projection-int8-marshalling` went **5 red** on
+real PG16; restored → green.
+
+### The second hole (T-8's pull branch) — deliberately NOT closed here
+
+`highestContiguousServerSeq` *is* now executed on the real driver by task 46's file. What remains
+unexecuted on any Postgres leg is the engine's **pull branch** (`applyPulledOp`), and closing it
+needs the server wiring that does not exist yet: a registered manifest, projection tables, and a
+watermark store — `createServerWatermarkStore` is task 47's live work, and how the engine is wired
+server-side is task 49's design decision. Building a harness for it here would either duplicate or
+contradict task 49 and would edit contended code mid-flight (§4). **Task 49 must ship coverage
+that executes the pull branch server-side** — the decoder it stands on is now covered; the branch
+itself is not.
 
 ## Note
 
