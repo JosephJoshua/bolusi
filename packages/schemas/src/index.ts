@@ -1,2 +1,9 @@
-// Placeholder shell — real contents land in later tasks (ai-docs/tasks/_index.md).
-export const PACKAGE_NAME = '@bolusi/schemas' as const;
+// @bolusi/schemas — the single schema definition for zValidator (server) and
+// client pre-send validation (api/00 §14). Zod-only, platform-free (08 §3.2–3.3).
+export * from './primitives.js';
+export * from './envelope.js';
+export * from './bookkeeping.js';
+export * from './rejection-codes.js';
+export * from './sync.js';
+export * from './errors.js';
+export * from './ws.js';

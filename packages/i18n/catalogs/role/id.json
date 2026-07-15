@@ -1,0 +1,11 @@
+{
+  "main_owner": {
+    "name": "Pemilik Utama"
+  },
+  "store_owner": {
+    "name": "Pemilik Toko"
+  },
+  "staff": {
+    "name": "Staf"
+  }
+}

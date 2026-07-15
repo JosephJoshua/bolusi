@@ -1,0 +1,18 @@
+{
+  "status": {
+    "pending": "Menunggu dikirim",
+    "uploading": "Mengirim foto…",
+    "uploaded": "Foto terkirim",
+    "failed": "Gagal mengirim. Ketuk untuk coba lagi.",
+    "waitingForConnection": "Menunggu koneksi"
+  },
+  "action": {
+    "takePhoto": "Ambil Foto",
+    "retake": "Foto Ulang",
+    "usePhoto": "Pakai Foto Ini",
+    "retryUpload": "Kirim Ulang"
+  },
+  "permission": {
+    "camera": "Izinkan aplikasi memakai kamera untuk ambil foto."
+  }
+}

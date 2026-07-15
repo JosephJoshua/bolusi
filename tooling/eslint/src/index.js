@@ -111,6 +111,30 @@ export default tseslint.config(
     },
   },
   {
+    // 07-i18n §5: @bolusi/i18n is the single formatting authority. UI code never touches Intl
+    // directly — money/date/number rendering has locale rules (NBSP normalization, zero fraction
+    // digits, day-first dates) that only the formatters apply. The i18n package itself is where
+    // Intl legitimately lives, so it is the one exemption.
+    name: 'bolusi/no-direct-intl',
+    files: ['**/*.{ts,tsx,js,jsx,mjs,cjs}'],
+    ignores: ['packages/i18n/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "NewExpression[callee.object.name='Intl']",
+          message:
+            'Do not construct Intl formatters outside packages/i18n — use the @bolusi/i18n formatters (ai-docs/07-i18n.md §5).',
+        },
+        {
+          selector: "CallExpression[callee.object.name='Intl']",
+          message:
+            'Do not call Intl directly outside packages/i18n — use the @bolusi/i18n formatters (ai-docs/07-i18n.md §5).',
+        },
+      ],
+    },
+  },
+  {
     name: 'bolusi/server-typed',
     files: ['apps/server/src/**/*.ts'],
     ignores: ['**/*.test.ts'],
