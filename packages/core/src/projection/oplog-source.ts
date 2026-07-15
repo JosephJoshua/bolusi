@@ -16,6 +16,8 @@ import { sql, type Kysely } from 'kysely';
 
 import type { Location, SignedOperation } from '@bolusi/schemas';
 
+import { int8ToBigInt, int8ToNumber, type Int8Value } from './int8.js';
+
 /** A canonical-order position (05 §4) — the rebuild checkpoint triple (04 §4.3). */
 export interface CanonicalCursor {
   readonly timestamp: number;
@@ -168,20 +170,43 @@ export async function highestContiguousServerSeq<DB>(
   db: Kysely<DB>,
   from: number,
 ): Promise<number> {
-  let watermark = from;
   // Bounded, ordered scan of everything above the current watermark. Contiguity breaks at
   // the first gap; the loop stops there. `> from` uses the (server_seq) column ordering.
-  const result = await sql<{ serverSeq: number }>`
+  //
+  // The result type is `Int8Value`, NOT `number`, because that is what the drivers actually
+  // return and a raw-`sql<>` annotation is an ASSERTION the compiler simply believes — it derives
+  // nothing and checks nothing at runtime. This one used to read `sql<{ serverSeq: number }>`;
+  // `server_seq` is `bigint` (10-db §5) and the real `pg` driver returns int8 as a STRING, so
+  // `row.serverSeq === watermark + 1` was `"1" === 1` → false, forever. The walk returned `from`
+  // and `applied_server_seq` never advanced in production — silently, since the `>` branch below
+  // coerces (`"1" > 1` is false too) and so never fired either. Every test lane ran a driver that
+  // hands back numbers, so nothing went red (task 46; testing-guide T-14f). Widening the
+  // annotation to the truth is half the fix: it makes the compiler force the normalisation.
+  const result = await sql<{ serverSeq: Int8Value }>`
     SELECT server_seq AS server_seq FROM operations
     WHERE server_seq > ${from}
     ORDER BY server_seq
   `.execute(db);
+
+  // The walk itself runs in BIGINT, and narrows exactly once, on the way out.
+  //
+  // Not a stylistic choice: `server_seq` is bigint, so bigint is the only type in which `===` and
+  // `+ 1` are exact over the column's whole range. Narrowing per row would instead make the walk
+  // throw on a row it was about to IGNORE — a value past 2^53 sitting beyond a gap is none of this
+  // function's business, since contiguity already stopped it. Deciding "is this the next one?" in
+  // the column's own arithmetic, and only converting the answer, keeps the range check exactly
+  // where the value escapes into JS.
+  let watermark = int8ToBigInt(from, 'operations.server_seq');
   for (const row of result.rows) {
-    if (row.serverSeq === watermark + 1) {
-      watermark = row.serverSeq;
-    } else if (row.serverSeq > watermark + 1) {
+    const serverSeq = int8ToBigInt(row.serverSeq, 'operations.server_seq');
+    if (serverSeq === watermark + 1n) {
+      watermark = serverSeq;
+    } else if (serverSeq > watermark + 1n) {
       break;
     }
   }
-  return watermark;
+  // The returned watermark is the one value that leaves this function, so this is the one place
+  // the 2^53 claim has to hold. It throws rather than round (int8.ts) — a rounded watermark is a
+  // wrong watermark returned with no error, which is task 46 again one magnitude up.
+  return int8ToNumber(watermark, 'operations.server_seq');
 }

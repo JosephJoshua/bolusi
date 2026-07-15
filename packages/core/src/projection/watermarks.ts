@@ -22,6 +22,8 @@
 // so nobody "fixes" the lag ad hoc.
 import { sql, type Kysely } from 'kysely';
 
+import { int8ToNumber } from './int8.js';
+
 /** The two watermark scalars for a module (10-db §9.1). */
 export interface WatermarkState {
   readonly appliedServerSeq: number;
@@ -68,19 +70,35 @@ export interface WatermarkStore {
 export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
   return {
     async read(moduleId: string): Promise<WatermarkState> {
-      const result = await sql<{ appliedServerSeq: number; appliedLocalSeq: number }>`
+      // The asserted type is the drivers' truth, not `number`: Postgres returns `bigint` as a
+      // STRING (int8 exceeds JS's safe integer range, so the pg wire protocol will not silently
+      // narrow it), while SQLite returns a number. A raw-`sql<>` annotation is believed by the
+      // compiler and checked by nobody, so claiming `number` here would just hide that.
+      const result = await sql<{
+        appliedServerSeq: string | number | bigint;
+        appliedLocalSeq: string | number | bigint;
+      }>`
         SELECT applied_server_seq, applied_local_seq
         FROM projection_watermarks WHERE module_id = ${moduleId}
       `.execute(db);
       const row = result.rows[0];
-      // `Number(...)`: Postgres returns `bigint` as a STRING (int8 exceeds JS's safe integer range,
-      // so the pg wire protocol will not silently narrow it), while SQLite returns a number. The
-      // watermark is a seq that fits in a double for any plausible history, so normalizing here
-      // keeps `WatermarkState` honest about being numbers on both engines — another divergence the
-      // both-engine run surfaced.
+      // `int8ToNumber` normalises whatever the driver handed back, keeping `WatermarkState` honest
+      // about being numbers on both engines — a divergence the both-engine run surfaced.
+      //
+      // This was a plain `Number(...)`, which was right about the LIVE bug and silently lossy past
+      // 2^53. Task 46 found the same mechanism twelve lines away in oplog-source's walk, where it
+      // was NOT cast at all: one function had the cast, the neighbouring one did not. That is what
+      // a per-call-site convention buys, so both now go through the one seam (CLAUDE.md §2.8),
+      // which additionally refuses out-of-range values rather than rounding them (see int8.ts).
       return {
-        appliedServerSeq: row === undefined ? 0 : Number(row.appliedServerSeq ?? 0),
-        appliedLocalSeq: row === undefined ? 0 : Number(row.appliedLocalSeq ?? 0),
+        appliedServerSeq:
+          row === undefined
+            ? 0
+            : int8ToNumber(row.appliedServerSeq ?? 0, 'projection_watermarks.applied_server_seq'),
+        appliedLocalSeq:
+          row === undefined
+            ? 0
+            : int8ToNumber(row.appliedLocalSeq ?? 0, 'projection_watermarks.applied_local_seq'),
       };
     },
     async advanceServerSeq(moduleId: string, value: number): Promise<void> {

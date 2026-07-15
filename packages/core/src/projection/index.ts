@@ -23,6 +23,13 @@ export {
   type CanonicalCursor,
 } from './oplog-source.js';
 
+// Exported for the SERVER side, not for this package's own convenience: any store reading an
+// int8/bigint column needs this exact seam, and a package that cannot import it will write its own
+// `Number(...)` instead — which is task 46 verbatim ("one function had the cast, the neighbour
+// twelve lines away didn't"). Keeping the normaliser private would guarantee the copy (CLAUDE.md
+// §2.8). Task 47's `createServerWatermarkStore` in @bolusi/db-server is the immediate consumer.
+export { int8ToBigInt, int8ToNumber, type Int8Value } from './int8.js';
+
 export {
   assertManifestColumnsComplete,
   digestModule,
