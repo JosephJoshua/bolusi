@@ -106,3 +106,55 @@ export async function seedNote(db: Kysely<DB>, tenant: TenantFixture): Promise<s
 
   return id;
 }
+
+/**
+ * Seeds one `operations` row for `tenant` at an exact `serverSeq` — the op log's server
+ * bookkeeping column (05 §2.4), which is what the contiguous-serverSeq walk reads.
+ *
+ * `serverSeq` is the caller's business: the whole point of the walk is which values are PRESENT,
+ * so a helper that allocated them itself would decide the test's input. Takes `bigint` because
+ * the column is `bigint` (10-db §5) — passing a JS number here would round silently at 2^53 and
+ * quietly weaken any test that probes that boundary.
+ *
+ * The op is content-free filler (`previous_hash`/`hash` are arbitrary 64-char strings, not a real
+ * chain): the walk only reads `server_seq`, and a fake chain here cannot mislead anyone into
+ * thinking this file verifies hashes.
+ */
+export async function seedOperation(
+  db: Kysely<DB>,
+  tenant: TenantFixture,
+  serverSeq: bigint,
+): Promise<string> {
+  const id = uuid();
+  const at = BigInt(timestampMs());
+
+  await db
+    .insertInto('operations')
+    .values({
+      id,
+      tenantId: tenant.tenantId,
+      storeId: tenant.storeId,
+      userId: tenant.userId,
+      deviceId: tenant.deviceId,
+      seq: BigInt(counter),
+      type: 'note.created',
+      entityType: 'note',
+      entityId: uuid(),
+      schemaVersion: 1,
+      payload: JSON.stringify({ title: `t-${id}` }),
+      timestampMs: at,
+      location: null,
+      source: 'ui',
+      agentInitiated: false,
+      agentConversationId: null,
+      previousHash: '0'.repeat(64),
+      hash: id.replace(/-/g, '').padEnd(64, '0').slice(0, 64),
+      signature: `sig-${id}`,
+      signedCoreJcs: `{"id":"${id}"}`,
+      serverSeq,
+      receivedAt: at,
+    })
+    .execute();
+
+  return id;
+}
