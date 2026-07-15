@@ -213,6 +213,12 @@ jobs:
   rls-witness:
     runs-on: ubuntu-latest
     needs: install
+    # DATABASE_URL is injected, so the lane runner skips compose entirely and uses this
+    # service container as-is. BOLUSI_DB_OWNER is the token the attribution gate checks the
+    # database's stamp against; run_id/run_attempt make it unique per job execution.
+    env:
+      DATABASE_URL: postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test
+      BOLUSI_DB_OWNER: ci-rls-${{ github.run_id }}-${{ github.run_attempt }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -238,10 +244,17 @@ jobs:
       # SEC-TENANT-03's repo-wide grep: no session-level tenant context anywhere
       # (security-guide §8.1 — set_config(..., false) / bare SET app.tenant_id).
       - run: node scripts/check-tenant-context.mjs
+      # CI's isolation is real and unchanged: this service container is created for this job
+      # and reachable by nothing else. What it lacks is a way to SAY so — a service container
+      # cannot run an init script, so it starts unstamped, and the attribution gate fails
+      # closed on unstamped databases (testing-guide T-14d). Claim it explicitly here, as the
+      # job that provisioned it. Provisioning stays separate from the test lane: if `test:rls`
+      # stamped what it found, it would adopt a foreign database rather than reject it, and
+      # the gate would certify the exact failure it exists to catch.
+      - name: claim the service container as this job's database
+        run: pnpm db:stamp
       - name: RLS suite vs real Postgres 16
         run: pnpm test:rls
-        env:
-          DATABASE_URL: postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test
 
   # Codegen drift (10-db §11.3): migrate a real postgres, re-run kysely-codegen, fail on any
   # diff against the committed src/generated/db.d.ts. Hand-edited or stale types cannot survive.
@@ -262,6 +275,10 @@ jobs:
           --health-interval 2s
           --health-timeout 3s
           --health-retries 30
+    # An injected DATABASE_URL puts the lane runner in its external mode: it uses this URL
+    # as-is and never touches compose. No owner token here on purpose — nothing in this job
+    # runs the attribution gate (that is the db-server test lane, i.e. rls-witness), and a
+    # token nobody checks is ceremony that the next agent would rightly delete.
     env:
       DATABASE_URL: postgres://bolusi:bolusi@localhost:5432/bolusi_dev
     steps:

@@ -15,14 +15,9 @@ import { createForTenant, type ForTenant } from '../../src/for-tenant.js';
 import type { DB } from '../../src/generated/db.js';
 import { migrateToLatest } from '../../src/migrator.js';
 import { APP_ROLE } from '../../src/schema/security.js';
+import { ENGINE, postgresUrl } from './db-target.js';
 
-export type Engine = 'pglite' | 'postgres';
-
-export const ENGINE: Engine =
-  process.env['BOLUSI_DB_ENGINE'] === 'postgres' ? 'postgres' : 'pglite';
-
-const POSTGRES_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test';
+export { ENGINE, type Engine } from './db-target.js';
 
 export interface TestDbOptions {
   /** Receives every SQL string Kysely executes, in order (for the set_config ordering test). */
@@ -105,8 +100,10 @@ async function createPglite(options: TestDbOptions): Promise<Kysely<DB>> {
 }
 
 async function createPostgres(options: TestDbOptions): Promise<Kysely<DB>> {
+  // Resolved per call, and from the same module the attribution gate reads (db-target.ts), so
+  // the database this harness opens is provably the one global-setup verified (T-14d).
   const db = new Kysely<DB>({
-    dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: POSTGRES_URL }) }),
+    dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: postgresUrl() }) }),
     plugins: [createCamelCasePlugin()],
     ...kyselyLog(options),
   });
