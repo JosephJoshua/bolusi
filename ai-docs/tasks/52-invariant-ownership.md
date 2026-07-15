@@ -64,3 +64,26 @@ So this is mostly **linking work**, not building work — but the link is what m
 This is the **first** finding to come from asking *"what does the spec promise that nothing checks?"* rather than *"does this code work?"* — and the split it produced is the interesting part. The same sweep found **68 FRs** with no owner and **8 invariants** with no owner, and those are **not the same problem**: FRs are inherited from PRDs that CLAUDE.md itself calls stale input, while invariants are spec-native and explicitly promised testable. Ruling both the same way would have been wrong in one direction or the other — 68 items of archaeology for FRs, or 8 unverified universal claims left standing.
 
 Worth carrying: the sweep's method — **trace to a producer, don't count mentions** — is what makes this checkable. Its own control proved why: mention-counting reported `restriction_violated` (the **dead** member) at 3 hits, *more* than `not_granted` (live) at 2. **The dead member looked more alive than the live ones.**
+
+## SCOPE ADDITION — `03 §13`'s universal claim is false as written, and its exclusion rationale contradicts the registry (inverse enum sweep, 2026-07-15)
+
+Same shape as I-13, in a different spec: **a universal claim that holds only under a qualification the text never states.**
+
+`03-state-machines.md:32` says, unqualified: **"No other v0 status enum exists."** It is **false as written**. `packages/db-server/migrations/0005_media_push_projections.ts:25-26`:
+
+```sql
+status text NOT NULL DEFAULT 'receiving'
+       CHECK (status IN ('receiving', 'complete')),
+```
+
+A persisted, defaulted, two-state lifecycle with a DB-enforced closed set. §13:287 excludes it — *"Server-side media chunk-session state | Owned by api/03-media.md; **not a client enum**."*
+
+**But that rationale contradicts the registry's own contents.** §2 rows **5** and **6** — `Device.status`, `User.status` — are both *"**server directory row (authoritative)**"*. **The registry already registers server-side enums.** So "not a client enum" cannot be the criterion that excludes `upload_sessions.status`; by that rule, Device and User don't belong either.
+
+**Fix — pick one, and say which:**
+- **Qualify the claim** (e.g. *"no other **client-persisted** status enum exists"*) and make §13's exclusion cite the real criterion; **or**
+- **Register the row**, Owns → `api/03-media.md`.
+
+Today a reader who finds `upload_sessions.status` **cannot tell whether they've found drift or a known exclusion** — and §13 tells them it's excluded *for a reason that isn't true of the registry*. That is worse than either answer.
+
+**The closing argument from the sweep, which belongs in this task's reasoning:** boolean-realized statuses (`Note.status` **is** the `archived` boolean; §13's `pushHalted`/`syncDisabled` are booleans ruled *not* enums) mean **no probe can distinguish "a boolean guard" from "a 2-member status enum realized as a boolean"** — that is a semantic judgment the registry made by hand. So *"no other exists"* is a claim **no sweep can fully discharge**. Which is precisely why it must be **accurately scoped**: *if a claim cannot be mechanically verified, its wording is the only thing carrying it.*
