@@ -139,29 +139,39 @@ try {
     writeFileSync(absolute, original.replace(mutation.anchor, mutation.mutated));
     const buildResult = build();
 
-    let observed;
+    // Only ONE outcome counts as caught: the mutant COMPILED and the test then went RED.
+    // Anything else is a HOLE to fix, not a pass.
+    let outcome;
     if (buildResult.status !== 0) {
-      // A mutation that fails to COMPILE also proves the code was load-bearing — the
-      // guard cannot be removed without breaking the build. Count it as caught.
-      observed = { status: buildResult.status, how: 'build failed to compile the mutant' };
+      // A non-compiling mutant ran NO test, so it proves nothing about whether the test
+      // detects the behaviour change — "watched the test go red" did not happen. This is
+      // the guard-of-the-guard: a falsification harness that scores green on a build
+      // error can itself pass without any behavioural failure. Rewrite the mutation so it
+      // compiles and changes BEHAVIOUR (e.g. `return` early, `if (false)`, a wrong call),
+      // never one that breaks the build.
+      outcome = {
+        kind: 'HOLE',
+        reason: `mutant did NOT COMPILE (build EXIT=${buildResult.status}) — a non-compiling mutant proves nothing about the test; rewrite it to change behaviour`,
+      };
     } else {
       const testResult = runTest(mutation.expectRedIn);
-      observed = { status: testResult.status, how: `${mutation.expectRedIn} exited` };
+      outcome =
+        testResult.status !== 0
+          ? { kind: 'OK', reason: `${mutation.expectRedIn} went RED EXIT=${testResult.status}` }
+          : {
+              kind: 'HOLE',
+              reason: `${mutation.expectRedIn} stayed GREEN EXIT=0 — the guard is not load-bearing`,
+            };
     }
 
-    // Restore + rebuild before evaluating, so a thrown assertion never leaves a mutant on disk.
+    // Restore before reporting, so a thrown assertion never leaves a mutant on disk.
     writeFileSync(absolute, original);
 
-    const caught = observed.status !== 0;
-    if (caught) {
-      console.log(
-        `[falsify] OK   ${mutation.guard}\n           mutant caught: ${observed.how} EXIT=${observed.status}`,
-      );
+    if (outcome.kind === 'OK') {
+      console.log(`[falsify] OK   ${mutation.guard}\n           mutant caught: ${outcome.reason}`);
     } else {
       holes += 1;
-      console.error(
-        `[falsify] HOLE ${mutation.guard}\n           mutant SURVIVED: ${observed.how} EXIT=0 — the guard is not load-bearing`,
-      );
+      console.error(`[falsify] HOLE ${mutation.guard}\n           ${outcome.reason}`);
     }
   }
 } finally {

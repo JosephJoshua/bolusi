@@ -59,9 +59,15 @@ Deliver the crypto foundation of `@bolusi/core`: the `CryptoPort` interface (`sh
 
 - **Falsification is a re-runnable artifact, not a claim.** `pnpm falsify:crypto`
   (`scripts/falsify-guards.mjs`) breaks each crypto guard in source, rebuilds (`tsc -b`),
-  runs the specific test that must catch it, asserts it goes red, and restores — 6/6 caught.
-  The harness itself was falsified: gutting a guard's test makes it report `HOLE` (exit 1).
-  It is a manual/CI-optional tool, not wired into the every-PR gate.
+  runs the specific test that must catch it, asserts it goes red, and restores — 6/6 caught,
+  every mutant BEHAVIOURAL (compiles clean, fails on behaviour). "Caught" requires exactly
+  one outcome: the mutant COMPILED **and** the test then went RED. A non-compiling mutant is
+  a `HOLE`, not a catch — it ran no test, so it proves nothing about what the test detects
+  (this is the guard-of-the-guard: a falsification harness that scored green on a build error
+  could itself pass with no behavioural failure). The harness's own assertions were falsified:
+  a deliberately non-compiling mutant and a compiles-but-test-passes mutant were both reported
+  `HOLE` (exit 1), then removed; gutting a guard's test also reports `HOLE`. Manual/CI-optional,
+  not wired into the every-PR gate.
 
 - **CI build-ordering trap (repo-wide, fixed at the script level).** Unit tests import
   `@bolusi/core` → `dist/`, but the CI `unit` job (stage 4) ran `pnpm test` with no build
