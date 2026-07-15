@@ -17,6 +17,7 @@ import {
   VerifierBoundsError,
   verifyPinAgainst,
   type CanonicalRef,
+  type KdfParams,
   type PinVerifier,
 } from '../../src/index.js';
 
@@ -80,16 +81,39 @@ describe('SEC-AUTH-01 — verifier construction rejects out-of-bounds params', (
     expect(() => assertVerifierInBounds(mkVerifier({ mKiB: 65536, t: 4 }))).not.toThrow();
   });
 
-  it('buildPinVerifier rejects an out-of-bounds profile AT CONSTRUCTION (never returns it)', async () => {
+  it('buildPinVerifier rejects an out-of-bounds profile BEFORE running the KDF (never returns it)', async () => {
+    // The KDF-invocation spy is the point: a rejection that happens AFTER the derivation still
+    // "passes" a rejects.toThrow() assertion while having burned ~300 ms on a profile it was always
+    // going to throw away. Counting the calls is what pins the ORDER rather than just the outcome.
+    let kdfCalls = 0;
+    const spy = {
+      ...noblePort,
+      kdf: (password: Uint8Array, salt: Uint8Array, params: KdfParams) => {
+        kdfCalls += 1;
+        return noblePort.kdf(password, salt, params);
+      },
+    };
     await expect(
       buildPinVerifier(
-        noblePort,
+        spy,
         encode('123456'),
         { memoryCost: 8192, timeCost: 1, parallelism: 1, outputLength: 32 },
         new Uint8Array(16),
         mkVerifier().asOf,
       ),
     ).rejects.toThrow(VerifierBoundsError);
+    expect(kdfCalls, 'the KDF must not run for a profile that is rejected outright').toBe(0);
+
+    // POSITIVE CONTROL: an in-bounds profile DOES reach the KDF (so the 0 above means "rejected
+    // early", not "the spy is wired to nothing").
+    await buildPinVerifier(
+      spy,
+      encode('123456'),
+      FLOOR_KDF_PARAMS,
+      noblePort.randomBytes(16),
+      mkVerifier().asOf,
+    );
+    expect(kdfCalls).toBe(1);
   });
 
   it('params record round-trips into verification — self-describing, never guessed', async () => {

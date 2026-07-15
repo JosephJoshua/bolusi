@@ -78,7 +78,21 @@ export function assertVerifierInBounds(verifier: PinVerifier): void {
   if (verifier.algorithm !== 'argon2id') {
     throw new VerifierBoundsError(`algorithm ${JSON.stringify(verifier.algorithm)} !== 'argon2id'`);
   }
-  const { mKiB, t, p } = verifier;
+  assertKdfParamsInBounds(verifier.mKiB, verifier.t, verifier.p, decodedLength(verifier.saltB64));
+  if (decodedLength(verifier.hashB64) !== PIN_KDF_BOUNDS.hashBytes) {
+    throw new VerifierBoundsError(
+      `hash decodes to ${String(decodedLength(verifier.hashB64))} bytes, not ${PIN_KDF_BOUNDS.hashBytes}`,
+    );
+  }
+}
+
+/**
+ * The api/02-auth §5.3 bounds on everything knowable BEFORE the KDF runs (the cost params + the
+ * salt). Split out so `buildPinVerifier` can reject a bad profile without first spending ~300 ms
+ * deriving a key it is about to throw away — ONE definition of the bounds, two call sites
+ * (CLAUDE.md §2.8).
+ */
+function assertKdfParamsInBounds(mKiB: number, t: number, p: number, saltBytes: number): void {
   if (
     !Number.isInteger(mKiB) ||
     mKiB < PIN_KDF_BOUNDS.memoryCostMin ||
@@ -96,14 +110,9 @@ export function assertVerifierInBounds(verifier: PinVerifier): void {
   if (p !== PIN_KDF_BOUNDS.parallelism) {
     throw new VerifierBoundsError(`p ${String(p)} !== ${PIN_KDF_BOUNDS.parallelism}`);
   }
-  if (decodedLength(verifier.saltB64) !== PIN_KDF_BOUNDS.saltBytes) {
+  if (saltBytes !== PIN_KDF_BOUNDS.saltBytes) {
     throw new VerifierBoundsError(
-      `salt decodes to ${String(decodedLength(verifier.saltB64))} bytes, not ${PIN_KDF_BOUNDS.saltBytes}`,
-    );
-  }
-  if (decodedLength(verifier.hashB64) !== PIN_KDF_BOUNDS.hashBytes) {
-    throw new VerifierBoundsError(
-      `hash decodes to ${String(decodedLength(verifier.hashB64))} bytes, not ${PIN_KDF_BOUNDS.hashBytes}`,
+      `salt decodes to ${String(saltBytes)} bytes, not ${PIN_KDF_BOUNDS.saltBytes}`,
     );
   }
 }
@@ -181,6 +190,8 @@ export async function buildPinVerifier(
   salt: Uint8Array,
   asOf: CanonicalRef,
 ): Promise<PinVerifier> {
+  // Bounds BEFORE the KDF: never spend ~300 ms deriving a key for a profile we are about to reject.
+  assertKdfParamsInBounds(params.memoryCost, params.timeCost, params.parallelism, salt.length);
   const hash = await crypto.kdf(pin, salt, params);
   const verifier: PinVerifier = {
     algorithm: 'argon2id',
