@@ -3,6 +3,16 @@
 **Priority:** **HIGH** — this lane carries every real-driver claim in the project, including task 46's guard for a class that had a *live production bug*. Third violation of the same normative rule.
 **Depends on:** 46
 
+## Why this is a PRECONDITION, not hygiene (review-04, task 48 review)
+
+> **"Task 55 isn't just a hygiene fix — it's what makes 46's and 48's refusals load-bearing."**
+
+Tasks 46 and 48 both chose to **refuse rather than coerce**: the int8 seam throws above 2^53 instead of rounding; `boolColumnToBoolean` enumerates and throws instead of guessing. Both refusals are correct, and both rest on the same promise — *"this fails **loudly** the day the assumption stops holding."*
+
+**The thing that would notice is `test:rls`.** It is the only lane running the production `pg` driver, so it is the only place a `setTypeParser`, a driver swap, or a text-mode read would surface. **And today it reads stale `dist`.** So the refusals' entire value — *loud, immediate, caught by the first test run* — is currently underwritten by a lane that cannot see the change that would trigger them.
+
+Until this lands, tasks 46 and 48 are correct code with an unenforced guarantee.
+
 ## The finding (task 48, confirmed by the orchestrator)
 
 **Evidence, each verified:**
@@ -10,7 +20,7 @@
 - `scripts/db-lane.mjs` — **does not build**.
 - Root `package.json`'s only `prepare` is `git config core.hooksPath .githooks` — **no build on install**.
 - `@bolusi/core`'s `exports` are **dist-only**: `"." → { types: "./dist/index.d.ts", default: "./dist/index.js" }`. Neither vitest config aliases it to `src`.
-- **Two** db-server tests import `@bolusi/core`: `sync-batch-atomicity.test.ts` (task 16) and `projection-int8-marshalling.test.ts` (task 46).
+- **Three** db-server tests import `@bolusi/core`: `sync-batch-atomicity.test.ts` (task 16), `projection-int8-marshalling.test.ts` (task 46), and task 48's decoder suite. (review-04 independently confirmed the count and the mechanism; `test`/`test:server` both carry a `tsc -b`, `test:rls` alone does not.)
 - CI's `rls-witness` job runs: checkout → `corepack enable` → setup-node → `pnpm install --frozen-lockfile` → `check-tenant-context.mjs` → `db:stamp` → **`pnpm test:rls`**. **No build step anywhere.**
 
 **So after a fresh checkout there is no `dist`, and those two tests cannot load** — the exact `Failed to resolve entry for package "@bolusi/core"` failure seen repeatedly in fresh worktrees today.
