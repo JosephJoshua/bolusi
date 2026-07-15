@@ -76,7 +76,16 @@ test('SEC-TENANT-05 a set_config-skipping bypass reads nothing, not everything',
   // gain unfiltered access. Fail-closed here is an error, not an empty set (10-db §6.3) — what
   // matters is that no row is returned.
   const a = await seedTenant(testDb.db);
-  await seedNote(testDb.db, a);
+  const noteId = await seedNote(testDb.db, a);
+
+  // FIXTURE PRESENCE: an empty `notes` makes "reads nothing" true for the wrong reason. Confirm
+  // the row is really there (as owner) before trusting the bypass probe's empty result.
+  const seeded = await testDb.db
+    .selectFrom('notes')
+    .select('id')
+    .where('id', '=', noteId)
+    .execute();
+  expect(seeded, 'fixture row missing — the bypass probe would be vacuous').toHaveLength(1);
 
   const outcome = await testDb.db.transaction().execute(async (trx) => {
     await sql`SET LOCAL ROLE bolusi_app`.execute(trx);

@@ -65,6 +65,15 @@ test('SEC-TENANT-02 SELECT as tenant A returns zero of tenant B rows', async () 
     db.selectFrom('notes').select(['id', 'tenantId']).execute(),
   );
 
+  // FIXTURE PRESENCE FIRST. `every`/`!some` are both satisfied by an EMPTY result, so a wiped
+  // fixture would look exactly like flawless isolation. This bit a reviewer for real: a parallel
+  // process on the shared docker daemon reset the schema mid-probe (DROP SCHEMA + re-migrate
+  // leaves tables and policies but zero rows) and the probe returned a perfect-looking `0 rows`.
+  // Tenant A must SEE ITS OWN row before "and none of B's" means anything.
+  expect(
+    rows.length,
+    'tenant A sees no rows at all — fixture missing, result is vacuous',
+  ).toBeGreaterThan(0);
   expect(rows.every((row) => row.tenantId === a.tenantId)).toBe(true);
   expect(rows.some((row) => row.tenantId === b.tenantId)).toBe(false);
 });
@@ -146,7 +155,18 @@ test('SEC-TENANT-02 a transaction with no set_config reads nothing from every te
   // raises 22P02 (invalid uuid "") once a previous transaction-local set_config has made the
   // parameter known to the session. Both are fail-closed per 10-db-schema §6.3 ("current_setting
   // with no GUC set → error → fail closed"). What must never happen is rows coming back.
-  await seedTwoTenants();
+  const { a } = await seedTwoTenants();
+
+  // FIXTURE PRESENCE: "reads nothing" is only meaningful if there was something to read. Prove
+  // the rows exist (as owner, RLS bypassed) before asserting the app role cannot reach them.
+  const seeded = await testDb.db
+    .selectFrom('notes')
+    .select('id')
+    .where('tenantId', '=', a.tenantId)
+    .execute();
+  expect(seeded.length, 'fixture rows missing — the sweep below would be vacuous').toBeGreaterThan(
+    0,
+  );
 
   const { rows: tables } = await sql<{ tableName: string }>`
     SELECT c.relname AS "tableName"
