@@ -7,6 +7,7 @@
 import { compress } from 'hono/compress';
 import { bodyLimit } from 'hono/body-limit';
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { requestId } from 'hono/request-id';
 
 import { resolveDeps, type ServerDeps } from './deps.js';
@@ -57,6 +58,13 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
   app.onError((err, c) => {
     if (err instanceof ApiError) {
       return respondError(c, err.code, err.details);
+    }
+    // Unparseable JSON body (api/00 §7 "Unparseable JSON → 400 MALFORMED_REQUEST"): Hono's json
+    // validator catches the parse failure and throws HTTPException(400, "Malformed JSON …") BEFORE
+    // the §7.1 hook can run — so it surfaces here, not as a 422. Map its 400 to the §7 envelope,
+    // never a 500 (SEC-SYNC-06). This is a task-12 gap the sync malformed-input tests exposed.
+    if (err instanceof HTTPException && err.status === 400) {
+      return respondError(c, 'MALFORMED_REQUEST');
     }
     return respondError(c, 'INTERNAL', { requestId: c.get('requestId') });
   });
