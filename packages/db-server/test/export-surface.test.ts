@@ -20,6 +20,12 @@ const EXPECTED_EXPORTS = [
   'forTenant',
   'migrateDownToStart',
   'migrateToLatest',
+  // D14 (10-db-schema §6.4): the three auth-entry cross-tenant lookups. They are fixed,
+  // keyed, definer-gated functions — not a raw handle, and the `queryish` assertion below
+  // still holds because they return plain records, not something with `selectFrom`.
+  'findDeviceByTokenHash',
+  'findControlSessionByTokenHash',
+  'findLoginCredential',
 ].sort();
 
 test('the package exports exactly the documented surface', () => {

@@ -301,6 +301,43 @@ CREATE POLICY tenant_self ON tenants
 -- `permissions` (global registry): no RLS; bolusi_app gets SELECT only.
 ```
 
+### 6.4 Auth-entry cross-tenant lookups (D14 — the ONLY sanctioned cross-tenant read path)
+
+Token verification (every request) and login resolve the tenant **from** an opaque credential — a `bdt_`/`bcs_` bearer token, or a globally-unique `loginIdentifier` — so they must read the matching `devices` / `control_sessions` / `users` row **before the tenant is known**. `forTenant` cannot express that (it requires the tenant and scopes RLS to it), and `bolusi_app` is `NOBYPASSRLS` (§6.3) — so under §6.2 those reads fail closed. This is the one bootstrap that legitimately precedes tenant context (the DDL comment on `users.login_identifier` flagged it; D14 closes it).
+
+Resolved with **three `SECURITY DEFINER` functions**, deliberately *not* a `BYPASSRLS` app role: a definer function does only what its fixed body says — one keyed lookup, fixed columns — so the cross-tenant surface is three auditable function bodies, not an open connection where a forgotten `WHERE` reads every tenant. `bolusi_app` keeps `NOBYPASSRLS`, so FORCE-RLS on every normal handler and the SEC-TENANT sweep are untouched.
+
+```sql
+-- Owner role: BYPASSRLS, NOLOGIN — it never connects; it exists only so the definer functions
+-- run outside RLS. bolusi_app gets EXECUTE on the three functions and nothing else cross-tenant.
+CREATE ROLE bolusi_auth NOLOGIN BYPASSRLS;
+
+-- Each returns the minimal fields of the SINGLE matched row; nothing on no-match (fail closed).
+-- Parameterized on the hash/identifier only (no injection). SECURITY DEFINER + owner bolusi_auth
+-- ⇒ the body reads across tenants; the caller (bolusi_app) reads no byte more than the body returns.
+CREATE FUNCTION auth_find_device_by_token_hash(p_token_hash text)
+  RETURNS TABLE (tenant_id uuid, store_id uuid, device_id uuid, status text)
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+    SELECT tenant_id, store_id, id, status FROM devices WHERE token_hash = p_token_hash
+$$;
+CREATE FUNCTION auth_find_control_session_by_token_hash(p_token_hash text)
+  RETURNS TABLE (tenant_id uuid, user_id uuid, session_id uuid, expires_at bigint, revoked_at bigint)
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+    SELECT tenant_id, user_id, id, expires_at, revoked_at FROM control_sessions WHERE token_hash = p_token_hash
+$$;
+CREATE FUNCTION auth_find_login_credential(p_login_identifier text)
+  RETURNS TABLE (tenant_id uuid, user_id uuid, password_verifier text, status text)
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+    SELECT tenant_id, id, password_verifier, status FROM users WHERE login_identifier = p_login_identifier
+$$;
+-- For each function: owner bolusi_auth, EXECUTE revoked from PUBLIC, granted only to bolusi_app.
+ALTER FUNCTION auth_find_device_by_token_hash(text) OWNER TO bolusi_auth;
+REVOKE ALL ON FUNCTION auth_find_device_by_token_hash(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION auth_find_device_by_token_hash(text) TO bolusi_app;
+```
+
+These three functions are the **only** code path in the system that reads across tenants. `@bolusi/db-server` exposes them as the narrow exports `findDeviceByTokenHash` / `findControlSessionByTokenHash` / `findLoginCredential` (still no raw handle, still no arbitrary cross-tenant query). After one resolves the tenant, the handler proceeds normally through `forTenant(tenant)`. api/02-auth §4.2/§8 owns the login and token-resolution semantics built on them.
+
 ## 7. Server DDL — identity directory (control plane)
 
 These are **directory rows, not projections**. They shall be mutated ONLY by the online control-plane endpoints (api/02-auth: `/v1/users*`, `/v1/users/:id/pin-verifier`, role management) and by server-side provisioning (`bolusi_provision`). They are never written by the projection engine and never sourced from ops — no `auth.user_*`/`auth.role_*` op types exist (api/02-auth §6.2 is the auth op registry). Every control-plane mutation is recorded in `identity_audit`. Devices receive their slice via the enrollment bundle and conditional `GET /v1/devices/me/bundle` (api/02-auth §5); the client mirrors are §9.5.
@@ -316,6 +353,11 @@ CREATE TABLE users (
                                                 -- unique indexes are not subject to RLS.
                                                 -- NULL for PIN-only users and the system actor
                                                 -- (Postgres UNIQUE permits multiple NULLs)
+  password_verifier text,                       -- argon2id verifier JSON {algorithm,saltB64,mKiB,t,p,hashB64};
+                                                -- server-side ONLY, never on device (§3 credential inventory).
+                                                -- NULL for PIN-only users. Read cross-tenant at login via
+                                                -- auth_find_login_credential (§6.4); written under forTenant at
+                                                -- provisioning / user-create / POST /v1/auth/password.
   photo_media_id   uuid,                        -- media object id; in the bundle from day one;
                                                 -- photo-upload UI is v1 (roadmap) — clients
                                                 -- render an initials fallback when NULL

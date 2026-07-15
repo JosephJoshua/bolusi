@@ -309,6 +309,7 @@ export interface Users {
   isSystem: Generated<boolean>;
   loginIdentifier: string | null;
   name: string;
+  passwordVerifier: string | null;
   photoMediaId: string | null;
   status: Generated<string>;
   tenantId: string;
