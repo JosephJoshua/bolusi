@@ -4,7 +4,9 @@
 **Priority:** **MEDIUM** — **no live defect**: the affordance ships correctly via a different path (verified below). The defect is the *coverage*: 11 green tests sit on a decoy, and the code that actually keeps the keys dark has none of them.
 **Depends on:** —
 **Blocks:** —
-**SEC ids owned by THIS task:** — (SEC-AUTH-02's enforcement leg is task 14's `assertAttemptAllowed`, not this; do not claim it)
+**SEC ids owned by THIS task:** none
+
+<!-- SEC-AUTH-02's enforcement leg is task 14's `assertAttemptAllowed`, not this task; do not claim it. Rationale kept out of the marker line: the grammar takes a comma-separated id list or the literal `none`, and anything else parses as MALFORMED — which the gate only reports for ids that already have an allowlist row, so a malformed marker silently declares nothing (found by impl-61; the orchestrator wrote three of them). -->
 
 ## The finding (review-05 coverage sweep)
 

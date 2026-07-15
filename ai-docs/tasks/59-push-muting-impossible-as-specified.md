@@ -4,7 +4,7 @@
 **Priority:** **HIGH — needs an owner decision before implementation** (see §The decision). The specified mechanism is not implementable on the target OS. A shop owner who mutes a category gets a toggle that cannot suppress anything.
 **Depends on:** 21 (push wiring) — but the **decision** does not; make it first.
 **Blocks:** the settings mute toggle (`04-push §5`, FR-1150)
-**SEC ids owned by THIS task:** —
+**SEC ids owned by THIS task:** none
 
 ## Goal
 
