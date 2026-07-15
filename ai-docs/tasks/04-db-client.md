@@ -1,5 +1,5 @@
 # TASK 04 — db-client (op-sqlite wrapper, Kysely dialect, SQLCipher, client migrations)
-**Status:** todo
+**Status:** in-review
 **Depends on:** 01
 
 ## Goal
@@ -41,3 +41,28 @@ Deliver `@bolusi/db-client` (Hermes-only, the ONLY importer of `@op-engineering/
 - **Dialect tests:** CRUD through Kysely against the wrapper equals raw-driver results on the same DB; transaction via Kysely rolls back on error.
 - **SEC-DEV-06** (`DB at rest is ciphertext`) ships IN this task, title verbatim, before review (CLAUDE.md §2.5): CI leg = (c)+(d) above under the SEC-DEV-06-titled test; L6 leg implemented now in the conformance/L6 suite (copy DB file → open without key → not a valid SQLite database; open with wrong key → failure; byte-grep finds no seeded plaintext markers), tagged for the on-device runner and compiling in CI. No CHAOS-* scenario attaches to this surface (catalog ids belong to sync/oplog/media/PIN tasks); this task's harness obligation is §2.3, incl. the single-connection rule the harness mirrors.
 - **Lint/CI gates:** `bolusi/boundaries` covers `@bolusi/db-client` exactly per 08 §3.3 (may import `core`, `schemas`, op-sqlite, `kysely-generic-sqlite` — nothing else); repo-wide rule that `@op-engineering/op-sqlite` imports outside `packages/db-client` fail lint, proven by a lint fixture; `better-sqlite3` absent from all shipping dependency lists; no `node:*` imports in db-client src; all new pins exact in the catalog, lockfile committed, CI `--frozen-lockfile` still green.
+
+---
+
+## Implementation record (2026-07-15) — read before review
+
+### SQLCipher / SEC-DEV-06: what is and is NOT proven in CI
+Per testing-guide §2.3, **SQLCipher is OFF in the CI lane by design**: better-sqlite3 ships no SQLCipher build and op-sqlite is a JSI native module that cannot run in Node (nor on this Linux host). No test here claims otherwise, and no fake green was manufactured to cover it.
+
+`SEC-DEV-06 DB at rest is ciphertext` ships with the title verbatim, split exactly as this task file directs:
+- **CI leg** (`packages/db-client/test/connection.test.ts`, `describe('SEC-DEV-06 DB at rest is ciphertext')`) — acceptance (c)+(d): wrong-key driver failure → typed `DbOpenError`, exactly one open attempt and always keyed (no plaintext-fallback path); missing/empty key throws before any driver call; key bytes never reach an error message, an error `cause`, or a captured log line.
+- **L6 leg** (`packages/test-support/src/driver-conformance/at-rest.ts`, `checkDbAtRestIsCiphertext`) — implemented now, platform-free and fully injected (copy → open unkeyed → open wrong-key → byte-grep for the plaintext SQLite header and seeded markers). It compiles in CI and is exported for the on-device runner; **task 27 executes it against real SQLCipher.** CI additionally unit-tests the probe's *detection logic* against fakes (`at-rest.test.ts`) so the probe is proven to catch a plaintext DB rather than rubber-stamp whatever it is handed — the probe itself cannot be the thing that silently passes on device.
+
+The `sec-pending-allowlist.json` entry for SEC-DEV-06 was removed, since the test now ships.
+
+### Deviations / decisions a reviewer should scrutinise
+1. **New inter-package edge — `test-support` → `@bolusi/db-client`, TYPE-ONLY.** 08 §3.3's `test-support` row does not list it. The suite must be typed against `DbDriver` (the ONE driver interface, CLAUDE.md §2.8 — duplicating the shape in test-support was the alternative and was rejected). No runtime edge exists: the emitted `dist/**/*.js` contains no db-client import. Per CLAUDE.md §4 the boundary table was **not** edited as an implementation side effect — **this edge needs ratifying by a spec task** (or hardening into the positive allow-matrix that `boundaries.js` defers to task 28).
+2. **`@bolusi/db-client/op-sqlite` subpath export.** The op-sqlite adapter is not re-exported from the package index, because importing the index in Node would otherwise load a JSI native module and break every Node test. The device app and the L6 runner import the factory from the subpath and inject it into `openClientDb`. op-sqlite remains this package's sole import site.
+3. **Client codegen runs WITHOUT `--camel-case`** — 10-db §11.4 (the client step) does not specify the flag; §11.3's `--camel-case` is the *server* step. Committed client types are therefore snake_case, matching the verbatim §9 DDL, and no `CamelCasePlugin` was wired into the client Kysely (that is a runtime decision this task is not licensed to make). **Open question for the spec owner:** 04 §2's dialect-neutral applier guarantee (one applier over client SQLite *and* server PGlite) likely needs identical column identifiers on both sides — if so, the client needs `--camel-case` + the plugin, and that should land as its own decision before task 11.
+4. **`packages/db-client/tsconfig.test.json`** splits test/tooling typechecking (Node types) from `tsconfig.json` (shipping `src` only, `types: []`). This makes 08 §3.4's tsconfig lock real: a `node:*` import in db-client shipping source cannot resolve. `bolusi/boundaries` enforces the same rule a second way (`nodeInHermesSource`).
+5. **`bolusi/boundaries` extended** (deny-list depth, per the rule's own header note): `better-sqlite3` gains `packages/db-client` as a **test-only** owner (test/ + scripts/ only — shipping source still errors, fixture-proven), and db-client shipping source is barred from `node:*`.
+6. **New pin:** `@types/better-sqlite3 7.6.13` (exact, catalog). better-sqlite3 12.11.1 ships no types.
+7. The scaffold's placeholder `packages/db-client/src/index.test.ts` was deleted — it asserted on the `PACKAGE_NAME` placeholder export that this task replaced with the real surface.
+
+### Not in this slice (per the Goal)
+No sync logic, no `markSyncResult` bookkeeping mutator (task 06), no SecureStore `KeyStorePort` implementation (tasks 14/24). `@bolusi/core` and `@bolusi/schemas` were not touched; `DbKeyStore` is a structural mirror of the `KeyStorePort` DB-key surface, so core's real port will satisfy it without an import.
