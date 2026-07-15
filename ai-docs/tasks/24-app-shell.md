@@ -1,7 +1,30 @@
 # TASK 24 — app-shell (Expo dev-build config, navigation, auth screens, sync status screen)
 
-**Status:** todo
+**Status:** in-review
 **Depends on:** 14, 22, 23
+
+## Implementation notes (task 24, branch `task/24-app-shell`)
+
+**Landed:** the navigation shell + gate (`src/navigation/zone.ts` — pure, total, exhaustive), the five screens and their models (enrollment / switcher / PIN / sync-status / settings), SEC-AUTH-08's UI half (`src/session/`), the `bolusi/list-primitive-only` lint rule discharging design-system §3.13, the device-locale bootstrap (07-i18n §1.2), the per-category notification channels (api/04-push §5), and the clock/location/locale-store ports. 188 mobile tests; `pnpm test` 2370 passed / EXIT=0.
+
+**NOT landed — carry into review/follow-up:**
+
+1. **Bootstrap item (2) is incomplete.** `src/bootstrap/` ships `notifications.ts` + `Root.tsx` only. The **DB open + local migrations** (SQLCipher key → `@bolusi/db-client` → migrate), **module registration**, the **hc-typed `TransportPort`**, and the **sync trigger adapters** (NetInfo, 3 s append debounce, 60 s foreground interval, background task, pull-to-refresh) are NOT built. `Root.tsx` therefore boots the SHELL but not the DATA: `device` resolves `unenrolled` and the app opens on the enrollment wizard. This is deliberately absent rather than stubbed — a fake `open()` returning a working-looking handle would let the shell boot green against a database that does not exist (CLAUDE.md §2.11).
+2. **No device/EAS verification.** `eas build`, the emulator/physical-device cold boot, the dev-mode bootstrap report, CI stage 12, and the **enrollment E2E against the local dev server** were NOT run — no Android toolchain or dev server in this environment. Every acceptance item that says "on the emulator/device" is still owed, including task 23's carried **banner-truncation measurement** (`onTextLayout` line count at 1.3× scale, both locales), which the vitest lane structurally cannot answer (no Yoga).
+3. **Navigation library: not added, and not needed.** 08 §2.2 pins none and the task file requires a stop-and-ask before adding one. `zone.ts` documents why v0's shell is a GATE (a pure function of device status + session + lock) rather than a route graph, so no spec-table addition was made. Revisit when the module screens outgrow it.
+4. **`BannerCause` has no `quarantined` member** (`packages/ui`, contended). Quarantined ops are surfaced loud ON the Sync Status screen (`sync.quarantine.*`), but cannot raise an ambient banner. See `screens/sync-status/model.ts`. → task 33.
+5. **`numeric` token is unusable as-is** (`packages/ui/src/tokens.ts`): the inner `Object.freeze(['tabular-nums'])` widens the tuple to `readonly string[]`, which RN's `TextStyle` rejects. Worked around with a cast at the one call site; dropping the inner freeze fixes it for every consumer. → task 33.
+6. **Idempotency-Key reuse is task 14's property**, already proven in `packages/core/test/auth/enrollment.test.ts:305` against a real DB. This task tests the wizard's half (a failed enroll preserves step-2 state so the retry re-enters the same `runEnrollment` call) rather than duplicating it.
+7. **`pnpm --filter @bolusi/mobile test` no longer exits 0 having run nothing** — a `test` script was added, and the lane's `include` was widened to `src/**/*.test.{ts,tsx}` (the old `test/**/*.test.ts` would have silently skipped every screen test this task adds).
+
+## Review round 1 — fixes applied (branch `task/24-app-shell`)
+
+- **FIX 1 (08 §5.6 normative):** `apps/mobile`'s `test` script was a bare `vitest run` while `@bolusi/core` / `@bolusi/i18n` resolve via `dist/` — it reported green against broken source. Now `tsc -b ../.. && vitest run`. **`../..` is required, not stylistic:** a bare `tsc -b` resolves `apps/mobile/tsconfig.json`, which has no `references` and cannot get any (§5.6 line 200 forbids `composite` here), so it rebuilds nothing; the ROOT tsconfig is the solution file (§5.6 line 198). Falsified all three ways — see the `vitest.config.ts` header.
+- **FIX 2 (T-12):** `bolusi/list-primitive-only` missed `import RN from 'react-native'` → `RN.FlatList`. `react-native` is CJS, so under `esModuleInterop` the default import IS the module object — it linted AND typechecked clean. Same class as the `<RN.FlatList/>` bug fixed earlier (namespace via an untracked binding); the first fix addressed the instance. `ImportDefaultSpecifier` now joins `namespaces`; 7 cases added. `export *`, computed `RN['FlatList']`, and dynamic `import()` are recorded in the rule header as deliberately unguarded (contrived; need scope analysis).
+- **FIX 3 (false claim, code deferred):** `toGridRows`'s comment claimed "uniform row heights, `getItemLayout` legal". **Both halves were wrong.** `List` hardcodes `getItemLayout` to `touch.row` (64) with no override; a grid row renders 32 (padding) + 96 (`Avatar switcher`) + 8 (gap) + 26|52 (name, `numberOfLines={2}`) = **162–188 dp**. So rows are uniform only while no name wraps, and the reported length is ~2.5× short — and `getItemLayout` exists to SKIP measurement, so it is never self-corrected (wrong scroll extent/offsets, compounded by `removeClippedSubviews`). Windowing still works; scroll geometry does not. Comment corrected to state exactly this. **Code fix needs `ListProps.itemHeight` in the contended `packages/ui`** → filed for task 33. Do not "fix" by shrinking the card: §8.2's 96 dp avatar is the point of the screen.
+- **Nit:** `contract.ts` cited `staleness.test.ts`; corrected to `contract.test.ts`.
+
+**Filed by review, not fixed here (agreed):** (a) `EnrollmentScreen.tsx`'s `confirmed: false` on store-change is the only thing enforcing §8.5's wrong-store control and has **no test** — the reviewer disproved the hole but the untested-ness stands; a refactor dropping that line goes green. (b) `App.tsx`'s `onLogin`/`onEnroll` are `noop` — a live-looking button that silently does nothing is the same "working-looking" shape this task's own PIN model rejects; the "absent rather than stubbed" call for DB/modules/transport was upheld, so the principle is applied inconsistently here.
 
 ## Goal
 
