@@ -13,12 +13,10 @@ import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import { expect, test } from 'vitest';
 
+// Namespace import kept on ONE line on purpose: the directive must sit directly above the
+// module specifier, and prettier wraps a long named-import list onto its own lines.
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
-import {
-  collectScannableFiles,
-  EXEMPT_PATHS,
-  findForbiddenTenantContext,
-} from '../../../scripts/check-tenant-context.mjs';
+import * as tenantContext from '../../../scripts/check-tenant-context.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 
@@ -29,9 +27,13 @@ interface Finding {
   rule: string;
 }
 
-const scanFiles = findForbiddenTenantContext as (
-  files: { path: string; text: string }[],
-) => Finding[];
+const { collectScannableFiles, EXEMPT_PATHS, findForbiddenTenantContext } = tenantContext as {
+  collectScannableFiles: (repoRoot: string) => { path: string; text: string }[];
+  EXEMPT_PATHS: Set<string>;
+  findForbiddenTenantContext: (files: { path: string; text: string }[]) => Finding[];
+};
+
+const scanFiles = findForbiddenTenantContext;
 
 async function lintFixture(code: string, filePath: string): Promise<string[]> {
   const eslint = new ESLint({ cwd: REPO_ROOT });
@@ -90,7 +92,7 @@ test('SEC-TENANT-03 pg is importable inside packages/db-server', async () => {
 });
 
 test('SEC-TENANT-03 the repo contains no session-level tenant context', async () => {
-  const files = collectScannableFiles(REPO_ROOT) as { path: string; text: string }[];
+  const files = collectScannableFiles(REPO_ROOT);
 
   // Guard: a scan that found no files would pass silently. Anchored on a long-committed file —
   // the walk covers TRACKED files only (by design, so an untracked decoy cannot smuggle the
@@ -141,7 +143,7 @@ test('SEC-TENANT-03 the grep accepts the sanctioned transaction-local form', () 
 
 test('SEC-TENANT-03 the grep exemption list stays minimal', () => {
   // Every exemption is a hole. Pin the list so widening it is a reviewed decision.
-  expect([...(EXEMPT_PATHS as Set<string>)].sort()).toEqual([
+  expect([...EXEMPT_PATHS].sort()).toEqual([
     'packages/db-server/test/sec-tenant-03-wrapper-only.test.ts',
     'scripts/check-tenant-context.mjs',
   ]);

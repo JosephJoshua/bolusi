@@ -7,3 +7,9 @@ pnpm-lock.yaml
 # specs are not reformatted as an implementation side effect (CLAUDE.md §4)
 ai-docs/
 CLAUDE.md
+
+# kysely-codegen output is byte-compared against a fresh run in CI (10-db-schema §11.3).
+# Reformatting it here would make that gate unsatisfiable: lint-staged would rewrite the
+# committed file at every commit, and the next `pnpm db:codegen` would "drift" back. 10-db §11.5
+# ("never edit generated type files by hand") covers prettier too — reformatting IS editing.
+packages/db-server/src/generated/
