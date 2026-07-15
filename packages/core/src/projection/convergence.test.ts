@@ -6,6 +6,14 @@
 // the notes projection. The canonical-fold reference is a fresh DB fed all ops strictly in
 // canonical order. Every seed prints on failure (T-6); the property is asserted over MANY
 // random permutations (T-12: the class, not three hand-picked orders).
+//
+// One case PER SEED (T-2), not one case for all ten. This is not cosmetic: as a single 10-seed
+// loop the test did ~4.85s of work against vitest's 5s default — 97% of its budget at idle — and
+// timed out under any concurrent load (task 35). A timeout fires no assertion, so the `seed=`
+// messages below never printed: a real divergence and a busy machine produced byte-identical CI
+// output. Per-seed cases put the seed in the test NAME (reportable even on timeout, T-6) and cut
+// each case to ~0.5s, ~1/10th of the smallest ceiling. Coverage is unchanged — the same 10 seeds
+// x 6 permutations x 120 ops; only the test boundaries moved.
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import type { ClientDatabase } from '@bolusi/db-client';
@@ -31,12 +39,15 @@ async function sumEditCounts(db: Kysely<ClientDatabase>): Promise<number> {
 const asPulled = (ops: readonly { id: string }[]): GeneratedOp[] =>
   ops.map((op) => ({ op: op as GeneratedOp['op'], serverSeq: null }));
 
-describe('out-of-order convergence property (CHAOS-01 precursor)', () => {
-  test('every random permutation digests byte-equal to the canonical fold, seeds 1..10', async () => {
-    let totalHead = 0;
-    let totalRefold = 0;
+/** Seeds the convergence property is asserted over. One test case each (T-2). */
+const CONVERGENCE_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+/** Random arrival orders per seed — the class of orders, not hand-picked ones (T-12). */
+const PERMUTATIONS_PER_SEED = 6;
 
-    for (let seed = 1; seed <= 10; seed += 1) {
+describe('out-of-order convergence property (CHAOS-01 precursor)', () => {
+  test.each(CONVERGENCE_SEEDS)(
+    'seed %i: every random permutation digests byte-equal to the canonical fold',
+    async (seed) => {
       const generated = generateNotesScript(seed, { deviceCount: 3, opsPerDevice: 40 });
       const ops = generated.map((g) => g.op);
 
@@ -51,26 +62,32 @@ describe('out-of-order convergence property (CHAOS-01 precursor)', () => {
       const referenceDigest = await reference.digest();
       await reference.close();
 
+      let headApplies = 0;
+      let refolds = 0;
       const permPrng = mulberry32(seed ^ 0x9e3779b9);
-      for (let perm = 0; perm < 6; perm += 1) {
+      for (let perm = 0; perm < PERMUTATIONS_PER_SEED; perm += 1) {
         const arrival = shuffle(permPrng, generated);
         const harness = await openProjectionHarness();
         await deliverPulled(harness, arrival);
         const digest = await harness.digest();
         const stats = harness.engine.stats.snapshot();
-        totalHead += stats.headApplies;
-        totalRefold += stats.refolds;
+        headApplies += stats.headApplies;
+        refolds += stats.refolds;
         expect(digest, `seed=${seed} perm=${perm}: diverged from canonical fold`).toBe(
           referenceDigest,
         );
         await harness.close();
       }
-    }
 
-    // Both §4.2 paths must have run, else the property proved nothing (CHAOS-01 inconclusive).
-    expect(totalHead, 'no head-applies observed — inconclusive').toBeGreaterThan(0);
-    expect(totalRefold, 'no re-folds observed — inconclusive').toBeGreaterThan(0);
-  });
+      // Both §4.2 paths must have run FOR THIS SEED, else this seed proved nothing (T-14: a case
+      // asserts its own coverage). Stronger than the old cross-seed total, which one busy seed
+      // could satisfy while nine others silently exercised neither path.
+      expect(headApplies, `seed=${seed}: no head-applies observed — inconclusive`).toBeGreaterThan(
+        0,
+      );
+      expect(refolds, `seed=${seed}: no re-folds observed — inconclusive`).toBeGreaterThan(0);
+    },
+  );
 
   test('mid-history insert re-folds to the canonical fold with no double-apply or drop', async () => {
     const seed = 314;
