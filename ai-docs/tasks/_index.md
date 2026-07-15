@@ -70,6 +70,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 59 | **HIGH — needs owner decision** `api/04-push §5`'s muting model is **impossible on Android** (channel importance immutable post-creation); `applyChannelImportance` has 0 callers and would be a no-op anyway (from review-05) | todo | 21 |
 | 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | todo | — |
 | 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | in-progress | 31 |
+| 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | todo | 55 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
