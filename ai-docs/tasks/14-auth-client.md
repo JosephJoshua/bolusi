@@ -1,6 +1,6 @@
 # TASK 14 — auth-client (enrollment, device keys, offline PIN + lockout, switcher, idle lock)
 
-**Status:** todo
+**Status:** in-review
 **Depends on:** 03, 04, 09, 10, 13
 
 ## Goal
