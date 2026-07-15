@@ -1,5 +1,5 @@
 # TASK 46 — `highestContiguousServerSeq` never advances on real Postgres: `int8` arrives as a string
-**Status:** todo
+**Status:** in-review
 **Priority:** **HIGH** — a silent, total failure of the server-side projection watermark on the production engine. Fails *quiet*, not closed: no error, no red test, the watermark simply never moves.
 **Depends on:** 08
 
@@ -77,6 +77,39 @@ Recorded as **testing-guide T-14f**. Note the near-miss that makes the point: re
 - **SWEEP THE CLASS — this is the deliverable, not the one-line fix** (T-12). Enumerate **every** raw-`sql<{...: number}>` read of an `int8`/`bigint` column in `@bolusi/core` and `@bolusi/db-server`, and every place a `bigint` crosses into JS arithmetic or `===`. `watermarks.ts` is safe; `oplog-source.ts` was not; **name the total and the verdict for each** (T-14 — a sweep must assert its own denominator). Any raw-SQL result type asserting `number` over an int8 column is this bug, present or latent.
 - **Close the lane gap, or state plainly why not.** The reason this shipped is that **no test lane uses the production driver**. Either add a real-`pg` leg to the projection suite (the `test:rls` lane already has attributed real PG16), or record explicitly in T-8 that the both-engine gate does **not** cover driver marshalling and name what does. Do not leave the gate implying a coverage it lacks — that is the exact failure this repo has now shipped nine times.
 - `pnpm test`, `pnpm test:rls` (real PG16, attributed), `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
+
+## Outcome
+
+Reproduced on real PG 16.14 (attributed): the walk returned **0** over contiguous ops at 1,2,3. Fixed by
+widening the raw-SQL annotation to the drivers' truth (`Int8Value = string | number | bigint`) and
+normalising through one seam, `packages/core/src/projection/int8.ts`. The walk now runs in **bigint** and
+narrows exactly once on the way out, so it is exact over the column's range and a value past 2^53 throws
+instead of rounding. `watermarks.ts` was moved onto the same seam: it was right about the live bug and
+silently lossy at 2^53, and a per-call-site convention is what let the neighbouring function ship without
+it (CLAUDE.md §2.8).
+
+Lane gap closed by construction: `packages/db-server/test/projection-int8-marshalling.test.ts` runs the
+walk on the **real `pg` driver** via `pnpm test:rls`. It asserts its own coverage (T-14) — the int8-arrives-
+as-string precondition is a test, so the file fails loudly the day that stops being true rather than
+going green for the wrong reason. Falsified: cast removed → 4 red on real PG16, green on PGlite with the
+bug fully present. T-8 + §2.4 amended to state the gate covers dialect, not driver marshalling.
+
+### Residual finding — NOT fixed here, needs an owner (task 17 is the natural one)
+
+`oplog-source.ts`'s `RawOpRow` / `reconstructOperation` is **client-shaped by construction** and cannot
+read the SERVER op log as written — three divergences, not one:
+
+| field | client (SQLite) | server (10-db §5) | asserted | on real `pg` |
+| --- | --- | --- | --- | --- |
+| `seq`, `timestamp_ms` | INTEGER → number | `bigint` | `number` | string → `"10" < "9"` is **true**, canonical order silently inverts past seq 9 |
+| `payload`, `location` | `text` | `jsonb` | `string` | driver returns a parsed **object**; `JSON.parse(object)` throws |
+| `agent_initiated` | `integer` 0/1 | `boolean` | `number` | `false !== 0` → **every op reads back agent-initiated** |
+
+Not reachable today (`apps/server` does not wire the projection engine; task 17 is `todo`), which is why it
+is reported rather than half-fixed: casting only the int8 half would leave the other two broken while
+implying a server-readiness that does not exist — the same "gate implying coverage it lacks" failure. The
+real question is a design one: does server projection read the server op log through this function at all,
+given jsonb/boolean? The applier-conformance fixture models the CLIENT DDL verbatim, so T-8 will not answer it.
 
 ## Note
 
