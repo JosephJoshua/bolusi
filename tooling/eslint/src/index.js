@@ -29,7 +29,59 @@ export default tseslint.config(
       // the module-manifest shape (a literal `id` beside permissions/commands/queries), so it costs
       // nothing elsewhere and cannot miss a manifest that lands in an unexpected package.
       'bolusi/permission-module-prefix': 'error',
+      // Added task 10 — 04-module-contract §5.1's "lint-enforced" five. Whole-repo and unscoped:
+      // prong A fires only on the emission channel's shape, prong B only on a direct
+      // `appendLocalOps` call, so it costs nothing elsewhere and cannot miss a non-command append
+      // that lands in an unexpected package.
+      //
+      // `sanctionedTypes` is passed rather than baked into the rule so the closed set has ONE
+      // definition (packages/core/src/runtime/runtime-emissions.ts, pinned to 04 §5.1 by core's
+      // suite) — a hand-maintained copy inside the rule is how a sixth type gets in
+      // (CLAUDE.md §2.8). Keep this list in step with that constant.
+      'bolusi/runtime-emission-allowlist': [
+        'error',
+        {
+          sanctionedTypes: [
+            'auth.user_switched',
+            'auth.session_ended',
+            'auth.permission_denied',
+            'auth.pin_locked_out',
+            'auth.device_enrolled',
+          ],
+          // The command runtime IS the append path's caller (04 §5.1 steps 5–6) — it is the one
+          // place a non-command append legitimately originates. Core's oplog suite and fixtures
+          // drive `appendLocalOps` directly to test it, which is the same "a test proving
+          // something is impossible has to attempt it" exemption the op-log rules already carry.
+          allowFiles: [
+            'packages/core/src/runtime/execute.ts',
+            'packages/core/test/oplog/_fixtures.ts',
+            'packages/core/test/oplog/append.test.ts',
+            'packages/core/test/oplog/chain.test.ts',
+            'packages/core/test/oplog/tamper-fixtures.test.ts',
+          ],
+        },
+      ],
       '@typescript-eslint/consistent-type-imports': 'error',
+    },
+  },
+  {
+    // Added task 10 — 04-module-contract §5.2: command handlers are pure (no clock, no rng, no
+    // network, no timers). Scoped to module command/query files by the same naming convention
+    // 08 §5.2 established for `bolusi/no-float-money`, because that is where handlers live.
+    //
+    // DENOMINATOR NOTE (T-14): as of task 10 `packages/modules` contains no command files yet —
+    // the notes module's commands land with task 25 — so this rule currently guards ZERO shipping
+    // files. It is live at `error` from here so the first handler file lands under it, and its
+    // RuleTester fixtures (no-clock-in-handlers.test.js) are what prove it fires. The runtime
+    // purity guard (packages/core/test/runtime/purity.test.ts) covers handlers behaviourally in
+    // the meantime, including the dynamic accesses this rule cannot see.
+    name: 'bolusi/handler-purity',
+    files: [
+      'packages/modules/src/**/*.{commands,queries,handlers}.{ts,tsx}',
+      'packages/modules/src/**/{commands,queries,handlers}.ts',
+    ],
+    rules: {
+      'bolusi/no-clock-in-handlers': 'error',
     },
   },
   {
