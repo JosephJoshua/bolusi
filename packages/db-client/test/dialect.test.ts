@@ -12,17 +12,19 @@ import { openBetterSqlite3Driver } from './better-sqlite3-adapter.js';
 
 let connection: ClientDb;
 
+// camelCase identifiers: CamelCasePlugin is wired into the client Kysely (10-db §11.4),
+// so the query builder speaks camelCase while the DDL and the raw driver stay snake_case.
 const NOTE = {
   id: 'note-1',
-  tenant_id: 'tenant-1',
-  store_id: 'store-1',
+  tenantId: 'tenant-1',
+  storeId: 'store-1',
   title: 'Stock count',
   body: 'Twelve crates',
-  media_id: null,
-  created_by: 'user-1',
-  created_at: 1_700_000_000_000,
-  last_edited_by: 'user-1',
-  last_edited_at: 1_700_000_000_000,
+  mediaId: null,
+  createdBy: 'user-1',
+  createdAt: 1_700_000_000_000,
+  lastEditedBy: 'user-1',
+  lastEditedAt: 1_700_000_000_000,
 };
 
 beforeEach(async () => {
@@ -45,20 +47,72 @@ test('Kysely insert is visible to the raw driver on the same connection', async 
   expect(raw.rows).toEqual([{ id: 'note-1', title: 'Stock count', body: 'Twelve crates' }]);
 });
 
+// The identifier contract 04 §2 depends on: ONE applier, written in camelCase, lands in
+// the snake_case columns of 10-db §9 on this engine — and the server's CamelCasePlugin
+// does the same over the same column names. If this mapping breaks, appliers silently
+// write nothing on one of the two engines.
+test('camelCase identifiers map to the snake_case DDL columns and back', async () => {
+  await connection.db.insertInto('notes').values(NOTE).execute();
+
+  // Raw SQL bypasses Kysely entirely: it must find the values under snake_case columns.
+  const raw = await connection.driver.execute(
+    `SELECT tenant_id, store_id, created_by, last_edited_at, edit_count FROM notes`,
+  );
+  expect(raw.rows).toEqual([
+    {
+      tenant_id: 'tenant-1',
+      store_id: 'store-1',
+      created_by: 'user-1',
+      last_edited_at: 1_700_000_000_000,
+      edit_count: 0,
+    },
+  ]);
+
+  // ...and reading back through Kysely re-camelizes the result keys.
+  const viaKysely = await connection.db
+    .selectFrom('notes')
+    .select(['tenantId', 'storeId', 'createdBy', 'lastEditedAt', 'editCount'])
+    .execute();
+  expect(viaKysely).toEqual([
+    {
+      tenantId: 'tenant-1',
+      storeId: 'store-1',
+      createdBy: 'user-1',
+      lastEditedAt: 1_700_000_000_000,
+      editCount: 0,
+    },
+  ]);
+});
+
+test('a camelCase WHERE clause filters on the snake_case column', async () => {
+  await connection.db.insertInto('notes').values(NOTE).execute();
+  await connection.db
+    .insertInto('notes')
+    .values({ ...NOTE, id: 'note-2', storeId: 'store-2' })
+    .execute();
+
+  const rows = await connection.db
+    .selectFrom('notes')
+    .select('id')
+    .where('storeId', '=', 'store-2')
+    .execute();
+  expect(rows).toEqual([{ id: 'note-2' }]);
+});
+
 test('Kysely select returns the same rows as the raw driver', async () => {
   await connection.driver.execute(
     `INSERT INTO notes (id, tenant_id, store_id, title, body, created_by, created_at, last_edited_by, last_edited_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       NOTE.id,
-      NOTE.tenant_id,
-      NOTE.store_id,
+      NOTE.tenantId,
+      NOTE.storeId,
       NOTE.title,
       NOTE.body,
-      NOTE.created_by,
-      NOTE.created_at,
-      NOTE.last_edited_by,
-      NOTE.last_edited_at,
+      NOTE.createdBy,
+      NOTE.createdAt,
+      NOTE.lastEditedBy,
+      NOTE.lastEditedAt,
     ],
   );
 
@@ -76,7 +130,7 @@ test('Kysely update and delete agree with the raw driver', async () => {
 
   await connection.db
     .updateTable('notes')
-    .set({ title: 'Recount', edit_count: 1 })
+    .set({ title: 'Recount', editCount: 1 })
     .where('id', '=', 'note-1')
     .execute();
   expect((await connection.driver.execute(`SELECT title, edit_count FROM notes`)).rows).toEqual([
@@ -91,7 +145,7 @@ test('Kysely update and delete agree with the raw driver', async () => {
 
 test('Kysely round-trips every value type the driver supports', async () => {
   await connection.db
-    .insertInto('meta_kv')
+    .insertInto('metaKv')
     .values([
       { key: 'deviceId', value: 'device-1' },
       { key: 'tenantId', value: 'tenant-1' },
@@ -99,7 +153,7 @@ test('Kysely round-trips every value type the driver supports', async () => {
     .execute();
 
   const rows = await connection.db
-    .selectFrom('meta_kv')
+    .selectFrom('metaKv')
     .select(['key', 'value'])
     .orderBy('key')
     .execute();
@@ -150,13 +204,17 @@ test('raw sql`` SELECT returns rows through the dialect', async () => {
   expect(result.rows).toEqual([{ id: 'note-1' }]);
 });
 
-test('raw sql`` PRAGMA returns rows through the dialect', async () => {
-  const result = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`.execute(connection.db);
-  expect(result.rows).toEqual([{ foreign_keys: 1 }]);
+test('raw sql`` PRAGMA returns rows through the dialect, with camelized result keys', async () => {
+  // Gotcha worth pinning: CamelCasePlugin does NOT rewrite identifiers inside a raw sql``
+  // fragment (`foreign_keys` stays as written), but it DOES map the RESULT keys — so the
+  // row comes back as `foreignKeys`. Callers reaching for raw SQL through Kysely must
+  // expect camelCase out; the raw driver (connection.driver) is the snake_case path.
+  const result = await sql<{ foreignKeys: number }>`PRAGMA foreign_keys`.execute(connection.db);
+  expect(result.rows).toEqual([{ foreignKeys: 1 }]);
 });
 
 test('a CHECK violation through Kysely surfaces as a typed DbError', async () => {
   await expect(
-    connection.db.insertInto('sync_state').values({ id: 2, pull_cursor: 0 }).execute(),
+    connection.db.insertInto('syncState').values({ id: 2, pullCursor: 0 }).execute(),
   ).rejects.toMatchObject({ name: 'DbError', code: 'constraint' });
 });

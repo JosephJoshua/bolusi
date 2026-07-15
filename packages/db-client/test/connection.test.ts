@@ -158,7 +158,7 @@ describe('single-connection invariant', () => {
     });
 
     // Drive both surfaces, then prove no extra handle was ever constructed.
-    await connection.db.selectFrom('meta_kv').select('key').execute();
+    await connection.db.selectFrom('metaKv').select('key').execute();
     await connection.driver.execute('SELECT 1');
 
     expect(h.driverFactory).toHaveBeenCalledTimes(1);

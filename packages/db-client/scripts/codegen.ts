@@ -39,6 +39,12 @@ try {
       scratchDbPath,
       '--out-file',
       outFile,
+      // 10-db §11.4: --camel-case on BOTH sides. The server generates camelCase over the
+      // same snake_case DDL (§11.3), so a module's appliers can be written once against
+      // `ProjectionDb` and run against client SQLite and server Postgres alike (04 §2).
+      // The runtime counterpart is `CamelCasePlugin` in src/connection.ts — the flag and
+      // the plugin must be changed together or the types stop describing the queries.
+      '--camel-case',
       '--log-level',
       'warn',
       '--type-only-imports',

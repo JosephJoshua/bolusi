@@ -3,7 +3,7 @@
 // op-sqlite's hard rule is EXACTLY ONE open connection per database, app-wide —
 // concurrency comes from WAL, never from a second handle. This module is where that rule
 // is enforced, and it is the only place the SQLCipher key is ever read.
-import { Kysely } from 'kysely';
+import { CamelCasePlugin, Kysely } from 'kysely';
 
 import { createClientDialect } from './dialect/index.js';
 import { toDbError, type DbDriver, type DbDriverFactory } from './driver.js';
@@ -150,7 +150,18 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
     throw sanitizeOpenFailure(error, encryptionKey);
   }
 
-  const db = new Kysely<ClientDatabase>({ dialect: createClientDialect(driver) });
+  // CamelCasePlugin is the runtime half of the client codegen contract (10-db §11.4): it
+  // maps camelCase identifiers down to the snake_case DDL and maps result keys back up.
+  // The server does the same over the same column names, so a module's appliers see ONE
+  // set of identifiers on both engines and can be written once against `ProjectionDb`
+  // (04 §2). It must stay in lockstep with `--camel-case` in scripts/codegen.ts.
+  //
+  // Only the Kysely surface is affected. `driver` stays raw: `driver.execute` speaks the
+  // verbatim snake_case SQL of 10-db §9, which is what the migration runner needs.
+  const db = new Kysely<ClientDatabase>({
+    dialect: createClientDialect(driver),
+    plugins: [new CamelCasePlugin()],
+  });
 
   const connection: ClientDb = {
     db,

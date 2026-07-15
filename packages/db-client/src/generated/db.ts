@@ -10,79 +10,79 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   : ColumnType<T, T | undefined, T>;
 
 export interface AuthPermissionDenials {
-  device_id: string;
+  deviceId: string;
   id: string | null;
-  permission_id: string;
+  permissionId: string;
   reason: string;
-  scope_store_id: string | null;
-  store_id: string | null;
-  suppressed_repeats: Generated<number>;
+  scopeStoreId: string | null;
+  storeId: string | null;
+  suppressedRepeats: Generated<number>;
   surface: string;
   target: string | null;
-  tenant_id: string;
-  timestamp_ms: number;
-  user_id: string;
+  tenantId: string;
+  timestampMs: number;
+  userId: string;
 }
 
 export interface AuthSessions {
-  device_id: string;
-  end_reason: string | null;
-  ended_at: number | null;
+  deviceId: string;
+  endedAt: number | null;
+  endReason: string | null;
   id: string | null;
-  started_at: number;
-  store_id: string | null;
-  tenant_id: string;
-  user_id: string;
+  startedAt: number;
+  storeId: string | null;
+  tenantId: string;
+  userId: string;
 }
 
 export interface Conflicts {
-  acknowledged_at: number | null;
-  acknowledged_by: string | null;
-  acknowledgement_op_id: string | null;
-  conflict_key: string;
-  detected_at: number;
-  entity_id: string;
-  entity_type: string;
+  acknowledgedAt: number | null;
+  acknowledgedBy: string | null;
+  acknowledgementOpId: string | null;
+  conflictKey: string;
+  detectedAt: number;
+  entityId: string;
+  entityType: string;
   id: string | null;
-  op_a_id: string;
-  op_b_id: string;
+  opAId: string;
+  opBId: string;
   severity: string;
   status: string;
-  store_id: string | null;
-  tenant_id: string;
+  storeId: string | null;
+  tenantId: string;
 }
 
 export interface DeviceRegistry {
   id: string | null;
   kind: string;
-  revoked_at: number | null;
-  signing_key_public: string;
+  revokedAt: number | null;
+  signingKeyPublic: string;
   status: string;
-  store_id: string | null;
+  storeId: string | null;
 }
 
 export interface MediaItems {
-  attached_to_operation_id: string | null;
-  byte_size: number;
-  captured_at: number;
-  captured_by_user_id: string;
-  chunk_size: number | null;
-  chunks_total: number | null;
-  device_id: string;
+  attachedToOperationId: string | null;
+  byteSize: number;
+  capturedAt: number;
+  capturedByUserId: string;
+  chunkSize: number | null;
+  chunksTotal: number | null;
+  deviceId: string;
   id: string | null;
-  last_error_code: string | null;
-  last_error_message: string | null;
-  local_path: string | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  localPath: string | null;
   location: string | null;
-  mime_type: string;
-  next_attempt_at: number | null;
+  mimeType: string;
+  nextAttemptAt: number | null;
   sha256: string;
-  store_id: string | null;
-  tenant_id: string;
+  storeId: string | null;
+  tenantId: string;
   type: string;
-  upload_attempts: Generated<number>;
-  upload_status: Generated<string>;
-  uploaded_at: number | null;
+  uploadAttempts: Generated<number>;
+  uploadedAt: number | null;
+  uploadStatus: Generated<string>;
 }
 
 export interface MetaKv {
@@ -91,7 +91,7 @@ export interface MetaKv {
 }
 
 export interface Migrations {
-  applied_at: number;
+  appliedAt: number;
   name: string;
   version: Generated<number | null>;
 }
@@ -99,155 +99,155 @@ export interface Migrations {
 export interface Notes {
   archived: Generated<number>;
   body: string;
-  created_at: number;
-  created_by: string;
-  edit_count: Generated<number>;
+  createdAt: number;
+  createdBy: string;
+  editCount: Generated<number>;
   id: string | null;
-  last_edited_at: number;
-  last_edited_by: string;
-  media_id: string | null;
-  store_id: string;
-  tenant_id: string;
+  lastEditedAt: number;
+  lastEditedBy: string;
+  mediaId: string | null;
+  storeId: string;
+  tenantId: string;
   title: string;
 }
 
 export interface Operations {
-  agent_conversation_id: string | null;
-  agent_initiated: Generated<number>;
-  device_id: string;
-  entity_id: string;
-  entity_type: string;
+  agentConversationId: string | null;
+  agentInitiated: Generated<number>;
+  deviceId: string;
+  entityId: string;
+  entityType: string;
   hash: string;
   id: string | null;
   location: string | null;
   payload: string;
-  previous_hash: string;
-  rejection_code: string | null;
-  rejection_reason: string | null;
-  schema_version: number;
+  previousHash: string;
+  rejectionCode: string | null;
+  rejectionReason: string | null;
+  schemaVersion: number;
   seq: number;
-  server_seq: number | null;
+  serverSeq: number | null;
   signature: string;
-  signed_core_jcs: string;
+  signedCoreJcs: string;
   source: string;
-  store_id: string | null;
-  sync_status: Generated<string>;
-  synced_at: number | null;
-  tenant_id: string;
-  timestamp_ms: number;
+  storeId: string | null;
+  syncedAt: number | null;
+  syncStatus: Generated<string>;
+  tenantId: string;
+  timestampMs: number;
   type: string;
-  user_id: string;
+  userId: string;
 }
 
 export interface PinAttemptState {
-  consecutive_failures: Generated<number>;
-  device_id: string;
-  not_before: number | null;
-  user_id: string;
-  window_started_at: number | null;
+  consecutiveFailures: Generated<number>;
+  deviceId: string;
+  notBefore: number | null;
+  userId: string;
+  windowStartedAt: number | null;
 }
 
 export interface PinLockoutEvents {
   at: number;
-  device_id: string;
-  failure_count: number | null;
+  deviceId: string;
+  failureCount: number | null;
   id: string | null;
   kind: string;
-  store_id: string | null;
-  tenant_id: string;
-  user_id: string;
+  storeId: string | null;
+  tenantId: string;
+  userId: string;
 }
 
 export interface ProjectionWatermarks {
-  applied_local_seq: Generated<number>;
-  applied_server_seq: Generated<number>;
-  module_id: string | null;
+  appliedLocalSeq: Generated<number>;
+  appliedServerSeq: Generated<number>;
+  moduleId: string | null;
 }
 
 export interface QuarantinedOps {
-  device_id: string;
+  deviceId: string;
   hash: string;
   id: string | null;
-  quarantined_at: number;
+  quarantinedAt: number;
   reason: string;
-  server_seq: number;
+  serverSeq: number;
   signature: string;
-  signed_core_jcs: string;
+  signedCoreJcs: string;
 }
 
 export interface RolesDirectory {
   id: string | null;
-  is_system_default: Generated<number>;
+  isSystemDefault: Generated<number>;
   name: string;
-  permission_ids: string;
-  scope_type: string;
+  permissionIds: string;
+  scopeType: string;
 }
 
 export interface SyncState {
-  backoff_until: number | null;
-  devices_directory_version: Generated<number>;
+  backoffUntil: number | null;
+  devicesDirectoryVersion: Generated<number>;
   id: Generated<number | null>;
-  last_pull_at: number | null;
-  last_push_at: number | null;
-  last_server_time: number | null;
-  last_server_time_received_at: number | null;
-  last_successful_sync_at: number | null;
-  last_sync_error: string | null;
-  pull_cursor: Generated<number>;
-  push_halted: Generated<number>;
-  sync_disabled: Generated<number>;
-  sync_disabled_reason: string | null;
+  lastPullAt: number | null;
+  lastPushAt: number | null;
+  lastServerTime: number | null;
+  lastServerTimeReceivedAt: number | null;
+  lastSuccessfulSyncAt: number | null;
+  lastSyncError: string | null;
+  pullCursor: Generated<number>;
+  pushHalted: Generated<number>;
+  syncDisabled: Generated<number>;
+  syncDisabledReason: string | null;
 }
 
 export interface UserPinVerifiers {
   algo: string;
-  as_of_device_id: string;
-  as_of_seq: number;
-  as_of_timestamp: number;
+  asOfDeviceId: string;
+  asOfSeq: number;
+  asOfTimestamp: number;
   hash: string;
   params: string;
   salt: string;
-  user_id: string | null;
+  userId: string | null;
 }
 
 export interface UserPrefs {
   locale: Generated<string>;
-  tenant_id: string;
-  updated_at: number;
-  user_id: string | null;
+  tenantId: string;
+  updatedAt: number;
+  userId: string | null;
 }
 
 export interface UserRolesDirectory {
-  role_id: string;
-  store_id: string | null;
-  user_id: string;
+  roleId: string;
+  storeId: string | null;
+  userId: string;
 }
 
 export interface UsersDirectory {
   id: string | null;
   name: string;
-  photo_media_id: string | null;
+  photoMediaId: string | null;
   status: string;
 }
 
 export interface DB {
-  auth_permission_denials: AuthPermissionDenials;
-  auth_sessions: AuthSessions;
+  authPermissionDenials: AuthPermissionDenials;
+  authSessions: AuthSessions;
   conflicts: Conflicts;
-  device_registry: DeviceRegistry;
-  media_items: MediaItems;
-  meta_kv: MetaKv;
+  deviceRegistry: DeviceRegistry;
+  mediaItems: MediaItems;
+  metaKv: MetaKv;
   migrations: Migrations;
   notes: Notes;
   operations: Operations;
-  pin_attempt_state: PinAttemptState;
-  pin_lockout_events: PinLockoutEvents;
-  projection_watermarks: ProjectionWatermarks;
-  quarantined_ops: QuarantinedOps;
-  roles_directory: RolesDirectory;
-  sync_state: SyncState;
-  user_pin_verifiers: UserPinVerifiers;
-  user_prefs: UserPrefs;
-  user_roles_directory: UserRolesDirectory;
-  users_directory: UsersDirectory;
+  pinAttemptState: PinAttemptState;
+  pinLockoutEvents: PinLockoutEvents;
+  projectionWatermarks: ProjectionWatermarks;
+  quarantinedOps: QuarantinedOps;
+  rolesDirectory: RolesDirectory;
+  syncState: SyncState;
+  userPinVerifiers: UserPinVerifiers;
+  userPrefs: UserPrefs;
+  userRolesDirectory: UserRolesDirectory;
+  usersDirectory: UsersDirectory;
 }
