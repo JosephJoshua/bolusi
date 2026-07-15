@@ -8,8 +8,9 @@ pnpm-lock.yaml
 ai-docs/
 CLAUDE.md
 
-# kysely-codegen output is byte-compared against a fresh run in CI (10-db-schema §11.3).
-# Reformatting it here would make that gate unsatisfiable: lint-staged would rewrite the
-# committed file at every commit, and the next `pnpm db:codegen` would "drift" back. 10-db §11.5
-# ("never edit generated type files by hand") covers prettier too — reformatting IS editing.
+# kysely-codegen output is byte-compared against a fresh run in CI (10-db-schema §11.3/§11.5:
+# never hand-edited — and prettier is a hand-edit by proxy). Reformatting it here would make
+# that gate unsatisfiable: lint-staged rewrites the committed file at every commit, and the
+# next codegen run "drifts" back to raw output. One entry per generated output.
 packages/db-server/src/generated/
+packages/db-client/src/generated/db.ts

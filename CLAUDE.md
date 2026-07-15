@@ -39,7 +39,7 @@ Decided in phases 1–2. Until then, make **no stack assumptions**. When a stack
 
 Invariants, learned the hard way. They hold in every phase.
 
-1. **Verify ground truth.** Read the tool's OWN output — never gate a merge / commit / delete / "done" on a summary or a task-notification. Summaries lie; outputs don't.
+1. **Verify ground truth.** Read the tool's OWN output — never gate a merge / commit / delete / "done" on a summary or a task-notification. Summaries lie; outputs don't. **Never trust an exit code directly:** a status describes *the process it came from*, which is not always the process you care about. A watcher, poller, or `until grep …; done` wrapper reports on the wrapper — and if its success condition matches failure markers, it is *guaranteed* to go green when the job fails. Capture status next to output (`cmd > log 2>&1; echo "EXIT=$?" >> log`) and read the log. Every number you report carries the `EXIT=` line that produced it.
 2. **Execute, don't over-ask.** Act on agreed work. Batch open questions to the end; interrupt only for real blockers or hard-to-reverse / outward-facing decisions.
 3. **Worktree isolation.** Every spawned implementation agent's FIRST step is `git branch --show-current` / `pwd`; if on `main` (or not in its own worktree) it STOPS and reports — never branch/commit in the main checkout. After entering a worktree, absolute main-repo paths edit the MAIN checkout — use worktree paths.
 4. **Atomic commits.** Conventional Commits (`type(scope): subject`), **subject line only — no body, no attributions of any kind**. Each commit builds + passes. No `wip`/`fixes`; squash before merge.
@@ -49,6 +49,7 @@ Invariants, learned the hard way. They hold in every phase.
 8. **One implementation, not per-module copies.** Permissions / validation / shared logic live once, in shared packages.
 9. **Every task gets ≥1 separate review agent before merge** (`review-wave`).
 10. **Pre-commit hooks are mandatory** — never `--no-verify`; fix the failure.
+11. **A guard is only load-bearing if someone has watched it go red.** Every gate, guard, sweep, probe, and adversarial test is **falsified before it is believed**: break what it protects, observe the specific failure, restore, observe green. Report the falsification ("broke X, saw Y fail, reverted"), never "the test passes". v0 has already shipped **five** gates that were green for the wrong reason — SEC-META-01 matched file content not test titles; the codegen-diff gate was made permanently unsatisfiable by prettier reformatting its own input; the boundary rule exempted the Hermes-bound files it existed to protect; `badOwners` matched a *mention* of a SEC id, so a task **disclaiming** one satisfied it; and a codegen sweep looped over a parse that would check **zero** properties and report green. A guard whose failure mode is "silently checks nothing" is worse than no guard: it converts an unknown risk into a false assurance, and nobody re-examines a green test. Detail + the corollaries (test the class not the instance; interrogate the oracle; a guard must assert its own coverage) live in `ai-docs/testing-guide.md` T-11–T-14.
 
 ---
 
