@@ -1,6 +1,5 @@
-// @bolusi/core — op log, projection engine, command runtime, sync client core, JCS,
+// @bolusi/core — op log, projection engine, command runtime, sync client loop, JCS,
 // UUIDv7. PURE TS; every effect behind an injected port (08-stack-and-repo §3.2).
-// Sync loop lands in a later task (15).
 export const PACKAGE_NAME = '@bolusi/core' as const;
 
 export * from './auth/index.js';
@@ -14,3 +13,4 @@ export * from './projection/index.js';
 export * from './runtime/index.js';
 export * from './module/index.js';
 export * from './query/index.js';
+export * from './sync/index.js';
