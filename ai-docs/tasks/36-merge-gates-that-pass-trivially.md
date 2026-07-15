@@ -8,9 +8,17 @@
 
 | job | placeholder because | real suite lands with |
 | --- | ------------------- | --------------------- |
-| `dual-dialect-appliers` | `packages/modules` holds only a scaffold `index.test.ts`; `pnpm test:appliers` routes to `not-implemented.mjs` | task 11 |
+| ~~`dual-dialect-appliers`~~ | ~~`packages/modules` holds only a scaffold~~ | **CLOSED by task 11 (2026-07-15)** — stage 10 now runs `pnpm test:appliers` for real |
 | `chaos-harness` | `packages/harness` likewise; `pnpm test:chaos` → `not-implemented.mjs` | task 26 |
 | `device-lane` | EAS build + on-device smoke | task 27 |
+
+**Update 2026-07-15 — stage 10 is closed, and it validated this task's whole premise on its first run.** Task 11 wired `dual-dialect-appliers` to the real `pnpm test:appliers` (better-sqlite3 behind the shim + PGlite, byte-equal oracle digests) and falsified it end-to-end — reintroducing a real `created_at integer` overflow turned the job red. It needs no `services:` block: PGlite is in-process, so it cannot collide with a peer worktree's database (T-14d).
+
+**What the newly-real gate caught immediately — two live bugs in already-merged task 08 code:**
+1. `createSqlWatermarkStore` was **documented "dialect-neutral raw SQL" and was SQLite-only.** 2-arg `MAX(a,b)` is a *scalar* in SQLite but an *aggregate* in Postgres, and the bare column is ambiguous there. Nothing noticed because it is only exercised against SQLite today — **tasks 07/16 (server-side projections) would have hit it.**
+2. **ms-epoch (~1.7e12) overflows Postgres' 32-bit `integer`**; SQLite silently swallows it.
+
+That is the argument for closing the remaining two, stated in evidence rather than principle: **the placeholder was not merely "not yet covering" — it was actively hiding two defects that had already shipped.** A green-for-nothing gate does not leave a gap where its coverage would be; it leaves a gap that *looks* covered, so nobody goes looking. Both bugs sat in merged code that every reviewer, including the orchestrator, had passed.
 
 **These are honest placeholders today** — unlike task 32's `server-integration`, they shadow no existing suite, so nothing is silently uncovered. `not-implemented.mjs` exits 1 by design, which is the right shape.
 

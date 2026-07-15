@@ -44,7 +44,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
-| 36 | three CI jobs labelled *merge gate* pass trivially; full workflow sweep (from task 32) | todo | 11, 26 |
+| 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
 | 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
 | 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | todo | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | todo | 05 |
