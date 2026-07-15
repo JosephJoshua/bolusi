@@ -31,7 +31,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | todo | 12, 13 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
-| 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | todo | 14, 22, 23 |
+| 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | in-progress | 14, 22, 23 |
 | 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26 |
@@ -54,7 +54,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | todo | 11, 14 |
 | 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | todo | 14 |
 | 45 | verifyPin read-side bounds; task 10's stale "DELETE WHEN TASK 14 LANDS" comment; **guard against NUL bytes turning source files binary/unreviewable** (2 agents hit it) (from task 14 review) | todo | 14 |
-| 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | todo | 08 |
+| 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | in-progress | 08 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
