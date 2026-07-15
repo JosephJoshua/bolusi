@@ -18,12 +18,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { PushResult, SignedOperation } from '@bolusi/schemas';
 
+import { noblePort } from '@bolusi/test-support';
+
 import {
   DomainError,
   SYNC_BACKOFF_SCHEDULE_MS,
   SYNC_LOOP_MACHINE,
   SyncTransportError,
   runTransition,
+  signedCoreJcsOf,
   type SyncLoopEvent,
   type SyncLoopState,
   type SyncTriggerReason,
@@ -82,7 +85,6 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
     entityId: uuidV7(prng, timestamp),
     prng,
   });
-  const { hash: _h, signature: _s, ...core } = op;
   await sql`
     INSERT INTO operations (
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
@@ -92,7 +94,7 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${JSON.stringify(core)}, 'local'
+      ${op.signature}, ${signedCoreJcsOf(op, noblePort)}, 'local'
     )
   `.execute(harness.db);
   return op;

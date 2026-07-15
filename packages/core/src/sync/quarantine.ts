@@ -86,8 +86,22 @@ export function verifyPulledOp(
  * op through `zSignedOperation` first, so a throw here is a bug, not hostile input.
  */
 export function signedCoreJcsOf(op: SignedOperation, crypto: CryptoPort): string {
-  const { hash: _hash, signature: _signature, ...core } = op;
-  return hashSignedCore(core as SignedCore, crypto).jcs;
+  return hashSignedCore(signedCoreOf(op), crypto).jcs;
+}
+
+/**
+ * The §2.1 signed core of an op — the §2.2 derived fields removed.
+ *
+ * `zSignedCore` is STRICT, so leaving `hash`/`signature` in would fail the parse rather than be
+ * ignored — which is the schema doing its job (they are not part of the preimage). Written as an
+ * omission rather than a hand-listed field set: a field added to 05 §2.1 must flow through here
+ * automatically, and a hand-listed core would silently drop it from the hash.
+ */
+function signedCoreOf(op: SignedOperation): SignedCore {
+  const core: Partial<SignedOperation> = { ...op };
+  delete core.hash;
+  delete core.signature;
+  return core as SignedCore;
 }
 
 /** A quarantined op as stored (10-db §9.5). */

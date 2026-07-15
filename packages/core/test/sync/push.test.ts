@@ -21,7 +21,7 @@ import {
 } from '@bolusi/schemas';
 import { noblePort } from '@bolusi/test-support';
 
-import { runPushPhase } from '../../src/index.js';
+import { runPushPhase, signedCoreJcsOf } from '../../src/index.js';
 import {
   makeDevice,
   makeSignedNoteOp,
@@ -71,7 +71,9 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
     payload: { title: `t${seq}`, body: `b${seq}` },
     prng,
   });
-  const { hash: _h, signature: _s, ...core } = op;
+  // `signed_core_jcs` via the REAL canonicalizer — the push path rebuilds the wire op from these
+  // bytes (05 §3 verbatim-storage), so a hand-rolled approximation here would test a fixture's
+  // serializer rather than the product's.
   await sql`
     INSERT INTO operations (
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
@@ -81,15 +83,10 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${JSON.stringify(sortedCore(core))}, 'local'
+      ${op.signature}, ${signedCoreJcsOf(op, noblePort)}, 'local'
     )
   `.execute(harness.db);
   return op;
-}
-
-/** JCS-ish: key-sorted JSON. Enough for the push path's `JSON.parse` round-trip in these tests. */
-function sortedCore(core: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(core).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
 function deps() {
@@ -105,6 +102,11 @@ function deps() {
     },
   };
 }
+
+/** A transport that dies before the server sees anything (testing-guide §3.5 F1). */
+const netFailPush = (): never => {
+  throw new Error('network down');
+};
 
 async function statusOf(id: string): Promise<{ status: string; code: string | null }> {
   const rows = await sql<{ syncStatus: string; rejectionCode: string | null }>`
@@ -136,26 +138,51 @@ describe('push results mark each op individually (03 §3)', () => {
   });
 
   it('a repeated ack for an already-synced op is an idempotent no-op, not INVALID_TRANSITION', async () => {
+    // 03 §3: "a repeated `accepted`/`duplicate` response for an already-`synced` op is an idempotent
+    // no-op (retry of a partially-acknowledged batch), not a transition." Reproduced through the
+    // real path — a response carrying TWO results for the same op — rather than by hand-editing the
+    // op log, which the append-only rule forbids for good reason (05 §1).
+    //
+    // This is evidence rather than luck: `markSyncResult` THROWS `INVALID_TRANSITION` on a genuinely
+    // invalid pair before it touches the DB, so a `synced → synced` that were NOT encoded as a
+    // self-loop would fail this test loudly.
     const a = await seedLocalOp(1);
     harness.transport.scriptPush({
-      results: [{ id: a.id, status: 'accepted', serverSeq: 10 }],
+      results: [
+        { id: a.id, status: 'accepted', serverSeq: 10 },
+        { id: a.id, status: 'duplicate' }, // the second ack lands on an already-`synced` op
+      ],
       serverTime: clockAt,
     });
-    await runPushPhase(deps());
 
-    // The retry-of-a-partially-acked-batch case (03 §3, CHAOS-06a). The op is already `synced`;
-    // a second `accepted` must fold as a no-op. `synced → synced` is a self-loop in the table, and
-    // `markSyncResult` would THROW on a real invalid pair — so this passing is evidence, not luck.
-    await sql`UPDATE operations SET sync_status = 'local' WHERE id = ${a.id}`.execute(harness.db);
-    await sql`UPDATE operations SET sync_status = 'synced' WHERE id = ${a.id}`.execute(harness.db);
-    harness.transport.scriptPush({
-      results: [{ id: a.id, status: 'duplicate' }],
+    const result = await runPushPhase(deps());
+
+    expect((await statusOf(a.id)).status).toBe('synced');
+    expect((await statusOf(a.id)).code).toBeNull(); // never drifted to `rejected`
+    expect(result.rejected).toBe(0);
+  });
+
+  it('a lost-ack retry re-sends the same batch and duplicate is terminal-success (CHAOS-02 F2)', async () => {
+    // The realistic idempotence path: the server accepted, the RESPONSE was lost, so the ops are
+    // still `local` client-side. The retry re-sends them and the server answers `duplicate`.
+    const a = await seedLocalOp(1);
+    const b = await seedLocalOp(2);
+    harness.transport.scriptPush(netFailPush, {
+      results: [
+        { id: a.id, status: 'duplicate' },
+        { id: b.id, status: 'duplicate' },
+      ],
       serverTime: clockAt,
     });
-    // Nothing is `local`, so no batch is even sent — the queue is drained.
+
+    await expect(runPushPhase(deps())).rejects.toThrow();
+    // Still `local` — nothing was marked, so the retry is the SAME batch (no loss, no dupes).
+    expect((await statusOf(a.id)).status).toBe('local');
+
     const result = await runPushPhase(deps());
-    expect(result.batches).toBe(0);
+    expect(result.synced).toBe(2);
     expect((await statusOf(a.id)).status).toBe('synced');
+    expect((await statusOf(b.id)).status).toBe('synced');
   });
 
   it('CHAIN_GAP leaves the op local and is not a rejection, not a failure (03 §3 / 05 §8)', async () => {
