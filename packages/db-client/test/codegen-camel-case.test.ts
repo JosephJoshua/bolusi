@@ -63,11 +63,32 @@ const dbBody = /export interface DB \{\n([\s\S]*?)\n\}/.exec(source)?.[1] ?? '';
 const tableMap = parseTableMap(dbBody);
 
 test('the generated types were parsed (guards the parser itself)', () => {
-  // A silently-empty parse would make every case below vacuously pass.
+  // testing-guide T-14: this guard must not be able to check nothing. `parseInterfaces` is a
+  // regex over generated text, so a kysely-codegen emit change degrades it silently — the sweep
+  // below would loop over fewer properties and still report green.
   expect(tableMap.length).toBe(19);
   for (const [, interfaceName] of tableMap) {
     expect(interfaces.get(interfaceName)?.length ?? 0).toBeGreaterThan(0);
   }
+
+  // Per-interface `> 0` catches TOTAL collapse but not PARTIAL degradation: an emit change
+  // leaving one property per interface passes every check above while silently dropping 145 of
+  // 164 columns. The aggregate floor is what catches that. 164 today across 19 tables; floor set
+  // below so schema growth never trips it, while a degraded parse fails loudly.
+  const checked = tableMap.reduce(
+    (n, [, interfaceName]) => n + (interfaces.get(interfaceName)?.length ?? 0),
+    0,
+  );
+  expect(checked).toBeGreaterThan(150);
+});
+
+test('parseInterfaces yields nothing when the generated emit format changes', () => {
+  // The negative the parser guard above depends on: prove the parse actually collapses on a
+  // format change, rather than assuming it would. `readonly` prefixes are a realistic emit shift.
+  const drifted = source.replace(/^ {2}(\w+):/gm, '  readonly $1:');
+  const reparsed = parseInterfaces(drifted);
+  const props = [...reparsed.values()].reduce((n, p) => n + p.length, 0);
+  expect(props).toBe(0);
 });
 
 test.each(tableMap)(
