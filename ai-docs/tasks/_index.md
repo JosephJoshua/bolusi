@@ -42,9 +42,9 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | in-progress | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
+| 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | todo | 05 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
 **Exit (D4), revised by D12 (2026-07-15 — no physical device available):** 26 (harness green incl. every CHAOS scenario) + 25 + 27a + 28 clean.
 **The D4 device clause is DEFERRED, NOT SATISFIED.** v0 "done" explicitly excludes three unproven claims, all held by blocked task 27b: argon2id p95 <300ms (so **D8's KDF parameter choice is undecided** — the default ships unvalidated and the real device may force the documented floor), op-sqlite write throughput (so **D6's whole rationale for choosing it over expo-sqlite is unvalidated** — the swap-target wrapper is load-bearing), and SQLCipher at-rest on real hardware. See `decisions/2026-07-15-no-device-v0-exit.md`. Emulator figures are regression canaries, never acceptance.
-| 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | todo | 05 |

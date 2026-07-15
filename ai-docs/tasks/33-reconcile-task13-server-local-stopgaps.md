@@ -14,6 +14,22 @@ The load-bearing one is a **direct CLAUDE.md §2.8 violation** — the hard rule
 | 2 | `apps/server/src/identity/schemas.ts` (auth DTOs) | `@bolusi/schemas` | `@bolusi/schemas` had no auth DTOs and was off-limits to task 13 |
 | 3 | surface error codes emitted via a **per-handler envelope wrapper** | the `api/00` §7 error registry (`@bolusi/schemas`) | the registry lacks them |
 
+### What review-02 already established (2026-07-15) — read before you plan
+
+The reviewer diffed the registry three ways on the merged branch and found **no drift today**:
+
+| Source | ids |
+| ------ | --- |
+| `ai-docs/02-permissions.md` §11 (authority) | 19 |
+| `apps/server/src/identity/permission-registry.ts` | 19 |
+| `packages/db-server/migrations/0008` seed | 19 distinct |
+
+`diff(code, doc)` → **identical**. `diff(seed, code)` → **identical**. So task 13's copy is a **verbatim transcription, not a fork**, and it carries an explicit ownership note naming task 09/31 and CLAUDE.md §2.8 — it disclosed the duplication rather than hiding it. Its drift guard is real and asserts its own denominator (`acting-user.test.ts`: `PERMISSIONS.length === 19`, `PERMISSION_BY_ID.size === 19`, plus a `selectFrom('permissions')` comparison of seed against code).
+
+**This changes the shape of this task, not its necessity.** The reconciliation should be a mechanical import swap. The risk that remains is the one nobody could measure yet: **task 09's canonical `@bolusi/core` registry did not exist when that diff was taken.** The diff that actually matters — task 09's registry vs these 19 ids — is yours to run, and it is the first thing to do.
+
+Reviewer's ruling to enforce: **task 14 (or whoever imports core's registry first) must DELETE this file, not leave both.** Two registries that agree today are not a §2.8 violation that resolved itself; they are one that has not fired yet.
+
 **Why #1 is urgent and not cosmetic.** Two permission registries means two answers to "what permissions exist." They will drift, and the drift is silent: the server seeds + validates from its copy, the client evaluates from task 09's copy. A permission that exists in one and not the other is an authorization hole that no single-package test can see — the server would accept a command the client believes is ungranted, or vice versa. The whole fraud model rests on one registry (`02-permissions` §3-5). This is exactly the class of bug that only shows up across a boundary neither owner tests.
 
 ## Docs to read
@@ -49,7 +65,7 @@ The load-bearing one is a **direct CLAUDE.md §2.8 violation** — the hard rule
 - **Error codes — decide, then do, and state the ruling:**
   - `LOGIN_IDENTIFIER_TAKEN` is emitted by task 13 but **absent from `api/02-auth` §10**. Either add it to the spec + registry (doc-first) or rename to an existing code. Do not leave an emitted code that no registry knows.
   - The other surface codes (`AUTH_INVALID_CREDENTIALS`, `ACTING_USER_INVALID`, `ENROLL_*`, `LAST_ADMIN_PROTECTED`) route through a per-handler wrapper because `api/00` §7 lacks them — fold them into the registry so the envelope is one path, not two.
-  - **`SESSION_EXPIRED` is specified but never emitted** — task 12's `verifyToken` maps expired sessions to `AUTH_TOKEN_INVALID`, and task 13 followed the merged reality. This is a genuine spec question, not a move: **decide whether an expired session is observably distinct from an invalid token, and say why.** Note the security angle — distinguishing them tells an attacker a token was once valid. If `AUTH_TOKEN_INVALID` is right, remove `SESSION_EXPIRED` from the spec; if not, emit it. Either way the spec and the code agree when this task closes.
+  - **`SESSION_EXPIRED` is specified but never emitted** — task 12's `verifyToken` maps expired sessions to `AUTH_TOKEN_INVALID`, and task 13 followed the merged reality. **review-02 ruled that following task 12 is the RIGHT call**, on two grounds: one vocabulary rather than two, and a distinct expired-vs-invalid code is an **oracle for an attacker** (it confirms a token was once valid). So the default action is: **remove `SESSION_EXPIRED` from `api/02-auth` §10** and record why. Overturn this only with a stated reason — and if you do, the security argument must be answered, not ignored. Either way the spec and the code agree when this task closes.
 - No behaviour change to the D14 auth-entry path — the SECURITY DEFINER functions and their tests are untouched. Re-run `pnpm test:rls` against real PG16.
 - `pnpm typecheck`, `pnpm lint`, `pnpm test` green. **Read the output, not the exit code** (CLAUDE.md §2.1).
 
