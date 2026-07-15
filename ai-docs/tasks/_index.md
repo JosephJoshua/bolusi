@@ -47,6 +47,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 36 | three CI jobs labelled *merge gate* pass trivially; full workflow sweep (from task 32) | todo | 11, 26 |
 | 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
 | 38 | convergence fixture has no cross-device ties: canonical order's deviceId/seq tie-breaks are never exercised (from task 35) | todo | 35 |
+| 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | todo | 05 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
