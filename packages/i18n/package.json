@@ -20,12 +20,13 @@
   },
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*",
-    "@formatjs/icu-messageformat-parser": "catalog:"
+    "@formatjs/icu-messageformat-parser": "catalog:",
+    "prettier": "catalog:"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "i18n:seed": "node scripts/seed.mjs",
-    "i18n:gen": "node scripts/gen-keys.mjs",
+    "i18n:gen": "node scripts/gen.mjs",
     "i18n:check": "node scripts/check.mjs"
   }
 }
