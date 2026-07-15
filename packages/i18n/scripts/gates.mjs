@@ -125,6 +125,45 @@ export function checkKeyGrammar(sources) {
 }
 
 /**
+ * Denominator floor for the seed-doc grammar gate (testing-guide T-14). ai-docs/ui-labels.md
+ * carries 126 rows today; this floor sits below that so growth never trips it, while a starved
+ * parse — a changed table format, a broken ROW_RE — fails loudly instead of linting nothing and
+ * reporting green. Lower it only alongside a real, deliberate shrink of the seed.
+ */
+export const SEED_MIN_ROWS = 120;
+
+/**
+ * Gate: key grammar over the seed DOC itself (07-i18n §3.1, §7.3).
+ *
+ * Why this is separate from checkKeyGrammar: that gate reads catalog sources, which are seed
+ * *output*. buildCatalogs drops every row in a module-owned namespace (`notes.*` — each module
+ * ships its own catalog files, 07-i18n §3.3), so those rows land in no catalog and reach no
+ * gate; before task 30 a parked-key list dropped three more. A key that never reaches a catalog
+ * was never grammar-checked, so ui-labels.md could ship a name the grammar forbids and every
+ * gate stayed green — the gate's denominator was 113 of 127 keys. This gate lints every row in
+ * the doc whatever its namespace, and asserts it saw the whole doc (CLAUDE.md §2.11, T-14).
+ *
+ * @param {{ key: string }[]} rows every row parsed out of ai-docs/ui-labels.md
+ * @param {number} [minRows] denominator floor; override only in tests
+ * @returns {string[]}
+ */
+export function checkSeedKeyGrammar(rows, minRows = SEED_MIN_ROWS) {
+  const errors = [];
+  if (rows.length < minRows) {
+    errors.push(
+      `parsed only ${rows.length} row(s) out of ai-docs/ui-labels.md, expected >= ${minRows} — ` +
+        `the parse is starved, so this gate checked almost nothing (testing-guide T-14). Fix the ` +
+        `parse, or lower SEED_MIN_ROWS if the seed really did shrink.`,
+    );
+  }
+  for (const { key } of rows) {
+    const problem = keyGrammarError(key);
+    if (problem) errors.push(`ai-docs/ui-labels.md: key '${key}' ${problem}`);
+  }
+  return errors;
+}
+
+/**
  * Gate: collisions — the same key defined by two catalogs, or a module claiming a reserved
  * namespace (07-i18n §3.1, §7.3).
  * @param {CatalogSource[]} sources
