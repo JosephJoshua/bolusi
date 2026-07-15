@@ -24,7 +24,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | in-progress | 03, 04, 09, 10, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | in-progress | 07, 12, 13 |
-| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16 |
+| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16, 46 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | todo | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
@@ -54,6 +54,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | todo | 11, 14 |
 | 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | todo | 14 |
 | 45 | verifyPin lacks read-side verifier bounds (defence-in-depth); task 10's "DELETE WHEN TASK 14 LANDS" comment is now false (from task 14 review) | todo | 14 |
+| 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | todo | 08 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
