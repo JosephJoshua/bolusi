@@ -9,7 +9,10 @@ import {
   checkExtraction,
   checkIcuSubset,
   checkKeyGrammar,
+  flattenSource,
   checkParity,
+  checkSeedKeyGrammar,
+  SEED_MIN_ROWS,
 } from './gates.mjs';
 import { KEYS_PATH, RESOURCES_PATH, renderAll } from './gen.mjs';
 import {
@@ -17,6 +20,8 @@ import {
   REPO_ROOT,
   RESERVED_NAMESPACES,
   SEEDED_LOCALES,
+  UI_LABELS_PATH,
+  parseUiLabels,
   seedFromDoc,
   serializeCatalog,
 } from './seed.mjs';
@@ -25,7 +30,17 @@ import {
 const SOURCE_ROOTS = ['apps', 'packages/modules', 'packages/ui'];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.expo', 'coverage', 'android', 'ios']);
-const T_CALL_RE = /\bt\(\s*'([a-zA-Z][\w.]*)'/g;
+/**
+ * A whole-key `t('a.b.c')` call site.
+ *
+ * The `(?!\s*\+)` tail excludes the derived-key calls the spec *mandates* —
+ * `t('core.errors.' + code)` / `t('core.rejection.' + code)` (07-i18n §3.1, §4.2, §4.3). Without
+ * it the literal is captured as the key `core.errors.`, which is a prefix, not a key, and the
+ * extraction gate reports it missing from the catalog forever. Those keys are not unchecked:
+ * the error-code coverage gate below enumerates them from the code registry, which is the whole
+ * point of deriving them.
+ */
+const T_CALL_RE = /\bt\(\s*'([a-zA-Z][\w.]*)'(?!\s*\+)/g;
 
 /** @returns {import('./gates.mjs').CatalogSource[]} */
 function loadReservedCatalogs() {
@@ -153,11 +168,13 @@ async function checkGenerated() {
 async function main() {
   const sources = [...loadReservedCatalogs(), ...loadModuleCatalogs()];
   const extraction = checkExtraction(collectUsedKeys(), sources);
+  const seedRows = parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
 
   /** @type {{ name: string, errors: string[] }[]} */
   const results = [
     { name: 'seed parity (ui-labels.md → catalogs)', errors: checkSeedParity() },
-    { name: 'key grammar', errors: checkKeyGrammar(sources) },
+    { name: 'key grammar (ui-labels.md rows)', errors: checkSeedKeyGrammar(seedRows) },
+    { name: 'key grammar (catalogs)', errors: checkKeyGrammar(sources) },
     { name: 'collision', errors: checkCollision(sources) },
     { name: 'parity (id ↔ en)', errors: checkParity(sources) },
     { name: 'ICU restricted subset', errors: checkIcuSubset(sources) },
@@ -184,6 +201,14 @@ async function main() {
       `i18n:check: WARN  ${extraction.warnings.length} catalog key(s) not yet referenced by a t() call`,
     );
   }
+
+  // State the denominator, don't just assert it (testing-guide T-14): a reader of this log can
+  // see how many keys the grammar gate actually read, rather than trusting a bare PASS.
+  console.log(
+    `i18n:check: grammar-linted ${seedRows.length} ui-labels.md row(s) and ` +
+      `${new Set(sources.flatMap((s) => flattenSource(s).map((e) => e.key))).size} catalog key(s) ` +
+      `(seed-row floor ${SEED_MIN_ROWS})`,
+  );
 
   if (failed > 0) {
     console.error(`i18n:check: ${failed} gate(s) failed (07-i18n §7.3)`);

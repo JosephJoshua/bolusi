@@ -18,8 +18,10 @@ import {
   checkIcuSubset,
   checkKeyGrammar,
   checkParity,
+  checkSeedKeyGrammar,
+  SEED_MIN_ROWS,
 } from '../scripts/gates.mjs';
-import { REPO_ROOT, seedFromDoc } from '../scripts/seed.mjs';
+import { REPO_ROOT, UI_LABELS_PATH, parseUiLabels, seedFromDoc } from '../scripts/seed.mjs';
 
 type Tree = Record<string, unknown>;
 
@@ -129,6 +131,56 @@ describe('key-grammar gate (07-i18n §3.1)', () => {
 
   it('passes the real seed', () => {
     expect(checkKeyGrammar(realSources())).toEqual([]);
+  });
+});
+
+describe('seed-doc key-grammar gate (07-i18n §3.1 over ai-docs/ui-labels.md)', () => {
+  /** Every row the real doc ships — the same input check.mjs feeds the gate. */
+  const realRows = () => parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
+
+  it('passes the real ui-labels.md seed', () => {
+    expect(checkSeedKeyGrammar(realRows())).toEqual([]);
+  });
+
+  it('reads the whole doc — the denominator is the doc, not a subset (T-14)', () => {
+    const rows = realRows();
+    // The gate's reach must be the doc's full row count, and that count must clear the floor.
+    // A parse that silently degrades to a handful of rows fails here rather than passing green.
+    expect(rows.length).toBeGreaterThanOrEqual(SEED_MIN_ROWS);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length); // no duplicate keys
+  });
+
+  it('fails loudly when the parse is starved instead of checking nothing (T-14, T-14b)', () => {
+    // The vacuity trap: zero rows means zero violations found, which must never read as PASS.
+    const errors = checkSeedKeyGrammar([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('parsed only 0 row(s)');
+  });
+
+  it('flags the exact 2-segment keys task 30 renamed, whatever their namespace', () => {
+    // Regression: these three shipped in the doc while every gate stayed green, because a
+    // parked-key list dropped them before they ever reached a catalog (task 30).
+    const errors = checkSeedKeyGrammar(
+      [{ key: 'auth.switchStore' }, { key: 'sync.pullToRefresh' }, { key: 'conflict.banner' }] as {
+        key: string;
+      }[],
+      0,
+    );
+    expect(errors).toHaveLength(3);
+    expect(errors.join('\n')).toContain('auth.switchStore');
+    expect(errors.join('\n')).toContain('sync.pullToRefresh');
+    expect(errors.join('\n')).toContain('conflict.banner');
+    for (const error of errors) expect(error).toContain('2 segment');
+  });
+
+  it('lints module-owned rows too — the catalogs gate never sees them', () => {
+    // `notes.*` rows are skipped by buildCatalogs (each module owns its catalog files, §3.3),
+    // so the catalog-side gate cannot check them. This gate must.
+    const bad = [{ key: 'notes.badKey' }] as { key: string }[];
+    expect(checkKeyGrammar([source('notes', 'id', { badKey: 'x' }, { isModule: true })])).toEqual([
+      expect.stringContaining('notes.badKey'),
+    ]);
+    expect(checkSeedKeyGrammar(bad, 0)).toEqual([expect.stringContaining("'notes.badKey'")]);
   });
 });
 

@@ -154,10 +154,12 @@ export const resources: SeededResources = {
         },
         action: {
           syncNow: 'Kirim Sekarang',
+          pullToRefresh: 'Tarik untuk memperbarui',
         },
       },
       conflict: {
         list: {
+          banner: '{count} data bentrok butuh keputusan',
           title: 'Data Bentrok',
         },
         status: {
@@ -359,10 +361,13 @@ export const resources: SeededResources = {
         },
         action: {
           syncNow: 'Sync Now',
+          pullToRefresh: 'Pull to refresh',
         },
       },
       conflict: {
         list: {
+          banner:
+            '{count, plural, one {# conflict needs a decision} other {# conflicts need a decision}}',
           title: 'Conflicts',
         },
         status: {
