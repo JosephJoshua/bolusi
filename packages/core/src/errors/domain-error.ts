@@ -28,6 +28,14 @@ export const DOMAIN_ERROR_CODES = [
 
 export type DomainErrorCode = (typeof DOMAIN_ERROR_CODES)[number];
 
+/** Membership set — derived FROM the registry above, so it can never disagree with it. */
+const DOMAIN_ERROR_CODE_SET: ReadonlySet<string> = new Set(DOMAIN_ERROR_CODES);
+
+/** Is `code` in the closed registry (04 §5.3)? */
+export function isDomainErrorCode(code: string): code is DomainErrorCode {
+  return DOMAIN_ERROR_CODE_SET.has(code);
+}
+
 /** Structured, machine-readable context — e.g. `{ machine, from, event }` for a bad transition. */
 export type DomainErrorDetails = Readonly<Record<string, unknown>>;
 
@@ -47,6 +55,20 @@ export class DomainError extends Error {
 
   constructor(code: DomainErrorCode, details?: DomainErrorDetails, message?: string) {
     super(message ?? (details ? `${code} ${JSON.stringify(details)}` : code));
+    // The closed set is enforced at RUNTIME as well as in the type (04 §5.3).
+    //
+    // The type alone stops the honest mistake; it does not stop a code arriving from outside the
+    // typechecker — a cast, a JS caller, a value crossing a package boundary. Such a code would
+    // sail through here and land in the UI as `t('core.errors.' + code)`, which resolves to
+    // `core.errors.UNEXPECTED` (07-i18n §4.2) — i.e. an unregistered code degrades into a
+    // plausible-looking generic error rather than a visible defect, and the 07-i18n §7.3
+    // error-code coverage gate would never see it, because the gate checks the REGISTRY against
+    // the catalog and this code is in neither. Throwing makes it loud at the source.
+    if (!isDomainErrorCode(code)) {
+      throw new RangeError(
+        `${JSON.stringify(String(code))} is not in the DomainError registry (04-module-contract §5.3). Adding a code changes 04 §5.3 first, then this registry, then its core.errors.<CODE> label row.`,
+      );
+    }
     this.code = code;
     if (details !== undefined) this.details = details;
   }
