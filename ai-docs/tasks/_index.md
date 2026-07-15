@@ -14,7 +14,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | done | 01 |
 | 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | done | 01 |
 | 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | done | 02, 03, 04 |
-| 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | in-progress | 02, 03, 05 |
+| 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | done | 02, 03, 05 |
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | done | 04, 06 |
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | done | 02, 04 |
 | 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | done | 06, 08, 09 |
@@ -49,6 +49,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | todo | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | todo | 05 |
 | 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | todo | 10 |
+| 41 | tenant-counter lock is taken AFTER the chain-head read it should protect (comment + 10-db §3 claim otherwise); latent, UNIQUE backstops it (from task 07 review) | todo | 07 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
