@@ -46,6 +46,18 @@ function reconstructWireOp(row: {
  * (a new row) and every revocation (a newly-non-null `revoked_at`) — precisely "bumped on any device
  * enrollment/revocation". Tenant-wide (all stores), scoped by the `forTenant` RLS predicate; the
  * client treats it as opaque (api/00 §10).
+ *
+ * ── WHAT ACTUALLY MAKES THIS SAFE: the DDL CHECK, not the terminality argument ─────────────────
+ *
+ * This counts `revoked_at IS NOT NULL` while `deviceSnapshot` below reports `status = 'revoked'` —
+ * TWO DIFFERENT COLUMNS. If they could ever disagree, a revocation would change the snapshot
+ * WITHOUT bumping the version, the client's echoed version would still match, and it would keep
+ * trusting a revoked device's signing key indefinitely. What forbids that divergence is the devices
+ * DDL constraint `CHECK (status = 'active' OR revoked_at IS NOT NULL)`
+ * (packages/db-server/migrations/0002_platform_directory.ts) — status `revoked` REQUIRES a non-null
+ * `revoked_at`, so every state this counter reports as revoked is exactly the set the snapshot
+ * reports as revoked. A future migration dropping that CHECK silently un-couples the two and
+ * re-opens the hole; cited here so the connection is not left to be rediscovered.
  */
 async function directoryVersion(db: TenantDb): Promise<number> {
   const row = await db
