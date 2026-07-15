@@ -35,6 +35,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      # 07-i18n §7.3 catalog gates: seed parity vs ui-labels.md, key grammar, collision,
+      # id/en parity, ICU restricted subset, error-code coverage, extraction, codegen staleness.
+      - run: pnpm i18n:check
 
   # Stage 3 — typecheck (tsc -b + mobile --noEmit).
   typecheck:
@@ -74,7 +77,8 @@ jobs:
           rm gitleaks.tgz
       - run: pnpm test
 
-  # Stage 6 — JCS + crypto vectors on the Hermes VM matching the pinned RN version.
+  # Stage 6 — JCS + crypto vectors AND the 07-i18n §5.4 i18n vectors on the Hermes VM matching
+  # the pinned RN version.
   # PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md).
   # Candidate paths verified at bootstrap (08 §7):
   #   (a) preferred: compile the standalone vector bundle with `hermesc` from the
@@ -83,11 +87,20 @@ jobs:
   #       the bytecode, so execution needs a built hermes CLI, or
   #   (b) guaranteed fallback: run the same suite inside the Android-emulator job.
   # Task 03 picks the mechanism and records it in 08 §5.6/§7.
+  #
+  # i18n vectors (task 22, release-blocking): entry point is
+  # packages/i18n/test/hermes-entry.ts — a runner-free module that prints a PASS/FAIL line per
+  # §5.4 vector and sets a non-zero exit status on mismatch, so it drops into whichever
+  # mechanism task 03 lands. It runs green on Node today (stage 4, packages/i18n
+  # test/vectors.test.ts); Hermes is UNVERIFIED because it ships only a subset of Intl.
+  # If the plural vector (`t('auth.pin.attemptsLeft', {count: 1})` → "1 try left") is the one
+  # that fails, apply the 07-i18n §2 contingency: add @formatjs/intl-pluralrules — and nothing
+  # else from FormatJS — then re-run and record the outcome in ai-docs/tasks/22-i18n.md.
   jcs-vectors-hermes:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "placeholder — Hermes vector lane lands with task 03 (see job comment for the verified candidate paths)"
+      - run: echo "placeholder — Hermes vector lane lands with task 03 (see job comment for the verified candidate paths and the task-22 i18n vector entry)"
 
   # Stage 7 — Ed25519 interop (noble sign→verify vs the @bolusi/test-support fixture set).
   # EVERY-PR PLACEHOLDER — wired by task 03 (ai-docs/tasks/03-crypto-canonical.md);
