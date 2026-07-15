@@ -141,8 +141,12 @@ describe('the icon whitelist is the only path to glyphs (design-system §7)', ()
   });
 });
 
-describe('the list primitive is the only collection surface (design-system §3.13)', () => {
-  test('only List.tsx imports FlatList — screens get virtualization for free or not at all', () => {
+describe('FlatList is contained to the List primitive within this package (design-system §3.13)', () => {
+  // Package-internal invariant only: `List` is the single place inside @bolusi/ui that touches
+  // FlatList, so the windowing config and the engine-swap seam live in one file. This does NOT
+  // police screens (they live in other packages) — that convention is task 24's screen import-
+  // boundary rule.
+  test('only List.tsx imports FlatList inside @bolusi/ui/src', () => {
     const importers = sources
       .filter(([file, source]) => !file.endsWith('List.tsx') && /\bFlatList\b/.test(source))
       .map(([file]) => file);

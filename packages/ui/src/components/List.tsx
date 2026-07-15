@@ -1,6 +1,8 @@
 /**
- * List (design-system §3.13) — the ONLY collection primitive. Screens never render a raw
- * `FlatList`, and never `.map()` rows.
+ * List (design-system §3.13) — the collection primitive. The CONVENTION is that screens render
+ * collections through this and never a raw `FlatList` / `.map()`; that convention is not yet
+ * lint-enforced (no screens exist to scope a rule against — task 24 adds the screen import-boundary
+ * rule). So this component makes the right path the easy one; it does not yet forbid the wrong one.
  *
  * TWO REASONS THIS COMPONENT EXISTS, both structural rather than cosmetic:
  *
@@ -8,10 +10,14 @@
  *    (testing-guide §4.1 `SEED-200K`) dies on the 2 GB target (§0). Owning the primitive here means
  *    the windowing config is written once and correctly, and — the part that matters in a year —
  *    the virtualization ENGINE is a one-file swap instead of a 25-screen rewrite.
- * 2. THE FOUR MANDATORY STATES ARE ENFORCED BY THE TYPE, NOT BY A REVIEWER'S MEMORY. §5 requires
+ * 2. THE FOUR MANDATORY STATES ARE FIRST-CLASS IN THE TYPE, NOT A REVIEWER'S MEMORY. §5 requires
  *    every screen to ship loading/empty/error/unauthorized. Here `state` is a discriminated union,
- *    so a screen that forgets `unauthorized` does not render an empty list — it fails to compile.
- *    §5 says a screen missing any of the four fails review; this makes it fail the build instead.
+ *    so what a screen CANNOT do is render items-or-empty while it means `unauthorized`, or pass a
+ *    partial state — that is the classic "render `[]` that reads as empty when the truth is denied"
+ *    bug (FR-1036), and this makes it a compile error. What the union does NOT do is force an
+ *    auth-unaware screen to grow an auth branch: a screen that only ever passes `ready`/`empty`
+ *    compiles fine. Making denial reach this component is the screen's job, enforced screen-side by
+ *    task 24's exhaustive-mapping pattern.
  *
  * ENGINE CHOICE (verified against current docs at implementation, per 08 §2.1):
  *   - `FlatList` (chosen). Already virtualized, zero new dependencies, and fixed-height rows +
