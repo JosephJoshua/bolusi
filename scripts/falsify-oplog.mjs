@@ -145,6 +145,35 @@ const only = process.argv.includes('--only')
   ? process.argv[process.argv.indexOf('--only') + 1]
   : undefined;
 
+// CRASH-SAFE RESTORE. This script deliberately writes broken code into the SHIPPED pipeline, so a
+// run that dies between the mutate and the restore leaves a defect on disk that looks like
+// authored source. That is not hypothetical: a timeout killed a run here and left
+// `anomaly-recording-disabled` in anomalies.ts. Anything holding a pending restore is registered
+// below and replayed on normal exit AND on the signals a CI/agent timeout actually sends.
+/** @type {Map<string,string>} */
+const pending = new Map();
+function restoreAll() {
+  for (const [file, original] of pending) {
+    try {
+      writeFileSync(file, original);
+    } catch {
+      // Best effort: a failed restore must not mask the original failure.
+    }
+  }
+  pending.clear();
+}
+process.on('exit', restoreAll);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    restoreAll();
+    process.exit(130);
+  });
+}
+process.on('uncaughtException', (error) => {
+  restoreAll();
+  throw error;
+});
+
 const results = [];
 for (const m of MUTATIONS) {
   if (only && m.name !== only) continue;
@@ -153,9 +182,11 @@ for (const m of MUTATIONS) {
     results.push({ name: m.name, verdict: 'ANCHOR-MISSING', detail: m.find.slice(0, 60) });
     continue;
   }
+  pending.set(m.file, original);
   writeFileSync(m.file, original.replace(m.find, m.replace));
   const { exit, out } = run(m.tests);
   writeFileSync(m.file, original); // restore ALWAYS
+  pending.delete(m.file);
   const failed = /Tests\s+\d+ failed/.test(out) || exit !== 0;
   results.push({
     name: m.name,
