@@ -115,8 +115,12 @@ both drivers: **PGlite → 10/10 passed, EXIT=0**; **real PG16.14 → 4 RED, EXI
 exists, and it is why the store's coverage could not have been left in the PGlite suite.
 
 **Denominator (T-14):** `createServerWatermarkStore` exports exactly **three** functions —
-`read`, `advanceServerSeq`, `advanceLocalSeq` — and the PG16 lane executes **3 of 3**, asserted by
-a test that reads the store's own key list rather than trusting the claim. Not zero.
+`read`, `advanceServerSeq`, `advanceLocalSeq` — and the PG16 lane executes **3 of 3**. Two distinct
+assertions, and review-47 was right to separate them: the DENOMINATOR test reads the store's own
+key list (`Object.keys(s).sort()`), so it catches a **fourth** function nobody runs — it asserts the
+*surface*, not execution. **Execution** is carried by the three sibling tests, and was proven by
+falsification rather than claimed: each went RED under the neuter. Residual (review-47 F2): delete
+the `advanceLocalSeq()` test and coverage silently drops to 2/3 while the denominator stays green.
 The hardcoded `advanceServerSeq(MODULE_ID, 3)` is gone: every contract case drives
 `engine.applyPulledOp`, so the watermark is an **output** of production `read()` +
 `highestContiguousServerSeq` + production `advanceServerSeq()`. A `CONTIGUITY` case (gap at
