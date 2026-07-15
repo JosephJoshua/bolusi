@@ -1,12 +1,11 @@
 {
-  "$comment": "SEC-META-01 pending allowlist: every security-guide SEC id without a shipped test MUST map to its owning task file (security-guide \u00a72.1.4). Entries are removed when the owning task ships the test; task 28 requires this file empty. The meta-test fails if a named task's Status is done.",
+  "$comment": "SEC-META-01 pending allowlist: every security-guide SEC id without a shipped test MUST map to its owning task file (security-guide §2.1.4-5). The owning task file MUST declare the id on its \"**SEC ids owned by THIS task:**\" marker line — a prose mention does not confer ownership, and a task naming an id only to disclaim it fails the gate. Entries are removed when the owning task ships a verbatim-id test title; task 28 requires this file empty. An id that is BOTH titled and listed here fails the gate: the row and the title cannot both be true.",
   "SEC-AUTH-09": "ai-docs/tasks/28-security-sweep.md",
   "SEC-AUTH-10": "ai-docs/tasks/27-device-gates.md",
-  "SEC-MEDIA-01": "ai-docs/tasks/18-media-client.md",
   "SEC-TENANT-04": "ai-docs/tasks/28-security-sweep.md",
   "SEC-RT-01": "ai-docs/tasks/20-realtime.md",
   "SEC-RT-02": "ai-docs/tasks/20-realtime.md",
-  "SEC-RT-03": "ai-docs/tasks/02-schemas.md",
+  "SEC-RT-03": "ai-docs/tasks/20-realtime.md",
   "SEC-RT-04": "ai-docs/tasks/20-realtime.md",
   "SEC-RT-05": "ai-docs/tasks/20-realtime.md",
   "SEC-SECRET-01": "ai-docs/tasks/28-security-sweep.md"

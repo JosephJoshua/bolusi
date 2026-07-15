@@ -45,6 +45,9 @@ Deliver the realtime channel of api/00 §12 end to end. Server side (`@bolusi/se
   - Fallback ladder: WS drop → retries at 5 s/15 s/60 s/300 s cap; exactly 3 consecutive WS failures → SSE with same backoff; SSE failing → polling-only with **no new timer created** (assert the 60 s periodic trigger from task 15 is untouched and no realtime-owned cadence exists); degraded → WS retry every 5 min; WS success → lower rung torn down, all counters reset.
   - FR-1146 equivalence: with the controller in `failed` state (both transports down), all api/01 §5 triggers still fire and the sync loop completes against a fake TransportPort; resulting `SyncState` is identical to a run with realtime healthy given the same op set. Realtime state never blocks or gates sync (assert no code path from controller state into loop gating).
 - **Named SEC tests (security-guide §9.2), titles embedding the ID verbatim:**
+
+**SEC ids owned by THIS task:** SEC-RT-01..05
+
   - `SEC-RT-01` — WS upgrade and SSE request with missing/invalid/revoked token → plain HTTP `401` (§7 envelope where a body exists), no socket/stream established; token never accepted via query string (a query-string token is ignored → `401`).
   - `SEC-RT-02` — open WS as device D; drive the revocation path (verifyToken now returns revoked + `hub.closeForDevice(D)`) → socket closed by server ≤ 5 s; reconnect → `401`. (Wiring from the real `/v1/devices/:id/revoke` handler is task 13; the hook + test live here.)
   - `SEC-RT-03` — WS/SSE legs: schema audit over every server code path that emits realtime messages — payloads validate against the frozen `{ "type": "sync.poke", "payload": {} }` schema; a fixture emission carrying any business value (amount, name, note body, entity data) fails the suite. Push leg → task 21.
