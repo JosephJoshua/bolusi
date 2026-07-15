@@ -24,7 +24,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | done | 03, 04, 09, 10, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | done | 07, 12, 13 |
-| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16, 46, 47 |
+| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | todo | 07, 08, 16, 46, 47, 48 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | todo | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
@@ -56,6 +56,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | todo | 14 |
 | 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | in-progress | 08 |
 | 47 | server watermark store has no production caller and no real-PG16 coverage — 3 gates blind to the same `Number()` (from task 16 review) | todo | 16 |
+| 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | todo | 46 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
