@@ -52,6 +52,7 @@ The `PinScreen.tsx:52` comment completes the trap: it tells the next reader the 
   - **Or wire it** — only with a stated reason why two client-side gates beat one, given 14's server-side gate already refuses. The bar is high; §2.8 is against you.
 - **Fix `PinScreen.tsx:52` either way.** It must name what actually gates `onSubmit` (`PinPad`'s `state='locked'` via `pinPadState`), or say nothing. A comment naming the wrong function is worse than no comment — that is this task's whole thesis.
 - **THE GUARD** (§2.11/T-14): after the move, break `pinPadState`'s `delayed` case → the ported tests go **RED**. Report the falsification ("broke X, saw Y fail, reverted"), not "tests pass."
+- `pnpm test`, `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
 - **Sweep the class** (T-12) — the valuable half. **What else is exported, tested, and uncalled?** But read the next section first: the orchestrator tried this with grep and it failed in a way you must not repeat.
 
 ## The orchestrator already tried the obvious sweep. It failed, and how it failed is this task's best evidence.
@@ -73,7 +74,6 @@ The other 109 are mostly noise anyway — the denominator is unsound in both dir
 **So the deliverable is a semantic tool, not a grep.** Use the TypeScript language service — `ts-morph`'s `findReferences`, or **`knip`**, which does exactly this job for a TS monorepo and already understands test-only exports and entry points. **Whatever you use, prove it on the known case first** (T-11/T-14): it must report `canAttempt` as unused. **A sweep that cannot see `canAttempt` is checking nothing** — and it will report a large, confident, useless number while doing it. Then state your denominator and what you excluded, and why.
 
 **Do not hand-classify 109 rows.** Get the tool right, re-derive the list, and expect it to be much shorter.
-- `pnpm test`, `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
 
 ## Note
 
