@@ -300,7 +300,7 @@ export interface TranslationResources {
       body: string;
     };
   };
-  permission: {};
+  permission: Record<never, never>;
   role: {
     main_owner: {
       name: string;

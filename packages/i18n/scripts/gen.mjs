@@ -62,6 +62,9 @@ function keysOf(tree) {
   return keys.sort();
 }
 
+/** Leaf emitter for the type side — identifies the interface pass in emitObject. */
+const EMIT_STRING = () => 'string';
+
 /**
  * @param {Record<string, unknown>} node
  * @param {number} depth
@@ -74,14 +77,28 @@ function emitObject(node, depth, leaf, terminator) {
   const lines = [];
   for (const [segment, value] of Object.entries(node)) {
     if (value !== null && typeof value === 'object') {
-      lines.push(`${pad}'${segment}': {`);
       const body = emitObject(
         /** @type {Record<string, unknown>} */ (value),
         depth + 1,
         leaf,
         terminator,
       );
-      if (body) lines.push(body);
+      if (body === '') {
+        // A namespace with no rows yet — `permission` is skeleton-only until the labels land
+        // with their registry PRs (ui-labels.md).
+        //
+        // `Record<never, never>` and not `Record<string, never>`: the latter carries an index
+        // signature, so `keyof` is `string` and i18next's key-path derivation recurses on
+        // `${string}.${string}...` until tsc gives up with TS2589. `Record<never, never>` has
+        // `keyof = never` — the same "no keys here" that a bare `{}` means, without tripping
+        // @typescript-eslint/no-empty-object-type ("{} allows any non-nullish value").
+        lines.push(
+          `${pad}'${segment}': ${leaf === EMIT_STRING ? 'Record<never, never>' : '{}'}${terminator}`,
+        );
+        continue;
+      }
+      lines.push(`${pad}'${segment}': {`);
+      lines.push(body);
       lines.push(`${pad}}${terminator}`);
     } else {
       lines.push(`${pad}'${segment}': ${leaf(String(value))}${terminator}`);
@@ -106,7 +123,7 @@ ${union};
 
 /** Nested shape of the merged catalog; fed to i18next's CustomTypeOptions in src/types.ts. */
 export interface TranslationResources {
-${emitObject(sourceTree, 1, () => 'string', ';')}
+${emitObject(sourceTree, 1, EMIT_STRING, ';')}
 }
 `;
 }
