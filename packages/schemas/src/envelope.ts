@@ -14,8 +14,17 @@ export type OpSource = z.infer<typeof zOpSource>;
 /**
  * Best-available location fix (05 §2.1; never blocks — PRD-009 FR-802).
  * Strict: part of the hashed core, so unknown keys reject. lat/lng/accuracyMeters
- * are finite doubles by nature (GPS), not money — hence z.float64(), which the
- * `bolusi/no-float-money` rule deliberately does not target.
+ * are finite doubles by nature (GPS), not money — hence z.float64(), which is also
+ * stricter than z.number() here: it rejects NaN/Infinity, so every admitted value
+ * stays JCS-serializable (05 §3).
+ *
+ * `bolusi/no-float-money` DOES flag z.float64() everywhere (08 §5.2); these three
+ * properties pass only via the rule's single explicit carve-out — allowlisted file
+ * (this one) AND allowlisted property name (lat/lng/accuracyMeters), wired in
+ * tooling/eslint/src/index.js. The carve-out is legitimate because location rides in
+ * the signed ENVELOPE, not the payload, and 05 §3's no-floats rule is scoped to
+ * payloads: the same `lat: z.float64()` in a module payload schema is still an error.
+ * Renaming any of these to a money-ish name re-arms the rule on this file.
  */
 export const zLocation = z.strictObject({
   lat: z.float64(),

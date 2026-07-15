@@ -6,6 +6,18 @@ import bolusi from './plugin/index.js';
 
 export { bolusi };
 
+// The ONE float-constructor carve-out in the repo (task 29; rule header + 08 §5.2):
+// envelope.ts's `zLocation`. Location rides in the signed ENVELOPE, not the payload, so
+// 05 §3's no-floats-in-payloads rule does not reach it; z.float64() is stricter than
+// z.number() there (rejects NaN/Infinity, keeping every admitted value JCS-serializable).
+// File AND property must both match, so this is not a blanket pass for either dimension.
+// Applied to both money blocks below: flat-config rule options REPLACE rather than merge,
+// so whichever block matches last must carry the carve-out.
+const LOCATION_FLOAT_CARVE_OUT = {
+  allowFloatFiles: ['packages/schemas/src/envelope.ts'],
+  allowFloatProps: ['lat', 'lng', 'accuracyMeters'],
+};
+
 export default tseslint.config(
   {
     name: 'bolusi/ignores',
@@ -121,7 +133,32 @@ export default tseslint.config(
     name: 'bolusi/money',
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {
-      'bolusi/no-float-money': ['error', { numericLiterals: false }],
+      'bolusi/no-float-money': ['error', { numericLiterals: false, ...LOCATION_FLOAT_CARVE_OUT }],
+      // no-float-money is syntactic: it recognises float ctors through a callee rooted at the
+      // zod namespace. Zod exports every ctor as a NAMED export too (`float64`, `number` are
+      // real, tree-shakeable functions in zod 4.4.3), so `import { float64 } from 'zod'` would
+      // call a float ctor the rule cannot see. Nothing but habit kept schema files on `z.*`.
+      // Make that convention TRUE rather than hoped: only `z` may be imported from zod here.
+      // Verified: this also blocks `import * as zod from 'zod'`. It does NOT block
+      // `import { z as zod }` (the imported name is `z`, which is allowed) — that alias is
+      // closed inside the rule, which resolves zod's local binding name.
+      // Safe to set here: no other config block sets no-restricted-imports, so this replaces
+      // nothing (flat-config rule options REPLACE, they do not merge). Deliberately NOT
+      // no-restricted-syntax: bolusi/no-direct-intl already owns that rule across these files
+      // and setting it again here would silently disable the Intl guard for schemas/modules.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'zod',
+              allowImportNames: ['z'],
+              message:
+                'Import only `z` from zod in schema code — `import { float64 } from "zod"` bypasses bolusi/no-float-money (08 §5.2). Use z.int() / z.number().int().',
+            },
+          ],
+        },
+      ],
     },
   },
   {
@@ -136,7 +173,7 @@ export default tseslint.config(
       'packages/modules/src/**/{schema,schemas,ops,operations,commands,queries}.ts',
     ],
     rules: {
-      'bolusi/no-float-money': ['error', { numericLiterals: true }],
+      'bolusi/no-float-money': ['error', { numericLiterals: true, ...LOCATION_FLOAT_CARVE_OUT }],
     },
   },
   {
