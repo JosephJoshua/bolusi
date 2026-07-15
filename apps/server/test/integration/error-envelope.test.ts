@@ -11,6 +11,7 @@ import { WIRE_CAP_SYNC_PUSH } from '../../src/deps.js';
 import { enrollDevice, makeTestApp } from '../helpers/app.js';
 import { makeFixture } from '../helpers/fixtures.js';
 import { gzipJson } from '../helpers/gzip.js';
+import { makeSyncHarness } from './sync/helpers.js';
 
 const PUSH = 'http://srv.test/v1/sync/push';
 const DEVICES = 'http://srv.test/v1/devices';
@@ -178,35 +179,45 @@ describe('validation errors (api/00 §7.1)', () => {
 });
 
 describe('2xx bodies never contain error', () => {
-  test('a valid identity push → 200 stub with no error key', async () => {
-    const h = makeTestApp();
-    const { auth, deviceId } = deviceAuth(h, 'env-200a');
-    const res = await h.app.request(
-      new Request(PUSH, {
-        method: 'POST',
-        headers: { Authorization: auth, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId, ops: [] }),
-      }),
-    );
-    expect(res.status).toBe(200);
-    expect(await res.json()).not.toHaveProperty('error');
+  // The sync push handler is a real DB-backed handler now (task 16), so an empty (valid) push needs
+  // a migrated PGlite DB + a seeded device; it accepts nothing → 200 with no error key.
+  test('a valid identity push → 200 with no error key', async () => {
+    const h = await makeSyncHarness();
+    try {
+      const dev = await h.seedDevice(200);
+      const res = await h.app.request(
+        new Request(PUSH, {
+          method: 'POST',
+          headers: { Authorization: dev.auth, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId: dev.world.deviceId, ops: [] }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).not.toHaveProperty('error');
+    } finally {
+      await h.close();
+    }
   });
 
-  test('a valid GZIP push → 200 stub with no error key (decompressed, validated, handled)', async () => {
-    const h = makeTestApp();
-    const { auth, deviceId } = deviceAuth(h, 'env-200b');
-    const res = await h.app.request(
-      new Request(PUSH, {
-        method: 'POST',
-        headers: {
-          Authorization: auth,
-          'Content-Type': 'application/json',
-          'Content-Encoding': 'gzip',
-        },
-        body: gzipJson({ deviceId, ops: [] }),
-      }),
-    );
-    expect(res.status).toBe(200);
-    expect(await res.json()).not.toHaveProperty('error');
+  test('a valid GZIP push → 200 with no error key (decompressed, validated, handled)', async () => {
+    const h = await makeSyncHarness();
+    try {
+      const dev = await h.seedDevice(201);
+      const res = await h.app.request(
+        new Request(PUSH, {
+          method: 'POST',
+          headers: {
+            Authorization: dev.auth,
+            'Content-Type': 'application/json',
+            'Content-Encoding': 'gzip',
+          },
+          body: gzipJson({ deviceId: dev.world.deviceId, ops: [] }),
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).not.toHaveProperty('error');
+    } finally {
+      await h.close();
+    }
   });
 });

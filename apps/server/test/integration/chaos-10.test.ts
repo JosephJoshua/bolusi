@@ -10,6 +10,7 @@ import { WIRE_CAP_SYNC_PUSH } from '../../src/deps.js';
 import { enrollDevice, makeTestApp, type TestHarness } from '../helpers/app.js';
 import { makeFixture } from '../helpers/fixtures.js';
 import { gzipBomb, gzipJson, truncatedGzip } from '../helpers/gzip.js';
+import { makeSyncHarness } from './sync/helpers.js';
 
 const PUSH = 'http://srv.test/v1/sync/push';
 
@@ -80,39 +81,55 @@ describe('CHAOS-10 gzip bomb + malformed gzip on push', () => {
     expect(h.stubCalls).not.toContain('sync.push');
   });
 
+  // G5 is a VALID push, so it reaches the real (task-16) pipeline and needs a migrated DB + a
+  // seeded device — makeSyncHarness. The 200 (not a stub) proves the whole chain + pipeline ran.
   test('G5 valid gzip within both caps → 200, and an immediate re-run also succeeds (survival)', async () => {
-    const { h, auth, deviceId } = harnessWithDevice('g5');
-    const valid = gzipJson({ deviceId, ops: [] });
+    const h = await makeSyncHarness();
+    try {
+      const dev = await h.seedDevice(2005);
+      const deviceId = dev.world.deviceId;
+      const first = await h.app.request(bodyReq(gzipJson({ deviceId, ops: [] }), dev.auth, true));
+      expect(first.status).toBe(200);
+      expect(h.stubCalls).toContain('sync.push');
 
-    const first = await h.app.request(bodyReq(valid, auth, true));
-    expect(first.status).toBe(200);
-    expect(h.stubCalls).toContain('sync.push');
-
-    // Server survives a prior rejection storm: re-run the valid push immediately.
-    const second = await h.app.request(bodyReq(gzipJson({ deviceId, ops: [] }), auth, true));
-    expect(second.status).toBe(200);
-    expect(h.stubCalls.filter((k) => k === 'sync.push')).toHaveLength(2);
+      // Server survives a prior rejection storm: re-run the valid push immediately.
+      const second = await h.app.request(bodyReq(gzipJson({ deviceId, ops: [] }), dev.auth, true));
+      expect(second.status).toBe(200);
+      expect(h.stubCalls.filter((k) => k === 'sync.push')).toHaveLength(2);
+    } finally {
+      await h.close();
+    }
   });
 
   test('G1–G4 rejected then G5 succeeds on the SAME server instance (survival across the matrix)', async () => {
-    const { h, auth, deviceId } = harnessWithDevice('gmatrix');
-    // G1
-    expect((await h.app.request(bodyReq(gzipBomb(50 * 1024 * 1024), auth, true))).status).toBe(413);
-    // G2
-    expect(
-      (await h.app.request(bodyReq(truncatedGzip({ deviceId, ops: [] }), auth, true))).status,
-    ).toBe(400);
-    // G3
-    expect((await h.app.request(bodyReq(Buffer.from('garbage'), auth, true))).status).toBe(400);
-    // G4
-    expect(
-      (await h.app.request(bodyReq(Buffer.alloc(WIRE_CAP_SYNC_PUSH + 512, 1), auth, true))).status,
-    ).toBe(413);
-    // No op processed by any rejection.
-    expect(h.stubCalls).not.toContain('sync.push');
-    // G5 — the server still serves a valid push.
-    const g5 = await h.app.request(bodyReq(gzipJson({ deviceId, ops: [] }), auth, true));
-    expect(g5.status).toBe(200);
-    expect(h.stubCalls).toContain('sync.push');
+    const h = await makeSyncHarness();
+    try {
+      const dev = await h.seedDevice(2099);
+      const { auth } = dev;
+      const deviceId = dev.world.deviceId;
+      // G1
+      expect((await h.app.request(bodyReq(gzipBomb(50 * 1024 * 1024), auth, true))).status).toBe(
+        413,
+      );
+      // G2
+      expect(
+        (await h.app.request(bodyReq(truncatedGzip({ deviceId, ops: [] }), auth, true))).status,
+      ).toBe(400);
+      // G3
+      expect((await h.app.request(bodyReq(Buffer.from('garbage'), auth, true))).status).toBe(400);
+      // G4
+      expect(
+        (await h.app.request(bodyReq(Buffer.alloc(WIRE_CAP_SYNC_PUSH + 512, 1), auth, true)))
+          .status,
+      ).toBe(413);
+      // No op processed by any rejection.
+      expect(h.stubCalls).not.toContain('sync.push');
+      // G5 — the server still serves a valid push.
+      const g5 = await h.app.request(bodyReq(gzipJson({ deviceId, ops: [] }), auth, true));
+      expect(g5.status).toBe(200);
+      expect(h.stubCalls).toContain('sync.push');
+    } finally {
+      await h.close();
+    }
   });
 });

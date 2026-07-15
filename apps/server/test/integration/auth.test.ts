@@ -6,13 +6,16 @@ import { readError } from '../helpers/http.js';
 
 import { enrollDevice, makeTestApp } from '../helpers/app.js';
 import { makeFixture } from '../helpers/fixtures.js';
+import type { AccessLogRecord } from '../../src/middleware/access-log.js';
+import { makeSyncHarness } from './sync/helpers.js';
 
 const DEVICES = 'http://srv.test/v1/devices';
 const LOGIN = 'http://srv.test/v1/auth/login';
 // task 13 made /v1/devices and /v1/tenant/settings real handlers (they now need a DB). These
-// bearerAuth/context probes are middleware-level, so they were repointed at the STILL-stub
-// /v1/sync/push route (device- and control-token accepting, no DB, still calls onStub) — the
-// middleware behaviour under test is identical, and the transport probes stay DB-free.
+// bearerAuth/context probes are middleware-level, so they were repointed at /v1/sync/push (device-
+// and control-token accepting) — the middleware behaviour under test is identical. The DB-free
+// probes push an empty batch (validated + logged before the pipeline touches the DB); the one leg
+// that must reach a 200 (access-log content) runs over a real DB via makeSyncHarness.
 const SYNC_PUSH = 'http://srv.test/v1/sync/push';
 function pushBody(deviceId: string): string {
   return JSON.stringify({ deviceId, ops: [] });
@@ -78,25 +81,25 @@ describe('bearerAuth 401 codes', () => {
   });
 
   test('valid device token authenticates and sets device context (seen by the access log)', async () => {
-    const h = makeTestApp();
-    const fx = makeFixture('valid-dev');
-    const auth = enrollDevice(h, {
-      deviceId: fx.deviceId,
-      tenantId: fx.tenantId,
-      storeId: fx.storeId,
-      token: fx.deviceToken,
-    });
-    const res = await h.app.request(SYNC_PUSH, {
-      method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: pushBody(fx.deviceId),
-    });
-    expect(res.status).toBe(200);
-    // The access log's deviceId is read from c.get('device') — its presence proves context was set.
-    expect(h.accessLogs.at(-1)?.deviceId).toBe(fx.deviceId);
+    // The sync push handler is real + DB-backed now (task 16); an empty (valid) push over a seeded
+    // device → 200, and the access log's deviceId is read from c.get('device') set by bearerAuth.
+    const h = await makeSyncHarness();
+    try {
+      const dev = await h.seedDevice(1183);
+      const res = await h.app.request(SYNC_PUSH, {
+        method: 'POST',
+        headers: { Authorization: dev.auth, 'Content-Type': 'application/json' },
+        body: pushBody(dev.world.deviceId),
+      });
+      expect(res.status).toBe(200);
+      // The access log's deviceId is read from c.get('device') — its presence proves context was set.
+      expect(h.accessLogs.at(-1)?.deviceId).toBe(dev.world.deviceId);
+    } finally {
+      await h.close();
+    }
   });
 
-  test('valid control-session token is accepted (context set; no device in the access log)', async () => {
+  test('valid control-session token authenticates (not 401) and carries no device context', async () => {
     const h = makeTestApp();
     const fx = makeFixture('valid-ctrl');
     h.tokenStore.add(fx.controlToken, {
@@ -105,14 +108,17 @@ describe('bearerAuth 401 codes', () => {
       tenantId: fx.tenantId,
       expiresAt: h.clock.now() + 60_000,
     });
-    // The sync stub does not reject a control session (token-kind gating is task 16's) — so it is
-    // a DB-free probe that a control session authenticates and sets controlSession context.
+    // Sync push is DEVICE-only (task 16). A control session PASSES bearerAuth (controlSession
+    // context set — otherwise verifyToken would 401 AUTH_TOKEN_INVALID), so it is NOT rejected at
+    // the auth layer; the device-only handler then rejects it (no device to push as). The point
+    // under test is the auth outcome + that no device context is set (the access log omits deviceId).
     const res = await h.app.request(SYNC_PUSH, {
       method: 'POST',
       headers: { Authorization: `Bearer ${fx.controlToken}`, 'Content-Type': 'application/json' },
       body: pushBody(fx.deviceId),
     });
-    expect(res.status).toBe(200); // accepted → controlSession context was set (else verifyToken throws)
+    expect(res.status).not.toBe(401); // authenticated past bearerAuth
+    expect((await readError(res)).error.code).not.toBe('AUTH_TOKEN_INVALID');
     // A control-session request carries no device, so the access log omits deviceId.
     expect(h.accessLogs.at(-1)?.deviceId).toBeUndefined();
   });
@@ -147,31 +153,31 @@ describe('login exemption and token confidentiality', () => {
   });
 
   test('access-log lines carry code+path+requestId+deviceId and never the token or Authorization', async () => {
-    const h = makeTestApp();
-    const fx = makeFixture('logscan');
-    const auth = enrollDevice(h, {
-      deviceId: fx.deviceId,
-      tenantId: fx.tenantId,
-      storeId: fx.storeId,
-      token: fx.deviceToken,
-    });
-    await h.app.request(SYNC_PUSH, {
-      method: 'POST',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: pushBody(fx.deviceId),
-    });
-    const record = h.accessLogs.at(-1);
-    expect(record).toBeDefined();
-    expect(record).toMatchObject({
-      method: 'POST',
-      path: '/v1/sync/push',
-      status: 200,
-      deviceId: fx.deviceId,
-    });
-    expect(typeof record?.requestId).toBe('string');
-    // The serialized record must contain no token material and no Authorization key.
-    const serialized = JSON.stringify(record);
-    expect(serialized).not.toContain(fx.deviceToken);
-    expect(serialized.toLowerCase()).not.toContain('authorization');
+    // A successful sync push (real DB, seeded device) → 200 logged with the device context; the
+    // record must never carry token material (the bdt_ prefix) or the Authorization header.
+    const h = await makeSyncHarness();
+    try {
+      const dev = await h.seedDevice(1176);
+      await h.app.request(SYNC_PUSH, {
+        method: 'POST',
+        headers: { Authorization: dev.auth, 'Content-Type': 'application/json' },
+        body: pushBody(dev.world.deviceId),
+      });
+      const record: AccessLogRecord | undefined = h.accessLogs.at(-1);
+      expect(record).toBeDefined();
+      expect(record).toMatchObject({
+        method: 'POST',
+        path: '/v1/sync/push',
+        status: 200,
+        deviceId: dev.world.deviceId,
+      });
+      expect(typeof record?.requestId).toBe('string');
+      // The serialized record must contain no token material and no Authorization key.
+      const serialized = JSON.stringify(record);
+      expect(serialized).not.toContain('bdt_'); // no device-token material
+      expect(serialized.toLowerCase()).not.toContain('authorization');
+    } finally {
+      await h.close();
+    }
   });
 });
