@@ -1,4 +1,4 @@
-# TASK 49 — the pull wire carries no per-op `serverSeq`; the client cannot store the value 10-db §9.2 says it stores
+# TASK 51 — the pull wire carries no per-op `serverSeq`; the client cannot store the value 10-db §9.2 says it stores
 
 **Status:** todo
 **Priority:** **MEDIUM** — not a live bug (v0's client-side numbering is self-consistent, see below), but a spec/wire divergence that becomes a real one the moment anything treats client `operations.server_seq` as the server's value, or a tenant grows a second store. Filed by task 15 rather than resolved there: the fix touches `@bolusi/schemas` and `apps/server`, both outside task 15's fence.
