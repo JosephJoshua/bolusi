@@ -43,6 +43,17 @@ function findHermesc() {
 
 mkdirSync(OUT_DIR, { recursive: true });
 
+// --- 0. Lock 1 for the Hermes entry (08 §3.4) ---------------------------------------
+// runner.ts runs on Hermes but lives under scripts/, which no workspace tsconfig covers.
+// Its own project pins `types: []`, so a stray Node/DOM global fails HERE rather than
+// surfacing as a runtime error on the VM. (Raised for task 03 in ai-docs/tasks/22-i18n.md.)
+console.log('[stage6] typechecking runner.ts under the platform-free lock (types: [])...');
+execFileSync(
+  require.resolve('typescript/bin/tsc', { paths: [REPO_ROOT] }),
+  ['-p', join(HERE, 'tsconfig.json')],
+  { stdio: 'inherit' },
+);
+
 // --- 1. Bundle ---------------------------------------------------------------------
 const bundlePath = join(OUT_DIR, 'jcs-vectors.js');
 console.log('[stage6] bundling runner.ts (standalone, Hermes-safe)...');

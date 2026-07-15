@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Lock 1 (08 §3.4 tsconfig lock) for the Hermes vector entry.
+  //
+  // `runner.ts` EXECUTES on Hermes, so it must be platform-free — the invariant is
+  // "runs on Hermes => platform-free", not "shipped => platform-free". It lives under
+  // scripts/, which no workspace tsconfig covers, so without this project it would not
+  // be typechecked at all and could pick up a Node global unnoticed.
+  //
+  // `types: []` + `lib: ["ES2022"]` come from base.json: no DOM, no Node, no RN ambient
+  // types can even resolve here. `pnpm test:jcs-hermes` runs this project before
+  // bundling, so stage 6 is the gate.
+  "extends": "@bolusi/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The golden vector file is imported (and inlined by esbuild) — Hermes has no fs.
+    "resolveJsonModule": true
+  },
+  "include": ["runner.ts"]
+}

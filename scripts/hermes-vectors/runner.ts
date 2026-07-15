@@ -25,12 +25,18 @@ import {
   propertySortingVector,
 } from '../../packages/test-support/src/crypto/vectors.js';
 
-/** Hermes' CLI has `print` and no `console`; Node has `console` and no `print`. */
+// Output is the ONE host capability this runner needs, and the two runtimes disagree on
+// it: the Hermes CLI exposes `print` and no `console`; Node exposes `console` and no
+// `print`. Both are declared explicitly rather than pulled in from `lib`/`@types/node`,
+// because this file compiles under `types: []` (tsconfig.json here) — the same
+// platform-free lock the shipped Hermes code obeys. `typeof` on an undeclared
+// identifier is safe in JS, so the guards below cannot throw on either runtime.
 declare const print: ((message: string) => void) | undefined;
+declare const console: { log: (message: string) => void } | undefined;
 
 function emit(message: string): void {
   if (typeof print === 'function') print(message);
-  else console.log(message);
+  else if (typeof console !== 'undefined') console.log(message);
 }
 
 const failures: string[] = [];
