@@ -71,6 +71,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | in-progress | — |
 | 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | in-progress | 31 |
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | todo | 55 |
+| 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
