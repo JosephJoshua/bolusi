@@ -30,6 +30,26 @@ tester.run('boundaries', rule, {
       code: `import { opEnvelopeSchema } from '@bolusi/schemas';`,
       filename: '/repo/packages/core/src/oplog/append.ts',
     },
+    // core → canonicalize: the JCS wrapper is its only importer (08 §3.3)
+    {
+      code: `import canonicalize from 'canonicalize';`,
+      filename: '/repo/packages/core/src/crypto/jcs.ts',
+    },
+    // noble is allowed exactly where the matrix grants it (08 §3.3): test-support…
+    {
+      code: `import { ed25519 } from '@noble/curves/ed25519.js';`,
+      filename: '/repo/packages/test-support/src/crypto/noble-port.ts',
+    },
+    // …the harness…
+    {
+      code: `import { sha256 } from '@noble/hashes/sha2.js';`,
+      filename: '/repo/packages/harness/src/device.ts',
+    },
+    // …and the server's own adapter.
+    {
+      code: `import { ed25519 } from '@noble/curves/ed25519.js';`,
+      filename: '/repo/apps/server/src/crypto.ts',
+    },
     // only apps/mobile may import */screens
     {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
@@ -91,6 +111,17 @@ tester.run('boundaries', rule, {
     {
       code: `import { Hono } from 'hono';`,
       filename: '/repo/packages/schemas/src/envelope.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // core must BIND a crypto provider through CryptoPort, never import one (08 §3.3/§2.6)
+    {
+      code: `import { ed25519 } from '@noble/curves/ed25519.js';`,
+      filename: '/repo/packages/core/src/crypto/signed-core.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { sha256 } from '@noble/hashes/sha2.js';`,
+      filename: '/repo/packages/modules/src/notes/ops.ts',
       errors: [{ messageId: 'platformFree' }],
     },
     // pg outside db-server → driver lock

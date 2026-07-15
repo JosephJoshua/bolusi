@@ -8,6 +8,8 @@
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
 //   5. nothing imports @bolusi/mobile
 //   6. §3.4 platform-free deny prefixes for core/schemas/i18n/modules-manifest
+//      (incl. @noble/* — crypto providers are injected via CryptoPort, never imported;
+//      added by task 03, the task that introduced noble to the repo)
 //   7. forTenant-only / no-raw-db-handle lock: no deep imports into @bolusi/db-server (FR-1039)
 // NOT YET IMPLEMENTED: the full §3.3 POSITIVE allow-matrix ("anything not listed is
 // forbidden" — e.g. schemas importing @bolusi/core would pass today). Owner: task 28
@@ -45,6 +47,11 @@ const PLATFORM_FORBIDDEN = [
   /^@hono\//,
   /^ws$/,
   /^@op-engineering\//,
+  // Crypto providers are BOUND, never imported, by platform-free packages: core declares
+  // CryptoPort and test-support/harness/apps-server bind noble, apps/mobile binds
+  // quick-crypto (08 §3.3 matrix; D8). noble in core would also be pure-JS crypto on a
+  // Hermes hot path — 100x+ too slow, forbidden outright by 08 §2.6.
+  /^@noble\//,
 ];
 
 function workspaceOf(filename) {
@@ -71,7 +78,7 @@ export default {
         "'{{source}}': @bolusi/server may be value-imported only by @bolusi/harness; the sole app→app edge is a type-only import of '@bolusi/server/client' (08-stack-and-repo §4.3).",
       appImport: "'{{source}}': nothing imports the mobile app (08-stack-and-repo §3.3).",
       platformFree:
-        "'{{source}}' is platform-bound; {{workspace}} is platform-free — no node:*, react-native*, expo*, pg, hono*, ws, @op-engineering/* (08-stack-and-repo §3.4).",
+        "'{{source}}' is platform-bound; {{workspace}} is platform-free — no node:*, react-native*, expo*, pg, hono*, ws, @op-engineering/*, @noble/* (08-stack-and-repo §3.4). Crypto providers are injected via CryptoPort, never imported (§3.3, D8).",
       dbServerDeepImport:
         "'{{source}}': deep imports into @bolusi/db-server are forbidden — forTenant() on the public entry is the ONLY way to query tenant tables; the raw db handle is not exported (FR-1039, 08-stack-and-repo §3.2).",
     },
