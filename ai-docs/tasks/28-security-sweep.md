@@ -1,7 +1,7 @@
 # TASK 28 — security-sweep (SEC inventory, cross-surface adversarial run, release gate)
 
 **Status:** todo
-**Depends on:** 13, 14, 16, 17, 19, 20, 21, 25, 26
+**Depends on:** 13, 14, 16, 17, 19, 20, 21, 25, 26, 43
 
 ## Goal
 
@@ -36,6 +36,11 @@ Final cross-surface security verification per CLAUDE.md §2.5 and the security-g
   - Parses `security-guide.md` for `SEC-[A-Z]+-[0-9]+`; asserts the parsed set equals the §12 roll-up exactly (OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–07 · MEDIA 01–06 · TENANT 01–05 · RT 01–05 · SECRET 01–02 · META 01 = **56 ids**) — doc/roll-up drift fails the sweep.
   - Every id has ≥1 test title embedding it verbatim (security-guide §2.1.3); the `packages/test-support` pending allowlist is **empty**.
   - **Passes, not presence:** the sweep runs the owning suites (`pnpm test`, `test:server`, `test:rls`, `chaos`, harness security suites) with a JSON reporter and asserts every SEC-titled test's state is `passed`. Negative control: a fixture SEC-titled test forced to fail (or skip) makes the inventory fail — proves status is checked, not grep-existence.
+- **SEC-AUTH-09 ships in THIS task** (ruling 2026-07-15 — it was orphaned; see the note at the bottom). Verbatim-id title, before review-wave. security-guide §165 gives it **three legs**, and they do not live in one place — that is why no single surface task could own it:
+  1. **Verifiers exist only inside the SQLCipher DB** — "scan app storage in the test harness for salt/verifier bytes". **Needs REAL SQLCipher**, which only the emulator/device lane has (task 27a attempts SEC-DEV-06's L6 leg there; CI has no SQLCipher at all — better-sqlite3 ships none and op-sqlite is JSI). **Coordinate with 27a**: either this leg runs in 27a's lane and reports back, or it is recorded `UNPROVEN` here with the reason — never asserted against a fake. (D12's asymmetry applies: this is a *correctness* claim — is the byte on disk ciphertext, yes/no — so an emulator CAN settle it, unlike the timing claims.)
+  2. **No pushed op payload contains verifier material** — "scan payload bytes across a full pin change/reset cycle". This is the cross-surface leg and it is squarely yours: drive a real pin change + reset through the command layer, capture every pushed op, and scan the raw bytes. Task 14 proved the *client* never puts verifier material in a payload; this proves it end-to-end over the wire (D11: PIN hashes never enter the op log).
+  3. **Comparison path is constant-time** — statistical timing test on equal-length inputs.
+  Note the trap in leg 2 (T-14b): a payload scan that finds nothing proves nothing unless you first assert the cycle actually **produced** ops and that your scanner **would** find a planted verifier byte. Plant one, watch the scan go red, remove it.
 - **SEC-TENANT-04 ships in THIS task** (security-guide §8.2; deferred here by tasks 05/12), title embedding the id verbatim, before review-wave (CLAUDE.md §2.5):
   - Walker enumerates **every registered route** on the composed Hono app; a route with no probe mapping **fails the sweep** (unknown ≠ skipped — future endpoints must register probes).
   - With tenant-A credentials against tenant-B resource ids → `404 NOT_FOUND` on every route; same-tenant unassigned-store scope → `403 PERMISSION_DENIED`; unauthorized list scopes → `403`, never silently-filtered `200 []`. **Any `200` — including empty-200 — fails** (security-guide §2.2).
@@ -50,3 +55,13 @@ Final cross-surface security verification per CLAUDE.md §2.5 and the security-g
 - **Zero cross-tenant leaks — the exit bar:** SEC-TENANT-04 walk, RLS re-enumeration, SEC-SYNC-09 (pull-scope), SEC-RT-04 (poke fan-out), and SEC-MEDIA-03 all green **in the same sweep run** — one command, one report.
 - **CHAOS-\*: none belong here.** The CHAOS catalog is task 26's (correctness-under-disorder); this sweep is correctness-under-malice (security-guide §12). Both gate v0 exit (D4) — this task wires only the SEC half.
 - **Lint/CI gates:** `ci.yml` release-gate stage runs `pnpm sec:sweep` at merge gate; SEC-META-01 green with empty allowlist; no new lint/boundary violations (harness imports only per 08 §3.3: `@bolusi/server` in-process test-only edge). Findings discipline verified by the reviewer: any red probe during development produced a task file + `_index.md` row, not an in-task patch to a product surface.
+
+## Note — the SEC-AUTH-09 ruling (orchestrator, 2026-07-15), and why task 43 is now a dependency
+
+**SEC-AUTH-09 was orphaned.** The allowlist pointed it at task 14 (auth-client), whose file disclaims it and which structurally cannot ship it — leg 1 needs real SQLCipher and leg 2 needs a full push cycle, neither of which exists inside task 14's surface. Task 26 explicitly disclaims **all** SEC ids ("the harness covers correctness-under-disorder"). So no task owned it, and the row would have detonated the moment task 14 flipped to `done` (proven: `EXIT=1`, *"task is done but the test never shipped"*).
+
+**Ruling: it lands here**, on the same principle that already gives you SEC-TENANT-04 — *this is the task that owns the ids no single surface can prove*, and whose literal job is to drive the pending-ID allowlist to empty. Its three legs are spelled out in Acceptance above; leg 1 coordinates with 27a (the only lane with real SQLCipher) or is recorded `UNPROVEN` with its reason — never asserted against a fake.
+
+**Task 43 became a dependency because of a line already in this file.** Acceptance requires that every dangerous-permission denial asserts *"a denial operation logged (02 §7, FR-1045) — never an empty-200."* That audit trail is currently **write-only**: the ops are emitted (tasks 09/10) and the projection tables exist (task 04, `10-db §549+`), but **no appliers fold one into the other and no task owned them** until task 43 was filed. A release gate that asserts an audit trail must be able to read it back.
+
+Worth carrying into the sweep's mindset: the three orphans found this session (the permission registry, the `@bolusi/schemas` auth DTOs, and the auth appliers) all failed by being **absent rather than broken** — no error, no red test, just a join that was never made. Your inventory parses the security-guide for ids and cross-checks them against *shipped test titles*, which is exactly the shape that catches absence. Point it at everything.
