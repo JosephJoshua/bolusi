@@ -36,3 +36,6 @@ export {
 // Driver-conformance suite (task 04) — identical statement set against better-sqlite3 in
 // CI and op-sqlite on device (testing-guide §2.3).
 export * from './driver-conformance/index.js';
+
+// Adversarial op builders for the server push-validation surface (task 07; 05 §8–9).
+export * from './oplog-fixtures/index.js';
