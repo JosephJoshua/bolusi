@@ -41,6 +41,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | todo | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | todo | 12 |
+| 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
