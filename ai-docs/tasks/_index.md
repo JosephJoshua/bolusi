@@ -39,7 +39,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | done | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
-| 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | in-progress | 03 |
+| 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | done | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
@@ -62,6 +62,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 51 | pull wire carries no per-op `serverSeq` — 10-db §9.2 says the client stores it, the wire structurally cannot carry it; client uses a local gapless counter (needs a ruling) (from task 15) | todo | 02, 15, 16 |
 | 52 | 8 of 12 live invariants have no owner/test in a section titled "Invariants (testable, numbered)"; state FR ids are provenance (D15) (from QA sweep) | todo | 31 |
 | 53 | `SyncStatus` declared 3× (core's is avoidable, ui's is boundary-forced); seams are `string` so the compiler finds zero (from inverse enum sweep) | todo | 15 |
+| 54 | **SEC-AUTH-06/11 server push-rejection legs are unclaimed and INVISIBLE** — a "client arm" title retired the whole id; guide §162/§167 require them (from task 31) | todo | 31 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
