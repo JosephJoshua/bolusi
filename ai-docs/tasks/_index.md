@@ -34,7 +34,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | todo | 14, 22, 23 |
 | 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
-| 27 | device-gates (on-device perf: seed-200k cold start, rebuild, KDF + write benchmarks) | todo | 24, 25, 26 |
+| 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26 |
+| 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput) | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | todo | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | todo | 22 |
@@ -42,4 +43,5 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
-**Exit (D4):** 26 (harness green incl. every CHAOS scenario) + 25 on a physical 2GB Android via 27, plus 28 clean.
+**Exit (D4), revised by D12 (2026-07-15 — no physical device available):** 26 (harness green incl. every CHAOS scenario) + 25 + 27a + 28 clean.
+**The D4 device clause is DEFERRED, NOT SATISFIED.** v0 "done" explicitly excludes three unproven claims, all held by blocked task 27b: argon2id p95 <300ms (so **D8's KDF parameter choice is undecided** — the default ships unvalidated and the real device may force the documented floor), op-sqlite write throughput (so **D6's whole rationale for choosing it over expo-sqlite is unvalidated** — the swap-target wrapper is load-bearing), and SQLCipher at-rest on real hardware. See `decisions/2026-07-15-no-device-v0-exit.md`. Emulator figures are regression canaries, never acceptance.
