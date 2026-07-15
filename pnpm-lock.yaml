@@ -290,12 +290,21 @@ importers:
         specifier: 'catalog:'
         version: 0.29.3
     devDependencies:
+      '@bolusi/db-client':
+        specifier: workspace:*
+        version: link:../db-client
       '@bolusi/test-support':
         specifier: workspace:*
         version: link:../test-support
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
+      '@types/better-sqlite3':
+        specifier: 'catalog:'
+        version: 7.6.13
+      better-sqlite3:
+        specifier: 'catalog:'
+        version: 12.11.1
 
   packages/db-client:
     dependencies:

@@ -19,10 +19,14 @@
     "kysely": "catalog:"
   },
   "devDependencies": {
+    "@bolusi/db-client": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
-    "@bolusi/test-support": "workspace:*"
+    "@bolusi/test-support": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
+    "better-sqlite3": "catalog:"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json && vitest run"
   }
 }
