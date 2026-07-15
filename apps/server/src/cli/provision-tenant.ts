@@ -231,7 +231,12 @@ export async function provisionTenant(
 
 async function main(): Promise<void> {
   const { parseArgs } = await import('node:util');
+  // `pnpm ... provision-tenant -- --tenant-name ...` (api/02-auth §2) forwards a leading `--`
+  // separator into argv; parseArgs would treat it as end-of-options and choke. Drop it.
+  const args = process.argv.slice(2);
+  const cleaned = args[0] === '--' ? args.slice(1) : args;
   const { values } = parseArgs({
+    args: cleaned,
     options: {
       'tenant-name': { type: 'string' },
       'store-name': { type: 'string', multiple: true },
