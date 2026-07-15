@@ -32,8 +32,14 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     END $$
   `.execute(db);
 
-  // The definer functions read only these three tables; BYPASSRLS bypasses the RLS POLICY but
-  // not table-level privileges, so bolusi_auth needs an explicit SELECT grant on each.
+  // The definer functions run AS bolusi_auth with search_path pinned to public, so it needs USAGE
+  // on the schema — PG15+ does not grant public-schema USAGE to arbitrary roles by default, and
+  // without it the function bodies fail "relation devices does not exist" (real PG16; PGlite's
+  // laxer default masks this).
+  await sql`GRANT USAGE ON SCHEMA public TO ${sql.id(AUTH_ROLE)}`.execute(db);
+
+  // BYPASSRLS bypasses the RLS POLICY but not table-level privileges, so bolusi_auth needs an
+  // explicit SELECT grant on each of the three tables the definer functions read.
   for (const table of ['devices', 'control_sessions', 'users']) {
     await sql`GRANT SELECT ON ${sql.table(table)} TO ${sql.id(AUTH_ROLE)}`.execute(db);
   }
