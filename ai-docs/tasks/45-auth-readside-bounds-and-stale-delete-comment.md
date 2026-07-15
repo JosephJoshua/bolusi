@@ -26,6 +26,22 @@ The harness proves both shapes work (`_harness.ts:390` minimal fake; `FakeKeySto
 
 **Rewrite it** to state the actual relationship: `SigningKeyPort` is the runtime's segregated view; `KeyStorePort` (task 14) structurally satisfies it; there is one implementation and no duplication; do not collapse them.
 
+## F6 — source files can go binary and nobody notices (add a guard; two agents hit it independently)
+
+**Twice in one wave**, an agent built a composite key with a **raw NUL byte** as the delimiter instead of the `\x00` escape, turning a `.ts` source file into `data` — binary to git, so its diff renders as `Bin 4469 -> 8758 bytes` and is **unreviewable**:
+
+- task 16, `apps/server/src/realtime/poke-hub.ts` — **caught it itself**, fixed with a text delimiter (`1db7c90 fix(server): use a text delimiter in the poke scope key`).
+- task 14, `packages/core/src/auth/pin-verify.ts:54` — **did not catch it**; found by the orchestrator only because `git show --stat` said `Bin` on the most security-critical file of the wave.
+
+Runtime behaviour is identical, so **every test passes and no lint fires**. The delimiter *idea* is sound (a NUL can't appear in an id, so no pair can forge another's key); only the encoding is wrong.
+
+**Ship a guard** — this is the point of the entry, not the two fixes (both are already done):
+- A check that **no tracked text-source file contains a NUL or other C0 control byte** (excluding `\t`/`\n`/`\r`). Wire it where it will actually run — the pre-commit hook and/or a lint rule. `git ls-files` for the denominator (**not** a filesystem walk: sibling worktrees live inside the repo and a naive walk sweeps other branches — the exact trap that made `pnpm lint` on main report peers' diagnostics).
+- **Falsify it** (§2.11): write a raw NUL into a `.ts` file, watch the guard go red, restore. **Assert the denominator** (T-14): the guard reports how many files it scanned and fails loudly on zero — a scanner that silently globs nothing is this repo's signature failure.
+- **Positive control**: a file containing the *escape* `\x00` (four characters) must pass. The guard must distinguish the byte from the escape, or it bans the correct fix.
+
+**Why it earns a guard rather than a note:** two independent agents reached for the same construct in the same wave, one caught it, one didn't. That is a class, not an accident (T-12). And its failure mode is the worst kind — it disables *review itself* on exactly the files most worth reviewing, while every automated signal stays green.
+
 ## Docs to read
 
 - `packages/core/src/auth/verifier.ts` :160-169 (read path), :184-194 (`buildPinVerifier` ordering); `repo.ts:144`; `bundle-apply.ts:75` (the check that *is* correctly placed — mirror its shape).

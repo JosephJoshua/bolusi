@@ -34,6 +34,14 @@ The privileged-target denial **is** `restriction_violated`. The release gate is 
 
 **Doc-first** (CLAUDE.md §4 — spec changes are their own task; this is that task): amend `02-permissions.md` §7's "Emitted by" to state that the enforcement point emits for **evaluator denials and handler-declared restriction denials alike, both through the runtime's emitter**, then change the code. Do not edit the spec as a side effect of the fix — do it deliberately, first.
 
+## A second audit gap in the same cluster — decide it here (from task 14's F1 fix, 2026-07-15)
+
+**A crash between the pessimistic lockout write and the emission leaves the user correctly locked with NO `auth.pin_locked_out` op.** Task 14's F1 fix banks the failure *before* the KDF (so a kill mid-verify can't buy a free guess) and emits the lockout op only *after* the KDF confirms failure (so a user whose 10th PIN was **correct** is never falsely announced as locked — that ordering is deliberate and right). The window between them is small but real: **fail-closed on the security property, a gap in the audit trail.**
+
+Same shape as the `restriction_violated` gap above — *the lock happened, the record didn't* — so rule on both together rather than twice.
+
+The option task 14 identified and correctly declined to implement unilaterally: **reconstruct on the next gate check** (if the row says `locked_out` and no lockout op exists for this lockout episode, emit it then). That is new behaviour and needs a decision, not a quiet fix. Weigh it against: (a) the op's `timestamp` would then lie about when the lock happened, or must carry the original — which the row would need to store; (b) an emission triggered by a *read* path is a new emission trigger, and `auth.pin_locked_out` is one of the five sanctioned runtime emissions (04 §5.1, a closed set) — the trigger set is not obviously as closed as the type set; (c) doing nothing means the audit under-counts lockouts by exactly the crash rate, which for an offline-first app on cheap Android hardware is **not** negligible.
+
 ## Docs to read
 
 - `02-permissions.md` **§7** (the denial op: payload, throttle, and the "Emitted by" line this task amends), **§5.4** (restrictions), **§12** (the authz matrix + the privileged-target rule), :186 (the `DenialReason` closed enum).
