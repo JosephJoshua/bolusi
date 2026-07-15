@@ -42,6 +42,23 @@ Runtime behaviour is identical, so **every test passes and no lint fires**. The 
 
 **Why it earns a guard rather than a note:** two independent agents reached for the same construct in the same wave, one caught it, one didn't. That is a class, not an accident (T-12). And its failure mode is the worst kind — it disables *review itself* on exactly the files most worth reviewing, while every automated signal stays green.
 
+## F7 — the attempt lock guards `verifyPin` only; three sibling writes to the same row are unsynchronized
+
+(review-04, post-merge review of task 14's F1 fix — the only finding in an otherwise clean bill.)
+
+Task 14's fix serializes `read → gate → record → KDF → settle` per `(userId, deviceId)` via `withAttemptLock`. But **three other read-modify-writes on `pin_attempt_state` sit outside it**:
+
+- `pin-flows.ts:333` + `:343` — `clearPinLockoutFlow`: read → `clearLockout` → write.
+- `pin-flows.ts:383` — `emitVerifierChange`: `resetForNewVerifier` write.
+
+**Not attacker-reachable for budget inflation** — both require owner permissions (`auth.pin_unlock` / `auth.user_reset_pin`), and `changePin` verifies the current PIN first. The realistic interleaving is **cosmetic**: an owner clearing a lockout concurrently with a losing attempt can emit `auth.pin_locked_out` for a user whose row then reads 0 — audit noise, not a bypass.
+
+**Why it's still worth closing:** it is **the same TOCTOU class the F1 fix just closed, one file away**, and it goes live the moment any caller parallelizes those flows. F1's whole lesson was that this class is invisible to a sequential suite.
+
+**Fix:** route those writes through `withAttemptLock`, **or** state in-code why they are exempt. If you exempt them, the reason must be a property someone can check — not "these callers don't race today", which is what F1 was too.
+
+**Falsify** (§2.11): construct the interleaving (owner clears a lockout while an attempt is mid-KDF) and assert the outcome you claim — either it serializes, or the audit noise is the *only* consequence. **Assert the fixture actually interleaved** (T-14b): two sequential calls prove nothing; prove both were in flight before either settled. That is the trap review-04 caught in its own probe here — its first lock measurement read `0` everywhere, and `0` reads identically as "eviction works" and "I'm measuring nothing", until it added a mid-flight positive control (=2).
+
 ## Docs to read
 
 - `packages/core/src/auth/verifier.ts` :160-169 (read path), :184-194 (`buildPinVerifier` ordering); `repo.ts:144`; `bundle-apply.ts:75` (the check that *is* correctly placed — mirror its shape).
