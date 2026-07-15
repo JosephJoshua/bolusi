@@ -1,0 +1,10 @@
+{
+  "conflict": {
+    "title": "A conflict needs a decision",
+    "body": "A conflict needs the store owner’s decision. Tap to view."
+  },
+  "device": {
+    "title": "Device alert",
+    "body": "Something needs attention on one of your store’s devices. Tap to check."
+  }
+}

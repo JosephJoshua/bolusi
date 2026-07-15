@@ -1,0 +1,32 @@
+{
+  "chip": {
+    "pending": "Belum terkirim",
+    "rejected": "Ditolak"
+  },
+  "status": {
+    "upToDate": "Semua perubahan terkirim",
+    "syncing": "Mengirim…",
+    "pending": "{count} perubahan belum terkirim",
+    "pendingMedia": "{count} foto belum terkirim",
+    "offline": "Tidak ada koneksi. Perubahan tersimpan di perangkat ini.",
+    "reconnected": "Terhubung kembali",
+    "lastSynced": "Terakhir terhubung {relative}"
+  },
+  "banner": {
+    "warning": "Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.",
+    "stale": "Sudah lama tidak terhubung. Data di layar ini bisa jauh tertinggal."
+  },
+  "rejected": {
+    "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
+    "title": "Perubahan Ditolak",
+    "explain": "Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.",
+    "technicalDetails": "Detail teknis"
+  },
+  "quarantine": {
+    "title": "Perubahan Ditahan",
+    "body": "Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko."
+  },
+  "action": {
+    "syncNow": "Kirim Sekarang"
+  }
+}

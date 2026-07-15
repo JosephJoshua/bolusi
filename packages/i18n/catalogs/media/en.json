@@ -1,0 +1,18 @@
+{
+  "status": {
+    "pending": "Waiting to send",
+    "uploading": "Sending photo…",
+    "uploaded": "Photo sent",
+    "failed": "Sending failed. Tap to try again.",
+    "waitingForConnection": "Waiting for connection"
+  },
+  "action": {
+    "takePhoto": "Take Photo",
+    "retake": "Retake",
+    "usePhoto": "Use This Photo",
+    "retryUpload": "Send Again"
+  },
+  "permission": {
+    "camera": "Allow the app to use the camera to take photos."
+  }
+}

@@ -20,6 +20,22 @@ const tester = new RuleTester({
 
 tester.run('boundaries', rule, {
   valid: [
+    // The platform-free lock follows "runs on Hermes", not "is shipped". Build tooling and the
+    // Node test lane (`test/**/*.test.*`) run only on Node — 08 §3.4's CI leg says so — and a
+    // codegen/gate script cannot read the repo without node:fs. Anything under test/ that is NOT
+    // a `.test.*` file is treated as Hermes-bound and stays locked (see the invalid fixtures).
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/scripts/check.mjs',
+    },
+    {
+      code: `import { join } from 'node:path';`,
+      filename: '/repo/packages/i18n/test/gates.test.ts',
+    },
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/core/test/jcs-vectors/run.test.ts',
+    },
     // db-client is THE importer of op-sqlite (08 §3.2)
     {
       code: `import { open } from '@op-engineering/op-sqlite';`,
@@ -105,6 +121,38 @@ tester.run('boundaries', rule, {
     {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/core/src/oplog/append.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // A non-`.test.` file under test/ is Hermes-bound, not Node-lane: hermes-entry.ts is the
+    // release-blocking stage-6 vector entry (08 §5.6). It is NOT shipped (rootDir=src,
+    // files=["dist"]) yet still runs on Hermes — so "shipped" is the wrong test and this fixture
+    // pins the hole shut.
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/test/hermes-entry.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { Platform } from 'react-native';`,
+      filename: '/repo/packages/i18n/test/hermes-entry.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/test/vectors.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // the non-shipped exemption is a directory carve-out, not a package one: src/ stays locked
+    // even in a package whose scripts/ legitimately read the repo
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/src/generated/resources.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // a nested src path that merely mentions the word is still shipped code
+    {
+      code: `import { join } from 'node:path';`,
+      filename: '/repo/packages/i18n/src/scripts-helper.ts',
       errors: [{ messageId: 'platformFree' }],
     },
     // platform-free package importing hono

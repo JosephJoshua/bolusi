@@ -35,6 +35,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      # 07-i18n §7.3 catalog gates: seed parity vs ui-labels.md, key grammar, collision,
+      # id/en parity, ICU restricted subset, error-code coverage, extraction, codegen staleness.
+      - run: pnpm i18n:check
 
   # Stage 3 — typecheck (tsc -b + mobile --noEmit).
   typecheck:
@@ -78,10 +81,28 @@ jobs:
   # Stage 6 — SEC-OPLOG-06: JCS vectors executed on a real Hermes VM and compared
   # byte-for-byte against the Node run (08 §5.6; mechanism + version caveat in 08 §7).
   #
-  # `pnpm test:jcs-hermes` bundles scripts/hermes-vectors/runner.ts standalone
-  # (canonicalize + core serialization + vector data only), compiles it with the
-  # RN-PINNED hermesc from `hermes-compiler`, executes it on Node and on the
-  # checksum-pinned Hermes CLI v0.13.0, and fails on any divergence.
+  # `pnpm test:jcs-hermes` typechecks scripts/hermes-vectors/runner.ts under the
+  # platform-free lock (types: []), bundles it standalone (canonicalize + core
+  # serialization + vector data only), compiles it with the RN-PINNED hermesc from
+  # `hermes-compiler`, executes it on Node and on the checksum-pinned Hermes CLI
+  # v0.13.0, and fails on any divergence.
+  #
+  # SCOPE — what this stage does and does NOT prove:
+  #   DOES: RFC 8785 canonicalization, incl. ES number->string, is byte-identical on
+  #         Node and a real Hermes VM (Appendix B + 200 seeded envelopes).
+  #   DOES NOT: cover the 07-i18n §5.4 i18n vectors. They are NOT run here and must not
+  #         be wired in. Measured on this VM: `typeof Intl === 'undefined'` — Intl is a
+  #         Hermes BUILD FLAG (HERMES_ENABLE_INTL); RN's Android Hermes enables it
+  #         (Android supplies ICU), this desktop CLI build does not. Running the
+  #         Intl-backed i18n vectors here would manufacture a FALSE FAILURE on a
+  #         formatting suite that is actually correct, and could trip 07-i18n §2's
+  #         @formatjs/intl-pluralrules contingency on a test-VM artifact — i.e. ship an
+  #         unnecessary polyfill to production. The JCS vectors are safe here precisely
+  #         because RFC 8785 number->string is plain ECMAScript with no Intl involved.
+  #         The i18n entry (packages/i18n/test/hermes-entry.ts, task 22 — runner-free,
+  #         prints PASS/FAIL per vector, non-zero exit on mismatch) still needs an
+  #         Intl-enabled Hermes: the Android-emulator lane or L6 / stage 12 (task 27).
+  #         Whoever wires that lane records the outcome in ai-docs/tasks/22-i18n.md.
   #
   # Version caveat (08 §7 record 6): RN 0.86 pins hermes-v0.17.0, whose git tag ships NO
   # host-VM release asset, and hermes-compiler ships only a COMPILER. v0.13.0 is the

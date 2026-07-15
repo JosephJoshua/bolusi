@@ -1,0 +1,11 @@
+{
+  "main_owner": {
+    "name": "Main Owner"
+  },
+  "store_owner": {
+    "name": "Store Owner"
+  },
+  "staff": {
+    "name": "Staff"
+  }
+}
