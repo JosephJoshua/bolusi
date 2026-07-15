@@ -36,7 +36,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "db:codegen": "tsx scripts/codegen.ts",
-    "test": "vitest run",
+    "test": "tsc -b ../.. && vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   }
 }
