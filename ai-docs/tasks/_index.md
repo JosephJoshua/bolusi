@@ -69,6 +69,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 58 | **HIGH** keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product; `security-guide §6.2:194` (android auto-backup exclusion) is an unchecked box **no task owns**; keystore.ts has 0 tests (from review-05 coverage sweep) | in-progress | — |
 | 59 | **HIGH — needs owner decision** `api/04-push §5`'s muting model is **impossible on Android** (channel importance immutable post-creation); `applyChannelImportance` has 0 callers and would be a no-op anyway (from review-05) | todo | 21 |
 | 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | todo | — |
+| 61 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` is not installed and the prebuild pipeline prints that fact every run. Cosmetic; filed for the class (from task 58's sweep) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
