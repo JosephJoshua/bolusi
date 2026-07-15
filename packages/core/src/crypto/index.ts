@@ -1,5 +1,12 @@
 // Crypto + canonicalization surface of @bolusi/core (05-operation-log §2–§4).
-export { bytesToBase64, base64ToBytes, bytesToHex, hexToBytes, utf8ToBytes } from './bytes.js';
+export {
+  bytesToBase64,
+  base64ToBytes,
+  bytesToHex,
+  bytesToUtf8,
+  hexToBytes,
+  utf8ToBytes,
+} from './bytes.js';
 export {
   canonicalizeJcs,
   JcsInputError,

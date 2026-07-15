@@ -134,6 +134,85 @@ export function base64ToBytes(base64: string): Uint8Array {
   return out;
 }
 
+/**
+ * UTF-8 decode without `TextDecoder` (not guaranteed on Hermes) — the inverse of `utf8ToBytes`.
+ *
+ * STRICT, and for the same reason `base64ToBytes` is: the lenient behaviour every platform decoder
+ * ships — substitute U+FFFD and carry on — turns "these bytes are not valid UTF-8" into "here is a
+ * string", so a caller cannot tell a corrupted input from a real one. The query cursor codec
+ * (query/cursor.ts) decodes caller-supplied bytes through this, and a cursor that silently decoded
+ * to replacement characters would parse as JSON-garbage rather than as the typed rejection 04 §6
+ * requires. Overlong encodings, surrogates encoded as 3-byte sequences (CESU-8), truncated
+ * sequences and out-of-range code points are all errors.
+ *
+ * @throws {RangeError} on anything that is not exactly one canonical UTF-8 encoding.
+ */
+export function bytesToUtf8(bytes: Uint8Array): string {
+  let out = '';
+  let i = 0;
+
+  while (i < bytes.length) {
+    const b0 = bytes[i] as number;
+    let codePoint: number;
+    let width: number;
+
+    if (b0 < 0x80) {
+      codePoint = b0;
+      width = 1;
+    } else if ((b0 & 0xe0) === 0xc0) {
+      codePoint = b0 & 0x1f;
+      width = 2;
+    } else if ((b0 & 0xf0) === 0xe0) {
+      codePoint = b0 & 0x0f;
+      width = 3;
+    } else if ((b0 & 0xf8) === 0xf0) {
+      codePoint = b0 & 0x07;
+      width = 4;
+    } else {
+      // A continuation byte in leading position, or an F8..FF byte that no UTF-8 encoding produces.
+      throw new RangeError(`invalid UTF-8 leading byte 0x${b0.toString(16)} at offset ${i}`);
+    }
+
+    if (i + width > bytes.length) {
+      throw new RangeError(`truncated UTF-8 sequence at offset ${i}`);
+    }
+    for (let j = 1; j < width; j += 1) {
+      const cont = bytes[i + j] as number;
+      if ((cont & 0xc0) !== 0x80) {
+        throw new RangeError(`invalid UTF-8 continuation byte at offset ${i + j}`);
+      }
+      codePoint = (codePoint << 6) | (cont & 0x3f);
+    }
+
+    // Overlong: the shortest encoding of this code point is narrower than `width`. Overlongs are
+    // the classic filter bypass — '/' encoded as 0xC0 0xAF passes a byte-wise check for 0x2F.
+    const minimum = width === 1 ? 0 : width === 2 ? 0x80 : width === 3 ? 0x800 : 0x10000;
+    if (codePoint < minimum) {
+      throw new RangeError(`overlong UTF-8 encoding at offset ${i}`);
+    }
+    // Lone surrogates are not valid UTF-8 (they are a UTF-16 artifact); > U+10FFFF does not exist.
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
+      throw new RangeError(
+        `UTF-8 encodes a lone surrogate U+${codePoint.toString(16)} at offset ${i}`,
+      );
+    }
+    if (codePoint > 0x10ffff) {
+      throw new RangeError(`UTF-8 code point out of range at offset ${i}`);
+    }
+
+    // Back to UTF-16, re-splitting astral code points into a surrogate pair.
+    if (codePoint < 0x10000) {
+      out += String.fromCharCode(codePoint);
+    } else {
+      const offset = codePoint - 0x10000;
+      out += String.fromCharCode(0xd800 + (offset >> 10), 0xdc00 + (offset & 0x3ff));
+    }
+    i += width;
+  }
+
+  return out;
+}
+
 /** UTF-8 encode without `TextEncoder` (not guaranteed on Hermes). Handles surrogate pairs. */
 export function utf8ToBytes(text: string): Uint8Array {
   const out: number[] = [];

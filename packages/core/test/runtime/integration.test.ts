@@ -46,7 +46,13 @@ import {
 } from '../authz/_fixtures.js';
 import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
 import { notesModule } from '../projection/notes-fixture.js';
-import { makeCommandSpy, makeFakeClock, EventLog, expectDomainError } from './_fixtures.js';
+import {
+  makeCommandSpy,
+  makeFakeClock,
+  EventLog,
+  expectDomainError,
+  fixtureOperations,
+} from './_fixtures.js';
 
 /**
  * The op store over the REAL driver: one driver-level transaction per command, shared with the
@@ -186,6 +192,7 @@ const open = async (seed: number, faultyApplier = false): Promise<Harness> => {
   const runtime = new CommandRuntime({
     device: { tenantId, storeId, deviceId },
     evaluator,
+    operations: fixtureOperations,
     store: new SqliteOpStore(driver, db),
     crypto: noblePort,
     clock: clockPort,

@@ -111,15 +111,20 @@ export interface OpDraftInput {
   readonly entityType: string;
   readonly entityId: string;
   /**
-   * Defaults to `1`.
+   * NO `schemaVersion` — deliberately, and this absence is the contract.
    *
-   * **LOCAL STOPGAP — task 11.** 04 §3's operation registry declares the current `schemaVersion`
-   * per op type, and once `defineModule` lands (task 11) the runtime resolves it FROM that
-   * registry and this default must be DELETED, not kept alongside as a second answer to the same
-   * question (CLAUDE.md §2.8). Until then `1` matches both the 04 §5 example (which omits the
-   * field entirely) and the fact that v0 has shipped no v2 payload.
+   * Task 10 shipped an optional `schemaVersion` here defaulting to `1`, marked "LOCAL STOPGAP —
+   * task 11" and instructed to be DELETED once the operation registry landed, rather than kept
+   * alongside as a second answer to the same question (CLAUDE.md §2.8). It is now deleted: the
+   * runtime resolves the version from the 04 §3 registry declaration for `type`.
+   *
+   * WHY A HANDLER MAY NOT STATE IT. 04 §3 binds `schemaVersion` to the OP TYPE, not to the
+   * emission: the registry declares the current version, and the applier must handle every
+   * historical version forever because old ops never disappear (05 §7). A handler able to name its
+   * own version could emit an op labelled v1 carrying a v2 payload, and the applier would fold it
+   * wrongly on every device, on every rebuild, permanently. There is one declared answer per type
+   * and the runtime reads it.
    */
-  readonly schemaVersion?: number;
   readonly payload: Record<string, unknown>;
   /** Overrides the invocation's `source` (05 §2.1). Omit to inherit it. */
   readonly source?: OpSource;
@@ -226,6 +231,13 @@ export interface CommandContextBinding {
 export interface CommandContextInternals {
   readonly identity: CommandIdentity;
   readonly newId: IdSource;
+  /**
+   * Resolve an op type's declared `schemaVersion` (04 §3) — the operation registry's answer, not
+   * the handler's. See `OpDraftInput` for why the handler has no say.
+   *
+   * @throws when `type` is not declared by any registered module.
+   */
+  readonly resolveSchemaVersion: (type: string) => number;
   /** The runtime's own check — the SAME function `execute` step 2 calls. One implementation. */
   readonly requirePermission: (
     identity: CommandIdentity,
@@ -283,7 +295,8 @@ export function createCommandContext(
         type: draft.type,
         entityType: draft.entityType,
         entityId: draft.entityId,
-        schemaVersion: draft.schemaVersion ?? 1,
+        // Resolved from the 04 §3 operation registry — never defaulted, never caller-supplied.
+        schemaVersion: internals.resolveSchemaVersion(draft.type),
         payload: draft.payload,
         // Attribution INHERITS from the invocation (05 §2.1; ARCH-001 §9.3) unless the handler
         // overrides it: an agent-initiated command's ops must be visible AS agent-initiated

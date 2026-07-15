@@ -308,12 +308,18 @@ importers:
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.4
       '@types/better-sqlite3':
         specifier: 'catalog:'
         version: 7.6.13
       better-sqlite3:
         specifier: 'catalog:'
         version: 12.11.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/db-client:
     dependencies:

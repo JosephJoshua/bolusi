@@ -39,6 +39,10 @@ import {
 } from '../authz/denials.js';
 import type { PermissionEvaluator } from '../authz/memo.js';
 import { DomainError } from '../errors/domain-error.js';
+// Type-only, and therefore erased: the module layer imports this file for `CommandHandlerResult`,
+// so a value import here would be a genuine ESM cycle. `import type` makes the edge disappear at
+// runtime (verbatimModuleSyntax keeps it honest).
+import type { OperationRegistry } from '../module/registry.js';
 import {
   appendLocalOps,
   type AppendContext,
@@ -67,6 +71,7 @@ import type {
   SigningKeyPort,
   SyncSchedulerPort,
 } from './ports.js';
+import { PermissionEnforcementPoint } from './enforce.js';
 import {
   assertSanctionedEmission,
   type SanctionedRuntimeEmissionType,
@@ -135,6 +140,17 @@ export interface RuntimeEmissionDraft {
   readonly type: SanctionedRuntimeEmissionType;
   readonly entityType: string;
   readonly entityId: string;
+  /**
+   * The emission's payload version.
+   *
+   * NOT resolved from the 04 §3 operation registry the way `ctx.op()` is — deliberately, for now.
+   * The five sanctioned types are appended by the runtime BEFORE any module could own them, and no
+   * v0 manifest declares them yet: `auth.*` op types arrive with the auth module (tasks 13/25),
+   * which will declare `auth.permission_denied` alongside the `auth_permission_denials` applier
+   * (02 §7). WHEN THAT LANDS, this field should resolve from the registry exactly as `ctx.op()`
+   * does, and this default deleted — otherwise the same op type has two answers about its version
+   * (CLAUDE.md §2.8). Flagged for tasks 13/25; not silently left as "fine".
+   */
   readonly schemaVersion?: number;
   readonly payload: Record<string, unknown>;
   /**
@@ -152,6 +168,15 @@ export interface CommandRuntimeOptions {
   readonly device: DeviceIdentity;
   /** DECIDES authorization (task 09). The runtime calls it; it never re-implements it. */
   readonly evaluator: PermissionEvaluator;
+  /**
+   * The 04 §3 operation registry — resolves each op type's declared `schemaVersion` for `ctx.op()`.
+   *
+   * REQUIRED, not optional. An optional registry would need a fallback, and the only available
+   * fallback is the `1` that task 10 left as a stopgap for exactly this task to remove — i.e. the
+   * second answer CLAUDE.md §2.8 forbids, reintroduced as a default parameter. A runtime that
+   * cannot say what version an op type is at cannot mint that op.
+   */
+  readonly operations: OperationRegistry;
   readonly store: OpAppendStore;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
@@ -176,6 +201,7 @@ export interface CommandRuntimeOptions {
 export class CommandRuntime {
   readonly #device: DeviceIdentity;
   readonly #evaluator: PermissionEvaluator;
+  readonly #operations: OperationRegistry;
   readonly #store: OpAppendStore;
   readonly #crypto: CryptoPort;
   readonly #clock: ClockPort;
@@ -186,12 +212,18 @@ export class CommandRuntime {
   readonly #applyProjection: ProjectionApply;
   readonly #syncScheduler: SyncSchedulerPort;
   readonly #denialEmitter: DenialEmitter;
+  /**
+   * THE single control (02 §4), shared with the query runtime — see runtime/enforce.ts for why it
+   * is one object rather than one per surface.
+   */
+  readonly #enforcement: PermissionEnforcementPoint;
   /** Identity of THIS runtime, for the ctx brand (ctx.ts). A fresh object per instance. */
   readonly #brand: object = {};
 
   constructor(options: CommandRuntimeOptions) {
     this.#device = options.device;
     this.#evaluator = options.evaluator;
+    this.#operations = options.operations;
     this.#store = options.store;
     this.#crypto = options.crypto;
     this.#clock = options.clock;
@@ -231,11 +263,25 @@ export class CommandRuntime {
           : {}),
       },
     );
+
+    this.#enforcement = new PermissionEnforcementPoint(this.#evaluator, this.#denialEmitter);
   }
 
   /** The denial emitter's throttle state — for diagnostics and for the suite's denominator (T-14). */
   get denialEmitter(): DenialEmitter {
     return this.#denialEmitter;
+  }
+
+  /**
+   * THE enforcement point (02 §4), for the query runtime to share.
+   *
+   * Exposing it grants no authority: every method on it consults this runtime's real evaluator, so
+   * a holder can only ask the question, never decide the answer. What it DOES do is guarantee the
+   * query surface is checked by the same object as the command surface — same evaluator reference,
+   * same §7 throttle memory (runtime/enforce.ts).
+   */
+  get enforcementPoint(): PermissionEnforcementPoint {
+    return this.#enforcement;
   }
 
   /**
@@ -254,6 +300,7 @@ export class CommandRuntime {
       {
         identity: this.#identityFor(userId),
         newId: this.#idSource,
+        resolveSchemaVersion: (type) => this.#resolveSchemaVersion(type),
         requirePermission: (identity, permissionId, tgt, surface) =>
           this.#requirePermission(identity, permissionId, tgt, surface, invocation),
         queryExecutor: this.#queryExecutor,
@@ -262,6 +309,27 @@ export class CommandRuntime {
       },
       target,
     );
+  }
+
+  /**
+   * The op type's declared `schemaVersion` (04 §3) — the operation registry's answer.
+   *
+   * FAILS CLOSED on an unregistered type, before anything is appended. An unregistered type has no
+   * declared version AND no applier (both come from the same 04 §3 declaration), so an op of that
+   * type would append, sync to every device, and be folded by nobody — a permanent silent hole in
+   * every projection, discoverable only by noticing data that never appears. Guessing `1` here is
+   * how that op gets written.
+   */
+  #resolveSchemaVersion(type: string): number {
+    const version = this.#operations.schemaVersionFor(type);
+    if (version === undefined) {
+      throw new DomainError(
+        'VALIDATION_FAILED',
+        { opType: type, issue: 'op type not declared by any registered module' },
+        `op type ${type} is not in the operation registry (04 §3) — declare it in the module's \`operations\` block, with its schemaVersion, reversal and applier. An op type with no applier folds into nothing on every device.`,
+      );
+    }
+    return version;
   }
 
   #identityFor(userId: string): CommandIdentity {
@@ -424,62 +492,21 @@ export class CommandRuntime {
   }
 
   /**
-   * The single enforcement point (02 §4) — the ONE implementation, called by step 2 and by
-   * `ctx.requirePermission` alike.
+   * The single enforcement point (02 §4) — called by step 2 and by `ctx.requirePermission` alike.
    *
-   * The evaluator DECIDES (task 09): this function does not look at roles, scopes, or the
-   * directory. It calls, and it acts on the answer:
-   *
-   *   allowed → return.
-   *   denied  → emit the denial op (§7, throttled), then THROW `PERMISSION_DENIED`.
-   *
-   * ORDER MATTERS: the emission is awaited BEFORE the throw so that a denial is recorded even
-   * when the caller swallows the error. But the throw is not conditional on the emission — see
-   * below.
+   * Delegates to `PermissionEnforcementPoint`, which is the ONE implementation and is shared with
+   * the query runtime (runtime/enforce.ts explains why it is shared rather than duplicated). This
+   * method stays as the runtime's internal entry point so step 2's call site reads as the §5.1
+   * sequence it implements.
    */
-  async #requirePermission(
+  #requirePermission(
     identity: CommandIdentity,
     permissionId: string,
     target: string,
     surface: DenialSurface,
     invocation: InvocationMeta,
   ): Promise<void> {
-    const decision = this.#evaluator.hasPermission({
-      userId: identity.userId,
-      tenantId: identity.tenantId,
-      storeId: identity.storeId,
-      permissionId,
-    });
-
-    if (decision.allowed) return;
-
-    try {
-      await this.#denialEmitter.record({
-        userId: identity.userId,
-        permissionId,
-        surface,
-        target,
-        reason: decision.reason,
-        // The EVALUATION scope (§7) — distinct from the envelope's storeId, which the emission
-        // channel stamps from the device.
-        scopeStoreId: identity.storeId,
-        source: invocation.source,
-        agentInitiated: invocation.agentInitiated,
-        agentConversationId: invocation.agentConversationId,
-      });
-    } catch {
-      // A denial that was already DECIDED is not up for reconsideration because its audit record
-      // failed to append (task 09's `record` says this explicitly). Swallowing here is what makes
-      // the throw below unconditional: if the emission's failure propagated, a full disk or a
-      // locked store would turn a denial into a generic error — and a caller distinguishing
-      // "denied" from "log broke" is a caller that can be made to stop denying.
-    }
-
-    throw new DomainError(
-      'PERMISSION_DENIED',
-      { permissionId, target, surface, reason: decision.reason },
-      `${identity.userId} lacks ${permissionId} for ${surface} ${target} (02-permissions §4)`,
-    );
+    return this.#enforcement.requirePermission(identity, permissionId, target, surface, invocation);
   }
 }
 

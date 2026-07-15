@@ -28,6 +28,7 @@ import {
   type IdSource,
   type LocationPort,
   type OpAppendStore,
+  type OperationRegistry,
   type OpAppendTx,
   type OpDraftInput,
   type PermissionQuery,
@@ -56,6 +57,29 @@ import {
 import { InMemoryOpStore, makeFakeClock, type FakeClock } from '../oplog/_fixtures.js';
 
 export { InMemoryOpStore, makeFakeClock, type FakeClock };
+
+/**
+ * The 04 §3 operation registry for the op types these fixtures emit.
+ *
+ * `ctx.op()` resolves an op's `schemaVersion` from here (task 11 removed the `?? 1` default task 10
+ * had left as a stopgap), so a runtime cannot mint a draft for a type nothing declares. Kept as an
+ * explicit port rather than a `registerModules` call: this is task 10's suite, and the real
+ * registry's own behaviour is pinned by the module suite (test/module/). The versions match the
+ * `notes` fixture manifest (test/projection/notes-fixture.ts).
+ */
+const FIXTURE_OP_SCHEMA_VERSIONS = new Map<string, number>([
+  ['notes.note_created', 1],
+  ['notes.note_body_edited', 1],
+  ['notes.note_archived', 1],
+]);
+
+export const fixtureOperations: OperationRegistry = {
+  schemaVersionFor: (type) => FIXTURE_OP_SCHEMA_VERSIONS.get(type),
+  types: () => [...FIXTURE_OP_SCHEMA_VERSIONS.keys()].sort(),
+  get size() {
+    return FIXTURE_OP_SCHEMA_VERSIONS.size;
+  },
+};
 
 /** Records the ORDER of the runtime's observable steps — the sequence assertions read this. */
 export class EventLog {
@@ -294,6 +318,7 @@ export function makeRuntimeFixture(seed: number, options: FixtureOptions = {}): 
   const runtime = new CommandRuntime({
     device: { tenantId, storeId, deviceId },
     evaluator,
+    operations: fixtureOperations,
     store: appendStore,
     crypto,
     clock: clockPort,
