@@ -1,6 +1,38 @@
 # TASK 54 — SEC-AUTH-06/11's server legs are unclaimed and invisible: a "client arm" title retired the whole id
-**Status:** todo
+**Status:** in-review — **premise moved; no code shipped. Needs an owner decision (below), not an implementation.**
 **Depends on:** 31
+
+## Outcome (2026-07-15) — the legs were already shipped; the sweep found the real instances two ids over
+
+**Both server legs this task was filed to build already exist, ship, and are load-bearing.** They landed with **task 07**, not 14 — `07-oplog-server.md:49` claims them explicitly (*"`auth.pin_reset` by an actor without `auth.user_reset_pin` → `SCOPE_VIOLATION`; … targeting a main_owner by a non-main_owner actor → `SCOPE_VIOLATION`, by a main_owner actor → accepted"*). The Goal below was written from task 31's audit, which read the **titles** and correctly concluded the ids were half-claimed — but did not check whether the *behaviour* shipped elsewhere under a different title. It had.
+
+**Implementation:** `apps/server/src/oplog/steps/scope.ts:107-118` (`checkScope`, case `AUTH_PIN_RESET`).
+**Coverage:** `apps/server/test/integration/oplog/pipeline.test.ts:521/542/570/607` — all four arms the guide names, **including both positive controls**:
+
+| guide leg (§171 / §176) | test | verdict |
+| ----------------------- | ---- | ------- |
+| forged `auth.pin_reset` (actor lacks `auth.user_reset_pin`) → `SCOPE_VIOLATION` at push | `:521` | ships |
+| by store owner (holds the permission) → accepted (positive control) | `:542` | ships |
+| `store_owner`-signed reset targeting the `main_owner` holder → `SCOPE_VIOLATION` at push | `:570` | ships |
+| `main_owner`-signed reset of the same target → accepted (control) | `:607` | ships |
+
+**Falsified, not assumed** (§2.11): gutted the `AUTH_PIN_RESET` case in `scope.ts` to `return null`, rebuilt (`npx tsc -b`, `EXIT=0`), re-ran. The two denial legs went **red** — `AssertionError: expected { status: 'accepted' } to match { status: 'rejected', code: 'SCOPE_VIOLATION' }`, i.e. **the forged op was accepted**, the exact hole this task describes — while **both positive controls stayed green**, proving they discriminate rather than asserting "everything is rejected" (T-14b). Restored; `git diff` empty; 4 passed, `EXIT=0`.
+
+**So the premise moved and the reproduction refuted it** (T-11's actual purpose). No code shipped here — writing the legs a second time would have duplicated task 07's (§2.8).
+
+### What remains true — and it is the gate half, not the tests half
+
+SEC-META-01 is green for SEC-AUTH-06/11 **because a "client arm" title matched**, not because coverage was verified. The coverage exists only by task 07's independent diligence; the gate neither knew nor could know. **The mechanism defect task 31 documented is untouched** — a partial-leg title with no allowlist row still retires an id, and `titledButPending` has nothing to contradict.
+
+### Open decisions for the orchestrator (red-flag, §6 — deliberately NOT taken here)
+
+1. **Who titles SEC-AUTH-06/11 now that both legs ship?** §2.1.6 says only the task that *completes* an id embeds it verbatim. Today task 14 titles both as *"client arm"* (a partial leg) while task 07 completes them untitled — the inverse of the rule. Fixing it means moving a title between two merged tasks; that is an ownership call, not an implementation detail.
+2. **Neither id is on any `**SEC ids owned by THIS task:**` marker.** Whoever takes (1) should declare them.
+3. The task's original "Decide first" (14/16/28 own the push legs) is **moot** — task 07 owns them.
+
+### The sweep (T-12) — filed as task 61
+
+Sweeping the class (`(test|it|describe)` titles carrying a SEC id + a partial-leg qualifier) found **two genuinely open instances**: **`SEC-DEV-04`** and **`SEC-DEV-05`**, each titled *"(server leg)"*, each with the client leg disclaimed **in prose only** by `13-auth-server.md:60-61`, **no allowlist row, and no marker anywhere declaring any SEC-DEV id.** Filed as **task 61**. `SEC-AUTH-04` carries a lesser nit (double-titled: core arm at `pin-verify.test.ts:136` + *"UI arm"* at `model.test.ts:112` — a §2.1.6 breach, but coverage exists, so no retire). `SEC-SYNC-02` is **correct** and is the pattern to copy (`sec-sync.test.ts:66` — server legs untitled, id in a comment).
 
 ## Goal
 
