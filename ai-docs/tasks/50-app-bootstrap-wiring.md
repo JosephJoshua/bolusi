@@ -57,3 +57,15 @@ A stub here would have been the most dangerous kind: `Root.tsx` would boot, the 
 ## Note — what is still owed after this, and cannot be closed here
 
 Task 24 could not verify **anything** on a device or emulator: no Android toolchain, no dev server. Still owed to **27a/27b**: `eas build`, cold boot, the bootstrap report, CI stage 12, and the **enrollment E2E**. Also owed and **structurally unanswerable in this lane**: task 23's carried **banner-truncation measurement** — the test double reads *declared styles* and never measures frames, because there is no Yoga. Do not let a jsdom-shaped green stand in for a layout measurement (D12's lesson: an emulator/CI figure is not a device figure, and for *layout* even the emulator is the first honest witness).
+
+## SCOPE ADDITION (from task 24's review, 2026-07-15) — the wrong-store control has no test, and binding is irreversible
+
+`EnrollmentScreen.tsx:177` does `onChange({ selectedStoreId: store.id, confirmed: false })`. **That single line is the only thing enforcing `design-system §8.5`'s wrong-store control**, and store binding is **irreversible** (§7.4) — an operator round-trip to undo.
+
+review-05 hypothesised the real hole — *confirm store A → transport fails → switch to store B → bind B unconfirmed* — and **disproved it**: that line re-arms the confirmation on every store change, so flapping the network rebinds the *same* confirmed store. Task 24's judgement (`confirmed` survives a transport failure: *"the network failed, not the user's intent"*) is correct and protected by construction.
+
+**The finding is that nothing proves it.** There is no `EnrollmentScreen.test.tsx`; the model tests cover only `canSubmitConfirm`'s gating. **Delete `confirmed: false` in a refactor and nothing goes red** — an irreversible, operator-costly binding whose sole guard is untested.
+
+**Add the test** (it belongs with this task, which owns the enrollment wiring): confirm store A → change to store B → assert `confirmed === false` and that submit is gated. **Falsify it** (§2.11): drop `confirmed: false`, watch it go red, restore. Positive control: re-confirming B re-enables submit — a test that only ever asserts "blocked" passes on a screen that blocks everything (T-14b).
+
+**Related, and also this task's:** `App.tsx` wires `onLogin={noop}` / `onEnroll={noop}`. Task 24's own PIN reasoning condemns this — *"an unresponsive keypad is indistinguishable from a broken app, and the rational response to a broken app is to keep tapping"* — and a button that looks live and silently does nothing is the same **working-looking** shape its "absent rather than stubbed" call correctly rejected elsewhere. Low severity today (the app cannot boot data anyway), but when you wire the bootstrap, wire these or make them visibly inert.

@@ -88,3 +88,21 @@ Two things follow, both for the decompose:
 Worth raising at the next decompose: any artifact named in §2.8 (permissions, validation, shared types/contracts) should be a **dependency edge**, not a parallel task.
 
 **A third fork was caught before it happened (2026-07-15), which is what this pattern looks like when you see it coming.** Task 14 (auth-client) became dependency-clear the moment task 09 merged — its declared deps are 03/04/09/13, all done. But its `session.ts` emits `user_switched` / `session_ended`, which are two of the **five sanctioned runtime emissions `04 §5.1` assigns to task 10** — in flight at the time. Nothing in the decompose would have stopped task 14 from starting; it would simply have needed an emission path that did not exist yet, and forked one. **Task 14's dependency on task 10 is real and the decompose does not record it.** Add the edge (14 depends on 10) rather than trusting whoever launches it to notice. The general rule this session keeps re-learning: *the dependency graph is only as good as its least obvious edge, and the forks land in the shared packages precisely because that is where the missing edges point.*
+
+## THREE `@bolusi/ui` findings from task 24 (2026-07-15) — the third is a real defect, not a nit
+
+Task 24 (app-shell) hit three `packages/ui` gaps it could not fix (contended). The first two are shape problems; **the third is a live bug with a false comment on top of it.**
+
+1. **`BannerCause` has no `quarantined` member** — quarantine is loud on-screen but cannot raise an ambient banner.
+2. **`numeric`'s inner `Object.freeze` widens the tuple** so RN's `TextStyle` rejects it; task 24 casts at one call site.
+3. **`List` hardcodes `getItemLayout` to `touch.row` = 64 with no override prop — and the switcher grid's rows are 162–188 dp.** (review-05, reproduced by arithmetic from the tokens + styles.)
+
+**Why (3) matters and why it can't be fixed in `apps/mobile`.** `design-system §8.2` wants a 2-column grid; `List` is single-column with no `numColumns`, so task 24 made each **list item a grid row** (`toGridRows`) — correct, and it preserves windowing. But the row renders `paddingVertical: space.lg` (16×2) + `Avatar size="switcher"` (**96**) + `gap: space.sm` (8) + a name at lineHeight 26 with **`numberOfLines={2}`** → **162–188 dp actual, reported as 64**.
+
+So the design is wrong twice over: rows **aren't uniform** (a wrapping name adds 26 dp), and the reported value is **~2.5× short**. RN's contract is what makes this bite: **`getItemLayout` exists to *skip* measurement**, so a wrong length is never self-corrected — wrong scroll extent and offsets, worsened by `removeClippedSubviews` on Android. **Uniformity is necessary, not sufficient.**
+
+**The irony worth preserving:** the scenario invoked to justify the design — *"a shop with 30 staff"* — is exactly when it breaks (15 rows → wrong geometry). At the typical 2–3 staff there is no scroll and it is invisible.
+
+**Fix: expose `ListProps.itemHeight`** (or let `List` measure). Then task 24's `toGridRows` can declare its real height. **Falsify it** (§2.11): a wrong `itemHeight` must produce observably wrong scroll geometry in a test, or the prop is decoration.
+
+**Note the coverage gap this sits in, and do not paper over it:** review-05 flagged that it verified this **by reading tokens + styles + RN docs, not on a device** — and `apps/mobile`'s vitest config says outright it **CANNOT** cover *"Yoga layout, real virtualization windowing."* **No test in this repo can currently catch a wrong `getItemLayout`.** That is task 27a's lane (the emulator is the first honest witness for layout — D12's logic applied to geometry). Task 24's false comment has been corrected; the code fix is here; **the proof is 27a's.**
