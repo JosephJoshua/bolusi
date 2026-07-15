@@ -27,6 +27,23 @@ export interface IdempotencyResult extends StoredResponse {
 }
 
 /**
+ * Purge idempotency rows older than the 24 h retention window (bounds the plaintext-token
+ * retention exception, SEC-DEV-02). Runs in its OWN transaction — a subsequent failed
+ * re-execution must not roll the purge back, so the record is genuinely forgotten after the window.
+ */
+export async function purgeExpiredIdempotency(
+  db: TenantDb,
+  tenantId: string,
+  now: number,
+): Promise<void> {
+  await db
+    .deleteFrom('idempotencyKeys')
+    .where('tenantId', '=', tenantId)
+    .where('createdAt', '<', BigInt(now - IDEMPOTENCY_RETENTION_MS))
+    .execute();
+}
+
+/**
  * Run `execute` under the idempotency contract for `(tenantId, key)`. `execute` performs the real
  * work (enroll) and returns the response to store, or throws an ApiError for a validation failure
  * (which rolls the whole transaction back — including the claim — so nothing is stored).
@@ -43,13 +60,6 @@ export async function runIdempotent(
     execute: () => Promise<StoredResponse>;
   },
 ): Promise<IdempotencyResult> {
-  // Purge expired rows first — bounds the plaintext-token retention window (24 h).
-  await db
-    .deleteFrom('idempotencyKeys')
-    .where('tenantId', '=', params.tenantId)
-    .where('createdAt', '<', BigInt(params.now - IDEMPOTENCY_RETENTION_MS))
-    .execute();
-
   const existing = await lookup(db, params.tenantId, params.key);
   if (existing !== undefined) {
     if (existing.requestHash !== params.requestHash) throw new ApiError('IDEMPOTENCY_CONFLICT');

@@ -15,7 +15,7 @@ import { buildBundle, bundleEtag } from '../identity/bundle.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permission-registry.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
-import { runIdempotent } from '../identity/idempotency.js';
+import { purgeExpiredIdempotency, runIdempotent } from '../identity/idempotency.js';
 import { revokeDevice } from '../identity/revocation.js';
 import { EnrollReq, type EnrollRes } from '../identity/schemas.js';
 import { zJson } from '../middleware/validator-hook.js';
@@ -168,6 +168,10 @@ export function createDevicesRouter(deps: ServerDeps) {
 
           const rawBody = JSON.stringify(body);
           const requestHash = sha256Hex(rawBody);
+
+          // Purge expired idempotency rows in a SEPARATE, committed tx so it is not undone if this
+          // enroll later fails validation (SEC-DEV-02: the 24 h purge bounds the token-retention).
+          await deps.forTenant(tenantId, (db) => purgeExpiredIdempotency(db, tenantId, t));
 
           const result = await deps.forTenant(tenantId, (db) =>
             runIdempotent(db, {
