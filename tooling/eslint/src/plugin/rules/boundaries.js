@@ -3,7 +3,9 @@
 //   1. §2.6 banned packages everywhere (@hono/node-ws, expo-background-fetch,
 //      expo-file-system/legacy, kysely-expo)
 //   2. DB-driver locks (op-sqlite → db-client only; pg → db-server only;
-//      better-sqlite3 → harness only)
+//      better-sqlite3 → harness, plus db-client TEST/TOOLING files only — it is the CI
+//      adapter behind the driver-conformance suite and must never reach shipping source)
+//   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
 //   3. */screens subpaths importable only from apps/mobile
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
 //   5. nothing imports @bolusi/mobile
@@ -22,11 +24,30 @@ const FORBIDDEN_EVERYWHERE = new Map([
 ]);
 
 // DB drivers may be imported only by their owning wrapper (08 §3.3 hard rule 2).
+// `testOnly` owners may import the driver from test/tooling files but NOT from shipping
+// source: better-sqlite3 is test-only (08 §2.5) and backs both the harness's simulated
+// devices and db-client's CI conformance adapter (testing-guide §2.3).
 const DB_DRIVER_OWNERS = new Map([
-  ['@op-engineering/op-sqlite', 'packages/db-client'],
-  ['pg', 'packages/db-server'],
-  ['better-sqlite3', 'packages/harness'],
+  ['@op-engineering/op-sqlite', [{ workspace: 'packages/db-client' }]],
+  ['pg', [{ workspace: 'packages/db-server' }]],
+  [
+    'better-sqlite3',
+    [{ workspace: 'packages/harness' }, { workspace: 'packages/db-client', testOnly: true }],
+  ],
 ]);
+
+// Hermes-only workspaces: shipping source cannot use Node builtins (08 §3.2). Their
+// test/tooling files legitimately do (in-memory adapters, codegen scripts).
+const NODE_FREE_SOURCE = new Set(['packages/db-client']);
+
+/** Test + tooling files: excluded from the "shipping source" locks above. */
+function isTestOrToolingFile(filename) {
+  return (
+    /\.test\.[cm]?[jt]sx?$/.test(filename) ||
+    /(?:^|\/)(?:test|tests|scripts)\//.test(filename) ||
+    /\/vitest\.config\.[cm]?[jt]s$/.test(filename)
+  );
+}
 
 // Platform-free workspaces (08 §3.3 hard rule 3). modules screens files are exempt.
 const PLATFORM_FREE = new Set([
@@ -65,6 +86,10 @@ export default {
       forbiddenEverywhere: "'{{source}}' is forbidden: {{reason}}",
       dbDriver:
         "Only {{owner}} may import the DB driver '{{source}}' (08-stack-and-repo §3.3 — nothing outside the wrappers touches a driver).",
+      dbDriverTestOnly:
+        "'{{source}}' is test-only (08-stack-and-repo §2.5) and must never reach shipping source — import it from a test/ or scripts/ file, and inject the driver into the code under test.",
+      nodeInHermesSource:
+        "'{{source}}': {{workspace}} is Hermes-only — Node builtins do not exist on device (08-stack-and-repo §3.2). Test and tooling files may use them; shipping source may not.",
       screensOutsideMobile:
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
       serverImport:
@@ -96,9 +121,32 @@ export default {
       const driverKey = source.startsWith('@op-engineering/')
         ? '@op-engineering/op-sqlite'
         : source;
-      const owner = DB_DRIVER_OWNERS.get(driverKey);
-      if (owner && workspace !== owner) {
-        context.report({ node, messageId: 'dbDriver', data: { source, owner } });
+      const owners = DB_DRIVER_OWNERS.get(driverKey);
+      if (owners) {
+        const owned = owners.find((entry) => entry.workspace === workspace);
+        if (!owned) {
+          context.report({
+            node,
+            messageId: 'dbDriver',
+            data: { source, owner: owners.map((entry) => entry.workspace).join(' / ') },
+          });
+          return;
+        }
+        // Owned, but test-only: shipping source in the owning workspace is still barred.
+        if (owned.testOnly && !isTestOrToolingFile(filename)) {
+          context.report({ node, messageId: 'dbDriverTestOnly', data: { source } });
+          return;
+        }
+      }
+
+      // 2b. Hermes-only workspaces: no Node builtins in shipping source.
+      if (
+        workspace &&
+        NODE_FREE_SOURCE.has(workspace) &&
+        /^node:/.test(source) &&
+        !isTestOrToolingFile(filename)
+      ) {
+        context.report({ node, messageId: 'nodeInHermesSource', data: { source, workspace } });
         return;
       }
       // 3. */screens subpaths only from apps/mobile.
