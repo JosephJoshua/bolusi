@@ -9,7 +9,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | id | title | status | depends on |
 | -- | ----- | ------ | ---------- |
 | 01 | repo-scaffold (pnpm monorepo, toolchain, CI, lint rules) | done | — |
-| 02 | schemas package (op envelope, API DTOs, error/WS schemas) | in-progress | 01 |
+| 02 | schemas package (op envelope, API DTOs, error/WS schemas) | done | 01 |
 | 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | todo | 01, 02 |
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | in-progress | 01 |
 | 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | in-progress | 01 |
@@ -36,6 +36,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
 | 27 | device-gates (on-device perf: seed-200k cold start, rebuild, KDF + write benchmarks) | todo | 24, 25, 26 |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26 |
+| 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | todo | 02 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

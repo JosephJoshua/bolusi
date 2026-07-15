@@ -14,6 +14,8 @@ Deliver the client sync loop in `@bolusi/core` exactly per api/01-sync §5–7 a
 - `05-operation-log.md` — §8 (rejection-code registry + mandated client behavior per code).
 - `01-domain-model.md` — §5.2 (SyncState field list + derived `pendingOperationCount`/`pendingMediaCount` formulas).
 - `10-db-schema.md` — §9.3 (`sync_state` DDL), §9.5 (`device_registry`, `quarantined_ops` DDL).
+
+> **Trap flagged by task 02's review — read before writing the pull phase.** `zPullResponse` (`@bolusi/schemas`) is tolerant at the top level but its `ops: z.array(zSignedOperation)` is **strict** (correct — you cannot strip unknown keys out of a hashed structure). Consequence: one odd op fails the WHOLE batch parse, which would violate api/01 §4.2's "one bad op must not brick sync". **Parse the envelope and each op individually; never validate the batch through `zPullResponse` and treat a throw as a transport failure.** A per-op parse failure is a quarantine case, not a loop failure.
 - `08-stack-and-repo.md` — §3.2 `@bolusi/core` row (ports), §3.3–3.4 (import boundaries, platform-freeness locks), §5.4 (Vitest layout).
 - `security-guide.md` — SEC-OPLOG-09 row only.
 - `testing-guide.md` — §3.5 (fault points F1–F5), CHAOS-02 and CHAOS-12 entries (the end-to-end scenarios this surface must later satisfy in task 26; their semantics define this task's unit fixtures).
