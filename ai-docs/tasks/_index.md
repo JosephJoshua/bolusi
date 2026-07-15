@@ -38,7 +38,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | in-progress | 02 |
-| 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | in-progress | 22 |
+| 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
