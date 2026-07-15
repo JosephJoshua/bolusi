@@ -11,7 +11,11 @@
   Error: Test timed out in 5000ms.
 ```
 
-It passes in isolation (4/4, EXIT=0) and passed at task 08's merge. It failed during task 13's integration verification with 5 agents + docker running (load average 9.9–15.5 on 48 cores). It sets **no `testTimeout`**, so it inherits vitest's **5s default** while doing ~6.6s of real folding, hashing, and permutation work. The gap between 5s and 6.6s is not a bug in the test's logic — it is a budget that was never set deliberately.
+It passes in isolation (4/4, EXIT=0) and passed at task 08's merge. It failed during task 13's integration verification with 5 agents + docker running (load average 9.9–15.5 on 48 cores). It sets **no `testTimeout`**, so it inherits vitest's **5s default**. The gap is not a bug in the test's logic — it is a budget that was never set deliberately.
+
+**The measurement that settles it (from task 29, which hit the same flake independently):** the test does **4.85s of work against the 5s default — 97% of its budget when the machine is *idle*.** Under full-suite load it took 6.6s. Two independent corroborations that this is load, not a real break: task 29 ran the baseline **without** its diff and it failed **3/3** under load while passing in isolation; task 30's suite (1499 tests, unrelated package) passed it unchanged.
+
+**97% of budget at idle is the whole story.** This test was never one bad day away from flaking — it was always going to flake the moment anything else ran on the machine. It passed CI so far by luck of an unloaded runner, which is exactly why the fix must be a *reasoned* budget rather than a bigger round number.
 
 **T-10 makes this a P1**: *"A flaky test is a P1 bug. No quarantine directory, no auto-retry-until-green. Fix the nondeterminism or delete the test with a written cause in the commit subject."*
 
