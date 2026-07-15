@@ -1,0 +1,202 @@
+{
+  "$comment": "Two ops seq swapped and re-signed -> chain break (SEQ_NOT_CONTIGUOUS / PREVIOUS_HASH_MISMATCH); server CHAIN_BROKEN.",
+  "device": {
+    "id": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+    "publicKey": "O3Ek8nxIdZS/Ip5aGINIRN7G43Te13f2RBOKxCCkDqA="
+  },
+  "expectContains": ["PREVIOUS_HASH_MISMATCH"],
+  "index": null,
+  "ops": [
+    {
+      "id": "0191dd9d-ec00-7f89-8bcf-99e4c398b538",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 1,
+      "type": "auth.device_enrolled",
+      "entityType": "device",
+      "entityId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "schemaVersion": 1,
+      "payload": {
+        "enrolledDeviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43"
+      },
+      "timestamp": 1726000000000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "hash": "ad9fe36812d0953c95a1ec357aecb6777916083b503150ab567aad54814566fe",
+      "signature": "AaxQDM12W5YqduOtWUi450E1EPHNuMVEHGl64peHIRlCCdumWhdElmz1/k0wggXxYLb4H2w6rKPbW37b/WOYBQ=="
+    },
+    {
+      "id": "0191dd9e-d660-721b-9457-51038b6e7a42",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 2,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dd9e-d660-721b-9457-5102ad854658",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-1",
+        "body": "body-424242-1"
+      },
+      "timestamp": 1726000060000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "ad9fe36812d0953c95a1ec357aecb6777916083b503150ab567aad54814566fe",
+      "hash": "81b23adc5d624dd1f385e98c20e514b8cfa98f1e64fe45ad4eb0cb02033ab528",
+      "signature": "eOr8rIV4lzdc/EXeTNKxJ0+ePicu0uMpXxPK1Yuy6ctWvg+v/PcB8By1tAwR7X3ISqih54Ts0iCqeka5zAWnCg=="
+    },
+    {
+      "id": "0191dd9f-c0c0-7d85-bd21-2a599666b90b",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 4,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dd9f-c0c0-7d85-bd21-2a58f01ba3fd",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-2",
+        "body": "body-424242-2"
+      },
+      "timestamp": 1726000120000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "81b23adc5d624dd1f385e98c20e514b8cfa98f1e64fe45ad4eb0cb02033ab528",
+      "hash": "ebfd1c005f1b918f57c018f2e332533fa7a760e2ad424a54ab4b60438d37968b",
+      "signature": "G72xzwrsCReKaHtRTptz/MRnO2epVsn7wIH2eR3lj4Zxa2Icug+sLQjZxIudfNdtVCKuy8wdGlalbUgIVP2ODw=="
+    },
+    {
+      "id": "0191dda0-ab20-771a-9d8e-2a87f2f9092c",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 3,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dda0-ab20-771a-9d8e-2a872b2bc839",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-3",
+        "body": "body-424242-3"
+      },
+      "timestamp": 1726000180000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "bfa6a227d2b1e211a0fb1c6ecba2848e349a31a5e7af3be8701f1eaf3043f1fe",
+      "hash": "22a52a681abdb58dc83430e0dc33c7a37e130732adca8408c889ae4dc6977d44",
+      "signature": "GzQIB7bB3I00krPQzpHhMJfy6YQORycbqed2TKZ8h7MKqnPnDU4/jNlurZLU54KCEQcxixFzEqeqNF6/iYJ4Dw=="
+    },
+    {
+      "id": "0191dda1-9580-70ab-a730-764edbc51b6a",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 5,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dda1-9580-70ab-a730-764ea4bd78a3",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-4",
+        "body": "body-424242-4"
+      },
+      "timestamp": 1726000240000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "00b23281ff0e349011d7830b6b191dec028098c452bae3ea97fdc8ecbf521fb4",
+      "hash": "66efb573aef5bd2b3b898a514fa6c10dae2f2f4c23a4c2548e927c0077c7f170",
+      "signature": "w3qP0xDBs80YMYADLSnhkpffrB4rnMi1kqbUpf1Fedk1wCBu266U5bDAHmX9NZXQXESVxLL344VXquj+ugiVAw=="
+    },
+    {
+      "id": "0191dda2-7fe0-79d9-a930-7a585a4c1962",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 6,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dda2-7fe0-79d9-a930-7a57b649d871",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-5",
+        "body": "body-424242-5"
+      },
+      "timestamp": 1726000300000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "66efb573aef5bd2b3b898a514fa6c10dae2f2f4c23a4c2548e927c0077c7f170",
+      "hash": "227eaff486e63f481acf12199c1cffca00fb551c491568cf74a7b662a1b74168",
+      "signature": "5aMrqOYM+QVXoROaKmOxtdmskY7C5MB/QF/3lzgJ5gLrYdIqldtOwLQKU+n3KUKQ2NIVO+Mcj5IRxG6K0ijoAA=="
+    },
+    {
+      "id": "0191dda3-6a40-71b0-b9df-07a658644a61",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 7,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dda3-6a40-71b0-b9df-07a64975d034",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-6",
+        "body": "body-424242-6"
+      },
+      "timestamp": 1726000360000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "227eaff486e63f481acf12199c1cffca00fb551c491568cf74a7b662a1b74168",
+      "hash": "9ea9ce77f1fb69b26f930191ad29433e0ae0b7664760c4ff12c394069a2ade1e",
+      "signature": "wR9hO5UcV8E345irmZTFU/H9vlYrjUT62cLazhMVVzNGKjXb1Wbz/OuTtC+R0zH9Xnz03GdVHesttwgpySTmAg=="
+    },
+    {
+      "id": "0191dda4-54a0-7958-b869-41137af89ded",
+      "tenantId": "0191dd9d-ec00-70f0-afa4-579a0584f7f8",
+      "storeId": "0191dd9d-ec00-70f0-afa4-579aa13b11b8",
+      "userId": "0191dd9d-ec00-70f0-afa4-579ad3465566",
+      "deviceId": "0191dd9d-ec00-70f0-afa4-579b34c88f43",
+      "seq": 8,
+      "type": "notes.note_created",
+      "entityType": "note",
+      "entityId": "0191dda4-54a0-7958-b869-4113270b3c52",
+      "schemaVersion": 1,
+      "payload": {
+        "title": "note-424242-7",
+        "body": "body-424242-7"
+      },
+      "timestamp": 1726000420000,
+      "location": null,
+      "source": "ui",
+      "agentInitiated": false,
+      "agentConversationId": null,
+      "previousHash": "9ea9ce77f1fb69b26f930191ad29433e0ae0b7664760c4ff12c394069a2ade1e",
+      "hash": "1e4528297dcdae84506179e2745c8238bd296a127c4293ec5181efb535ee7188",
+      "signature": "hQOjW+gZinlZzEdRZv+6bQVY/9BAvmaWk5TNxXDBm1TFOSApzH0gbOFImaXVMkwOPh+jsHmcg+oVzMptbivXBw=="
+    }
+  ]
+}
