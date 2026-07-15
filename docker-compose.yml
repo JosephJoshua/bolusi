@@ -1,15 +1,32 @@
 # Dev services (08-stack-and-repo §6.1): Postgres 16 only — no redis, no queues in v0.
-# `pnpm db:up` = docker compose up -d --wait (healthcheck-gated).
+# `pnpm db:up` = scripts/db-lane.mjs --up (compose up -d --wait, healthcheck-gated).
 # Credentials are local-dev-only; real environments never use compose (security-guide §10).
+#
+# ONE COMPOSE PROJECT PER WORKTREE. Compose derives the project name from this file's
+# directory, so each worktree already gets its own container, network and volume — the only
+# thing that was ever shared was the published host port, and that is what broke (T-14d).
 services:
   postgres:
     image: postgres:16-alpine
     ports:
-      # loopback only — the dev database is never exposed on the LAN
-      - '127.0.0.1:5432:5432'
+      # EPHEMERAL host port, loopback only. Docker picks a free port, so N worktrees can each
+      # run their own database concurrently instead of the first one winning 5432 and every
+      # later `db:up` failing with "port is already allocated" (T-14d).
+      #
+      # Never pin this back to '127.0.0.1:5432:5432'. The fixed port is precisely what let a
+      # worktree whose db:up had FAILED go green against a peer's database. Resolve the real
+      # port with `pnpm db:url` (or `docker compose port postgres 5432`) — never hardcode it.
+      - '127.0.0.1::5432'
     environment:
       POSTGRES_USER: bolusi
       POSTGRES_PASSWORD: bolusi
+      # The attribution stamp (T-14d). Compose substitutes the ACTUAL project name here even
+      # when COMPOSE_PROJECT_NAME is unset in the environment (it injects the derived value
+      # into interpolation), so this container is born knowing which worktree owns it and a
+      # bare `docker compose up` cannot produce an unstamped database.
+      # scripts/pg-init/02-stamp-db-owner.sh writes it into every dev database; the db-server
+      # test lane refuses to run against a database whose stamp isn't its own.
+      BOLUSI_DB_OWNER: ${COMPOSE_PROJECT_NAME}
     volumes:
       - bolusi-pgdata:/var/lib/postgresql/data
       - ./scripts/pg-init:/docker-entrypoint-initdb.d:ro

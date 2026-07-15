@@ -289,8 +289,21 @@ Security-surface tasks additionally ship adversarial tests BEFORE review (CLAUDE
 
 ### 6.1 Services
 
-- `docker-compose.yml`: `postgres:16-alpine`, port 5432, named volume, init script creating `bolusi_dev` and `bolusi_rls_test` databases. Nothing else (no redis, no queues — out of v0 scope).
+- `docker-compose.yml`: `postgres:16-alpine`, **ephemeral loopback host port**, named volume, init scripts creating `bolusi_dev` + `bolusi_rls_test` and stamping the owning compose project into each. Nothing else (no redis, no queues — out of v0 scope).
 - `apps/server/.env` (gitignored, `.env.example` committed): `DATABASE_URL`, `PORT=3000`. `apps/mobile`: `EXPO_PUBLIC_API_URL` via `app.config.ts`.
+
+**One database per worktree — never a shared one.** Compose derives its project name from the worktree directory, so each worktree gets its own container, network and volume. The host port is deliberately **not** fixed: docker assigns a free one, and `scripts/db-lane.mjs` resolves it (`docker compose port postgres 5432`) into `DATABASE_URL` for every db script. **Never hardcode 5432, and never restore a fixed `ports:` mapping.** A fixed port means only the first worktree to `db:up` binds it, every later `db:up` fails with `port is already allocated`, and — because nothing downstream noticed — its DB tests pass against a *peer's* database. That is not a hypothetical; it produced a false merge-gate green (testing-guide **T-14d**).
+
+| Need | Command |
+| ---- | ------- |
+| Start this worktree's database | `pnpm db:up` (fatal on failure — the lane stops, nothing runs against a peer) |
+| Its connection URL (port is ephemeral) | `pnpm db:url` → e.g. `DATABASE_URL=$(pnpm -s db:url) pnpm dev:server` |
+| Remove **your own** container + volume | `pnpm db:down` |
+| Claim an externally-provisioned DB (CI only) | `BOLUSI_DB_OWNER=<token> pnpm db:stamp` |
+
+**Never `docker compose down` / `docker stop` a container that is not yours.** Peers are live agents; a container that looks abandoned may be mid-run, and killing it corrupts their work (testing-guide T-14b is that failure in a different shape). `pnpm db:down` only ever touches your own compose project. Reap your own container when you finish a task — a leaked one squatted the fixed port for 4+ hours and is what triggered T-14d.
+
+**Attribution is asserted, not assumed.** Each dev cluster is stamped at init with the compose project that owns it (`bolusi.db_owner`, a database-level GUC, so it survives the test harness's schema reset and stays invisible to codegen and the RLS catalog sweep). The db-server test lane reads it before any test runs and **aborts** unless it matches the project it provisioned — an absent stamp counts as foreign, because an unstamped database is exactly what someone else's pre-existing container looks like. Reading is verification and writing is provisioning; the test lane only ever reads, or it would adopt the foreign database it is meant to reject.
 
 ### 6.2 Bootstrap sequence (must work from a clean clone)
 
