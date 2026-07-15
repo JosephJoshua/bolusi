@@ -259,6 +259,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@bolusi/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@bolusi/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
@@ -271,6 +277,9 @@ importers:
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.1
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.5(jiti@2.7.0)
       kysely:
         specifier: 'catalog:'
         version: 0.29.3

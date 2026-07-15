@@ -149,12 +149,20 @@ export default tseslint.config(
     //     both the trigger exception and the app role's grant denial (security-guide §3.1's
     //     "enforced three ways"). A test proving mutation is impossible has to attempt it.
     //
-    // Scoped to these two exact paths via the rule's documented `allowFiles` option — the log
-    // stays append-only everywhere else, including the rest of packages/db-server.
+    //   apps/server/test/integration/oplog/sec-oplog-07.test.ts — SEC-OPLOG-07 (security-guide
+    //     §3.2), added task 07. Same shape as append-only.test.ts one row up: it attempts
+    //     UPDATE/DELETE on `operations` as the app role AND as the owner to prove both the grant
+    //     denial and the trigger exception, and it feeds the rule's own forbidden statements to
+    //     ESLint as lint fixtures. A test proving mutation is impossible has to attempt it.
+    //
+    // Scoped to these exact paths via the rule's documented `allowFiles` option — the log
+    // stays append-only everywhere else, including the rest of packages/db-server and the whole
+    // of apps/server/src (the acceptance path only ever INSERTs; sec-oplog-07 asserts that too).
     name: 'bolusi/op-log-enforcement-allowlist',
     files: [
       'packages/db-server/migrations/0003_operations.ts',
       'packages/db-server/test/append-only.test.ts',
+      'apps/server/test/integration/oplog/sec-oplog-07.test.ts',
     ],
     rules: {
       'bolusi/no-op-table-update': [
@@ -163,6 +171,7 @@ export default tseslint.config(
           allowFiles: [
             'packages/db-server/migrations/0003_operations.ts',
             'packages/db-server/test/append-only.test.ts',
+            'apps/server/test/integration/oplog/sec-oplog-07.test.ts',
           ],
         },
       ],
@@ -309,6 +318,62 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
+    },
+  },
+  {
+    // Task 07 (05 §8–9): the op-acceptance pipeline is a LIBRARY layer — a pure function of deps +
+    // batch, runnable in-process with zero Hono/HTTP so the task-26 chaos harness (CHAOS-04/05/06)
+    // can drive it without sockets. The HTTP wiring is task 16's POST /v1/sync/push, which lives
+    // OUTSIDE src/oplog and calls in. This rule keeps the transport out of the pipeline; the
+    // fixture in apps/server/test/integration/oplog/no-http-boundary.test.ts proves it fires
+    // (testing-guide T-11 — a guard nobody has watched go red is not load-bearing).
+    name: 'bolusi/oplog-no-http',
+    files: ['apps/server/src/oplog/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'hono',
+              message:
+                'src/oplog is HTTP-free (task 07): the pipeline is in-process; HTTP wiring is task 16.',
+            },
+            {
+              name: '@hono/node-server',
+              message: 'src/oplog is HTTP-free (task 07): no server/transport in the pipeline.',
+            },
+            {
+              name: '@hono/zod-validator',
+              message:
+                'src/oplog is HTTP-free (task 07): request validation belongs to the route (task 16).',
+            },
+            {
+              name: 'ws',
+              message: 'src/oplog is HTTP-free (task 07): no sockets in the pipeline.',
+            },
+            {
+              name: 'node:http',
+              message: 'src/oplog is HTTP-free (task 07): the pipeline runs in-process.',
+            },
+            {
+              name: 'node:https',
+              message: 'src/oplog is HTTP-free (task 07): the pipeline runs in-process.',
+            },
+            {
+              name: 'node:http2',
+              message: 'src/oplog is HTTP-free (task 07): the pipeline runs in-process.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['hono/*', '@hono/*'],
+              message:
+                'src/oplog is HTTP-free (task 07): no Hono in the pipeline; the route (task 16) calls in.',
+            },
+          ],
+        },
+      ],
     },
   },
 );
