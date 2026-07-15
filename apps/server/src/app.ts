@@ -34,6 +34,17 @@ function isRealtime(path: string): boolean {
 }
 
 /**
+ * Media routes carry their OWN per-route chain (api/03-media §7; task 19): the sync gzip middleware
+ * is NOT mounted (encoded chunk → 415), the body caps are per-endpoint (16 KiB init/complete, 262144
+ * chunk) with media error codes (CHUNK_TOO_LARGE), and chunk PUT is rate-limited at 600/min/device
+ * (others 120). So media is excluded from the app-level compress, per-device limiter, and body/gzip
+ * steps and handles all three inside `createMediaRouter`. bearerAuth (§13 step 6) still applies.
+ */
+function isMedia(path: string): boolean {
+  return path === '/v1/media' || path.startsWith('/v1/media/');
+}
+
+/**
  * Build the app from injected dependencies. Production uses the defaults (`resolveDeps`); tests
  * swap fakes. The return value is the fully chained router — `typeof` it is `AppType` (§14).
  */
@@ -58,9 +69,12 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
   // §13 step 3: access log (code+path+requestId+deviceId; never tokens/bodies).
   app.use('*', accessLog({ sink: deps.accessLogSink }));
 
-  // §13 step 4: response compression — excluded from WS/SSE (§12.1).
+  // §13 step 4: response compression — excluded from WS/SSE (§12.1) and from media (raw,
+  // already-compressed bytes; download must keep an exact Content-Length + ETag — api/03 §3.5).
   const compressor = compress();
-  app.use('*', async (c, next) => (isRealtime(c.req.path) ? next() : compressor(c, next)));
+  app.use('*', async (c, next) =>
+    isRealtime(c.req.path) || isMedia(c.req.path) ? next() : compressor(c, next),
+  );
 
   // §13 step 5: per-IP limit, pre-auth, login only.
   app.use(
@@ -78,20 +92,22 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
   app.use('/v1/*', async (c, next) => (c.req.path === LOGIN_PATH ? next() : auth(c, next)));
 
   // §13 step 7: per-device limit (keyed by the device from step 6; realtime bucket for realtime).
-  app.use(
-    '/v1/*',
-    perDeviceRateLimit({
-      store: deps.perDeviceStore,
-      limits: deps.deviceRateLimits,
-      now: deps.now,
-      isRealtime,
-    }),
-  );
+  // Media is excluded — it owns per-endpoint device buckets (chunk 600/min, others 120/min —
+  // api/03 §8) inside createMediaRouter, reusing this same token-bucket store.
+  const deviceLimiter = perDeviceRateLimit({
+    store: deps.perDeviceStore,
+    limits: deps.deviceRateLimits,
+    now: deps.now,
+    isRealtime,
+  });
+  app.use('/v1/*', async (c, next) => (isMedia(c.req.path) ? next() : deviceLimiter(c, next)));
 
   // §13 steps 8–9: wire-byte cap then decompressed-byte cap. Realtime routes carry no body
   // middleware (reduced chain). Caps are per route class (§5.3).
   app.use('/v1/*', async (c, next) => {
-    if (isRealtime(c.req.path)) {
+    // Realtime + media carry the reduced chain (no app-level body/gzip). Media applies its own
+    // per-endpoint bodyLimit + Content-Encoding rejection inside createMediaRouter (api/03 §7).
+    if (isRealtime(c.req.path) || isMedia(c.req.path)) {
       await next();
       return;
     }
