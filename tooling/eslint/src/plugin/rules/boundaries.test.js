@@ -20,6 +20,21 @@ const tester = new RuleTester({
 
 tester.run('boundaries', rule, {
   valid: [
+    // Build tooling and the Node test lane are not shipped code (tsconfig.build.json rootDir=src,
+    // package.json files=["dist"]), so the platform-free lock does not reach them — 08 §3.4's CI
+    // leg runs these packages' unit tests on Node by design.
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/scripts/check.mjs',
+    },
+    {
+      code: `import { join } from 'node:path';`,
+      filename: '/repo/packages/i18n/test/gates.test.ts',
+    },
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/core/test/jcs-vectors/run.test.ts',
+    },
     // db-client is THE importer of op-sqlite (08 §3.2)
     {
       code: `import { open } from '@op-engineering/op-sqlite';`,
@@ -85,6 +100,19 @@ tester.run('boundaries', rule, {
     {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/core/src/oplog/append.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // the non-shipped exemption is a directory carve-out, not a package one: src/ stays locked
+    // even in a package whose scripts/ legitimately read the repo
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/src/generated/resources.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // a nested src path that merely mentions the word is still shipped code
+    {
+      code: `import { join } from 'node:path';`,
+      filename: '/repo/packages/i18n/src/scripts-helper.ts',
       errors: [{ messageId: 'platformFree' }],
     },
     // platform-free package importing hono

@@ -1,3 +1,4 @@
+import { ESLint } from 'eslint';
 import { expect, test } from 'vitest';
 
 import config, { bolusi } from './index.js';
@@ -51,4 +52,23 @@ test('no-float-money literal prong is scoped to schema files only (F1)', () => {
   expect(
     moduleGlobs.some((glob) => glob.includes('screens') || glob.endsWith('**/*.{ts,tsx}')),
   ).toBe(false);
+});
+
+// 07-i18n §5: the `new Intl.` ban. Linting real file paths through the actual flat config is the
+// only way to prove the packages/i18n exemption resolves — asserting on the config object would
+// just restate it.
+test('direct Intl use fails outside packages/i18n and passes inside it (07-i18n §5)', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const source = 'const f = new Intl.NumberFormat("id-ID");\n';
+
+  const lintAt = async (filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((message) => message.ruleId);
+  };
+
+  expect(await lintAt('apps/mobile/src/screens/Notes.tsx')).toContain('no-restricted-syntax');
+  expect(await lintAt('packages/modules/src/notes/screens/List.tsx')).toContain(
+    'no-restricted-syntax',
+  );
+  expect(await lintAt('packages/i18n/src/formatters.ts')).not.toContain('no-restricted-syntax');
 });

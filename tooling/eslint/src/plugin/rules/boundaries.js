@@ -35,6 +35,14 @@ const PLATFORM_FREE = new Set([
   'packages/i18n',
   'packages/modules',
 ]);
+/**
+ * The platform-free lock governs SHIPPED code: what tsconfig.build.json compiles (rootDir=src)
+ * and what package.json publishes (files: ["dist"]). Build tooling and the Node test lane are
+ * neither — 08 §3.4's own CI leg says these packages' unit tests run on Node and only the
+ * standalone vector bundle runs on Hermes, and a codegen/gate script cannot read the repo
+ * without node:fs. Everything under src/ stays locked, which is the surface Hermes loads.
+ */
+const NON_SHIPPED_DIR = /\/(scripts|test)\//;
 const PLATFORM_FORBIDDEN = [
   /^node:/,
   /^react-native($|\/|-)/,
@@ -126,6 +134,7 @@ export default {
         workspace &&
         PLATFORM_FREE.has(workspace) &&
         !(workspace === 'packages/modules' && /\/screens\//.test(filename)) &&
+        !NON_SHIPPED_DIR.test(filename) &&
         PLATFORM_FORBIDDEN.some((re) => re.test(source))
       ) {
         context.report({ node, messageId: 'platformFree', data: { source, workspace } });
