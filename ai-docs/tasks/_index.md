@@ -36,7 +36,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
-| 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43 |
+| 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | done | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
@@ -52,6 +52,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 41 | tenant-counter lock is taken AFTER the chain-head read it should protect (comment + 10-db §3 claim otherwise); latent, UNIQUE backstops it (from task 07 review) | todo | 07 |
 | 42 | @electric-sql/pglite escapes the DB-driver testOnly lock; watermark Number() comment overstates its evidence (from task 11 review) | todo | 11 |
 | 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | todo | 11, 14 |
+| 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | todo | 14 |
+| 45 | verifyPin lacks read-side verifier bounds (defence-in-depth); task 10's "DELETE WHEN TASK 14 LANDS" comment is now false (from task 14 review) | todo | 14 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
