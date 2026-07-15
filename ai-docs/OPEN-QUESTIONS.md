@@ -2,7 +2,30 @@
 
 Standing instruction: build autonomously, batch questions rather than interrupt. This is the batch. It is a file, not a chat message, because context gets compacted and a lost question is worse than an asked one.
 
-**Last updated:** 2026-07-15 · **Status:** 11/33 tasks done, 6 in flight
+**Last updated:** 2026-07-15 · **Status:** 29/61 tasks done
+
+---
+
+## 0. NEW — push muting cannot work as specified on Android. Pick an option. (task 59)
+
+**This one is a product decision, not a technical one, which is why it's above the device farm.**
+
+`api/04-push §5` promises: *"a boolean mute toggle per category, implemented as the channel's importance."* **Android does not permit that.** Expo's docs, twice, verbatim: *"After a channel has been created, you can modify only its name and description. This limitation is imposed by the Android OS."* Channels are created at app start, so by the time a shop owner opens Settings, the app can never change importance again. This isn't an Expo gap to route around — it's Android's design intent: **channel importance belongs to the user, so an app can't un-mute itself.**
+
+(Two separate bugs, incidentally: the toggle is also **unwired** — `applyChannelImportance` has zero callers. So muting does nothing today for a mundane reason *and* would do nothing once wired, for the OS reason.)
+
+**Your options — my recommendation is (d), or (a) if the settings screen is already built:**
+
+| | what the shop owner sees | honest? |
+| - | ------------------------ | ------- |
+| **(a) Toggle becomes a link** to Android's own per-category settings | one extra tap, then Android's screen — Android's copy, Indonesian only if the *phone* is set to Indonesian | yes, and it's what Android intends |
+| **(d) No in-app toggle in v0** | muting lives where Android puts it (per-app settings, already one row per category) | yes, and it's free |
+| **(b) Delete/recreate the channel per toggle** | a working toggle | **no — this is the trap.** Android restores a recreated channel's *old* settings on purpose, to defeat exactly this. Evading it needs a new channel id per change, which litters the user's settings with dead channels. It would pass every test we can run and fail on a real phone. |
+| **(c) Server-side muting** | a working toggle | v1 scope (FR-1149), and §5 rejected it deliberately — it forfeits killed-app suppression, the property the channel model buys |
+
+**What you're actually choosing between:** an in-app toggle that lies (b/c-as-hack), or muting that works but lives in Android's settings instead of ours (a/d). **v0 doesn't lose muting either way — it relocates it.** The channels created at boot are real and Android already exposes them per category.
+
+**Nothing is blocked.** Task 59 holds the decision; push wiring (21) proceeds regardless. If you don't answer, I'll take **(d)** — drop the toggle for v0, keep the channels, note it in `roadmap.md` — because it's the only option that's both honest and reversible.
 
 ---
 
