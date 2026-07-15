@@ -38,11 +38,16 @@ test('repo-wide rules are not scoped to a files subset', () => {
 
 test('no-float-money literal prong is scoped to schema files only (F1)', () => {
   const broad = config.find((block) => block.name === 'bolusi/money');
-  expect(broad.rules['bolusi/no-float-money']).toEqual(['error', { numericLiterals: false }]);
+  // Assert the F1 invariant (the literal prong's per-block state) rather than the whole
+  // options object, so unrelated options (task 29's float carve-out) don't false-fail here;
+  // the carve-out has its own assertions below.
+  expect(broad.rules['bolusi/no-float-money'][0]).toBe('error');
+  expect(broad.rules['bolusi/no-float-money'][1].numericLiterals).toBe(false);
   expect(broad.files).toContain('packages/modules/src/**/*.{ts,tsx}');
 
   const schemaOnly = config.find((block) => block.name === 'bolusi/money-schema-files');
-  expect(schemaOnly.rules['bolusi/no-float-money']).toEqual(['error', { numericLiterals: true }]);
+  expect(schemaOnly.rules['bolusi/no-float-money'][0]).toBe('error');
+  expect(schemaOnly.rules['bolusi/no-float-money'][1].numericLiterals).toBe(true);
   // the schema-file convention: whole schemas package + named module schema files
   expect(schemaOnly.files).toEqual([
     'packages/schemas/src/**/*.{ts,tsx}',
@@ -55,6 +60,33 @@ test('no-float-money literal prong is scoped to schema files only (F1)', () => {
   expect(
     moduleGlobs.some((glob) => glob.includes('screens') || glob.endsWith('**/*.{ts,tsx}')),
   ).toBe(false);
+});
+
+test('the float carve-out is narrow and identical in both money blocks (task 29)', () => {
+  const blocks = ['bolusi/money', 'bolusi/money-schema-files'].map((name) =>
+    config.find((block) => block.name === name),
+  );
+
+  for (const block of blocks) {
+    const [, options] = block.rules['bolusi/no-float-money'];
+    // exactly one file and exactly the three location props — nothing broader ever
+    // silently joins the allowlist
+    expect(options.allowFloatFiles).toEqual(['packages/schemas/src/envelope.ts']);
+    expect(options.allowFloatProps).toEqual(['lat', 'lng', 'accuracyMeters']);
+    // the carve-out must not admit a money-named prop
+    expect(
+      options.allowFloatProps.some((prop) => /(amount|price|cost|total|fee|idr)/i.test(prop)),
+    ).toBe(false);
+  }
+
+  // Flat-config rule options REPLACE rather than merge: envelope.ts matches BOTH blocks, so
+  // if the carve-out were only in the earlier block the later one would drop it and lint
+  // would break. Pin that they agree.
+  const [broadOptions, schemaOptions] = blocks.map(
+    (block) => block.rules['bolusi/no-float-money'][1],
+  );
+  expect(broadOptions.allowFloatFiles).toEqual(schemaOptions.allowFloatFiles);
+  expect(broadOptions.allowFloatProps).toEqual(schemaOptions.allowFloatProps);
 });
 
 // 07-i18n §5: the `new Intl.` ban. Linting real file paths through the actual flat config is the

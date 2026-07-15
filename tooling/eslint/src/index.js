@@ -6,6 +6,18 @@ import bolusi from './plugin/index.js';
 
 export { bolusi };
 
+// The ONE float-constructor carve-out in the repo (task 29; rule header + 08 §5.2):
+// envelope.ts's `zLocation`. Location rides in the signed ENVELOPE, not the payload, so
+// 05 §3's no-floats-in-payloads rule does not reach it; z.float64() is stricter than
+// z.number() there (rejects NaN/Infinity, keeping every admitted value JCS-serializable).
+// File AND property must both match, so this is not a blanket pass for either dimension.
+// Applied to both money blocks below: flat-config rule options REPLACE rather than merge,
+// so whichever block matches last must carry the carve-out.
+const LOCATION_FLOAT_CARVE_OUT = {
+  allowFloatFiles: ['packages/schemas/src/envelope.ts'],
+  allowFloatProps: ['lat', 'lng', 'accuracyMeters'],
+};
+
 export default tseslint.config(
   {
     name: 'bolusi/ignores',
@@ -101,7 +113,7 @@ export default tseslint.config(
     name: 'bolusi/money',
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {
-      'bolusi/no-float-money': ['error', { numericLiterals: false }],
+      'bolusi/no-float-money': ['error', { numericLiterals: false, ...LOCATION_FLOAT_CARVE_OUT }],
     },
   },
   {
@@ -116,7 +128,7 @@ export default tseslint.config(
       'packages/modules/src/**/{schema,schemas,ops,operations,commands,queries}.ts',
     ],
     rules: {
-      'bolusi/no-float-money': ['error', { numericLiterals: true }],
+      'bolusi/no-float-money': ['error', { numericLiterals: true, ...LOCATION_FLOAT_CARVE_OUT }],
     },
   },
   {
