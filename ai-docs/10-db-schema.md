@@ -932,7 +932,7 @@ CREATE TABLE user_prefs (
 1. Edit **this doc** (schema change = spec change).
 2. Server: write the migration in `packages/db-server/migrations` (kysely-ctl 0.21.0; programmatic use imports `Migrator` from `'kysely/migration'`). Projection-table migrations may also be expressed as drop-and-rebuild via the projection engine — the log is the source of truth (05-operation-log §1), so projection DDL changes never need data migrations, only a rebuild.
 3. Run `kysely-ctl migrate:latest` against the dev DB → run kysely-codegen 0.20.0 (`--camel-case`) → commit generated types. CI regenerates and diffs.
-4. Client: add the embedded migration; CI builds a scratch SQLite DB from all client migrations, runs kysely-codegen against it, diffs committed types.
+4. Client: add the embedded migration; CI builds a scratch SQLite DB from all client migrations, runs kysely-codegen against it **with `--camel-case` (as the server does in step 3)**, diffs committed types. The client runtime wires Kysely's `CamelCasePlugin` alongside the custom dialect (08 §2.2), so generated identifiers and query-builder identifiers agree. **Both engines therefore expose identical camelCase identifiers over the same snake_case DDL** — this is what lets a module's appliers be written once against `ProjectionDb` and run against client SQLite *and* server Postgres/PGlite alike (04 §2). Raw SQL and the driver-level helpers are unaffected: they speak the snake_case column names in this doc verbatim.
 5. Never edit generated type files by hand; never define a table interface manually.
 6. DB migrations serialize globally across parallel agents (CLAUDE.md §4).
 
