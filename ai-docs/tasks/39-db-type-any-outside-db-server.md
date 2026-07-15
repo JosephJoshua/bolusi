@@ -1,5 +1,5 @@
 # TASK 39 — `DB` is `any` for every consumer of `@bolusi/db-server`; all of `apps/server` is untyped against the schema
-**Status:** todo
+**Status:** in-review
 **Depends on:** 05
 
 ## Goal
