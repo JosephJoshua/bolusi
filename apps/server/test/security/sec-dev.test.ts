@@ -1,0 +1,237 @@
+// SEC-DEV server legs (security-guide §6.5). Titles embed the id verbatim so SEC-META-01 greps
+// them. SEC-DEV-06 is a client SQLCipher concern (tasks 04/14) and is asserted there, not here.
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { afterEach, beforeEach, expect, test } from 'vitest';
+
+import { sha256Hex } from '../../src/crypto/index.js';
+import { EnrollReq } from '../../src/identity/schemas.js';
+import { uuidv7 } from '../../src/uuidv7.js';
+import {
+  enroll,
+  makeIdentityHarness,
+  provision,
+  seedControlSession,
+  seedDevice,
+  seedUser,
+  type IdentityHarness,
+} from '../helpers/identity-app.js';
+
+let h: IdentityHarness;
+beforeEach(async () => {
+  h = await makeIdentityHarness();
+});
+afterEach(async () => {
+  await h.close();
+});
+
+async function setup() {
+  const p = await provision(h, {
+    tenantName: 'T',
+    storeNames: ['S'],
+    ownerName: 'O',
+    ownerLogin: `o-${Math.random()}`,
+  });
+  return {
+    p,
+    storeId: p.storeIds[0] as string,
+    control: await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId }),
+  };
+}
+
+function enrollBody(storeId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    deviceId: uuidv7(h.clock.now()),
+    devicePublicKeyB64: Buffer.from(ed25519.keygen().publicKey).toString('base64'),
+    storeId,
+    deviceName: 'Tablet',
+    platform: 'android',
+    appVersion: '1.0.0',
+    ...overrides,
+  };
+}
+
+test('SEC-DEV-01 enrollment authorization: a non-holder → 403, no device row, no token; a holder → 201 + audit row', async () => {
+  const { p, storeId, control } = await setup();
+
+  // Non-holder: a staff user's control session lacks auth.device_enroll.
+  const staff = await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'Staff',
+    storeIds: [storeId],
+    roleKeys: ['staff'],
+  });
+  const staffControl = await seedControlSession(h, { tenantId: p.tenantId, userId: staff });
+  const before = (
+    await h.idb.db.selectFrom('devices').select('id').where('kind', '=', 'member').execute()
+  ).length;
+
+  const denied = await enroll(h, staffControl, enrollBody(storeId), uuidv7(h.clock.now()));
+  expect(denied.status).toBe(403);
+  const after = (
+    await h.idb.db.selectFrom('devices').select('id').where('kind', '=', 'member').execute()
+  ).length;
+  expect(after).toBe(before); // no device row, no token minted
+
+  // Holder: the owner enrolls → 201 + an audit row.
+  const ok = await enroll(h, control, enrollBody(storeId), uuidv7(h.clock.now()));
+  expect(ok.status).toBe(201);
+  const okBody = (await ok.json()) as { deviceId: string };
+  const audit = await h.idb.db
+    .selectFrom('identityAudit')
+    .select('id')
+    .where('action', '=', 'device.enrolled')
+    .where('entityId', '=', okBody.deviceId)
+    .executeTakeFirst();
+  expect(audit).toBeDefined();
+});
+
+test('SEC-DEV-02 token hashed at rest: no plaintext token in devices/control_sessions; a stolen hash does not authenticate', async () => {
+  const { storeId, control } = await setup();
+  const res = await enroll(h, control, enrollBody(storeId), uuidv7(h.clock.now()));
+  const { deviceToken } = (await res.json()) as { deviceToken: string };
+
+  // Scan devices + control_sessions for the plaintext token value.
+  const deviceHashes = await h.idb.db.selectFrom('devices').select('tokenHash').execute();
+  const sessionHashes = await h.idb.db.selectFrom('controlSessions').select('tokenHash').execute();
+  const allHashes = [...deviceHashes, ...sessionHashes].map((r) => r.tokenHash);
+  expect(allHashes).not.toContain(deviceToken);
+  expect(allHashes).not.toContain(control);
+  // The stored value is exactly SHA-256(token) and auth works via that hash lookup.
+  expect(allHashes).toContain(sha256Hex(deviceToken));
+  const authed = await h.app.request('http://srv.test/v1/devices/me', {
+    headers: { Authorization: `Bearer ${deviceToken}` },
+  });
+  expect(authed.status).toBe(200);
+
+  // A stolen token_hash presented AS a bearer does not authenticate (verifyToken re-hashes it).
+  const stolen = await h.app.request('http://srv.test/v1/devices/me', {
+    headers: { Authorization: `Bearer ${sha256Hex(deviceToken)}` },
+  });
+  expect(stolen.status).toBe(401);
+});
+
+test('SEC-DEV-03 revocation latency semantics: revoke → next request → 401 DEVICE_REVOKED; signing_key_public retained + pre-revocation state readable', async () => {
+  const { p, storeId, control } = await setup();
+  const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
+  const pubkeyBefore = (
+    await h.idb.db
+      .selectFrom('devices')
+      .select('signingKeyPublic')
+      .where('id', '=', device.deviceId)
+      .executeTakeFirstOrThrow()
+  ).signingKeyPublic;
+
+  await h.app.request(`http://srv.test/v1/devices/${device.deviceId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${control}` },
+  });
+
+  // Very next request with that token → 401 DEVICE_REVOKED.
+  const next = await h.app.request('http://srv.test/v1/devices/me/bundle', {
+    headers: { Authorization: `Bearer ${device.token}` },
+  });
+  expect(next.status).toBe(401);
+  expect(((await next.json()) as { error: { code: string } }).error.code).toBe('DEVICE_REVOKED');
+
+  // signing_key_public retained forever; pre-revocation directory state (enrolled-by, pubkey)
+  // still readable via GET /v1/devices (owner control session).
+  const list = await h.app.request('http://srv.test/v1/devices', {
+    headers: { Authorization: `Bearer ${control}` },
+  });
+  const devices = (
+    (await list.json()) as {
+      devices: Array<{
+        deviceId: string;
+        signingKeyPublic: string;
+        enrolledBy: string | null;
+        status: string;
+      }>;
+    }
+  ).devices;
+  const row = devices.find((d) => d.deviceId === device.deviceId);
+  expect(row?.status).toBe('revoked');
+  expect(row?.signingKeyPublic).toBe(pubkeyBefore);
+  expect(row?.enrolledBy).toBe(p.ownerUserId);
+});
+
+test('SEC-DEV-04 (server leg) revoked-device 401: every identity endpoint returns DEVICE_REVOKED for the revoked token, incl. the /me confirm-then-wipe probe', async () => {
+  const { p, storeId, control } = await setup();
+  const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
+  await h.app.request(`http://srv.test/v1/devices/${device.deviceId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${control}` },
+  });
+
+  const hdr = { Authorization: `Bearer ${device.token}`, 'X-Acting-User': p.ownerUserId };
+  for (const path of ['/v1/devices', '/v1/devices/me', '/v1/devices/me/bundle']) {
+    const res = await h.app.request(`http://srv.test${path}`, { headers: hdr });
+    expect(res.status, `${path} should DEVICE_REVOKED`).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('DEVICE_REVOKED');
+  }
+});
+
+test('SEC-DEV-05 (server leg) private key never reaches the server: EnrollReq is .strict() and carries only the public key; audit rows contain no private-key bytes', async () => {
+  const { storeId, control } = await setup();
+
+  // .strict(): an enroll body carrying a private key (or any extra field) is rejected — the
+  // schema cannot accept private-key material.
+  const keypair = ed25519.keygen();
+  const privB64 = Buffer.from(keypair.secretKey).toString('base64');
+  const parsed = EnrollReq.safeParse({
+    deviceId: uuidv7(h.clock.now()),
+    devicePublicKeyB64: Buffer.from(keypair.publicKey).toString('base64'),
+    storeId,
+    deviceName: 'X',
+    platform: 'android',
+    appVersion: '1',
+    devicePrivateKeyB64: privB64, // the forbidden field
+  });
+  expect(parsed.success).toBe(false);
+
+  // A legitimate enroll: the captured audit rows for the run contain no private-key bytes.
+  const res = await enroll(
+    h,
+    control,
+    enrollBody(storeId, { devicePublicKeyB64: Buffer.from(keypair.publicKey).toString('base64') }),
+    uuidv7(h.clock.now()),
+  );
+  expect(res.status).toBe(201);
+  const audits = await h.idb.db.selectFrom('identityAudit').select(['before', 'after']).execute();
+  const serialized = JSON.stringify(audits);
+  expect(serialized).not.toContain(privB64);
+});
+
+test('SEC-DEV-07 (surfacing leg) key-compromise containment: GET /v1/devices surfaces device_anomalies counts and last-anomaly-at per device', async () => {
+  const { p, storeId, control } = await setup();
+  const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
+
+  // Seed anomaly rows (the tamper surface the fraud model exposes to the owner).
+  for (const [kind, at] of [
+    ['BAD_SIGNATURE', 100],
+    ['CHAIN_BROKEN', 300],
+  ] as const) {
+    await h.idb.db
+      .insertInto('deviceAnomalies')
+      .values({
+        id: uuidv7(h.clock.now()),
+        tenantId: p.tenantId,
+        deviceId: device.deviceId,
+        kind,
+        at: BigInt(at),
+        detail: null,
+      })
+      .execute();
+  }
+
+  const list = await h.app.request('http://srv.test/v1/devices', {
+    headers: { Authorization: `Bearer ${control}` },
+  });
+  const devices = (
+    (await list.json()) as {
+      devices: Array<{ deviceId: string; anomalyCount: number; lastAnomalyAt: number | null }>;
+    }
+  ).devices;
+  const row = devices.find((d) => d.deviceId === device.deviceId);
+  expect(row?.anomalyCount).toBe(2);
+  expect(row?.lastAnomalyAt).toBe(300);
+});
