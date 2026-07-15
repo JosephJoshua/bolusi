@@ -1,6 +1,7 @@
 // eslint-plugin-bolusi — the custom rules (08-stack-and-repo §5.2), packaged inside
 // @bolusi/eslint-config (one workspace) and exposed via the `bolusi` plugin namespace.
 import boundaries from './rules/boundaries.js';
+import listPrimitiveOnly from './rules/list-primitive-only.js';
 import noClockInHandlers from './rules/no-clock-in-handlers.js';
 import noFloatMoney from './rules/no-float-money.js';
 import noHardcodedStrings from './rules/no-hardcoded-strings.js';
@@ -17,6 +18,11 @@ const plugin = {
   },
   rules: {
     boundaries,
+    // Added task 24 (design-system §3.13/§7). Scoped to SCREEN code in the shared config below —
+    // `packages/ui` is out of scope on purpose: wrapping the RN primitive is its job, and that
+    // asymmetry is the boundary. Discharges §3.13's "a convention until enforced by task 24's
+    // screen import-boundary lint rule".
+    'list-primitive-only': listPrimitiveOnly,
     'no-float-money': noFloatMoney,
     'no-hardcoded-strings': noHardcodedStrings,
     'no-op-table-update': noOpTableUpdate,

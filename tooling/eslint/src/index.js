@@ -286,6 +286,34 @@ export default tseslint.config(
     },
   },
   {
+    // Added task 24 — design-system §3.13: screens render collections through the `List` primitive,
+    // never a raw FlatList/SectionList/VirtualizedList. §3.13 stated this as fact but nothing
+    // enforced it ("a convention until enforced by task 24's screen import-boundary lint rule");
+    // this block is that enforcement.
+    //
+    // SCOPE IS THE POINT. `packages/ui` is deliberately absent: it is the ONE package that may reach
+    // for the RN primitive, because wrapping it — owning `getItemLayout`, the fixed `touch.row`
+    // height, and the four §5 states as a discriminated union — is its job. Screens are in scope so
+    // that a screen cannot silently drop virtualization on the 2 GB target (§0) or regain the
+    // ability to render `[]` as "empty" when the truth is `unauthorized` (FR-1036).
+    //
+    // The mobile test lane's `react-native` double re-exports FlatList (the `List` primitive under
+    // test resolves through it), so it carries the rule's exact-path `allowFiles` exemption — the
+    // same shape as the op-log allowlists above, and for the same reason: a double that must supply
+    // the primitive is not a screen reaching past it.
+    name: 'bolusi/list-primitive',
+    files: ['apps/mobile/**/*.{ts,tsx}', 'packages/modules/src/**/screens/**/*.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      'bolusi/list-primitive-only': [
+        'error',
+        { allowFiles: ['apps/mobile/test/doubles/react-native.tsx'] },
+      ],
+    },
+  },
+  {
     // 07-i18n §5: @bolusi/i18n is the single formatting authority. UI code never touches Intl
     // directly — money/date/number rendering has locale rules (NBSP normalization, zero fraction
     // digits, day-first dates) that only the formatters apply. The i18n package itself is where

@@ -14,8 +14,10 @@ test('all bolusi custom rules are registered at error in the flat config', () =>
   // `permission-module-prefix` added task 09 (02-permissions §2 CI lint).
   // `no-clock-in-handlers` + `runtime-emission-allowlist` added task 10 (04-module-contract
   // §5.1/§5.2).
+  // `list-primitive-only` added task 24 (design-system §3.13 screen import boundary).
   expect(Object.keys(bolusi.rules).sort()).toEqual([
     'boundaries',
+    'list-primitive-only',
     'no-clock-in-handlers',
     'no-float-money',
     'no-hardcoded-strings',
@@ -41,6 +43,7 @@ test('all bolusi custom rules are registered at error in the flat config', () =>
   expect(ruleLevel('bolusi/permission-module-prefix')).toBe('error');
   expect(ruleLevel('bolusi/no-clock-in-handlers')).toBe('error');
   expect(ruleLevel('bolusi/runtime-emission-allowlist')).toBe('error');
+  expect(ruleLevel('bolusi/list-primitive-only')).toBe('error');
 });
 
 test('repo-wide rules are not scoped to a files subset', () => {
@@ -285,6 +288,52 @@ test('the configured sanctioned set is exactly 04 §5.1`s five', () => {
   const block = config.find((b) => Array.isArray(b.rules?.['bolusi/runtime-emission-allowlist']));
   const configured = block.rules['bolusi/runtime-emission-allowlist'][1].sanctionedTypes;
   expect([...configured].sort()).toEqual([...fromSpec].sort());
+});
+
+// Added task 24. design-system §3.13's boundary is an ASYMMETRY, and the asymmetry is the whole
+// rule: screens may not import the RN list primitive; `packages/ui` must, because wrapping it is
+// its job. The RuleTester fixtures prove the rule MATCHES; only the config decides where it RUNS,
+// so both directions are asserted through the REAL flat config. A version of this block that
+// checked only the "screen fails" direction would still pass if the rule had been made repo-wide —
+// which would break `packages/ui`'s own List and force someone to disable the rule to fix it.
+test('list-primitive-only fires on screens and exempts packages/ui (design-system §3.13)', async () => {
+  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const lintAt = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    return result.messages.map((m) => m.ruleId);
+  };
+
+  const rawList = `import { FlatList } from 'react-native';\n`;
+  const viaPrimitive = `import { List } from '@bolusi/ui';\n`;
+
+  // Screen code — both homes named by §7's scope.
+  expect(await lintAt(rawList, 'apps/mobile/src/screens/switcher/SwitcherScreen.tsx')).toContain(
+    'bolusi/list-primitive-only',
+  );
+  expect(await lintAt(rawList, 'packages/modules/src/notes/screens/NotesList.tsx')).toContain(
+    'bolusi/list-primitive-only',
+  );
+  // The `List` primitive is the sanctioned path — the rule is not simply always-on (T-14b).
+  expect(
+    await lintAt(viaPrimitive, 'apps/mobile/src/screens/switcher/SwitcherScreen.tsx'),
+  ).not.toContain('bolusi/list-primitive-only');
+
+  // THE ASYMMETRY: `packages/ui` is the one package that may reach for the primitive.
+  expect(await lintAt(rawList, 'packages/ui/src/components/List.tsx')).not.toContain(
+    'bolusi/list-primitive-only',
+  );
+
+  // The test lane's double must supply the primitive; the exemption is exact-path, so a
+  // neighbouring file in the same directory gets no pass.
+  expect(
+    await lintAt(
+      `export { FlatList } from 'react-native';\n`,
+      'apps/mobile/test/doubles/react-native.tsx',
+    ),
+  ).not.toContain('bolusi/list-primitive-only');
+  expect(await lintAt(rawList, 'apps/mobile/test/doubles/other-double.tsx')).toContain(
+    'bolusi/list-primitive-only',
+  );
 });
 
 test('no-token-literals covers packages/ui but exempts tokens.ts (§7 lint (a))', async () => {
