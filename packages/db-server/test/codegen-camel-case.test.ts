@@ -83,33 +83,57 @@ test('every generated table property maps back to a real column', async () => {
     }
 
     // Anti-vacuity, per interface. `parseInterfaces` is a REGEX over generated text: if
-    // kysely-codegen ever changes its output shape, the parse degrades to zero properties, the
-    // loop below no-ops, and this test goes green having verified nothing. An empty parse is a
-    // broken test, not a passing schema — so say so out loud rather than iterating `?? []`.
+    // kysely-codegen changes its output shape, the parse degrades and the loop below quietly
+    // checks less. An empty parse is a broken test, not a passing schema.
     const props = interfaces.get(ifaceName) ?? [];
     expect(
       props.length,
       `${ifaceName} parsed 0 properties — the generated-type parse broke`,
     ).toBeGreaterThan(0);
 
+    // Direction 1 — property → column: the actual defect this file exists for (opAId → op_aid).
+    const mapped = new Set<string>();
     for (const prop of props) {
       const column = toSnakeCase(prop);
+      mapped.add(column);
       checked += 1;
       if (!realColumns.has(column)) {
         mismatches.push(`${table}.${prop} → ${column} (no such column)`);
+      }
+    }
+
+    // Direction 2 — column → property: every column MUST be covered by a parsed property.
+    //
+    // This is what makes the sweep exhaustive rather than merely non-empty, and it closes a
+    // hole task 04 proved by construction on their side: a codegen emit change (e.g.
+    // `readonly id:`) breaks SOME line matches, not all, so a per-interface `props.length > 0`
+    // keeps passing while most properties go unchecked — they measured 19 of 164 checked, still
+    // green. Partial degradation is the realistic shape; total collapse is the easy one.
+    //
+    // Set equality has no slack to hide in: codegen emits exactly one property per column, so
+    // any dropped property leaves a column uncovered and fails here. It also needs no magic
+    // floor to maintain as the schema grows.
+    for (const column of realColumns) {
+      if (!mapped.has(column)) {
+        mismatches.push(
+          `${table}.${column} has no generated property — parse degraded, or codegen drifted`,
+        );
       }
     }
   }
 
   expect(mismatches).toEqual([]);
 
-  // Anti-vacuity, in aggregate: the whole sweep must have actually mapped the schema. 27 tables
-  // / 216 columns today; the floor is deliberately below that so ordinary schema growth does not
-  // trip it, while a collapsed parse (which yields ~0) still fails loudly.
-  expect(
-    checked,
-    'the sweep checked implausibly few properties — parse likely broke',
-  ).toBeGreaterThan(150);
+  // Anti-vacuity, in aggregate — an EXACT count derived from the catalog, not a hand-picked
+  // floor. A floor has slack by construction (a `> 150` floor against 216 columns tolerates 66
+  // silently unchecked), and slack is exactly where partial degradation hides. Deriving the
+  // expectation from the live schema also means it never needs updating as the schema grows.
+  const expectedTotal = [...tableToInterface.keys()]
+    .map((tableProp) => actual.get(toSnakeCase(tableProp))?.size ?? 0)
+    .reduce((a, b) => a + b, 0);
+
+  expect(expectedTotal, 'the catalog itself came back implausibly small').toBeGreaterThan(150);
+  expect(checked, 'the sweep did not check every column in the schema').toBe(expectedTotal);
 });
 
 test('the generated-type parser fails loudly rather than silently matching nothing', () => {
