@@ -1,20 +1,30 @@
-# TASK 38 — the convergence property test never exercises canonical order's tie-breaks
+# TASK 38 — nothing in the repo tests canonical order's `seq` tie-break
 **Status:** todo
+**Priority:** LOW-MEDIUM (sized by review-03 — real vacuity, cheap fix, pre-existing, small blast radius; the value is regression protection)
 **Depends on:** 35
 
 ## Goal
 
-Make the convergence property test actually test canonical order — all three components, not just the first.
+Add the missing tie-break coverage. **Read the precise finding below before planning — the obvious version of this task is wrong.**
 
-**The gap** (self-reported by task 35 while fixing the timeout flake, deliberately not fixed there — out of its file set):
+Canonical order is **`(timestamp, deviceId, seq)`**. Task 35 self-reported that the convergence fixture never produces ties; review-03 then **split the finding in half, and only one half is a real gap**:
 
-Canonical order is **`(timestamp, deviceId, seq)`**. The convergence fixture generates **120 ops with 120 distinct timestamps and zero cross-device ties**. So every op is fully ordered by `timestamp` alone, and the `deviceId` / `seq` tie-breaks are **never exercised**. Perturbing them leaves the test **green**.
+| component | status | evidence |
+| --------- | ------ | -------- |
+| `timestamp` | covered | the property test orders by it |
+| `deviceId` | **covered — do not "fix" this** | perturbing `ORDER BY timestamp_ms, device_id DESC, seq` makes **CHAOS-07ii go RED** (`expected 'from-a' to be 'from-b'`) while all 10 per-seed convergence cases stay green. The property test is blind to it, but CHAOS-07ii genuinely backstops it. |
+| **`seq`** | **COVERED BY NOTHING** | perturbing `ORDER BY timestamp_ms, device_id, seq DESC` at all three sites → **whole core package green: 27 files / 503 tests, EXIT=0** |
 
-This is the test named *"every random permutation digests byte-equal to the canonical fold"* — the guard on FR-1118 / `04 §4.2`, the load-bearing property of the entire offline-first architecture. It proves materially less than its name implies: it tests that ordering by timestamp converges, not that **canonical order** converges.
+**Why `seq` is unguarded, precisely:** CHAOS-07ii builds its tie from two *different* devices (`dev-a`/`dev-b`) at an identical timestamp — so `deviceId` resolves the comparison and `seq` is **never consulted**. `oplog-source.test.ts` uses distinct timestamps even within a device. **No test in the repo constructs two ops sharing `(timestamp, deviceId)`** — the precondition for the third component simply never occurs. A textbook T-14b vacuity: the assertion is fine, the *precondition* never happens.
 
-**Why ties are not a corner case — they are the actual scenario.** Two devices in the same shop, offline, both writing at the same moment: identical millisecond timestamps are exactly what the `deviceId`/`seq` tie-break exists to resolve. A shared clock granularity of 1ms across concurrent writers makes collisions *ordinary*, not exotic. The one situation where the tie-break decides the outcome is the one situation the property test cannot see.
+**Why the fixture cannot produce ties — structural, not luck.** Each device gets `clock = base + d*137` and advances only in whole seconds (`(1+floor(prng()*600)) * 1000`), so device `d`'s timestamps are permanently `≡ d*137 (mod 1000)`. Residues 0/137/274 → **cross-device ties are impossible by construction**. Measured: **1200 ops, 0 cross-device ties**. The `d*137` stagger that exists to *interleave* devices is exactly what makes ties unreachable.
 
-**What stops this being urgent** (verify before trusting): task 35 reports `CHAOS-07ii` covers ties with hand-built ops, so the class is not wholly unguarded. That is a mitigation, not a substitute — hand-built cases test the ties someone *thought of*; the property test is what tests the ones nobody thought of (T-12). Right now the randomized instrument is blind to two-thirds of the ordering key.
+**Honest sizing (review-03 talked itself DOWN from higher — don't re-inflate it):**
+- The **JS comparator is well covered**: `order.test.ts` deliberately uses a tiny value space (3 timestamps × 3 devices × 3 seqs) to force ties and explicitly tests *"breaks a timestamp+deviceId tie by seq"*. The subtle side is guarded.
+- The unguarded side is the **SQL `ORDER BY`** — the second implementation of `05 §4`. But `seq` is `INTEGER NOT NULL CHECK (seq >= 1)`, so SQL and JS cannot disagree via collation; and the server imports only `compareCanonicalOrder`/`canonicalizeJcs` from core, so **the SQL projection path is client-side SQLite only** — no cross-engine collation hazard either. (review-03 suspected one, checked, and was wrong. Don't repeat the suspicion without checking.)
+- So **live-bug risk is small.** The real value is **regression protection**: an edit to that `ORDER BY` — a refactor, an index-driven "optimization" — is currently caught by *nothing*. That is precisely the change the perturbation simulated.
+
+**The spec shares the blind spot — fix that too.** `testing-guide.md`'s CHAOS-07 is specified as *"Concurrent same-entity edits, 2+ devices"* and never names the **intra-device same-millisecond** case. So nobody violated the catalogue by not testing it; the catalogue never asked. A test added without fixing the spec leaves the next person with the same gap.
 
 ## Docs to read
 
@@ -38,18 +48,19 @@ This is the test named *"every random permutation digests byte-equal to the cano
 
 ## Acceptance
 
-**Observable done-condition:** perturbing the `deviceId` tie-break, or the `seq` tie-break, makes the convergence suite go **RED** — and the failure is a digest byte-inequality naming its seed, not a timeout.
+**Observable done-condition:** perturbing the **`seq`** tie-break makes the suite go **RED**. (It currently leaves 27 files / 503 tests green.)
 
-- **Prove the gap first** (T-11): perturb `order.ts`'s `deviceId` comparison, run the suite, watch it stay **GREEN**. That green is the bug. Then perturb `seq` — also green. Report both. If either already goes red, the premise is wrong: stop and report that instead.
-- **Generate ties deliberately, and assert you generated them** (T-14 — the denominator is the whole point here). The fixture must produce, per seed: ops sharing a `timestamp` across **different devices** (exercises `deviceId`), and ops sharing `(timestamp, deviceId)` (exercises `seq`). **Assert the counts are non-zero per seed** — a fixture that *intends* ties but produces none is this exact bug wearing a fix's clothing, and it would pass silently. Name the numbers.
-- **Then falsify properly**: with ties present, perturbing `deviceId` → RED with byte-inequality; perturbing `seq` → RED; restore → green. Both must name the seed (T-6) so a real break is debuggable from a CI log alone.
-- **Do not regress task 35's work.** Coverage stays ≥ its 10 seeds × 6 permutations × 120 ops, per-seed head/refold assertions keep their own denominators, and the suite stays inside the 30s ceiling — **measure it** (task 35's post-split numbers: p50 1076ms / p95 2681ms / max 3475ms, n=50). Adding ties should not materially change runtime; if it does, say so with numbers rather than raising the ceiling.
-- **Check the sibling fixtures for the same blindness** (T-12 — this is unlikely to be the only one): does any *other* projection/oplog property test generate distinct-timestamp-only data and therefore skip the tie-break? Report what you find. The bug is not "this fixture"; it is "our random fixtures are ordered by construction."
-- **Verify the CHAOS-07ii mitigation claim** rather than inheriting it: does it genuinely cover the tie class, and does this task overlap or complement it? If CHAOS-07ii is thinner than believed, that is a finding worth more than the fix.
+- **Prove the gap first, both halves** (T-11 — and this is what stops you fixing the wrong thing): perturb `ORDER BY … seq DESC` → watch the core package stay **GREEN** (that green is the bug). Then perturb `… device_id DESC` → watch **CHAOS-07ii go RED** (that one is already guarded — leave it alone). If either behaves differently than recorded above, the premise changed: stop and report.
+- **The fix is ~15 lines**: mirror CHAOS-07ii with **same timestamp + same deviceId + differing seq**. Do NOT rebuild the convergence fixture to manufacture ties — review-03's analysis shows the `d*137` stagger makes cross-device ties structurally impossible, and reworking the generator would risk task 35's verified coverage (10 seeds × 6 perms × 120 ops, per-seed `headApplies + refolds === 720` exactly) for a gap a hand-built case closes precisely. **If you believe the property test itself must generate ties, argue it explicitly against that cost** — don't do it by default.
+- **Assert the precondition, not just the assertion** (T-14b — this bug *is* a missing precondition): the new test must prove it actually constructed two ops sharing `(timestamp, deviceId)`. A tie test whose ops don't tie is this exact bug wearing a fix's clothing.
+- **Falsify**: with the case present, perturb `seq` → RED; restore → green. Report both.
+- **Fix the spec too** — otherwise the gap regrows. `testing-guide.md`'s CHAOS-07 says *"Concurrent same-entity edits, 2+ devices"*; add the **intra-device same-millisecond** case to the catalogue so the requirement exists, not just the test.
+- **Do not regress task 35.** If you touch `convergence.test.ts` at all, its per-seed `headApplies + refolds === 720` must still hold for all ten seeds, and runtime must stay well inside the 30s ceiling (post-split: p50 1076ms / p95 2681ms / max 3475ms, n=50).
+- **Sweep for the same shape** (T-12): does any other fixture make its precondition unreachable by construction? The bug is not "this fixture" — it is *"our random fixtures are ordered by construction, so the comparator's tie-breaks are unreachable."* Report what you find even if you fix only `seq`.
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
 
 ## Note
 
-Found by task 35 while fixing an unrelated timeout, and reported rather than left as a silent limitation — the second time this session an agent volunteered a weakness in work it had just made green (review-02 did the same on task 09's order-dependent escalation guard).
+Found by task 35 while fixing an unrelated timeout and reported rather than left as a silent limitation; **sized correctly only after review-03 split it** — the first version of this task file said "`deviceId`/`seq` are never exercised" and would have sent someone to re-cover `deviceId`, which CHAOS-07ii already guards, while possibly missing `seq`, which nothing does. Both halves *looked* identical from the property test's point of view; only a perturbation of each told them apart. That is why this file leads with the evidence table.
 
-The pattern is worth stating: **a randomized test's coverage is a property of its fixture, not of its name.** "Every random permutation" sounds exhaustive; it was exhaustive over permutations of a data set that had already been made unambiguous by construction. Randomizing the *order* of ops that can only order one way proves the fold is stable, not that the comparator is right. This is T-13 pointed at a fixture instead of an oracle: ask what the generator can actually produce before believing what the assertion claims to check.
+The pattern worth keeping: **a randomized test's coverage is a property of its fixture, not of its name.** "Every random permutation" sounds exhaustive — and it *was* exhaustive, over permutations of a data set that had already been made unambiguous by construction. Randomizing the order of ops that can only order one way proves the fold is stable; it says nothing about whether the comparator is right. This is T-13 aimed at a fixture instead of an oracle: **ask what the generator can actually produce before believing what the assertion claims to check.** The generator's staggering — added to make devices interleave — is what silently removed the ties the comparator exists to resolve.
