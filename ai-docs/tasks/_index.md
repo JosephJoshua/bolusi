@@ -12,14 +12,14 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 02 | schemas package (op envelope, API DTOs, error/WS schemas) | done | 01 |
 | 03 | crypto + canonicalization (JCS, SHA-256, Ed25519 ports, RFC 8785 vectors) | in-review | 01, 02 |
 | 04 | db-client (op-sqlite wrapper, custom Kysely dialect, SQLCipher, migrations) | done | 01 |
-| 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | in-review | 01 |
+| 05 | db-server (PG migrations from 10-db DDL, RLS, forTenant, codegen) | done | 01 |
 | 06 | oplog-client (append path: seq/chain/hash/sign, local log, bookkeeping) | todo | 02, 03, 04 |
 | 07 | oplog-server (validation pipeline, serverSeq, rejections, device anomalies, system-device chain) | todo | 02, 03, 05 |
 | 08 | projection-engine (head-apply/re-fold, watermarks, rebuild, oracle interface) | todo | 04, 06 |
 | 09 | permission-evaluator (scope evaluation, fail-closed, denial emission) | todo | 02, 04 |
 | 10 | command-runtime (execute sequence, ctx, DomainError registry, runtime emissions) | todo | 06, 08, 09 |
 | 11 | module-contract (defineModule, queries layer, registration) | todo | 08, 10 |
-| 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | todo | 02, 05 |
+| 12 | server-app (Hono skeleton, middleware chain, error envelope, RPC AppType) | in-progress | 02, 05 |
 | 13 | auth-server (control plane: login, users, verifiers, devices, bundle, provisioning, identity_audit) | todo | 05, 12 |
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | todo | 03, 04, 09, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | todo | 06, 10 |
