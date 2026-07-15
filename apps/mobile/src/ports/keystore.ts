@@ -13,9 +13,32 @@
 // the response to a compromised device is revocation (§7), not storage magic. Do not upgrade this
 // comment to a stronger claim without a doc change.
 //
-// `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` is deliberate: the entry needs the device
-// unlocked, and `THIS_DEVICE_ONLY` keeps it out of encrypted backups/restores, so a device identity
-// is never resurrected onto different hardware (§7.4 — re-enrollment always means a fresh keypair).
+// WHAT ENFORCES §7.4 ("a device identity is never resurrected"), PER PLATFORM. Read this before
+// touching OPTIONS below — an earlier version of this comment credited the whole guarantee to
+// `keychainAccessible`, which is an **iOS-only option**. Expo's `SecureStoreOptions` docs say
+// "Supported platforms: iOS" for it; on Android the field is accepted and ignored. The constant
+// `WHEN_UNLOCKED_THIS_DEVICE_ONLY` is separately documented as "Supported on Android, iOS, tvOS" —
+// that is the CONSTANT existing, not the OPTION having an effect. Both statements are true and the
+// composition is a trap: the symbol resolves, `tsc` is green, and Android drops the field. This is
+// an Android-first product (00-product-overview), so the practical answer is the Android one:
+//
+//   - Android: the seed is stored as ciphertext in SharedPreferences, wrapped by an Android Keystore
+//     key that is hardware-bound and never backed up. Restored ciphertext is therefore inert — the
+//     unwrapping key never left the old handset. expo-secure-store's own Android source is explicit
+//     about the outcome: when an entry outlives its Keystore key it logs "there is no corresponding
+//     KeyStore key … Returning null", deletes the entry, and returns null. So a restored phone reads
+//     as UNENROLLED and re-enrolls with a fresh keypair — §7.4's required path, and not a crash.
+//   - iOS: `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` is the leg that does this work —
+//     it keeps the entry out of encrypted backups/restores. Correct and load-bearing; do not remove.
+//   - BOTH, by construction: Android auto-backup is configured to carry none of this app's data off
+//     the device (security-guide §6.2:194) — `allowBackup: false` plus expo-secure-store's
+//     `configureAndroidBackup` rules, both asserted against the GENERATED manifest in
+//     `test/android-backup.test.ts`. That does not create the §7.4 property (Keystore already does);
+//     it removes the ambiguity and avoids the decryption-failure mess of a half-restored app.
+//
+// The residual risk is stated rather than papered over: the exclusion is present in the shipped
+// manifest; that it behaves as documented on a real restore is unverified on-device (D12/D13).
+//
 // `requireAuthentication` (biometric) is NOT set: it is defence-in-depth only and out of v0
 // (security-guide §6.2), and enabling it would block background sync signing.
 import * as SecureStore from 'expo-secure-store';
@@ -31,6 +54,9 @@ const DEVICE_TOKEN = 'bolusi.device_token';
 const MAX_ITEM_BYTES = 2048;
 
 const OPTIONS: SecureStore.SecureStoreOptions = {
+  // iOS only: Android accepts and ignores this field (see the platform note above). Kept because it
+  // is correct and load-bearing on iOS, which is a listed platform (`app.config.ts` → `platforms`).
+  // Asserted in keystore.test.ts, because nothing else would notice if it silently changed.
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
