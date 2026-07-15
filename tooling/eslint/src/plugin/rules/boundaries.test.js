@@ -116,6 +116,12 @@ tester.run('boundaries', rule, {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/harness/src/device.ts',
     },
+    // ...and core's projection-engine tests drive the shim over better-sqlite3 (task 08,
+    // testing-guide §2.3): test/ files only, never shipping source (invalid case below).
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/core/test/projection/better-sqlite3-driver.ts',
+    },
     // db-client test/tooling files may use Node builtins; only its shipping source may not
     {
       code: `import { mkdtempSync } from 'node:fs';`,
@@ -269,6 +275,12 @@ tester.run('boundaries', rule, {
     {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/db-client/src/adapters/better-sqlite3.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    // ...same for core: a test-only owner, so its SHIPPING source is still barred (task 08).
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/core/src/projection/engine.ts',
       errors: [{ messageId: 'dbDriverTestOnly' }],
     },
     // op-sqlite outside db-client, from the app that actually ships it (primary fixture)

@@ -3,8 +3,10 @@
 //   1. §2.6 banned packages everywhere (@hono/node-ws, expo-background-fetch,
 //      expo-file-system/legacy, kysely-expo)
 //   2. DB-driver locks (op-sqlite → db-client only; pg → db-server only;
-//      better-sqlite3 → harness, plus db-client TEST/TOOLING files only — it is the CI
-//      adapter behind the driver-conformance suite and must never reach shipping source)
+//      better-sqlite3 → harness, plus db-client AND core TEST/TOOLING files only — it is the
+//      CI adapter behind the shim dialect (testing-guide §2.3) that the driver-conformance
+//      suite and the core projection-engine tests both drive, and must never reach shipping
+//      source)
 //   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
 //   3. */screens subpaths importable only from apps/mobile
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
@@ -62,7 +64,13 @@ const DB_DRIVER_OWNERS = new Map([
   ['pg', [{ workspace: 'packages/db-server' }]],
   [
     'better-sqlite3',
-    [{ workspace: 'packages/harness' }, { workspace: 'packages/db-client', testOnly: true }],
+    [
+      { workspace: 'packages/harness' },
+      { workspace: 'packages/db-client', testOnly: true },
+      // core's projection-engine tests (task 08) drive the shim dialect over better-sqlite3
+      // :memory: (testing-guide §2.3); test/tooling files only — shipping core stays clean.
+      { workspace: 'packages/core', testOnly: true },
+    ],
   ],
 ]);
 
