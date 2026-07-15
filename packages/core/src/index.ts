@@ -3,6 +3,7 @@
 // Command runtime / sync loop land in later tasks.
 export const PACKAGE_NAME = '@bolusi/core' as const;
 
+export * from './authz/index.js';
 export * from './crypto/index.js';
 export * from './errors/domain-error.js';
 export * from './state-machines/index.js';
