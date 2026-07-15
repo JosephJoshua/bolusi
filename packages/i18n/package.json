@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Label catalog id/en + generated key union type (07-i18n)",
+  "description": "i18next + ICU label catalogs, locale state, Intl formatters, CI gates (07-i18n)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,10 +13,19 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "i18next": "catalog:",
+    "i18next-icu": "catalog:",
+    "intl-messageformat": "catalog:"
+  },
   "devDependencies": {
-    "@bolusi/tsconfig": "workspace:*"
+    "@bolusi/tsconfig": "workspace:*",
+    "@formatjs/icu-messageformat-parser": "catalog:"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "i18n:seed": "node scripts/seed.mjs",
+    "i18n:gen": "node scripts/gen-keys.mjs",
+    "i18n:check": "node scripts/check.mjs"
   }
 }

@@ -20,6 +20,11 @@ catalog:
   kysely: 0.29.3
   '@noble/curves': 2.2.0
   '@noble/hashes': 2.2.0
+  # i18n runtime (07-i18n §2; versions verified against current docs at implementation).
+  # intl-messageformat is i18next-icu's peer dep (declared range >=10.3.3 <12.0.0).
+  i18next: 26.3.6
+  i18next-icu: 2.4.4
+  intl-messageformat: 11.2.11
 
   # §2.4 server
   hono: 4.12.30
@@ -36,6 +41,9 @@ catalog:
   better-sqlite3: 12.11.1
   eslint: 9.39.5
   prettier: 3.9.5
+  # ICU syntax gate (07-i18n §7.3) — the parser behind i18next-icu's intl-messageformat,
+  # used build-time only; never bundled into the app.
+  '@formatjs/icu-messageformat-parser': 3.5.14
 
   # bootstrap support pins (recorded in 08 §7)
   typescript: 5.9.3
