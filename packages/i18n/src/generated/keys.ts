@@ -30,6 +30,7 @@ export type TranslationKey =
   | 'conflict.autoResolved.toast'
   | 'conflict.decision.saved'
   | 'conflict.detail.instruction'
+  | 'conflict.list.banner'
   | 'conflict.list.title'
   | 'conflict.status.acknowledged'
   | 'conflict.status.autoResolved'
@@ -99,6 +100,7 @@ export type TranslationKey =
   | 'role.main_owner.name'
   | 'role.staff.name'
   | 'role.store_owner.name'
+  | 'sync.action.pullToRefresh'
   | 'sync.action.syncNow'
   | 'sync.banner.stale'
   | 'sync.banner.warning'
@@ -248,10 +250,12 @@ export interface TranslationResources {
     };
     action: {
       syncNow: string;
+      pullToRefresh: string;
     };
   };
   conflict: {
     list: {
+      banner: string;
       title: string;
     };
     status: {
