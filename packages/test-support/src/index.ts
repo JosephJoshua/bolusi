@@ -36,3 +36,33 @@ export {
 // Driver-conformance suite (task 04) — identical statement set against better-sqlite3 in
 // CI and op-sqlite on device (testing-guide §2.3).
 export * from './driver-conformance/index.js';
+
+// The module-contract fixture module (task 11) — 02 §9.3's "fixture module with one gated field
+// to keep the mechanism itself under test". Exports the MANIFEST; the caller calls `defineModule`
+// (see fixture-module.ts for why that matters).
+export {
+  FIXTURE_SECRET_PERMISSION,
+  FIXTURE_TABLE,
+  FixtureParseError,
+  fixtureItemsTable,
+  itemCreatedPayload,
+  listItemsInput,
+  makeFixtureModuleManifest,
+  type CreateItemInput,
+  type FixtureCursorCodec,
+  type FixtureDatabase,
+  type FixtureItemRow,
+  type FixtureItemsTable,
+  type FixtureParseIssue,
+  type FixtureSort,
+  type ItemCreatedPayload,
+  type ListItemsInput,
+} from './fixtures/fixture-module.js';
+
+// The applier conformance suite (T-8 / testing-guide §2.4) — every module's appliers folded
+// through the real projection engine against BOTH engines, oracle-digest-equal.
+export {
+  runApplierConformance,
+  type ApplierConformanceEngine,
+  type ApplierConformanceResult,
+} from './applier-conformance/index.js';
