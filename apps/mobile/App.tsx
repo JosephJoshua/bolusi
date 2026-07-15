@@ -8,7 +8,7 @@
  * its own and why it must stay this thin.
  *
  * ── WHAT IS STUBBED, AND WHY (read before wiring task 15) ───────────────────────────────────────
- * `SyncStatusInput` is assembled from `syncSnapshot`, a PROP. Task 15 (sync-client) is not merged,
+ * `SyncStatusInput` arrives as the `sync` PROP. Task 15 (sync-client) is not merged,
  * so nothing on this device yet computes a real `SyncState`, the derived counters, or the rejected /
  * quarantined / media lists. The seam is typed against `03-state-machines` §8/§10 and `01` §5.2 (see
  * `src/sync/contract.ts`) rather than against a guess, so task 15 supplies the value and this file
