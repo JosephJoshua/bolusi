@@ -15,6 +15,8 @@
   ],
   "scripts": {
     "db:migrate": "kysely migrate latest",
+    "db:codegen": "kysely-codegen --dialect postgres --camel-case --out-file src/generated/db.d.ts --url ${DATABASE_URL:-postgres://bolusi:bolusi@localhost:5432/bolusi_dev}",
+    "db:codegen:check": "kysely-codegen --dialect postgres --camel-case --out-file src/generated/db.d.ts --url ${DATABASE_URL:-postgres://bolusi:bolusi@localhost:5432/bolusi_dev} --verify",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -24,10 +26,13 @@
     "pg": "catalog:"
   },
   "devDependencies": {
+    "@bolusi/eslint-config": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
-    "kysely-ctl": "catalog:",
-    "kysely-codegen": "catalog:",
+    "@electric-sql/pglite": "catalog:",
+    "@types/node": "catalog:",
     "@types/pg": "catalog:",
-    "@types/node": "catalog:"
+    "eslint": "catalog:",
+    "kysely-codegen": "catalog:",
+    "kysely-ctl": "catalog:"
   }
 }
