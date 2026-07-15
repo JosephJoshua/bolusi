@@ -83,7 +83,7 @@ describe('media upload → resume → complete → download', () => {
 
     // media_chunks purged after assembly.
     const remaining = await h.db
-      .selectFrom('media_chunks')
+      .selectFrom('mediaChunks')
       .select('chunkIndex')
       .where('mediaId', '=', mediaId)
       .execute();

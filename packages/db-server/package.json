@@ -16,8 +16,8 @@
   "scripts": {
     "db:migrate": "kysely migrate latest",
     "db:stamp": "node scripts/stamp-db-owner.mjs",
-    "db:codegen": "kysely-codegen --dialect postgres --camel-case --out-file src/generated/db.d.ts --url ${DATABASE_URL:?run this from the repo root as 'pnpm db:codegen' — it derives this worktree's own database URL (T-14d)}",
-    "db:codegen:check": "kysely-codegen --dialect postgres --camel-case --out-file src/generated/db.d.ts --url ${DATABASE_URL:?run this from the repo root as 'pnpm db:codegen:check' — it derives this worktree's own database URL (T-14d)} --verify",
+    "db:codegen": "kysely-codegen --dialect postgres --camel-case --out-file src/generated/db.ts --url ${DATABASE_URL:?run this from the repo root via pnpm db:codegen, which derives this worktree own database URL (T-14d). NOTE: no apostrophes in this message — sh parses them and an odd count makes the whole script a syntax error}",
+    "db:codegen:check": "kysely-codegen --dialect postgres --camel-case --out-file src/generated/db.ts --url ${DATABASE_URL:?run this from the repo root via pnpm db:codegen:check, which derives this worktree own database URL (T-14d). NOTE: no apostrophes in this message — sh parses them and an odd count makes the whole script a syntax error} --verify",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

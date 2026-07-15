@@ -3,7 +3,7 @@
 //
 // ONE definition, used by the production handle and the test harness alike — the plugin is only
 // correct if the runtime mapping is the exact inverse of what kysely-codegen --camel-case wrote
-// into src/generated/db.d.ts, so two copies of this config that drift would be a silent
+// into src/generated/db.ts, so two copies of this config that drift would be a silent
 // wrong-column bug.
 //
 // `underscoreBetweenUppercaseLetters` is NOT cosmetic and NOT the default:

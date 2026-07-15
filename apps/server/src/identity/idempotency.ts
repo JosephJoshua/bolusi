@@ -36,10 +36,14 @@ export async function purgeExpiredIdempotency(
   tenantId: string,
   now: number,
 ): Promise<void> {
+  // `created_at` is int8: kysely-codegen derives `Int8 = ColumnType<string, ...>` because the pg
+  // driver returns int8 as a STRING, so a comparison operand is typed `string` too (10-db §11.4).
+  // The wire value is identical either way (pg serializes 123n and '123' to the same "123") — this
+  // is the derived type being honoured, not a behaviour change.
   await db
     .deleteFrom('idempotencyKeys')
     .where('tenantId', '=', tenantId)
-    .where('createdAt', '<', BigInt(now - IDEMPOTENCY_RETENTION_MS))
+    .where('createdAt', '<', String(now - IDEMPOTENCY_RETENTION_MS))
     .execute();
 }
 
