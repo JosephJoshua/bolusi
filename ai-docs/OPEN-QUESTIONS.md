@@ -6,11 +6,22 @@ Standing instruction: build autonomously, batch questions rather than interrupt.
 
 ---
 
-## 1. The only question that actually blocks something: a cloud device farm
+## 1. Cloud device farm — ASKED AND DEFERRED (owner, 2026-07-15). Revisit when task 27a lands.
 
-**Ask:** Do we rent real physical low-end Androids (Firebase Test Lab / AWS Device Farm / BrowserStack App Automate), or accept that v0 ships with three claims unproven?
+**Status: closed for now.** Owner's call: think about it later. Nothing stalls; do not re-ask until the trigger below fires.
 
-**Why it's yours and not mine:** it's paid, and it uploads a build artifact to a third party — outward-facing (CLAUDE.md §6).
+**The trigger that should reopen it:** task **27a** (emulator lane, already scheduled, free, lands in v0) measures op-sqlite write throughput. **Look at the margin over the 667 ops/s floor.** Fat margin → stay deferred to pre-pilot. Thin margin → rent then; it costs roughly nothing (below).
+
+**Cost, checked 2026-07-15 (so nobody re-litigates it):** Firebase Test Lab is ~free at our volume — 30 min/day on *physical* devices on the free Spark plan; Blaze gives 30 free min/project/month then $0.15/min (~$5/device-hour), billed only for test execution, not app install or result collection. The whole device gate (P-1..P-6 + write benchmark) is minutes. So **$0 to single-digit dollars.** Cost is not the reason to defer — attention is.
+
+**Honest sizing (an earlier version of this file overstated the case):**
+- **argon2id p95** — *tunable, not architectural.* The fix is already documented: drop to the `m=19456/t=2/p=1` floor. The real risk isn't slowness, it's a security parameter being downgraded hastily under UX pressure.
+- **op-sqlite throughput** — **the one that actually matters**, and D6's mitigation is weaker than D6 claims: the "swap target" is expo-sqlite, which is *slower* (that's why op-sqlite was chosen), so if the floor fails, swapping does not save us — the fix is architectural (batching, op volume, sync strategy). Low probability, high impact, and **expensive to discover late** since everything is built on it.
+- **SQLCipher at-rest** — *not device-blocked at all*; 27a answers it on a real op-sqlite database.
+
+**What automation needs from the owner if this reopens:** the harness, EAS build, Test Lab upload, and result parsing are all automatable. What an agent cannot do: create the Firebase/Expo accounts, accept ToS, or attach billing — and uploading a build artifact to a third party is outward-facing (CLAUDE.md §6), so it gets confirmed before the first run. Owner supplies: Firebase project + Expo/EAS account + a service-account key.
+
+**Nothing blocks meanwhile.** v0 exits on 26 + 28 + 27a with the D4 device clause explicitly **deferred, not satisfied**; every emulator figure is labelled `EMULATOR — NOT A DEVICE MEASUREMENT`; task 27b stays **blocked, not deleted**, so the gap stays visible rather than forgotten.
 
 **Why it matters more than it sounds.** You said you have no physical 2GB Android. D4 made "the reference module running on a physical 2GB Android" *half the v0 exit criterion*, so that half is currently unmeetable — recorded in D12 rather than laundered through an emulator. An emulator runs on this host's x86 cores with host RAM; for CPU/storage/memory-bound numbers it doesn't produce conservative estimates, it produces **unrelated numbers**.
 

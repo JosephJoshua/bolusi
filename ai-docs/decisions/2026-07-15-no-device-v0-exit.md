@@ -29,10 +29,13 @@ Also unproven by an emulator: cold start (P-1), projection rebuild (P-3), `execu
 - **Delete the device gates.** Rejected: the gates exist because 2GB Android is the product's defining constraint (ARCH-001 §1). Deleting them makes the constraint invisible rather than unmet.
 - **Block v0 entirely until a device exists.** Rejected: everything else in the foundation is provable now, and stopping would waste that.
 
-## Open — needs the owner
+## Open — needs the owner → **ASKED AND DEFERRED 2026-07-15**
 
-- **A cloud device farm** (Firebase Test Lab, AWS Device Farm, BrowserStack App Automate) rents *real physical* low-end Androids and would close 27b without owning hardware. It is a paid, outward-facing service (uploads a build artifact to a third party) — **owner decision, not an agent's**. Recorded as the recommended path if no device is coming.
-- If a device arrives later, 27b runs unchanged; nothing else needs revisiting.
+- **A cloud device farm** (Firebase Test Lab, AWS Device Farm, BrowserStack App Automate) rents *real physical* low-end Androids and would close 27b without owning hardware. It is a paid, outward-facing service (uploads a build artifact to a third party) — **owner decision, not an agent's**.
+- **Owner's call (2026-07-15): defer.** Not rejected — deferred. Nothing stalls; v0 exits as described above with the device clause explicitly unsatisfied.
+- **Reopen trigger:** task **27a**'s measured op-sqlite write-throughput margin over the 667 ops/s floor. Thin margin → rent (cost is negligible: Firebase Test Lab is 30 free physical-device min/day on Spark; ~$5/device-hour on Blaze, and the whole gate is minutes). Fat margin → stays deferred to pre-pilot.
+- **Sizing correction recorded at the same time:** of the three unproven claims, only **op-sqlite throughput** is genuinely architectural-if-wrong — and note this doc's own D6 mitigation is weaker than it reads, because the swap target (expo-sqlite) is *slower* than op-sqlite, so a throughput failure is not rescued by swapping. **argon2id** is tunable (the documented floor exists for exactly this). **SQLCipher at-rest** is not device-blocked at all — 27a answers it on a real op-sqlite DB. Detail in `ai-docs/OPEN-QUESTIONS.md` §1.
+- If a physical device arrives later, 27b runs unchanged; nothing else needs revisiting.
 
 ## D13 — JCS byte-identity is proven on Hermes 0.13.0, UNPROVEN on the shipping 0.17.0 (accepted risk)
 
