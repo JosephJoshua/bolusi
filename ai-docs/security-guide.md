@@ -25,7 +25,16 @@ Per PRD-011 §8: the adversary is mostly an **insider**, not a nation-state.
 1. Every task touching a surface below copies that surface's checklist into its task file and checks items off with evidence (file/line or test name).
 2. The surface's **named adversarial tests** (`SEC-<AREA>-<NN>`) must exist and pass before the task enters review-wave. Reviewers verify test *content* against this doc, not just presence.
 3. Test titles MUST embed the ID verbatim (e.g. `test('SEC-OPLOG-01 forged signature rejected', ...)`) so they are greppable.
-4. **SEC-META-01** (ships with the CI setup task): a meta-test parses this doc for `SEC-[A-Z]+-[0-9]+` IDs and fails CI if any ID has no matching test title in the repo. This is how "tests ship with the surface" is enforced mechanically, not by memory.
+4. **SEC-META-01** (ships with the CI setup task): a meta-test parses this doc for `SEC-[A-Z]+-[0-9]+` IDs and fails CI if any ID has no matching test title in the repo. This is how "tests ship with the surface" is enforced mechanically, not by memory. An ID with no shipped title MUST instead have a row in `packages/test-support/src/sec-pending-allowlist.json` naming its owning task file. An ID that is **both** titled and allowlisted fails the gate — the row says "owed", the title says "shipped", and they cannot both be true.
+5. **Ownership is declared, never inferred from prose.** A task file claims the IDs it owns on a single marker line:
+
+   ```
+   **SEC ids owned by THIS task:** SEC-RT-01..05, SEC-SECRET-01
+   **SEC ids owned by THIS task:** none
+   ```
+
+   The value is a comma-separated list of IDs and inclusive ranges (`SEC-RT-01..05`), or the literal `none`. **No trailing prose** — anything else is a malformed marker and fails the gate rather than silently declaring nothing. An allowlist row is valid only when the owning task's marker declares that ID, and **exactly one** task file may declare a given ID. Rationale: the predecessor checked ownership with a substring match over the whole task file, so a task naming an ID only to **disclaim** it ("that's task 07's") satisfied the check, while a task claiming a **range** was rejected for containing no literal ID. Prose cannot express ownership; a grammar can.
+6. **A title claims the whole ID, so a partial leg must not title it.** SEC-META-01 matches a title *containing* the ID, and reads that as the ID being fully shipped. Where an ID spans surfaces (e.g. a client leg and a server leg), only the task that completes it may embed the ID verbatim; contributing surfaces reference the ID in a **comment**, never a title — comments are stripped before titles are extracted, precisely so prose can never fake coverage.
 
 ### 2.2 Denied-access response semantics (global rule table)
 

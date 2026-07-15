@@ -21,7 +21,11 @@ describe('WS frame (api/00 §12.1) — client-ignore contract', () => {
   });
 });
 
-describe('sync.poke message (api/00 §12.1) — frozen emission contract (SEC-RT-03 fixture)', () => {
+// The frozen schema that the realtime poke-payload audit consumes as its fixture. The id is
+// deliberately kept OUT of the title: 02-schemas.md owns no SEC id ("none execute in this task"),
+// and a verbatim id here would read to SEC-META-01 as the audit itself having shipped, silently
+// retiring the WS/SSE legs (task 20) and the push leg (task 21).
+describe('sync.poke message (api/00 §12.1) — frozen emission contract (realtime audit fixture)', () => {
   test('the canonical poke parses', () => {
     expect(zSyncPokeMessage.safeParse({ type: 'sync.poke', payload: {} }).success).toBe(true);
   });
