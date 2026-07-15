@@ -1,6 +1,6 @@
 # TASK 16 — sync-server (push/pull endpoints, devices sidecar, batching, gzip)
 
-**Status:** todo
+**Status:** in-review
 **Depends on:** 07, 12, 13
 
 ## Goal
@@ -50,3 +50,37 @@ Deliver the `sync` sub-router of `@bolusi/server`: `POST /v1/sync/push` wiring t
 - **Security checklist copied per security-guide §2.1** — check off with evidence (file/line or test name): [ ] middleware order bearerAuth → bodyLimit(1 MiB wire) → gzip-decompress(10 MiB cap) → zValidator, never reordered; [ ] decompression streams and aborts at cap; [ ] malformed/truncated gzip → 400, no unhandled rejection; [ ] batch limits (≤500 ops, ≤1 MiB gzipped) enforced server-side; [ ] scope validation fail-closed per 05 §9, per-op results; [ ] idempotent by op-id dedupe; [ ] revoked device → 401 / `DEVICE_REVOKED`; [ ] pull scope exact per api/01 §4.3, inside `forTenant` (RLS backstop witnessed in `test:rls`); [ ] per-device rate cap on push/pull with 429; [ ] errors never echo secrets or other tenants' data; rejection `reason` strings static English.
 - **CHAOS-01..05 protocol-level fixtures, in-process:** a fixture per testing-guide §3.1's server half (production `app.fetch` on PGlite, seeded tenant/stores/devices, raw wire client for tamper payloads) under `apps/server/test/integration/sync/`, running the server legs: CHAOS-01 (interleaved multi-device push arrival → server log complete, per-device seq order enforced), CHAOS-02 (F2 lost-response retry at each batch boundary → all `duplicate`, op count exact, no re-insert), CHAOS-03 (incremental pull transfers only missing ops; ≤500/batch respected), CHAOS-04 (±72 h skewed ops `accepted` + `clockSkewFlagged` via the 07 pipeline; no rejection path from skew), CHAOS-05 T1–T9 exact `results[].status`/code matrix with rejected ops absent from the log and from any other device's pull. Fixture helpers structured for reuse by task 26 (`@bolusi/harness` runs the full multi-device convergence versions there).
 - **CI gates:** stages 2/3/4/8 green on PR; stage 9 (`test:rls`) green at merge; SEC-META-01 finds every SEC-SYNC id in test titles; no new lint-boundary violations (sync router imports only what 08 §3.3 allows `apps/server`).
+
+---
+
+## Implementation notes (as shipped)
+
+### Security checklist (security-guide §4.1), checked off with evidence
+
+- [x] **Middleware order fixed** `bearerAuth → bodyLimit(1 MiB wire) → gzip-decompress(10 MiB cap) → zValidator` — chain in `apps/server/src/app.ts` (task 12, unreordered); witnessed by `test/integration/middleware-order.test.ts` (spies on the later stages) and `SEC-SYNC-05 > 1 MiB wire body → 413 BODY_TOO_LARGE before decompression`.
+- [x] **Decompression streams and aborts at the cap** — `src/middleware/gzip-decompress.ts` `inflateWithCap` cancels the reader at the cap; `SEC-SYNC-04 gzip bomb bounded` asserts the peak decompressed-byte witness stays within cap + one chunk (never inflate-then-measure).
+- [x] **Malformed / truncated gzip → 400, no unhandled rejection** — `SEC-SYNC-08` (truncated; asserts an empty `unhandledRejection` capture), `SEC-SYNC-10` (non-gzip bytes labeled gzip), `SEC-SYNC-06` (valid gzip of invalid JSON). The last one required a fix — see Findings.
+- [x] **Batch limits enforced server-side** — `zPushRequest.ops.max(500)` (`@bolusi/schemas`) → `SEC-SYNC-05 501 ops → 422 at the schema, handler never runs` (asserts zero rows in `operations`); wire cap → `SEC-SYNC-05 > 1 MiB wire body → 413`.
+- [x] **Scope validation fail-closed, per-op results** — task 07's `checkScope` (untouched); surfaced faithfully by `src/sync/push.ts`. `SEC-SYNC-03 cross-tenant op claim`, `CHAOS-05 T6`, and `push-semantics.test.ts` (an accepted sibling is unaffected by a SCOPE_VIOLATION).
+- [x] **Idempotent by op-id dedupe** — `SEC-SYNC-07 acknowledged-batch replay` (log byte-identical across the replay) and `CHAOS-02` (F2 lost-response retry at every batch boundary → all `duplicate`, no re-insert).
+- [x] **Revoked device → 401 / DEVICE_REVOKED** — `SEC-SYNC-02` (push and pull) and `CHAOS-05 T7`.
+- [x] **Pull scope exact per api/01 §4.3, inside `forTenant`** — `src/sync/pull.ts` (`serverSeq > cursor AND (storeId = device.storeId OR storeId IS NULL)`); `SEC-SYNC-09 pull scope leak probe` drains to exhaustion and asserts zero foreign-store/foreign-tenant ops with tenant-null ops present. RLS backstop witnessed on real PG16 by db-server `SEC-TENANT-01/02` under `pnpm test:rls`.
+- [x] **Per-device rate cap on push/pull with 429** — `test/integration/sync/rate-limit.test.ts`: the 121st request across MIXED push/pull → `429 RATE_LIMITED` with `Retry-After` == `details.retryAfterSeconds`; a second device is unaffected.
+- [x] **Errors never echo secrets or other tenants' data; rejection `reason` strings static English** — `auth.test.ts` access-log scan (no `bdt_` material, no `authorization` key); `error-envelope.test.ts` 422 asserts no input echo; every `reason` in task 07's pipeline is a static literal.
+
+### Engine attribution (T-14d)
+
+- **PGlite (embeds PostgreSQL 18)** — every `apps/server` in-process `app.fetch` suite: push/pull, sidecar, rate limit, SEC-SYNC, CHAOS-01..05, and the end-to-end batch-atomicity proof driving the REAL projection engine.
+- **Real PostgreSQL 16.14** (`pnpm test:rls`, attributed `owned by '<this worktree>'`) — `packages/db-server/test/sync-batch-atomicity.test.ts`: the §39 atomicity contract on the pinned engine.
+
+### Findings (for the orchestrator to file — not fixed here)
+
+1. **`highestContiguousServerSeq` is inert on real Postgres (`@bolusi/core`, task 08) — SERIOUS.**
+   `packages/core/src/projection/oplog-source.ts` compares `row.serverSeq === watermark + 1`, but the `pg` driver returns `bigint` as a **string** (probed on PG16.14: `rawValue="1" typeof=string`), so the strict comparison is always false and the walk returns `from` unchanged — `applied_server_seq` **never advances on the production engine**. `createSqlWatermarkStore.read` already normalizes with `Number(...)` for exactly this reason; the contiguity walk was missed. Invisible to every existing lane (core runs better-sqlite3; applier-conformance runs PGlite — both return numbers); only real PG16 exposes it. Fix is one line (`Number(row.serverSeq)`). **Not fixed here: `@bolusi/core` is contended and task 14 is live in it (CLAUDE.md §4/§6).** Task 17 consumes this path — it should land before/with 17.
+2. **Unparseable JSON returned 500, not 400 (api/00 §7) — fixed here.** Hono's json validator catches the parse failure and throws `HTTPException(400, 'Malformed JSON in request body')` *before* the §7.1 hook; the app's custom `onError` handled only `ApiError`, so it fell through to `500 INTERNAL`. Fixed in `apps/server/src/app.ts` (map `HTTPException` 400 → `MALFORMED_REQUEST`). Pre-existed task 16 (the stub used the same validator); no test covered it until `SEC-SYNC-06`.
+
+### Deviations
+
+- **`devicesDirectoryVersion` is DERIVED, not stored.** No server-side column exists (10-db has only the client's `sync_state.devices_directory_version`) and this task adds no migration, so `src/sync/pull.ts` derives it as `count(devices) + count(revoked devices)` — strictly monotonic, +1 per enrolment and +1 per revocation, since devices are never hard-deleted (03-state-machines §5 terminal `revoked`). Tenant-wide, opaque to the client (api/00 §10). A dedicated counter column would be a migration (serialized globally) — flagged for review.
+- **SEC-SYNC-05's 501-op leg asserts `422`, not the guide's `413/400`.** The ≤500 batch cap is enforced structurally by `zPushRequest.ops.max(500)`, so it is a schema rejection (api/00 §7.1) — still "before any op is processed" (asserted: zero rows in `operations`). The byte cap leg does assert `413`.
+- **Server-side projection application during push is NOT wired here** (10-db §8 / §3): task 17 owns the in-transaction conflict projection and wires it into this task's push module. Task 16 ships the seam — the push transaction boundary (task 07's `processPushBatch`, one `forTenant` tx) and the server watermark store embedding task 08 deferred to "tasks 07/16" (`src/sync/watermarks.ts`).
