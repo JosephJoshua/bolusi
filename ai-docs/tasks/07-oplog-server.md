@@ -1,6 +1,6 @@
 # TASK 07 — oplog-server: push validation pipeline, serverSeq, anomalies
 
-**Status:** todo
+**Status:** in-review
 **Depends on:** 02, 03, 05
 
 ## Goal
@@ -55,3 +55,39 @@ Deliver the server-side operation-acceptance pipeline as a **library layer insid
 - **SEC tests shipped IN this task, before review (CLAUDE.md §2.5), titles embedding ids verbatim (security-guide §2.1):** `SEC-OPLOG-01` (forged sig → `BAD_SIGNATURE` + anomaly row), `SEC-OPLOG-02` (replay inert), `SEC-OPLOG-03` (resequenced chain → `CHAIN_BROKEN` + remainder `CHAIN_HALTED`; skip-ahead → `CHAIN_GAP` distinguished), `SEC-OPLOG-04` (cross-device splice → `BAD_SIGNATURE`/`SCOPE_VIOLATION`, never accepted), `SEC-OPLOG-05` (payload byte + `userId` mutation → `BAD_SIGNATURE`), `SEC-OPLOG-08` (30-day-old timestamp accepted + flagged + `CLOCK_SKEW` anomaly). The `packages/test-support` fixture builders must cover the full SEC-OPLOG-01..09 matrix so the out-of-surface owners reuse them: SEC-OPLOG-06 (Hermes JCS — task 03), SEC-OPLOG-07 (DB grants/trigger + lint fixture — task 05), SEC-OPLOG-09 (client pull-side — task 15).
 - **CHAOS coverage note:** CHAOS-04, CHAOS-05, CHAOS-06 exercise this surface but live in the task-26 harness; this task's exit is that the pipeline is in-process drivable by `@bolusi/harness` (pure function of deps + batch, PGlite-compatible) — no HTTP required to run the scenarios.
 - **Gates:** pipeline performs zero `UPDATE`/`DELETE` against `operations` (existing lint rule + the task-05 trigger both stay green in integration); `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:server` pass; the `test:rls` concurrency subset is wired into the merge-gate lane (08-stack §5.6 stage 9).
+
+## Implementation notes (deviations + findings — for review / task 31)
+
+1. **SEC-OPLOG-07 ownership.** Acceptance above attributes it to task 05, but
+   `sec-pending-allowlist.json` mapped it to task 07 and `db-server/test/append-only.test.ts`
+   deliberately does not title it ("scoped to the full rejection pipeline"). The allowlist wins:
+   the id ships here (`apps/server/test/integration/oplog/sec-oplog-07.test.ts`) standing on task
+   05's trigger/grants and adding the leg this task owns — the acceptance path only ever INSERTs.
+   Task 31 should reconcile this line.
+2. **Where the concurrency proof lives.** The genuinely-concurrent serverSeq race is
+   `packages/db-server/test/oplog-server-seq-concurrency.test.ts` (real postgres:16 under
+   `pnpm test:rls`), NOT `apps/server/test/integration/oplog/`. PGlite drives one in-process
+   connection and cannot race, so a "concurrent" test there passes with the lock absent (T-11);
+   `pg` is boundary-locked to db-server, so apps/server cannot open a pool. apps/server proves the
+   pipeline's per-op accounting + that it EMITS the lock (statement spy); db-server proves the
+   statements are correct under contention. The two are cross-referenced as a sync-required mirror.
+3. **What the row lock actually buys (falsification finding).** Removing `FOR UPDATE` leaves
+   gaplessness INTACT — `UPDATE … SET n = n + 1 RETURNING` is atomic and holds its row lock to
+   commit. Only the `lock_timeout` mutual-exclusion test detects the missing lock. The lock's real
+   job is 10-db §3's "serializes pushes per tenant" — it serializes the whole push (incl. the
+   chain-head read), not just the allocations. Both classes are covered by separate tests.
+4. **Hash cross-check coverage gap (found by mutation testing, now closed).** Disabling the
+   `hash` cross-check in `steps/signature.ts` left the whole SEC suite green: payload mutation is
+   caught by the signature over the RECOMPUTED digest regardless. The cross-check's own class is a
+   tampered `hash` field with a genuine core+signature — accepted without it, poisoning the chain
+   for every device that links to it. `SEC-OPLOG-05` now covers it. `scripts/falsify-oplog.mjs`
+   re-runs all 13 mutations.
+5. **BLOCKER FOR ANOTHER TASK — `DB` is `any` outside packages/db-server.**
+   `src/generated/db.d.ts` is an input `.d.ts`; tsc does not copy it into `dist/`, so
+   `dist/index.d.ts`'s `export type { DB } from './generated/db.js'` dangles and every consumer of
+   `@bolusi/db-server` (all of apps/server) gets `DB = any` — no Kysely column/table/value typing
+   at all. Reproduce: `type X = DB['this_table_does_not_exist']` typechecks clean from apps/server
+   (EXIT=0) and errors TS2339 inside db-server (EXIT=2). This is exactly the hazard 10-db §11.4
+   documents for the CLIENT and fixes there by emitting a `.ts`; db-server has it unfixed. NOT
+   fixed here: it is db-server source + a codegen/spec change (10-db §11), and it is cross-cutting
+   (tasks 12/13/16/19). Reported, not drive-by-patched.
