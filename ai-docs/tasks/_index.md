@@ -65,6 +65,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 54 | **SEC-AUTH-06/11 server push-rejection legs are unclaimed and INVISIBLE** — a "client arm" title retired the whole id; guide §162/§167 require them (from task 31) | todo | 31 |
 | 55 | **HIGH** `test:rls` doesn't build — the only real-`pg` lane can't resolve @bolusi/core in CI and reads stale dist locally; 3rd §5.6 violation (from task 48) | todo | 46 |
 | 56 | `readVerifier` asserts client shapes over server types — the PIN-verifier "newest" decision can invert silently; 4th instance of the class (from task 48) | todo | 48 |
+| 57 | no gate stops a package re-exporting a type it doesn't emit — 0 live instances, but the class shipped `DB`-is-`any` across apps/server (from task 39 review) | todo | 39 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
