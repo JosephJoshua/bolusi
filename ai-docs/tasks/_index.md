@@ -63,7 +63,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 52 | 8 of 12 live invariants have no owner/test in a section titled "Invariants (testable, numbered)"; state FR ids are provenance (D15) (from QA sweep) | todo | 31 |
 | 53 | `SyncStatus` declared 3× (core's is avoidable, ui's is boundary-forced); seams are `string` so the compiler finds zero (from inverse enum sweep) | todo | 15 |
 | 54 | **SEC-AUTH-06/11 server push-rejection legs are unclaimed and INVISIBLE** — a "client arm" title retired the whole id; guide §162/§167 require them (from task 31) | todo | 31 |
-| 55 | **HIGH — precondition for 46/48's refusals meaning anything** `test:rls` doesn't build — the only real-`pg` lane can't resolve @bolusi/core in CI and reads stale dist locally; 3rd §5.6 violation (from task 48) | in-progress | 46 |
+| 55 | **HIGH — precondition for 46/48's refusals meaning anything** `test:rls` doesn't build — the only real-`pg` lane can't resolve @bolusi/core in CI and reads stale dist locally; 3rd §5.6 violation (from task 48) | done | 46 |
 | 56 | `readVerifier` asserts client shapes over server types — the PIN-verifier "newest" decision can invert silently; 4th instance of the class (from task 48) | todo | 48 |
 | 57 | no gate stops a package re-exporting a type it doesn't emit — 0 live instances, but the class shipped `DB`-is-`any` across apps/server (from task 39 review) | todo | 39 |
 | 58 | **HIGH** keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product; `security-guide §6.2:194` (android auto-backup exclusion) is an unchecked box **no task owns**; keystore.ts has 0 tests (from review-05 coverage sweep) | in-progress | — |
