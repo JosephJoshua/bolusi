@@ -68,9 +68,11 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 57 | no gate stops a package re-exporting a type it doesn't emit — 0 live instances, but the class shipped `DB`-is-`any` across apps/server (from task 39 review) | todo | 39 |
 | 58 | **HIGH** keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product; `security-guide §6.2:194` (android auto-backup exclusion) is an unchecked box **no task owns**; keystore.ts has 0 tests (from review-05 coverage sweep) | in-progress | — |
 | 59 | **HIGH — needs owner decision** `api/04-push §5`'s muting model is **impossible on Android** (channel importance immutable post-creation); `applyChannelImportance` has 0 callers and would be a no-op anyway (from review-05) | todo | 21 |
-| 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | todo | — |
+| 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) — **premise confirmed (11 green while the real gate was sabotaged); `canAttempt` deleted, coverage ported onto `pinPadState`/`pinView`, guard falsified 4-red; sweep filed 63/64** | in-review | — |
 | 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | in-progress | 31 |
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | todo | 55 |
+| 63 | every mobile screen exports a `*_KEY` label map its tests assert and its screen ignores (`PIN_MESSAGE_KEY`, `SWITCHER_KEY`, `REASSURANCE_KEY`) — `canAttempt`'s class, 3+ more times; §2.8 two copies of each mapping (from task 60's sweep) | todo | 60 |
+| 64 | wire the semantic unused-export sweep — `knip.json` + controls landed with 60, the **dependency and gate did not**; 2 of 4 configs were green-because-blind (from task 60's sweep) | todo | 60 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
