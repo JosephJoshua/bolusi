@@ -139,10 +139,10 @@ function assertCanonicalizable(value: unknown, path: string, seen: Set<object>):
     // across distinct data, strictly worse than the dropped-key bug this guard began as.
     //
     // The test is prototype-based so class instances are caught too (`[object Object]`
-    // cannot distinguish them). An object carrying `toJSON` on its prototype is exotic by
-    // this test; a plain object with an OWN `toJSON` is caught by the function prong.
-    // Date is rejected deliberately: it serializes to an ISO string, while the wire
-    // contract is integer ms-epoch and "never ISO strings" (api/00 §2.1, 05 §3).
+    // cannot distinguish them). Date is rejected deliberately: it serializes to an ISO
+    // string, while the wire contract is integer ms-epoch and "never ISO strings"
+    // (api/00 §2.1, 05 §3). Inherited `toJSON` (Date's lives on its prototype) is caught
+    // here; the OWN-toJSON case is caught by the descriptor check below.
     const prototype: unknown = Object.getPrototypeOf(object);
     if (prototype !== Object.prototype && prototype !== null) {
       const name = (object as { constructor?: { name?: string } }).constructor?.name;
@@ -150,6 +150,31 @@ function assertCanonicalizable(value: unknown, path: string, seen: Set<object>):
         'NON_PLAIN_OBJECT',
         path,
         `${name ?? 'exotic object'} is not JSON data — its contents would be silently dropped or reshaped; convert it to a plain object or array first`,
+      );
+    }
+
+    // Reject an OWN `toJSON` FUNCTION, ENUMERABILITY BE DAMNED. This is a time-of-check /
+    // time-of-use hole, not a type hole: canonicalize serializes any value whose `toJSON`
+    // is a function by calling it (matching JSON.stringify), whether or not it is
+    // enumerable — but `Object.keys` below only sees enumerable keys. So an object with a
+    // non-enumerable own `toJSON` function reads as "plain" to a key walk while canonicalize
+    // hashes whatever `toJSON()` RETURNS: the guard validates one value, the preimage is
+    // another (`{amountIdr:250000}` and `{amountIdr:999999}`, each with a non-enumerable
+    // toJSON returning `{}`, both canonicalize to `{}` — a collision across distinct data).
+    // Only a descriptor probe sees a non-enumerable key.
+    //
+    // Precisely `typeof === 'function'`, matching canonicalize's OWN trigger, for two
+    // reasons: (1) a `toJSON` DATA key is legitimate JSON — `{"toJSON":"note"}` arrives
+    // straight from the wire via JSON.parse (enumerable string) and canonicalize emits it
+    // verbatim; rejecting it would fail-closed on valid data. (2) We read the descriptor's
+    // `value` rather than `object.toJSON` so an ACCESSOR (getter) toJSON is NOT invoked —
+    // a getter is a separate, wire-unreachable TOCTOU deliberately left as accept.
+    const toJsonDescriptor = Object.getOwnPropertyDescriptor(object, 'toJSON');
+    if (toJsonDescriptor !== undefined && typeof toJsonDescriptor.value === 'function') {
+      throw new JcsInputError(
+        'NON_PLAIN_OBJECT',
+        path,
+        'object defines an own toJSON function — canonicalize would hash its return value, not the object the guard validated',
       );
     }
 

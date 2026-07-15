@@ -183,15 +183,7 @@ describe('canonicalizeJcs — input guards', () => {
           x = 1;
         })(),
       ],
-      [
-        'object with prototype toJSON',
-        new (class T {
-          toJSON() {
-            return 'HIJACKED';
-          }
-        })(),
-      ],
-      ['object with own toJSON', { toJSON: () => 'HIJACKED' }],
+      // toJSON is NOT covered here — it has its own placement x enumerability class below.
     ];
 
     // Top level, nested in an object, and inside an array — the three shapes a signed
@@ -222,6 +214,92 @@ describe('canonicalizeJcs — input guards', () => {
       const a = expectRejection({ tags: new Set([1, 2]) });
       expect(a.code).toBe('NON_PLAIN_OBJECT');
       expect(a.path).toBe('$.tags');
+    });
+  });
+
+  // toJSON is its OWN class, orthogonal to the exotic-type class above, because
+  // `JSON.stringify` (and therefore canonicalize) honours toJSON no matter WHERE it sits
+  // or WHETHER it is enumerable — so the guard hashes toJSON()'s RETURN, not the object
+  // it walked. The full class is placement × enumerability:
+  //   placement    = { own, inherited }
+  //   enumerability = { enumerable, non-enumerable }   (own only; inherited-via-prototype
+  //                    is non-enumerable by construction)
+  // The first fix caught own-ENUMERABLE (function-valued key) and inherited (prototype
+  // walk) and MISSED own-NON-ENUMERABLE — a key walk cannot see it, only a descriptor
+  // probe can. Enumerating the class means that third door cannot reopen silently.
+  describe('an own or inherited toJSON is rejected regardless of enumerability or placement', () => {
+    // Each factory returns an otherwise-plain object carrying a toJSON that, if honoured,
+    // would substitute a DIFFERENT value into the preimage than the guard walked.
+    const carriers: [string, () => object][] = [
+      [
+        'own enumerable toJSON',
+        () => ({ real: 'walked', toJSON: () => ({ substituted: 'hashed' }) }),
+      ],
+      [
+        'own non-enumerable toJSON',
+        () => {
+          const object: Record<string, unknown> = { real: 'walked' };
+          Object.defineProperty(object, 'toJSON', {
+            value: () => ({ substituted: 'hashed' }),
+            enumerable: false,
+          });
+          return object;
+        },
+      ],
+      [
+        'inherited toJSON',
+        () =>
+          Object.assign(Object.create({ toJSON: () => ({ substituted: 'hashed' }) }) as object, {
+            real: 'walked',
+          }),
+      ],
+    ];
+
+    const positions: [string, (value: object) => unknown][] = [
+      ['top level', (value) => value],
+      ['nested in an object', (value) => ({ outer: { inner: value } })],
+      ['inside an array', (value) => ({ list: [1, value] })],
+    ];
+
+    for (const [carrierName, make] of carriers) {
+      for (const [positionName, wrap] of positions) {
+        it(`rejects an ${carrierName} ${positionName}`, () => {
+          expect(() =>
+            canonicalizeJcs(wrap(make()) as Parameters<typeof canonicalizeJcs>[0]),
+          ).toThrow(JcsInputError);
+        });
+      }
+    }
+
+    it('rejects the non-enumerable-toJSON collision the key walk cannot see', () => {
+      // Two distinct plain-looking objects whose non-enumerable toJSON both return {}.
+      // Under a key walk they look like different data; canonicalize collapses both to
+      // `{}` — a hash collision. Object.keys cannot see the toJSON; the descriptor can.
+      const collide = (amountIdr: number): object => {
+        const object: Record<string, unknown> = { amountIdr };
+        Object.defineProperty(object, 'toJSON', { value: () => ({}), enumerable: false });
+        return object;
+      };
+      expect(canonicalize({ payload: collide(250000) })).toBe('{"payload":{}}');
+      expect(canonicalize({ payload: collide(999999) })).toBe('{"payload":{}}');
+      expect(Object.keys(collide(1))).not.toContain('toJSON');
+
+      const rejection = expectRejection({ payload: collide(250000) });
+      expect(rejection.code).toBe('NON_PLAIN_OBJECT');
+      expect(rejection.path).toBe('$.payload');
+    });
+
+    it('accepts a toJSON DATA key — it is legitimate JSON, not a serializer hook', () => {
+      // The trigger is `typeof toJSON === 'function'`, matching canonicalize. A field
+      // literally named "toJSON" holding a STRING arrives straight from the wire
+      // (JSON.parse yields an enumerable string) and canonicalize emits it verbatim —
+      // rejecting it would fail-closed on valid data. This pins the guard against
+      // regressing into the broader "any own toJSON" over-rejection.
+      const fromWire = JSON.parse('{"amountIdr":250000,"toJSON":"a note"}') as unknown;
+      expect(typeof (fromWire as { toJSON: unknown }).toJSON).toBe('string');
+      expect(canonicalizeJcs(fromWire as Parameters<typeof canonicalizeJcs>[0])).toBe(
+        '{"amountIdr":250000,"toJSON":"a note"}',
+      );
     });
   });
 
