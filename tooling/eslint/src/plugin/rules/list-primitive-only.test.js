@@ -34,6 +34,10 @@ tester.run('list-primitive-only', rule, {
     { code: `import { FlatList } from './doubles/react-native.js';` },
     // A namespace import is fine until it is used to reach the primitive.
     { code: `import * as RN from 'react-native'; const v = RN.View;` },
+    // Likewise a default import — the binding is only a violation at the use site.
+    { code: `import RN from 'react-native'; const v = RN.View;` },
+    // A default import of something ELSE named RN is not react-native's module object.
+    { code: `import RN from './doubles/react-native.js'; const L = RN.FlatList;` },
     // Non-react-native require.
     { code: `const { FlatList } = require('./local-double.js');` },
     // A property named FlatList on an unrelated object is not an import of the primitive.
@@ -78,6 +82,31 @@ tester.run('list-primitive-only', rule, {
     // (3) Namespace access — the bypass a naive import-only rule misses.
     {
       code: `import * as RN from 'react-native'; const el = <RN.FlatList data={rows} />;`,
+      errors: [{ messageId: 'forbidden' }],
+    },
+    {
+      code: `import * as RN from 'react-native'; const L = RN.SectionList;`,
+      errors: [{ messageId: 'forbidden' }],
+    },
+    // (3b) DEFAULT-import namespace — `react-native` is CJS, so under esModuleInterop the default
+    // import IS the module object and `RN.FlatList` renders a real, non-virtualized list. This
+    // spelling linted AND typechecked clean until review caught it (T-12: the first fix addressed
+    // the JSX instance of this bug, not the class — an untracked binding holding the namespace).
+    {
+      code: `import RN from 'react-native'; const el = <RN.FlatList data={rows} renderItem={() => null} />;`,
+      errors: [{ messageId: 'forbidden', data: { name: 'FlatList' } }],
+    },
+    {
+      code: `import RN from 'react-native'; const L = RN.FlatList;`,
+      errors: [{ messageId: 'forbidden' }],
+    },
+    {
+      code: `import ReactNative from 'react-native'; const el = <ReactNative.VirtualizedList data={rows} />;`,
+      errors: [{ messageId: 'forbidden' }],
+    },
+    // A default AND named import together — both routes stay guarded.
+    {
+      code: `import RN, { View } from 'react-native'; const el = <RN.SectionList data={rows} />;`,
       errors: [{ messageId: 'forbidden' }],
     },
     // (4) CJS destructure.

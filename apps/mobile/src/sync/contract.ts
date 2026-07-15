@@ -15,7 +15,7 @@
  * task 15 exports these, this file is deleted and the imports repoint — the shapes are written to
  * match so that deletion is a repoint, not a rewrite.
  *
- * THE ONE THING A REVIEWER SHOULD CHECK: that these constants still equal 03 §8's. `staleness.test.ts`
+ * THE ONE THING A REVIEWER SHOULD CHECK: that these constants still equal 03 §8's. `contract.test.ts`
  * parses the numbers out of the spec table itself rather than restating them, so a threshold change
  * in the doc fails this lane instead of silently disagreeing with it (T-13 — interrogate the oracle).
  */

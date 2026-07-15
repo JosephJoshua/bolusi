@@ -99,12 +99,40 @@ export interface SwitcherGridRow {
  * and exposes no `numColumns`. `packages/ui` is CONTENDED this wave (CLAUDE.md §4), so adding the
  * prop is a coordinated design-system change, not an inline edit.
  *
- * The answer: make each LIST ITEM a grid ROW. Virtualization is preserved exactly — `List` still
- * windows, still gets uniform row heights, still keeps `getItemLayout` legal — and the screen gets
- * its grid. A `.map()` over all users inside one ScrollView would have been the easy alternative and
- * is precisely the defect the 2 GB target cannot afford (§0/§3.13): a shop with 30 staff would
- * mount 30 96 dp avatars at once, and the `bolusi/list-primitive-only` rule this task ships would
- * not have caught it (it guards the import, not a hand-rolled map).
+ * The answer: make each LIST ITEM a grid ROW. The list windows, and the screen gets its grid. A
+ * `.map()` over all users inside one ScrollView would have been the easy alternative and is
+ * precisely the defect the 2 GB target cannot afford (§0/§3.13); the `bolusi/list-primitive-only`
+ * rule this task ships would not have caught that (it guards the import, not a hand-rolled map).
+ *
+ * ── KNOWN DEFECT: THE SCROLL GEOMETRY IS WRONG (task 33) ────────────────────────────────────────
+ * State plainly, because an earlier version of this comment claimed the opposite and a false
+ * "verified" claim is what silently retires a concern:
+ *
+ *   `List` hardcodes `getItemLayout` to `length: touch.row` (**64**) with no override prop. A grid
+ *   row here actually renders `space.lg`×2 padding (32) + `Avatar size="switcher"` (96) +
+ *   `space.sm` gap (8) + a name at `type.body` lineHeight 26 — and the name is `numberOfLines={2}`.
+ *   So a row is **162 dp** with a one-line name and **188 dp** when it wraps. (`minHeight:
+ *   touch.row` is a floor that never binds.)
+ *
+ * Two things follow, and both are true:
+ *   1. Rows are uniform ONLY while no name wraps — a wrapping name adds 26 dp, so uniformity is a
+ *      property of the DATA here, not of the construction.
+ *   2. The reported length is ~2.5× short of the real one. `getItemLayout` exists precisely to SKIP
+ *      measurement, so FlatList never discovers the error and never self-corrects: scroll extent and
+ *      every computed offset are wrong, and `removeClippedSubviews` (on by default on Android)
+ *      compounds it by unmounting against those offsets.
+ *
+ * Windowing still happens — this is not a `.map()`, and memory is still bounded. What is broken is
+ * where the list thinks its rows ARE.
+ *
+ * The irony is worth absorbing rather than hiding: the scenario invoked above to justify this design
+ * — a shop with 30 staff — is exactly the one where it breaks. At the typical 2–3 staff nothing
+ * scrolls and the defect is invisible. Uniformity was also never sufficient on its own; the value
+ * has to be RIGHT, and it is not.
+ *
+ * The fix is `ListProps.itemHeight` (or a measured layout) in `@bolusi/ui`, which is contended this
+ * wave — so it is FILED, not patched here. Do not "fix" it by shrinking the card to 64 dp: §8.2
+ * specifies a 96 dp avatar precisely so a face is recognisable, and that is the point of the screen.
  *
  * The trailing row is short rather than padded with a placeholder: the screen renders an empty
  * flex spacer, so an odd user count leaves a gap instead of a phantom card.

@@ -17,13 +17,30 @@
 // primitive, because wrapping it is its job. That asymmetry IS the boundary this rule draws.
 //
 // WHAT COUNTS AS A VIOLATION — every route to the primitive, not just the tidy one. A rule that
-// catches only `import { FlatList } from 'react-native'` is trivially bypassed by the other two
+// catches only `import { FlatList } from 'react-native'` is trivially bypassed by the other
 // spellings, and a guard with a documented hole is a guard that reports green for the wrong reason:
 //   1. Named import:      import { FlatList } from 'react-native';
 //   2. Named re-export:   export { FlatList } from 'react-native';
 //   3. Namespace access:  import * as RN from 'react-native'; RN.FlatList
+//   3b. DEFAULT import:   import RN from 'react-native';       RN.FlatList
 //   4. CJS destructure:   const { FlatList } = require('react-native');
 //   5. CJS member:        require('react-native').FlatList
+//
+// (3b) is the same bug as (3) — the module namespace object reached through an untracked binding —
+// and it escaped the first version of this rule for the same reason the JSX spelling of (3) did:
+// the visitor only knew about bindings it had explicitly collected. `react-native` is CJS, so under
+// `esModuleInterop` a DEFAULT import yields the whole module object and `RN.FlatList` works exactly
+// like the namespace form. It lints AND typechecks clean, which is what makes it worth guarding: a
+// silent, working, non-virtualized list on the 2 GB target. Caught by review (T-12 — test the class,
+// not the instance) after the first fix addressed only the instance.
+//
+// KNOWN, DELIBERATELY UNGUARDED — recorded so the hole is a decision, not an oversight:
+//   - `export * from 'react-native'` (re-exports the primitive without naming it),
+//   - computed access `RN['FlatList']`,
+//   - dynamic `await import('react-native')`.
+// All three are contrived in screen code and none can be written by accident; catching them needs
+// scope analysis this rule deliberately does not do. If one ever appears, it is a code-review
+// finding, not a lint gap.
 //
 // An import of the TYPE alone (`import type { FlatListProps }`) is not a violation: a type cannot
 // render a row. Type-only specifiers are skipped explicitly.
@@ -64,7 +81,12 @@ export default {
     const filename = (context.filename ?? '').split('\\').join('/');
     if (allowFiles.some((allowed) => filename.endsWith(allowed))) return {};
 
-    /** Local binding names for `import * as RN from 'react-native'`. */
+    /**
+     * Local bindings that hold the `react-native` MODULE OBJECT — i.e. anything `X.FlatList` can be
+     * reached through. Both `import * as RN` and `import RN` land here: `react-native` is CJS, so
+     * under `esModuleInterop` the default import IS the module object, and the two spellings are
+     * indistinguishable at the use site.
+     */
     const namespaces = new Set();
 
     /** Report `node` for the forbidden primitive `name`. */
@@ -80,13 +102,17 @@ export default {
       node.arguments[0].value === SOURCE;
 
     return {
-      // (1) import { FlatList } from 'react-native'   — and `import * as RN`
+      // (1) import { FlatList } from 'react-native'   — and (3/3b) `import * as RN` / `import RN`
       ImportDeclaration(node) {
         if (node.source.value !== SOURCE) return;
         // `import type { … }` cannot render anything.
         if (node.importKind === 'type') return;
         for (const specifier of node.specifiers) {
-          if (specifier.type === 'ImportNamespaceSpecifier') {
+          // Both spellings of "the module object" — see `namespaces` above.
+          if (
+            specifier.type === 'ImportNamespaceSpecifier' ||
+            specifier.type === 'ImportDefaultSpecifier'
+          ) {
             namespaces.add(specifier.local.name);
             continue;
           }

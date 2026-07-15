@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "expo start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "tsc -b ../.. && vitest run"
   },
   "op-sqlite": {
     "sqlcipher": true,

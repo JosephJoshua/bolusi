@@ -22,6 +22,31 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  *     `onTextLayout`. No assertion in this lane may stand in for that one.
  *
  * `environment: 'node'` on purpose: there is no DOM here and nothing should pretend there is.
+ *
+ * ── THE LANE MUST BE ENTERED THROUGH `tsc -b ../..` (08 §5.6, normative) ────────────────────────
+ * This package's `test` script is `tsc -b ../.. && vitest run`, NOT a bare `vitest run`, and the
+ * prefix is load-bearing rather than tidy. `@bolusi/core` and `@bolusi/i18n` both resolve through
+ * their `dist/`, so a bare run tests whatever was built LAST — not the source on disk. 08 §5.6 makes
+ * this a rule ("any test script that imports a built cross-package entry MUST prefix `tsc -b &&`")
+ * and records `test:server` being repaired for exactly this.
+ *
+ * It is not hypothetical here, twice over: a reviewer mutated `src`, skipped the rebuild, and this
+ * lane reported 10 passed / EXIT=0 against genuinely broken source; and task 24's own first
+ * falsification of the i18n key-existence test came back GREEN with a catalog key deleted, because
+ * the edit landed in `src` while the test loaded `dist`. Both are one failure — a green describing a
+ * stale artifact.
+ *
+ * WHY `../..` AND NOT A BARE `tsc -b` — the detail that makes the difference between a fix and a
+ * fake one. `tsc -b` resolves THIS package's tsconfig, which has no `references` and cannot get any:
+ * 08 §5.6 line 200 is explicit that `apps/mobile` must not be composite ("composite would force emit
+ * through Expo's config"). So a bare `tsc -b` here builds only this project — which is `noEmit` —
+ * and rebuilds no dependency at all. The ROOT tsconfig is the solution file holding every
+ * `references` entry (§5.6 line 198), so `../..` is what actually rebuilds `@bolusi/*` dist.
+ *
+ * Verified by falsification, not by reading: with `CHAIN_HALTED` deleted from the `en` catalog
+ * SOURCE and dist left stale, `vitest run` → EXIT=0 (fake green) and a bare `tsc -b && vitest run`
+ * → EXIT=0 (fake green, dist untouched), while `tsc -b ../.. && vitest run` → EXIT=2, rebuilding
+ * dist and failing on the real defect. Incremental, so it is a no-op once built.
  */
 export default defineConfig({
   resolve: {
