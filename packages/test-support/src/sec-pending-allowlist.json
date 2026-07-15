@@ -24,7 +24,7 @@
   "SEC-AUTH-08": "ai-docs/tasks/14-auth-client.md",
   "SEC-AUTH-09": "ai-docs/tasks/14-auth-client.md",
   "SEC-AUTH-10": "ai-docs/tasks/14-auth-client.md",
-  "SEC-AUTH-11": "ai-docs/tasks/10-command-runtime.md",
+  "SEC-AUTH-11": "ai-docs/tasks/14-auth-client.md",
   "SEC-MEDIA-01": "ai-docs/tasks/18-media-client.md",
   "SEC-TENANT-04": "ai-docs/tasks/28-security-sweep.md",
   "SEC-RT-01": "ai-docs/tasks/20-realtime.md",
