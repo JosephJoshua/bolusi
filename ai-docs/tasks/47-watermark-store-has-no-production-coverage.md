@@ -1,5 +1,5 @@
 # TASK 47 — the server watermark store has no production caller and no real-PG16 coverage; three gates are blind to the same line
-**Status:** todo
+**Status:** in-review
 **Priority:** P2 — **not a live bug** (the code is correct on PG16 today, probed). A coverage hole positioned exactly where task 17 will write the first real batch-apply.
 **Depends on:** 16
 **Blocks:** 17
@@ -75,6 +75,62 @@ The root cause is T-8's own scope: **T-8 proves *appliers* are dialect-neutral, 
 - **Un-hardcode the value.** `advanceServerSeq(MODULE_ID, 3)` with a literal 3 cannot detect a watermark computed wrongly. Drive it through the real path.
 - **Assert the denominator** (T-14): name how many production functions in `watermarks.ts` the PG16 lane now executes, and confirm it is not zero. "The lane runs" is not "the lane covers this."
 - `pnpm test`, `pnpm test:server`, `pnpm test:rls` (real PG16, attributed), `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
+
+## Outcome (impl-47, 2026-07-15)
+
+**Fix: option (a).** `createServerWatermarkStore` now lives in `packages/db-server/src/watermarks.ts`
+and is exported from `@bolusi/db-server`; `apps/server/src/sync/watermarks.ts` is deleted. The
+boundary objection dissolved exactly as predicted: the store's only imports are `kysely` and
+`@bolusi/core`, both edges 08 §3.3 already grants db-server, and it has no apps/server dependency
+in either direction. `packages/db-server` is the ONLY package whose suite re-runs on real PG16
+(`test:rls` → `--project db-server`), so the lane now imports what it guards. **The mirror is
+deleted** — there is nothing left to "keep in sync".
+
+**The triple-blind reproduction, measured before the fix** (all on this worktree's own container,
+PG16.14, `owned by 'agent-a966bffd92b4073e8'`):
+
+| gate | driver | result with production `read()` broken |
+| ---- | ------ | -------------------------------------- |
+| `pnpm typecheck` | tsc | **EXIT=0** |
+| `pnpm test:server` | **PGlite (PG18)** | **373 passed, EXIT=0** |
+| `pnpm test:rls` | **real PG16.14** | **105 passed, EXIT=0** (ran the mirror) |
+
+**One correction to the finding (c).** Typecheck's blindness is *conditional*, not automatic.
+Deleting the `Number()` alone turns typecheck **RED** (`TS2322`, EXIT=2) — the row type was
+honestly declared `string | number`, which is not assignable to `WatermarkState`. The gate only
+goes blind when the author *also* asserts the row type (`sql<{ appliedServerSeq: number }>`) —
+which is exactly what task 46's real bug did, so the realistic scenario is the blind one and the
+finding stands. Recorded because it changes the mechanism: gate 1 is defeated by an **assertion**,
+not by task 39's `any`. The new store therefore types the row `Int8Value` (core's exported union),
+which makes the naive deletion a **type error by construction** and leaves the assertion variant to
+be caught by PG16.
+
+**Falsifications** (§2.11), both on attributed real PG16.14:
+- seam removed (assertion variant) → **4 RED, EXIT=1**, `AssertionError: expected 'string' to be 'number'`; restored → 110 green.
+- production `advanceServerSeq` neutered → **7 RED, EXIT=1**, `AssertionError: expected +0 to be 7`. **Previously this left the lane 95/95 GREEN.**
+
+**T-14f, demonstrated rather than asserted.** With the seam removed, the *same test file* was run on
+both drivers: **PGlite → 10/10 passed, EXIT=0**; **real PG16.14 → 4 RED, EXIT=1**. Both are
+"PostgreSQL"; only one is the production *driver*. That pair is the argument for why this lane
+exists, and it is why the store's coverage could not have been left in the PGlite suite.
+
+**Denominator (T-14):** `createServerWatermarkStore` exports exactly **three** functions —
+`read`, `advanceServerSeq`, `advanceLocalSeq` — and the PG16 lane executes **3 of 3**, asserted by
+a test that reads the store's own key list rather than trusting the claim. Not zero.
+The hardcoded `advanceServerSeq(MODULE_ID, 3)` is gone: every contract case drives
+`engine.applyPulledOp`, so the watermark is an **output** of production `read()` +
+`highestContiguousServerSeq` + production `advanceServerSeq()`. A `CONTIGUITY` case (gap at
+serverSeq 2 → watermark holds at 1, not 3) was added, which a literal 3 could never detect.
+
+**T-8 hole, partially closed:** this lane is now the only thing that executes
+`highestContiguousServerSeq` on any engine (applier-conformance calls only `applyAppendedOp`; the
+walk is reachable solely from the pull branch, `engine.ts:154`). The general fix — T-8's
+denominator becoming *engine entry points exercised* rather than *appliers covered* — remains
+task 31's.
+
+**For task 49:** the guard is now live at the seam you will wire. `processPushBatch` should call
+`createServerWatermarkStore` from `@bolusi/db-server` inside the push transaction; the atomicity
+cases here will fail if the apply/watermark ever leaves that transaction.
 
 ## Note
 
