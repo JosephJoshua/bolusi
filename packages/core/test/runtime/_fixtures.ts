@@ -39,6 +39,9 @@ import {
   type SyncSchedulerPort,
 } from '../../src/index.js';
 import { CommandRuntime, type CommandDefinition } from '../../src/index.js';
+// Internal path on purpose: the brand symbol is deliberately NOT on the package surface
+// (runtime/index.ts), and `ctx-brand.test.ts` asserts that absence.
+import { CTX_RUNTIME_BRAND } from '../../src/runtime/ctx.js';
 import type { Location, SignedOperation } from '@bolusi/schemas';
 import { mulberry32, noblePort, randomBytes as prngBytes, type Prng } from '@bolusi/test-support';
 
@@ -199,6 +202,16 @@ export interface RuntimeFixture {
   prime(): Promise<void>;
   /** Repeats currently suppressed for `(user, permission, target)` — task 09's throttle counter. */
   denialSuppressed(target: string, permissionId: string, userId?: string): number;
+  /**
+   * This runtime's brand object, for driving `isOwnContext` directly.
+   *
+   * READ OFF A GENUINELY-MINTED CTX rather than exposed by the runtime: the brand is a `#private`
+   * field and must stay that way — an accessor would hand out the one thing that makes a forged
+   * ctx impossible. Deriving it from a real ctx is also honest about the threat model, since it is
+   * exactly what an attacker who already holds a real ctx could do (and it still gains them
+   * nothing: they cannot mint that object themselves).
+   */
+  readonly runtimeBrand: object;
   /** Append the device's genesis op so later commands are not the chain's first (05 §9.5). */
   enroll(): Promise<void>;
   setSnapshot(next: DirectorySnapshot): void;
@@ -322,6 +335,7 @@ export function makeRuntimeFixture(seed: number, options: FixtureOptions = {}): 
     prime: () => evaluator.prime(),
     denialSuppressed: (target, permissionId, userId = staffId) =>
       runtime.denialEmitter.suppressedCount(userId, permissionId, target),
+    runtimeBrand: runtime.createContext(ownerId)[CTX_RUNTIME_BRAND].runtime,
     async enroll() {
       await runtime.emitRuntimeOp({
         type: 'auth.device_enrolled',

@@ -296,11 +296,19 @@ export class CommandRuntime {
         'ctx was not created by this CommandRuntime (04 §5.2)',
       );
     }
-    // Recovered from the brand, not from a caller-writable property: the invocation attribution
-    // decides how a denial op is attributed (02 §7), so it must come from the binding this runtime
-    // minted rather than from anything the call site can restate.
-    const { invocation } = ctx[CTX_RUNTIME_BRAND];
-    const identity = this.#identityFor(ctx.userId);
+    // BOTH recovered from the brand — never re-read off the ctx's own fields.
+    //
+    // `identity` decides what the permission is evaluated against and what every op is attributed
+    // to; `invocation` decides how a denial op is attributed (02 §7). Same rule for both: an input
+    // to an authorization decision comes from the binding THIS runtime minted, not from a property
+    // of the object the call site handed back. `ctx.userId` is the §5.2 handler-facing copy of the
+    // same value, and is deliberately not the source here.
+    //
+    // Neither is a discovered hole — the ctx is frozen and `createContext(userId)` takes the user
+    // as an argument, so the trust boundary is "whoever holds the runtime instance names the
+    // acting user" either way. It is that the decision path should not read a field a caller could
+    // ever reach, so this stays correct if the freeze is lost or a field is added.
+    const { identity, invocation } = ctx[CTX_RUNTIME_BRAND];
 
     // Step 1 — strict parse. An unknown key or a wrong type is VALIDATION_FAILED, and the handler
     // is never reached: nothing is appended and no projection moves.

@@ -18,9 +18,12 @@ export {
   type RuntimeEmissionDraft,
 } from './execute.js';
 
+// `CTX_RUNTIME_BRAND` is DELIBERATELY NOT re-exported (see ctx.ts). It is the key under which a
+// ctx carries the identity and attribution `execute` makes its authorization decision from, and
+// keeping it off the package's public surface is a property the code is allowed to rely on — so
+// it is asserted by the suite (`ctx-brand.test.ts`), not left to this comment.
 export {
   createCommandContext,
-  CTX_RUNTIME_BRAND,
   defaultInvocation,
   isOwnContext,
   type BrandedCommandContext,

@@ -172,8 +172,24 @@ export interface CommandContext extends CommandIdentity {
  * is always an identity the runtime itself established. Fail closed (02 §5.2 step 7) means an
  * unrecognized ctx is an error, never a "probably fine".
  *
- * A module-private symbol: not exported from the package index, so it is unforgeable from outside
- * this package without deliberately importing an internal path.
+ * WHAT MAKES IT UNFORGEABLE — read this before simplifying `isOwnContext`.
+ *
+ * NOT the symbol's obscurity. The protection is OBJECT IDENTITY: `isOwnContext` compares
+ * `binding.runtime === brand` against the minting runtime's `#brand`, a genuine `#private` field
+ * that never leaves the instance. Possessing this symbol — or reading the binding off a real ctx —
+ * buys an attacker nothing, because they still cannot produce that object. The suite drives
+ * exactly that case (a caller holding the symbol, branding with their own object → refused).
+ *
+ * So a presence check (`CTX_RUNTIME_BRAND in ctx`) would be a REAL HOLE, not a shortcut: anyone
+ * who can name the symbol could then stamp any object and walk a forged identity past step 2.
+ * The `===` is the control; keep it.
+ *
+ * This symbol is additionally kept OFF the package's public surface (`runtime/index.ts` does not
+ * re-export it) as defence in depth — narrower surface, fewer people relying on internals. That is
+ * a second lock, not the first one, and `ctx-brand.test.ts` asserts BOTH: the export is absent AND
+ * the symbol alone cannot forge a ctx. An earlier version of this comment claimed the non-export
+ * was what made forgery impossible — while the symbol was in fact exported. Both halves are now
+ * pinned by tests, because a security comment nobody can run is a claim, not a control.
  */
 export const CTX_RUNTIME_BRAND = Symbol('bolusi.commandContext.runtime');
 
@@ -188,6 +204,21 @@ export const CTX_RUNTIME_BRAND = Symbol('bolusi.commandContext.runtime');
 export interface CommandContextBinding {
   /** The minting `CommandRuntime`'s brand object. */
   readonly runtime: object;
+  /**
+   * The identity this ctx was MINTED with — the one `execute` evaluates the permission against
+   * and stamps onto every op.
+   *
+   * It rides the binding rather than being re-read from `ctx.userId` for the same reason
+   * `invocation` does: both feed an authorization decision, so both come from what this runtime
+   * established, not from a property the call site can restate. `ctx.userId` remains as the §5.2
+   * handler-facing field and is the same value — but it is the COPY, not the source.
+   *
+   * This is belt-and-braces, not a discovered hole: `createContext(userId)` takes the acting user
+   * as an argument, so the trust boundary is already "whoever holds the runtime instance names the
+   * user". The point is that the decision path should not depend on a mutable field at all, so
+   * that neither a future refactor nor a frozen-ness regression can turn a copy into an authority.
+   */
+  readonly identity: CommandIdentity;
   readonly invocation: InvocationMeta;
 }
 
@@ -233,7 +264,15 @@ export function createCommandContext(
 ): BrandedCommandContext {
   const { identity, invocation } = internals;
 
-  return {
+  // FROZEN (and the identity is captured in the binding above, not read back off these fields).
+  //
+  // A minted ctx is a statement of who is acting; nothing downstream should be able to edit it
+  // after the fact. Freezing does not close a hole — `execute` decides from the binding, so
+  // `ctx.userId = 'VICTIM'` was already inert — it closes the gap between what the object PERMITS
+  // and what its comments IMPLY. A handler that silently mutated `ctx.userId` and saw its ops
+  // still attributed correctly would be a confusing bug report; in strict mode (every file here is
+  // an ES module) the assignment now throws at the point of the mistake instead.
+  return Object.freeze({
     tenantId: identity.tenantId,
     storeId: identity.storeId,
     userId: identity.userId,
@@ -268,6 +307,6 @@ export function createCommandContext(
       return internals.queryExecutor.execute(query, input, identity);
     },
 
-    [CTX_RUNTIME_BRAND]: { runtime: internals.brand, invocation },
-  };
+    [CTX_RUNTIME_BRAND]: { runtime: internals.brand, identity, invocation },
+  });
 }
