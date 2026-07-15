@@ -32,6 +32,7 @@ catalog:
 
   # §2.5 tooling / test-only (bootstrap pins, 08 §7)
   vitest: 4.1.10
+  esbuild: 0.28.1
   '@electric-sql/pglite': 0.5.4
   better-sqlite3: 12.11.1
   eslint: 9.39.5

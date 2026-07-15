@@ -39,6 +39,9 @@ catalogs:
     canonicalize:
       specifier: 3.0.0
       version: 3.0.0
+    esbuild:
+      specifier: 0.28.1
+      version: 0.28.1
     eslint:
       specifier: 9.39.5
       version: 9.39.5
@@ -107,9 +110,15 @@ importers:
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:tooling/tsconfig
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.1
       eslint:
         specifier: 'catalog:'
         version: 9.39.5(jiti@2.7.0)
+      hermes-compiler:
+        specifier: 250829098.0.14
+        version: 250829098.0.14
       lint-staged:
         specifier: 'catalog:'
         version: 17.0.8
@@ -260,6 +269,9 @@ importers:
         specifier: 'catalog:'
         version: 0.29.3
     devDependencies:
+      '@bolusi/test-support':
+        specifier: workspace:*
+        version: link:../test-support
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig

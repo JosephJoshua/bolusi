@@ -12,6 +12,8 @@
     "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:jcs-hermes": "node scripts/hermes-vectors/run.mjs",
+    "test:ed25519-interop": "vitest run --project test-support",
     "test:server": "node scripts/not-implemented.mjs test:server 12-server-app",
     "test:rls": "node scripts/not-implemented.mjs test:rls 05-db-server",
     "test:appliers": "node scripts/not-implemented.mjs test:appliers 11-module-contract",
@@ -33,7 +35,9 @@
     "lint-staged": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "esbuild": "catalog:",
+    "hermes-compiler": "250829098.0.14"
   },
   "pnpm": {
     "overrides": {
