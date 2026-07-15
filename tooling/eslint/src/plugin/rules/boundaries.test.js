@@ -71,8 +71,43 @@ tester.run('boundaries', rule, {
       code: `import pg from 'pg';`,
       filename: '/repo/packages/db-server/src/pool.ts',
     },
+    // @bolusi/ui may import react-native and @expo/vector-icons (08 §3.3) — the styling-lib prong
+    // must not over-match these legitimate RN imports.
+    {
+      code: `import { StyleSheet } from 'react-native';`,
+      filename: '/repo/packages/ui/src/components/Button.tsx',
+    },
+    {
+      code: `import MCI from '@expo/vector-icons/MaterialCommunityIcons.js';`,
+      filename: '/repo/packages/ui/src/components/Icon.tsx',
+    },
   ],
   invalid: [
+    // styling/animation libraries are banned in v0 (design-system §7 lint (c) + 08 §2.6) — added
+    // task 23. Reanimated in the ui package:
+    {
+      code: `import Animated from 'react-native-reanimated';`,
+      filename: '/repo/packages/ui/src/components/Banner.tsx',
+      errors: [{ messageId: 'stylingLib' }],
+    },
+    // NativeWind in a screen:
+    {
+      code: `import { styled } from 'nativewind';`,
+      filename: '/repo/packages/modules/src/notes/screens/NotesList.tsx',
+      errors: [{ messageId: 'stylingLib' }],
+    },
+    // a styling-lib subpath is caught via the package root:
+    {
+      code: `import { Theme } from '@shopify/restyle';`,
+      filename: '/repo/apps/mobile/src/App.tsx',
+      errors: [{ messageId: 'stylingLib' }],
+    },
+    // Tamagui core subpath:
+    {
+      code: `import { styled } from '@tamagui/core';`,
+      filename: '/repo/packages/ui/src/components/Card.tsx',
+      errors: [{ messageId: 'stylingLib' }],
+    },
     // op-sqlite outside db-client → error (primary fixture)
     {
       code: `import { open } from '@op-engineering/op-sqlite';`,

@@ -21,6 +21,34 @@ const FORBIDDEN_EVERYWHERE = new Map([
   ['kysely-expo', 'rejected — we own the op-sqlite dialect shim (08 §2.6)'],
 ]);
 
+// Styling / animation libraries banned in v0 (design-system §7 lint (c) + 08 §2.6). No workspace
+// legitimately imports these — the design system is tokens + StyleSheet, zero styling deps, on the
+// 2 GB-RAM budget. Matched as package roots (bare name or a subpath). `react-native-reanimated` is
+// "cautioned — avoid in v0" (08 §2.6): v0 UI must not need it, so importing it is an error until a
+// doc change says otherwise. Added task 23.
+const STYLING_FORBIDDEN = new Map([
+  ['nativewind', 'no styling library in v0 — tokens + StyleSheet only (design-system §7)'],
+  ['tamagui', 'no styling library in v0 — tokens + StyleSheet only (design-system §7)'],
+  ['@tamagui/core', 'no styling library in v0 — tokens + StyleSheet only (design-system §7)'],
+  ['styled-components', 'no styling library in v0 — tokens + StyleSheet only (design-system §7)'],
+  ['@shopify/restyle', 'no styling library in v0 — tokens + StyleSheet only (design-system §7)'],
+  [
+    'react-native-reanimated',
+    'cautioned — avoid in v0 (~25–30% Android memory inflation on RN 0.86 Hermes); v0 UI must not need it (design-system §7, 08 §2.6)',
+  ],
+  ['lottie-react-native', 'no animation library in v0 — no Lottie (design-system §7)'],
+  ['moti', 'no animation library in v0 (design-system §7)'],
+]);
+
+/** Root package of an import specifier: `@scope/pkg/sub` → `@scope/pkg`; `pkg/sub` → `pkg`. */
+function packageRoot(source) {
+  if (source.startsWith('@')) {
+    const parts = source.split('/');
+    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : source;
+  }
+  return source.split('/')[0];
+}
+
 // DB drivers may be imported only by their owning wrapper (08 §3.3 hard rule 2).
 const DB_DRIVER_OWNERS = new Map([
   ['@op-engineering/op-sqlite', 'packages/db-client'],
@@ -85,6 +113,7 @@ export default {
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
       serverImport:
         "'{{source}}': @bolusi/server may be value-imported only by @bolusi/harness; the sole app→app edge is a type-only import of '@bolusi/server/client' (08-stack-and-repo §4.3).",
+      stylingLib: "'{{source}}' is forbidden: {{reason}}.",
       appImport: "'{{source}}': nothing imports the mobile app (08-stack-and-repo §3.3).",
       platformFree:
         "'{{source}}' is platform-bound; {{workspace}} is platform-free — no node:*, react-native*, expo*, pg, hono*, ws, @op-engineering/* (08-stack-and-repo §3.4).",
@@ -106,6 +135,13 @@ export default {
           messageId: 'forbiddenEverywhere',
           data: { source, reason: banReason },
         });
+        return;
+      }
+      // 1b. Styling/animation libraries, anywhere (design-system §7 lint (c) + 08 §2.6). Matched on
+      // the package root so subpath imports are caught too.
+      const stylingReason = STYLING_FORBIDDEN.get(packageRoot(source));
+      if (stylingReason) {
+        context.report({ node, messageId: 'stylingLib', data: { source, reason: stylingReason } });
         return;
       }
       // 2. DB-driver locks.
