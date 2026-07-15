@@ -375,6 +375,9 @@ importers:
       '@formatjs/icu-messageformat-parser':
         specifier: 'catalog:'
         version: 3.5.14
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
       prettier:
         specifier: 'catalog:'
         version: 3.9.5

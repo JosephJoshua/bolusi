@@ -305,16 +305,25 @@ describe('extraction gate (07-i18n §7.3)', () => {
 // Re-reading the specs here means a transcription slip fails CI rather than silently weakening
 // the coverage gate it feeds.
 describe('checked-in code registry mirrors the specs', () => {
+  /** Slice a spec section, failing loudly if the doc's headings ever move. */
+  function sectionBetween(doc: string, start: string, end: string): string {
+    const [, afterStart] = doc.split(start);
+    if (afterStart === undefined) throw new Error(`spec section '${start}' not found`);
+    const [section] = afterStart.split(end);
+    if (section === undefined) throw new Error(`spec section end '${end}' not found`);
+    return section;
+  }
+
   it('matches the DomainError closed set in 04-module-contract §5.3', () => {
     const doc = readFileSync(join(REPO_ROOT, 'ai-docs', '04-module-contract.md'), 'utf8');
-    const section = doc.split('### 5.3')[1].split('## 6.')[0];
+    const section = sectionBetween(doc, '### 5.3', '## 6.');
     const codes = [...section.matchAll(/`([A-Z][A-Z0-9_]+)`/g)].map((match) => match[1]);
     expect(codes).toEqual(DOMAIN_ERROR_CODES);
   });
 
   it('matches the rejection-code closed set in 05-operation-log §8', () => {
     const doc = readFileSync(join(REPO_ROOT, 'ai-docs', '05-operation-log.md'), 'utf8');
-    const section = doc.split('## 8. Rejection codes')[1].split('## 9.')[0];
+    const section = sectionBetween(doc, '## 8. Rejection codes', '## 9.');
     const codes = [...section.matchAll(/^\|\s*`([A-Z][A-Z0-9_]+)`\s*\|/gm)].map(
       (match) => match[1],
     );

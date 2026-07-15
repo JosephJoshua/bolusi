@@ -21,6 +21,7 @@
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*",
     "@formatjs/icu-messageformat-parser": "catalog:",
+    "@types/node": "catalog:",
     "prettier": "catalog:"
   },
   "scripts": {
