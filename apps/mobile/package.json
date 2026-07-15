@@ -13,6 +13,7 @@
     "performanceMode": true
   },
   "dependencies": {
+    "@bolusi/core": "workspace:*",
     "@expo/vector-icons": "15.1.1",
     "@op-engineering/op-sqlite": "catalog:",
     "expo": "catalog:",
