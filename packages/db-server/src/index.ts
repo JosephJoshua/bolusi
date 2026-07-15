@@ -33,6 +33,15 @@ export {
   type LoginCredentialRecord,
 } from './auth-entry.js';
 
+// Task 47 — the SERVER projection watermark store (10-db §8, 04 §4.3), moved here from
+// apps/server so the real-PG16 lane executes it rather than a hand-copied mirror (watermarks.ts
+// header). A deliberate surface addition, weighed against D7/FR-1039 rather than waved through:
+// it does not hand back a handle, it REQUIRES one the caller already holds from `forTenant`, and
+// it returns a three-method store with no `selectFrom` — so "forTenant is the only exported way
+// to reach a tenant table" is untouched, and export-surface.test.ts's `queryish` assertion still
+// holds. Its consumer is apps/server's push transaction (task 49).
+export { createServerWatermarkStore } from './watermarks.js';
+
 /**
  * Runs `fn` inside a transaction bound to `tenantId`.
  *
