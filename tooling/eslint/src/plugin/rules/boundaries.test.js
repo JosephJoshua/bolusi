@@ -20,9 +20,10 @@ const tester = new RuleTester({
 
 tester.run('boundaries', rule, {
   valid: [
-    // Build tooling and the Node test lane are not shipped code (tsconfig.build.json rootDir=src,
-    // package.json files=["dist"]), so the platform-free lock does not reach them — 08 §3.4's CI
-    // leg runs these packages' unit tests on Node by design.
+    // The platform-free lock follows "runs on Hermes", not "is shipped". Build tooling and the
+    // Node test lane (`test/**/*.test.*`) run only on Node — 08 §3.4's CI leg says so — and a
+    // codegen/gate script cannot read the repo without node:fs. Anything under test/ that is NOT
+    // a `.test.*` file is treated as Hermes-bound and stays locked (see the invalid fixtures).
     {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/i18n/scripts/check.mjs',
@@ -100,6 +101,25 @@ tester.run('boundaries', rule, {
     {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/core/src/oplog/append.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // A non-`.test.` file under test/ is Hermes-bound, not Node-lane: hermes-entry.ts is the
+    // release-blocking stage-6 vector entry (08 §5.6). It is NOT shipped (rootDir=src,
+    // files=["dist"]) yet still runs on Hermes — so "shipped" is the wrong test and this fixture
+    // pins the hole shut.
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/test/hermes-entry.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { Platform } from 'react-native';`,
+      filename: '/repo/packages/i18n/test/hermes-entry.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { readFileSync } from 'node:fs';`,
+      filename: '/repo/packages/i18n/test/vectors.ts',
       errors: [{ messageId: 'platformFree' }],
     },
     // the non-shipped exemption is a directory carve-out, not a package one: src/ stays locked

@@ -36,13 +36,21 @@ const PLATFORM_FREE = new Set([
   'packages/modules',
 ]);
 /**
- * The platform-free lock governs SHIPPED code: what tsconfig.build.json compiles (rootDir=src)
- * and what package.json publishes (files: ["dist"]). Build tooling and the Node test lane are
- * neither — 08 §3.4's own CI leg says these packages' unit tests run on Node and only the
- * standalone vector bundle runs on Hermes, and a codegen/gate script cannot read the repo
- * without node:fs. Everything under src/ stays locked, which is the surface Hermes loads.
+ * Files exempt from the platform-free prong (08 §3.4).
+ *
+ * The invariant is "runs on Hermes ⇒ platform-free" — NOT "shipped ⇒ platform-free". Those look
+ * identical until you hit the counterexample: `packages/i18n/test/hermes-entry.ts` is not shipped
+ * (rootDir=src, files=["dist"]) and still runs on Hermes as the release-blocking stage-6 vector
+ * entry. Exempting all of `test/` would un-guard exactly that file, and it is not covered
+ * elsewhere: for the vector bundle, lock 1 (tsconfig `types: []`) is off under test/, lock 3 (CI
+ * stage 6) is still a placeholder — so this rule is the only lock left standing.
+ *
+ * Hence: `scripts/` (build tooling, never runs anywhere but Node) plus only `test/**\/*.test.*`
+ * (the Node test lane — 08 §3.4's CI leg runs these packages' unit tests on Node by design). The
+ * `.test.` suffix IS the Node-lane marker: a Hermes-bundled entry cannot carry a test-runner
+ * import, which is why it never has one.
  */
-const NON_SHIPPED_DIR = /\/(scripts|test)\//;
+const NODE_LANE_ONLY = /\/scripts\/|\/test\/.*\.test\.[tj]sx?$/;
 const PLATFORM_FORBIDDEN = [
   /^node:/,
   /^react-native($|\/|-)/,
@@ -134,7 +142,7 @@ export default {
         workspace &&
         PLATFORM_FREE.has(workspace) &&
         !(workspace === 'packages/modules' && /\/screens\//.test(filename)) &&
-        !NON_SHIPPED_DIR.test(filename) &&
+        !NODE_LANE_ONLY.test(filename) &&
         PLATFORM_FORBIDDEN.some((re) => re.test(source))
       ) {
         context.report({ node, messageId: 'platformFree', data: { source, workspace } });
