@@ -52,7 +52,27 @@ The `PinScreen.tsx:52` comment completes the trap: it tells the next reader the 
   - **Or wire it** — only with a stated reason why two client-side gates beat one, given 14's server-side gate already refuses. The bar is high; §2.8 is against you.
 - **Fix `PinScreen.tsx:52` either way.** It must name what actually gates `onSubmit` (`PinPad`'s `state='locked'` via `pinPadState`), or say nothing. A comment naming the wrong function is worse than no comment — that is this task's whole thesis.
 - **THE GUARD** (§2.11/T-14): after the move, break `pinPadState`'s `delayed` case → the ported tests go **RED**. Report the falsification ("broke X, saw Y fail, reverted"), not "tests pass."
-- **Sweep the class** (T-12) — this is the valuable half, and the reason this task is worth doing at all: **what else is exported, tested, and uncalled?** A repo-wide check for `export`ed functions in `apps/`/`packages/` whose only references are their definition + a `.test.ts` would find every other decoy in one pass. Report the list. If it is short, fix it here; if it is long, file it. **Consider making it a lint rule** — this class is mechanically detectable, which is more than can be said for tasks 58 and 59.
+- **Sweep the class** (T-12) — the valuable half. **What else is exported, tested, and uncalled?** But read the next section first: the orchestrator tried this with grep and it failed in a way you must not repeat.
+
+## The orchestrator already tried the obvious sweep. It failed, and how it failed is this task's best evidence.
+
+Ran the natural check — for each `export function` in `apps/`/`packages/`, count references outside its own file and outside `*.test.ts`; zero ⇒ decoy. Result:
+
+```
+CHECKED=462 FOUND=109
+```
+
+**109 findings, and `canAttempt` — the case the sweep was written to find — is not among them.** Verified: `grep -c canAttempt decoy.log` → **0**.
+
+**Why:** the only non-test file mentioning `canAttempt` is `PinScreen.tsx` — at **line 52, in the comment**, which is the defect this task exists to fix. `grep` cannot tell a **call** from a **mention**. So the false comment registered as a production reference, and the function it falsely credits was scored as *live*.
+
+**The comment did not merely fool the reviewer. It fooled the automated sweep built to catch what the comment was hiding.** A tool for this class cannot be textual, because the defect *is* text that looks like use.
+
+The other 109 are mostly noise anyway — the denominator is unsound in both directions: test helpers (`test/helpers/*`, `_fixtures.ts`, `_harness.ts`) have zero production callers **by design**, and `packages/core`'s auth functions (`resetPin`, `runEnrollment`, `attemptLockKey`, …) are **built-ahead-of-consumer**, which is the *orphan* class already tracked as tasks 43/49/50 — a different problem with a different fix. A sweep that cannot separate *decoy* from *helper* from *not-yet-wired* has not measured anything.
+
+**So the deliverable is a semantic tool, not a grep.** Use the TypeScript language service — `ts-morph`'s `findReferences`, or **`knip`**, which does exactly this job for a TS monorepo and already understands test-only exports and entry points. **Whatever you use, prove it on the known case first** (T-11/T-14): it must report `canAttempt` as unused. **A sweep that cannot see `canAttempt` is checking nothing** — and it will report a large, confident, useless number while doing it. Then state your denominator and what you excluded, and why.
+
+**Do not hand-classify 109 rows.** Get the tool right, re-derive the list, and expect it to be much shorter.
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
 
 ## Note
@@ -60,5 +80,7 @@ The `PinScreen.tsx:52` comment completes the trap: it tells the next reader the 
 Found by review-05 asking *"if this line silently changed, what would notice?"* — the same question that produced tasks 58 and 59. Three findings, one question, one shape.
 
 What makes this one instructive is that **every individual piece is good work.** `canAttempt` is correct. Its 11 tests are thorough — they cover the rollback case, which is a genuinely sharp edge. Its docstring reasons carefully about belt-and-braces. `pinView`/`pinPadState` are correct. `PinScreen` is correct. **There is no bad code here and no bug.** The defect exists only in the *relationship* between the pieces — which is precisely the thing no file-scoped review, no type, and no test can see, because each of them is looking at one piece and every piece is fine.
+
+**And the sweep's failure is the same lesson one layer up.** Task 52's Note already contains the warning — *"trace to a producer, don't count mentions"* — with its own control proving it (*"the dead member looked more alive than the live ones"*). The orchestrator wrote that warning into task 52 and then, sweeping for this exact class, **counted mentions**. That is the third time on this project a rule was authored and then broken by its own author (see §2.1 and the unattributable-`test:rls` green). It is the argument for tooling that cannot make the mistake, over a rule asking people not to.
 
 Also worth carrying, against a "just delete it, it's dead code" reading: **coverage is not a number, it is a mapping.** `model.test.ts` would report excellent coverage of `model.ts` today. Every line of `canAttempt` is exercised. The 11 tests are *counted*. What no coverage tool can report is that they are counted against a function nothing calls — coverage measures *whether a line ran under test*, never *whether the line runs in production*. A decoy with 11 tests raises the number, and it is the number that gets reported to the reviewer.
