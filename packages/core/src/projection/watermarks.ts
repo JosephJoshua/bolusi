@@ -41,9 +41,29 @@ export interface WatermarkStore {
 }
 
 /**
- * Client watermark store over `projection_watermarks` (10-db §9.1). Dialect-neutral raw SQL:
- * an upsert whose `ON CONFLICT ... DO UPDATE` takes `MAX(existing, proposed)` so a lower value
- * can never regress the watermark, even if a caller passes one (defense in depth for §4.3).
+ * Watermark store over `projection_watermarks` (10-db §9.1). Dialect-neutral raw SQL: an upsert
+ * whose `ON CONFLICT ... DO UPDATE` keeps the GREATER of (existing, proposed), so a lower value can
+ * never regress the watermark even if a caller passes one (defense in depth for §4.3).
+ *
+ * ── WHY THE MAX IS A `CASE` AND NOT `MAX(a, b)` (task 11 — do not "simplify" this back) ────────
+ *
+ * `MAX(existing, proposed)` reads better and is SQLITE-ONLY. In SQLite `max()` with two arguments
+ * is a scalar function; in PostgreSQL `max()` is an AGGREGATE and takes one argument, so the same
+ * statement fails outright — and before it even gets that far, the bare `applied_server_seq` on the
+ * right of `SET` is rejected as ambiguous, because Postgres requires the target table to be
+ * qualified there. Postgres's scalar two-argument maximum is `GREATEST(a, b)`, which SQLite does
+ * not have: there is no function spelled the same way on both engines, so the portable form is an
+ * explicit `CASE`.
+ *
+ * This file previously carried the `MAX(a, b)` version under a docblock asserting it was
+ * "dialect-neutral raw SQL". It was not, and nothing noticed, because the store is only exercised
+ * against SQLite today — the server side (10-db §8) lands with tasks 07/16, which is exactly when a
+ * claim nobody could run would have become a bug someone had to debug. Task 11's applier
+ * conformance suite (T-8) runs the projection engine against BOTH engines and found it on its first
+ * Postgres execution (`column reference "applied_local_seq" is ambiguous`).
+ *
+ * Both column references are table-qualified for the same reason: required by Postgres, accepted by
+ * SQLite.
  */
 export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
   return {
@@ -53,9 +73,14 @@ export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
         FROM projection_watermarks WHERE module_id = ${moduleId}
       `.execute(db);
       const row = result.rows[0];
+      // `Number(...)`: Postgres returns `bigint` as a STRING (int8 exceeds JS's safe integer range,
+      // so the pg wire protocol will not silently narrow it), while SQLite returns a number. The
+      // watermark is a seq that fits in a double for any plausible history, so normalizing here
+      // keeps `WatermarkState` honest about being numbers on both engines — another divergence the
+      // both-engine run surfaced.
       return {
-        appliedServerSeq: row?.appliedServerSeq ?? 0,
-        appliedLocalSeq: row?.appliedLocalSeq ?? 0,
+        appliedServerSeq: row === undefined ? 0 : Number(row.appliedServerSeq ?? 0),
+        appliedLocalSeq: row === undefined ? 0 : Number(row.appliedLocalSeq ?? 0),
       };
     },
     async advanceServerSeq(moduleId: string, value: number): Promise<void> {
@@ -63,7 +88,11 @@ export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
         INSERT INTO projection_watermarks (module_id, applied_server_seq)
         VALUES (${moduleId}, ${value})
         ON CONFLICT (module_id) DO UPDATE
-        SET applied_server_seq = MAX(applied_server_seq, excluded.applied_server_seq)
+        SET applied_server_seq = CASE
+          WHEN projection_watermarks.applied_server_seq > excluded.applied_server_seq
+          THEN projection_watermarks.applied_server_seq
+          ELSE excluded.applied_server_seq
+        END
       `.execute(db);
     },
     async advanceLocalSeq(moduleId: string, value: number): Promise<void> {
@@ -71,7 +100,11 @@ export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
         INSERT INTO projection_watermarks (module_id, applied_local_seq)
         VALUES (${moduleId}, ${value})
         ON CONFLICT (module_id) DO UPDATE
-        SET applied_local_seq = MAX(applied_local_seq, excluded.applied_local_seq)
+        SET applied_local_seq = CASE
+          WHEN projection_watermarks.applied_local_seq > excluded.applied_local_seq
+          THEN projection_watermarks.applied_local_seq
+          ELSE excluded.applied_local_seq
+        END
       `.execute(db);
     },
   };
