@@ -39,7 +39,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | done | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
-| 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | todo | 03 |
+| 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | in-progress | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
@@ -55,8 +55,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | todo | 14 |
 | 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | todo | 14 |
 | 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | done | 08 |
-| 47 | server watermark store has no production caller and no real-PG16 coverage — 3 gates blind to the same `Number()` (from task 16 review) | todo | 16 |
-| 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | todo | 46 |
+| 47 | server watermark store has no production caller and no real-PG16 coverage — 3 gates blind to the same `Number()` (from task 16 review) | in-progress | 16 |
+| 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | in-progress | 46 |
 | 49 | **HIGH** the server never applies projections — push transaction drops normative step 6; the handoff ring closes on itself; every server read model is empty (from qa orphan sweep) | todo | 16 |
 | 50 | **HIGH** app bootstrap: DB open + migrations, module registration, transport, sync triggers — shell boots, data layer doesn't (from task 24) | todo | 15, 18, 24 |
 | 51 | pull wire carries no per-op `serverSeq` — 10-db §9.2 says the client stores it, the wire structurally cannot carry it; client uses a local gapless counter (needs a ruling) (from task 15) | todo | 02, 15, 16 |
