@@ -78,11 +78,11 @@ export default tseslint.config(
   },
   {
     // The client's SINGLE syncStatus bookkeeping mutator (task 06; 08-stack §5.2, 05 §2.3).
-    // `markSyncResult` in this exact file UPDATEs the operations table's BOOKKEEPING columns
-    // only (`syncStatus`, `syncedAt`, `serverSeq`, `rejectionCode`, `rejectionReason`) — the
-    // signed core stays immutable, and DELETE never appears. Every OTHER core file (draft.ts,
-    // append.ts, verify.ts, …) still fails `bolusi/no-op-table-update` on any `updateTable`/
-    // `deleteFrom('operations')`, proven by the rule's own fixture suite.
+    // COLUMN-SCOPED: `markSyncResult` in this exact file may UPDATE `operations` only for the
+    // four client bookkeeping columns below — the rule rejects any other `.set()` key (a
+    // signed-core column), a dynamic/spread `.set()`, or a `deleteFrom` (DELETE never allowed,
+    // 05 §1). Every OTHER core file (draft.ts, append.ts, verify.ts, …) still fails on any
+    // `updateTable`/`deleteFrom('operations')`, proven by the rule's own fixture suite.
     name: 'bolusi/oplog-client-bookkeeping-allowlist',
     files: ['packages/core/src/oplog/bookkeeping.ts'],
     rules: {
@@ -90,6 +90,7 @@ export default tseslint.config(
         'error',
         {
           allowFiles: ['packages/core/src/oplog/bookkeeping.ts'],
+          allowColumns: ['syncStatus', 'syncedAt', 'rejectionCode', 'rejectionReason'],
         },
       ],
     },
