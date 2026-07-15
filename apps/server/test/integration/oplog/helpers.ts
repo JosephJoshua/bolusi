@@ -12,7 +12,14 @@
 // CONCURRENT serverSeq race (two pool connections) therefore lives in
 // packages/db-server/test/oplog-server-seq-concurrency.test.ts under `pnpm test:rls`; this lane
 // proves the pipeline's per-op accounting + that it emits the FOR UPDATE lock (query spy).
-import { CamelCasePlugin, Kysely, PGliteDialect, sql, type LogEvent } from 'kysely';
+import {
+  CamelCasePlugin,
+  Kysely,
+  PGliteDialect,
+  sql,
+  type LogEvent,
+  type Selectable,
+} from 'kysely';
 import { z } from 'zod';
 
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
@@ -341,8 +348,15 @@ export async function grantRole(
     .execute();
 }
 
+// The return types below are annotated, not inferred: the inferred row type names the generated
+// table interfaces, which this package does not import (only `DB` is exported — growing db-server's
+// export surface is a decision, never an accident: src/index.ts, test/export-surface.test.ts).
+// Indexing the imported `DB` names the same rows through the one type the package does export.
 /** Read the accepted operation rows for a tenant (owner handle), ascending by serverSeq. */
-export async function readOps(db: Kysely<DB>, tenantId: string) {
+export async function readOps(
+  db: Kysely<DB>,
+  tenantId: string,
+): Promise<Selectable<DB['operations']>[]> {
   return db
     .selectFrom('operations')
     .selectAll()
@@ -352,7 +366,10 @@ export async function readOps(db: Kysely<DB>, tenantId: string) {
 }
 
 /** Read the device_anomalies for a device (owner handle). */
-export async function readAnomalies(db: Kysely<DB>, deviceId: string) {
+export async function readAnomalies(
+  db: Kysely<DB>,
+  deviceId: string,
+): Promise<Selectable<DB['deviceAnomalies']>[]> {
   return db
     .selectFrom('deviceAnomalies')
     .selectAll()

@@ -40,7 +40,7 @@ async function initMedia(
 
 function chunkRowCount(mediaId: string, index: number): Promise<number> {
   return h.db
-    .selectFrom('media_chunks')
+    .selectFrom('mediaChunks')
     .select('chunkIndex')
     .where('mediaId', '=', mediaId)
     .where('chunkIndex', '=', index)
@@ -104,7 +104,7 @@ describe('chunk index bounds (api/03 §3.2)', () => {
     expect(res.status).toBe(422);
     expect((await readError(res)).error.code).toBe('CHUNK_INDEX_INVALID');
     const rows = await h.db
-      .selectFrom('media_chunks')
+      .selectFrom('mediaChunks')
       .select('chunkIndex')
       .where('mediaId', '=', id)
       .execute();

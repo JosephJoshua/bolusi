@@ -50,7 +50,7 @@ async function uploadChunksOnly(
 
 function chunkCount(mediaId: string): Promise<number> {
   return h.db
-    .selectFrom('media_chunks')
+    .selectFrom('mediaChunks')
     .select('chunkIndex')
     .where('mediaId', '=', mediaId)
     .execute()

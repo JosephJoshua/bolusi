@@ -157,7 +157,7 @@ export function createMediaRouter(deps: ServerDeps) {
     mediaId: string,
   ): Promise<number[]> =>
     db
-      .selectFrom('media_chunks')
+      .selectFrom('mediaChunks')
       .select('chunkIndex')
       .where('mediaId', '=', mediaId)
       .orderBy('chunkIndex', 'asc')
@@ -327,7 +327,7 @@ export function createMediaRouter(deps: ServerDeps) {
 
             // Idempotent: re-PUT overwrites (final integrity rests on the whole-file hash, §3.2).
             await db
-              .insertInto('media_chunks')
+              .insertInto('mediaChunks')
               .values({
                 mediaId: id,
                 chunkIndex: index,
@@ -397,7 +397,7 @@ export function createMediaRouter(deps: ServerDeps) {
             if (media.status === 'complete') return { kind: 'already' }; // idempotent
 
             const chunkRows = await db
-              .selectFrom('media_chunks')
+              .selectFrom('mediaChunks')
               .select(['chunkIndex', 'bytes'])
               .where('mediaId', '=', id)
               .orderBy('chunkIndex', 'asc')
@@ -414,7 +414,7 @@ export function createMediaRouter(deps: ServerDeps) {
             const assembled = assembleChunks(chunkRows.map((r) => toUint8(r.bytes)));
 
             const purgeChunks = () =>
-              db.deleteFrom('media_chunks').where('mediaId', '=', id).execute();
+              db.deleteFrom('mediaChunks').where('mediaId', '=', id).execute();
 
             if (assembled.sha256 !== media.sha256) {
               await purgeChunks(); // corrupt transfer's chunks are worthless (§3.4 step 3)

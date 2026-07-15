@@ -257,7 +257,7 @@ jobs:
         run: pnpm test:rls
 
   # Codegen drift (10-db §11.3): migrate a real postgres, re-run kysely-codegen, fail on any
-  # diff against the committed src/generated/db.d.ts. Hand-edited or stale types cannot survive.
+  # diff against the committed src/generated/db.ts. Hand-edited or stale types cannot survive.
   codegen-diff:
     runs-on: ubuntu-latest
     needs: install
@@ -295,7 +295,7 @@ jobs:
       - run: pnpm db:codegen:check
       - run: pnpm db:codegen
       - name: fail on generated-type drift
-        run: git diff --exit-code -- packages/db-server/src/generated/db.d.ts
+        run: git diff --exit-code -- packages/db-server/src/generated/db.ts
 
   # Stage 10 — dual-dialect appliers (wired by task 11). The T-8 merge gate: every module's
   # appliers folded through the real projection engine against BOTH engines — better-sqlite3 behind

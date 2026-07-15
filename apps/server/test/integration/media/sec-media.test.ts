@@ -313,7 +313,7 @@ describe('SEC-MEDIA-06 cross-device chunk injection', () => {
 
 function chunkCount(mediaId: string): Promise<number> {
   return h.db
-    .selectFrom('media_chunks')
+    .selectFrom('mediaChunks')
     .select('chunkIndex')
     .where('mediaId', '=', mediaId)
     .execute()

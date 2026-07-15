@@ -1,7 +1,7 @@
 // The codegen ⇄ runtime name contract (10-db-schema §1, §11).
 //
 // Two independent pieces of machinery have to agree on one mapping:
-//   kysely-codegen --camel-case   writes  op_a_id  →  opAId   into src/generated/db.d.ts
+//   kysely-codegen --camel-case   writes  op_a_id  →  opAId   into src/generated/db.ts
 //   CamelCasePlugin (runtime)     maps    opAId    →  ???     back to a column
 //
 // If they disagree the code COMPILES (the type says opAId exists) and fails at runtime against
@@ -16,7 +16,7 @@ import { afterAll, beforeAll, expect, test } from 'vitest';
 import { CAMEL_CASE_OPTIONS, createCamelCasePlugin } from '../src/camel-case.js';
 import { createTestDb, type TestDb } from './helpers/test-db.js';
 
-const GENERATED = new URL('../src/generated/db.d.ts', import.meta.url);
+const GENERATED = new URL('../src/generated/db.ts', import.meta.url);
 
 /** The plugin's camelCase→snake_case mapper, i.e. the exact function the runtime uses. */
 const toSnakeCase = (name: string): string =>

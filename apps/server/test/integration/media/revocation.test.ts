@@ -51,7 +51,7 @@ test('revoked device mid-upload → 401 DEVICE_REVOKED, chunks retained', async 
 
   // The already-received chunk 0 is retained (the revoked request never reached the handler).
   const rows = await h.db
-    .selectFrom('media_chunks')
+    .selectFrom('mediaChunks')
     .select('chunkIndex')
     .where('mediaId', '=', id)
     .execute();

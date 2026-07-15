@@ -105,7 +105,10 @@ export async function runPull(
     const rows = await db
       .selectFrom('operations')
       .select(['serverSeq', 'signedCoreJcs', 'hash', 'signature'])
-      .where('serverSeq', '>', request.cursor)
+      // `server_seq` is int8 → derived as `Int8 = ColumnType<string, ...>` (the pg driver returns
+      // int8 as a string), so the comparison operand is typed `string`. pg serializes 500 and '500'
+      // to the same wire value — this honours the derived type without changing behaviour.
+      .where('serverSeq', '>', String(request.cursor))
       .where((eb) => eb.or([eb('storeId', '=', identity.storeId), eb('storeId', 'is', null)]))
       .orderBy('serverSeq')
       .limit(limit + 1)
