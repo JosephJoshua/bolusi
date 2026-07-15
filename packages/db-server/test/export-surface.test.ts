@@ -1,0 +1,46 @@
+// Task 05 acceptance (d): the package's public export surface is exactly the documented set
+// (08-stack-and-repo §3.2, D7/FR-1039).
+//
+// This is the API half of the tenant-isolation guarantee: RLS makes an unscoped query fail
+// closed, and THIS makes it inexpressible. If the raw pool/db handle ever appears here, the
+// wrapper stops being "the only exported way to query tenant tables" and the guarantee is
+// reduced to a convention.
+import { expect, test } from 'vitest';
+
+import * as dbServer from '../src/index.js';
+
+/**
+ * The documented surface: forTenant, the generated types (type-only, so invisible at runtime),
+ * and a migration-runner entry (08 §3.2's explicit exception).
+ */
+const EXPECTED_EXPORTS = [
+  'InvalidTenantIdError',
+  'MIGRATION_FOLDER',
+  'createMigrator',
+  'forTenant',
+  'migrateDownToStart',
+  'migrateToLatest',
+].sort();
+
+test('the package exports exactly the documented surface', () => {
+  expect(Object.keys(dbServer).sort()).toEqual(EXPECTED_EXPORTS);
+});
+
+test('the package exports no raw db, pool, or handle-producing factory', () => {
+  // Named explicitly rather than inferred from the list above: these are the specific escape
+  // hatches D7 exists to close, so they get their own assertion that reads as intent.
+  for (const forbidden of ['db', 'getDb', 'pool', 'getPool', 'kysely', 'createForTenant']) {
+    expect(Object.keys(dbServer)).not.toContain(forbidden);
+  }
+});
+
+test('forTenant is the only exported way to reach a tenant table', () => {
+  expect(typeof dbServer.forTenant).toBe('function');
+
+  // Nothing else exported may hand back something queryable. The migration entries take a db
+  // rather than producing one, so they cannot be used to obtain a handle.
+  const queryish = Object.entries(dbServer).filter(
+    ([, value]) => typeof value === 'object' && value !== null && 'selectFrom' in (value as object),
+  );
+  expect(queryish).toEqual([]);
+});
