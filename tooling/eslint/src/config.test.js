@@ -69,6 +69,19 @@ test('the float carve-out is narrow and identical in both money blocks (task 29)
 
   for (const block of blocks) {
     const [, options] = block.rules['bolusi/no-float-money'];
+    // T-14 (the guard asserts its own DENOMINATOR): pin the exact option key set, not just
+    // the keys we happen to check. Asserting only known keys let the reviewer inject
+    // `allowFloatDirs: ['packages/modules/src/']` — exempting ALL of packages/modules —
+    // into both blocks plus the rule's meta.schema with every test still green. The rule's
+    // `additionalProperties: false` already hard-fails an ACCIDENTAL new key (ESLint exits
+    // 2, "Unexpected property"); what this line closes is the DELIBERATE two-file widening
+    // (schema + config edited together), which is exactly how a carve-out gets quietly
+    // broadened. A new option must be added here consciously.
+    expect(Object.keys(options).sort()).toEqual([
+      'allowFloatFiles',
+      'allowFloatProps',
+      'numericLiterals',
+    ]);
     // exactly one file and exactly the three location props — nothing broader ever
     // silently joins the allowlist
     expect(options.allowFloatFiles).toEqual(['packages/schemas/src/envelope.ts']);

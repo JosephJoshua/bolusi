@@ -75,6 +75,15 @@ tester.run('no-float-money (float constructors)', rule, {
     { code: `const c = z.int();` },
     { code: `const d = z.int32();` },
     { code: `const e = z.bigint();` },
+    // an aliased zod root honours .int() exactly like `z` — the alias fix must not
+    // false-positive on sanctioned integer shapes
+    { code: `import { z as zod } from 'zod';\nconst a = zod.number().int();` },
+    { code: `import { z as zod } from 'zod';\nconst b = zod.int();` },
+    // a NON-zod identifier that merely happens to be named like a float ctor is not zod's:
+    // pins that zodRoots is import-derived, not a name-shaped guess
+    { code: `import { z as zod } from 'zod';\nconst c = other.float64();` },
+    // an unrelated module's `z` import is out of scope for this rule's ctor prong
+    { code: `import { z as zod } from 'other';\nconst d = zod.float64();` },
     // the location carve-out: allowlisted FILE *and* allowlisted PROP together
     {
       code: `const zLocation = z.strictObject({ lat: z.float64(), lng: z.float64(), accuracyMeters: z.float64() });`,
@@ -120,6 +129,27 @@ tester.run('no-float-money (float constructors)', rule, {
       options: [CARVE_OUT],
       filename: ENVELOPE,
       errors: [{ messageId: 'zFloatConstructor' }],
+    },
+    // ALIAS ESCAPE (F2): `import { z as zod }` keeps the imported name `z`, so the shared
+    // config's no-restricted-imports ban lets it through — the rule must resolve the local
+    // binding itself rather than assume the identifier is literally `z`.
+    {
+      code: `import { z as zod } from 'zod';\nconst zAmountIdr = zod.float64();`,
+      errors: [{ messageId: 'zFloatConstructor' }],
+    },
+    {
+      code: `import { z as zod } from 'zod';\nconst zTotal = zod.number();`,
+      errors: [{ messageId: 'zNumberWithoutInt' }],
+    },
+    // namespace import (the config bans it, but the rule must not depend on that config)
+    {
+      code: `import * as zod from 'zod';\nconst zPrice = zod.float64();`,
+      errors: [{ messageId: 'zFloatConstructor' }],
+    },
+    // an aliased root still honours .int() — no false positive
+    {
+      code: `import { z as zod } from 'zod';\nconst zFee = zod.coerce.number();`,
+      errors: [{ messageId: 'zNumberWithoutInt' }],
     },
     // CARVE-OUT DENOMINATOR 2 — the FILE dimension is load-bearing: `lat` float64 in a
     // PAYLOAD schema is still caught. 05 §3 forbids floats in payloads; the carve-out is

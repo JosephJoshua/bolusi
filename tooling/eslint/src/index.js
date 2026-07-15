@@ -114,6 +114,31 @@ export default tseslint.config(
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {
       'bolusi/no-float-money': ['error', { numericLiterals: false, ...LOCATION_FLOAT_CARVE_OUT }],
+      // no-float-money is syntactic: it recognises float ctors through a callee rooted at the
+      // zod namespace. Zod exports every ctor as a NAMED export too (`float64`, `number` are
+      // real, tree-shakeable functions in zod 4.4.3), so `import { float64 } from 'zod'` would
+      // call a float ctor the rule cannot see. Nothing but habit kept schema files on `z.*`.
+      // Make that convention TRUE rather than hoped: only `z` may be imported from zod here.
+      // Verified: this also blocks `import * as zod from 'zod'`. It does NOT block
+      // `import { z as zod }` (the imported name is `z`, which is allowed) — that alias is
+      // closed inside the rule, which resolves zod's local binding name.
+      // Safe to set here: no other config block sets no-restricted-imports, so this replaces
+      // nothing (flat-config rule options REPLACE, they do not merge). Deliberately NOT
+      // no-restricted-syntax: bolusi/no-direct-intl already owns that rule across these files
+      // and setting it again here would silently disable the Intl guard for schemas/modules.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'zod',
+              allowImportNames: ['z'],
+              message:
+                'Import only `z` from zod in schema code — `import { float64 } from "zod"` bypasses bolusi/no-float-money (08 §5.2). Use z.int() / z.number().int().',
+            },
+          ],
+        },
+      ],
     },
   },
   {

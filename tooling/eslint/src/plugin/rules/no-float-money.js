@@ -40,17 +40,20 @@ const MONEY_NAME = /(amount|price|cost|total|fee|idr)/i;
 /** Zod ctors that declare a float format outright (zod 4.4.3). */
 const FLOAT_CTORS = new Set(['float32', 'float64']);
 
-/** Resolve `z.<name>()` and `z.coerce.<name>()` to `<name>`; anything else → null. */
-function zodCtorName(callee) {
+/**
+ * Resolve `<root>.<name>()` and `<root>.coerce.<name>()` to `<name>`; anything else → null.
+ * `zodRoots` is the set of local identifiers bound to the zod namespace (see below).
+ */
+function zodCtorName(callee, zodRoots) {
   if (callee.type !== 'MemberExpression' || callee.computed) return null;
   if (callee.property.type !== 'Identifier') return null;
   const obj = callee.object;
-  if (obj.type === 'Identifier' && obj.name === 'z') return callee.property.name;
+  if (obj.type === 'Identifier' && zodRoots.has(obj.name)) return callee.property.name;
   if (
     obj.type === 'MemberExpression' &&
     !obj.computed &&
     obj.object.type === 'Identifier' &&
-    obj.object.name === 'z' &&
+    zodRoots.has(obj.object.name) &&
     obj.property.type === 'Identifier' &&
     obj.property.name === 'coerce'
   ) {
@@ -141,6 +144,14 @@ export default {
     // Carve-out dimension 1: the file. Empty allowlist ⇒ no file is exempt (safe default).
     const fileAllowsFloat = allowFloatFiles.some((suffix) => filename.endsWith(suffix));
 
+    // Local identifiers standing for the zod namespace. `z` is always assumed (the repo
+    // convention, and schema snippets are often linted without their import). An aliased
+    // import — `import { z as zod } from 'zod'` — adds its local name, so `zod.float64()`
+    // is caught too: the shared config's no-restricted-imports ban stops named and
+    // namespace zod imports but CANNOT stop that alias (the imported name is `z`, which is
+    // allowed), so the rule closes it here rather than assuming it away.
+    const zodRoots = new Set(['z']);
+
     /** Float ctor is exempt only in an allowlisted file AND on an allowlisted property. */
     function isCarvedOut(node) {
       if (!fileAllowsFloat) return false;
@@ -149,9 +160,27 @@ export default {
     }
 
     return {
+      // Runs before CallExpression: ESLint traverses the program in source order and imports
+      // are hoisted to the top of the file, so zodRoots is populated before any call is seen.
+      ImportDeclaration(node) {
+        if (node.source.value !== 'zod') return;
+        for (const spec of node.specifiers) {
+          if (spec.type === 'ImportNamespaceSpecifier') {
+            // `import * as zod from 'zod'` — the whole namespace
+            zodRoots.add(spec.local.name);
+          } else if (
+            spec.type === 'ImportSpecifier' &&
+            spec.imported.type === 'Identifier' &&
+            spec.imported.name === 'z'
+          ) {
+            // `import { z as zod } from 'zod'` — local name stands for the namespace
+            zodRoots.add(spec.local.name);
+          }
+        }
+      },
       CallExpression(node) {
         const callee = node.callee;
-        const ctor = zodCtorName(callee);
+        const ctor = zodCtorName(callee, zodRoots);
         // z.number() / z.coerce.number() without a chained .int()
         if (ctor === 'number') {
           if (!chainHasInt(node)) {
