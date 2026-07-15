@@ -44,5 +44,19 @@ tester.run('no-op-table-update', rule, {
       code: 'await sql`UPDATE operations SET payload = ${p}`;',
       errors: [{ messageId: 'rawSqlMutation' }],
     },
+    // The bookkeeping allowlist (task 06) is EXACT-FILE: another core oplog file mutating a
+    // signed-core column still fails, even while bookkeeping.ts is allowlisted (05 §1).
+    {
+      code: `await db.updateTable('operations').set({ signature }).where('id', '=', id).execute();`,
+      options: [{ allowFiles: ['packages/core/src/oplog/bookkeeping.ts'] }],
+      filename: '/repo/packages/core/src/oplog/append.ts',
+      errors: [{ messageId: 'opTableMutation' }],
+    },
+    {
+      code: `await db.deleteFrom('operations').where('id', '=', id).execute();`,
+      options: [{ allowFiles: ['packages/core/src/oplog/bookkeeping.ts'] }],
+      filename: '/repo/packages/core/src/oplog/verify.ts',
+      errors: [{ messageId: 'opTableMutation' }],
+    },
   ],
 });

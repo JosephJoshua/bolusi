@@ -7,3 +7,4 @@ export * from './crypto/index.js';
 export * from './errors/domain-error.js';
 export * from './state-machines/index.js';
 export * from './ids/uuidv7.js';
+export * from './oplog/index.js';
