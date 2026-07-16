@@ -48,17 +48,21 @@ const KNOWN_STATUS_SET: ReadonlySet<string> = new Set(KNOWN_STATUSES);
 
 /** A numbered task file's basename: `NN-slug.md`. One-or-more digits ON PURPOSE — sec-meta.ts's
  *  `OWNER_PATH_PATTERN = /…\d{2}…/` assumes exactly two digits and breaks at task 100; this gate
- *  handles 1-, 2-, and 3-digit numbers so the same bug is not copied here. */
-const TASK_FILE_BASENAME = /^(\d+)-[\w-]+\.md$/;
+ *  handles 1-, 2-, and 3-digit numbers so the same bug is not copied here.
+ *  Exported so the task 71 single-writer (`scripts/task-status.mjs`) mirrors this grammar rather than
+ *  inventing a second one — its `task-status.test.ts` pins the mirror to this exact value (§2.8). */
+export const TASK_FILE_BASENAME = /^(\d+)-[\w-]+\.md$/;
 
 /** An index-row id: a number with an optional split suffix (`27a`, `27b`). The number is what
- *  resolves to a file; the suffix distinguishes rows that share one file. */
-const ROW_ID_PATTERN = /^(\d+)([a-z]*)$/;
+ *  resolves to a file; the suffix distinguishes rows that share one file. Exported for the writer's
+ *  pinned mirror (see TASK_FILE_BASENAME). */
+export const ROW_ID_PATTERN = /^(\d+)([a-z]*)$/;
 
 /** The front-matter Status line — the SAME shape sec-meta.ts reads, so drift-detection agrees with
  *  the SEC-META staleAllowlist check that already depends on this field. `\S+` grabs only the
- *  status token, so a line like `**Status:** in-review — premise moved` yields `in-review`. */
-const STATUS_LINE = /\*\*Status:\*\*\s*(\S+)/;
+ *  status token, so a line like `**Status:** in-review — premise moved` yields `in-review`.
+ *  Exported for the writer's pinned mirror (see TASK_FILE_BASENAME). */
+export const STATUS_LINE = /\*\*Status:\*\*\s*(\S+)/;
 
 interface TaskFileEntry {
   path: string;

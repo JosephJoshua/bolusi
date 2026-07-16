@@ -98,6 +98,7 @@ One row per concern → the doc(s) to read (under `ai-docs/`). Load only what th
 - Conventional Commits, subject-only, no attributions (§2.4).
 - Branch per task; never commit on `main` directly.
 - Merge only after review (§2.9); prefer a clean integration worktree over merging in the main checkout.
+- **Change a task's Status with `pnpm task:status <id> <status>`, never by hand** — one action writes both §2.6 locations (the `_index.md` row cell **and** the file's `**Status:**` line), so they cannot drift. This is the writeback step on every state change, including at merge. Legal values: `todo · in-progress · in-review · done · blocked`; it refuses an unknown id or status. Task 66's ledger gate stays the backstop for any hand-edit that skips it.
 
 ---
 

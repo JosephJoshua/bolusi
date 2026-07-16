@@ -9,6 +9,7 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
+    "task:status": "node scripts/task-status.mjs",
     "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
     "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
