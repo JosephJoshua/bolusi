@@ -15,12 +15,15 @@ test('all bolusi custom rules are registered at error in the flat config', () =>
   // `no-clock-in-handlers` + `runtime-emission-allowlist` added task 10 (04-module-contract
   // §5.1/§5.2).
   // `list-primitive-only` added task 24 (design-system §3.13 screen import boundary).
+  // `no-media-column-update` + `no-legacy-upload-api` added task 18 (06-media-pipeline §4/§5.5).
   expect(Object.keys(bolusi.rules).sort()).toEqual([
     'boundaries',
     'list-primitive-only',
     'no-clock-in-handlers',
     'no-float-money',
     'no-hardcoded-strings',
+    'no-legacy-upload-api',
+    'no-media-column-update',
     'no-op-table-update',
     'no-token-literals',
     'permission-module-prefix',
@@ -44,6 +47,10 @@ test('all bolusi custom rules are registered at error in the flat config', () =>
   expect(ruleLevel('bolusi/no-clock-in-handlers')).toBe('error');
   expect(ruleLevel('bolusi/runtime-emission-allowlist')).toBe('error');
   expect(ruleLevel('bolusi/list-primitive-only')).toBe('error');
+  // A rule present in the plugin but never switched on is a guard that silently checks nothing —
+  // the exact-set assertion above cannot see that, so both halves are needed (task 18).
+  expect(ruleLevel('bolusi/no-media-column-update')).toBe('error');
+  expect(ruleLevel('bolusi/no-legacy-upload-api')).toBe('error');
 });
 
 test('repo-wide rules are not scoped to a files subset', () => {
@@ -120,11 +127,54 @@ test('the float carve-out is narrow and identical in both money blocks (task 29)
   expect(broadOptions.allowFloatProps).toEqual(schemaOptions.allowFloatProps);
 });
 
+/**
+ * The flat config minus the TYPE-AWARE lane (`bolusi/app-typed`), for probes that lint SYNTHETIC
+ * file paths.
+ *
+ * WHY THIS EXISTS. `no-floating-promises` needs type information, so its block sets
+ * `parserOptions.projectService`. The project service resolves a file against a real tsconfig and
+ * hard-FAILS on anything it cannot find ("was not found by the project service", `fatal: true`,
+ * `ruleId: null`). Every probe below lints an in-memory file at a path like
+ * `apps/mobile/src/screens/Notes.tsx` — which resolves under `tooling/eslint/` and has never
+ * existed on disk. So once the type-aware lane grew to cover `apps/mobile/src` (task 18), those
+ * probes stopped reporting rule ids and started reporting a parse error.
+ *
+ * That is a REAL incompatibility, not a workaround: a lane that needs types cannot parse a file
+ * that is not on disk, and `allowDefaultProject` cannot rescue it (its globs forbid `**`). Dropping
+ * the lane here keeps each probe testing the rule it names. What the probes then do NOT prove is
+ * that the type-aware lane works — so that is asserted separately, on the config's shape
+ * (`the type-aware lane covers apps/mobile/src`), and end-to-end by a falsification against the
+ * real `pnpm lint`: remove an `await` from `apps/mobile/src/media/files.ts` and lint goes red.
+ */
+const configWithoutTypeAwareLane = config.filter((block) => block.name !== 'bolusi/app-typed');
+
+// Task 18. The probes above deliberately drop the type-aware lane (see
+// `configWithoutTypeAwareLane`), so this asserts the lane's SHAPE — that it exists, that it covers
+// apps/mobile/src, and that no-floating-promises is on. It is a config-object assertion and proves
+// only wiring; that the rule actually FIRES is proven end-to-end against the real `pnpm lint`
+// (remove the `await` from `apps/mobile/src/media/files.ts` and lint goes red — the exact bug that
+// prompted this: a floating `File#move()` returned before the move completed, so a MediaItem row
+// would point into the OS-purgeable cache dir and a shop's only record of a repair would be gone).
+test('the type-aware lane covers apps/mobile/src with no-floating-promises (task 18)', () => {
+  const lane = config.find((block) => block.name === 'bolusi/app-typed');
+  expect(lane, 'bolusi/app-typed block must exist').toBeDefined();
+  expect(lane.rules['@typescript-eslint/no-floating-promises']).toBe('error');
+  // Type information is what the rule needs; without projectService it silently cannot run.
+  expect(lane.languageOptions.parserOptions.projectService).toBe(true);
+  // The mobile half is the point — apps/server was already covered and is kept.
+  expect(lane.files).toContain('apps/mobile/src/**/*.ts');
+  expect(lane.files).toContain('apps/mobile/src/**/*.tsx');
+  expect(lane.files).toContain('apps/server/src/**/*.ts');
+});
+
 // 07-i18n §5: the `new Intl.` ban. Linting real file paths through the actual flat config is the
 // only way to prove the packages/i18n exemption resolves — asserting on the config object would
 // just restate it.
 test('direct Intl use fails outside packages/i18n and passes inside it (07-i18n §5)', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const source = 'const f = new Intl.NumberFormat("id-ID");\n';
 
   const lintAt = async (filePath) => {
@@ -142,7 +192,10 @@ test('direct Intl use fails outside packages/i18n and passes inside it (07-i18n 
 // Added task 23. Prove the two scope changes resolve through the REAL flat config, not just the
 // config object — the packages/ui addition and the tokens.ts exemption are the load-bearing parts.
 test('no-hardcoded-strings now covers packages/ui but exempts its tests (§7 lint (b))', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const lintAt = async (source, filePath) => {
     const [result] = await eslint.lintText(source, { filePath });
     return result.messages.map((m) => m.ruleId);
@@ -167,7 +220,10 @@ test('no-hardcoded-strings now covers packages/ui but exempts its tests (§7 lin
 // silently covered more than that file would disarm the lint for real manifests, so the scope is
 // asserted through the REAL flat config rather than by reading the config object back.
 test('permission-module-prefix fires on real manifests and is exempted only in the assembly suite', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const lintAt = async (source, filePath) => {
     const [result] = await eslint.lintText(source, { filePath });
     return result.messages.map((m) => m.ruleId);
@@ -205,7 +261,10 @@ test('permission-module-prefix fires on real manifests and is exempted only in t
 // Added task 10. The two §5 rules, proven through the REAL flat config: the rule's own RuleTester
 // fixtures prove it MATCHES, but only the config decides whether it ever runs on a real path.
 test('no-clock-in-handlers fires on module command files and nowhere else (04 §5.2)', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const lintAt = async (source, filePath) => {
     const [result] = await eslint.lintText(source, { filePath });
     return result.messages.map((m) => m.ruleId);
@@ -236,7 +295,10 @@ test('no-clock-in-handlers fires on module command files and nowhere else (04 §
 });
 
 test('runtime-emission-allowlist fires repo-wide on a non-command append (04 §5.1)', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const lintAt = async (source, filePath) => {
     const [result] = await eslint.lintText(source, { filePath });
     return result.messages.map((m) => m.ruleId);
@@ -297,7 +359,10 @@ test('the configured sanctioned set is exactly 04 §5.1`s five', () => {
 // checked only the "screen fails" direction would still pass if the rule had been made repo-wide —
 // which would break `packages/ui`'s own List and force someone to disable the rule to fix it.
 test('list-primitive-only fires on screens and exempts packages/ui (design-system §3.13)', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const lintAt = async (source, filePath) => {
     const [result] = await eslint.lintText(source, { filePath });
     return result.messages.map((m) => m.ruleId);
@@ -337,7 +402,10 @@ test('list-primitive-only fires on screens and exempts packages/ui (design-syste
 });
 
 test('no-token-literals covers packages/ui but exempts tokens.ts (§7 lint (a))', async () => {
-  const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: config });
+  const eslint = new ESLint({
+    overrideConfigFile: true,
+    overrideConfig: configWithoutTypeAwareLane,
+  });
   const lintAt = async (source, filePath) => {
     const [result] = await eslint.lintText(source, { filePath });
     return result.messages.map((m) => m.ruleId);

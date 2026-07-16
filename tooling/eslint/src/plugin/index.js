@@ -5,6 +5,10 @@ import listPrimitiveOnly from './rules/list-primitive-only.js';
 import noClockInHandlers from './rules/no-clock-in-handlers.js';
 import noFloatMoney from './rules/no-float-money.js';
 import noHardcodedStrings from './rules/no-hardcoded-strings.js';
+// 06-media-pipeline §5.5 — legacy expo-file-system upload APIs throw at runtime in SDK 57.
+import noLegacyUploadApi from './rules/no-legacy-upload-api.js';
+// 06-media-pipeline §4 — media metadata is frozen at capture (task 18).
+import noMediaColumnUpdate from './rules/no-media-column-update.js';
 import noOpTableUpdate from './rules/no-op-table-update.js';
 import noTokenLiterals from './rules/no-token-literals.js';
 import permissionModulePrefix from './rules/permission-module-prefix.js';
@@ -25,6 +29,8 @@ const plugin = {
     'list-primitive-only': listPrimitiveOnly,
     'no-float-money': noFloatMoney,
     'no-hardcoded-strings': noHardcodedStrings,
+    'no-legacy-upload-api': noLegacyUploadApi,
+    'no-media-column-update': noMediaColumnUpdate,
     'no-op-table-update': noOpTableUpdate,
     // Added task 23 (design-system §7 lint (a)). Scoped in the shared config below.
     'no-token-literals': noTokenLiterals,
