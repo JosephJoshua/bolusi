@@ -57,6 +57,46 @@ Read **`ai-docs/decisions/2026-07-16-integration-tests-run-real-dependencies.md`
 
 **The orchestrator has no preferred answer here and is not ruling it** — it is a genuine architecture decision with a spec change on one side and a permanent coverage hole on the other. Bring evidence, not a preference. If (a), the `pg`-in-apps/server question is a **§6 red flag** (a boundary/stack change) — surface it rather than deciding unilaterally.
 
+## THE DESIGN — owner-specified, 2026-07-16 (build this; the shape is not open)
+
+> *"let's do testcontainers and migrate once, and then create new databases based on templates (of course make sure the parallelism doesn't crash this one instance), or maybe you can launch multiple containers (e.g. cap 1 container to 50 databases, and for more launch another container, etc.)"*
+
+**One container, migrated once, per-file databases cloned from a template — and shard to more containers when a cap is hit.** The orchestrator verified the load-bearing constraints on the real PG 16.14 rather than asserting them; the numbers below are measured.
+
+### The mechanism
+
+1. **Boot one `postgres:16` container** (testcontainers, `.withReuse()`), production major pinned in code.
+2. **Migrate ONCE** into a template database (e.g. `bolusi_tmpl`) — the full migration chain, one time, at global setup.
+3. **Per test file: `CREATE DATABASE <file_db> TEMPLATE bolusi_tmpl;`** — a filesystem-level copy, milliseconds. **No WASM boot, no re-migrate.**
+4. **Re-enable `fileParallelism`** — the reason it is `false` today (a single shared DB that each file resets) disappears when each file owns a database.
+5. **Shard on the cap**: when files exceed the per-container ceiling, boot another container.
+
+### THE ONE RULE THAT MAKES OR BREAKS IT — proven, not assumed
+
+**`CREATE DATABASE … TEMPLATE` fails while ANY session is connected to the template.** Measured on PG 16.14 by the orchestrator:
+
+| probe | result |
+| ----- | ------ |
+| clone with **no** connections to the template | `CREATE DATABASE` ✅ |
+| clone while **one** session holds the template | ❌ `DETAIL: There is 1 other session using the database.` |
+
+**So: migrate the template, then never connect to it again.** Not for a health check, not for a "quick verify", not for codegen. If anything holds it open, every clone fails — **loudly**, which is the good failure. Guard it: the clone helper should `pg_terminate_backend` stragglers on the template (or assert zero `pg_stat_activity` rows for it) and **fail with the reason**, not retry blindly.
+
+### THE CAP IS `max_connections`, NOT DATABASE COUNT — measured
+
+The owner's "~50 databases per container" instinct maps onto a real ceiling. Measured on the running container: **`max_connections = 100`**, **`shared_buffers = 128MB`** (stock defaults).
+
+**Databases are cheap; CONNECTIONS are the resource.** An idle cloned database costs disk and catalog rows. The thing that will crash the instance is **N parallel files × pool size** exceeding `max_connections`, and Postgres reserves `superuser_reserved_connections` (default 3) on top. So:
+
+- **Compute the cap from connections, not from a database count**: `maxParallelFiles × poolSizePerFile + headroom ≤ max_connections`. With a pool of 1–2 per file, ~50 is a sound cap — the owner's number is right, for the right reason.
+- **Raise `max_connections` deliberately if you want more per container** (`-c max_connections=200`), and **say what it costs**: each backend is a process with its own memory; 200 × `work_mem` is real. Prefer sharding to a second container over an unbounded `max_connections`.
+- **Shard when the cap is hit**: container 1 takes files 1–50, container 2 takes 51–100, etc. Each container migrates its own template once. **State the sharding key** (file path hash, or a work-stealing pool) and make it deterministic so a failure is reproducible.
+- **Falsify the cap**: drive parallelism past it and prove you get a **clear, attributable error** (`FATAL: sorry, too many clients already`) rather than a wedge or a silent hang. **This repo has had unexplained vitest wedges (76 bytes, 600 s, no output) with no established cause** — do not let connection exhaustion become a second one. If your failure mode under load is a hang rather than an error, the design is not done.
+
+### Do not lose what `db-lane.mjs` already bought (task 34)
+
+It exists because a fixed host port let a failed `db:up` **silently resolve to a peer worktree's database**, and task 13's "82/11 on real PG16" was produced by task 05's leaked container — a real number with fictional provenance. Whatever replaces it keeps: **ephemeral ports** (testcontainers' `getConnectionUri()` gives this by construction), a **fatal** failure to start, and the **`bolusi.db_owner` attribution GUC** or equivalent — asserted, not advisory. A green whose provenance is unknown is not a green (T-14d).
+
 ## Acceptance
 
 **Observable done-condition:** the L3 lane runs on real PG16 over the real `pg` driver, an RLS test on it can actually fail, and no gate's name says "Postgres" without saying which one and over which client.
