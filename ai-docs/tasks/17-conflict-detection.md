@@ -143,6 +143,9 @@ npx vitest run --project server apps/server/test/integration/sync/conflict-detec
  Test Files  1 passed (1)
       Tests  10 passed (10)
 EXIT=0                                   ← GREEN. The lane is BLIND to the bug.
+# (10 was the file's count when measured mid-task; it carries 15 at the tip. review-17 reproduced
+#  the same pair independently at 14/14 green. The conclusion is unaffected: every test in the
+#  PGlite lane passes with the bug present, whatever the denominator.)
 ```
 
 **Lane B — real PostgreSQL 16.14 over the `pg` driver, attributed (`pnpm test:rls`):**
@@ -273,27 +276,75 @@ platform op declaring a conflict, production detects nothing until task 25 regis
 `notes` type even with a key store — the thread test swaps in a notes-carrying list (what
 `SERVER_MODULES` holds post-25) to exercise it today.
 
-### KNOWN GAP — no post-wiring green on the neighbouring sync/oplog tests (for the reviewer)
+## review-17 fixes (impl-17, 2026-07-16) — MERGE WITH FIXES, all four addressed
 
-Stated verbatim, because a gap a reviewer has to infer is a gap nobody checks:
+**F1 — the tenant-scope mechanism had ZERO test witnesses, and it was my own trap one layer up.**
+review-17 deleted the mechanism and ran the full suite: `tsc -b` EXIT=0, **187 files / 2633 passed,
+EXIT=0 — not one test noticed**; `git grep -lE "resolveScope|scopeFor|conflictFor" -- '**/*.test.ts'`
+→ **zero files** (I reproduced both). I spent this task proving a missing registration is a
+well-typed empty list that only a test can see — then shipped a live mechanism with no witness two
+files away. Now covered by `packages/core/test/platform/commands.test.ts` against the REAL
+`registerModules([platformModule]).operations` (not a fixture map — `ctx.op()` reads `scopeFor` from
+it, so a hand-built registry would assert its own opinion of the manifest, T-13). **Falsified**:
+deleted the mechanism exactly as review-17 did (`ctx.ts` → `storeId: identity.storeId`) → `tsc -b`
+**EXIT=0**, test **RED**: `expected '0191dd9d-ec00-7383-afa8-2233a36265a6' to be null` — the store id
+leaking into a tenant-scoped op, which IS the `setLocale` failure. The store-scoped positive control
+stayed green (attributable). Restored → **10/10, EXIT=0**.
 
-> The final wiring commit (`6e34d5d`) is **additive** — conditional spreads that are no-ops when
-> `detectConflicts` is `undefined`, which is what `resolveDeps` produces by default (no
-> `SystemKeyStore` in v0). Its own suite is **3/3 with the threading falsified** (dropped the thread
-> from `runPush` → the end-to-end test went RED, the two construction tests stayed green →
-> restored → 3/3). **But there is no post-wiring green on the neighbouring sync/oplog tests.**
+**F2 — the denial legs; my "needs a device DB" claim was wrong.** review-17's counter is exact:
+denial is execute step 2, **before** the handler's read. Shipped in the same file: staff →
+`PERMISSION_DENIED` + a recorded `auth.permission_denied` op + **zero** query calls (proving the
+handler never ran); owner CAN acknowledge (the positive control); `INVALID_TRANSITION` for
+`auto_resolved` AND already-`acknowledged`, with 03 §12's exact `{machine, from, event, entityId}`
+and no op emitted; `ENTITY_NOT_FOUND` out of scope. `listConflicts` staff-denial runs the REAL
+`QueryRuntime` over the REAL `enforcementPoint` with a **db that throws if touched** — so "denied"
+and "ran and returned nothing" are different observable events (FR-1036: never an empty page), plus
+an owner control proving the db is reachable. **Only `setLocale` end-to-end** (op → `user_prefs` row
+→ a second device reading it) remains blocked on the client runtime over a device DB (tasks
+24/25/50); the op it emits is asserted here, the fold by the registration + T-8 suites.
 
-What IS known-green, and its provenance:
-- **Full suite `186 files / 2630 passed | 3 skipped, EXIT=0`** — but that run **predates `6e34d5d`**.
-  It covers everything else: the platform module, detection engine, conformance, no-cascade,
-  CHAOS-07, the CLI hardening.
-- `pnpm typecheck` **EXIT=0** and `pnpm lint` **EXIT=0**, both run **after** `6e34d5d`.
-- `pnpm test:rls` **16 files / 133 passed, EXIT=0**, attributed to PostgreSQL 16.14, after `6e34d5d`.
+**F3 — my ATOMIC test proved less than it claimed; adopted review-17's probe.** It aborted from
+`systemIdentity`, which `detectConflicts` resolves BEFORE the emission loop, so `appendSystemOp`
+never ran and `expect(lastSeq).toBe(0)` was **trivially true** — it would hold even if the chain
+advance were not transactional. Replaced with the mid-emission probe: two conflicts, a signer that
+succeeds on #1 and throws on #2, so #1 is fully emitted (op inserted, serverSeq allocated, row
+folded, chain at seq 1) before the unwind. Asserts ops unchanged, `conflicts` 0, `last_seq` 0, and
+**`signCalls === 2`** (the control proving #1 completed and #2 reached the signer). Added the control
+review-17 described: **working signer → 2 conflicts, chain seq 2**, proving the zeroes are a
+**rollback, not an absence**. **Falsified** by neutering the emission — and the result is the T-17
+point itself: the **ATOMIC test stayed GREEN** (zeroes hold either way) while the **positive control
+went RED**. The control is the only thing that tells rollback from absence. Restored → **15/15**.
 
-Not closed here by instruction: the orchestrator runs the full suite serially in the integration
-worktree (this worktree's environment was saturated — three concurrent agents; the server project
-wedged at the vitest banner, 76 bytes of output for 600s, which is task 67's load-flake at scale and
-not a property of this code). **Do not read the gap as "probably fine" — read it as unrun.**
+**F4 — stale comments in the trap's own home.** `deps.ts` still said the registry is "EMPTY today
+(⇒ every pushed op is `UNKNOWN_TYPE`)" — which **this task made false**; same for `projections`
+"empty by default", the duplicates at `push.ts`, and `pipeline.ts:24` ("empty until a module
+registers") — *the file whose stale header I fixed this very task*. All corrected to the real state
+(`platform.*` registered; 25/43 pending). Also fixed `conflict-detection.test.ts`'s claim that Rule 2
+"reads `notes.archived`", which my own `existsPrecedingOp` fix had made false. This is §2.11's "the
+comment was the guard" in its plainest form: I edited `pipeline.ts` to fix one stale comment while
+leaving three more in the same file's neighbourhood.
+
+### The `6e34d5d` gap — declared unrun by me, CLOSED by review-17
+
+I declared it rather than infer it was fine: the wiring commit is additive (conditional spreads that
+no-op when `detectConflicts` is undefined — `resolveDeps`'s default), its own suite was 3/3 with the
+threading falsified, but I had **no post-wiring green on the neighbouring sync/oplog tests** because
+this worktree's environment was saturated (three concurrent agents; the server project wedged at the
+vitest banner — 76 bytes of output for 600s, task 67's load-flake at scale, not a property of this
+code).
+
+**review-17 ran it: `test:server` 54 files / 405 tests and `test:rls` 133 attributed to its own
+container, both EXIT=0.** The gap is closed. Recorded because the sequence is the point: a declared
+gap got run by the next pair of hands, which is what declaring it is FOR — an inferred one would
+have been carried into the merge unexamined.
+
+**The fixes above (F1–F4) re-open a smaller version of the same gap**, stated the same way: the
+files I touched are green (`core/test/platform/commands.test.ts` **10/10**;
+`sync/conflict-detection.test.ts` **15/15**; `pnpm typecheck` **EXIT=0**; `pnpm lint` **EXIT=0** —
+all read from logs, not notifications), but **the full suite has not been re-run after F1–F4** on my
+side. F4 touches only comments; F1 adds an additive `operations?` option to a SHARED fixture
+(`packages/core/test/runtime/_fixtures.ts`) that defaults to `fixtureOperations` — the one change
+with reach beyond my own files, so it is the one worth a reviewer's eye.
 
 **Not done / out of scope — stated, not implied.** No client-side command/query integration test
 (`acknowledgeConflict`'s `INVALID_TRANSITION`, `listConflicts` staff denial, `setLocale`
