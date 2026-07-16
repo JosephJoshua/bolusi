@@ -1,5 +1,5 @@
 # TASK 49 — the server never applies projections; the push transaction drops a normative step and no task owns it
-**Status:** todo
+**Status:** done
 **Priority:** **HIGH** — a normative stage of the push transaction, specified four times, implemented nowhere. Every server read model is permanently empty.
 **Depends on:** 16
 **Blocks:** 17, 21, 25, 43
@@ -77,3 +77,67 @@ Everyone points somewhere else, and the ring closes. Task 07 — the one two oth
 Found by a systematic orphan sweep — the first of the five orphans **not** found by accident. The previous four (the permission registry, the schemas auth DTOs, the auth appliers, `restriction_violated`) were each volunteered by an agent noticing its own gap. This one was found by enumerating what the specs *require* and checking each entry against what exists, which is the only method that finds absence.
 
 The shape is worth naming, because the decompose will do it again: **a step every task assumes another task owns.** Each handoff was individually reasonable — 08 punts server embedding to "07/16", 16 punts to 17, 17 does one table for its own op, 25 assumes a list. No single task file is wrong. The ring is wrong, and no reviewer sees a ring, because every review sees one task.
+
+## Outcome (impl-49, 2026-07-16)
+
+**The premise held.** Reproduced first (T-11) by driving the REAL push path — `processPushBatch`, not a
+hand-built engine: a signed `probe.item_created` op pushed through the full pipeline was `accepted`,
+gained its `operations` row, and left the projection table **EMPTY** (`expected [] to deeply equal
+[ 'alpha' ]`; the batch `expected +0 to be 3`; an applier `throwOn` never fired because the applier
+was never called). The missing sixth step, exactly as filed. `pipeline.ts:17`'s header comment
+agreed with the five-step code — the sixth authoritative-prose-wrong-in-one-clause instance (T-15/16);
+fixed alongside the code.
+
+**What was built, and where the seam lives.**
+- `apps/server/src/deps.ts` — **`SERVER_MODULES`**, the ONE list the ring pointed at and nobody
+  created. `registerModules(SERVER_MODULES)` (core, task 11) derives BOTH the op-payload validators
+  (`serverOpRegistry`, via `deriveOpRegistry`) AND the projection appliers (`serverModuleRegistry.projections`)
+  from it, so validation and folding can never name different module sets (§2.8). Empty at v0 — 17/25/43
+  append their `defineModule` result here, and both paths light up together. Replaces the old
+  `EMPTY_OP_REGISTRY`.
+- `packages/db-server/src/projection-apply.ts` — **`createServerProjectionEngine(db, tenantId, registry)`**,
+  the ONE construction of `ProjectionEngine` over `createServerWatermarkStore` + a throwing no-rebuild
+  store. Homed in db-server (not inline in the pipeline) for the same reason task 47 moved the watermark
+  store: `pnpm test:rls` (`--project db-server`) then executes the EXACT construction the pipeline runs,
+  not a copy. Exported; `export-surface.test.ts` updated (still passes the D7 `queryish` assertion — it
+  consumes a handle, returns no `selectFrom`). The two atomicity suites' inline `makeEngine` mirrors were
+  deleted and now call this factory.
+- `apps/server/src/oplog/pipeline.ts` — the apply step (`await projectionEngine.applyPulledOp(op)`) after
+  `insertOperationRow`, per accepted op, inside the one `forTenant` transaction; header comment fixed to
+  carry step 6. Threaded `projections` through `types.ts` → `sync/push.ts` → `routes/sync.ts`.
+- **One applier, both engines** (§2.8/T-8): consumes core's `ProjectionEngine` unchanged — no server copy.
+  Server folds via `applyPulledOp` (advances `applied_server_seq` by highest-contiguous, 10-db §8), the
+  correct server semantics (no own-device local seq).
+
+**Falsification (§2.11).** Neutered the shipped `applyPulledOp` call → the three apply-dependent
+assertions went RED (`[] vs ['alpha']`; `+0 vs 3`; `promise resolved instead of rejecting`) while the
+UNREGISTERED no-op test stayed green; restored → 4/4 green. **Atomicity** proven THROUGH the production
+path: an applier throw mid-batch rolls back the whole push (0 ops, 0 rows) — `.rejects.toThrow`.
+
+**Denominator (T-14).** Six server projection tables exist and are RLS-secured (`conflicts`,
+`user_prefs`, `auth_sessions`, `pin_lockout_events`, `auth_permission_denials`, `notes`) — verified
+independently. The apply STEP covers **all** of them structurally (any registered applier runs). But
+production registers **ZERO** modules today (`SERVER_MODULES` is empty; 17=todo, 25=todo, 43=todo), so
+**0 of 6** tables are folded in production right now — the honest v0 state, proven a deliberate no-op
+(UNREGISTERED test), not a vacuous-green loop. The seam is proven end-to-end with a **1-module,
+1-applier, 1-type** probe driven through the real pipeline (3 folded rows asserted, not 1, not 0).
+
+**Real PG16.** `pnpm test:rls` → **15 files, 124 passed, EXIT=0**, `owner 'agent-ab8cc995ed251a7e8'`.
+The refactored `sync-batch-atomicity.test.ts` now drives `applyPulledOp` + `highestContiguousServerSeq`
+through the PRODUCTION factory on real PG16 (the pull branch, server-side). Also green: `pnpm test:server`
+(50 files / **378 passed**, PGlite), `pnpm typecheck`, `pnpm lint`, `npx tsc -b` — all EXIT=0, outputs read.
+
+**Correcting task 48's premise (verify, don't assume — 54/58 were refuted today too).** Task 48's closing
+line said `applyPulledOp` / `highestContiguousServerSeq` are "unexecuted on any Postgres leg." That was
+already **STALE**: task 47's atomicity test executes both on real PG16 (its header credits the change).
+So the pull branch was already covered server-side before task 49 — via a hand-built engine over a probe.
+What task 49 adds is the PRODUCTION-PATH coverage (the pipeline CALLS the apply) and the shared factory
+that lane now runs.
+
+**NOT covered — filed, not fixed (no new task number taken).** The task-21 trap is **not resolved by
+task 49 alone**. `user_prefs` is folded from `platform.user_locale_changed` by the **platform module**,
+which **task 17** owns (`packages/core/src/platform/projections/user-prefs.ts`). Until task 17 (a) ships
+that module and (b) **registers it into `SERVER_MODULES`** (deps.ts), the server folds nothing and every
+push notification still falls back to `id-ID`. The seam now makes that a one-line registration; the fold
+itself is 17's. Same for `conflicts` (17), `notes` (25), and the auth tables (43). Each must append to the
+ONE `SERVER_MODULES` list — the coordination point this task created.
