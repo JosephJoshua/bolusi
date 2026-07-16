@@ -234,27 +234,50 @@ async function stampOwner(client: pg.Client, database: string, owner: string): P
  */
 export async function assertTemplateUnused(maintenanceUri: string): Promise<void> {
   await withAdmin(maintenanceUri, async (client) => {
-    const before = await client.query<{ pid: number; application_name: string }>(
-      `SELECT pid, application_name FROM pg_stat_activity WHERE datname = $1`,
-      [TEMPLATE_DATABASE],
-    );
-    if (before.rowCount === 0) return;
+    const countSessions = async (): Promise<number> => {
+      const { rows } = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+        [TEMPLATE_DATABASE],
+      );
+      return Number(rows[0]?.n ?? '0');
+    };
+
+    if ((await countSessions()) === 0) return;
 
     await client.query(
-      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1`,
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+        WHERE datname = $1 AND pid <> pg_backend_pid()`,
       [TEMPLATE_DATABASE],
     );
 
-    const after = await client.query(`SELECT pid FROM pg_stat_activity WHERE datname = $1`, [
-      TEMPLATE_DATABASE,
-    ]);
-    if (after.rowCount !== 0) {
+    // `pg_terminate_backend` SIGNALS a backend; it does not synchronously reap it. An immediate
+    // re-check therefore races the backend's exit and reports sessions that are already dying.
+    //
+    // This is not a hypothetical tightening: the first version of this function re-checked
+    // immediately and FAILED its own falsification probe — it threw "1 session(s) still hold
+    // template" for a plain `pg.Client` that had in fact been terminated successfully. Shipped,
+    // that would have been a flake (T-10) in the one guard the whole design hinges on.
+    //
+    // So: wait for the signal to TAKE EFFECT, bounded. This is not "retry blindly" — the loop
+    // waits only for a termination already issued, and a session that keeps RECONNECTING (the
+    // real defect this guard exists to name) still outlives every attempt and still fails below,
+    // with the reason.
+    const deadline = Date.now() + 5_000;
+    let remaining = await countSessions();
+    while (remaining > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      remaining = await countSessions();
+    }
+
+    if (remaining !== 0) {
       throw new Error(
-        `db-server: ABORT — ${after.rowCount} session(s) still hold template ` +
-          `'${TEMPLATE_DATABASE}' after termination, so every CREATE DATABASE … TEMPLATE will ` +
-          'fail with "There is N other session using the database".\n' +
-          'Something is RECONNECTING to the template. The template is migrated once and must ' +
-          'never be connected to again — not for a health check, not for codegen (task 73).',
+        `db-server: ABORT — ${remaining} session(s) still hold template '${TEMPLATE_DATABASE}' ` +
+          '5s after being terminated, so every CREATE DATABASE … TEMPLATE will fail with ' +
+          '"There is N other session using the database".\n' +
+          'Something is RECONNECTING to the template. The template is migrated ONCE and must ' +
+          'never be connected to again — not for a health check, not for a quick verify, not ' +
+          'for codegen (task 73). Look for a pool whose connectionString names ' +
+          `'${TEMPLATE_DATABASE}'.`,
       );
     }
   });
