@@ -34,6 +34,16 @@ const EXPECTED_EXPORTS = [
   // store — it CONSUMES a `forTenant` handle and returns a `ProjectionEngine` (apply/rebuild
   // methods, no `selectFrom`), so D7 and the `queryish` assertion below are untouched.
   'createServerProjectionEngine',
+  // Task 17: Rule 1's candidate query (01 §8.2). Same shape again — it CONSUMES a tenant-bound
+  // handle and returns plain `{opId, beforeProbe}` records, so D7 and `queryish` are untouched. It
+  // is here rather than in apps/server because `test:rls` (the only real-PG16 lane) is
+  // `--project db-server`, and Rule 1's `server_seq > last_pull_cursor` is the int8 comparison D16
+  // forbids a substitute from being the sole witness for.
+  'findRule1Candidates',
+  // Task 17: Rule 2's canonical-order probe (01 §8.2 / 03 §11). Same shape and same reason as
+  // findRule1Candidates — a row-value comparison Postgres must do, over columns the production
+  // driver marshals as strings.
+  'existsPrecedingOp',
 ].sort();
 
 test('the package exports exactly the documented surface', () => {

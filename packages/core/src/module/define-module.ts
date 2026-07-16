@@ -31,6 +31,51 @@ export class ModuleDefinitionError extends Error {
   }
 }
 
+/** Conflict severity (01 §8.3). Static per op type — v0 has no payload-dependent severity. */
+export type ConflictSeverity = 'minor' | 'significant';
+
+/**
+ * A conflict declaration (01-domain-model §8.1, which extends 04 §3).
+ *
+ * `conflict: { key: 'note.body', severity: 'minor' }` — OPTIONAL. "Ops without a `conflict`
+ * declaration never generate Conflict records. Two ops conflict only when they share (`entityId`,
+ * `conflict.key`)" (§8.1). The server's Rule-1 detection reads exactly this: it is the only thing
+ * that makes two accepted ops on one entity a collision rather than a sequence.
+ *
+ * `severity` is STATIC (§8.3: "an op type's declared severity is static — v0 has no
+ * payload-dependent severity"), which is why it lives on the type's declaration and not in a
+ * payload field an emitter could vary.
+ *
+ * OWNING-DOC NOTE: 01 §8.1 declares this field and frames itself as extending 04 §3 — but 04 §3's
+ * registry-entry shape does not list it (04 lists `permissions`, which 02 §3.2 obliges it to). The
+ * field is implemented here per 01 §8.1; the 04 §3 shape listing is stale. Spec drift is its own
+ * task (CLAUDE.md §4) — filed, not fixed here.
+ */
+export interface ConflictDeclaration {
+  /** Which aspect collides (01 §5.4 `conflictKey`), e.g. `note.body`. */
+  readonly key: string;
+  /** The Conflict record's severity when this rule fires (01 §8.3). */
+  readonly severity: ConflictSeverity;
+}
+
+/**
+ * The envelope scope an op type is recorded in (05 §2.1: `storeId` null = tenant-scoped).
+ *
+ * Declared on the TYPE for the same reason `schemaVersion` is (see below): it is a property of the
+ * op type, not of the emission. 01 §6 pins it per type — `platform.user_locale_changed` is
+ * "Tenant-scoped (`storeId = null`): the preference follows the user to every device", while every
+ * `auth.*`/`notes.*` op is store-scoped. A handler that could state its own scope could record an
+ * op in a store it was not authorized in; the registry states it once instead.
+ *
+ * Default `'store'` — the device's store (02 §5.2's v0 rule), which is what every op type declared
+ * before this field existed already got, so omitting it is exactly the previous behaviour.
+ *
+ * OWNING-DOC NOTE: 01 §6 states the FACT (this type's `storeId` is null) but names no mechanism,
+ * and 04 §5's runtime stamps `storeId` from the device identity for every draft — so the fact was
+ * previously inexpressible. Filed as spec drift alongside `conflict` (CLAUDE.md §4).
+ */
+export type OperationScope = 'store' | 'tenant';
+
 /**
  * One declared op type (04 §3).
  *
@@ -48,6 +93,10 @@ export interface OperationDeclaration<DB> {
   readonly reversal: string;
   /** The fold step (04 §4.1). */
   readonly apply: ProjectionApplier<DB>;
+  /** Optional collision declaration (01 §8.1). Absent ⇒ this type never produces a Conflict. */
+  readonly conflict?: ConflictDeclaration;
+  /** Envelope scope (01 §6; 05 §2.1). Default `'store'`. */
+  readonly scope?: OperationScope;
 }
 
 /** A command, as DECLARED in a manifest (04 §5). `name` is derived from the key — see `defineModule`. */
@@ -241,6 +290,34 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
     if (!isStrictSchema(payload)) {
       throw new ModuleDefinitionError(
         `op type ${type}'s payload schema does not reject unknown keys — 04 §3 requires .strict() (use z.strictObject({...}) or z.object({...}).strict()). A schema that strips or passes through unknown keys lets a client believe it recorded a field the append-only log does not contain.`,
+      );
+    }
+
+    // `conflict` (01 §8.1) — OPTIONAL, but a malformed one is worse than an absent one: the
+    // server's Rule-1 detection reads `key` to decide what collides. An empty key would make
+    // every op on an entity collide with every other; an unknown severity would land a row the
+    // `conflicts` CHECK constraint rejects, aborting a push transaction (10-db §8).
+    const { conflict } = declaration;
+    if (conflict !== undefined) {
+      if (typeof conflict.key !== 'string' || conflict.key.trim().length === 0) {
+        throw new ModuleDefinitionError(
+          `op type ${type} declares a conflict with key ${JSON.stringify(conflict.key)} — it must be a non-empty string (01 §8.1). Two ops conflict only when they share (entityId, conflict.key); an empty key collides everything on the entity with everything else.`,
+        );
+      }
+      if (conflict.severity !== 'minor' && conflict.severity !== 'significant') {
+        throw new ModuleDefinitionError(
+          `op type ${type} declares conflict severity ${JSON.stringify(conflict.severity)} — must be 'minor' or 'significant' (01 §8.3). The value lands in conflicts.severity, whose CHECK constraint would abort the push transaction that detected it.`,
+        );
+      }
+    }
+
+    // `scope` (01 §6; 05 §2.1) — OPTIONAL, defaulting to 'store'. A typo'd value must not silently
+    // degrade to the default: 'tenant' vs 'store' decides whether an op reaches every device or
+    // one store's devices, and the wrong answer is a permanent, signed fact in an append-only log.
+    const { scope } = declaration;
+    if (scope !== undefined && scope !== 'store' && scope !== 'tenant') {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares scope ${JSON.stringify(scope)} — must be 'store' or 'tenant' (01 §6; 05 §2.1: storeId null = tenant-scoped). Omit it for the default 'store' (the device's store, 02 §5.2).`,
       );
     }
   }

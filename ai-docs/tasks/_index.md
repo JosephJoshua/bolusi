@@ -24,7 +24,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | done | 03, 04, 09, 10, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | done | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | done | 07, 12, 13 |
-| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | in-progress | 07, 08, 16, 46, 47, 48, 49 |
+| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | in-review | 07, 08, 16, 46, 47, 48, 49 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | in-progress | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
@@ -83,6 +83,10 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 72 | `06 §3.2` says `mediaRefSchema` lives in `@bolusi/core` — which **may not import zod** (`08 §3.3`, and core's own `strict-schema.ts:6`); the violation would compile + lint green and break only at runtime. Ruled to `@bolusi/schemas`; spec text still wrong (from task 18) | todo | — |
 | 73 | **HIGH — owner directive (D16)** L3 integration (378 tests) runs on PGlite, which measurably missed the int8 silent bug (14/14 green vs real `pg` 4 red) and makes RLS tests vacuous (owner bypasses RLS); move to real PG16 via testcontainers + Ryuk | in-progress | — |
 | 74 | 11 raw-`sql<T>` readers resolve their keys only because `CamelCasePlugin` is wired; nothing asserts it. `pull.ts:411` launders a missing key into a plausible serverSeq of 1; `oplog-source.ts:229` is a no-op self-alias at task 46's own fix site (from review-18) | todo | — |
+| 75 | `04 §3`'s registry-entry shape lists neither `conflict` (mandated by 01 §8.1, which says it "extends 04 §3") nor a way to express 01 §6's tenant-scoped op; both now ship in code — 04 is the owning doc and is stale (from task 17) | todo | — |
+| 76 | `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale` — the column holds `'id'\|'en'`. Inert (the applier always supplies locale) but a decoy aimed at task 21, which reads this column and whose brief already repeats the wrong value (from task 17) | todo | — |
+| 77 | the selectable-locale list is declared **twice** (`i18n`'s `SELECTABLE_LOCALES`, core's `LOCALE_VALUES`) because core is pure-TS and cannot import i18n; no gate compares them — adding `zh` to one silently breaks the toggle or the payload. Decide with task 72 (same boundary shape) (from task 17) | todo | — |
+| 78 | **HIGH** conflict detection is built + wired into the production push route but **OFF in production**: signing `platform.conflict_detected` needs the tenant system-device key and there is NO server loader (`config.ts` reads DB+port only; provisioning writes a file nothing reads). Provide a `SystemKeyStore` (§6: key-loading mechanism is a deployment decision) (from task 17) | todo | 17, 13 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

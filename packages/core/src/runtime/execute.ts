@@ -42,6 +42,7 @@ import { DomainError } from '../errors/domain-error.js';
 // Type-only, and therefore erased: the module layer imports this file for `CommandHandlerResult`,
 // so a value import here would be a genuine ESM cycle. `import type` makes the edge disappear at
 // runtime (verbatimModuleSyntax keeps it honest).
+import type { OperationScope } from '../module/define-module.js';
 import type { OperationRegistry } from '../module/registry.js';
 import {
   appendLocalOps,
@@ -301,6 +302,7 @@ export class CommandRuntime {
         identity: this.#identityFor(userId),
         newId: this.#idSource,
         resolveSchemaVersion: (type) => this.#resolveSchemaVersion(type),
+        resolveScope: (type) => this.#resolveScope(type),
         requirePermission: (identity, permissionId, tgt, surface) =>
           this.#requirePermission(identity, permissionId, tgt, surface, invocation),
         queryExecutor: this.#queryExecutor,
@@ -330,6 +332,29 @@ export class CommandRuntime {
       );
     }
     return version;
+  }
+
+  /**
+   * The op type's declared envelope scope (01 §6) — the same registry entry `#resolveSchemaVersion`
+   * reads.
+   *
+   * FAILS CLOSED on an unregistered type for the same reason that one does, and the failure is
+   * unreachable in practice precisely because it does: `ctx.op()` resolves the version first, so an
+   * undeclared type has already thrown by the time scope is asked for. It is written as a throw
+   * rather than a `?? 'store'` fallback anyway — defaulting the scope of a type nobody declared
+   * would silently record a tenant-scoped op in a store (or the reverse), permanently, in a signed
+   * append-only log.
+   */
+  #resolveScope(type: string): OperationScope {
+    const scope = this.#operations.scopeFor(type);
+    if (scope === undefined) {
+      throw new DomainError(
+        'VALIDATION_FAILED',
+        { opType: type, issue: 'op type not declared by any registered module' },
+        `op type ${type} is not in the operation registry (04 §3) — its envelope scope (01 §6) is undeclared.`,
+      );
+    }
+    return scope;
   }
 
   #identityFor(userId: string): CommandIdentity {

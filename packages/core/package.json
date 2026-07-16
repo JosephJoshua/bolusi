@@ -16,7 +16,8 @@
   "dependencies": {
     "@bolusi/schemas": "workspace:*",
     "canonicalize": "catalog:",
-    "kysely": "catalog:"
+    "kysely": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@bolusi/db-client": "workspace:*",
@@ -24,8 +25,7 @@
     "@bolusi/test-support": "workspace:*",
     "@electric-sql/pglite": "catalog:",
     "@types/better-sqlite3": "catalog:",
-    "better-sqlite3": "catalog:",
-    "zod": "catalog:"
+    "better-sqlite3": "catalog:"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

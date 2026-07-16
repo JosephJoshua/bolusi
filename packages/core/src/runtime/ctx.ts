@@ -22,6 +22,9 @@
 import type { OpSource } from '@bolusi/schemas';
 
 import type { DenialSurface } from '../authz/denials.js';
+// Type-only (erased): the module layer imports this file, so a value edge here would be an ESM
+// cycle — the same reason execute.ts imports the module layer with `import type`.
+import type { OperationScope } from '../module/define-module.js';
 import type { OpDraft } from '../oplog/draft.js';
 import type { IdSource } from './ports.js';
 
@@ -238,6 +241,13 @@ export interface CommandContextInternals {
    * @throws when `type` is not declared by any registered module.
    */
   readonly resolveSchemaVersion: (type: string) => number;
+  /**
+   * The op type's declared envelope scope (01 §6), from the same 04 §3 registry entry as the
+   * version — so a type cannot be known to one resolver and unknown to the other.
+   *
+   * @throws when `type` is not declared by any registered module.
+   */
+  readonly resolveScope: (type: string) => OperationScope;
   /** The runtime's own check — the SAME function `execute` step 2 calls. One implementation. */
   readonly requirePermission: (
     identity: CommandIdentity,
@@ -297,6 +307,11 @@ export function createCommandContext(
         entityId: draft.entityId,
         // Resolved from the 04 §3 operation registry — never defaulted, never caller-supplied.
         schemaVersion: internals.resolveSchemaVersion(draft.type),
+        // Likewise resolved, and for the same reason (01 §6): the scope belongs to the op TYPE.
+        // A tenant-scoped type records `storeId: null` — "the preference follows the user to every
+        // device" — while a store-scoped one records the store this ctx was minted in, which is the
+        // store its permission was evaluated in (02 §5.2). The handler states neither.
+        storeId: internals.resolveScope(draft.type) === 'tenant' ? null : identity.storeId,
         payload: draft.payload,
         // Attribution INHERITS from the invocation (05 §2.1; ARCH-001 §9.3) unless the handler
         // overrides it: an agent-initiated command's ops must be visible AS agent-initiated

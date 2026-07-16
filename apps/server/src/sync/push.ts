@@ -5,6 +5,7 @@
 // the pipeline's per-op results faithfully (05 §8) and never reshapes a rejection into an HTTP
 // error (HTTP errors ≠ op rejections, api/00 §6).
 import { processPushBatch, type OpRegistry } from '../oplog/index.js';
+import type { OplogPipelineDeps } from '../oplog/types.js';
 import type { PokeHub, PokeScope } from '../realtime/poke-hub.js';
 import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
 import type { DB, ForTenant } from '@bolusi/db-server';
@@ -24,13 +25,19 @@ export interface PushDeps {
   readonly now: () => number;
   /** Fresh ids for `device_anomalies` rows (05 §3 alarm). */
   readonly newId: () => string;
-  /** (type, schemaVersion) → payload validator. Empty until modules register (tasks 17/25). */
+  /** (type, schemaVersion) → payload validator. Carries `platform.*` (task 17); `notes.*` (25) and
+   *  `auth.*` (43) are UNKNOWN_TYPE until those modules register. */
   readonly registry: OpRegistry;
-  /** Op type → projection applier (04 §4) for the pipeline's apply step. Empty until modules
-   *  register (tasks 17/25/43); derived from the same list as `registry`. */
+  /** Op type → projection applier (04 §4) for the pipeline's apply step. Carries the `platform`
+   *  appliers (task 17); 25/43 still fold nothing. Derived from the same list as `registry`. */
   readonly projections: ProjectionRegistry<DB>;
   /** Scoped poke publisher (api/00 §12.1); default hub has zero subscribers (a no-op). */
   readonly pokeHub: PokeHub;
+  /** Conflict detection (01 §8.2), run inside the push transaction. `undefined` ⇒ disabled (no
+   *  system key store configured — conflict-wiring.ts). Passed straight to the pipeline. */
+  readonly detectConflicts?: OplogPipelineDeps['detectConflicts'];
+  /** Post-commit hook for surfaced conflicts (03 §7). Task 21 subscribes; default absent. */
+  readonly onConflictSurfaced?: OplogPipelineDeps['onConflictSurfaced'];
 }
 
 export async function runPush(
@@ -62,6 +69,12 @@ export async function runPush(
       newId: deps.newId,
       registry: deps.registry,
       projections: deps.projections,
+      // Threaded straight through: the pipeline runs detection inside the push transaction and
+      // fires the hook post-commit. Both undefined by default (no key store) — detection off.
+      ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
+      ...(deps.onConflictSurfaced === undefined
+        ? {}
+        : { onConflictSurfaced: deps.onConflictSurfaced }),
     },
     { deviceId: identity.deviceId, tenantId: identity.tenantId },
     request.ops,

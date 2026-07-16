@@ -120,7 +120,10 @@ export async function appendLocalOps(
         {
           id,
           tenantId: context.tenantId,
-          storeId: context.storeId,
+          // The draft's resolved scope (01 §6) wins when present; `undefined` inherits the
+          // device's store, which is what every store-scoped type resolves to anyway. `null` is a
+          // declared tenant scope and must NOT be treated as absent (05 §3).
+          storeId: draft.storeId !== undefined ? draft.storeId : context.storeId,
           userId: context.userId,
           deviceId: context.deviceId,
           seq,

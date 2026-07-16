@@ -9,6 +9,8 @@
 // forTenant(newTenantId) as bolusi_app — which CAN create a single tenant's rows (RLS WITH CHECK
 // passes for the tenant it is creating) and relies on the GLOBAL login_identifier UNIQUE index for
 // idempotency. Global reference data (`permissions`) is seeded by migration 0008, not here.
+import { closeSync, openSync, writeFileSync } from 'node:fs';
+
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { forTenant as dbForTenant, type ForTenant, type TenantDb } from '@bolusi/db-server';
 
@@ -228,6 +230,104 @@ export async function provisionTenant(
 // ---------------------------------------------------------------------------
 // CLI entry
 // ---------------------------------------------------------------------------
+// Secret emission (task 17's inherited finding from task 13's review-02, 2026-07-15).
+//
+// ── WHAT WAS WRONG ────────────────────────────────────────────────────────────────────────────
+//
+// This CLI printed the system device's Ed25519 PRIVATE KEY to stdout, unconditionally, labelled.
+// review-02 sized it as a MINOR non-blocker for an operator-run step and was right about the
+// blast radius — but pushed back on the posture, and that pushback is the reason this exists:
+// stdout lands in terminal scrollback, in shell-history-adjacent tooling, in tmux buffers, in CI
+// job logs, and in whatever `provision-tenant … | tee setup.txt` someone reaches for at 2am. A
+// private key there is not a habit to normalize, and the key it prints signs
+// `platform.conflict_detected` for the whole tenant, forever (10-db §12 — "server secret store,
+// never in Postgres"). Task 17 is that key's consumer, so task 17 closes it.
+//
+// ── WHAT IS DONE, AND WHY BOTH ────────────────────────────────────────────────────────────────
+//
+// The task offered two options — a 0600 file, or a `--print-key` flag so the default never emits.
+// Both ship, because they close different halves and neither is redundant:
+//
+//   * The DEFAULT writes the key to a file with mode 0600 and prints only its PATH. This is the
+//     half that matters: the safe thing happens when the operator does nothing, so the protection
+//     does not depend on anyone having read this comment.
+//   * `--print-key` still allows stdout, EXPLICITLY. Removing the capability entirely would be
+//     worse than it looks — an operator who genuinely needs the key in a pipe would go get it some
+//     other way, and the other ways are worse (cat the file, and now it is in scrollback AND on
+//     disk). A flag makes the unsafe path deliberate, greppable in a shell history, and reviewable.
+//
+// `wx` + `mode` is the mechanism, not `writeFileSync(path, data, { mode })`: `mode` applies ONLY on
+// creation, so writing to a path that already exists as 0644 would silently keep 0644. `wx` refuses
+// to overwrite at all — which also stops a second provisioning run from clobbering a live tenant's
+// key file, a mistake with no undo.
+//
+// §2.5 applies (this is a real security surface): the adversarial tests ship with the change, and
+// per §2.11 the guard is falsified — `cli-key-handling.test.ts` proves the default path does NOT
+// emit the key, and that test has been watched go red by making it emit.
+
+/** Where the default path writes the system-device key. */
+export function defaultKeyPath(tenantId: string): string {
+  return `system-device-${tenantId}.key`;
+}
+
+export interface EmitOptions {
+  /** Explicit opt-in to stdout (`--print-key`). Default false — the key goes to a 0600 file. */
+  readonly printKey: boolean;
+  readonly keyPath: string;
+}
+
+export interface EmitPorts {
+  readonly write: (line: string) => void;
+  /** Create `path` with mode 0600, failing if it exists. Injected so the test can observe both. */
+  readonly writeSecretFile: (path: string, contents: string) => void;
+}
+
+/** Create a file with mode 0600, refusing to overwrite (see the header for why `wx`). */
+export function writeSecretFileSync(path: string, contents: string): void {
+  const fd = openSync(path, 'wx', 0o600);
+  try {
+    writeFileSync(fd, contents);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Emit a provisioning result's human-facing output.
+ *
+ * Extracted from `main` so the key-handling rules are TESTABLE: `main` reads `process.argv` and
+ * calls `process.exit`, so a test of it would be a test of the process. The security property —
+ * "the default path does not put the key on stdout" — is a property of this function, and this
+ * function is what the adversarial suite drives.
+ */
+export function emitProvisionOutput(
+  result: ProvisionResult,
+  options: EmitOptions,
+  ports: EmitPorts,
+): void {
+  ports.write(`tenant provisioned: ${result.tenantId}\n`);
+  ports.write(`owner user:         ${result.ownerUserId}\n`);
+  // The one-time PASSWORD keeps its stdout path deliberately: it is a bootstrap credential the
+  // operator must type into a login form within minutes, it is single-use, and it is rotated by
+  // using it. That is a different risk profile from a long-lived tenant signing key, and 02's
+  // provisioning flow specifies it shown once.
+  ports.write(`ONE-TIME PASSWORD (store securely, shown once): ${result.oneTimePassword}\n`);
+
+  if (options.printKey) {
+    ports.write(
+      `SYSTEM DEVICE PRIVATE KEY (deployment secret for the conflict signer): ${result.systemDevicePrivateKeyB64}\n`,
+    );
+    return;
+  }
+
+  ports.writeSecretFile(options.keyPath, `${result.systemDevicePrivateKeyB64}\n`);
+  // The PATH, never the key. An operator who wants it in a pipe passes --print-key.
+  ports.write(
+    `system device private key written to ${options.keyPath} (mode 0600) — move it to the server secret store (10-db §12) and delete the file. Pass --print-key to print it to stdout instead.\n`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
   const { parseArgs } = await import('node:util');
@@ -242,6 +342,9 @@ async function main(): Promise<void> {
       'store-name': { type: 'string', multiple: true },
       'owner-name': { type: 'string' },
       'owner-login': { type: 'string' },
+      // Explicit opt-in to putting the tenant signing key on stdout. Default: a 0600 file.
+      'print-key': { type: 'boolean', default: false },
+      'key-file': { type: 'string' },
     },
   });
 
@@ -263,14 +366,18 @@ async function main(): Promise<void> {
       ownerName,
       ownerLogin,
     });
-    // The one-time password (and system-device key) is printed EXACTLY ONCE. Never logged again.
-    process.stdout.write(`tenant provisioned: ${result.tenantId}\n`);
-    process.stdout.write(`owner user:         ${result.ownerUserId}\n`);
-    process.stdout.write(
-      `ONE-TIME PASSWORD (store securely, shown once): ${result.oneTimePassword}\n`,
-    );
-    process.stdout.write(
-      `SYSTEM DEVICE PRIVATE KEY (deployment secret for the conflict signer): ${result.systemDevicePrivateKeyB64}\n`,
+    // The one-time password is printed EXACTLY ONCE. The system-device PRIVATE KEY is NOT printed
+    // unless --print-key is passed — by default it lands in a 0600 file (see emitProvisionOutput).
+    emitProvisionOutput(
+      result,
+      {
+        printKey: values['print-key'] ?? false,
+        keyPath: values['key-file'] ?? defaultKeyPath(result.tenantId),
+      },
+      {
+        write: (line) => process.stdout.write(line),
+        writeSecretFile: writeSecretFileSync,
+      },
     );
     process.exit(0);
   } catch (err) {

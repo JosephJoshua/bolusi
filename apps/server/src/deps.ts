@@ -4,6 +4,7 @@
 // real implementations without reshaping the skeleton.
 import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
 import {
+  platformModule,
   registerModules,
   type AnyModuleDefinition,
   type CryptoPort,
@@ -28,6 +29,12 @@ import {
 } from './middleware/rate-limit.js';
 import { serverCryptoPort, type OpRegistry } from './oplog/index.js';
 import { InProcessPokeHub, type PokeHub } from './realtime/poke-hub.js';
+import type { SurfacedConflict } from './sync/conflict-detection.js';
+import {
+  buildConflictDetection,
+  type DetectConflictsFn,
+  type SystemKeyStore,
+} from './sync/conflict-wiring.js';
 import { uuidv7 } from './uuidv7.js';
 
 /** Body-size caps by route class (api/00 §5.3). */
@@ -68,11 +75,26 @@ export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
  * task 49 closed: 08 punted server embedding to "07/16", 16 to "17", 25 assumed "the registration
  * list nobody creates" — all pointing at a list that did not exist. It exists here now.
  *
- * EMPTY at v0: no module ships appliers yet (17/25/43 are todo). With an empty list every pushed op
- * resolves `unknown` → `UNKNOWN_TYPE` and every accepted op folds as a defined no-op — the honest
- * state of a server that folds no modules, not a silent gap.
+ * Registered today: `platform` (task 17) — `conflicts` + `user_prefs`. Still MISSING: `notes`
+ * (task 25) and `auth` (task 43); until they append here, their op types are `UNKNOWN_TYPE` and
+ * their four projection tables stay empty in production. That is 2 of 6 server projection tables
+ * folded — stated because a registration list's failure mode is a silent omission, and the honest
+ * count belongs next to the list rather than in a report nobody re-reads.
+ *
+ * ON THE CAST. The appliers are typed against a dialect-neutral `PlatformDatabase` (04 §2) — the
+ * one shape that can run on BOTH Postgres and SQLite, which is what makes them one applier instead
+ * of two copies (§2.8). `DB` (db-server's generated schema) is a different type: same columns, but
+ * `bigint` arrives as `Int8 = ColumnType<string, …>` and it carries 30-odd tables the module never
+ * names. Neither is assignable to the other, and `apply(db: Kysely<DB>, …)` puts `DB` in a
+ * contravariant position, so no variance annotation rescues it. The cast is where "one applier,
+ * two engines" is paid for, and it is sound in exactly the way the T-8 conformance suite proves:
+ * the appliers touch only the declared columns, through Kysely's dialect-neutral builder, and the
+ * suite folds them against a real Postgres and a real SQLite and asserts byte-identical oracle
+ * digests. Tasks 25/43 will cast here identically.
  */
-export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [];
+export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [
+  platformModule as unknown as AnyModuleDefinition<DB>,
+];
 
 const serverModuleRegistry: ModuleRegistry<DB> = registerModules(SERVER_MODULES);
 
@@ -108,10 +130,12 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
 }
 
 /**
- * The default server op registry (05 §8), derived from SERVER_MODULES. EMPTY today (⇒ every pushed
- * op is `UNKNOWN_TYPE`), which is why the pipeline suite injects a registry covering the types it
- * pushes. When 17/25/43 add their modules, the SAME list feeds `projections` below, so a validated
- * type always has an applier and vice versa.
+ * The default server op registry (05 §8), derived from SERVER_MODULES.
+ *
+ * Carries the `platform.*` types today (task 17); `notes.*` (25) and `auth.*` (43) are still
+ * `UNKNOWN_TYPE` until those modules append to the list above. That is why the pipeline suite
+ * injects a registry covering the types IT pushes rather than relying on this one. The SAME list
+ * feeds `projections` below, so a validated type always has an applier and vice versa.
  */
 export const serverOpRegistry: OpRegistry = deriveOpRegistry(serverModuleRegistry);
 
@@ -139,11 +163,25 @@ export interface ServerDeps {
   readonly serverCrypto: CryptoPort;
   /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
   readonly newOpLogId: () => string;
-  /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Empty by default. */
+  /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Derived from
+   *  SERVER_MODULES — `platform.*` today; 25/43 pending. */
   readonly opRegistry: OpRegistry;
   /** Op type → projection applier (04 §4) for the push pipeline's apply step (10-db §3 step 6).
-   *  Derived from the SAME SERVER_MODULES list as `opRegistry`; empty by default. */
+   *  Derived from the SAME SERVER_MODULES list as `opRegistry` — the `platform` appliers today
+   *  (`conflicts` + `user_prefs`); `notes` (25) and the auth tables (43) fold nothing until those
+   *  modules register. */
   readonly projections: ProjectionRegistry<DB>;
+  /** Conflict detection (01 §8.2), run inside the push transaction. `undefined` ⇒ disabled — the
+   *  v0 default, because no `SystemKeyStore` is configured (conflict-wiring.ts). Built from
+   *  SERVER_MODULES + the injected key store when one is present. */
+  readonly detectConflicts?: DetectConflictsFn;
+  /** Post-commit hook for surfaced (significant) conflicts (03 §7). Task 21 subscribes to deliver
+   *  push category `conflict`; default absent (no delivery). */
+  readonly onConflictSurfaced?: (conflict: SurfacedConflict) => Promise<void>;
+  /** The deployment-owned source of tenant system-device signing keys (01 §3.6, 10-db §12).
+   *  Absent in v0 — no secret-store loader exists yet (filed as a deployment task); its presence
+   *  is what ENABLES conflict detection. */
+  readonly systemKeyStore?: SystemKeyStore;
   /** In-process scoped `sync.poke` hub (api/00 §12.1); default has zero subscribers (task 20 subs). */
   readonly pokeHub: PokeHub;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
@@ -167,6 +205,26 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   // The auth directory is resolved first: the default verifyToken is the DB-backed token store
   // over it (task 13 fills task 12's injected seam — its default was an empty store).
   const authDirectory = overrides.authDirectory ?? dbAuthDirectory;
+
+  // Conflict detection is ENABLED IFF a system key store is present (conflict-wiring.ts header):
+  // detection must sign `platform.conflict_detected` with the tenant system-device key, whose
+  // deployment-owned secret store does not exist in v0 (no loader — filed as a task). With no
+  // store, `detectConflicts` stays undefined and the push pipeline skips detection — the honest
+  // no-op, exactly like an empty SERVER_MODULES folds nothing. An explicit override wins for tests.
+  const newOpLogId = overrides.newOpLogId ?? (() => uuidv7(now()));
+  const serverCrypto = overrides.serverCrypto ?? serverCryptoPort;
+  const detectConflicts =
+    overrides.detectConflicts ??
+    (overrides.systemKeyStore === undefined
+      ? undefined
+      : buildConflictDetection({
+          modules: SERVER_MODULES,
+          keyStore: overrides.systemKeyStore,
+          crypto: serverCrypto,
+          now,
+          newId: newOpLogId,
+        }));
+
   return {
     now,
     newRequestId: overrides.newRequestId ?? (() => uuidv7(now())),
@@ -183,11 +241,16 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     accessLogSink: overrides.accessLogSink ?? consoleAccessLogSink,
     bodyCaps: overrides.bodyCaps ?? defaultBodyCaps,
     clientIp: overrides.clientIp ?? defaultClientIp,
-    serverCrypto: overrides.serverCrypto ?? serverCryptoPort,
-    newOpLogId: overrides.newOpLogId ?? (() => uuidv7(now())),
+    serverCrypto,
+    newOpLogId,
     opRegistry: overrides.opRegistry ?? serverOpRegistry,
     projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
+    ...(detectConflicts === undefined ? {} : { detectConflicts }),
+    ...(overrides.onConflictSurfaced === undefined
+      ? {}
+      : { onConflictSurfaced: overrides.onConflictSurfaced }),
+    ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
   };

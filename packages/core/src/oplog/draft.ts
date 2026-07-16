@@ -28,6 +28,19 @@ export interface OpDraft {
   readonly entityId: string;
   readonly schemaVersion: number;
   readonly payload: Record<string, unknown>;
+  /**
+   * The envelope scope, RESOLVED from the op type's 04 §3 declaration (01 §6) — `null` for a
+   * tenant-scoped type, the device's store otherwise.
+   *
+   * Optional, and `undefined` means "inherit the append context's storeId" — the same
+   * `undefined = inherit` idiom `source`/`agentInitiated` below already use, and exactly the
+   * behaviour every draft had before tenant-scoped types existed. `null` is NOT inherit: it is the
+   * declared tenant scope, which is why the two are distinguished here rather than collapsed
+   * (absent-vs-null, 05 §3).
+   *
+   * A handler never sets this: `ctx.op()` fills it from the registry, like `schemaVersion`.
+   */
+  readonly storeId?: string | null;
   /** Default `"ui"` (05 §2.1). */
   readonly source?: OpSource;
   /** Default `false` (05 §2.1; ARCH-001 §9.3). */
