@@ -15,8 +15,8 @@ The repo has been built **Android-first**, and that assumption is load-bearing i
 
 | shipped | what it assumed | what D17 changes |
 | ------- | --------------- | ---------------- |
-| **task 58** (`SEC-DEV-08`) | `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` was ruled **inert** — an iOS-only option on an Android-first product. Kept and marked `// iOS only:` | It is now **load-bearing on a first-class platform.** The `THIS_DEVICE_ONLY` guarantee (§7.4, "a device identity is never resurrected") must actually be **verified on iOS**, not merely retained. |
-| **task 58** (the guard) | `android-backup.test.ts` asserts the **generated `AndroidManifest.xml`** + `allowBackup:false` + data-extraction rules | **iOS has no equivalent leg.** iOS backup exclusion is `NSFileProtection` + the Keychain's `ThisDeviceOnly` accessibility class + `isExcludedFromBackupKey` for files. **Nothing asserts any of it.** The Android guard now implies a symmetric guarantee it does not deliver (§2.11: a gate implying absent coverage). |
+| **task 58** (`SEC-DEV-08`) | `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` was ruled **inert** — an iOS-only option on an Android-first product. Kept and marked `// iOS only:` | It is now **load-bearing on a first-class platform**, and audit 80 sharpened why: Expo's default `WHEN_UNLOCKED` **does** migrate to a new device, so the option is what delivers §7.4 on iOS. **Correction to this decision's first draft:** it claimed the option has *"zero tests"* — **false.** `keystore.test.ts` ships **10**, three asserting the option reaches SecureStore, falsified by task 58. The real gap is narrower and worth stating precisely: **the call is asserted; the effect is not** (the module is mocked, and no iOS target exists to observe it on). |
+| **task 58** (the guard) | `android-backup.test.ts` asserts the **generated `AndroidManifest.xml`** + `allowBackup:false` + data-extraction rules | **iOS has no equivalent leg** — and audit 80 found the real hole is the **SQLCipher DB file**: iOS `entitlements: null`, `infoPlist: null`, nothing excludes it from iCloud/device-transfer. **Correction:** this decision claimed the Android guard *"implies a symmetric guarantee it does not deliver."* **False, and it maligns task 58** — the SEC row reads *"auto-backup exclusion is present in the shipped **Android** build"*. It names its platform. **iOS is not mis-claimed; it is ABSENT** — a different bug with a different fix, and `security-guide` §6 having no iOS row at all is the actual gap. |
 | **task 59** (push muting) | The muting model's whole analysis is **Android channel importance**; the recommendation (drop the in-app toggle, relocate to Android's settings) is an **Android-shaped answer** | iOS has **no channels** — it has per-app notification settings and no per-category OS surface. The v0 recommendation may be right for Android and wrong for iOS. **Reopen before implementing.** |
 | **task 18 / D12-D13** | "no physical Android" ⇒ capture/compression/`FileHandle`/disk-space **unverified on device** | Now **two** unverified platforms. `Paths.availableDiskSpace`, `expo-camera`, `expo-file-system` behaviours diverge across them, and the residual-risk statements name only Android. |
 | **`app.config.ts`** | already declares `platforms: ['android', 'ios']` | The **declaration was always there**; the *verification* never was. The config has been claiming iOS support the tests never checked — the repo's signature failure, at the platform level. |
@@ -33,11 +33,23 @@ The repo has been built **Android-first**, and that assumption is load-bearing i
 
 ## Consequences
 
-- **Filed as task 79** — the iOS parity audit. It is scoped as an **audit**, not a build: find every platform-conditional claim, state which leg is verified, and file the gaps. Frontend implementation stays deferred.
+- **Filed as task 80** — the iOS parity audit *(this pointer originally said 79; 79 is a media task. The orchestrator's own stale cross-reference, caught by impl-80 — a pointer is a mention, T-16)*. It is scoped as an **audit**, not a build: find every platform-conditional claim, state which leg is verified, and file the gaps. Frontend implementation stays deferred.
 - **Task 59 (push muting) must reopen its analysis for iOS before anyone implements it.** Its current recommendation is Android-reasoned. It is already batched as an owner decision; this adds a dimension to that decision rather than resolving it.
 - **Task 27 (device gates)** now has two physical-device legs, and `27b` (the PHYSICAL lane) is already blocked/deferred.
 - **`security-guide` §6** needs an iOS column, or an explicit statement that its checklist is Android-only — currently it reads as platform-neutral and is not.
 - **The frontend phase, when it starts, loads `frontend-design` (and `impeccable`, once installed) — not optional.**
+
+## Corrections from audit 80 (2026-07-16) — three of this decision's premises were wrong
+
+This decision was written fast, from an owner directive, and **three of its claims did not survive contact with the repo.** Recorded rather than silently patched, because the pattern is the point:
+
+1. *"`keychainAccessible` has zero tests"* — **false**; 10 tests, 3 on the option.
+2. *"a SEC id reads as a platform-neutral guarantee"* — **false**; `SEC-DEV-08` says "Android" in its row. **Task 58 was more careful than this decision credited it.**
+3. *"everything reads platform-neutral"* — **mostly false**; design-system, testing-guide, and §6.2:194 all say "Android" explicitly.
+
+**The corrected finding is narrower and more useful than the one it replaces: iOS is not MIS-CLAIMED anywhere. It is ABSENT.** Nothing lies about iOS; nothing covers it. That is a different defect with a different fix — you cannot correct a false claim that was never made, you can only build the missing leg or say out loud that it does not exist.
+
+**And the platform list was never a decision.** Audit 80's sharpest note: **Expo's `platforms` defaults to iOS+Android**, so `platforms: ['android', 'ios']` is *the default restated*, not a choice anyone made. This decision's "the declaration was always there; the verification never was" framing implied someone had decided. Nobody had. Which makes **"say v0 is Android-only, out loud"** a real answer rather than a retreat — and it is now on the table as task 85.
 
 ## The honest note
 
