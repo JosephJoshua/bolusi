@@ -1,6 +1,6 @@
 # TASK 80 — iOS is a declared platform that nothing verifies: audit every platform-conditional claim and state which leg is covered
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — owner directive (D17)**. Not a build task; an **audit**. It exists because merged, reviewed, green code makes platform claims that were reasoned Android-first, and iOS is now first-class.
 **Depends on:** —
 **Blocks:** the frontend phase (deferred), task 27's device lanes
