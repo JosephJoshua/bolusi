@@ -1,10 +1,50 @@
 # TASK 58 — the keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product, and the Android control that would do its job is an unchecked box nobody owns
 
-**Status:** todo
+**Status:** done-review
 **Priority:** **HIGH** — a written security requirement (`security-guide §6.2`) that nothing builds, nothing tests, and no task owns, on **the** most likely device lifecycle event in this business. The code comment asserting the guarantee names a mechanism that does not run on the target platform.
 **Depends on:** —
 **Blocks:** —
-**SEC ids owned by THIS task:** — (none exist for this surface; see §Acceptance — one of the deliverables is deciding whether one should)
+**SEC ids owned by THIS task:** SEC-DEV-08
+
+## Outcome (2026-07-15) — shipped as SEC-DEV-08
+
+**The premise was verified from the live docs, and it moved. Both halves matter.**
+
+- **Confirmed:** `keychainAccessible` is iOS-only. Expo's `SecureStoreOptions`, verbatim: *"keychainAccessible(optional) | KeychainAccessibilityConstant | **Supported platforms: iOS.** Specifies when the stored entry is accessible, using iOS's `kSecAttrAccessible` property."* The constants-page trap is real and unchanged. The comment was wrong; it is now correct and the option is marked `// iOS only:` and kept (load-bearing on iOS).
+- **Moved:** *"nothing implements it / no `data-extraction-rules` anywhere"* was **true of the source and false of the artifact**. `expo-secure-store` is in `plugins`, its `configureAndroidBackup` **defaults to `true`**, and its plugin injects `android:dataExtractionRules` + `android:fullBackupContent` pointing at library resources that exclude the SecureStore prefs from `<cloud-backup>` **and** `<device-transfer>`, pre-12 and 12+. The DB was excluded too — but only as a **side-effect** of Android's rule that *"if you specify an `<include>` element, the system … backs up **only the files specified**"*, and those rules include only `sharedpref`. So §194's control was ~90% already delivered, by accident, undeclared, unguarded, and invisible to a grep. **The repo-grep that filed this task is exactly what the guard had to not be.**
+- **The real gap** was therefore: `allowBackup` (Expo actively writes `android:allowBackup="true"` when the config is silent — every build shipped backup ON), the DB never being named, the intent living in an undeclared default, and **no guard at all**. Plus a genuine upstream trap: if any other plugin sets those attributes first, expo-secure-store `console.warn`s and **silently skips its rules** — a green build with no exclusion.
+
+**Open question — ANSWERED, and it de-escalates the priority: `getItemAsync` returns `null`, it does not throw.** From expo-secure-store's Android source (`SecureStoreModule.kt`, sdk-57), not from a guess: when the entry outlives its Keystore key it logs *"there is no corresponding KeyStore key. This situation occurs when the app is reinstalled. The value will be removed to avoid future errors. Returning null"*, calls `deleteItemImpl`, and returns null. `BadPaddingException` and `KeyPermanentlyInvalidatedException` are also caught → null. **So this is NOT a P1 crash:** a restored phone reads as unenrolled and re-enrolls with a fresh keypair — §7.4's correct path, and Expo does it deliberately. The bootstrap path needs no new catch.
+
+**What shipped**
+
+- `app.config.ts`: `android.allowBackup: false` (the cloud leg — insufficient alone; Android's docs say it does not disable device-to-device transfer for apps targeting 12+), and `configureAndroidBackup: true` spelled out rather than defaulted, so flipping it is a visible diff on a security line.
+- `apps/mobile/test/android-backup.test.ts` — **SEC-DEV-08**. Compiles the REAL prebuild pipeline in-process (`getPrebuildConfigAsync` + `compileModsAsync`, offline, ~1s) and asserts the **generated** `AndroidManifest.xml`, then RESOLVES the `@xml/…` references to the files on disk and asserts their contents.
+- `apps/mobile/src/ports/keystore.test.ts` — 10 tests, `vi.mock('expo-secure-store')`, closing review-05's "what would notice? nothing".
+- `keystore.ts` — the comment now states what holds per platform, and claims nothing more.
+
+**A harness bug worth carrying (it is this task's own §2.11 instance).** The first version used `getConfig`, which applies only the `plugins` array — every core `app.config.ts` → manifest mapping (`allowBackup`, permissions, package) lives in `withAndroidExpoPlugins` inside `@expo/prebuild-config` and was **absent**. Under it, `allowBackup` read as missing no matter what the config said. **The only reason this surfaced is that an assertion stayed red after a correct fix**; the two tests that passed on arrival would have gone on passing against a partial pipeline forever. `@expo/prebuild-config` is now resolved *through* `expo → @expo/cli` so it is the exact copy real prebuild loads, not a devDependency that could drift.
+
+**Falsified, not asserted** (§2.11 — each broken, the specific failure observed, then reverted; restored → 3/3 + 10/10 + 14/14 green):
+
+| broke | saw |
+| ----- | --- |
+| removed `allowBackup: false` | `expected 'true' to be 'false'` — and it read `'true'`, proving Expo writes the default explicitly |
+| `configureAndroidBackup: false` | both 12+ and pre-12 red: `the manifest must point at data-extraction rules: expected undefined to be defined` |
+| added `<include domain="database" path="."/>` to the resolved XML | `cloud-backup includes domain "database" … requires the DB be excluded` |
+| deleted the `<exclude … path="SecureStore"/>` | `cloud-backup must exclude expo-secure-store's SharedPreferences` |
+| hid the XML resource file | `no file on disk provides the manifest's @xml/secure_store_data_extraction_rules reference` |
+| `wipe()` stops clearing `#signingKey` | `clears the in-memory signing key — a cached seed surviving a wipe defeats the erase` |
+| dropped `keychainAccessible` from OPTIONS | both options tests red |
+| `getSigningKey` returns empty bytes | `throws when unloaded rather than handing empty bytes to the signer` |
+| `MAX_ITEM_BYTES = 4096` | both 2 KB boundary tests red |
+| stripped the `SEC-DEV-08` title (guide row kept) | SEC-META-01: `expected [ 'SEC-DEV-08' ] to deeply equal []` — the id is genuinely wired, not decorative |
+
+**SEC id — decided: YES, `SEC-DEV-08`**, and deliberately **scoped to the build artifact**. §194 was prose in a checkbox, which is precisely why it survived 29 merged tasks unowned; an id makes it structurally visible. But a verbatim-id title *retires* an id (task 31), so defining it as "a restored backup yields no usable identity" would let a config assertion mark a device claim shipped. The row therefore claims the manifest and names the on-device leg as **not covered**. *(Caught during this task: the first draft titled it `SEC-DEV-07`, which already exists — a collision that would have read as key-compromise-containment having shipped. Instance thirteen, self-inflicted, caught by grepping the guide instead of trusting the next-free-number assumption.)*
+
+**RESIDUAL RISK — stated in the required words:** *the exclusion is present in the shipped manifest; that it behaves as documented on a real restore is unverified on-device.* There is no physical Android on this project (D12/D13); no Google Drive restore or device-to-device transfer was performed. **No green in this task may be read as a device-verified restore.** The on-device leg belongs with task 27's device-gates runner, alongside SEC-DEV-06.
+
+**Filed, not fixed:** task **61** — `userInterfaceStyle: 'light'` is inert (`expo-system-ui` not installed); the real prebuild pipeline prints *"userInterfaceStyle: Install expo-system-ui in your project to enable this feature."* every run. Same class, cosmetic blast radius. The class sweep's other legs came back clean: **`accessGroup` is used nowhere**, and `keychainAccessible` had exactly the one site.
 
 ## Goal
 
