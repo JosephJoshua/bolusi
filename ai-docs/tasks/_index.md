@@ -69,7 +69,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 58 | **HIGH** keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product; `security-guide §6.2:194` (android auto-backup exclusion) is an unchecked box **no task owns**; keystore.ts has 0 tests (from review-05 coverage sweep) | done | — |
 | 59 | **HIGH — needs owner decision** `api/04-push §5`'s muting model is **impossible on Android** (channel importance immutable post-creation); `applyChannelImportance` has 0 callers and would be a no-op anyway (from review-05) | todo | 21 |
 | 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | done | — |
-| 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | in-progress | 31 |
+| 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | done | 31 |
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | todo | 55 |
 | 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | todo | — |
 | 64 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` not installed; the prebuild pipeline prints that fact every run and nobody reads prebuild stdout (from task 58 class sweep) | todo | — |
@@ -78,6 +78,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 65 | `PIN_MESSAGE_KEY`/`SWITCHER_KEY`/`REASSURANCE_KEY` label-key maps are decoys — 0 production callers, screens hardcode `t()`, only tests assert the map (same class as 60, from task 60 sweep) | todo | — |
 | 68 | wire the semantic export-sweep (knip) as a pinned dep + gate — `knip.json` shipped but knip is not a declared dependency, so the config is a non-executable document (from task 60) | todo | — |
 | 69 | **MEDIUM** no `apps/mobile` test mounts a screen — hardcoding `state="entry"` unlocks the PIN pad during every lockout with 16/16 green; the render lane EXISTS and is unused (from task 60) | todo | — |
+| 70 | **HIGH — §6 owner decision** SEC-DEV-04's §218 ("offline-revocation caveat") contradicts api/02-auth §7.3's by-design wipe and asks for a per-op result the wire never produces (401 precedes it); 2 of 5 behaviours unbuildable, 3 shipped (from task 61, review-61 confirmed) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

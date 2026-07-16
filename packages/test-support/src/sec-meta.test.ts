@@ -14,6 +14,7 @@ import {
   collectTrackedTaskFiles,
   collectTrackedTestFiles,
   extractTestTitles,
+  isPartialLegTitle,
 } from './sec-meta.js';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
@@ -52,6 +53,26 @@ test('SEC-META-01 every security-guide SEC id has a verbatim test title or a pen
   expect(result.checked.titles, 'tracked test titles parsed').toBeGreaterThan(1000);
   expect(result.checked.taskFiles, 'tracked task files parsed').toBeGreaterThan(30);
   expect(testFiles.length, 'tracked test files walked').toBeGreaterThan(100);
+  // The §2.1.6 rule's OWN denominator. `idsWithTitles` at zero would mean the title walk matched
+  // nothing and every id-vs-title rule is vacuously green — the "silently checks nothing" mode.
+  expect(result.checked.idsWithTitles, 'SEC ids with at least one verbatim title').toBeGreaterThan(
+    40,
+  );
+  // Drift canary for the qualifier vocabulary. Qualified titles that carry an id are legitimate
+  // (SEC-SYNC-02's "(client leg)" describe is correct — an unqualified `it` completes the id), so
+  // some exist today and the vocabulary provably still matches this repo's prose.
+  //
+  // If this ever goes to zero, READ BEFORE DELETING. Two very different causes:
+  //   (a) the vocabulary drifted — authors write a qualifier this regex misses, and
+  //       `partialLegTitles` silently cannot fire. Fix the vocabulary.
+  //   (b) the repo genuinely got clean — every id titled only by its completing test. That is the
+  //       goal state, and then this floor is the wrong assertion: drop THIS line, not the rule.
+  // The rule's own can-it-fire proof does not depend on this line — it is the synthetic
+  // reproduction below, which is why (b) is safe to resolve by deleting this assertion.
+  expect(
+    result.checked.partialLegQualifiedTitles,
+    'titles carrying both a SEC id and a partial-leg qualifier (see the note above before deleting)',
+  ).toBeGreaterThan(0);
 
   expect(result.missing, 'SEC ids with neither a test title nor an allowlist entry').toEqual([]);
   expect(result.staleAllowlist, 'allowlist entries pointing at done tasks').toEqual([]);
@@ -59,6 +80,10 @@ test('SEC-META-01 every security-guide SEC id has a verbatim test title or a pen
   expect(result.unknownEntries, 'allowlist entries not present in security-guide.md').toEqual([]);
   expect(result.titledButPending, 'ids both titled by a test and allowlisted as owed').toEqual([]);
   expect(result.ownershipConflicts, 'ids declared by more than one task file').toEqual([]);
+  expect(
+    result.partialLegTitles,
+    'ids retired only by a title that calls itself a partial leg, with nothing declaring them',
+  ).toEqual([]);
 });
 
 test('a SEC id mentioned only in a comment or fixture string is NOT counted as tested', () => {
@@ -277,6 +302,105 @@ test('comment prose containing the word "it" followed by a quote is not a test t
     "test('a genuine title', () => {});",
   ].join('\n');
   expect(extractTestTitles(source)).toEqual(['a genuine title']);
+});
+
+// ---------------------------------------------------------------------------
+// TASK 61 reproductions. Task 31 left this open: "Can a partial-coverage title still claim an id?
+// Yes — when no row exists", reasoning that retiring an id needs title→task attribution the gate
+// does not have. It does not need attribution: when EVERY title claiming an id calls itself a
+// leg/arm, the titles themselves say no test claims the whole id.
+// ---------------------------------------------------------------------------
+
+test('REPRODUCTION: a "(server leg)" title with no allowlist row no longer retires an id', () => {
+  // sec-dev.test.ts:157's exact shape, verbatim. This is what was live and green: the title
+  // embeds SEC-DEV-04, so `title.includes(id)` read the id as fully shipped, while §218's
+  // client-side behaviours had no owner, no row, and no marker. Nothing contradicted it —
+  // `titledButPending` needs a row to disagree with, and the row was never written.
+  const result = auditSecCoverage({
+    guideText: 'SEC-DEV-04 offline-revocation caveat holds',
+    allowlist: {},
+    testTitles: [
+      'SEC-DEV-04 (server leg) revoked-device 401: every identity endpoint returns DEVICE_REVOKED for the revoked token, incl. the /me confirm-then-wipe probe',
+    ],
+    taskFiles: {},
+  });
+
+  expect(
+    result.missing,
+    'the title still counts as a title — this is not a missing-id case',
+  ).toEqual([]);
+  expect(
+    result.titledButPending,
+    'no row exists, so the old rule has nothing to contradict',
+  ).toEqual([]);
+  expect(result.partialLegTitles).toHaveLength(1);
+  expect(result.partialLegTitles[0]).toContain('SEC-DEV-04');
+  expect(result.partialLegTitles[0]).toContain('concedes it is a partial leg');
+});
+
+test('an unqualified title completes an id, even when a partial-leg title also names it', () => {
+  // SEC-SYNC-02's real shape and the reason this rule is not a blunt "no qualifier in any title":
+  // push.test.ts titles a `describe` "(client leg)" AND an `it` that carries no qualifier. The
+  // unqualified one is the completing test, so the id is legitimately retired. A rule that fired
+  // here would be wrong on correct code — the fastest way to get a gate routed around.
+  const result = auditSecCoverage({
+    guideText: 'SEC-SYNC-02 revoked device rejected',
+    allowlist: {},
+    testTitles: [
+      'SEC-SYNC-02 — revoked device rejected (client leg)',
+      'SEC-SYNC-02: ops pushed in the revocation window come back DEVICE_REVOKED and are kept client-side as rejected',
+    ],
+    taskFiles: {},
+  });
+  expect(result.partialLegTitles).toEqual([]);
+});
+
+test('a partial-leg title is legitimate once an allowlist row or a marker declares the id', () => {
+  // The two declarative escapes (task 31's rails, not a second mechanism). Both must silence it.
+  const titles = ['SEC-DEV-05 (server leg) private key never reaches the server'];
+  const viaRow = auditSecCoverage({
+    guideText: 'SEC-DEV-05 private key never leaves device',
+    allowlist: { 'SEC-DEV-05': 'ai-docs/tasks/26-chaos-harness.md' },
+    testTitles: titles,
+    taskFiles: {
+      'ai-docs/tasks/26-chaos-harness.md': [
+        '**Status:** todo',
+        '**SEC ids owned by THIS task:** SEC-DEV-05',
+      ].join('\n'),
+    },
+  });
+  expect(viaRow.partialLegTitles).toEqual([]);
+
+  const viaMarker = auditSecCoverage({
+    guideText: 'SEC-DEV-05 private key never leaves device',
+    allowlist: {},
+    testTitles: titles,
+    taskFiles: {
+      'ai-docs/tasks/26-chaos-harness.md': [
+        '**Status:** todo',
+        '**SEC ids owned by THIS task:** SEC-DEV-05',
+      ].join('\n'),
+    },
+  });
+  expect(viaMarker.partialLegTitles).toEqual([]);
+});
+
+test('the partial-leg vocabulary does not fire on words that merely contain it', () => {
+  // `alarm` is not an arm; `legal` is not a leg. A false positive here ends the rule's
+  // credibility, and "SEC-OPLOG-03 CHAIN_BROKEN raises a tamper alarm" is a real, correct title.
+  expect(
+    isPartialLegTitle('SEC-OPLOG-03 CHAIN_BROKEN raises a tamper alarm where CHAIN_GAP does not'),
+  ).toBe(false);
+  expect(isPartialLegTitle('SEC-FAKE-01 the legal hold path is honored')).toBe(false);
+  expect(isPartialLegTitle('SEC-FAKE-02 harmless payloads are accepted')).toBe(false);
+  // …and it does fire on the real qualifiers seen in this repo.
+  expect(isPartialLegTitle('SEC-DEV-04 (server leg) revoked-device 401')).toBe(true);
+  expect(isPartialLegTitle('SEC-AUTH-06 client arm — PIN command denials')).toBe(true);
+  expect(isPartialLegTitle('SEC-DEV-07 (surfacing leg) key-compromise containment')).toBe(true);
+  expect(isPartialLegTitle('SEC-AUTH-09 precursor — storage scan')).toBe(true);
+  expect(
+    isPartialLegTitle('a rolled-back clock cannot open the window early (SEC-AUTH-04s UI arm)'),
+  ).toBe(true);
 });
 
 test('an allowlist entry whose owning task is done counts as stale', () => {

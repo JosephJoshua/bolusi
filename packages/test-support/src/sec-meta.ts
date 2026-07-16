@@ -27,6 +27,28 @@ const TEST_TITLE_PATTERN =
   /\b(?:test|it|describe)(?:\.[a-zA-Z]+)*\s*(?:\((?:[^()]|\([^()]*\))*\)\s*)?\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1/g;
 
 /**
+ * Words with which a title admits, in its own text, that it covers only PART of its id:
+ * "(server leg)", "client arm", "SEC-AUTH-09 precursor". security-guide §2.1.6 forbids exactly
+ * this — "only the task that completes it may embed the ID verbatim" — because SEC-META-01 reads
+ * ANY title containing an id as that id being fully shipped.
+ *
+ * Deliberately NOT in this vocabulary: `fixture`. "…is ACCEPTED (fixture-validity control)" is a
+ * common, legitimate idiom across the SEC-OPLOG suite (T-14b's positive controls), and matching it
+ * would make the rule fire on correct tests — the fastest way to get a gate routed around.
+ */
+const PARTIAL_LEG_QUALIFIER = /\b(?:legs?|arms?|precursor|partial)\b/i;
+
+/**
+ * Does this title concede that it covers only one leg of the id it names?
+ *
+ * Word-boundary anchored: `alarm`/`harm` must not read as "arm", `legal` must not read as "leg" —
+ * a false positive here is not a nuisance, it is the end of the rule's credibility.
+ */
+export function isPartialLegTitle(title: string): boolean {
+  return PARTIAL_LEG_QUALIFIER.test(title);
+}
+
+/**
  * Blank out `//` and block comments, preserving string/template literals and offsets.
  * A SEC id inside a comment must never read as a shipped test title.
  */
@@ -172,8 +194,23 @@ export interface SecAuditResult {
   titledButPending: string[];
   /** Ids declared by more than one task file. */
   ownershipConflicts: string[];
+  /**
+   * Ids retired ONLY by titles that concede they are partial legs, with nothing declaring them.
+   * The gate cannot verify an id is fully covered — but it can refuse to let a title that calls
+   * ITSELF a leg stand as the sole evidence that the id is whole.
+   */
+  partialLegTitles: string[];
   /** What the audit actually looked at. Zero anywhere means the gate checked nothing. */
-  checked: { ids: number; titles: number; taskFiles: number; declaredIds: number };
+  checked: {
+    ids: number;
+    titles: number;
+    taskFiles: number;
+    declaredIds: number;
+    /** Ids with ≥1 verbatim title. Zero ⇒ the title walk found nothing and every rule below is vacuous. */
+    idsWithTitles: number;
+    /** Titles carrying an id AND a partial-leg qualifier. Zero ⇒ the §2.1.6 rule scanned nothing. */
+    partialLegQualifiedTitles: number;
+  };
 }
 
 export function auditSecCoverage(input: SecAuditInput): SecAuditResult {
@@ -199,9 +236,43 @@ export function auditSecCoverage(input: SecAuditInput): SecAuditResult {
   const staleAllowlist: string[] = [];
   const badOwners: string[] = [];
   const titledButPending: string[] = [];
+  const partialLegTitles: string[] = [];
+
+  /** id → the verbatim titles claiming it. */
+  const titlesById = new Map<string, string[]>(
+    requiredIds.map((id) => [id, input.testTitles.filter((title) => title.includes(id))]),
+  );
+
+  // ── §2.1.6: a partial leg must not title an id ───────────────────────────────────────────────
+  //
+  // task 31 left this open ("Can a partial-coverage title still claim an id? Yes — when no row
+  // exists"), reasoning that retiring an id needs title→task attribution the gate does not have.
+  // It does not need attribution. When EVERY title claiming an id calls itself a leg/arm, the
+  // titles themselves say no test claims the whole id — and if nothing declares the id either,
+  // the id is retired by a claim its own author disowned. That is decidable from the titles.
+  //
+  // Three escapes, all declarative, none prose (task 31's thesis):
+  //   1. an unqualified title — the completing test, per §2.1.6;
+  //   2. an allowlist row — the id is openly owed;
+  //   3. a `**SEC ids owned by THIS task:**` marker — someone declares the id whole.
+  for (const id of requiredIds) {
+    const titles = titlesById.get(id) as string[];
+    if (titles.length === 0) continue;
+    if (!titles.every(isPartialLegTitle)) continue;
+    if (input.allowlist[id] !== undefined) continue;
+    if (declaredBy.has(id)) continue;
+    partialLegTitles.push(
+      `${id} → every title claiming it concedes it is a partial leg (${titles
+        .map((title) => `"${title}"`)
+        .join(
+          ', ',
+        )}), no allowlist row, and no "SEC ids owned by THIS task:" marker declares it — ` +
+        `so the id reads as fully shipped on the strength of a title that says it is not`,
+    );
+  }
 
   for (const id of requiredIds) {
-    const tested = input.testTitles.some((title) => title.includes(id));
+    const tested = (titlesById.get(id) as string[]).length > 0;
     const owner = input.allowlist[id];
 
     if (!owner) {
@@ -259,11 +330,16 @@ export function auditSecCoverage(input: SecAuditInput): SecAuditResult {
     unknownEntries,
     titledButPending,
     ownershipConflicts,
+    partialLegTitles: partialLegTitles.sort(),
     checked: {
       ids: requiredIds.length,
       titles: input.testTitles.length,
       taskFiles: Object.keys(input.taskFiles).length,
       declaredIds: declaredBy.size,
+      idsWithTitles: [...titlesById.values()].filter((titles) => titles.length > 0).length,
+      partialLegQualifiedTitles: [...titlesById.values()]
+        .flat()
+        .filter((title) => isPartialLegTitle(title)).length,
     },
   };
 }

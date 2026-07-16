@@ -1,5 +1,28 @@
-// SEC-DEV server legs (security-guide §6.5). Titles embed the id verbatim so SEC-META-01 greps
-// them. SEC-DEV-06 is a client SQLCipher concern (tasks 04/14) and is asserted there, not here.
+// SEC-DEV server legs (security-guide §6.5). SEC-DEV-06 is a client SQLCipher concern (tasks
+// 04/14) and is asserted there, not here.
+//
+// SEC-DEV-01/02/03 are complete on this surface, so their titles carry the id verbatim.
+//
+// SEC-DEV-04 / SEC-DEV-05 / SEC-DEV-07 are NOT: each has a leg this file cannot reach, and each
+// title below used to embed the id anyway. SEC-META-01 counts an id as shipped when a title
+// contains it verbatim (`title.includes(id)`) — it cannot read this comment — so those three
+// titles were retiring their ids whole while proving one leg each, and with no allowlist row live
+// there was nothing to contradict them (task 31's stated residual; found by task 54's class sweep
+// and closed by task 61). Per security-guide §2.1.6 a contributing surface names the id in a
+// COMMENT, never a title. The outstanding legs are carried by allowlist rows instead:
+//
+//   SEC-DEV-04 → ai-docs/tasks/62-*.md  §218's client legs. Two of its five behaviours contradict
+//                api/02-auth §7.3 and cannot be built as written; the three that are real ship in
+//                packages/core/test/sync/offline-revocation.test.ts. 62 resolves the spec conflict.
+//   SEC-DEV-05 → ai-docs/tasks/26-chaos-harness.md  §219 wants "sync bodies and logs contain no
+//                private-key material (harness intercepts ALL outbound requests during enroll +
+//                sync cycle)". Below is the enroll-payload leg only; interception is 26's surface.
+//   SEC-DEV-07 → ai-docs/tasks/62-*.md  §221 wants forge-with-extracted-key → CHAIN_BROKEN +
+//                anomaly row AND the surfacing. Below is the surfacing leg only; the generation
+//                leg is task 07's pipeline (sec-oplog.test.ts:241 covers it under SEC-OPLOG-03).
+//
+// Do not "tidy" the ids back into these titles — that is the defect, not the fix. Same discipline
+// as apps/server/test/integration/sync/sec-sync.test.ts:66.
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
@@ -154,7 +177,9 @@ test('SEC-DEV-03 revocation latency semantics: revoke → next request → 401 D
   expect(row?.enrolledBy).toBe(p.ownerUserId);
 });
 
-test('SEC-DEV-04 (server leg) revoked-device 401: every identity endpoint returns DEVICE_REVOKED for the revoked token, incl. the /me confirm-then-wipe probe', async () => {
+// Server leg of the id named in the header (§218). This is the wire fact the client's offline
+// caveat rests on; it is not the whole id, so the title carries no id.
+test('revoked-device 401: every identity endpoint returns DEVICE_REVOKED for the revoked token, incl. the /me confirm-then-wipe probe', async () => {
   const { p, storeId, control } = await setup();
   const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
   await h.app.request(`http://srv.test/v1/devices/${device.deviceId}/revoke`, {
@@ -170,7 +195,9 @@ test('SEC-DEV-04 (server leg) revoked-device 401: every identity endpoint return
   }
 });
 
-test('SEC-DEV-05 (server leg) private key never reaches the server: EnrollReq is .strict() and carries only the public key; audit rows contain no private-key bytes', async () => {
+// Enroll-payload leg of the id named in the header (§219). The sync-bodies + logs half needs a
+// harness that intercepts every outbound request (task 26), so the title carries no id.
+test('private key never reaches the server on enroll: EnrollReq is .strict() and carries only the public key; audit rows contain no private-key bytes', async () => {
   const { storeId, control } = await setup();
 
   // .strict(): an enroll body carrying a private key (or any extra field) is rejected — the
@@ -201,7 +228,9 @@ test('SEC-DEV-05 (server leg) private key never reaches the server: EnrollReq is
   expect(serialized).not.toContain(privB64);
 });
 
-test('SEC-DEV-07 (surfacing leg) key-compromise containment: GET /v1/devices surfaces device_anomalies counts and last-anomaly-at per device', async () => {
+// Surfacing leg of the id named in the header (§221). The forge-with-extracted-key → CHAIN_BROKEN
+// + anomaly-row generation leg is the oplog pipeline's, so the title carries no id.
+test('key-compromise containment: GET /v1/devices surfaces device_anomalies counts and last-anomaly-at per device', async () => {
   const { p, storeId, control } = await setup();
   const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
 
