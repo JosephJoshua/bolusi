@@ -1,6 +1,6 @@
 # TASK 66 — three agents filed colliding task numbers in one session, and the collision auto-merges **clean**: nothing checks `_index.md` against the filesystem
 
-**Status:** todo
+**Status:** done
 **Priority:** **MEDIUM — but it is actively firing.** Three instances in a single session (impl-54, impl-58, impl-61). It will fire again on the next parallel wave, and CLAUDE.md §2.6 makes the thing it corrupts — `_index.md` — the single source of truth for "what's left".
 **Depends on:** —
 **Blocks:** —

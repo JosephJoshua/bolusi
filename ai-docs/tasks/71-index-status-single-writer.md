@@ -1,7 +1,7 @@
 # TASK 71 — the ledger's Status is written in two places and the merge procedure touches one; make the writeback single-action (task 66's gate is only the backstop)
 
 **Status:** todo
-**Priority:** **MEDIUM** — task 66 shipped the *detector* (a post-merge gate over `_index.md` vs the task files). This is the *writer*. Without it the gate goes red on every merge until someone hand-edits a file, which is precisely the check people learn to route around (CLAUDE.md §2.10's earned `--no-verify` instinct).
+**Priority:** **HIGH — must land BEFORE tasks 17 or 18 merge** (review-66's hard sequencing constraint: a chronically-red ledger gate masks the next real collision inside an already-red suite — this repo's "a loud bug masks silent ones", T-14h, turned against the gate meant to fix it). MEDIUM by blast radius, — task 66 shipped the *detector* (a post-merge gate over `_index.md` vs the task files). This is the *writer*. Without it the gate goes red on every merge until someone hand-edits a file, which is precisely the check people learn to route around (CLAUDE.md §2.10's earned `--no-verify` instinct).
 **Depends on:** 66
 **Blocks:** —
 **SEC ids owned by THIS task:** none
