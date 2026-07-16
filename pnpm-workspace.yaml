@@ -41,7 +41,12 @@ catalog:
   '@electric-sql/pglite': 0.5.4
   better-sqlite3: 12.11.1
   # D16/task 73 — the L3 lane's real PG16, in a container, over the real `pg` driver.
-  # Test-only: shipping-deps' TEST_ONLY_PACKAGES holds it out of any production graph.
+  # Test-only, and that is ENFORCED rather than intended: it is listed in
+  # `packages/test-support/src/shipping-deps.test.ts`'s TEST_ONLY_PACKAGES, which fails if any
+  # shipping workspace declares it under `dependencies`. Falsified (task 73): moved into
+  # db-server's production deps -> `expected [ '@testcontainers/postgresql' ] to deeply equal []`,
+  # 1 failed / 10 passed. The first version of this comment claimed that guard already covered it
+  # while the list did not name it — adding a package to a catalog is not adding it to a gate.
   '@testcontainers/postgresql': 12.0.4
   eslint: 9.39.5
   prettier: 3.9.5
