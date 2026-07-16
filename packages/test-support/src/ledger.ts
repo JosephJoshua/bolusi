@@ -117,15 +117,25 @@ function pushInto<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   else map.set(key, [value]);
 }
 
+/** Table cells split on pipes that are NOT backslash-escaped (`\|` is GitHub's table escape). */
+const SPLIT_ON_UNESCAPED_PIPE = new RegExp(String.raw`(?<!\\)\|`);
+/** Turns the escape back into the literal the author wrote. */
+const UNESCAPE_PIPE = new RegExp(String.raw`\\\|`, 'g');
+
 function parseIndexRows(indexText: string, unparseable: string[]): IndexRow[] {
   const rows: IndexRow[] = [];
   for (const line of indexText.split('\n')) {
     if (!line.startsWith('|')) continue;
-    // The table is `| id | title | status | depends on |`; the title never contains a raw pipe.
+    // The table is `| id | title | status | depends on |`. A title MAY contain a pipe, escaped as
+    // `\|` per GitHub's table spec (row 76 does: "the column holds `'id'\|'en'`"). Splitting on a
+    // bare `|` shifts every later cell, so `status` parses as title text — which this gate flagged
+    // as a statusMismatch, a true failure with a misleading diagnosis. Split on UNESCAPED pipes
+    // only, then unescape. The prior comment claimed "the title never contains a raw pipe": true,
+    // irrelevant, and load-bearing on a distinction `.split('|')` cannot make (§2.11).
     const cells = line
-      .split('|')
+      .split(SPLIT_ON_UNESCAPED_PIPE)
       .slice(1, -1)
-      .map((cell) => cell.trim());
+      .map((cell) => cell.replace(UNESCAPE_PIPE, '|').trim());
     if (cells.length < 3) continue;
     const idCell = cells[0] as string;
     const match = idCell.match(ROW_ID_PATTERN);
