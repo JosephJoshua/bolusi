@@ -73,6 +73,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | todo | 55 |
 | 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | todo | — |
 | 66 | three agents filed colliding task numbers in one session; the collision **auto-merges clean** (filenames differ) while only `_index.md` conflicts — nothing checks §2.6's source of truth against the filesystem; Status drift already live on 07/13/15/58 | todo | — |
+| 67 | `db-client/dialect.test.ts` "rolls back on error" times out at 5000ms under parallel load; passes in isolation — a T-10 flake, load is a hidden variable in this repo's test outcomes (from task 55 merge verification) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
