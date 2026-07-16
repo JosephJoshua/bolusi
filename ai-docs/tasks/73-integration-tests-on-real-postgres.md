@@ -36,6 +36,27 @@ Read **`ai-docs/decisions/2026-07-16-integration-tests-run-real-dependencies.md`
 - `ai-docs/08-stack-and-repo.md` §2 (catalog/pins — its PGlite row already says *"do not trust WASM as the only RLS witness"*), §5.6 (CI stages), §3.3.
 - **testcontainers-node docs via Context7 — read them yourself, do not trust this file's API sketch** (§2.1, and CLAUDE.md §1: verify current library docs before using an API — training data drifts). Confirmed at filing: `new PostgreSqlContainer("postgres:16")`, `.start()`, `.getConnectionUri()`, `.withReuse()`, default wait `Wait.forAll([forHealthCheck, forListeningPorts])`, 120 s startup timeout, and **Ryuk** for orphan reaping.
 
+## THE STRUCTURAL BLOCKER THIS TASK MUST OWN — `apps/server` cannot reach real PG16 at all
+
+**Found independently by two agents from opposite directions** (review-49 auditing task 49; impl-17 building task 17), then verified by the orchestrator against the tree. That convergence is what makes it structural rather than an oversight:
+
+| fact | evidence |
+| ---- | -------- |
+| `pg` is granted to **`db-server` only** | `08-stack-and-repo.md §3.3:164` — `\| \`db-server\` \| \`core\`, \`schemas\`, \`kysely\`, \`pg\` \|`. There is no row granting `apps/server` `pg`, and `apps/server/package.json` has **no `pg` dependency**. |
+| the real-PG lane sees **only** `db-server` | `test:rls` = `… vitest run --project db-server`. Nothing else. |
+| the code says so | `apps/server/test/integration/oplog/helpers.ts` header: *"WHY PGLITE (not the db-server test:rls Postgres lane): `pg` is boundary-locked to …"* |
+
+**So D16's rule — "a substitute may never be the sole witness for a claim about the production driver, RLS, or a version-sensitive behaviour" — is currently unsatisfiable for every `apps/server` integration test.** The push pipeline, the validation stages, the conflict-detection engine, the projection-apply step: all live in `apps/server`, all can only be tested on PGlite today. This is not something an individual task can fix without either moving `pg` across a boundary lint or inventing a second real-PG lane — **both of which are this task's to decide, and §2.8/§4 violations for anyone else.**
+
+**The current workaround, and why it is not a solution:** tasks 47, 49, and 17 all home their **marshalling-sensitive primitive** in `@bolusi/db-server` so `test:rls` executes the *exact production code* rather than a copy. That is genuinely good — it is why task 49's `createServerProjectionEngine` and task 47's watermark store are covered on real PG16 — and impl-17 went further, keeping a `serverSeq > last_pull_cursor` comparison **entirely in SQL** so the marshalling class cannot arise by construction. But it means coverage is the **UNION of two lanes** (pipeline-calls-X on PGlite; X-on-real-PG in db-server), and **no single test traverses the production path end-to-end on the production driver**. A union is not an integration test; it is two halves and an assumption about the seam between them.
+
+**Decide and state which** (this is the task's central architectural call, not a detail):
+- **(a) Give `apps/server` a test-only real-PG lane.** Needs an `08 §3.3` change (spec-first) and a rule that keeps `pg` out of `apps/server`'s *production* dependency graph while letting its tests reach a container. Note the boundary lint is a **deny-list** whose positive allow-matrix is **unimplemented** (owner: task 28) — so today the boundary is prose, and "enforced by nothing" cuts both ways.
+- **(b) Keep the db-server-homing pattern** and accept that `apps/server` integration stays on a substitute forever — in which case **say so in T-8/T-14f and in every affected gate**, because a lane that cannot ever satisfy D16 must not imply it does (§2.11: a gate implying absent coverage is worse than no gate).
+- **(c) Something else** — e.g. move the seam so the production path itself lives where the real lane can see it.
+
+**The orchestrator has no preferred answer here and is not ruling it** — it is a genuine architecture decision with a spec change on one side and a permanent coverage hole on the other. Bring evidence, not a preference. If (a), the `pg`-in-apps/server question is a **§6 red flag** (a boundary/stack change) — surface it rather than deciding unilaterally.
+
 ## Acceptance
 
 **Observable done-condition:** the L3 lane runs on real PG16 over the real `pg` driver, an RLS test on it can actually fail, and no gate's name says "Postgres" without saying which one and over which client.
