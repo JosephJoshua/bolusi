@@ -1,28 +1,66 @@
-// The one test harness, run against BOTH engines (08-stack-and-repo §5.4: "the identical suite
-// re-runs against real Postgres"; testing-guide §2.5.4: "PGlite is the fast loop, real Postgres
-// is the drift check"). Engine is chosen by env, never by a forked copy of the suite.
+// The one test harness. Real PostgreSQL 16, in a container, over the real `pg` driver (D16/73).
 //
-//   pnpm test      → PGlite   (in-process, no docker)
-//   pnpm test:rls  → Postgres 16 in docker (CI stage 9 merge gate)
+// WHAT CHANGED AND WHY IT MATTERS
+// --------------------------------
+// This used to pick an engine from `BOLUSI_DB_ENGINE`: PGlite for the fast loop, real Postgres
+// for the drift check (testing-guide §2.5.4, now superseded). D16 removed the choice, and the
+// repo's own measurements are why — reproduced a third time by task 73, on this exact file's
+// subject:
 //
-// The drift this guards is real, not theoretical: PGlite 0.5.4 embeds PostgreSQL 18, while
-// production and `pnpm test:rls` pin Postgres 16.
-import { Kysely, PGliteDialect, PostgresDialect, sql, type KyselyConfig } from 'kysely';
+//   int8 seam reverted at `reconstructOperation`, same test file, same assertions:
+//     PGlite                 14/14 GREEN  EXIT=0   ← blind
+//     real PG16 over `pg`     4 RED       EXIT=1   ← `expected [ '10', '9' ] to equal [ 9, 10 ]`
+//
+// A "fast loop / drift check" split cannot help when the fast loop is green BECAUSE it cannot see
+// the defect. There is one lane now, and it is the real one.
+//
+// EACH FILE OWNS A DATABASE — WHICH IS WHY `fileParallelism` IS BACK ON
+// ---------------------------------------------------------------------
+// The old postgres path did `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` + a full migrate,
+// against ONE shared database. That is why this package set `fileParallelism: false`: the reset
+// would race a neighbour. The PGlite path was no better — it booted a WASM Postgres AND migrated,
+// per file, which is what made parallel files "contend on CPU and time out".
+//
+// Both reasons are gone. `CREATE DATABASE … TEMPLATE <pre-migrated>` is a filesystem-level copy:
+// no WASM boot, no migrate, milliseconds. Each file gets a private database, so there is nothing
+// left to race and nothing left to serialise for.
+import { Kysely, PostgresDialect, sql, type KyselyConfig } from 'kysely';
 import pg from 'pg';
+import { expect, inject } from 'vitest';
 
 import { createCamelCasePlugin } from '../../src/camel-case.js';
 import { createForTenant, type ForTenant } from '../../src/for-tenant.js';
 import type { DB } from '../../src/generated/db.js';
-import { migrateToLatest } from '../../src/migrator.js';
 import { APP_ROLE } from '../../src/schema/security.js';
-import { ENGINE, postgresUrl } from './db-target.js';
+import {
+  assertAttribution,
+  createDatabaseFromTemplate,
+  databaseNameFor,
+  POOL_PER_FILE,
+} from '../../src/testing/pg-container.js';
 
-export { ENGINE, type Engine } from './db-target.js';
+/**
+ * The lane identifier the suites report in their T-14 "which engine answered" assertions.
+ *
+ * The UNION is kept deliberately even though only one member is now reachable: these tests exist
+ * to make the lane EXPLICIT rather than assumed (T-14f rule 3 — "when a gate's name says Postgres,
+ * write down which Postgres and over which client"), and a gate that can only express one answer
+ * has stopped asking the question. `ENGINE` is now a constant because D16 removed the choice, not
+ * because the question stopped mattering.
+ *
+ * Note what this un-skips: `oplog-server-seq-concurrency.test.ts` guards its genuinely concurrent
+ * cases with `describe.runIf(ENGINE === 'postgres')`, so on the PGlite lane they SILENTLY DID NOT
+ * RUN — a green with a smaller denominator than it looked (T-14). They now always run.
+ */
+export type Engine = 'pglite' | 'postgres';
+
+/** D16: there is one L3 DB engine, and it is real PostgreSQL 16 over the real `pg` driver. */
+export const ENGINE: Engine = 'postgres';
 
 export interface TestDbOptions {
   /** Receives every SQL string Kysely executes, in order (for the set_config ordering test). */
   onQuery?: (sql: string) => void;
-  /** Skip migrations — the migration suite drives the migrator itself. */
+  /** Skip migrations — kept for the migration suite, which drives the migrator itself. */
   skipMigrations?: boolean;
 }
 
@@ -35,11 +73,15 @@ export interface TestDb {
   /**
    * The probe path: `forTenant` that runs `SET LOCAL ROLE bolusi_app` inside the transaction.
    *
-   * testing-guide §2.5 is blunt about why this exists: PGlite connects as the superuser and
-   * superusers bypass RLS, so an RLS suite that skips SET ROLE passes VACUOUSLY and proves
-   * nothing. Every tenant-isolation assertion in this package goes through THIS handle.
-   * `sec-tenant-02` additionally proves the harness is not vacuous, by showing the owner
-   * handle CAN see across tenants while this one cannot.
+   * THE ROLE IS WHAT MAKES THIS LANE NON-VACUOUS — NOT THE ENGINE. Moving off PGlite does not by
+   * itself fix T-14b: testcontainers' default `postgres` user is a SUPERUSER, and a superuser
+   * bypasses RLS even under FORCE ROW LEVEL SECURITY. (The table OWNER does not bypass here —
+   * `secureTenantTable` FORCEs RLS and hands ownership to `bolusi_provision` — so the superuser
+   * is the only bypass left, and this role switch is what closes it.) Connecting a container as
+   * `postgres` and calling it a real-PG RLS lane would swap one vacuous lane for another; D16
+   * says so in as many words. Every tenant-isolation assertion goes through THIS handle, and
+   * `sec-tenant-02` proves the harness is not vacuous by showing the owner handle CAN see across
+   * tenants while this one cannot.
    */
   readonly appForTenant: ForTenant;
   /** `forTenant` WITHOUT the role switch — the production statement shape. */
@@ -48,17 +90,59 @@ export interface TestDb {
 }
 
 /**
- * Builds a migrated database on the configured engine. Caller owns `close()`.
+ * Builds this test file's OWN database, cloned from the pre-migrated template. Caller owns
+ * `close()`.
  *
- * Every test file gets its own: on PGlite that is a fresh in-memory postgres; on the real
- * engine it is a schema reset. Files are serialised (`fileParallelism: false`) so the reset
- * cannot race a neighbour.
+ * The clone is named deterministically from the test path, so a failure names the file that
+ * produced it (task 73) rather than a random id nobody can trace back.
  */
 export async function createTestDb(options: TestDbOptions = {}): Promise<TestDb> {
-  const db = ENGINE === 'pglite' ? await createPglite(options) : await createPostgres(options);
+  const maintenanceUri = inject('pgMaintenanceUri');
+  const owner = inject('pgOwner');
+  const baseUri = inject('pgBaseUri');
 
-  if (options.skipMigrations !== true) {
-    await migrateToLatest(db);
+  // The file identity comes from vitest's own state — the same string vitest prints in a failure,
+  // which is what makes the database name traceable back to the file that owns it.
+  //
+  // NO `?? 'fallback'` HERE, on purpose (T-19). A default would manufacture a plausible database
+  // name out of a failed read, and two files that both failed the read would then SHARE a
+  // database — silently reintroducing the exact cross-file interference this design exists to
+  // remove, as a flake nobody could reproduce. If vitest stops reporting a test path, that must
+  // stop the run.
+  const testPath = expect.getState().testPath;
+  if (testPath === undefined || testPath === '') {
+    throw new Error(
+      'db-server: cannot resolve this test file path, so its database name would not be unique. ' +
+        'Two files sharing a database is the interference this lane exists to remove (task 73).',
+    );
+  }
+  const database = databaseNameFor(testPath);
+
+  await createDatabaseFromTemplate({ maintenanceUri }, database, owner);
+
+  const uri = baseUri.replace(/\/[^/?]*(\?|$)/, `/${database}$1`);
+
+  // Attribution is asserted per file, not just once at boot: this is the handle the test actually
+  // uses, and a guard that verifies a DIFFERENT connection from the one under test is theatre
+  // (db-target.ts's rule, kept). It fails CLOSED on an absent stamp.
+  await assertAttribution(uri, owner);
+
+  const db = new Kysely<DB>({
+    dialect: new PostgresDialect({
+      pool: new pg.Pool({ connectionString: uri, max: POOL_PER_FILE }),
+    }),
+    plugins: [createCamelCasePlugin()],
+    ...kyselyLog(options),
+  });
+
+  if (options.skipMigrations === true) {
+    // The migration suite drives the migrator from zero itself, so hand it an EMPTY database
+    // rather than the template's fully-migrated schema. Dropping the schema is safe here in a way
+    // it never was before: this database belongs to this file alone.
+    await sql`DROP SCHEMA public CASCADE`.execute(db);
+    await sql`CREATE SCHEMA public`.execute(db);
+    // 0001's roles are cluster-wide and survive the drop, which is exactly the case its
+    // idempotent DO blocks exist for — so their idempotency stays continuously proven.
   }
 
   return {
@@ -84,38 +168,4 @@ function kyselyLog(options: TestDbOptions): Pick<KyselyConfig, 'log'> | Record<s
       onQuery(event.query.sql);
     },
   };
-}
-
-async function createPglite(options: TestDbOptions): Promise<Kysely<DB>> {
-  // Imported lazily so the postgres lane never pays for the WASM boot.
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pglite = new PGlite();
-  await pglite.waitReady;
-
-  return new Kysely<DB>({
-    dialect: new PGliteDialect({ pglite }),
-    plugins: [createCamelCasePlugin()],
-    ...kyselyLog(options),
-  });
-}
-
-async function createPostgres(options: TestDbOptions): Promise<Kysely<DB>> {
-  // Resolved per call, and from the same module the attribution gate reads (db-target.ts), so
-  // the database this harness opens is provably the one global-setup verified (T-14d).
-  const db = new Kysely<DB>({
-    dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: postgresUrl() }) }),
-    plugins: [createCamelCasePlugin()],
-    ...kyselyLog(options),
-  });
-
-  // Fresh schema per file so migrations are exercised from zero every time.
-  //
-  // The ROLES are deliberately NOT dropped: they are cluster-wide and own objects in the dev
-  // database too, so dropping them here would fail. That is precisely the case 0001's
-  // idempotent DO blocks exist for — this reset re-runs 0001 against pre-existing roles on
-  // every run, so their idempotency is continuously proven rather than asserted.
-  await sql`DROP SCHEMA IF EXISTS public CASCADE`.execute(db);
-  await sql`CREATE SCHEMA public`.execute(db);
-
-  return db;
 }

@@ -212,10 +212,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Stage 9 — RLS witness vs dockerized postgres:16 (08 §5.6). MERGE GATE.
-  # The fast lane (stage 4) runs this same suite on PGlite, which embeds PostgreSQL 18 — this
-  # job is the drift check against the pinned major, and the only witness that counts for RLS
-  # (08 §2.5: "do not trust WASM as the only RLS witness").
+  # Stage 9 — RLS witness vs real postgres:16 in a testcontainer (08 §5.6, D16). MERGE GATE.
+  #
+  # This is no longer a "drift check" behind a fast PGlite lane, and the old framing is deleted
+  # rather than softened: db-server HAS no PGlite lane any more (task 73 removed the branch rather
+  # than defaulting it, because a lane that can be downgraded to WASM will be, silently). This job
+  # runs the ONLY engine this suite has. `test:rls` boots its own postgres:16 container, migrates
+  # a template once, and clones a database per file.
+  #
+  # 08 §2.5's "do not trust WASM as the only RLS witness" is now satisfied by construction rather
+  # than by a second job: there is no WASM witness left to distrust. What made the old PGlite lane
+  # dangerous was never speed — it was that PGlite connects as a superuser, and superusers bypass
+  # RLS, so its RLS suite could not fail (T-14b). Measured on this branch: neutering `SET LOCAL
+  # ROLE bolusi_app` turns cross-tenant SELECT/INSERT/UPDATE/DELETE all green-for-the-wrong-reason
+  # — `expected 'test' to be 'bolusi_app'`. The ROLE closes it, not the engine.
   #
   # NO separate build step, and that is deliberate rather than the omission it was: `tsc -b` is
   # INSIDE `test:rls` per the 08 §5.6 normative convention (same as `test:server` above), so the
@@ -230,26 +240,24 @@ jobs:
   rls-witness:
     runs-on: ubuntu-latest
     needs: install
-    # DATABASE_URL is injected, so the lane runner skips compose entirely and uses this
-    # service container as-is. BOLUSI_DB_OWNER is the token the attribution gate checks the
-    # database's stamp against; run_id/run_attempt make it unique per job execution.
-    env:
-      DATABASE_URL: postgres://bolusi:bolusi@localhost:5432/bolusi_rls_test
-      BOLUSI_DB_OWNER: ci-rls-${{ github.run_id }}-${{ github.run_attempt }}
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: bolusi
-          POSTGRES_PASSWORD: bolusi
-          POSTGRES_DB: bolusi_rls_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U bolusi -d bolusi_rls_test"
-          --health-interval 2s
-          --health-timeout 3s
-          --health-retries 30
+    # NO `services:` BLOCK, NO DATABASE_URL, NO db:stamp — AND THAT IS THE FIX, NOT AN OMISSION.
+    #
+    # This job used to declare a `postgres:16-alpine` service container, inject DATABASE_URL and
+    # BOLUSI_DB_OWNER, and run `pnpm db:stamp` to claim it. Under D16/task 73 `test:rls` boots and
+    # owns its OWN postgres:16 container via testcontainers and reads NONE of that: no db-server
+    # test code resolves DATABASE_URL any more (test/helpers/db-target.ts is gone). So the job
+    # would have gone green against a container it started itself while every line of its config
+    # said it had tested the service container.
+    #
+    # That is a REAL NUMBER WITH FICTIONAL PROVENANCE — the precise failure this task exists to
+    # eliminate (T-14d: task 13's "82/11 on real PG16" served by task 05's leaked container),
+    # re-created in CI by the change meant to close it. Caught by review-73, not by this lane's
+    # own verification, because `test:rls` is green either way; only reading the CONFIG against
+    # the CODE shows it. Leaving the service container as decoration would be strictly worse than
+    # never having had one: a gate implying coverage it lacks is worse than an absent gate (§2.11).
+    #
+    # Docker is available on ubuntu-latest runners, which is what makes the container lane viable
+    # here at all; Ryuk reaps it when the job ends, however it ends.
     steps:
       - uses: actions/checkout@v4
       - run: corepack enable
@@ -261,16 +269,14 @@ jobs:
       # SEC-TENANT-03's repo-wide grep: no session-level tenant context anywhere
       # (security-guide §8.1 — set_config(..., false) / bare SET app.tenant_id).
       - run: node scripts/check-tenant-context.mjs
-      # CI's isolation is real and unchanged: this service container is created for this job
-      # and reachable by nothing else. What it lacks is a way to SAY so — a service container
-      # cannot run an init script, so it starts unstamped, and the attribution gate fails
-      # closed on unstamped databases (testing-guide T-14d). Claim it explicitly here, as the
-      # job that provisioned it. Provisioning stays separate from the test lane: if `test:rls`
-      # stamped what it found, it would adopt a foreign database rather than reject it, and
-      # the gate would certify the exact failure it exists to catch.
-      - name: claim the service container as this job's database
-        run: pnpm db:stamp
-      - name: RLS suite vs real Postgres 16
+      # Attribution has not been dropped — it moved from a stamp-what-CI-provisioned step into the
+      # lane itself, where it is now true BY CONSTRUCTION rather than by a job remembering to
+      # claim a database: the container is created by this process, its port is ephemeral and
+      # derived from it, every cloned database is stamped at creation with a token unique to this
+      # run, and the suite refuses an absent or foreign stamp before any test executes
+      # (packages/db-server/src/testing/pg-container.ts). The provenance line it prints on every
+      # run — "PostgreSQL 16.14 … owned by 'task73-<pid>-<t>'" — is the evidence §2.1 asks for.
+      - name: RLS suite vs real Postgres 16 (testcontainers, D16)
         run: pnpm test:rls
 
   # Codegen drift (10-db §11.3): migrate a real postgres, re-run kysely-codegen, fail on any

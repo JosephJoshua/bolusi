@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/pg-container.d.ts",
+      "default": "./dist/testing/pg-container.js"
     }
   },
   "files": [
@@ -30,6 +34,7 @@
     "@bolusi/eslint-config": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "@electric-sql/pglite": "catalog:",
+    "@testcontainers/postgresql": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "eslint": "catalog:",

@@ -25,8 +25,24 @@ const SHIPPING_WORKSPACES = [
   'packages/ui',
 ];
 
-/** Test-only packages that must never be a runtime dependency of shipping code. */
-const TEST_ONLY_PACKAGES = ['better-sqlite3', '@types/better-sqlite3', '@electric-sql/pglite'];
+/**
+ * Test-only packages that must never be a runtime dependency of shipping code.
+ *
+ * `@testcontainers/postgresql` joined this list with task 73, and the reason it had to is the
+ * point: `pnpm-workspace.yaml` already CLAIMED this guard covered it — "Test-only: shipping-deps'
+ * TEST_ONLY_PACKAGES holds it out of any production graph" — while the list did not mention it.
+ * review-73 falsified the claim by moving the package into db-server's production `dependencies`
+ * and watching this suite stay green (11 passed, EXIT=0). A comment naming a guard that does not
+ * cover it is the §2.11 class exactly: it supplies the confidence that stops anyone checking.
+ * Adding a package to a catalog is not adding it to a gate — the gate has a list, and lists do
+ * not grow themselves.
+ */
+const TEST_ONLY_PACKAGES = [
+  'better-sqlite3',
+  '@types/better-sqlite3',
+  '@electric-sql/pglite',
+  '@testcontainers/postgresql',
+];
 
 function readPackageJson(workspace: string): { dependencies?: Record<string, string> } {
   return JSON.parse(readFileSync(join(REPO_ROOT, workspace, 'package.json'), 'utf8')) as {
