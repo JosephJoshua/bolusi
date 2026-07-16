@@ -56,6 +56,16 @@ const AUTH_OP_SCHEMA_VERSIONS: ReadonlyMap<string, number> = new Map(
 /** The `auth` module's operation registry (04 §3) — the runtime's `operations` option. */
 export const authOperationRegistry: OperationRegistry = {
   schemaVersionFor: (type) => AUTH_OP_SCHEMA_VERSIONS.get(type),
+  // Every auth op is STORE-scoped (01 §6's scope rules; api/02-auth §6.2: "all auth ops are
+  // store-scoped"), so the envelope `storeId` is the device's store — which is what these types
+  // already recorded before `scope` was declarable (task 17), i.e. this states today's behaviour
+  // rather than changing it. Keyed off the same map as the version so the two registries cannot
+  // disagree about which types exist.
+  scopeFor: (type) => (AUTH_OP_SCHEMA_VERSIONS.has(type) ? 'store' : undefined),
+  // No auth op declares a conflict (01 §8.1): identity mutations are online-only, so no offline
+  // collision can exist (01 §8.2 says so explicitly — "Identity uniqueness is *not* a Rule-2
+  // case"). An auth op therefore never produces a Conflict record.
+  conflictFor: () => undefined,
   types: () => [...AUTH_OP_SCHEMA_VERSIONS.keys()].sort(),
   get size() {
     return AUTH_OP_SCHEMA_VERSIONS.size;

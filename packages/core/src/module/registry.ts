@@ -42,8 +42,10 @@ import type {
 import type {
   AnyCommandDeclaration,
   AnyQueryDeclaration,
+  ConflictDeclaration,
   ModuleProjections,
   OperationDeclaration,
+  OperationScope,
 } from './define-module.js';
 
 /** A registration defect (04 §1/§3; 02 §3.2). Thrown at assembly — before the first command. */
@@ -86,6 +88,19 @@ export interface AnyModuleDefinition<DB> {
 export interface OperationRegistry {
   /** The declared version for an op type, or `undefined` when no module declares it. */
   schemaVersionFor(type: string): number | undefined;
+  /**
+   * The declared envelope scope for an op type (01 §6; 05 §2.1), or `undefined` when no module
+   * declares the type. Declared types default to `'store'`.
+   *
+   * Same rationale as `schemaVersionFor`: the scope is a property of the TYPE, so the runtime
+   * resolves it here rather than letting a handler state it per emission.
+   */
+  scopeFor(type: string): OperationScope | undefined;
+  /**
+   * The declared conflict rule for an op type (01 §8.1), or `undefined` when the type declares
+   * none (⇒ it never produces a Conflict record). The server's Rule-1 detection reads this.
+   */
+  conflictFor(type: string): ConflictDeclaration | undefined;
   /** Every registered op type, sorted. The T-14 denominator for any sweep over op types. */
   types(): readonly string[];
   readonly size: number;
@@ -154,11 +169,18 @@ export function registerModules<DB>(
     projections.register(toProjectionManifest(module));
   }
 
-  // 04 §3 — the operation registry.
+  // 04 §3 — the operation registry. One pass, three facts per type: they come from ONE
+  // declaration, so they cannot disagree about which types exist (CLAUDE.md §2.8).
   const schemaVersions = new Map<string, number>();
+  const scopes = new Map<string, OperationScope>();
+  const conflicts = new Map<string, ConflictDeclaration>();
   for (const module of modules) {
     for (const [type, declaration] of Object.entries(module.operations)) {
       schemaVersions.set(type, declaration.schemaVersion);
+      // Default here, once, rather than at each reader: an absent `scope` means 'store' (01 §6),
+      // and a reader that had to remember that is how the two answers drift apart.
+      scopes.set(type, declaration.scope ?? 'store');
+      if (declaration.conflict !== undefined) conflicts.set(type, declaration.conflict);
     }
   }
 
@@ -175,6 +197,10 @@ export function registerModules<DB>(
 
   const operations: OperationRegistry = {
     schemaVersionFor: (type) => schemaVersions.get(type),
+    // Keyed off `schemaVersions` membership, not off `scopes`, so an undeclared type answers
+    // `undefined` (the caller's fail-closed signal) rather than the 'store' default.
+    scopeFor: (type) => (schemaVersions.has(type) ? (scopes.get(type) ?? 'store') : undefined),
+    conflictFor: (type) => conflicts.get(type),
     types: () => [...schemaVersions.keys()].sort(),
     get size() {
       return schemaVersions.size;
