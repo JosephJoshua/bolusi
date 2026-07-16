@@ -40,6 +40,9 @@ catalog:
   esbuild: 0.28.1
   '@electric-sql/pglite': 0.5.4
   better-sqlite3: 12.11.1
+  # D16/task 73 — the L3 lane's real PG16, in a container, over the real `pg` driver.
+  # Test-only: shipping-deps' TEST_ONLY_PACKAGES holds it out of any production graph.
+  '@testcontainers/postgresql': 12.0.4
   eslint: 9.39.5
   prettier: 3.9.5
   # ICU syntax gate (07-i18n §7.3) — the parser behind i18next-icu's intl-messageformat,

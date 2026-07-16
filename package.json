@@ -18,7 +18,7 @@
     "test:ed25519-interop": "tsc -b && vitest run --project test-support",
     "falsify:crypto": "node scripts/falsify-guards.mjs",
     "test:server": "tsc -b && vitest run --project server",
-    "test:rls": "tsc -b && BOLUSI_DB_ENGINE=postgres node scripts/db-lane.mjs --db=bolusi_rls_test -- vitest run --project db-server",
+    "test:rls": "tsc -b && vitest run --project db-server",
     "test:appliers": "tsc -b && vitest run --project core test/module/applier-conformance.test.ts",
     "chaos": "node scripts/not-implemented.mjs chaos 26-chaos-harness",
     "simulate": "node scripts/not-implemented.mjs simulate 26-chaos-harness",

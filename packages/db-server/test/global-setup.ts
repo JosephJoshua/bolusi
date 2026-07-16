@@ -1,128 +1,104 @@
-// ATTRIBUTION GATE — proves this suite reached its OWN database before a single test runs.
+// THE L3 LANE'S ONE CONTAINER — booted once, template migrated once, cloned per file (D16/73).
 //
-// This is the load-bearing half of task 34. The port fix (ephemeral host port, URL derived
-// from `docker compose port`) makes collisions impossible in the normal case; this gate makes
-// a violation DETECTABLE in the abnormal one. An isolation fix that cannot detect its own
-// violation is just a hope, and this repo has shipped seven guards that were green for the
-// wrong reason (CLAUDE.md §2.11) — the seventh was a `test:rls` green served by another
-// worktree's container after an unread `db:up` failure (T-14d). "The tests passed" was true;
-// "we tested our database" was not.
+// This replaces the compose lane's attribution gate (task 34). It keeps every property that gate
+// bought and drops the one thing it could not close by construction: the leak.
 //
-// The mechanism: every dev cluster is stamped AT INIT with the compose project that owns it
-// (scripts/pg-init/02-stamp-db-owner.sh writes the `bolusi.db_owner` database GUC). The lane
-// runner passes the project it provisioned as BOLUSI_DB_OWNER. If the database on the other
-// end of DATABASE_URL does not agree that it belongs to us, the run ABORTS. It fails CLOSED:
-// an absent stamp is a failure, not a pass, because "unstamped" is indistinguishable from
-// "somebody else's, created before this guard existed" — and there is such a container on the
-// dev daemon right now.
+//   property (T-14d)              how it is kept here
+//   ----------------------------  --------------------------------------------------------------
+//   ephemeral, per-run port       `getConnectionUri()` is DERIVED from the container this process
+//                                 started. There is no fixed port left to fall back to, so a dead
+//                                 container cannot silently resolve to a live peer's.
+//   a FATAL failure to start      `startPgLane` does not catch; a rejected `start()` aborts the
+//                                 run before a single test file is spawned.
+//   attribution ASSERTED          every database carries a `bolusi.db_owner` stamp naming THIS
+//                                 run; `assertAttribution` refuses an absent or foreign stamp.
+//   nobody has to remember        Ryuk reaps the container however the run dies — including
+//   `db:down`                     SIGKILL, which no `finally` block survives.
 //
-// This gate NEVER writes a stamp. Provisioning is a separate, explicit act (`pnpm db:stamp`).
-// If verification could also provision, a foreign database would simply be adopted by the run
-// that was supposed to reject it — the failure mode being designed against.
+// WHY THE PGlite BRANCH IS GONE FROM THIS PACKAGE (D16, and it is a ruling)
+// -------------------------------------------------------------------------
+// `db-server`'s suite IS the RLS, driver-marshalling and version witness. D16 rule 3 permits a
+// substitute only where it proves something the real thing also proves, and NEVER as the sole
+// witness for a claim about the driver, RLS, or a version-sensitive behaviour — which is this
+// package's entire subject. Keeping a `BOLUSI_DB_ENGINE=pglite` path here would leave a green
+// reachable by `vitest run --project db-server` that is vacuous for exactly the reasons T-14b and
+// T-14f record. So the switch is deleted rather than defaulted: the lane cannot be downgraded to
+// WASM because there is no longer a WASM path to downgrade to.
+//
+// The cost is stated plainly: `pnpm test` now needs a working Docker daemon. That is D16's
+// accepted price, and it is the same price CI already pays.
+import { Kysely, PostgresDialect } from 'kysely';
 import pg from 'pg';
 
-import { DB_OWNER_SETTING, ENGINE, expectedDbOwner, postgresUrl } from './helpers/db-target.js';
+import { migrateToLatest } from '../src/migrator.js';
+import {
+  assertAttribution,
+  createDatabaseFromTemplate,
+  databaseNameFor,
+  startPgLane,
+  TEMPLATE_DATABASE,
+  uriForDatabase,
+  type PgLane,
+} from '../src/testing/pg-container.js';
 
-interface Attribution {
-  owner: string | null;
-  database: string;
-  version: string;
+declare module 'vitest' {
+  export interface ProvidedContext {
+    /** Maintenance-database URI — clones are issued from here, never from the template. */
+    pgMaintenanceUri: string;
+    /** The token every database of this run is stamped with (T-14d). */
+    pgOwner: string;
+    /** Base URI whose database component each file swaps for its own clone. */
+    pgBaseUri: string;
+  }
 }
 
-/** Hides the password when a URL is echoed into a failure message. */
-function redact(url: string): string {
-  return url.replace(/:\/\/([^:]+):[^@]*@/, '://$1:***@');
-}
+let lane: PgLane | undefined;
 
-export default async function setup(): Promise<void> {
-  const expected = expectedDbOwner();
+export async function setup(project: {
+  provide: <K extends 'pgMaintenanceUri' | 'pgOwner' | 'pgBaseUri'>(key: K, value: string) => void;
+}): Promise<void> {
+  const started = Date.now();
 
-  if (ENGINE !== 'postgres') {
-    // PGlite is in-process: it boots a private postgres inside this node process, reachable by
-    // nobody else, so there is no attribution question to answer and nothing to check.
-    //
-    // But a guard must assert it is not silently no-opping on the very lane it protects
-    // (testing-guide T-14). BOLUSI_DB_OWNER is set only by scripts/db-lane.mjs, i.e. only when
-    // somebody intended the real-Postgres lane. Seeing it here means the lane quietly
-    // downgraded to WASM — which would hand back a green "PG16 witness" produced by
-    // PostgreSQL 18 in a WASM sandbox. That is the same fake-green shape as T-14d wearing a
-    // different hat, so refuse rather than skip.
-    if (expected !== undefined) {
-      throw new Error(
-        `db-server: BOLUSI_DB_OWNER='${expected}' says the postgres lane was requested, but ` +
-          `BOLUSI_DB_ENGINE resolved to '${ENGINE}'.\n` +
-          'This run would report a PGlite/WASM result as a real-Postgres witness. Run the ' +
-          "lane as 'pnpm test:rls' (which sets BOLUSI_DB_ENGINE=postgres), or unset " +
-          'BOLUSI_DB_OWNER to run the PGlite fast loop.',
-      );
+  lane = await startPgLane(async (templateUri) => {
+    // The template is migrated exactly once, HERE, and this is the only code permitted to open a
+    // connection to it. `db.destroy()` in the finally is not politeness: a surviving connection
+    // makes every later `CREATE DATABASE … TEMPLATE` fail with "There is 1 other session using
+    // the database", and `assertTemplateUnused` (called immediately after this resolves) is the
+    // backstop that turns a leak into a loud, attributed error instead of a distant one.
+    const db = new Kysely<unknown>({
+      dialect: new PostgresDialect({
+        pool: new pg.Pool({ connectionString: templateUri, max: 1 }),
+      }),
+    });
+    try {
+      await migrateToLatest(db as never);
+    } finally {
+      await db.destroy();
     }
-    return;
-  }
+  });
 
-  if (expected === undefined) {
-    throw new Error(
-      'db-server: the postgres lane requires BOLUSI_DB_OWNER — the compose project (or CI ' +
-        'token) whose database this run is entitled to reach.\n' +
-        "Run 'pnpm test:rls'. It brings up THIS worktree's database, derives its ephemeral " +
-        'port and passes the owner token. Running vitest directly against a hand-set ' +
-        'DATABASE_URL cannot be attributed, and an unattributable green is not a green ' +
-        '(testing-guide T-14d).',
-    );
-  }
+  const provenance = await assertAttribution(
+    uriForDatabase(lane.container, TEMPLATE_DATABASE),
+    lane.owner,
+  );
 
-  const url = postgresUrl();
-  const pool = new pg.Pool({ connectionString: url, max: 1 });
+  project.provide('pgMaintenanceUri', lane.maintenanceUri);
+  project.provide('pgOwner', lane.owner);
+  project.provide('pgBaseUri', lane.container.getConnectionUri());
 
-  let attribution: Attribution;
-  try {
-    // NOT inet_server_port(): that reports the port INSIDE the container (always 5432), which
-    // in a provenance line is worse than useless — it prints the very number this lane exists
-    // to stop trusting. The host:port we actually dialled is in `url`.
-    const { rows } = await pool.query<Attribution>(
-      `select current_setting('${DB_OWNER_SETTING}', true) as owner,
-              current_database() as database,
-              current_setting('server_version') as version`,
-    );
-    const row = rows[0];
-    if (row === undefined) {
-      throw new Error('db-server: attribution query returned no rows');
-    }
-    attribution = row;
-  } finally {
-    await pool.end();
-  }
-
-  const { owner, database, version } = attribution;
-
-  if (owner === null || owner === '') {
-    throw new Error(
-      `db-server: ABORT — the database at ${redact(url)} carries no ${DB_OWNER_SETTING} stamp, ` +
-        `so it cannot be shown to belong to '${expected}'.\n` +
-        'An unstamped database is treated as foreign, on purpose: it is exactly what a ' +
-        'container created before this guard existed looks like, and adopting it is the bug ' +
-        '(T-14d).\n' +
-        "Fix: 'pnpm db:down && pnpm db:up' to recreate THIS worktree's database with a stamp. " +
-        "If you provisioned this database yourself (CI), stamp it with 'pnpm db:stamp'.",
-    );
-  }
-
-  if (owner !== expected) {
-    throw new Error(
-      `db-server: ABORT — WRONG DATABASE. ${redact(url)} belongs to compose project ` +
-        `'${owner}', but this worktree is '${expected}'.\n` +
-        "You are one command away from migrating, resetting and reporting on a PEER's " +
-        'database — that is precisely the incident T-14d records (a green "82/11 on real ' +
-        'PG16" served by another worktree\'s container).\n' +
-        'Do NOT stop or remove that container: it is not yours, and another agent may be ' +
-        "using it right now. Unset DATABASE_URL and run 'pnpm test:rls' to use your own.",
-    );
-  }
-
-  // Provenance, printed on every run: which database produced the numbers that follow.
-  // §2.1 asks every reported number to carry the evidence of where it came from; making the
-  // lane say it out loud beats asking each reader to go and check.
+  // Provenance, printed on every run: which database produced the numbers that follow (§2.1).
+  // The template is stamped and verified BEFORE any clone, so every clone inherits a stamp that
+  // was checked rather than assumed.
   console.log(
-    `db-server: attribution OK — PostgreSQL ${version} · db '${database}' · ${redact(url)} ` +
-      `· owned by '${owner}'`,
+    `db-server: lane UP in ${Date.now() - started}ms — ${provenance} · template '${TEMPLATE_DATABASE}' migrated once`,
   );
 }
+
+export async function teardown(): Promise<void> {
+  // Best-effort. Ryuk is the guarantee — this is the fast path, not the safety net. If this
+  // process is SIGKILLed, `teardown` never runs and Ryuk reaps the container anyway; that is the
+  // entire structural argument for testcontainers over the compose lane (task 73).
+  await lane?.container.stop();
+}
+
+export { createDatabaseFromTemplate, databaseNameFor };
