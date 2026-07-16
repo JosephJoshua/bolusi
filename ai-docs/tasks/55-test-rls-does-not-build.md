@@ -1,5 +1,5 @@
 # TASK 55 — `test:rls` doesn't build: the project's ONLY real-Postgres lane cannot resolve `@bolusi/core` in CI
-**Status:** todo
+**Status:** done
 **Priority:** **HIGH** — this lane carries every real-driver claim in the project, including task 46's guard for a class that had a *live production bug*. Third violation of the same normative rule.
 **Depends on:** 46
 
@@ -62,6 +62,147 @@ Locally `dist` usually exists (left by a prior `pnpm test`), so the lane runs �
 - **Falsify** (§2.11): with the fix, an edit to `core/src` **changes the lane's result** without a manual rebuild; revert the fix → the lane goes back to reporting stale. That is the whole property.
 - **Sweep the class** (T-12) — this is the third instance, so **enumerate every script that runs tests**, and for each: does it import a built cross-package entry, and does it build? Name the total and the verdict per script. §5.6 has now been violated three times by three different agents; **the deliverable is a check that makes a fourth impossible**, not a fourth repair. Consider a gate that fails when a test script imports a `dist`-resolved workspace package without a build prefix.
 - `pnpm test`, `pnpm test:rls`, `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
+
+## Outcome
+
+**Both failures reproduced first, then fixed, then falsified. Real PG 16.14, attributed to this
+worktree's own compose project (`owner 'agent-abe5e7ded7f3279ca'`) on every run.**
+
+| # | reproduction (before the fix) | measured |
+| - | ----------------------------- | -------- |
+| a | **cold / CI**: no `dist`, `pnpm test:rls` | `Failed to resolve entry for package "@bolusi/core"` ×3 · **3 failed \| 12 passed (15)** · `Tests 90 passed (90)` · `EXIT=1` |
+| b | **warm / local liar**: task 46's 2^53 refusal deleted from `packages/core/src`, no rebuild | **`Tests 10 passed (10)` · `EXIT=0`** |
+
+(a) is the loud half, and its shape is the point: the run still *reports* "90 passed" — those 90 are
+the 12 files that don't import core. **The three that carry every real-`pg` claim contributed zero
+tests**, and a reader who checks the summary rather than the file count sees a healthy number.
+
+(b) is the dangerous half. The deleted line is the exact one task 46 falsified as "narrowing throw
+removed → red". It reported **10/10 green on real Postgres** because `dist` was stale.
+
+**Fix:** `"test:rls": "tsc -b && …"` — a root script, so a bare `tsc -b` resolves the ROOT
+`tsconfig.json`, which *is* the solution file (10 references). Verified, not assumed: task 24's trap
+is real but does not apply here, and the same check said `@bolusi/db-client` needed `../..`.
+
+**Falsification (§2.11) — the property is "an edit to `core/src` changes the lane's result with no
+manual rebuild". Same broken source, same stale-green `dist`; the only variable is the prefix:**
+
+| `dist` at start | script | real-PG result |
+| --- | --- | --- |
+| stale (green content) | **without** `tsc -b` | `Tests 10 passed (10)` · `EXIT=0` — **the liar** |
+| stale (green content) | **with** `tsc -b` | `Tests 1 failed \| 9 passed (10)` on `/exceeds/` · `EXIT=1` |
+
+Broke the refusal → lane went red **on its own**; a pre/post grep of `dist` showed the probe absent
+before the run and present after, so the script's own `tsc -b` did the rebuild. Restored → `10
+passed (10)` · `EXIT=0`, `src` byte-identical to HEAD (`git diff` empty). The test is not inert:
+against a *manually* rebuilt `dist` the same edit was already red, so (b)'s green was staleness
+alone.
+
+**Observable done-condition, met:** from a tree with **0** `dist` directories, `pnpm test:rls` →
+**15 passed (15)** · **`Tests 119 passed (119)`** · `EXIT=0`. The three real-driver files now
+contribute the **29** tests they previously contributed none of (119 − 90).
+
+### The deliverable is the gate, not the prefix
+
+`scripts/check-test-script-builds.mjs` + `packages/test-support/src/test-script-builds.test.ts`
+(11 tests). It **resolves the `tsc -b` project graph** — arg → tsconfig → `references`, transitively
+— and asks whether the needed package's `dist` is actually emitted. It does **not** grep for
+`tsc -b`, because task 24 proved a *present* prefix can build nothing: that is the ninth-fake-green
+shape this repo keeps shipping, and a grep-shaped gate would have certified it. Falsified both ways:
+
+- prefix deleted from `test:rls` → gate `EXIT=1` naming the script; unit tests **2 failed \| 9
+  passed** · `EXIT=1` (the CI-visible red). Restored → green.
+- db-client's `tsc -b ../..` → bare `tsc -b` (builds nothing; **a grep gate passes this**) → still
+  flagged, `EXIT=1`. Restored → green.
+
+It fails **closed on its own blindness** (§2.11) — see the next section for what that took. Green
+output states its denominator: `10 test scripts checked, 10 dist-only packages`. Wired into CI
+stage 1 (static — names the offending script in seconds) *and* stage 4 via the unit test.
+
+### The gate shipped the very bug it was written to prevent (review-55, MEDIUM)
+
+Worth reading before trusting any guard in this repo, this one included. The first cut failed
+closed on two **global** conditions (zero scripts / zero dist-only packages) and I wrote that up as
+"fails closed on its own blindness". **It was open per-script.** `targetDirs` resolved
+`--project <name>` by scraping `name: '...'` out of vitest configs and **silently dropped names it
+couldn't map** (`.filter((d) => d !== undefined)`) → empty target list → empty needed-set → a
+confident green. The denominator could not see it: the script was still **counted**, just checked
+against nothing.
+
+Review-55's reproduction, which I confirmed: `const N = 'server'; … name: N` (an ordinary
+extract-a-const refactor) plus the prefix removed from `test:server` → old gate printed `10 test
+scripts checked … every cross-package import is built first` · `EXIT=0`, **all 11 unit tests
+green**, through prettier, lint and typecheck. That is the ninth instance of this repo's signature
+failure, **inside the file written to stop it** — which is the honest measure of how strong the pull
+toward a vacuous green is.
+
+Closed at both ends, per-script and at the source: an unmappable `--project` is a reported
+violation, and a `vitest.config.ts` whose name the scraper cannot read fails the whole run rather
+than quietly leaving a project out of the map. Falsified four ways:
+
+| sabotage | result |
+| --- | --- |
+| `const N = 'server'` + prefix removed (review-55's exact case) | gate `EXIT=1` naming the config; unit tests **3 failed \| 11 passed** `EXIT=1` |
+| ``name: `server` `` (template literal) | gate `EXIT=1` naming the config |
+| config readable, prefix removed | gate `EXIT=1` — original prong, names all 4 needed packages |
+| prefix present, `--project srever` (pure vacuous-pass) | gate `EXIT=1` — "refuses to pass it" |
+
+All restored; gate back to `EXIT=0`. My own new check also produced a **false positive** on first
+run — it read the ROOT `vitest.config.ts` (the `projects: [...]` aggregator, which correctly has no
+`name`) as an unreadable project. Caught by running it, not by reading it.
+
+Test 10's tripwire was generalised from the instance to the class (T-12): it pinned only
+`test:rls`'s needed-set, so every *other* script could go blind silently. Now every script's
+`unresolved` must be empty, every lane known to import a dist-only package must be **seen** to need
+one, and `projectDirs` must account for **all 13** `vitest.config.ts` files on disk.
+
+**Stated, not fixed (§2.11 — a gate implying coverage it lacks is worse than none).** The gate's
+header now enumerates what it cannot see, each verified against this repo rather than guessed:
+dynamic `await import('@bolusi/x')` is **not** matched — live at
+`packages/core/test/sync/loop.test.ts:278`, harmless only because line 21 imports the same package
+statically, so it is **masked, not absent**; `.js`/`.mjs` are unscanned (no live instance — the only
+`.js` tests are tooling/eslint's rule tests whose `@bolusi/*` mentions are RuleTester `code:`
+fixture strings, which is also why naively globbing `.js` would manufacture false alarms); and
+`emits` reads a tsconfig's own `outDir`, so one inherited via `extends` would be misread (no
+instance today). None can false-alarm; all can fail to notice. A green here means "no violation
+among the imports this gate can see" — strictly weaker than "no violation".
+
+**CI:** no build step added to `rls-witness`, deliberately. `tsc -b` inside the script is
+runner-independent and fixes **every** caller — a job-level build would have fixed CI while leaving
+every local run and every falsification reading whatever `dist` it found. This mirrors what
+`server-integration` already documents for `test:server`. Comment added at the job saying so.
+
+### The sweep found a FOURTH violation, live in CI (T-12)
+
+**10 vitest-invoking test scripts; 10 dist-only packages. Two were violations, not one.**
+
+| script | needs `dist` of | before |
+| ------ | --------------- | ------ |
+| `bolusi::test` / `test:server` / `test:appliers` / `test:ed25519-interop` | core, schemas, db-server, db-client, test-support, i18n, ui | ok — carry `tsc -b` |
+| `bolusi::test:rls` | core, schemas | **VIOLATION** (this task) |
+| `@bolusi/db-client::test` | test-support | **VIOLATION — found by the sweep** |
+| `@bolusi/mobile::test` | core, i18n, ui | ok — `tsc -b ../..` (task 24) |
+| `@bolusi/core::test` | db-client, schemas, test-support | ok — names both tsconfigs |
+| `@bolusi/schemas::test`, `@bolusi/ui::test` | — | n/a — import no dist package |
+
+`packages/db-client`'s `"test": "vitest run"` had **no build** while
+`test/driver-conformance.test.ts:8` really imports dist-only `@bolusi/test-support`. CI's
+`db-client` job runs exactly that script, and its `pnpm -F @bolusi/db-client build` does **not**
+help: `db-client/tsconfig.build.json` references only `../core` and `../schemas` (correct —
+test-support is a devDep and builds exclude tests). Measured in CI's own state: `Failed to resolve
+entry for package "@bolusi/test-support"` · **1 failed \| 5 passed (6)** · `Tests 85 passed (85)` ·
+`EXIT=1` — the driver-conformance suite, the job's entire purpose, contributing **zero** tests
+behind an 85-test green. Fixed with `tsc -b ../..` (a bare `tsc -b` there is task 24's no-op:
+`db-client/tsconfig.json` is `noEmit` with no references). Cold-tree after: **6 passed (6)** ·
+`Tests 87 passed (87)` · `EXIT=0` — the 2 conformance tests now run.
+
+So §5.6 was violated **four** times by four agents, and the fourth was found only by asking the
+class question. `test:jcs-hermes` is out of the gate's scope by construction (esbuild bundle, no
+vitest, no dist resolution).
+
+**Acceptance, each read from the command's own log next to its `EXIT=` line (§2.1):** `pnpm test`
+**177 files / 2563 passed | 3 skipped** `EXIT=0` · `pnpm test:rls` (cold, real PG 16.14, attributed)
+**15 files / 119 passed** `EXIT=0` · `pnpm lint` `EXIT=0` · `pnpm typecheck` `EXIT=0`.
 
 ## Note
 

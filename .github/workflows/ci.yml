@@ -21,6 +21,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/check-single-zod.mjs
       - run: node scripts/check-forbidden-packages.mjs
+      # 08 §5.6: every test script builds the cross-package dists it imports. Static — no
+      # build or database needed — so it runs here in stage 1 and names the offending script
+      # in seconds, rather than surfacing as a mystery "Failed to resolve entry for package
+      # @bolusi/core" (cold runner) or, worse, a lane silently reading a stale dist (local).
+      # The same check is a unit test in @bolusi/test-support, so stage 4 catches it too.
+      - run: node scripts/check-test-script-builds.mjs
 
   # Stage 2 — lint + boundaries (all four bolusi rules at error).
   lint:
@@ -210,6 +216,17 @@ jobs:
   # The fast lane (stage 4) runs this same suite on PGlite, which embeds PostgreSQL 18 — this
   # job is the drift check against the pinned major, and the only witness that counts for RLS
   # (08 §2.5: "do not trust WASM as the only RLS witness").
+  #
+  # NO separate build step, and that is deliberate rather than the omission it was: `tsc -b` is
+  # INSIDE `test:rls` per the 08 §5.6 normative convention (same as `test:server` above), so the
+  # lane is self-sufficient on a cold runner and `needs: install` alone suffices. Adding a build
+  # step here would fix this job while leaving every OTHER caller of `test:rls` — every local
+  # run, every falsification — reading whatever dist it happened to find. Until task 55 the
+  # prefix was missing and this job could not load the three db-server files that import
+  # @bolusi/core: measured, 3 files failed to resolve while the run still reported "90 passed"
+  # from the 12 that don't. The three that carry every real-`pg` claim contributed zero tests.
+  # `scripts/check-test-script-builds.mjs` (stage 1) is what keeps the prefix from going missing
+  # again; do not "simplify" it away.
   rls-witness:
     runs-on: ubuntu-latest
     needs: install
