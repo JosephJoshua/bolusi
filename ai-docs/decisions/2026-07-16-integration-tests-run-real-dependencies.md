@@ -42,7 +42,16 @@ Testcontainers closes that class **by construction rather than by discipline** �
 
 ## Cost, stated honestly
 
-Container start is seconds, not milliseconds; the full suite is already ~600 s and `test:rls` ~70 s for 124 tests. Expect L3 to get slower. **That is accepted.** Mitigations are reuse (`.withReuse()`), template databases, and suite-level (not test-level) containers — not a return to the substitute.
+~~Container start is seconds, not milliseconds… Expect L3 to get slower. **That is accepted.** Mitigations are reuse (`.withReuse()`)…~~
+
+**RETRACTED — both halves were wrong, measured by task 73 (2026-07-16):**
+
+1. **It is 2.65× FASTER, not slower.** Same 15 files / 124 tests, same engine, both green: **130 s → 49 s**, *including* a 17 s container boot. The cost framing was backwards because the substitute's real price was never boot time — it was that PGlite boots a WASM Postgres **per file** and forced `fileParallelism: false`, serialising 65 files on a 48-core box. Real PG boots **once**; `CREATE DATABASE … TEMPLATE` is milliseconds; parallelism came back (`maxWorkers: 24`, derived from the connection budget and re-asserted against the live server at boot).
+2. **`.withReuse()` and Ryuk are MUTUALLY EXCLUSIVE, and recommending reuse here silently disabled the one benefit this decision calls structural.** testcontainers 12.0.4 returns from `reuseOrStartContainer` **before** `getReaper()` and never applies the `session-id` label Ryuk reaps by. Confirmed on this box: a reused container 13 days old carrying a `container-hash` label and **no `session-id`**. So reuse buys ~2 s and **re-creates the exact leak class (T-14d) that Ryuk was chosen to close by construction**. **Rejected.**
+
+**That second error is this decision's own class, authored by its author.** D16 argues for mechanism over discipline, names Ryuk as the mechanism, and then recommended the one option that turns Ryuk off — with nothing to notice, because a reused container looks identical to a fresh one until it outlives its session. It was caught by an implementer reading testcontainers' source rather than trusting this file (§2.1). **A recommendation is a mention, not a producer** (T-16).
+
+**The honest cost, restated:** `pnpm test` now requires Docker. That is the real price and it is accepted. Container boot is ~17 s, once.
 
 ## Consequences
 

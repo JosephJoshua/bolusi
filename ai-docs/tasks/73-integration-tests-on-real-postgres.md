@@ -34,7 +34,7 @@ Read **`ai-docs/decisions/2026-07-16-integration-tests-run-real-dependencies.md`
 - `ai-docs/testing-guide.md` **§2** (the pyramid + environments — **this doc OWNS them and its change-control says: change the doc first, then the code**), §2.4 (the conformance suite), §2.5, and **T-8 / T-14b / T-14d / T-14f** — the four rules this task's evidence comes from. T-8's stated scope-limits and T-14f's rule 3 must be **rewritten**, not merely satisfied: they currently document the gap this task closes.
 - `scripts/db-lane.mjs` — **read its header in full before touching anything.** It is the existing attributed real-PG16 lane (task 34) and it exists because a fixed host port let a failed `db:up` resolve to a *peer worktree's database*, producing a real number with fictional provenance. Whatever you build must preserve **every** property it bought: ephemeral per-worktree ports, a fatal `db:up`, and the `bolusi.db_owner` attribution GUC.
 - `ai-docs/08-stack-and-repo.md` §2 (catalog/pins — its PGlite row already says *"do not trust WASM as the only RLS witness"*), §5.6 (CI stages), §3.3.
-- **testcontainers-node docs via Context7 — read them yourself, do not trust this file's API sketch** (§2.1, and CLAUDE.md §1: verify current library docs before using an API — training data drifts). Confirmed at filing: `new PostgreSqlContainer("postgres:16")`, `.start()`, `.getConnectionUri()`, `.withReuse()`, default wait `Wait.forAll([forHealthCheck, forListeningPorts])`, 120 s startup timeout, and **Ryuk** for orphan reaping.
+- **testcontainers-node docs via Context7 — read them yourself, do not trust this file's API sketch** (§2.1, and CLAUDE.md §1: verify current library docs before using an API — training data drifts). Confirmed at filing: `new PostgreSqlContainer("postgres:16")`, `.start()`, `.getConnectionUri()`, default wait `Wait.forAll([forHealthCheck, forListeningPorts])`, 120 s startup timeout, and **Ryuk** for orphan reaping. **`.withReuse()` was ALSO suggested here and in D16 — that was wrong: it is mutually exclusive with Ryuk** (reuse returns before `getReaper()` and never applies the `session-id` label Ryuk reaps by; verified in testcontainers 12.0.4's source and against a 13-day-old reused container on this box carrying no `session-id`). Reuse buys ~2 s and re-creates the leak class Ryuk exists to close. **Do not use it.**
 
 ## THE STRUCTURAL BLOCKER THIS TASK MUST OWN — `apps/server` cannot reach real PG16 at all
 
@@ -65,7 +65,7 @@ Read **`ai-docs/decisions/2026-07-16-integration-tests-run-real-dependencies.md`
 
 ### The mechanism
 
-1. **Boot one `postgres:16` container** (testcontainers, `.withReuse()`), production major pinned in code.
+1. **Boot one `postgres:16` container** (testcontainers, **NOT `.withReuse()` — see below**), production major pinned in code.
 2. **Migrate ONCE** into a template database (e.g. `bolusi_tmpl`) — the full migration chain, one time, at global setup.
 3. **Per test file: `CREATE DATABASE <file_db> TEMPLATE bolusi_tmpl;`** — a filesystem-level copy, milliseconds. **No WASM boot, no re-migrate.**
 4. **Re-enable `fileParallelism`** — the reason it is `false` today (a single shared DB that each file resets) disappears when each file owns a database.
