@@ -1,6 +1,6 @@
 # TASK 58 — the keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product, and the Android control that would do its job is an unchecked box nobody owns
 
-**Status:** done-review
+**Status:** done
 **Priority:** **HIGH** — a written security requirement (`security-guide §6.2`) that nothing builds, nothing tests, and no task owns, on **the** most likely device lifecycle event in this business. The code comment asserting the guarantee names a mechanism that does not run on the target platform.
 **Depends on:** —
 **Blocks:** —
