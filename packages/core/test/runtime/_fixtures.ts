@@ -75,6 +75,12 @@ const FIXTURE_OP_SCHEMA_VERSIONS = new Map<string, number>([
 
 export const fixtureOperations: OperationRegistry = {
   schemaVersionFor: (type) => FIXTURE_OP_SCHEMA_VERSIONS.get(type),
+  // Every fixture op is store-scoped (01 §6's default) and declares no conflict — this fixture
+  // exercises the RUNTIME's sequence, not the conflict rules. Keyed off the same map as the
+  // version so an undeclared type answers `undefined` from both, which is what the runtime's
+  // fail-closed path reads.
+  scopeFor: (type) => (FIXTURE_OP_SCHEMA_VERSIONS.has(type) ? 'store' : undefined),
+  conflictFor: () => undefined,
   types: () => [...FIXTURE_OP_SCHEMA_VERSIONS.keys()].sort(),
   get size() {
     return FIXTURE_OP_SCHEMA_VERSIONS.size;

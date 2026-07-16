@@ -24,7 +24,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 14 | auth-client (enrollment, device keys, offline PIN + lockout, switcher state, idle lock, bundle persist) | done | 03, 04, 09, 10, 13 |
 | 15 | sync-client (loop, triggers, backoff, SyncState, staleness, quarantine) | done | 06, 10 |
 | 16 | sync-server (push/pull endpoints, devices sidecar, batching, gzip) | done | 07, 12, 13 |
-| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | in-progress | 07, 08, 16, 46, 47, 48, 49 |
+| 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | in-review | 07, 08, 16, 46, 47, 48, 49 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | in-progress | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
@@ -79,6 +79,9 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 68 | wire the semantic export-sweep (knip) as a pinned dep + gate — `knip.json` shipped but knip is not a declared dependency, so the config is a non-executable document (from task 60) | todo | — |
 | 69 | **MEDIUM** no `apps/mobile` test mounts a screen — hardcoding `state="entry"` unlocks the PIN pad during every lockout with 16/16 green; the render lane EXISTS and is unused (from task 60) | todo | — |
 | 70 | **HIGH — §6 owner decision** SEC-DEV-04's §218 ("offline-revocation caveat") contradicts api/02-auth §7.3's by-design wipe and asks for a per-op result the wire never produces (401 precedes it); 2 of 5 behaviours unbuildable, 3 shipped (from task 61, review-61 confirmed) | todo | — |
+| 74 | `04 §3`'s registry-entry shape lists neither `conflict` (mandated by 01 §8.1, which says it "extends 04 §3") nor a way to express 01 §6's tenant-scoped op; both now ship in code — 04 is the owning doc and is stale (from task 17) | todo | — |
+| 75 | `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale` — the column holds `'id'\|'en'`. Inert (the applier always supplies locale) but a decoy aimed at task 21, which reads this column and whose brief already repeats the wrong value (from task 17) | todo | — |
+| 76 | the selectable-locale list is declared **twice** (`i18n`'s `SELECTABLE_LOCALES`, core's `LOCALE_VALUES`) because core is pure-TS and cannot import i18n; no gate compares them — adding `zh` to one silently breaks the toggle or the payload. Decide with task 72 (same boundary shape) (from task 17) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

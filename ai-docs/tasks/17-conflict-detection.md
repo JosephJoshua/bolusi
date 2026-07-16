@@ -1,6 +1,6 @@
 # TASK 17 — conflict-detection: server rules, system-device emission, platform module, acknowledge
 
-**Status:** todo
+**Status:** in-review
 **Depends on:** 07, 08, 16, 46, 47, 48
 
 ## Goal
@@ -77,3 +77,120 @@ Task 49 built the server projection-apply step and the **one** registration list
 **Falsify the registration** (§2.11): with your module registered, push an op through the REAL push path (`processPushBatch`, not a hand-seeded row — T-14b) and assert the projection row appears; then remove your line from `SERVER_MODULES` and watch it go RED. A test that INSERTs its own projection row proves nothing about the fold.
 
 *(For task 17 specifically: `user_prefs` folds from `platform.user_locale_changed`, which this module owns. Until it is registered, task 21's push-notification locale falls back to `id-ID` forever — and task 21's own locale test stays green because it seeds the row directly. That trap is closed only when the platform module both ships the fold AND lands in `SERVER_MODULES`.)*
+
+## Outcome (impl-17, 2026-07-16)
+
+**The premise held, and the trap is closed.**
+
+**Reproduction (T-11), captured before any implementation.** A signed `platform.user_locale_changed`
+pushed through the REAL `processPushBatch` over PRODUCTION deps (`resolveDeps()`) was **rejected
+`UNKNOWN_TYPE`** and `user_prefs` stayed **EMPTY** (`expected [] to include 'platform'`;
+`expected [ 'rejected' ] to deeply equal [ 'accepted' ]`). Both halves are the same one-line absence.
+
+**THE REGISTRATION FALSIFICATION (§2.11) — and the sharpest thing in this task.** With
+`platformModule` in `SERVER_MODULES`: 4/4 green. Removed the one line → **3 RED**, negative control
+still green (so the red is attributable to the registration, not a broken harness). Restored → 4/4.
+**`tsc` stayed EXIT=0 through the break.** The type system cannot see a missing registration — which
+is precisely why the test has to, and why task 49 built the falsification into the brief. Same shape
+as task 39 (`DB` was `any`, `tsc` green across all of apps/server).
+
+**D16 / T-14f — the two lanes, and which proves what.** Rule 1 is
+`serverSeq(P) > lastPullCursor(O.device)`: an int8 comparison. It is kept **entirely in SQL**
+(`WHERE o.server_seq > d.last_pull_cursor`), so Postgres compares int8 natively and the marshalling
+class **cannot arise** — closed by construction, not by a cast someone must remember (task 46's bug
+WAS a missing cast `tsc` believed). The query is homed in `@bolusi/db-server`
+(`conflict-candidates.ts`) because `pg` is boundary-locked there and `test:rls` is
+`--project db-server` — task 49's precedent; the constraint was found independently by review-49 and
+now belongs to task 73.
+
+**Falsified across BOTH lanes, same bug, minutes apart** — reintroduced task 46's bug (pull the
+cursor into JS, compare there):
+
+| lane | driver | result |
+| ---- | ------ | ------ |
+| PGlite (PG18, in-process) | int8 → number | **10/10 GREEN — blind** |
+| real PG16 via `pg` (`test:rls`) | int8 → **string** | **1 RED** (`expected [] to have a length of 1 but got +0`) |
+
+D16's premise, reproduced live. Restored → both green. **And the case that caught it matters:** the
+**2^53 test stayed GREEN with the bug present** (`"9007199254740993" > "9007199254740992"` is true —
+equal-length strings compare correctly). The real class is **differing digit counts** ("10" vs "9"),
+not "big numbers" (T-12). A suite built only from the 2^53 instance would have been the bug's alibi.
+
+**A real bug my own test caught.** Rule 2 first read `notes.archived` — but detection runs AFTER the
+acceptance loop, so a device that edits then archives its own note in one batch was reported as
+conflicting with itself: exactly the case 01 §8.2's parenthetical excludes ("the editing device had
+not seen the archive"). 03 §11 states the rule as ORDER, not state. Now `existsPrecedingOp` asks the
+op log whether an archive sorts canonically before the edit.
+
+**Denominator (T-14) — what folds now, and what does not.** `SERVER_MODULES` carries **`platform`**
+⇒ **2 of 6** server projection tables fold in production (`conflicts`, `user_prefs`). Still empty:
+`notes` (task 25), `auth_sessions` / `pin_lockout_events` / `auth_permission_denials` (task 43) —
+their types are `UNKNOWN_TYPE` until they append to the same list. Task 49 measured 0 of 6; this task
+moves it to 2 of 6, and the count is stated next to the list in `deps.ts` rather than only here.
+Consequence worth naming: `auth.device_enrolled` is still `UNKNOWN_TYPE`, so the registration suite
+seeds devices at their post-genesis chain head rather than borrowing task 43's coverage.
+
+**Atomicity, proven through the production path.** A forced failure inside the detection block (the
+system signer throws, after Rule 1 matched) rolls back the WHOLE push: the pushed edit's op row and
+its fold vanish, no conflict row, `system_device_chain_state.last_seq` still 0. Gapless contiguous
+`serverSeq` across accepted + system ops asserted over the whole stream; the detection op is last;
+the chain advances `seq = last_seq + 1`, `previousHash = last_hash`; `source: 'system'`.
+
+**The hook.** Fires once, POST-COMMIT (asserted by reading the committed row from OUTSIDE the push
+transaction), category `conflict`, for the SIGNIFICANT path only — a batch producing one minor and
+one significant conflict fires exactly once. No delivery here (task 21's).
+
+**Contract additions (filed as task 74, not fixed here).** `conflict` (mandated by 01 §8.1, which
+says it "extends 04 §3" — but 04 §3 does not list it) and `scope` (01 §6 states the FACT that
+`platform.user_locale_changed` is tenant-scoped; the runtime stamped `storeId` from the device for
+every draft, so the fact was **inexpressible**). Both follow `schemaVersion`'s precedent: resolved
+from the registry, never caller-supplied. 04 is the owning doc and is stale — §4 says that is its
+own task.
+
+**Inherited finding (task 13 review-02) — CLOSED, both hardenings.** The CLI printed the tenant's
+Ed25519 signing key to stdout unconditionally. **Default now writes a 0600 file and prints only the
+PATH**; `--print-key` is an explicit opt-in. Both, because they close different halves: the default
+protects an operator who does nothing, and removing the capability entirely would push people to
+`cat` the file (scrollback AND disk). `openSync(path,'wx',0o600)` — not `writeFileSync(…,{mode})`,
+whose `mode` applies only on CREATE, so writing over an existing 0644 file would silently keep 0644.
+Adversarial tests ship with the change (§2.5) and are falsified (§2.11): regressed to the original
+unconditional print → the fence went **RED** (2 tests), restored → 6 green. Every case carries its
+T-17 positive control (`--print-key` proves the harness CAN see a key on stdout).
+
+**The pre-commit secret scan caught my own fixture, and it was right.** The first key fixture was a
+realistic base64 blob; `gitleaks` rejected the commit (`generic-api-key`, SEC-SECRET-02). That line
+is character-for-character what a real leak looks like. Fixed the fixture rather than allowlist the
+rule — a repo that learns to wave it through on "it's only a test" has disabled the control for the
+case it exists for. Never `--no-verify` (§2.10).
+
+**T-8 both-engine conformance** ships for the platform appliers, with a second test that reads the
+rows back — because **a digest gate proves the engines AGREE, not that they agree on the right
+answer**. Falsified: removed the `status = 'surfaced'` predicate (03 §7's "first ack in canonical
+order wins") → the semantics test went RED (`expected 'op-0004' to be 'op-0003'`) while the
+**digest test stayed GREEN** — both engines identically wrong. That is the oracle's blind spot,
+demonstrated rather than asserted.
+
+**CHAOS-07 fixture** (`@bolusi/test-support`): deterministic scripts + the exhaustive
+expected-classification table for all three sub-cases, consumed by task 26. **Five** conflicts total
+(3 minor pairs in (i), 1 in (ii), 1 significant in (iii)); both resting transitions covered (D4).
+`expectedWinner` is `null` for the forced-tie case BY DESIGN — the fixture cannot know the harness's
+runtime deviceIds, and guessing would be a fixture asserting a fact it cannot see (T-14b); §3.6 says
+the winner is computed explicitly. Task 17 drives sub-case (i) through the real pipeline: **3 devices
+⇒ 3 unordered pairs**, not 1 and not 6.
+
+**T-18 fired twice, on me.** Two full-suite runs notified **"completed (exit code 0)"** with logs of
+**3578** and **181 bytes**, no `Test Files N passed` line and no `EXIT=` line — reaped. The first
+hid **34 real failures** (my `resolveScope` broke core's runtime fixtures). Had I trusted either
+notification I would have shipped a regression. Also learned, and worth writing down: **`npx tsc -b`
+does NOT typecheck test files** (it builds the build tsconfigs); `pnpm typecheck` (`tsc -b && pnpm -r
+typecheck`) does — my repeated `tsc -b EXIT=0` was never the full typecheck, and two type errors in
+my own tests were invisible until I ran the real one.
+
+**Not done / out of scope — stated, not implied.** No client-side command/query integration test
+(`acknowledgeConflict`'s `INVALID_TRANSITION`, `listConflicts` staff denial, `setLocale`
+`storeId: null` end-to-end) — those need the client command runtime wired to a device DB, which is
+tasks 24/25/50's surface; the command/query CODE ships and is typechecked, but its acceptance legs
+are **unproven by a running test** and should be a review finding or a follow-up, not assumed. The
+member-device `conflict_detected` → `SCOPE_VIOLATION` rejection already ships in task 07's
+`steps/scope.ts` (verified by reading it; a mention is not a producer — T-16) and is not re-tested
+here. The full N-device convergence run is task 26's.
