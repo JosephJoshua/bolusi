@@ -54,10 +54,41 @@ declare module 'vitest' {
 
 let lane: PgLane | undefined;
 
-export async function setup(project: {
+interface GlobalSetupProject {
   provide: <K extends 'pgMaintenanceUri' | 'pgOwner' | 'pgBaseUri'>(key: K, value: string) => void;
-}): Promise<void> {
+  config?: { maxWorkers?: unknown };
+}
+
+/**
+ * The worker count VITEST ACTUALLY RESOLVED, read from the live project config.
+ *
+ * Not `MAX_PARALLEL_FILES`. The budget guard exists to compare the real parallelism against the
+ * real server, and review-73 proved that distinction IS the guard: when it compared its own
+ * constant instead, `maxWorkers: 110` sailed through (24 × 2 + 10 ≤ 197) while the run opened
+ * 220 connections. Reading the number from the object vitest hands us, after it has resolved the
+ * config, is what makes it un-fakeable.
+ *
+ * It THROWS rather than defaulting. A `?? MAX_PARALLEL_FILES` here would resurrect the exact
+ * defect — the guard would quietly check the constant again and nothing downstream could tell
+ * the difference (T-19: a default that is plausible in the domain is indistinguishable from a
+ * real reading).
+ */
+function resolveMaxWorkers(project: GlobalSetupProject): number {
+  const raw = project.config?.maxWorkers;
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw;
+  throw new Error(
+    `db-server: ABORT — vitest's resolved maxWorkers is ${JSON.stringify(raw)}, not a positive ` +
+      'integer, so the connection budget cannot be checked against the parallelism this run will ' +
+      'actually use.\n' +
+      'vitest.config.ts must set `maxWorkers` to a number (it imports MAX_PARALLEL_FILES from ' +
+      'src/testing/budget.ts). Refusing rather than assuming: a guard that assumes its own ' +
+      'answer is the defect review-73 found here (task 73).',
+  );
+}
+
+export async function setup(project: GlobalSetupProject): Promise<void> {
   const started = Date.now();
+  const maxWorkers = resolveMaxWorkers(project);
 
   lane = await startPgLane(async (templateUri) => {
     // The template is migrated exactly once, HERE, and this is the only code permitted to open a
@@ -75,7 +106,7 @@ export async function setup(project: {
     } finally {
       await db.destroy();
     }
-  });
+  }, maxWorkers);
 
   const provenance = await assertAttribution(
     uriForDatabase(lane.container, TEMPLATE_DATABASE),
@@ -90,7 +121,8 @@ export async function setup(project: {
   // The template is stamped and verified BEFORE any clone, so every clone inherits a stamp that
   // was checked rather than assumed.
   console.log(
-    `db-server: lane UP in ${Date.now() - started}ms — ${provenance} · template '${TEMPLATE_DATABASE}' migrated once`,
+    `db-server: lane UP in ${Date.now() - started}ms — ${provenance} · template ` +
+      `'${TEMPLATE_DATABASE}' migrated once · budget OK for ${maxWorkers} live workers`,
   );
 }
 

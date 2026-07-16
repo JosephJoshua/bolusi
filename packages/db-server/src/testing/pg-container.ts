@@ -72,6 +72,8 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 
+import { HEADROOM, MAX_CONNECTIONS, POOL_PER_FILE } from './budget.js';
+
 /** The production major, stated in code where a test can read it (D16, T-14f rule 3). */
 export const PG_IMAGE = 'postgres:16';
 
@@ -89,37 +91,7 @@ export const TEMPLATE_DATABASE = 'bolusi_tmpl';
  */
 const MAINTENANCE_DATABASE = 'postgres';
 
-/**
- * Connections each test file's pool may open. The cap below is derived from this, so changing
- * it without re-deriving the cap is a mistake the budget assertion will catch.
- */
-export const POOL_PER_FILE = 2;
-
-/** Connections reserved for the clone/maintenance path and this module's own bookkeeping. */
-const HEADROOM = 10;
-
-/**
- * `max_connections` for the test container.
- *
- * Raised from the stock 100 DELIBERATELY, and the cost is real rather than theoretical: each
- * backend is a PROCESS with its own `work_mem`, so 200 backends is 200 × `work_mem` (4 MB
- * default) ≈ 800 MB worst case. That is affordable here (measured: 43 GB available) and it is
- * the reason to prefer SHARDING to a second container over raising this without limit.
- *
- * The cap that matters is CONNECTIONS, not database count: an idle cloned database costs disk
- * and catalog rows, while a parallel file costs a pool.
- */
-const MAX_CONNECTIONS = 200;
-
-/**
- * The most test files that may run concurrently against ONE container.
- *
- * `maxParallelFiles × POOL_PER_FILE + HEADROOM ≤ max_connections − superuser_reserved_connections`
- * — solved for maxParallelFiles, and ASSERTED against the live server in `assertConnectionBudget`
- * rather than trusted, because this constant and the server's actual setting are two different
- * facts and a guard that assumes they agree is the T-14 failure mode.
- */
-export const MAX_PARALLEL_FILES = 24;
+export { HEADROOM, MAX_CONNECTIONS, MAX_PARALLEL_FILES, POOL_PER_FILE } from './budget.js';
 
 export interface PgLane {
   readonly container: StartedPostgreSqlContainer;
@@ -142,6 +114,7 @@ export interface PgLane {
  */
 export async function startPgLane(
   migrate: (templateUri: string) => Promise<void>,
+  actualMaxWorkers: number,
 ): Promise<PgLane> {
   // A token unique to THIS process, so a database created by any other run is detectably foreign.
   const owner = `task73-${process.pid}-${Date.now().toString(36)}`;
@@ -157,7 +130,7 @@ export async function startPgLane(
 
   const maintenanceUri = uriForDatabase(container, MAINTENANCE_DATABASE);
 
-  await assertConnectionBudget(maintenanceUri);
+  await assertConnectionBudget(maintenanceUri, actualMaxWorkers);
 
   // Create the template, migrate it, stamp it — then never touch it again.
   await withAdmin(maintenanceUri, async (client) => {
@@ -284,14 +257,36 @@ export async function assertTemplateUnused(maintenanceUri: string): Promise<void
 }
 
 /**
- * Proves the container's real `max_connections` can actually fund the parallelism we configured.
+ * Proves the container's real `max_connections` can fund the parallelism VITEST ACTUALLY
+ * CONFIGURED — not the parallelism this module would like to believe it configured.
  *
- * A guard must assert its own denominator (T-14). `MAX_PARALLEL_FILES` and the server's setting
- * are two independent facts: this asserts they agree, so a future edit to either that breaks the
- * budget fails HERE with the arithmetic, instead of surfacing as `FATAL: sorry, too many clients
- * already` in an unrelated test file — or, worse, as a wedge.
+ * @param actualMaxWorkers the worker count read from the live vitest config at boot. It is a
+ *   REQUIRED argument, and that is the whole point of this function's shape.
+ *
+ * A guard must assert its own denominator (T-14), and the first version of this one did not.
+ * It compared `MAX_PARALLEL_FILES` — its OWN constant — against the server, so it answered
+ * "is the number I chose self-consistent?" while claiming to answer "can this run fit?".
+ * review-73 falsified it: `maxWorkers: 110` left the guard GREEN (24 × 2 + 10 ≤ 197) while the
+ * run opened 220 connections. Both facts were true and the guard was blind to the one that
+ * mattered, which is §2.11's whole thesis — a guard whose failure mode is "silently checks
+ * nothing" converts an unknown risk into a false assurance.
+ *
+ * Taking the real number as a parameter is what closes it BY CONSTRUCTION: there is no longer a
+ * value this function can check that is not the value the run will use.
  */
-export async function assertConnectionBudget(maintenanceUri: string): Promise<void> {
+export async function assertConnectionBudget(
+  maintenanceUri: string,
+  actualMaxWorkers: number,
+): Promise<void> {
+  if (!Number.isInteger(actualMaxWorkers) || actualMaxWorkers < 1) {
+    throw new Error(
+      `db-server: ABORT — could not read vitest's real maxWorkers (got ${JSON.stringify(actualMaxWorkers)}).\n` +
+        'This guard exists to compare the LIVE worker count against the LIVE server. Defaulting ' +
+        'it would make the check pass by assuming its own answer (T-19), which is the exact ' +
+        'defect review-73 found here.',
+    );
+  }
+
   await withAdmin(maintenanceUri, async (client) => {
     const { rows } = await client.query<{ name: string; setting: string }>(
       `SELECT name, setting FROM pg_settings
@@ -304,15 +299,17 @@ export async function assertConnectionBudget(maintenanceUri: string): Promise<vo
       throw new Error('db-server: could not read max_connections from the container');
     }
 
-    const budget = MAX_PARALLEL_FILES * POOL_PER_FILE + HEADROOM;
+    const budget = actualMaxWorkers * POOL_PER_FILE + HEADROOM;
     const available = max - reserved;
     if (budget > available) {
       throw new Error(
         `db-server: ABORT — connection budget does not fit.\n` +
-          `  ${MAX_PARALLEL_FILES} files × ${POOL_PER_FILE} conns + ${HEADROOM} headroom = ${budget}\n` +
+          `  ${actualMaxWorkers} workers × ${POOL_PER_FILE} conns + ${HEADROOM} headroom = ${budget}\n` +
           `  available = max_connections(${max}) − superuser_reserved(${reserved}) = ${available}\n` +
-          'Lower MAX_PARALLEL_FILES (and vitest maxWorkers with it), or shard to a second ' +
-          'container. Raising max_connections costs a process + work_mem per backend (task 73).',
+          'Lower maxWorkers in vitest.config.ts (MAX_PARALLEL_FILES in src/testing/budget.ts), ' +
+          'or shard to a second container. Raising max_connections costs a process + work_mem ' +
+          'per backend (task 73). Measured: exceeding the real ceiling gives `sorry, too many ' +
+          'clients already` (53300) in ~1.1s — an attributable error, not a wedge.',
       );
     }
   });
