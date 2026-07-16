@@ -40,6 +40,21 @@ So the natural repair — resolve the loud index conflict, keep both rows — **
 
 Every one of these is mechanically checkable in a few lines, over files the repo already parses (`packages/test-support/src/sec-meta.ts` already globs `ai-docs/tasks/*.md` and enforces `OWNER_PATH_PATTERN = /^ai-docs\/tasks\/\d{2}-[\w-]+\.md$/`). **The parser exists; nobody pointed it at the ledger.**
 
+## THE PAYOFF — caught live on a real merge, 2026-07-16 (not a synthetic probe)
+
+Six task-number collisions happened **blind** this session (impl-54, impl-58, impl-61, impl-60 ×3), each discovered by hand after the fact. **The seventh was caught automatically**, by this gate, during task 18's merge:
+
+```
+78 → 78-media-immutable-hash-comparison-has-no-endpoint.md,
+     78-system-key-store-deployment-loader.md
+     (two task files share a number; git auto-merges this clean)
+Tests  1 failed | 12 passed (13)   EXIT=1
+```
+
+impl-17 and impl-18 filed a **different** task 78 concurrently, against different trees. Exactly as review-58 predicted and this task's brief documents: **the two files merged clean with no git conflict** — different filenames — and only the ledger check saw it. Renumbered to 79; gate green.
+
+That is the whole thesis, demonstrated: **the uniqueness constraint lives in a number embedded in a filename, which git has no reason to know about.** The failure was invisible to version control **by design**, and it took a check that runs after the tree stops moving.
+
 ## Acceptance
 
 **Observable done-condition:** two task files sharing a number fails a test; an index row with no file fails; a file with no row fails; and a Status disagreement fails.
