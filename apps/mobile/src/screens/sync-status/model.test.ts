@@ -9,7 +9,12 @@
 import { selectBanner } from '@bolusi/ui';
 import { describe, expect, test } from 'vitest';
 
-import { STALENESS_STALE_MS, STALENESS_WARNING_MS, type SyncState } from '../../sync/contract.js';
+import {
+  STALENESS_STALE_MS,
+  STALENESS_WARNING_MS,
+  type SyncLoopState,
+  type SyncState,
+} from '@bolusi/core';
 
 import {
   bannerCauses,
@@ -30,15 +35,26 @@ import {
 
 const NOW = 1_700_000_000_000;
 
+/**
+ * `@bolusi/core`'s `SyncState` (task 15), replacing task 24's local stopgap. Two renames came with
+ * the repoint and both are the real shape, not a preference: `lastServerTimeAt` →
+ * `lastServerTimeReceivedAt`, and `loopState` is GONE — 03 §10 keeps the loop state in memory, so
+ * it is not a column and not on this record. It arrives on `SyncStatusInput` instead.
+ */
 function state(overrides: Partial<SyncState> = {}): SyncState {
   return {
+    cursor: 0,
+    devicesDirectoryVersion: 0,
     lastSuccessfulSyncAt: NOW,
+    lastPushAt: null,
+    lastPullAt: null,
     pushHalted: false,
     syncDisabled: false,
     syncDisabledReason: null,
-    loopState: 'idle',
+    lastSyncError: null,
+    backoffUntil: null,
     lastServerTime: NOW,
-    lastServerTimeAt: NOW,
+    lastServerTimeReceivedAt: NOW,
     ...overrides,
   };
 }
@@ -46,6 +62,7 @@ function state(overrides: Partial<SyncState> = {}): SyncState {
 function input(overrides: Partial<SyncStatusInput> = {}): SyncStatusInput {
   return {
     state: state(),
+    loopState: 'idle' satisfies SyncLoopState,
     pendingOperationCount: 0,
     pendingMediaCount: 0,
     rejected: [],
@@ -122,7 +139,7 @@ describe('THE THESIS — offline is a normal state, not an error', () => {
 
 describe('staleness tiers, in both directions (03 §8)', () => {
   const syncedAt = (age: number): SyncState =>
-    state({ lastSuccessfulSyncAt: NOW - age, lastServerTime: NOW, lastServerTimeAt: NOW });
+    state({ lastSuccessfulSyncAt: NOW - age, lastServerTime: NOW, lastServerTimeReceivedAt: NOW });
 
   test('never synced is `stale` — the loud banner (03 §8: "or never synced")', () => {
     const given = input({ state: state({ lastSuccessfulSyncAt: null }) });
@@ -187,11 +204,19 @@ describe('the counters are DERIVED — no stored count column exists to read (01
     // screen cannot read one even by accident. A test that merely checked the rendered number would
     // pass just as happily against a stored column.
     const record: SyncState = state();
+    // The key list is @bolusi/core's `SyncState` (task 15), not task 24's stopgap. `loopState` is
+    // absent for the same reason the counts are: 03 §10 keeps the loop state in memory, so it is
+    // not a column — the record and the DDL agree by construction.
     expect(Object.keys(record).sort()).toEqual([
+      'backoffUntil',
+      'cursor',
+      'devicesDirectoryVersion',
+      'lastPullAt',
+      'lastPushAt',
       'lastServerTime',
-      'lastServerTimeAt',
+      'lastServerTimeReceivedAt',
       'lastSuccessfulSyncAt',
-      'loopState',
+      'lastSyncError',
       'pushHalted',
       'syncDisabled',
       'syncDisabledReason',
@@ -214,8 +239,8 @@ describe('the header chip maps all five states from the same fixtures (§8.1)', 
   test.each([
     ['synced', input()],
     ['pending', input({ pendingOperationCount: 3 })],
-    ['syncing', input({ state: state({ loopState: 'pushing' }) })],
-    ['syncing', input({ state: state({ loopState: 'pulling' }) })],
+    ['syncing', input({ loopState: 'pushing' })],
+    ['syncing', input({ loopState: 'pulling' })],
     ['offline', input({ isOffline: true })],
     ['attention', input({ rejected: [rejectedRow('SCOPE_VIOLATION')] })],
     [
@@ -230,7 +255,7 @@ describe('the header chip maps all five states from the same fixtures (§8.1)', 
     const reached = new Set([
       syncChipState(input()),
       syncChipState(input({ pendingOperationCount: 1 })),
-      syncChipState(input({ state: state({ loopState: 'pulling' }) })),
+      syncChipState(input({ loopState: 'pulling' })),
       syncChipState(input({ isOffline: true })),
       syncChipState(input({ rejected: [rejectedRow('BAD_SIGNATURE')] })),
     ]);
@@ -239,7 +264,7 @@ describe('the header chip maps all five states from the same fixtures (§8.1)', 
 
   test('attention beats syncing, offline and pending — a rejection is never hidden by a spinner', () => {
     const given = input({
-      state: state({ loopState: 'pushing' }),
+      loopState: 'pushing',
       isOffline: true,
       pendingOperationCount: 5,
       rejected: [rejectedRow('UNKNOWN_TYPE')],

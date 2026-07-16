@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@bolusi/core": "workspace:*",
+    "@bolusi/db-client": "workspace:*",
     "@bolusi/i18n": "workspace:*",
+    "@bolusi/schemas": "workspace:*",
     "@bolusi/ui": "workspace:*",
     "@expo/vector-icons": "15.1.1",
     "@op-engineering/op-sqlite": "catalog:",
@@ -32,6 +34,7 @@
     "expo-secure-store": "57.0.0",
     "expo-status-bar": "57.0.0",
     "expo-task-manager": "57.0.2",
+    "kysely": "catalog:",
     "react": "19.2.3",
     "react-native": "0.86.0",
     "react-native-nitro-modules": "catalog:",
@@ -40,7 +43,9 @@
   },
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
     "@types/react": "19.2.17",
+    "better-sqlite3": "catalog:",
     "test-renderer": "1.2.0",
     "typescript": "catalog:"
   }
