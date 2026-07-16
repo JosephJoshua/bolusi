@@ -69,3 +69,15 @@ export {
   type ApplierConformanceEngine,
   type ApplierConformanceResult,
 } from './applier-conformance/index.js';
+
+// CHAOS-07's deterministic scripts + expected-classification table (testing-guide §3.6). Shipped
+// by task 17 (which owns the conflict rules) for task 26's harness (which owns the N-device
+// convergence run) — one contract, so the two cannot disagree about what the scenario means.
+export {
+  chaos07Cases,
+  chaos07ExpectedConflicts,
+  type Chaos07Case,
+  type Chaos07ExpectedConflict,
+  type Chaos07Op,
+  type Chaos07SubCase,
+} from './fixtures/chaos-07.js';

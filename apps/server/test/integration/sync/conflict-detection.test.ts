@@ -26,7 +26,13 @@ import {
   type ProjectionApplier,
 } from '@bolusi/core';
 import type { DB } from '@bolusi/db-server';
-import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
+import {
+  chaos07Cases,
+  chaos07ExpectedConflicts,
+  ChainBuilder,
+  makeWorld,
+  type ChainWorld,
+} from '@bolusi/test-support';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import {
@@ -779,6 +785,113 @@ describe('dedupe, emission and atomicity (01 §8.2; 10-db §3)', () => {
       .where('tenantId', '=', member.tenantId)
       .executeTakeFirstOrThrow();
     expect(Number(chain.lastSeq)).toBe(0);
+  });
+});
+
+describe('CHAOS-07 fixture (testing-guide §3.6) — driven through the real push pipeline', () => {
+  test('the fixture’s expected-classification table is exhaustive and non-vacuous', () => {
+    // The fixture is DATA two tasks read (17 and 26), so its own shape is asserted before either
+    // trusts it. §3.6: "PASS criteria are exhaustive — anything beyond them observed as a diff is
+    // a failure", which is only enforceable against a closed, non-empty expectation (T-14).
+    const cases = chaos07Cases(4207);
+    expect(cases.map((c) => c.subCase)).toEqual([
+      'distinct-timestamps',
+      'forced-tie',
+      'edit-after-archive',
+    ]);
+    // FIVE conflicts total: 3 pairs from sub-case (i), 1 from (ii), 1 significant from (iii).
+    const expected = chaos07ExpectedConflicts(4207);
+    expect(expected).toHaveLength(5);
+    // Both resting transitions covered (D4) — the reason CHAOS-07 exists at all.
+    expect(new Set(expected.map((c) => c.status))).toEqual(
+      new Set(['auto_resolved', 'acknowledged']),
+    );
+    expect(new Set(expected.map((c) => c.severity))).toEqual(new Set(['minor', 'significant']));
+    // Per-seed unique bodies (T-3): a shared literal would let a wrong winner look right.
+    expect(chaos07Cases(1).at(0)?.ops.at(1)?.payload.body).not.toBe(
+      chaos07Cases(2).at(0)?.ops.at(1)?.payload.body,
+    );
+  });
+
+  test('sub-case (i) — THREE devices editing one note is THREE conflicts, one per unordered pair', async () => {
+    // The dedupe rule's real shape (01 §8.2: "At most one Conflict record per unordered op pair").
+    // Three concurrent editors is C(3,2) = 3 pairs — not 1 (a naive "one conflict per entity") and
+    // not 6 (a pair counted in both directions). No other test in this suite has three devices, and
+    // the arithmetic is exactly where an off-by-one lives.
+    const { member, systemIdentity, builder: aBuilder } = await setupTenant(4210);
+    const { other: devB, builder: bBuilder } = await addDevice(member, 4211, 0, 1_726_000_200_000);
+    const { other: devC, builder: cBuilder } = await addDevice(member, 4212, 0, 1_726_000_300_000);
+    const noteId = makeWorld(4213, serverCryptoPort).storeId;
+
+    const fixture = chaos07Cases(4207)[0];
+    expect(fixture?.expectedConflicts).toHaveLength(3); // the fixture's claim …
+
+    // A creates + edits.
+    await processPushBatch(
+      depsWith({ systemIdentity }),
+      { deviceId: member.deviceId, tenantId: member.tenantId },
+      [
+        aBuilder.append({
+          type: NOTE_CREATED,
+          entityType: 'note',
+          entityId: noteId,
+          payload: { title: 't', body: 'a0' },
+        }),
+        aBuilder.append({
+          type: NOTE_EDITED,
+          entityType: 'note',
+          entityId: noteId,
+          payload: { body: 'a1' },
+        }),
+      ],
+    );
+    // B, offline (cursor 0), edits.
+    await processPushBatch(
+      depsWith({ systemIdentity, idSeed: 810 }),
+      { deviceId: devB.deviceId, tenantId: member.tenantId },
+      [
+        bBuilder.append({
+          type: NOTE_EDITED,
+          entityType: 'note',
+          entityId: noteId,
+          payload: { body: 'b1' },
+        }),
+      ],
+    );
+    // C, also offline (cursor 0), edits — conflicting with BOTH A and B.
+    await processPushBatch(
+      depsWith({ systemIdentity, idSeed: 820 }),
+      { deviceId: devC.deviceId, tenantId: member.tenantId },
+      [
+        cBuilder.append({
+          type: NOTE_EDITED,
+          entityType: 'note',
+          entityId: noteId,
+          payload: { body: 'c1' },
+        }),
+      ],
+    );
+
+    // … matched by the real engine: 1 conflict from B's push (B×A) + 2 from C's (C×A, C×B) = 3.
+    const conflicts = await readConflicts();
+    expect(conflicts).toHaveLength(3);
+    expect(conflicts.every((c) => c.severity === 'minor')).toBe(true);
+    // 01 §8.3: minor → auto_resolved, terminal, recorded but surfaced to nobody.
+    expect(conflicts.every((c) => c.status === 'auto_resolved')).toBe(true);
+
+    // Every pair is DISTINCT and unordered-unique — the dedupe's actual claim.
+    const pairs = conflicts.map((c) => [c.opAId, c.opBId].sort().join('|'));
+    expect(new Set(pairs).size).toBe(3);
+
+    // LWW stands alongside (01 §8.3's minor row: "the canonically-later body wins"), and no edit
+    // was lost from the log — §3.6's `edit_count` = total edits from all devices.
+    const note = await testDb.db
+      .selectFrom('notes')
+      .select(['body', 'editCount'])
+      .where('id', '=', noteId)
+      .executeTakeFirstOrThrow();
+    expect(note.body).toBe('c1'); // C is canonically last (latest timestamp)
+    expect(Number(note.editCount)).toBe(3);
   });
 });
 
