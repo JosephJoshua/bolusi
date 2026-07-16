@@ -67,3 +67,13 @@ Constraints: this is a real security surface, so CLAUDE.md §2.5 applies — the
 - **Hook:** the surfaced (significant) path invokes `onConflictSurfaced` exactly once, post-commit, with category `conflict`; the minor path never invokes it; an aborted transaction invokes nothing.
 - **CHAOS-07 fixture:** deterministic scripts + expected-classification table for sub-cases (i) distinct timestamps, (ii) forced timestamp tie, (iii) edit-after-archive + owner acknowledgment, committed in `@bolusi/test-support`; this task's integration test drives all three through the real push pipeline and asserts the classification/lifecycle legs (minor → `auto_resolved` ×2; significant → `surfaced → acknowledged`; both resting transitions exercised per D4). The full N-device convergence run lands with task 26.
 - **Gates:** `pnpm lint` + `pnpm typecheck` repo-wide (core stays platform-free — boundary lints at `error`); core unit lane + server PGlite lane green in CI; conventional commits, pre-commit hooks intact.
+
+## REGISTRATION REQUIRED (task 49 landed the seam, 2026-07-15)
+
+Task 49 built the server projection-apply step and the **one** registration list it folds from: `SERVER_MODULES` in `apps/server/src/deps.ts`. It is **empty at v0 by design**, and `registerModules(SERVER_MODULES)` derives BOTH the op validators and the projection appliers from it, so they can never name different module sets.
+
+**This task's `defineModule` result MUST be appended to `SERVER_MODULES`, or the server folds nothing** — the op is accepted and its `operations` row is written, but its projection table stays empty in production, silently. That is the exact handoff-ring that left this unbuilt through 8 tasks (task 49's finding). Shipping the applier without registering it is a half-fix that looks done and folds nothing.
+
+**Falsify the registration** (§2.11): with your module registered, push an op through the REAL push path (`processPushBatch`, not a hand-seeded row — T-14b) and assert the projection row appears; then remove your line from `SERVER_MODULES` and watch it go RED. A test that INSERTs its own projection row proves nothing about the fold.
+
+*(For task 17 specifically: `user_prefs` folds from `platform.user_locale_changed`, which this module owns. Until it is registered, task 21's push-notification locale falls back to `id-ID` forever — and task 21's own locale test stays green because it seeds the row directly. That trap is closed only when the platform module both ships the fold AND lands in `SERVER_MODULES`.)*

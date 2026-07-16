@@ -75,3 +75,11 @@ So the ops are appended, chained, signed, and synced — and the projection tabl
 Found by task 14, which shipped `authOperationRegistry` and then said plainly: *"`auth_sessions` / `pin_lockout_events` / `auth_permission_denials` have no appliers anywhere and no task owns them."* It could have shipped its own surface green and left this silent — the tables aren't its deliverable and no test of its was red. It reported it instead.
 
 Worth stating for the decompose: this is the **third** artifact this session that was specified, built halfway, and orphaned because the graph named no owner (after the permission registry and the `@bolusi/schemas` auth DTOs, both now task 33). The pattern is consistent — **a table with no applier, like a shared contract with no owning task, fails by being absent rather than broken**, and absence is exactly what a green test suite cannot see.
+
+## REGISTRATION REQUIRED (task 49 landed the seam, 2026-07-15)
+
+Task 49 built the server projection-apply step and the **one** registration list it folds from: `SERVER_MODULES` in `apps/server/src/deps.ts`. It is **empty at v0 by design**, and `registerModules(SERVER_MODULES)` derives BOTH the op validators and the projection appliers from it, so they can never name different module sets.
+
+**This task's `defineModule` result MUST be appended to `SERVER_MODULES`, or the server folds nothing** — the op is accepted and its `operations` row is written, but its projection table stays empty in production, silently. That is the exact handoff-ring that left this unbuilt through 8 tasks (task 49's finding). Shipping the applier without registering it is a half-fix that looks done and folds nothing.
+
+**Falsify the registration** (§2.11): with your module registered, push an op through the REAL push path (`processPushBatch`, not a hand-seeded row — T-14b) and assert the projection row appears; then remove your line from `SERVER_MODULES` and watch it go RED. A test that INSERTs its own projection row proves nothing about the fold.

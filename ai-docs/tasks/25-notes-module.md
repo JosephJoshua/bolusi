@@ -46,3 +46,11 @@ Observable: `pnpm typecheck`, `pnpm lint`, `pnpm test` green including the new `
 - **i18n (04 §8 box 7):** `{id,en}.json` contain every `notes.*` key from ui-labels with the exact strings, no missing/extra keys in either locale (07-i18n CI completeness gate passes); verified demo — ID/EN toggle live-switches all three screens.
 - **CHAOS-\* ownership:** CHAOS-01, CHAOS-06, CHAOS-07, CHAOS-08 use this module as workload and land with task 26 (`@bolusi/harness`); this task ships their module-scale equivalents above plus the §3.2 testability prerequisites so 26 needs no notes changes.
 - **Lint/CI gates:** `bolusi/no-hardcoded-strings` clean over `packages/modules/notes/screens`; `bolusi/boundaries` — `apps/server` imports only `@bolusi/modules/notes` (never `*/screens`), screens import only from `apps/mobile`; `bolusi/no-float-money` clean; dual-dialect applier suite added to the standard `pnpm test` CI stage (no new stage); `tsc -b` composite build clean.
+
+## REGISTRATION REQUIRED (task 49 landed the seam, 2026-07-15)
+
+Task 49 built the server projection-apply step and the **one** registration list it folds from: `SERVER_MODULES` in `apps/server/src/deps.ts`. It is **empty at v0 by design**, and `registerModules(SERVER_MODULES)` derives BOTH the op validators and the projection appliers from it, so they can never name different module sets.
+
+**This task's `defineModule` result MUST be appended to `SERVER_MODULES`, or the server folds nothing** — the op is accepted and its `operations` row is written, but its projection table stays empty in production, silently. That is the exact handoff-ring that left this unbuilt through 8 tasks (task 49's finding). Shipping the applier without registering it is a half-fix that looks done and folds nothing.
+
+**Falsify the registration** (§2.11): with your module registered, push an op through the REAL push path (`processPushBatch`, not a hand-seeded row — T-14b) and assert the projection row appears; then remove your line from `SERVER_MODULES` and watch it go RED. A test that INSERTs its own projection row proves nothing about the fold.
