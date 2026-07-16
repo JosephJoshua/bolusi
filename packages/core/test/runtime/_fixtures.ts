@@ -256,6 +256,17 @@ export interface FixtureOptions {
   readonly applyProjection?: CommandRuntimeOptions['applyProjection'];
   /** Return an Error to fail the next `insertOp`, or null to let it through. */
   readonly insertFault?: () => Error | null;
+  /**
+   * Replace the 04 §3 operation registry (default: `fixtureOperations`, the `notes.*` types).
+   *
+   * Exists so a suite can drive the runtime against a REAL module's registry —
+   * `registerModules([platformModule]).operations` — rather than this file's hand-built map. That
+   * matters for anything the registry ANSWERS rather than merely gates: `ctx.op()` resolves both
+   * `schemaVersion` AND the 01 §6 envelope scope from it, so a test of tenant-scoping must read
+   * the real declaration or it is testing this fixture's opinion of it (T-13: interrogate the
+   * oracle). Additive — every existing caller keeps `fixtureOperations`.
+   */
+  readonly operations?: OperationRegistry;
 }
 
 /** Build a fully-seeded runtime. Two calls with the same seed reproduce bit-for-bit (T-6). */
@@ -324,7 +335,7 @@ export function makeRuntimeFixture(seed: number, options: FixtureOptions = {}): 
   const runtime = new CommandRuntime({
     device: { tenantId, storeId, deviceId },
     evaluator,
-    operations: fixtureOperations,
+    operations: options.operations ?? fixtureOperations,
     store: appendStore,
     crypto,
     clock: clockPort,
