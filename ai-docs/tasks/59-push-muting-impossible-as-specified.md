@@ -74,6 +74,37 @@ Every option changes `api/04-push §5` or the settings UX. **This is a spec chan
 
 **The orchestrator's recommendation: (a) or (d), and (d) if the settings screen is not already built.** Both respect the OS instead of fighting it; (b) is the option that looks like it works and is the one this repo is worst at — it would go green in every test we can run and fail on a real phone. Note the honest framing for (a)/(d): **v0 does not lose muting, it relocates it.** The channels created at boot are real and Android's own per-app settings already expose them per category — which is the thing `createNotificationChannels`'s design was buying all along (§5's *"create one channel for everything and the shop's only choice is all-or-nothing"*).
 
+### The iOS dimension — added 2026-07-16 by task 80 under **D17**. NOT a resolution; a dimension the decision above was made without.
+
+**Everything above this line is Android-reasoned and remains correct for Android.** D17 makes iOS a first-class target, so the owner should decide **once, with both platforms in view**, rather than twice.
+
+**iOS has no notification channels, and the no-op is silent.** Traced to the producer, not the docs — `expo-notifications@57.0.3` ships `setNotificationChannelAsync.android.ts` (real, calls the native module) and `setNotificationChannelAsync.ts`, which is what Metro resolves on iOS because **no `.ios.ts` variant exists**:
+
+```ts
+/** @platform android */
+export async function setNotificationChannelAsync(channelId, channel): Promise<NotificationChannel | null> {
+  console.debug('Notification channels feature is only supported on Android.');
+  return null;
+}
+```
+
+There is no `Channel` source file anywhere in the package's `ios/` directory. So on iOS **the entire call resolves successfully having created nothing** — the same T-15 shape as this task's Android finding, one level wider: on Android the *field* is ignored, on iOS the *whole mechanism* is absent.
+
+**Live consequence today (latent, not user-reachable — stated precisely, do not inflate):** `createNotificationChannels` (`bootstrap/notifications.ts:47`) is called at boot from `Root.tsx:88`. On iOS it loops the categories, awaits a call that returns `null`, and **`created.push(id)` unconditionally** — returning a list of channel ids that do not exist. It is not currently a user-facing bug: `Root.tsx:88` discards the return value, and `applyChannelImportance` still has **zero callers**. It becomes live the moment either the toggle is wired or that return value is trusted.
+
+**The options table above does not survive the platform change — this is the part that needs the owner:**
+
+| option | Android (as ruled above) | iOS |
+| ------ | ------------------------ | --- |
+| **(a)** deep-link to the OS per-channel screen | works; idiomatic | **no such screen exists.** `Linking.openSettings()` reaches the app's iOS settings page, whose controls are **per-app, not per-category** (`allowsAlert` / `allowsBadge` / `allowsSound` / `allowsDisplayOnLockScreen` — all app-wide). A row that opens an all-or-nothing switch is not per-category muting. |
+| **(b)** delete + recreate the channel | defeated by Android by design | **n/a** — no channels. |
+| **(c)** server-side suppression | rejected by §5 for v0; forfeits killed-app OS suppression | **the only option that delivers per-category muting on iOS at all**, and it works identically on both platforms. |
+| **(d)** ship channels, drop the in-app toggle | honest — *"v0 does not lose muting, it relocates it"* | **that framing is Android-only and false here.** There is nowhere on iOS for it to relocate *to*. On iOS, (d) means per-category muting simply does not exist in v0. |
+
+**The two platforms' idioms are opposite, which is the finding.** Android says importance belongs to the **user**, in the OS screen — so the app should get out of the way (options a/d). iOS's per-notification `InterruptionLevel` (`'passive' | 'active' | 'timeSensitive' | 'critical'`, `@platform ios`, on `NotificationContentIos`) is set by the **sender**, on the payload — and iOS's permission surface even carries `providesAppNotificationSettings`, the flag by which an app declares it hosts its **own** in-app notification settings for iOS to link to. **iOS expects the in-app toggle that Android's answer deletes.**
+
+**So D17 shifts the calculus toward (c)** — the option §5 rejected and roadmap'd to v1 (FR-1149) — because it is the only mechanism under which one in-app toggle means the same thing on both platforms. That is a real cost (it forfeits killed-app OS suppression on Android, which is exactly what §5 was buying) and it is **not an agent's call**. **Do not resolve this here.** Note also that task 85's owner decision may rule v0 Android-only, which would collapse this back to the table above — **these two decisions should be made together, in that order.**
+
 ## Docs to read
 
 - `api/04-push.md` **§5** (the claim to fix), §3 (the category table + the `sync`-gets-no-channel rule — preserve that reasoning, it is correct and well-argued), §6, §7 (Android-only in practice).
