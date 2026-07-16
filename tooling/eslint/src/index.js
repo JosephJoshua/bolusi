@@ -44,6 +44,10 @@ export default tseslint.config(
     plugins: { bolusi },
     rules: {
       'bolusi/no-op-table-update': 'error',
+      // 06-media-pipeline §4 / §5.5, task 18. Both are whole-repo: media metadata is frozen at
+      // capture wherever it is written, and the legacy upload APIs throw at runtime everywhere.
+      'bolusi/no-media-column-update': 'error',
+      'bolusi/no-legacy-upload-api': 'error',
       'bolusi/boundaries': 'error',
       // Added task 09 — the 02-permissions §2 CI lint. Whole-repo and unscoped: it fires only on
       // the module-manifest shape (a literal `id` beside permissions/commands/queries), so it costs
@@ -119,6 +123,8 @@ export default tseslint.config(
     files: ['tooling/eslint/src/plugin/rules/*.test.js'],
     rules: {
       'bolusi/no-op-table-update': 'off',
+      'bolusi/no-media-column-update': 'off',
+      'bolusi/no-legacy-upload-api': 'off',
       'bolusi/boundaries': 'off',
     },
   },
@@ -338,9 +344,22 @@ export default tseslint.config(
     },
   },
   {
-    name: 'bolusi/server-typed',
-    files: ['apps/server/src/**/*.ts'],
-    ignores: ['**/*.test.ts'],
+    // Type-aware lane. `no-floating-promises` needs type information, hence `projectService`.
+    //
+    // apps/mobile/src was added by task 18, after a floating `File#move()` (which returns
+    // `Promise<void>`) shipped in apps/mobile/src/media/files.ts and reached review. The function
+    // resolved and returned a destination URI BEFORE the move completed, so a caller would insert a
+    // MediaItem row pointing into the OS-purgeable cache dir — the OS purges it, and a shop's only
+    // record of a repair is gone (06 §2.2 step 5; security-guide §7.1). Nothing caught it: tsc was
+    // clean, there is no test, and this rule was scoped to apps/server only — while the mobile half
+    // is where the filesystem, the camera and every other async native API actually live.
+    //
+    // The file's own header stated the ordering rule six lines above the violation, which is why
+    // the fix is a LINT RULE and not a code review note: the class closes by construction, not by
+    // asking the next author to be careful (§2.11).
+    name: 'bolusi/app-typed',
+    files: ['apps/server/src/**/*.ts', 'apps/mobile/src/**/*.ts', 'apps/mobile/src/**/*.tsx'],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
     languageOptions: {
       parserOptions: { projectService: true },
     },

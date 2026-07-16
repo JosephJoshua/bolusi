@@ -75,6 +75,22 @@ Rendered via `t('core.errors.' + code)` for every `DomainError` (07-i18n §4.2).
 | `core.errors.RATE_LIMITED` | Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi. | Too many requests. Wait a moment, then try again. |
 | `core.errors.UNEXPECTED` | Terjadi kesalahan. Coba lagi. | Something went wrong. Try again. |
 | `core.errors.NETWORK` | Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini. | Connection problem. Your changes are still saved on this device. |
+| `core.errors.MEDIA_NOT_FOUND` | Foto belum ada di server. Aplikasi akan mencoba lagi. | The photo isn’t on the server yet. The app will try again. |
+| `core.errors.MEDIA_IMMUTABLE` | Foto yang sudah terkirim tidak bisa diganti. Ambil foto baru kalau perlu koreksi. | A photo that has been sent can’t be replaced. Take a new photo if a correction is needed. |
+| `core.errors.INIT_MISMATCH` | Data foto ini tidak cocok dengan yang ada di server. Ambil foto baru. | This photo’s details don’t match the server’s. Take a new photo. |
+| `core.errors.MEDIA_TOO_LARGE` | Foto ini terlalu besar untuk dikirim. Laporkan masalah ini. | This photo is too large to send. Please report this. |
+| `core.errors.CHUNK_TOO_LARGE` | Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini. | The photo couldn’t be sent because of an app problem. Please report this. |
+| `core.errors.UNSUPPORTED_ENCODING` | Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini. | The photo couldn’t be sent because of an app problem. Please report this. |
+| `core.errors.MIME_UNSUPPORTED` | Jenis berkas ini tidak bisa dikirim. Laporkan masalah ini. | This file type can’t be sent. Please report this. |
+| `core.errors.CHUNK_INDEX_INVALID` | Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini. | The photo couldn’t be sent because of an app problem. Please report this. |
+| `core.errors.CHUNK_SIZE_INVALID` | Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini. | The photo couldn’t be sent because of an app problem. Please report this. |
+| `core.errors.CHUNKS_MISSING` | Sebagian foto belum sampai. Aplikasi akan mengirim sisanya. | Part of the photo hasn’t arrived. The app will send the rest. |
+| `core.errors.HASH_MISMATCH` | Foto rusak saat dikirim. Aplikasi akan mencoba lagi. | The photo was damaged while sending. The app will try again. |
+| `core.errors.MIME_MISMATCH` | Berkas foto tidak cocok dengan jenisnya. Ambil foto baru. | The photo file doesn’t match its type. Take a new photo. |
+| `core.errors.STORAGE_ERROR` | Server gagal menyimpan foto. Aplikasi akan mencoba lagi. | The server couldn’t save the photo. The app will try again. |
+| `core.errors.LOCAL_CORRUPT` | Foto ini rusak di perangkat dan tidak bisa dikirim. Ambil foto baru. | This photo is damaged on this device and can’t be sent. Take a new photo. |
+| `core.errors.AUTH_TOKEN_MISSING` | Masuk lagi untuk melanjutkan pengiriman foto. | Sign in again to keep sending photos. |
+| `core.errors.AUTH_TOKEN_INVALID` | Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto. | This device’s session has ended. Sign in again to keep sending photos. |
 
 ## core — sync rejection codes (`core.rejection.<CODE>`)
 
@@ -194,6 +210,11 @@ States per `MediaItem.uploadStatus` machine: `pending → uploading → uploaded
 | `media.action.usePhoto` | Pakai Foto Ini | Use This Photo |
 | `media.action.retryUpload` | Kirim Ulang | Send Again |
 | `media.permission.camera` | Izinkan aplikasi memakai kamera untuk ambil foto. | Allow the app to use the camera to take photos. |
+| `media.storage.lowWarning` | Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan. | Storage is getting low. Old photos that have already been sent will be cleaned up. |
+| `media.storage.lowCritical` | Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman. | Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept. |
+| `media.capture.refusedTitle` | Penyimpanan penuh | Storage full |
+| `media.capture.refusedBody` | Tidak bisa ambil foto karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi. | Photos can’t be taken because storage is nearly full. Free up some space, then try again. |
+| `media.upload.persistentFailure` | {count} foto belum sampai ke server. | {count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}} |
 
 ## notes — reference module (`notes.*`)
 

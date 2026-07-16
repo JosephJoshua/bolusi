@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_ERROR_CODES,
   DOMAIN_ERROR_CODES,
+  MEDIA_ERROR_CODES,
   REJECTION_CODES,
 } from '../scripts/error-code-registry.mjs';
 import {
@@ -82,9 +83,13 @@ describe('error-code coverage gate (07-i18n §7.3)', () => {
     expect(errors[0]).toContain('CHAIN_HALTED');
   });
 
-  it('passes on the full seed — all 12 DomainError codes, the transport codes and all 8 rejection codes', () => {
+  it('passes on the full seed — DomainError, transport, media and all 8 rejection codes', () => {
     expect(DOMAIN_ERROR_CODES).toHaveLength(12);
-    expect(ALL_ERROR_CODES).toHaveLength(15); // 12 + IDEMPOTENCY_CONFLICT + RATE_LIMITED + UNEXPECTED
+    // 12 DomainError + IDEMPOTENCY_CONFLICT + RATE_LIMITED + 16 media (api/03 §8, task 18) +
+    // UNEXPECTED = 31. MEDIA_ERROR_CODES surface through the same `core.errors.<CODE>` derivation
+    // (06 §8); see error-code-registry.mjs for why they ride `core.*` and not `media.errors.*`.
+    expect(MEDIA_ERROR_CODES).toHaveLength(16);
+    expect(ALL_ERROR_CODES).toHaveLength(31);
     expect(REJECTION_CODES).toHaveLength(8);
     expect(checkErrorCodeCoverage(realSources())).toEqual([]);
   });

@@ -6,4 +6,5 @@ export * from './bookkeeping.js';
 export * from './rejection-codes.js';
 export * from './sync.js';
 export * from './errors.js';
+export * from './media.js';
 export * from './ws.js';
