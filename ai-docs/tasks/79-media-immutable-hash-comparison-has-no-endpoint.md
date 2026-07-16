@@ -1,4 +1,4 @@
-# TASK 78 — `api/03 §8`'s `MEDIA_IMMUTABLE` rule instructs a comparison against a value no endpoint returns
+# TASK 79 — `api/03 §8`'s `MEDIA_IMMUTABLE` rule instructs a comparison against a value no endpoint returns
 **Status:** todo
 **Depends on:** —
 **Filed by:** task 18 (media-client), 2026-07-16. **Fourth instance this session of "the spec cannot be implemented as written"** (62, 70, 72 are the others).
