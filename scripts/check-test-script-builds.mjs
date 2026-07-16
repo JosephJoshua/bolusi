@@ -32,9 +32,32 @@
 // for the wrong reason (CLAUDE.md §2.11). So: resolve what `tsc -b` actually reaches, follow
 // `references` transitively, and ask whether the needed package's dist is among the output.
 //
-// This gate fails CLOSED on its own blindness: if it finds no test scripts, or no dist-only
-// packages, it reports a failure rather than a vacuous green (§2.11 — a guard must assert its
-// own coverage).
+// This gate fails CLOSED on its own blindness: no test scripts, no dist-only packages, a vitest
+// config whose project name it cannot read, or a `--project` it cannot map, are each a reported
+// FAILURE rather than a vacuous green (§2.11 — a guard must assert its own coverage). The
+// `--project` case was a live bug in this file: unmappable names were silently dropped, so the
+// script was still COUNTED in the denominator while being checked against nothing.
+//
+// WHAT THIS GATE DOES NOT SEE — read before trusting a green
+// ----------------------------------------------------------
+// Import detection is a REGEX over source text, not a resolver. Each blind spot below was
+// checked against this repo rather than guessed at, because an unverified limitations list is
+// just another comment standing in for evidence:
+//   - Dynamic `await import('@bolusi/x')` is NOT matched: the pattern wants `from`/`import`/
+//     `require(` then whitespace-then-quote, and `import(` puts a paren in the way. LIVE
+//     instance at packages/core/test/sync/loop.test.ts:278 — presently harmless only because
+//     line 21 of that same file imports @bolusi/test-support statically, so the package is
+//     detected anyway. Delete line 21 and this gate goes blind to it. Masked, not absent.
+//   - Only .ts/.tsx/.mts/.cts are scanned. No live instance: the repo's only .js tests are
+//     tooling/eslint's rule tests, whose `@bolusi/*` mentions are RuleTester `code:` FIXTURE
+//     STRINGS, not imports (boundaries.test.js:86 etc.). That cuts both ways — naively adding
+//     .js to the scan would read those fixtures as real imports and manufacture false alarms
+//     against a package that imports nothing. Widen with a parser, not a bigger glob.
+//   - `emits` is read from a tsconfig's OWN compilerOptions, so an `outDir` inherited purely
+//     through `extends` would be misread. No instance today: every emitting project here is a
+//     tsconfig.build.json declaring its own outDir.
+// The first and third can only fail to NOTICE, never false-alarm. So a green here means "no
+// violation among the imports this gate can see" — strictly weaker than "no violation".
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -182,6 +205,8 @@ export function readWorkspaceModel(rootDir) {
   const packages = [];
   /** @type {Record<string, string>} */
   const projectDirs = {};
+  /** @type {string[]} */
+  const unreadableProjects = [];
   /** @type {Record<string, any>} */
   const tsconfigs = {};
 
@@ -208,10 +233,19 @@ export function readWorkspaceModel(rootDir) {
       scripts: pkgJson.scripts ?? {},
     });
 
+    // The project name is scraped, not evaluated — this is a static check, and importing a
+    // vitest config to ask would run arbitrary repo code. So the scrape's FAILURE has to be
+    // loud: `name: N` (an ordinary extract-a-const refactor) or a template literal defeats the
+    // regex, and a project missing from this map is a project whose scripts get checked against
+    // nothing. Record the miss; `checkTestScriptBuilds` fails on it rather than assuming a
+    // config it could not read has nothing to say.
+    // The ROOT vitest.config.ts is the projects aggregator (`projects: [...]`), not a project:
+    // it has no `name` and must not be read as one. Only per-package configs name a project.
     const vitestConfig = join(abs, 'vitest.config.ts');
-    if (existsSync(vitestConfig)) {
+    if (dir !== '.' && existsSync(vitestConfig)) {
       const name = /name:\s*'([^']+)'/.exec(readFileSync(vitestConfig, 'utf8'));
       if (name) projectDirs[name[1]] = dir;
+      else unreadableProjects.push(`${dir}/vitest.config.ts`);
     }
 
     for (const entry of readdirSync(abs)) {
@@ -235,7 +269,7 @@ export function readWorkspaceModel(rootDir) {
     }
   }
 
-  return { rootDir, packages, projectDirs, tsconfigs };
+  return { rootDir, packages, projectDirs, unreadableProjects, tsconfigs };
 }
 
 /**
@@ -307,16 +341,33 @@ export function builtPackageDirs(command, pkgDir, tsconfigs) {
 /**
  * The vitest projects a test command runs: the named `--project`s, or — for a root script that
  * names none — every project in the workspace.
+ *
+ * Unresolvable `--project` names come back as `unresolved`, NOT dropped. Dropping them is a
+ * vacuous pass and this function shipped that bug: a name it could not map produced an empty
+ * target list, hence an empty needed-set, hence "every cross-package import is built first" for
+ * a script that builds nothing. The denominator cannot see it either — the script is still
+ * COUNTED, just checked against nothing. That is §2.11's shape inside the file written to
+ * prevent it, so the caller turns `unresolved` into a reported failure.
  * @param {string} command
  * @param {any} pkg
  * @param {any} model
- * @returns {string[]}
+ * @returns {{ dirs: string[], unresolved: string[] }}
  */
 function targetDirs(command, pkg, model) {
-  if (pkg.dir !== '.') return [pkg.dir];
+  if (pkg.dir !== '.') return { dirs: [pkg.dir], unresolved: [] };
   const named = [...command.matchAll(/--project[= ]([\w-]+)/g)].map((m) => m[1]);
-  if (named.length === 0) return Object.values(model.projectDirs);
-  return named.map((n) => model.projectDirs[n]).filter((d) => d !== undefined);
+  if (named.length === 0) return { dirs: Object.values(model.projectDirs), unresolved: [] };
+
+  /** @type {string[]} */
+  const dirs = [];
+  /** @type {string[]} */
+  const unresolved = [];
+  for (const name of named) {
+    const dir = model.projectDirs[name];
+    if (dir === undefined) unresolved.push(name);
+    else dirs.push(dir);
+  }
+  return { dirs, unresolved };
 }
 
 /**
@@ -349,8 +400,10 @@ export function checkTestScriptBuilds(model) {
     for (const [script, command] of Object.entries(pkg.scripts ?? {})) {
       if (typeof command !== 'string' || !runsVitest(command)) continue;
 
+      const { dirs, unresolved } = targetDirs(command, pkg, model);
+
       const needed = new Set();
-      for (const dir of targetDirs(command, pkg, model)) {
+      for (const dir of dirs) {
         const target = byDir.get(dir);
         if (target === undefined) continue;
         for (const imported of target.distImports ?? []) {
@@ -371,7 +424,21 @@ export function checkTestScriptBuilds(model) {
         script,
         needed: [...needed].sort(),
         built: [...built].sort(),
+        unresolved,
       });
+
+      // Fail CLOSED per script: a `--project` this checker cannot map is a script it cannot
+      // check, and "cannot check" must never render as "checked and fine".
+      if (unresolved.length > 0) {
+        violations.push({
+          pkg: pkg.name,
+          script,
+          command,
+          missing: [],
+          unresolved,
+          reason: `--project ${unresolved.join(', ')} does not match any vitest project name this check could read — it cannot tell what this script imports, so it refuses to pass it`,
+        });
+      }
 
       if (missing.length > 0) {
         violations.push({
@@ -379,6 +446,7 @@ export function checkTestScriptBuilds(model) {
           script,
           command,
           missing,
+          unresolved: [],
           reason:
             built.size === 0
               ? 'no `tsc -b` reaches an emitting project — the prefix is absent, or it resolves a tsconfig with no references (task 24)'
@@ -388,6 +456,18 @@ export function checkTestScriptBuilds(model) {
     }
   }
 
+  const unreadable = model.unreadableProjects ?? [];
+  if (unreadable.length > 0) {
+    return {
+      ok: false,
+      violations,
+      checkedScripts,
+      message:
+        `could not read the vitest project name from: ${unreadable.join(', ')} — a project this ` +
+        'check cannot name is a project whose scripts it would check against nothing. Give the ' +
+        "config a literal `name: '...'`, or teach this script to read the form used.",
+    };
+  }
   if (distOnly.size === 0) {
     return {
       ok: false,
@@ -406,16 +486,16 @@ export function checkTestScriptBuilds(model) {
   }
   if (violations.length > 0) {
     const detail = violations
-      .map(
-        (v) =>
-          `  ${v.pkg} · "${v.script}": needs ${v.missing.join(', ')} — ${v.reason}\n    ${v.command}`,
-      )
+      .map((v) => {
+        const what = v.missing.length > 0 ? `needs ${v.missing.join(', ')}` : 'unresolvable target';
+        return `  ${v.pkg} · "${v.script}": ${what} — ${v.reason}\n    ${v.command}`;
+      })
       .join('\n');
     return {
       ok: false,
       violations,
       checkedScripts,
-      message: `${violations.length} test script(s) import a dist-only workspace package without building it (08 §5.6):\n${detail}`,
+      message: `${violations.length} test script(s) violate 08 §5.6 (import a dist-only workspace package without building it, or cannot be checked):\n${detail}`,
     };
   }
   return {

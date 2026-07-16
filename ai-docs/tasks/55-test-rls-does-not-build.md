@@ -115,10 +115,57 @@ shape this repo keeps shipping, and a grep-shaped gate would have certified it. 
 - db-client's `tsc -b ../..` → bare `tsc -b` (builds nothing; **a grep gate passes this**) → still
   flagged, `EXIT=1`. Restored → green.
 
-It fails **closed on its own blindness** (§2.11): zero test scripts or zero dist-only packages is a
-reported failure, not a vacuous green. Green output states its denominator: `10 test scripts
-checked, 10 dist-only packages`. Wired into CI stage 1 (static — names the offending script in
-seconds) *and* stage 4 via the unit test.
+It fails **closed on its own blindness** (§2.11) — see the next section for what that took. Green
+output states its denominator: `10 test scripts checked, 10 dist-only packages`. Wired into CI
+stage 1 (static — names the offending script in seconds) *and* stage 4 via the unit test.
+
+### The gate shipped the very bug it was written to prevent (review-55, MEDIUM)
+
+Worth reading before trusting any guard in this repo, this one included. The first cut failed
+closed on two **global** conditions (zero scripts / zero dist-only packages) and I wrote that up as
+"fails closed on its own blindness". **It was open per-script.** `targetDirs` resolved
+`--project <name>` by scraping `name: '...'` out of vitest configs and **silently dropped names it
+couldn't map** (`.filter((d) => d !== undefined)`) → empty target list → empty needed-set → a
+confident green. The denominator could not see it: the script was still **counted**, just checked
+against nothing.
+
+Review-55's reproduction, which I confirmed: `const N = 'server'; … name: N` (an ordinary
+extract-a-const refactor) plus the prefix removed from `test:server` → old gate printed `10 test
+scripts checked … every cross-package import is built first` · `EXIT=0`, **all 11 unit tests
+green**, through prettier, lint and typecheck. That is the ninth instance of this repo's signature
+failure, **inside the file written to stop it** — which is the honest measure of how strong the pull
+toward a vacuous green is.
+
+Closed at both ends, per-script and at the source: an unmappable `--project` is a reported
+violation, and a `vitest.config.ts` whose name the scraper cannot read fails the whole run rather
+than quietly leaving a project out of the map. Falsified four ways:
+
+| sabotage | result |
+| --- | --- |
+| `const N = 'server'` + prefix removed (review-55's exact case) | gate `EXIT=1` naming the config; unit tests **3 failed \| 11 passed** `EXIT=1` |
+| ``name: `server` `` (template literal) | gate `EXIT=1` naming the config |
+| config readable, prefix removed | gate `EXIT=1` — original prong, names all 4 needed packages |
+| prefix present, `--project srever` (pure vacuous-pass) | gate `EXIT=1` — "refuses to pass it" |
+
+All restored; gate back to `EXIT=0`. My own new check also produced a **false positive** on first
+run — it read the ROOT `vitest.config.ts` (the `projects: [...]` aggregator, which correctly has no
+`name`) as an unreadable project. Caught by running it, not by reading it.
+
+Test 10's tripwire was generalised from the instance to the class (T-12): it pinned only
+`test:rls`'s needed-set, so every *other* script could go blind silently. Now every script's
+`unresolved` must be empty, every lane known to import a dist-only package must be **seen** to need
+one, and `projectDirs` must account for **all 13** `vitest.config.ts` files on disk.
+
+**Stated, not fixed (§2.11 — a gate implying coverage it lacks is worse than none).** The gate's
+header now enumerates what it cannot see, each verified against this repo rather than guessed:
+dynamic `await import('@bolusi/x')` is **not** matched — live at
+`packages/core/test/sync/loop.test.ts:278`, harmless only because line 21 imports the same package
+statically, so it is **masked, not absent**; `.js`/`.mjs` are unscanned (no live instance — the only
+`.js` tests are tooling/eslint's rule tests whose `@bolusi/*` mentions are RuleTester `code:`
+fixture strings, which is also why naively globbing `.js` would manufacture false alarms); and
+`emits` reads a tsconfig's own `outDir`, so one inherited via `extends` would be misread (no
+instance today). None can false-alarm; all can fail to notice. A green here means "no violation
+among the imports this gate can see" — strictly weaker than "no violation".
 
 **CI:** no build step added to `rls-witness`, deliberately. `tsc -b` inside the script is
 runner-independent and fixes **every** caller — a job-level build would have fixed CI while leaving

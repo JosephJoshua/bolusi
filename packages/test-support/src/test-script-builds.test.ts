@@ -15,7 +15,7 @@
 // fake green with the required prefix present. A gate that grepped for `tsc -b` would have
 // certified exactly that bug. `builds nothing because the tsconfig it resolves has no
 // references` below is that case, and it is the reason the checker resolves the graph.
-import { readFileSync } from 'node:fs';
+import { globSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
@@ -40,6 +40,7 @@ interface WorkspaceModel {
   rootDir: string;
   packages: WorkspacePackage[];
   projectDirs: Record<string, string>;
+  unreadableProjects?: string[];
   tsconfigs: Record<string, { emits: boolean; references: string[] }>;
 }
 
@@ -48,6 +49,7 @@ interface CheckedScript {
   script: string;
   needed: string[];
   built: string[];
+  unresolved: string[];
 }
 
 interface Violation {
@@ -55,6 +57,7 @@ interface Violation {
   script: string;
   command: string;
   missing: string[];
+  unresolved: string[];
   reason: string;
 }
 
@@ -186,6 +189,38 @@ test('fails when the workspace exposes no dist-only package, rather than checkin
   expect(result.message).toMatch(/no dist-only/i);
 });
 
+// Review-55's finding, and the bug this file's own author shipped: the two checks above fail
+// closed on GLOBAL blindness (zero scripts / zero dist packages) but said nothing about
+// PER-SCRIPT blindness. A `--project` name that resolved to nothing was silently dropped,
+// yielding an empty needed-set — so the script was still COUNTED in the denominator while being
+// checked against nothing, and the gate printed a confident green. Refusing to pass what it
+// cannot check is the whole difference between a guard and a decoration.
+test('refuses a script whose `--project` names a project it cannot resolve', () => {
+  const result = check(
+    fixture({
+      scripts: {},
+      rootScripts: { 'test:server': 'vitest run --project unmappable' },
+    }),
+  );
+  expect(result.ok).toBe(false);
+  expect(result.violations[0]).toMatchObject({ pkg: 'root', script: 'test:server' });
+  expect(result.violations[0]?.unresolved).toEqual(['unmappable']);
+  expect(result.violations[0]?.reason).toMatch(
+    /cannot tell what this script imports|does not match/i,
+  );
+});
+
+// The upstream half of the same blindness: the project name is scraped from vitest.config.ts,
+// so `const N = 'server'; … name: N` (an ordinary refactor) defeats the regex. A project the
+// checker cannot name is a project whose scripts it would check against nothing.
+test('refuses the whole run when a vitest config project name cannot be read', () => {
+  const model = fixture({ scripts: { test: 'tsc -b ../.. && vitest run' } });
+  model.unreadableProjects = ['apps/server/vitest.config.ts'];
+  const result = check(model);
+  expect(result.ok).toBe(false);
+  expect(result.message).toMatch(/could not read the vitest project name/i);
+});
+
 // The real repo. This is the row that goes red when someone drops a build prefix.
 test('passes on the real committed workspace', () => {
   const result = check(readModel(REPO_ROOT));
@@ -211,6 +246,43 @@ test('the real-workspace check covers the known test scripts and dist-only packa
   expect(rls?.needed).toContain('@bolusi/core');
 
   expect(model.packages.filter((p) => p.distOnly).length).toBeGreaterThanOrEqual(8);
+
+  // The class version of the line above (T-12). Pinning only `test:rls`'s needed-set catches
+  // only `test:rls` going blind; every OTHER script could quietly resolve to nothing and the
+  // suite would still be green. No script may be counted while checked against nothing.
+  for (const s of result.checkedScripts) {
+    expect(s.unresolved, `${s.pkg}:${s.script} has an unresolvable --project`).toEqual([]);
+  }
+
+  // Every lane known to import a dist-only package must be SEEN to need one. This is the
+  // tripwire that goes red if project-name resolution silently breaks for any of them.
+  const mustNeedSomething = [
+    'bolusi:test',
+    'bolusi:test:rls',
+    'bolusi:test:server',
+    'bolusi:test:appliers',
+    'bolusi:test:ed25519-interop',
+    '@bolusi/mobile:test',
+    '@bolusi/core:test',
+    '@bolusi/db-client:test',
+  ];
+  for (const key of mustNeedSomething) {
+    const row = result.checkedScripts.find((s) => `${s.pkg}:${s.script}` === key);
+    expect(row, `${key} is missing from the checked set`).toBeDefined();
+    expect(row?.needed.length, `${key} was checked against an empty needed-set`).toBeGreaterThan(0);
+  }
+});
+
+// The source of the per-script blindness: a project whose name the scraper cannot read never
+// enters `projectDirs`. Assert the map accounts for every vitest config on disk — the class
+// check, rather than one assertion per project that someone must remember to add.
+test('every vitest.config.ts in the repo resolves to a named project', () => {
+  const model = readModel(REPO_ROOT);
+  expect(model.unreadableProjects ?? []).toEqual([]);
+
+  const configs = globSync('{apps,packages,tooling}/*/vitest.config.ts', { cwd: REPO_ROOT });
+  expect(configs.length).toBeGreaterThanOrEqual(12);
+  expect(Object.keys(model.projectDirs)).toHaveLength(configs.length);
 });
 
 // The gate reads package.json from disk; pin that `test:rls` carries the prefix, so deleting
