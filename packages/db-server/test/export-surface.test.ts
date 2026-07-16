@@ -40,6 +40,10 @@ const EXPECTED_EXPORTS = [
   // `--project db-server`, and Rule 1's `server_seq > last_pull_cursor` is the int8 comparison D16
   // forbids a substitute from being the sole witness for.
   'findRule1Candidates',
+  // Task 17: Rule 2's canonical-order probe (01 §8.2 / 03 §11). Same shape and same reason as
+  // findRule1Candidates — a row-value comparison Postgres must do, over columns the production
+  // driver marshals as strings.
+  'existsPrecedingOp',
 ].sort();
 
 test('the package exports exactly the documented surface', () => {

@@ -136,6 +136,10 @@ export interface OperationOverrides {
    * an unrelated failure stands in for the claim (T-13).
    */
   readonly signature?: string;
+  /** The op `type` (05 §2.1). Task 17's Rule-1 query filters on it, so its cases must own it. */
+  readonly type?: string;
+  /** The emitting device. Rule 1 turns on `P.deviceId ≠ O.deviceId`, so its cases must own it. */
+  readonly deviceId?: string;
 }
 
 /**
@@ -170,9 +174,9 @@ export async function seedOperation(
       tenantId: tenant.tenantId,
       storeId: tenant.storeId,
       userId: tenant.userId,
-      deviceId: tenant.deviceId,
+      deviceId: overrides.deviceId ?? tenant.deviceId,
       seq: overrides.seq ?? BigInt(counter),
-      type: 'note.created',
+      type: overrides.type ?? 'note.created',
       entityType: 'note',
       entityId: overrides.entityId ?? uuid(),
       schemaVersion: 1,

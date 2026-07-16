@@ -123,3 +123,56 @@ export async function findRule1Candidates(
 
   return rows.map((row) => ({ opId: row.opId, beforeProbe: row.beforeProbe }));
 }
+
+/** Where an op sits in the canonical total order (05 §4: `timestamp ASC, deviceId ASC, seq ASC`). */
+export interface CanonicalPosition {
+  readonly timestamp: number;
+  readonly deviceId: string;
+  readonly seq: number;
+}
+
+/**
+ * Does an op of `types` on `entityId` sort canonically BEFORE `position` (05 §4)?
+ *
+ * This is how a Rule-2 invariant check asks "had this already happened when my op folded?" — and
+ * asking it of the OP LOG rather than of the projection is the whole correctness of the check.
+ *
+ * WHY NOT JUST READ THE PROJECTION. 01 §8.2 defines `notes:edit_after_archive` as an edit "whose
+ * note is already archived **at fold time**". Detection runs AFTER the acceptance loop (10-db §3),
+ * so by then the projection reflects the WHOLE batch — including ops that folded after the edit.
+ * A check reading `notes.archived` there would fire on a device that edited and then archived its
+ * own note in one batch: a deliberate sequence by one author, reported to an owner as a conflict
+ * the parenthetical in §8.2 explicitly excludes ("the editing device had not seen the archive").
+ * That false positive was real and this suite caught it.
+ *
+ * 03 §11 states the rule precisely, and it is a statement about ORDER, not about current state:
+ * "`notes.note_body_edited` sorting after `notes.note_archived` in canonical order … The
+ * server-side Rule-2 check (N2) surfaces the sequence as a Conflict". Archive is terminal in v0
+ * (no unarchive), so "archived at the edit's fold position" and "an archive sorts before the edit"
+ * are the same question — and only the second one is still answerable after the batch has folded.
+ *
+ * Like `findRule1Candidates`, the comparison is done BY POSTGRES over a row value, so no `int8`
+ * crosses the driver to be compared in JS (T-14f).
+ */
+export async function existsPrecedingOp(
+  db: TenantDb | Kysely<DB>,
+  args: {
+    readonly entityId: string;
+    readonly types: readonly string[];
+    readonly position: CanonicalPosition;
+  },
+): Promise<boolean> {
+  if (args.types.length === 0) return false;
+
+  const row = await db
+    .selectFrom('operations')
+    .select('id')
+    .where('entityId', '=', args.entityId)
+    .where('type', 'in', args.types)
+    .where(
+      sql<boolean>`(timestamp_ms, device_id, seq) < (${args.position.timestamp}::bigint, ${args.position.deviceId}::uuid, ${args.position.seq}::bigint)`,
+    )
+    .executeTakeFirst();
+
+  return row !== undefined;
+}

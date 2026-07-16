@@ -58,7 +58,9 @@ export { createServerProjectionEngine } from './projection-apply.js';
 // handle rather than producing one, and returns plain records with no `selectFrom`, so the
 // `queryish` assertion in export-surface.test.ts still holds.
 export {
+  existsPrecedingOp,
   findRule1Candidates,
+  type CanonicalPosition,
   type Rule1Candidate,
   type Rule1Probe,
 } from './conflict-candidates.js';

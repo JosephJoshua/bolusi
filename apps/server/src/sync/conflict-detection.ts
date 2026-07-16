@@ -25,7 +25,7 @@
 // — a fact only the server knows (`devices.last_pull_cursor`). Results reach every device as
 // ordinary `platform.conflict_detected` ops through normal pull, so a fresh device rebuilding from
 // cursor 0 replays the same conflict ops and converges (I-8).
-import { findRule1Candidates, type TenantDb } from '@bolusi/db-server';
+import { existsPrecedingOp, findRule1Candidates, type TenantDb } from '@bolusi/db-server';
 import type { ConflictDeclaration, ConflictSeverity } from '@bolusi/core';
 import { PLATFORM_ENTITY, PLATFORM_OP } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
@@ -113,9 +113,14 @@ export interface InvariantCheck {
  * server endpoint check (`409 LAST_ADMIN_PROTECTED`), not a Conflict. The v1 examples (negative
  * stock, contradictory status transitions) "slot in here; they are **not** built in v0".
  *
- * It reads the `notes` PROJECTION, not the op log: "already archived **at fold time**" is a
- * question about folded state, and the projection is where fold outcomes live. The apply step ran
- * for every accepted op before detection (10-db §3), so this sees the batch's own archive op.
+ * It asks the OP LOG whether an archive sorts canonically BEFORE this edit — not whether the note
+ * is archived NOW. The difference is a false positive this suite caught: detection runs after the
+ * acceptance loop, so a device that edits and then archives its own note in one batch would, under
+ * a "read `notes.archived`" check, be reported as conflicting with itself — the exact case 01
+ * §8.2's parenthetical excludes ("the editing device had not seen the archive"). 03 §11 states the
+ * rule as ORDER ("`notes.note_body_edited` sorting after `notes.note_archived` in canonical
+ * order"), and archive is terminal in v0, so the two formulations agree wherever the naive one is
+ * right and only the ordered one is right where they differ. See `existsPrecedingOp`.
  *
  * NOTE — this check is inert until task 25 registers `notes`. It fires only for
  * `notes.note_body_edited`, which is `UNKNOWN_TYPE` today (SERVER_MODULES carries only
@@ -129,17 +134,12 @@ export const NOTES_EDIT_AFTER_ARCHIVE: InvariantCheck = {
   appliesTo: ['notes.note_body_edited'],
   conflictKey: 'note.archived',
   severity: 'significant',
-  async fires(db, op) {
-    const note = await db
-      .selectFrom('notes')
-      .select('archived')
-      .where('id', '=', op.entityId)
-      .executeTakeFirst();
-    // A note that does not exist is not an invariant break — it is an edit whose create has not
-    // arrived (or a note in another store, invisible under RLS). `?? false` would say the same
-    // thing less loudly; `=== true` says "fires only on a note we can see, that is archived".
-    return note?.archived === true;
-  },
+  fires: (db, op) =>
+    existsPrecedingOp(db, {
+      entityId: op.entityId,
+      types: ['notes.note_archived'],
+      position: { timestamp: op.timestamp, deviceId: op.deviceId, seq: op.seq },
+    }),
 };
 
 /** The tenant's system identity + key — 01 §3.6's ONLY emission path. */
