@@ -25,10 +25,11 @@ export interface PushDeps {
   readonly now: () => number;
   /** Fresh ids for `device_anomalies` rows (05 §3 alarm). */
   readonly newId: () => string;
-  /** (type, schemaVersion) → payload validator. Empty until modules register (tasks 17/25). */
+  /** (type, schemaVersion) → payload validator. Carries `platform.*` (task 17); `notes.*` (25) and
+   *  `auth.*` (43) are UNKNOWN_TYPE until those modules register. */
   readonly registry: OpRegistry;
-  /** Op type → projection applier (04 §4) for the pipeline's apply step. Empty until modules
-   *  register (tasks 17/25/43); derived from the same list as `registry`. */
+  /** Op type → projection applier (04 §4) for the pipeline's apply step. Carries the `platform`
+   *  appliers (task 17); 25/43 still fold nothing. Derived from the same list as `registry`. */
   readonly projections: ProjectionRegistry<DB>;
   /** Scoped poke publisher (api/00 §12.1); default hub has zero subscribers (a no-op). */
   readonly pokeHub: PokeHub;

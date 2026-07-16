@@ -130,10 +130,12 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
 }
 
 /**
- * The default server op registry (05 §8), derived from SERVER_MODULES. EMPTY today (⇒ every pushed
- * op is `UNKNOWN_TYPE`), which is why the pipeline suite injects a registry covering the types it
- * pushes. When 17/25/43 add their modules, the SAME list feeds `projections` below, so a validated
- * type always has an applier and vice versa.
+ * The default server op registry (05 §8), derived from SERVER_MODULES.
+ *
+ * Carries the `platform.*` types today (task 17); `notes.*` (25) and `auth.*` (43) are still
+ * `UNKNOWN_TYPE` until those modules append to the list above. That is why the pipeline suite
+ * injects a registry covering the types IT pushes rather than relying on this one. The SAME list
+ * feeds `projections` below, so a validated type always has an applier and vice versa.
  */
 export const serverOpRegistry: OpRegistry = deriveOpRegistry(serverModuleRegistry);
 
@@ -161,10 +163,13 @@ export interface ServerDeps {
   readonly serverCrypto: CryptoPort;
   /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
   readonly newOpLogId: () => string;
-  /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Empty by default. */
+  /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Derived from
+   *  SERVER_MODULES — `platform.*` today; 25/43 pending. */
   readonly opRegistry: OpRegistry;
   /** Op type → projection applier (04 §4) for the push pipeline's apply step (10-db §3 step 6).
-   *  Derived from the SAME SERVER_MODULES list as `opRegistry`; empty by default. */
+   *  Derived from the SAME SERVER_MODULES list as `opRegistry` — the `platform` appliers today
+   *  (`conflicts` + `user_prefs`); `notes` (25) and the auth tables (43) fold nothing until those
+   *  modules register. */
   readonly projections: ProjectionRegistry<DB>;
   /** Conflict detection (01 §8.2), run inside the push transaction. `undefined` ⇒ disabled — the
    *  v0 default, because no `SystemKeyStore` is configured (conflict-wiring.ts). Built from
