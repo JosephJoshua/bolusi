@@ -2,7 +2,7 @@
 // truth for "what's left", and nothing checked it against the filesystem — so a parallel wave filed
 // two task files numbered 61 that auto-merged clean (different filenames) with no gate to catch it.
 // The real-repo test runs the check over the actual tree; the synthetic tests below each break ONE
-// leg and prove it goes red, so a green here means the four invariants hold, not that it looked at
+// leg and prove it goes red, so a green here means the five invariants hold, not that it looked at
 // nothing (testing-guide T-11, T-14).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,7 @@ test('the ledger (_index.md) and the task files on disk agree', () => {
   expect(result.checked.numbers, 'distinct task numbers on disk').toBeGreaterThan(30);
 
   expect(result.duplicateNumbers, 'task files sharing a number').toEqual([]);
+  expect(result.duplicateRows, 'index rows sharing an id').toEqual([]);
   expect(result.orphanRows, 'index rows with no task file').toEqual([]);
   expect(result.orphanFiles, 'task files with no index row').toEqual([]);
   expect(result.statusMismatches, 'files whose Status disagrees with their index row').toEqual([]);
@@ -69,6 +70,8 @@ test('a clean ledger with the 27a/27b split passes — two rows, one file, is le
     },
   });
   expect(result.duplicateNumbers).toEqual([]);
+  // 27a and 27b share a NUMBER but not an id — the split must not read as a duplicate row.
+  expect(result.duplicateRows).toEqual([]);
   expect(result.orphanRows).toEqual([]);
   expect(result.orphanFiles).toEqual([]);
   expect(result.statusMismatches).toEqual([]); // file `todo` matches 27a; 27b=blocked does not flag.
@@ -87,6 +90,26 @@ test('LEG 1: two task files sharing a number is a duplicate (the git-invisible c
   expect(result.duplicateNumbers).toEqual([
     '61 → 61-sec-dev-partial-leg-retire.md, 61-user-interface-style-is-inert.md (two task files share a number; git auto-merges this clean)',
   ]);
+});
+
+test('LEG 5: two index rows sharing an id is a duplicate row (a phantom task in the ledger)', () => {
+  // review-66's exact reproduction. The first cut of this gate passed this GREEN: both row checks
+  // keyed on the row's number, so the phantom `61` resolved to the real 61's file and was exempt
+  // from the orphan check, while `statusMismatches` used `.some()` — the real row's `done` matched
+  // the file, so the phantom's `todo` never had to. Reachable by the natural repair of an index
+  // conflict ("keep both rows"), and it leaves §2.6's source of truth listing a task that does not
+  // exist. Nothing else fires here, which is precisely why this leg must exist on its own.
+  const result = auditLedger({
+    indexText: ledger(['| 61 | real | done | — |', '| 61 | phantom dupe | todo | — |']),
+    taskFiles: { 'ai-docs/tasks/61-real.md': file('done') },
+  });
+  expect(result.duplicateRows).toEqual([
+    '61 → 2 rows share the id "61" (statuses: done, todo); exactly one row per id',
+  ]);
+  // The hole this closes: every other check is silent on it.
+  expect(result.orphanRows).toEqual([]);
+  expect(result.statusMismatches).toEqual([]);
+  expect(result.duplicateNumbers).toEqual([]);
 });
 
 test('LEG 2: an index row with no matching task file is an orphan row', () => {

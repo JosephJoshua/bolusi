@@ -8,18 +8,30 @@
 //
 // This module rides the same rails as sec-meta.ts — it reuses `collectTrackedTaskFiles` (the
 // git-tracked task-file walk) rather than building a second parser (CLAUDE.md §2.8) — and adds
-// four checks:
+// five checks:
 //   1. two task files share a number (the collision git cannot see);
 //   2. an index row resolves to no task file;
 //   3. a task file is referenced by no index row;
-//   4. a row's Status disagrees with the file's `**Status:**` line.
+//   4. a row's Status disagrees with the file's `**Status:**` line;
+//   5. two index rows share an id.
+//
+// Check 5 exists because the first cut of this gate did not have it, and review-66 found the hole:
+// both row checks keyed on the row's NUMBER, so a phantom `| 61 | … | todo |` row sitting beside
+// the real 61 resolved to the real 61's file and was exempt from BOTH the orphan and the Status
+// check — `_index.md` could permanently list a task that does not exist, and the suite stayed
+// green. That state is reachable by the repair this defect's own task file calls natural: "resolve
+// the loud index conflict, keep both rows". Note what the bug WAS: the comment below claimed "every
+// row resolves to exactly one existing file" while the code implemented "every row's number
+// resolves to >=1 file". The comment was the guard (CLAUDE.md §2.11) — inside the gate built to
+// close a sibling of that very class. Row ids are keyed by id, not number, so `27a` != `27b` and
+// the legitimate split cannot trip it.
 //
 // The invariant is deliberately NOT `rowcount == filecount` and NOT a bijection. Task 27 is split
 // into TWO rows (`27a`, `27b`) against ONE file (`27-device-gates.md`) — a legitimate 2-rows-to-
 // 1-file shape that a naive equality would red on day one, and the "fix" for that would be to
 // loosen the gate until it stops complaining (i.e. until it checks nothing). The invariant is:
-// every row resolves to exactly one existing file; every file is referenced by >=1 row; Statuses
-// agree. On a Status disagreement the gate REPORTS both sides and never picks a winner — a file
+// each row has a UNIQUE id; every row resolves to exactly one existing file (check 2 catches zero,
+// check 1 catches two); every file is referenced by >=1 row; Statuses agree. On a Status disagreement the gate REPORTS both sides and never picks a winner — a file
 // marked `done` whose row says `in-progress` means something entirely different from the merge-
 // writeback drift (file lagging behind an advanced index) and must not be auto-flattened.
 
@@ -72,6 +84,9 @@ export interface LedgerAuditInput {
 export interface LedgerAuditResult {
   /** Numbers claimed by more than one task file — the collision git auto-merges clean. */
   duplicateNumbers: string[];
+  /** Ids claimed by more than one index row. A dupe hides behind its twin's file: it resolves, so
+   *  it is exempt from the orphan and Status checks, and the ledger lists a phantom task. */
+  duplicateRows: string[];
   /** Index rows that resolve to no task file. */
   orphanRows: string[];
   /** Task files referenced by no index row. */
@@ -165,6 +180,21 @@ export function auditLedger(input: LedgerAuditInput): LedgerAuditResult {
     }
   }
 
+  // 5. two rows sharing an id. Keyed on the id, NOT the number: `27a`/`27b` are distinct ids
+  //    against one file and must pass, while a second `61` row is a phantom task.
+  const rowsById = new Map<string, IndexRow[]>();
+  for (const row of rows) pushInto(rowsById, row.id, row);
+  const duplicateRows: string[] = [];
+  for (const [id, sharing] of rowsById) {
+    if (sharing.length > 1) {
+      duplicateRows.push(
+        `${id} → ${sharing.length} rows share the id "${id}" (statuses: ${sharing
+          .map((row) => row.status)
+          .join(', ')}); exactly one row per id`,
+      );
+    }
+  }
+
   // 2. a row that resolves to no file.
   const orphanRows: string[] = [];
   for (const row of rows) {
@@ -201,6 +231,7 @@ export function auditLedger(input: LedgerAuditInput): LedgerAuditResult {
 
   return {
     duplicateNumbers: duplicateNumbers.sort(),
+    duplicateRows: duplicateRows.sort(),
     orphanRows: orphanRows.sort(),
     orphanFiles: orphanFiles.sort(),
     statusMismatches: statusMismatches.sort(),
