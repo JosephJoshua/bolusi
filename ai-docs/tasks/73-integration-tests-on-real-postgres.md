@@ -120,6 +120,71 @@ It exists because a fixed host port let a failed `db:up` **silently resolve to a
 - `pnpm test`, `pnpm test:rls`, `pnpm lint`, `pnpm typecheck` green — **read the output, not the exit code** (§2.1). **T-18**: a "completed (exit code 0)" notification has repeatedly described a **reaped** run whose log had no `Test Files N passed` line — `wc -c` a fast log and confirm the denominator. **Scratch files in your worktree or `$CLAUDE_JOB_DIR/tmp`, never bare `/tmp/<name>.log`** (`/tmp` is shared across agent worktrees; a peer read another agent's log this session).
 - **Coordinate:** `packages/db-server` and the test lanes are contended (§4). Check `_index.md` for in-flight work before starting and serialize if needed.
 
+## Outcome
+
+**Shipped:** `packages/db-server` L3 runs on real PG16 in a testcontainer over real `pg`. One container per run → migrate ONCE into `bolusi_tmpl` → per-file `CREATE DATABASE … TEMPLATE` → `fileParallelism` re-enabled. `packages/db-server/src/testing/{pg-container,budget}.ts`; PGlite branch **deleted** from this package (not defaulted — a lane that can be downgraded to WASM will be, silently).
+
+### The value proof (T-11) — 4th independent measurement, reproduced not cited
+
+Reverted the int8 seam at `reconstructOperation`; same file, same assertions:
+
+| lane | result |
+| ---- | ------ |
+| PGlite | **14/14 GREEN**, `EXIT=0` |
+| real PG16 / `pg` | **4 RED / 10 pass**, `EXIT=1` |
+
+Discriminator: `expected [ '10', '9' ] to deeply equal [ 9, 10 ]`. Probe was task 48's `LOW_SEQ=9n/HIGH_SEQ=10n` — the digit-count boundary. **The alibi is real and was re-verified in Node**: `"10">"9"` → false (bites), but `"9007199254740993">"9007199254740992"` → **true**, and `"10">9` → **true** (numeric coercion). So the class needs TWO driver-returned int8s compared; a 2^53 probe is green with the bug present.
+
+### Falsifications (every guard watched going red, then restored green)
+
+| guard | broke | saw | restored |
+| ----- | ----- | --- | -------- |
+| **RLS non-vacuity** | neutered `SET LOCAL ROLE` | **5 failed/1 passed**: `expected 'test' to be 'bolusi_app'`; cross-tenant SELECT/INSERT/UPDATE/DELETE **all succeeded** | 6/6 |
+| **RLS positive control** (T-17) | — | fence's `rows.length > 0` still passed while fence failed → isolation genuinely broke, not a dead fixture | — |
+| **template rule** | held 1 session, bypassed guard | `source database "bolusi_tmpl" is being accessed by other users` / `There is 1 other session using the database.` | — |
+| **template guard** | neutered `pg_terminate_backend` | `ABORT — 1 session(s) still hold template … Something is RECONNECTING` at the right call site | clone succeeds |
+| **connection cap** | opened `max_connections+25` | failed at **199/225**: `sorry, too many clients already`, SQLSTATE **53300**, in **1147 ms** — an error, not a wedge | — |
+| **shipping-deps** | moved `@testcontainers/postgresql` into db-server prod deps | `expected [ '@testcontainers/postgresql' ] to deeply equal []` | 11/11 |
+| **Ryuk** | SIGKILLed the runner (no teardown possible) | container **gone within 10 s** | — |
+
+Measured on the live container: `max_connections=200`, `superuser_reserved_connections=3`.
+
+### Wall-clock — the speedup is real but was MISATTRIBUTED (corrected by review-73)
+
+| lane | wall |
+| ---- | ---- |
+| compose real-PG, serial (replaced) | **216.72 s** |
+| **this lane** (testcontainers, parallel) | **45.35 s** → **4.8× vs the lane it replaces** |
+| PGlite, serial (main) | ~46 s |
+| **PGlite, parallel** (main + `--fileParallelism`) | **14.40 s** |
+
+**This lane is ~3× SLOWER than parallelised PGlite, and the original "PGlite's WASM boot forced serialization" story is false** — main's own config says PGlite was serialized deliberately, because it "buys identical behaviour across both lanes". **The reason this lane exists is FIDELITY, not speed.** D16's argument is untouched; the speed was a bonus, claimed wrong twice.
+
+### Rulings
+
+- **`.withReuse()` REJECTED** — it defeats Ryuk. testcontainers 12.0.4 `generic-container.js:79-86` returns from `reuseOrStartContainer` **before** `getReaper()` and never applies the `session-id` label Ryuk reaps by. Confirmed on the dev box: a 13-day-old orphan with `container-hash` and **no** `session-id`. D16 §"Cost" and this file both recommended reuse *while* naming Ryuk the main benefit; they are mutually exclusive. Reuse buys ~2 s and re-creates T-14d.
+- **`apps/server` boundary → option (c)**, no spec change, **not a §6 red flag**: `apps/server` already may import `db-server`, which owns `pg`; the lane lives in db-server and is imported. **But the seam as shipped exports no `Kysely<DB>`, so it does NOT yet discharge the ruling** — filed as **task 81** step 0 with the exact factory signature.
+- **T-8's Postgres leg stays PGlite, permanently and deliberately**: `core` may import neither `pg` (§3.3 rule 3) nor `db-server` — the latter is a **dependency CYCLE**. Legitimate under D16 rule 3 (dialect-only, no longer sole witness). Written into T-8 and §2.4.
+- **PGlite's residual role**: deleted from db-server; kept for T-8 with scope stated.
+
+### Denominator (T-14)
+
+| lane | files | engine |
+| ---- | ----- | ------ |
+| `packages/db-server` | **16 (133 tests)** | **real PG16 / `pg`** |
+| `apps/server` | **50** | PGlite — **not moved** → task 81 |
+| T-8 conformance | 1 | PGlite — ruled |
+
+`ENGINE` pinned to `'postgres'` un-skips `oplog-server-seq-concurrency`'s `describe.runIf(ENGINE === 'postgres')` cases, which the PGlite lane silently skipped.
+
+### Mistakes made and caught, recorded because the class is the point
+
+1. **I wrote a false comment asserting a mechanism I had not falsified** — that `CREATE DATABASE … TEMPLATE` copies database GUCs. It does not (measured: `src -> STAMPED`, `clone -> (ABSENT)`; `pg_db_role_setting` is a shared catalog keyed by OID). Caught only because the attribution guard **fails closed**: 13 loud aborts instead of 13 unattributed greens. T-15, inside a file whose header lectures about T-15.
+2. **My first template guard raced its own fix** — `pg_terminate_backend` signals asynchronously; the immediate re-check reported sessions already dying. A flake (T-10) in the guard the design hinges on, found only by falsifying it.
+3. **`maxWorkers: 24` made `pnpm test` collect ZERO tests and exit 1** while `test:rls` stayed green — vitest 4 refuses projects sharing `sequence.groupOrder` with different `maxWorkers`. **A single-project lane has nothing to conflict with, which is exactly why my verification missed it and review-73 caught it.** Verify the suite, not just the lane.
+4. **My budget guard checked its own constant, not vitest's real worker count** — `maxWorkers: 110` passed it while the run would open 220 connections. Now `assertConnectionBudget(uri, actualMaxWorkers)` takes the live number as a **required** argument read from the resolved vitest config, and refuses rather than defaulting (T-19).
+5. **I re-created my own task's failure class in CI** — `rls-witness` provisioned a service container, injected `DATABASE_URL`, and stamped it, while `test:rls` ignored all of it and booted its own. A real number with fictional provenance. Removed.
+
 ## Note
 
 The owner's directive and this repo's evidence point the same way, which is worth stating plainly: **we already ran the experiment.** The fast substitute was chosen deliberately and reasonably (`testing-guide §2:87` — *"PGlite is the fast loop, real Postgres is the drift check"*), and then it let two silent bugs through — a watermark that never advanced, and an RLS lane that could not fail — while showing green. The `08` catalog row had *already* written the warning (*"do not trust WASM as the only RLS witness"*), and the warning did not save us, because a warning is not a mechanism. That is the same lesson as `db-lane.mjs`'s header, §2.1's exit codes, and §2.11's whole thesis: **the rule was already written; it did not help; the fix has to be by construction.**

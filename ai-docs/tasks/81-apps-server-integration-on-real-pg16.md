@@ -23,7 +23,19 @@ Task 73's brief offered three options. It chose **(c)**, in a specific shape, an
 - **`apps/server` may already import `db-server`** (`08 §3.3`): the edge exists and is granted.
 - **`db-server` owns `pg`** (`08 §3.3:164` — `| db-server | core, schemas, kysely, pg |`).
 - Therefore the lane can live in `db-server` and be *imported* by `apps/server` tests, which then reach real PG16 **without importing `pg` at all**. `pg` stays boundary-locked; rule 2 ("nothing outside them imports a DB driver") is untouched; **no `08 §3.3` change is required, so this is NOT a §6 red flag.**
-- Task 73 shipped the seam: `packages/db-server/src/testing/pg-container.ts`, exported as **`@bolusi/db-server/testing`**.
+
+**THE RULING IS SOUND. THE SEAM AS SHIPPED DOES NOT YET DISCHARGE IT — READ THIS BEFORE YOU START.** Task 73 shipped `packages/db-server/src/testing/pg-container.ts`, exported as `@bolusi/db-server/testing`. An earlier revision of this task file said it *"hands apps/server a `Kysely<DB>`"*. **It does not.** Verified against the module (review-73, confirmed by grep of its export list): it exports `startPgLane`, `createDatabaseFromTemplate`, `assertAttribution`, `databaseNameFor`, `uriForDatabase`, the budget constants and a container handle — **and zero Kysely**. db-server's own harness turns a URI into `Kysely<DB>` in `test/helpers/test-db.ts` via `import pg from 'pg'` + `new pg.Pool(...)` — *exactly the line `apps/server` may not write*.
+
+So **the blocker two agents found independently is not dissolved by task 73's diff; it is dissolved by code nobody has written yet.** That code is step 0 below, it is small, and it needs no spec change — but this file previously asserted it existed, which is the T-16 failure (a mention is not a producer) landing in the very task filed to fix a boundary. Do not start step 1 until step 0 is real.
+
+**Step 0 — give the seam a factory that returns a handle, not a URI:**
+```ts
+// packages/db-server/src/testing/pg-container.ts (or a sibling)
+export async function createTestDatabase(
+  lane: PgLane, testPath: string,
+): Promise<{ db: Kysely<DB>; close: () => Promise<void> }>
+```
+It owns the clone + the stamp assertion + the `pg.Pool` + the `CamelCasePlugin` wiring, so **`pg` never leaves db-server** and there is ONE construction rather than one per consumer (§2.8). `packages/db-server/test/helpers/test-db.ts` must then be refactored to consume it rather than keep its own copy — otherwise the "one implementation" claim is false the moment it is written.
 
 Rejected, with reasons:
 - **(a) give `apps/server` a test-only `pg` grant.** Implementable — the lint already has the mechanism (`tooling/eslint/src/plugin/rules/boundaries.js:69-72` grants `better-sqlite3` to `packages/core` with `testOnly: true`, and `pg`'s row is `['pg', [{ workspace: 'packages/db-server' }]]` with no test-only variant). But it needs a spec change (§6 red flag) and buys nothing (c) does not, while putting a second copy of the lane's logic in reach (§2.8).
@@ -35,7 +47,17 @@ Rejected, with reasons:
 
 1. Give `apps/server` a `globalSetup` that consumes `@bolusi/db-server/testing` (`startPgLane` + `createDatabaseFromTemplate`), mirroring `packages/db-server/test/global-setup.ts`. **One container for both projects if vitest's project wiring allows it; two if not — measure, don't assume.**
 2. Replace `apps/server/test/integration/oplog/helpers.ts`'s PGlite harness. **Read its header first** — it explains exactly why it chose PGlite, and that reason ("`pg` is boundary-locked to packages/db-server, so apps/server test code cannot open a real-Postgres pool") is now false: it never needed `pg`, it needed a `Kysely<DB>`, and `@bolusi/db-server/testing` hands it one.
-3. **Re-enable `fileParallelism` in `apps/server/vitest.config.ts`** and size `maxWorkers` from the connection budget, not from core count (`assertConnectionBudget` re-derives it against the live server). **This is the big number**: 50 files at a measured 11–13 s/file serialized ≈ 550–685 s. Task 73's equivalent change on `db-server` took the same 15 files / 124 tests from **130 s → 49 s including container boot (2.65×)**, on the same engine, both green.
+3. **Re-enable `fileParallelism` in `apps/server/vitest.config.ts`** and size `maxWorkers` from the connection budget, not from core count — pass the LIVE worker count to `assertConnectionBudget` (task 73's guard takes it as a required argument precisely because checking its own constant is what review-73 falsified). **Give the project its own `sequence.groupOrder`**: vitest 4 refuses projects that share a groupOrder but declare different `maxWorkers`, and this made `pnpm test` collect **zero** tests on task 73's branch while `test:rls` stayed green.
+   **DO NOT EXPECT A SPEEDUP HERE, AND DO NOT SELL ONE.** Task 73's first report claimed the real-PG lane was faster *than PGlite* and that was wrong — the orchestrator has now corrected it. Measured honestly on the same 15 files:
+
+   | lane | wall |
+   | ---- | ---- |
+   | compose real-PG, serial (what 73 replaced) | **216.72 s** |
+   | testcontainers real-PG, parallel (73's lane) | **45.35 s** — 4.8× vs the lane it replaced |
+   | PGlite, serial (main) | ~46 s |
+   | **PGlite, parallel** (main + one flag: `--fileParallelism`) | **14.40 s** |
+
+   So the real-PG lane is **~3× SLOWER than parallelised PGlite**, and PGlite's serialization was never a WASM-boot tax — main's own config says it was serialized deliberately, "buys identical behaviour across both lanes", to match the shared-DB postgres lane. **The reason to move `apps/server` is FIDELITY, not speed** (D16): PGlite is blind to the silent class — measured four times now, most recently PGlite 14/14 GREEN vs real PG16 4 RED on the same int8 defect. Expect `test:server` to get *slower* than a hypothetical parallelised-PGlite lane and *faster* than today's serialized one. Report the real numbers; do not inherit these (T-14e).
 4. **Delete the PGlite branch rather than default it** (73's pattern): a lane that can be downgraded to WASM will be, and the downgrade is silent.
 
 ## Acceptance
