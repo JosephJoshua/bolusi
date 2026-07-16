@@ -67,8 +67,10 @@ const NOTE_CREATED = 'notes.note_created';
  *
  * It is not a toy: it declares the conflict rule 01 §8.1 / 03 §11's N1 row specifies verbatim
  * (`{key: 'note.body', severity: 'minor'}`) and its appliers write the REAL `notes` table (10-db
- * §8), because Rule 2's `notes:edit_after_archive` reads `notes.archived` — a check against a
- * fake table would prove nothing about the check that ships.
+ * §8). Rule 2's `notes:edit_after_archive` no longer reads `notes.archived` — it asks the OP LOG
+ * whether an archive sorts canonically before the edit (`existsPrecedingOp`), after the naive
+ * current-state read produced a false positive this suite caught. The real table is still what the
+ * appliers write, and a fake one would prove nothing about the appliers that ship.
  *
  * `notes.note_archived` deliberately declares NO conflict key: 03 §11's total rule says "Duplicate
  * `notes.note_archived`: no-op, not a conflict", and N2 (edit-after-archive) is Rule 2's job, not
@@ -753,17 +755,17 @@ describe('dedupe, emission and atomicity (01 §8.2; 10-db §3)', () => {
     expect(detection?.deviceId).toBe(system.deviceId);
   });
 
-  test('ATOMIC — a failure after detection leaves no op, no conflict row, no chain advance', async () => {
-    // 10-db §3's whole argument for one transaction: "If it is not atomic with the push, a crash
-    // leaves a conflict that exists in the log but never in the read model." The abort is forced
-    // from the system signer — i.e. from INSIDE the detection block, after Rule 1 has already
-    // matched and the candidate query has run.
-    const { member, systemIdentity, builder: aBuilder } = await setupTenant(1790);
-    const { other, builder: bBuilder } = await addDevice(member, 1791);
-    const noteId = makeWorld(1792, serverCryptoPort).storeId;
-
-    const explode = (): Promise<SystemIdentity> =>
-      Promise.reject(new Error('system key unavailable'));
+  /**
+   * A batch that detects TWO conflicts, so a signer can fail BETWEEN them.
+   *
+   * Device A creates+edits two notes; B (cursor 0, never pulled) edits both in one batch → two
+   * Rule-1 collisions → two emissions.
+   */
+  async function twoConflictSetup(seed: number) {
+    const { member, system, systemIdentity, builder: aBuilder } = await setupTenant(seed);
+    const { other, builder: bBuilder } = await addDevice(member, seed + 1);
+    const noteOne = makeWorld(seed + 2, serverCryptoPort).storeId;
+    const noteTwo = makeWorld(seed + 3, serverCryptoPort).storeId;
 
     await processPushBatch(
       depsWith({ systemIdentity }),
@@ -772,46 +774,122 @@ describe('dedupe, emission and atomicity (01 §8.2; 10-db §3)', () => {
         aBuilder.append({
           type: NOTE_CREATED,
           entityType: 'note',
-          entityId: noteId,
-          payload: { title: 't', body: 'a' },
+          entityId: noteOne,
+          payload: { title: 't', body: 'a1' },
         }),
         aBuilder.append({
           type: NOTE_EDITED,
           entityType: 'note',
-          entityId: noteId,
-          payload: { body: 'edit-a' },
+          entityId: noteOne,
+          payload: { body: 'edit-a1' },
+        }),
+        aBuilder.append({
+          type: NOTE_CREATED,
+          entityType: 'note',
+          entityId: noteTwo,
+          payload: { title: 't', body: 'a2' },
+        }),
+        aBuilder.append({
+          type: NOTE_EDITED,
+          entityType: 'note',
+          entityId: noteTwo,
+          payload: { body: 'edit-a2' },
         }),
       ],
     );
-    const before = await readOps(testDb.db, member.tenantId);
 
-    // B's push WOULD detect a conflict — and the emission then fails.
+    const bBatch = [
+      bBuilder.append({
+        type: NOTE_EDITED,
+        entityType: 'note',
+        entityId: noteOne,
+        payload: { body: 'edit-b1' },
+      }),
+      bBuilder.append({
+        type: NOTE_EDITED,
+        entityType: 'note',
+        entityId: noteTwo,
+        payload: { body: 'edit-b2' },
+      }),
+    ];
+    return { member, system, systemIdentity, other, bBatch };
+  }
+
+  async function systemChainSeq(tenantId: string): Promise<number> {
+    const row = await testDb.db
+      .selectFrom('systemDeviceChainState')
+      .select('lastSeq')
+      .where('tenantId', '=', tenantId)
+      .executeTakeFirstOrThrow();
+    return Number(row.lastSeq);
+  }
+
+  test('ATOMIC — a signer that throws on the SECOND conflict rolls back the FIRST one entirely', async () => {
+    // 10-db §3's whole argument for one transaction: "If it is not atomic with the push, a crash
+    // leaves a conflict that exists in the log but never in the read model."
+    //
+    // THE PROBE IS review-17's, AND IT REPLACES A TEST OF MINE THAT PROVED LESS THAN IT CLAIMED.
+    // My original aborted from `systemIdentity` — which `detectConflicts` resolves BEFORE the
+    // emission loop — so `appendSystemOp` had never run and `expect(lastSeq).toBe(0)` was
+    // TRIVIALLY TRUE: it would have held even if the chain advance were not transactional. The
+    // failure has to land BETWEEN two emissions for the zeroes to mean anything.
+    //
+    // So: the signer succeeds once and throws after. At the throw, conflict #1 is FULLY emitted —
+    // op inserted, serverSeq allocated, `conflicts` row folded, chain advanced to seq=1 — and only
+    // then does the transaction unwind. If any of that escaped the push transaction, this is red.
+    const { member, system, other, bBatch } = await twoConflictSetup(1790);
+    const before = await readOps(testDb.db, member.tenantId);
+    expect(await systemChainSeq(member.tenantId)).toBe(0);
+
+    let signCalls = 0;
+    const flakySign: SystemSigner = (hash) => {
+      signCalls += 1;
+      if (signCalls > 1) throw new Error('signer exploded mid-emission');
+      return serverCryptoPort.sign(hash, system.secretKey);
+    };
+    const flakyIdentity = (): Promise<SystemIdentity> =>
+      Promise.resolve({
+        systemDeviceId: system.deviceId,
+        systemUserId: system.userId,
+        systemDevicePublicKey: system.publicKey,
+        sign: flakySign,
+      });
+
     await expect(
       processPushBatch(
-        depsWith({ systemIdentity: explode, idSeed: 800 }),
+        depsWith({ systemIdentity: flakyIdentity, idSeed: 800 }),
         { deviceId: other.deviceId, tenantId: other.tenantId },
-        [
-          bBuilder.append({
-            type: NOTE_EDITED,
-            entityType: 'note',
-            entityId: noteId,
-            payload: { body: 'edit-b' },
-          }),
-        ],
+        bBatch,
       ),
-    ).rejects.toThrow('system key unavailable');
+    ).rejects.toThrow('signer exploded mid-emission');
 
-    // B's edit was INSERTed and folded in-flight, then rolled back with everything else: the log is
-    // exactly as it was, no conflict exists, and the chain never moved.
+    // THE CONTROL THAT MAKES THE ZEROES MEAN SOMETHING (T-17): the signer was called TWICE — so
+    // emission #1 genuinely completed and #2 genuinely reached the signer. Without it, a harness
+    // that detected nothing at all satisfies every assertion below.
+    expect(signCalls).toBe(2);
+
+    // Conflict #1's op, its serverSeq, its folded row AND the chain advance all vanish — along
+    // with B's two accepted edits, which were inserted and folded in-flight.
     const after = await readOps(testDb.db, member.tenantId);
     expect(after.map((o) => o.id)).toEqual(before.map((o) => o.id));
     expect(await readConflicts()).toHaveLength(0);
-    const chain = await testDb.db
-      .selectFrom('systemDeviceChainState')
-      .select('lastSeq')
-      .where('tenantId', '=', member.tenantId)
-      .executeTakeFirstOrThrow();
-    expect(Number(chain.lastSeq)).toBe(0);
+    expect(await systemChainSeq(member.tenantId)).toBe(0);
+  });
+
+  test('POSITIVE CONTROL — the same batch with a working signer yields 2 conflicts and chain seq 2', async () => {
+    // Proves the zeroes above are a ROLLBACK, not an absence (T-17). Identical setup and identical
+    // batch; the ONLY difference is a signer that does not throw. If this produced one conflict, or
+    // none, the atomicity test would be asserting that nothing happened to nothing.
+    const { member, systemIdentity, other, bBatch } = await twoConflictSetup(1795);
+
+    await processPushBatch(
+      depsWith({ systemIdentity, idSeed: 810 }),
+      { deviceId: other.deviceId, tenantId: other.tenantId },
+      bBatch,
+    );
+
+    expect(await readConflicts()).toHaveLength(2);
+    expect(await systemChainSeq(member.tenantId)).toBe(2);
   });
 });
 
