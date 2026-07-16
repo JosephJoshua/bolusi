@@ -81,7 +81,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 70 | **HIGH — §6 owner decision** SEC-DEV-04's §218 ("offline-revocation caveat") contradicts api/02-auth §7.3's by-design wipe and asks for a per-op result the wire never produces (401 precedes it); 2 of 5 behaviours unbuildable, 3 shipped (from task 61, review-61 confirmed) | todo | — |
 | 71 | ledger Status is written twice (index row + file `**Status:**`) and the merge procedure touches one — make the writeback single-action; task 66's gate is only the backstop (from task 66) | done | 66 |
 | 72 | `06 §3.2` says `mediaRefSchema` lives in `@bolusi/core` — which **may not import zod** (`08 §3.3`, and core's own `strict-schema.ts:6`); the violation would compile + lint green and break only at runtime. Ruled to `@bolusi/schemas`; spec text still wrong (from task 18) | todo | — |
-| 73 | **HIGH — owner directive (D16)** L3 integration (378 tests) runs on PGlite, which measurably missed the int8 silent bug (14/14 green vs real `pg` 4 red) and makes RLS tests vacuous (owner bypasses RLS); move to real PG16 via testcontainers + Ryuk | todo | — |
+| 73 | **HIGH — owner directive (D16)** L3 integration (378 tests) runs on PGlite, which measurably missed the int8 silent bug (14/14 green vs real `pg` 4 red) and makes RLS tests vacuous (owner bypasses RLS); move to real PG16 via testcontainers + Ryuk | in-progress | — |
 | 74 | 11 raw-`sql<T>` readers resolve their keys only because `CamelCasePlugin` is wired; nothing asserts it. `pull.ts:411` launders a missing key into a plausible serverSeq of 1; `oplog-source.ts:229` is a no-op self-alias at task 46's own fix site (from review-18) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
