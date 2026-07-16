@@ -1,5 +1,5 @@
 # TASK 18 — media-client (capture, compress, metadata, queue, chunked upload drain)
-**Status:** todo
+**Status:** in-progress
 **Depends on:** 03, 04, 22
 
 ## Goal
