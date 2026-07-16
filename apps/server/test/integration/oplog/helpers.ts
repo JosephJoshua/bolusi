@@ -24,7 +24,7 @@ import { z } from 'zod';
 
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import type { OpRegistry, OplogPipelineDeps } from '../../../src/oplog/types.js';
-import type { CryptoPort } from '@bolusi/core';
+import { ProjectionRegistry, type CryptoPort } from '@bolusi/core';
 import { migrateToLatest, type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { mulberry32, uuidV7, type ChainWorld } from '@bolusi/test-support';
 
@@ -176,6 +176,8 @@ export interface MakeDepsOptions {
   readonly crypto?: CryptoPort;
   readonly registry?: OpRegistry;
   readonly newId?: () => string;
+  /** Projection appliers (04 §4). Default: empty — the pipeline folds nothing (honest v0 state). */
+  readonly projections?: ProjectionRegistry<DB>;
 }
 
 export function makeDeps(options: MakeDepsOptions): OplogPipelineDeps {
@@ -186,6 +188,7 @@ export function makeDeps(options: MakeDepsOptions): OplogPipelineDeps {
     now: () => clock.now(),
     newId: options.newId ?? makeIdSource(),
     registry: options.registry ?? testRegistry,
+    projections: options.projections ?? new ProjectionRegistry<DB>(),
   };
 }
 

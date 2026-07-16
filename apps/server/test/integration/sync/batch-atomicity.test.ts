@@ -29,12 +29,11 @@ import {
   decodeCursor,
   defineModule,
   encodeCursor,
-  ProjectionEngine,
   ProjectionRegistry,
   type JsonValue,
   type ModuleProjectionManifest,
   type ProjectionApplier,
-  type RebuildStore,
+  type ProjectionEngine,
 } from '@bolusi/core';
 import {
   FIXTURE_TABLE,
@@ -44,7 +43,7 @@ import {
 } from '@bolusi/test-support';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { createServerWatermarkStore } from '@bolusi/db-server';
+import { createServerProjectionEngine, createServerWatermarkStore } from '@bolusi/db-server';
 
 import { makeSyncHarness, type SeededDevice, type SyncHarness } from './helpers.js';
 
@@ -69,26 +68,14 @@ function projectionManifest(): ModuleProjectionManifest<FixtureDatabase> {
   return { id: fixtureModule.id, tables: fixtureModule.projections.tables, appliers };
 }
 
-/** Rebuild is not exercised here; a throwing store proves it is never reached. */
-const unusedRebuildStore: RebuildStore = {
-  readCursor: () => Promise.reject(new Error('rebuild not exercised')),
-  writeCursor: () => Promise.reject(new Error('rebuild not exercised')),
-  clearCursor: () => Promise.reject(new Error('rebuild not exercised')),
-  readVersion: () => Promise.reject(new Error('rebuild not exercised')),
-  writeVersion: () => Promise.reject(new Error('rebuild not exercised')),
-};
-
-/** The engine bound to one transaction handle + this task's SERVER watermark store (10-db §8). */
+/** The engine bound to one transaction handle via the PRODUCTION factory (task 49) — the exact
+ *  construction apps/server's push pipeline runs (server watermark store + no-rebuild store,
+ *  composed once in db-server so this lane executes it, not a copy — CLAUDE.md §2.8). */
 function makeEngine(trx: unknown): ProjectionEngine<FixtureDatabase> {
   const db = trx as Kysely<FixtureDatabase>;
   const registry = new ProjectionRegistry<FixtureDatabase>();
   registry.register(projectionManifest());
-  return new ProjectionEngine<FixtureDatabase>({
-    db,
-    registry,
-    watermarks: createServerWatermarkStore(db, tenantId),
-    makeRebuildStore: () => unusedRebuildStore,
-  });
+  return createServerProjectionEngine<FixtureDatabase>(db, tenantId, registry);
 }
 
 /** Insert an accepted op into the log with an explicit serverSeq (the push pipeline's INSERT). */

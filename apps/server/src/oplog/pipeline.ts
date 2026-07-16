@@ -2,8 +2,9 @@
 // identity + batch; task 16 wires it to POST /v1/sync/push. Everything runs inside ONE forTenant
 // transaction: the per-tenant counter is locked at the top, ops are validated in batch order with
 // the normative per-op sequence, accepted ops are inserted with their verbatim JCS and a gapless
-// serverSeq, tamper-class rejections + skew flags write device_anomalies, and the device chain
-// head is advanced once at the end.
+// serverSeq AND folded into the server read models (04 §4, 10-db §3 step 6) atomically with that
+// insert, tamper-class rejections + skew flags write device_anomalies, and the device chain head
+// is advanced once at the end.
 //
 // Per-op sequence (this ONE orchestrator pins it; steps never re-decide it):
 //   halted? → CHAIN_HALTED (no validation, no anomaly, no sig verify)
@@ -14,9 +15,17 @@
 //   chain continuity → CHAIN_GAP | CHAIN_BROKEN(+halt)
 //   scope (tenant/store/user membership + per-type rules) → SCOPE_VIOLATION
 //   registry + zod → UNKNOWN_TYPE | SCHEMA_INVALID
-//   accepted → allocate serverSeq → INSERT (+ clock-skew flag) → advance head
+//   accepted → allocate serverSeq → INSERT (+ clock-skew flag) → APPLY PROJECTIONS → advance head
+//
+// The APPLY step is normative (10-db §3, 04 §5.1 step 6): the projection fold shares this
+// transaction, so an op cannot be accepted without its server read model being updated — a crash
+// between the two would strand a permanently unreadable projection (only rebuild.ts recovers it).
+// An op whose type has no registered applier folds as a defined no-op (engine.ts `unregistered`):
+// the log fills, no projection moves. `deps.projections` is empty until a module registers
+// (tasks 17/25/43), so v0 folds nothing — the honest state, wired so those tasks light it up by
+// adding to ONE module list (deps.ts), never by touching this orchestrator.
 import { base64ToBytes } from '@bolusi/core';
-import type { TenantDb } from '@bolusi/db-server';
+import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
 
 import { recordAnomaly, type AnomalyKind } from './anomalies.js';
@@ -100,6 +109,16 @@ export async function processPushBatch(
     }
 
     await lockTenantCounter(db, identity.tenantId);
+
+    // The projection engine for this transaction (04 §4). It folds each accepted op into the
+    // server read models through `db`, so the fold commits or rolls back WITH the op insert
+    // (10-db §3 step 6). Constructed once and reused: it holds no per-op state, and the watermark
+    // it advances is computed from log presence per apply, never carried between calls.
+    const projectionEngine = createServerProjectionEngine<DB>(
+      db,
+      identity.tenantId,
+      deps.projections,
+    );
 
     const results: PushOpResult[] = [];
     let head: ChainHead = { seq: device.lastSeq, hash: device.lastHash };
@@ -199,6 +218,14 @@ export async function processPushBatch(
         jcs: signature.jcs,
         clockSkewFlagged,
       });
+
+      // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models. The op
+      // is already in the log with its serverSeq, so the engine reads it as PRESENT and advances
+      // `applied_server_seq` to the highest contiguous serverSeq (04 §4.3) — the PULL-shaped path,
+      // because server projections track server-seq, not an own-device local seq (10-db §8). An
+      // applier throw propagates out of `forTenant`, rolling back this op AND the whole batch
+      // (atomic — 10-db §3). An unregistered type folds as a no-op (engine.ts).
+      await projectionEngine.applyPulledOp(op);
 
       if (clockSkewFlagged) {
         await anomaly(

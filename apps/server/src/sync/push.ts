@@ -6,8 +6,8 @@
 // error (HTTP errors ≠ op rejections, api/00 §6).
 import { processPushBatch, type OpRegistry } from '../oplog/index.js';
 import type { PokeHub, PokeScope } from '../realtime/poke-hub.js';
-import type { CryptoPort } from '@bolusi/core';
-import type { ForTenant } from '@bolusi/db-server';
+import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
+import type { DB, ForTenant } from '@bolusi/db-server';
 import type { PushRequest, PushResponse, PushResult } from '@bolusi/schemas';
 
 /** The token-authenticated device pushing (api/00 §3): identity comes from the bearer token, never
@@ -26,6 +26,9 @@ export interface PushDeps {
   readonly newId: () => string;
   /** (type, schemaVersion) → payload validator. Empty until modules register (tasks 17/25). */
   readonly registry: OpRegistry;
+  /** Op type → projection applier (04 §4) for the pipeline's apply step. Empty until modules
+   *  register (tasks 17/25/43); derived from the same list as `registry`. */
+  readonly projections: ProjectionRegistry<DB>;
   /** Scoped poke publisher (api/00 §12.1); default hub has zero subscribers (a no-op). */
   readonly pokeHub: PokeHub;
 }
@@ -58,6 +61,7 @@ export async function runPush(
       now: deps.now,
       newId: deps.newId,
       registry: deps.registry,
+      projections: deps.projections,
     },
     { deviceId: identity.deviceId, tenantId: identity.tenantId },
     request.ops,

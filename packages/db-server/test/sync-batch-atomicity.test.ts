@@ -48,17 +48,17 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 import {
-  ProjectionEngine,
   ProjectionRegistry,
   type ModuleProjectionManifest,
   type ProjectionApplier,
-  type RebuildStore,
+  type ProjectionEngine,
 } from '@bolusi/core';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import type { DB } from '../src/generated/db.js';
 import { APP_ROLE } from '../src/schema/security.js';
-// THE POINT OF THIS FILE: the production store, on the production driver.
+// THE POINT OF THIS FILE: the production store + engine factory, on the production driver.
+import { createServerProjectionEngine } from '../src/projection-apply.js';
 import { createServerWatermarkStore } from '../src/watermarks.js';
 import { seedTenant, uuid, type TenantFixture } from './helpers/fixtures.js';
 import { createTestDb, ENGINE, type TestDb } from './helpers/test-db.js';
@@ -98,14 +98,6 @@ const probeManifest: ModuleProjectionManifest<ProbeDb> = {
   appliers: { [OP_TYPE]: probeApplier },
 };
 
-const unusedRebuildStore: RebuildStore = {
-  readCursor: () => Promise.reject(new Error('rebuild not exercised')),
-  writeCursor: () => Promise.reject(new Error('rebuild not exercised')),
-  clearCursor: () => Promise.reject(new Error('rebuild not exercised')),
-  readVersion: () => Promise.reject(new Error('rebuild not exercised')),
-  writeVersion: () => Promise.reject(new Error('rebuild not exercised')),
-};
-
 /** The PRODUCTION store, bound to a tenant-scoped handle — the same call apps/server makes.
  *  `Transaction<DB>` extends `Kysely<DB>`, so this one parameter type accepts both handles. */
 function store(trx: Kysely<DB>) {
@@ -115,12 +107,15 @@ function store(trx: Kysely<DB>) {
 function makeEngine(trx: Transaction<DB>): ProjectionEngine<ProbeDb> {
   const registry = new ProjectionRegistry<ProbeDb>();
   registry.register(probeManifest);
-  return new ProjectionEngine<ProbeDb>({
-    db: trx as unknown as Kysely<ProbeDb>,
+  // The PRODUCTION factory (task 49) — the EXACT construction apps/server's push pipeline runs
+  // (createServerWatermarkStore + the no-rebuild store, composed once). Homing it in db-server is
+  // what lets THIS PG16 lane execute it rather than a hand-rolled copy — the same reason task 47
+  // moved the watermark store here (projection-apply.ts header; CLAUDE.md §2.8).
+  return createServerProjectionEngine<ProbeDb>(
+    trx as unknown as Kysely<ProbeDb>,
+    tenant.tenantId,
     registry,
-    watermarks: store(trx), // production read() + advanceServerSeq(), driven by the engine
-    makeRebuildStore: () => unusedRebuildStore,
-  });
+  );
 }
 
 /** A minimal accepted-op row. Signatures are irrelevant here — the projection path never verifies. */
