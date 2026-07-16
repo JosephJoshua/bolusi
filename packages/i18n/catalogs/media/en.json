@@ -14,5 +14,16 @@
   },
   "permission": {
     "camera": "Allow the app to use the camera to take photos."
+  },
+  "storage": {
+    "lowWarning": "Storage is getting low. Old photos that have already been sent will be cleaned up.",
+    "lowCritical": "Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept."
+  },
+  "capture": {
+    "refusedTitle": "Storage full",
+    "refusedBody": "Photos can’t be taken because storage is nearly full. Free up some space, then try again."
+  },
+  "upload": {
+    "persistentFailure": "{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}"
   }
 }

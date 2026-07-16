@@ -48,11 +48,25 @@ export type TranslationKey =
   | 'core.action.save'
   | 'core.action.search'
   | 'core.action.yes'
+  | 'core.errors.AUTH_TOKEN_INVALID'
+  | 'core.errors.AUTH_TOKEN_MISSING'
+  | 'core.errors.CHUNKS_MISSING'
+  | 'core.errors.CHUNK_INDEX_INVALID'
+  | 'core.errors.CHUNK_SIZE_INVALID'
+  | 'core.errors.CHUNK_TOO_LARGE'
   | 'core.errors.DEVICE_NOT_ENROLLED'
   | 'core.errors.ENTITY_NOT_FOUND'
+  | 'core.errors.HASH_MISMATCH'
   | 'core.errors.IDEMPOTENCY_CONFLICT'
+  | 'core.errors.INIT_MISMATCH'
   | 'core.errors.INVALID_TRANSITION'
   | 'core.errors.LAST_ADMIN_PROTECTED'
+  | 'core.errors.LOCAL_CORRUPT'
+  | 'core.errors.MEDIA_IMMUTABLE'
+  | 'core.errors.MEDIA_NOT_FOUND'
+  | 'core.errors.MEDIA_TOO_LARGE'
+  | 'core.errors.MIME_MISMATCH'
+  | 'core.errors.MIME_UNSUPPORTED'
   | 'core.errors.NETWORK'
   | 'core.errors.NOT_AUTHENTICATED'
   | 'core.errors.PERMISSION_DENIED'
@@ -60,7 +74,9 @@ export type TranslationKey =
   | 'core.errors.PIN_RATE_LIMITED'
   | 'core.errors.RATE_LIMITED'
   | 'core.errors.ROLE_IN_USE'
+  | 'core.errors.STORAGE_ERROR'
   | 'core.errors.UNEXPECTED'
+  | 'core.errors.UNSUPPORTED_ENCODING'
   | 'core.errors.USER_DEACTIVATED'
   | 'core.errors.VALIDATION_FAILED'
   | 'core.language.en'
@@ -87,12 +103,17 @@ export type TranslationKey =
   | 'media.action.retryUpload'
   | 'media.action.takePhoto'
   | 'media.action.usePhoto'
+  | 'media.capture.refusedBody'
+  | 'media.capture.refusedTitle'
   | 'media.permission.camera'
   | 'media.status.failed'
   | 'media.status.pending'
   | 'media.status.uploaded'
   | 'media.status.uploading'
   | 'media.status.waitingForConnection'
+  | 'media.storage.lowCritical'
+  | 'media.storage.lowWarning'
+  | 'media.upload.persistentFailure'
   | 'push.conflict.body'
   | 'push.conflict.title'
   | 'push.device.body'
@@ -174,6 +195,22 @@ export interface TranslationResources {
       RATE_LIMITED: string;
       UNEXPECTED: string;
       NETWORK: string;
+      MEDIA_NOT_FOUND: string;
+      MEDIA_IMMUTABLE: string;
+      INIT_MISMATCH: string;
+      MEDIA_TOO_LARGE: string;
+      CHUNK_TOO_LARGE: string;
+      UNSUPPORTED_ENCODING: string;
+      MIME_UNSUPPORTED: string;
+      CHUNK_INDEX_INVALID: string;
+      CHUNK_SIZE_INVALID: string;
+      CHUNKS_MISSING: string;
+      HASH_MISMATCH: string;
+      MIME_MISMATCH: string;
+      STORAGE_ERROR: string;
+      LOCAL_CORRUPT: string;
+      AUTH_TOKEN_MISSING: string;
+      AUTH_TOKEN_INVALID: string;
     };
     rejection: {
       BAD_SIGNATURE: string;
@@ -292,6 +329,17 @@ export interface TranslationResources {
     };
     permission: {
       camera: string;
+    };
+    storage: {
+      lowWarning: string;
+      lowCritical: string;
+    };
+    capture: {
+      refusedTitle: string;
+      refusedBody: string;
+    };
+    upload: {
+      persistentFailure: string;
     };
   };
   push: {

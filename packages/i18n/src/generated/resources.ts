@@ -71,6 +71,24 @@ export const resources: SeededResources = {
           RATE_LIMITED: 'Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.',
           UNEXPECTED: 'Terjadi kesalahan. Coba lagi.',
           NETWORK: 'Koneksi bermasalah. Perubahan kamu tetap tersimpan di perangkat ini.',
+          MEDIA_NOT_FOUND: 'Foto belum ada di server. Aplikasi akan mencoba lagi.',
+          MEDIA_IMMUTABLE:
+            'Foto yang sudah terkirim tidak bisa diganti. Ambil foto baru kalau perlu koreksi.',
+          INIT_MISMATCH: 'Data foto ini tidak cocok dengan yang ada di server. Ambil foto baru.',
+          MEDIA_TOO_LARGE: 'Foto ini terlalu besar untuk dikirim. Laporkan masalah ini.',
+          CHUNK_TOO_LARGE: 'Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.',
+          UNSUPPORTED_ENCODING: 'Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.',
+          MIME_UNSUPPORTED: 'Jenis berkas ini tidak bisa dikirim. Laporkan masalah ini.',
+          CHUNK_INDEX_INVALID: 'Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.',
+          CHUNK_SIZE_INVALID: 'Foto gagal dikirim karena masalah aplikasi. Laporkan masalah ini.',
+          CHUNKS_MISSING: 'Sebagian foto belum sampai. Aplikasi akan mengirim sisanya.',
+          HASH_MISMATCH: 'Foto rusak saat dikirim. Aplikasi akan mencoba lagi.',
+          MIME_MISMATCH: 'Berkas foto tidak cocok dengan jenisnya. Ambil foto baru.',
+          STORAGE_ERROR: 'Server gagal menyimpan foto. Aplikasi akan mencoba lagi.',
+          LOCAL_CORRUPT: 'Foto ini rusak di perangkat dan tidak bisa dikirim. Ambil foto baru.',
+          AUTH_TOKEN_MISSING: 'Masuk lagi untuk melanjutkan pengiriman foto.',
+          AUTH_TOKEN_INVALID:
+            'Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.',
         },
         rejection: {
           BAD_SIGNATURE:
@@ -197,6 +215,19 @@ export const resources: SeededResources = {
         permission: {
           camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
         },
+        storage: {
+          lowWarning: 'Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.',
+          lowCritical:
+            'Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman.',
+        },
+        capture: {
+          refusedTitle: 'Penyimpanan penuh',
+          refusedBody:
+            'Tidak bisa ambil foto karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
+        },
+        upload: {
+          persistentFailure: '{count} foto belum sampai ke server.',
+        },
       },
       push: {
         conflict: {
@@ -278,6 +309,29 @@ export const resources: SeededResources = {
           RATE_LIMITED: 'Too many requests. Wait a moment, then try again.',
           UNEXPECTED: 'Something went wrong. Try again.',
           NETWORK: 'Connection problem. Your changes are still saved on this device.',
+          MEDIA_NOT_FOUND: 'The photo isn’t on the server yet. The app will try again.',
+          MEDIA_IMMUTABLE:
+            'A photo that has been sent can’t be replaced. Take a new photo if a correction is needed.',
+          INIT_MISMATCH: 'This photo’s details don’t match the server’s. Take a new photo.',
+          MEDIA_TOO_LARGE: 'This photo is too large to send. Please report this.',
+          CHUNK_TOO_LARGE:
+            'The photo couldn’t be sent because of an app problem. Please report this.',
+          UNSUPPORTED_ENCODING:
+            'The photo couldn’t be sent because of an app problem. Please report this.',
+          MIME_UNSUPPORTED: 'This file type can’t be sent. Please report this.',
+          CHUNK_INDEX_INVALID:
+            'The photo couldn’t be sent because of an app problem. Please report this.',
+          CHUNK_SIZE_INVALID:
+            'The photo couldn’t be sent because of an app problem. Please report this.',
+          CHUNKS_MISSING: 'Part of the photo hasn’t arrived. The app will send the rest.',
+          HASH_MISMATCH: 'The photo was damaged while sending. The app will try again.',
+          MIME_MISMATCH: 'The photo file doesn’t match its type. Take a new photo.',
+          STORAGE_ERROR: 'The server couldn’t save the photo. The app will try again.',
+          LOCAL_CORRUPT:
+            'This photo is damaged on this device and can’t be sent. Take a new photo.',
+          AUTH_TOKEN_MISSING: 'Sign in again to keep sending photos.',
+          AUTH_TOKEN_INVALID:
+            'This device’s session has ended. Sign in again to keep sending photos.',
         },
         rejection: {
           BAD_SIGNATURE:
@@ -404,6 +458,21 @@ export const resources: SeededResources = {
         },
         permission: {
           camera: 'Allow the app to use the camera to take photos.',
+        },
+        storage: {
+          lowWarning:
+            'Storage is getting low. Old photos that have already been sent will be cleaned up.',
+          lowCritical:
+            'Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept.',
+        },
+        capture: {
+          refusedTitle: 'Storage full',
+          refusedBody:
+            'Photos can’t be taken because storage is nearly full. Free up some space, then try again.',
+        },
+        upload: {
+          persistentFailure:
+            '{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}',
         },
       },
       push: {

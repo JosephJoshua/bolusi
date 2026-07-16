@@ -14,5 +14,16 @@
   },
   "permission": {
     "camera": "Izinkan aplikasi memakai kamera untuk ambil foto."
+  },
+  "storage": {
+    "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.",
+    "lowCritical": "Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman."
+  },
+  "capture": {
+    "refusedTitle": "Penyimpanan penuh",
+    "refusedBody": "Tidak bisa ambil foto karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi."
+  },
+  "upload": {
+    "persistentFailure": "{count} foto belum sampai ke server."
   }
 }
