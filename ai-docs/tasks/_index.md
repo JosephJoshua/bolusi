@@ -91,6 +91,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 82 | media pipeline's MOBILE half — capture (expo-camera), signature pad, compress passes, cache→document wiring, drain triggers, background-task registration, pruning actor, remote cache. Task 18 shipped the engine and deliberately not this (the split) | todo | 18, 50 |
 
 | 79 | `api/03 §8`'s `MEDIA_IMMUTABLE` rule says compare own sha256 to **the server's** — no endpoint returns it (`status`/`init` carry no hash; the 409 has no `details`, and `media.ts:215` returns before the field check). Only §3.5's `ETag` exposes it. Shipped via conditional-GET `If-None-Match`, fails closed; spec text still unimplementable — 4th of the class (62/70/72) (from task 18) | todo | — |
+| 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | in-progress | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
