@@ -34,7 +34,7 @@ Concretely, shipped and merged:
 
 ## Docs to read
 
-- **D17** (above) — the directive and the five things it rules.
+- **D17** (above) — the directive and the five things it rules. **The `impeccable` skill is now installed** (`github.com/pbakaus/impeccable`, v3.9.1) alongside `frontend-design`; both are **mandatory for the frontend phase**, which this task does not do.
 - `ai-docs/decisions/2026-07-15-no-device-v0-exit.md` (**D12/D13**) — the no-device posture this amends.
 - `ai-docs/tasks/58-*.md` §Outcome — **read it closely.** It is the model for this work: it verified a platform claim against **live SDK docs**, found the option iOS-only, and ruled it inert *because the product was Android-first*. **D17 changes that premise.** Its reasoning is preserved, which is why the ruling can be re-evaluated rather than re-derived.
 - `ai-docs/tasks/59-*.md` — the muting analysis, Android-reasoned, **already batched as an owner decision**; D17 adds a dimension to that decision.
