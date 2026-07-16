@@ -13,4 +13,5 @@ export * from './projection/index.js';
 export * from './runtime/index.js';
 export * from './module/index.js';
 export * from './query/index.js';
+export * from './media/index.js';
 export * from './sync/index.js';
