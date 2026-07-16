@@ -29,6 +29,24 @@ Standing instruction: build autonomously, batch questions rather than interrupt.
 
 ---
 
+## 0b. NEW — a security spec contradicts itself: SEC-DEV-04's §218 vs api/02-auth §7.3. Pick which is right. (task 70)
+
+**Two agents independently proved this, in opposite directions, and it held.** `security-guide §218` (SEC-DEV-04, "offline-revocation caveat holds") requires that a device revoked **while offline**, on reconnect, has its queued ops **"kept + surfaced as `rejected`, none accepted."** Three independent facts make that unbuildable as written:
+
+1. **The wire never produces it.** A revoked device's request 401s at the auth middleware (`auth.ts:116` → 401 `DEVICE_REVOKED`) *before* any per-op rejection code can be produced — and that 401 is itself normative (`api/02-auth §8`/§9). So "each queued op comes back `DEVICE_REVOKED`" cannot happen over HTTP; the whole request is refused at the door.
+2. **The client has no path from a 401 to marking ops** — ops are marked only from a `200`.
+3. **"kept" directly contradicts `api/02-auth §7.3`**, which says unsynced ops on a revoked device are **destroyed by design** (crypto-wipe). And `rejected` is a terminal state (`03 §3`), so marking ops on a 401 would let **one spurious 401 permanently destroy a shop's unsynced work** — the exact harm §7.3's confirm-then-wipe exists to prevent.
+
+**So the three shippable behaviours of §218 (continues-offline, kept-locally, none-accepted) are built and tested; two (per-op `DEVICE_REVOKED`, surfaced-as-`rejected`) cannot be, and were correctly deferred rather than faked.** review-61 verified all three legs against source and agrees.
+
+**Your call (this is a §6 red-flag — a security-behaviour spec change, not an implementer's call):**
+- **(a) §218 is over-specified** — drop the two per-op-rejection words; the real guarantee is "a revoked device cannot sync and its unsynced work is wiped, not leaked." *(review-61 and I both think this is right.)*
+- **(b) §218 means the revocation-*window* (revoked mid-session, not offline)** — in which case it **duplicates SEC-SYNC-02** (whose client leg already ships) and should be removed from the guide as redundant or explicitly scoped to the offline half.
+
+**Default if you don't answer: (a).** It matches §7.3, which is the stronger and more recently-reasoned control. Nothing is blocked — SEC-DEV-04 stays allowlisted to task 70 until you rule; task 28's "allowlist empty" roll-up waits on it.
+
+---
+
 ## 1. Cloud device farm — ASKED AND DEFERRED (owner, 2026-07-15). Revisit when task 27a lands.
 
 **Status: closed for now.** Owner's call: think about it later. Nothing stalls; do not re-ask until the trigger below fires.
