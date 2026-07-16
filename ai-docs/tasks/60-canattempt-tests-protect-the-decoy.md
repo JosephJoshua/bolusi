@@ -1,7 +1,25 @@
 # TASK 60 — `canAttempt` has 11 tests, zero callers, and a comment pointing at it: the PIN lockout's test coverage protects the function that isn't the gate
 
-**Status:** todo
+**Status:** done
 **Priority:** **MEDIUM** — **no live defect**: the affordance ships correctly via a different path (verified below). The defect is the *coverage*: 11 green tests sit on a decoy, and the code that actually keeps the keys dark has none of them.
+
+## Resolution (implemented — premise confirmed, option 1 taken)
+
+**Premise confirmed in the direction that matters** (T-11). Sabotaged `pinPadState`'s `delayed → 'locked'` arm to `'entry'` (keys go live inside the lockout window). All 10 `expect(canAttempt(…))` sites — isolated into a probe file containing nothing else — stayed **green: 9 passed, EXIT=0**. The finding holds.
+
+**One refinement to the brief, measured:** the *file* was not entirely blind. The full-file run under the same sabotage went **1 failed / 15 passed**, and the single red was `model.test.ts:95` — a pre-existing `pinPadState` assertion, **not** a `canAttempt` one (the `canAttempt` assertions at L91/92 in that same test ran first and passed). So the live path's coverage was not zero; it was **exactly two assertions** (L95 `delayed`, L150 `lockedOut`), each on one fixture. Sabotaging both arms: **2 failed / 14 passed**. The thorough coverage — boundary, rollback, whole-schedule walk — was all on the decoy.
+
+**Option taken: deleted `canAttempt`** (§2.8; its docstring's "belt AND braces" defence is not load-bearing — `assertAttemptAllowed` throws regardless). Its 10 assertion sites were **ported, not dropped**, onto the shipping path via a test-local `keysAreLive(row, now, last) = pinPadState(pinView(…)) !== 'locked'` — a *composition* of the shipped functions mirroring `PinScreen.tsx:96`, never a mirror of their logic. The equivalence is exact: `canAttempt` ⟺ `!locked` on all four branches.
+
+**THE GUARD** (§2.11/T-14): broke `pinPadState`'s `delayed` arm → **4 failed / 12 passed**, incl. the rollback case and the whole-schedule walk (was 1 red before the port). Broke the `lockedOut` arm → **3 failed / 13 passed**. Restored → **16 passed, EXIT=0**. Both arms are load-bearing.
+
+**`PinScreen.tsx:52` fixed** — it now names `PinPad`'s `state='locked'`, traced to the producer (`PinPad.tsx:144` early-returns from `pressDigit` before `onComplete`; `:215` `disabled`; `:216` drops `onPress`).
+
+**Also strengthened:** the totality sweep asserted `expect(pinPadState(view)).toBeTruthy()` — which stayed **green under both sabotages**, because `'entry'` is truthy. It now asserts the security property (keys live IFF not a lockout state) across the whole cross-product, with a `dark > 0` denominator (T-14).
+
+**Sweep filed 63** (the `*_KEY` label-map decoys — same class, 3+ more instances incl. `PIN_MESSAGE_KEY` in this very file) and **64** (wire `knip` as a pinned dep + gate; `knip.json` landed here, the dependency did not).
+
+**A near-miss worth recording (T-15, this task's own thesis):** the replacement comment first written for `PinScreen.tsx:52` said `assertAttemptAllowed` "throws **server-side**". It does not — it is `core/src/auth/lockout.ts`, called by `verifyPin` **on-device**; PIN auth is offline (`api/02-auth §6.5`). An authoritative comment naming an unverified mechanism was nearly shipped **into the fix for an authoritative comment naming an unverified mechanism**. Caught by tracing before writing. This is the fourth time on this project a rule was broken by its own enforcer (§2.11).
 **Depends on:** —
 **Blocks:** —
 **SEC ids owned by THIS task:** none
