@@ -77,10 +77,13 @@ const NOTE_CREATED = 'notes.note_created';
 const notesModule = {
   id: 'notes',
   operations: {
-    [NOTE_CREATED]: { conflict: undefined },
+    // No `conflict` KEY at all — 01 §8.1's "ops without a conflict declaration". An absent key,
+    // not a present-and-undefined one: the two differ under exactOptionalPropertyTypes, and the
+    // absent form is what a real manifest writes.
+    [NOTE_CREATED]: {},
     // N1 (03 §11): "concurrent body edits of the same note from different devices" → minor.
     [NOTE_EDITED]: { conflict: { key: 'note.body', severity: 'minor' as const } },
-    [NOTE_ARCHIVED]: { conflict: undefined },
+    [NOTE_ARCHIVED]: {},
   },
 };
 
@@ -131,6 +134,21 @@ const suiteRegistry: OpRegistry = {
       return { kind: 'known', validate: () => true };
     }
     if (type === PLATFORM_OP.conflictDetected) return { kind: 'known', validate: () => true };
+    // The no-cascade case pushes a real locale op; it validates through the SHIPPED payload schema
+    // (platformModule's own declaration), not a `() => true` stub, so a schema regression is red.
+    if (type === PLATFORM_OP.userLocaleChanged) {
+      return {
+        kind: 'known',
+        validate: (payload) => {
+          try {
+            platformModule.operations[PLATFORM_OP.userLocaleChanged]?.payload.parse(payload);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      };
+    }
     return { kind: 'unknown' };
   },
 };
@@ -260,7 +278,16 @@ function depsWith(options: PushOptions): OplogPipelineDeps {
     crypto: base.crypto,
     now: base.now,
     newId: base.newId,
-    registry: buildConflictRegistry([notesModule]),
+    // The notes stand-in AND the REAL platform module. Including `platformModule` is what makes
+    // the no-cascade test below honest: with only `notesModule` here, the conflict registry never
+    // sees the platform types, so "concurrent setLocale produces no conflict" would be green even
+    // if `platform.user_locale_changed` DID declare a conflict key — green for the wrong reason.
+    // Caught by falsifying it (§2.11): adding a conflict declaration to the platform op left the
+    // behavioural test green and only the declaration test red.
+    registry: buildConflictRegistry([
+      notesModule,
+      platformModule as unknown as Parameters<typeof buildConflictRegistry>[0][number],
+    ]),
     invariantChecks: options.checks ?? [NOTES_EDIT_AFTER_ARCHIVE],
     systemIdentity: options.systemIdentity,
   };
@@ -785,6 +812,81 @@ describe('dedupe, emission and atomicity (01 §8.2; 10-db §3)', () => {
       .where('tenantId', '=', member.tenantId)
       .executeTakeFirstOrThrow();
     expect(Number(chain.lastSeq)).toBe(0);
+  });
+});
+
+describe('no cascade — platform ops never produce Conflict rows (01 §8.1)', () => {
+  test('concurrent setLocale from two devices: ZERO conflicts, LWW on user_prefs', async () => {
+    // 01 §6: `platform.user_locale_changed` has "No conflict declaration (canonical-order LWW)".
+    // Two devices setting a locale is not a collision anyone should hear about — the later one
+    // simply wins. This is the same fixture shape as the Rule-1 HIT above (two devices, same
+    // entity, neither having pulled the other) with ONE thing changed: the op type declares no
+    // conflict. So the zero here is attributable to the declaration, not to a fixture that failed
+    // to push — which the positive control below pins.
+    //
+    // It also guards the RECURSION. A `platform.conflict_detected` op is itself an accepted op on
+    // an entity; if the platform types declared a conflict key, detection would manufacture
+    // conflicts about conflicts, each emitting another detection op, forever. The absence of a
+    // `conflict` key in `platform/operations.ts` is what stops it, and absence is invisible — so
+    // this test is what makes it load-bearing rather than incidental.
+    const { member, systemIdentity, builder: aBuilder } = await setupTenant(4300);
+    const { other: devB, builder: bBuilder } = await addDevice(member, 4301);
+
+    await processPushBatch(
+      depsWith({ systemIdentity }),
+      { deviceId: member.deviceId, tenantId: member.tenantId },
+      [
+        aBuilder.append({
+          type: PLATFORM_OP.userLocaleChanged,
+          entityType: 'user_pref',
+          entityId: member.userId,
+          storeId: null,
+          payload: { locale: 'en' },
+        }),
+      ],
+    );
+    // B never pulled A's change (cursor 0) — concurrent by Rule 1's own definition.
+    await processPushBatch(
+      depsWith({ systemIdentity, idSeed: 830 }),
+      { deviceId: devB.deviceId, tenantId: member.tenantId },
+      [
+        bBuilder.append({
+          type: PLATFORM_OP.userLocaleChanged,
+          entityType: 'user_pref',
+          entityId: member.userId,
+          storeId: null,
+          payload: { locale: 'id' },
+        }),
+      ],
+    );
+
+    // THE POSITIVE CONTROL (T-14b): both ops really are in the log. Without it, "zero conflicts"
+    // is equally satisfied by two pushes that never landed.
+    const logged = await readOps(testDb.db, member.tenantId);
+    expect(logged.filter((o) => o.type === PLATFORM_OP.userLocaleChanged)).toHaveLength(2);
+
+    // No conflict — and no detection op either, so nothing could cascade next time.
+    expect(await readConflicts()).toHaveLength(0);
+    expect(logged.filter((o) => o.type === PLATFORM_OP.conflictDetected)).toHaveLength(0);
+
+    // LWW stands: ONE row, carrying B's locale (canonically later — B's builder starts later).
+    const prefs = await testDb.db.selectFrom('userPrefs').select(['userId', 'locale']).execute();
+    expect(prefs).toEqual([{ userId: member.userId, locale: 'id' }]);
+  });
+
+  test('none of the three platform op types declares a conflict key (the T-14 denominator)', () => {
+    // The absence, asserted directly and exhaustively — 01 §8.1: "Ops without a `conflict`
+    // declaration never generate Conflict records." Behavioural coverage above proves it for the
+    // one type a test can drive today; this covers the CLASS (T-12), including
+    // `conflict_detected` itself, whose cascade would be the recursive one and which no member
+    // device can push (05 §9 item 5) so no behavioural test could reach it.
+    const declared = Object.entries(platformModule.operations).filter(
+      ([, d]) => (d as { conflict?: unknown }).conflict !== undefined,
+    );
+    expect(declared).toEqual([]);
+    // … and the denominator: three types were examined, not zero (an empty operations block would
+    // also produce an empty `declared`).
+    expect(Object.keys(platformModule.operations)).toHaveLength(3);
   });
 });
 

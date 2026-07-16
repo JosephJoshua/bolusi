@@ -27,7 +27,10 @@ import {
 function makeResult(): ProvisionResult {
   return {
     tenantId: '0198f200-0000-7000-8000-00000000a001',
+    storeIds: ['0198f200-0000-7000-8000-00000000a003'],
     ownerUserId: '0198f200-0000-7000-8000-00000000a002',
+    systemUserId: '0198f200-0000-7000-8000-00000000a004',
+    systemDeviceId: '0198f200-0000-7000-8000-00000000a005',
     oneTimePassword: 'PW-ONE-TIME-9c1f4a',
     /**
      * A distinctive marker, deliberately NOT base64-shaped.
