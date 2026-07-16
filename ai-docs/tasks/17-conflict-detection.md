@@ -1,6 +1,6 @@
 # TASK 17 — conflict-detection: server rules, system-device emission, platform module, acknowledge
 
-**Status:** in-review
+**Status:** done
 **Depends on:** 07, 08, 16, 46, 47, 48
 
 ## Goal
