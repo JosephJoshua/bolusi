@@ -1,6 +1,6 @@
 # TASK 73 — L3 integration runs on a substitute that has already shipped two silent production bugs; move it to real PG16 via testcontainers (D16)
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH** — not a hypothetical. The substitute lane has been **measured** missing exactly the bug class that fails silently, and it makes our most important invariant (tenant isolation) untestable-by-construction. Owner directive, 2026-07-16.
 **Depends on:** — (34 landed the attributed real-PG lane this builds on)
 **Blocks:** —
