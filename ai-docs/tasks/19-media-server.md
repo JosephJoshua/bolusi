@@ -1,6 +1,6 @@
 # TASK 19 — media-server (init/chunks/status/complete/download, assembly, magic bytes)
 
-**Status:** in-review
+**Status:** done
 **Depends on:** 05, 12
 
 ## Goal

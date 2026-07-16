@@ -1,5 +1,5 @@
 # TASK 04 — db-client (op-sqlite wrapper, Kysely dialect, SQLCipher, client migrations)
-**Status:** in-review
+**Status:** done
 **Depends on:** 01
 
 ## Goal

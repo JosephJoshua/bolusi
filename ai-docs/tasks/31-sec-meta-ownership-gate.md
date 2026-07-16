@@ -1,5 +1,5 @@
 # TASK 31 — SEC-META-01 cannot tell "owns" from "disclaims"; three rows are armed
-**Status:** in-review
+**Status:** done
 **Depends on:** 03
 
 ## Outcome (2026-07-15) — shipped

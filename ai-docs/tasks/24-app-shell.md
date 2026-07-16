@@ -1,6 +1,6 @@
 # TASK 24 — app-shell (Expo dev-build config, navigation, auth screens, sync status screen)
 
-**Status:** in-review
+**Status:** done
 **Depends on:** 14, 22, 23
 
 ## Implementation notes (task 24, branch `task/24-app-shell`)

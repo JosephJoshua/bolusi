@@ -1,5 +1,5 @@
 # TASK 46 — `highestContiguousServerSeq` never advances on real Postgres: `int8` arrives as a string
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH** — a silent, total failure of the server-side projection watermark on the production engine. Fails *quiet*, not closed: no error, no red test, the watermark simply never moves.
 **Depends on:** 08
 

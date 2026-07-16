@@ -1,6 +1,6 @@
 # TASK 05 — db-server: PG migrations, RLS, forTenant, codegen
 
-**Status:** in-review
+**Status:** done
 **Depends on:** 01
 
 ## Goal

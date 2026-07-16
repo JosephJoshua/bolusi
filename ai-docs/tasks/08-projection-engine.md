@@ -1,6 +1,6 @@
 # TASK 08 — projection-engine
 
-**Status:** in-review
+**Status:** done
 **Depends on:** 04, 06
 
 ## Goal

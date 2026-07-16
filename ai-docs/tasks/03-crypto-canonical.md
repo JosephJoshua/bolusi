@@ -1,5 +1,5 @@
 # TASK 03 — crypto + canonicalization (@bolusi/core crypto, JCS, RFC 8785 vectors)
-**Status:** in-review
+**Status:** done
 **Depends on:** 01, 02
 
 ## Goal

@@ -1,5 +1,5 @@
 # TASK 30 — resolve 3 `ui-labels.md` keys that violate the 07-i18n §3.1 key grammar
-**Status:** in-review
+**Status:** done
 **Depends on:** 22
 
 ## Goal

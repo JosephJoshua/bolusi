@@ -1,5 +1,5 @@
 # TASK 48 — `RawOpRow` is client-shaped in three ways; the projection engine cannot read server ops
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH when task 17 wires the engine server-side** — three separate production bugs, currently unreachable. One of them silently **inverts canonical order**.
 **Depends on:** 46
 **Blocks:** 17

@@ -1,6 +1,6 @@
 # TASK 23 — ui-kit (@bolusi/ui tokens + mandatory-state components)
 
-**Status:** in-review
+**Status:** done
 **Depends on:** 01, 22
 
 ## Goal
