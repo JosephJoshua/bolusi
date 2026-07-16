@@ -42,6 +42,13 @@ export {
 // holds. Its consumer is apps/server's push transaction (task 49).
 export { createServerWatermarkStore } from './watermarks.js';
 
+// Task 49 — the SERVER projection engine factory (10-db §3 step 6, 04 §4). Same D7 weighing as
+// the watermark store: it CONSUMES a `forTenant` handle rather than producing one, and returns a
+// `ProjectionEngine` (apply/rebuild methods, no `selectFrom`), so the export-surface `queryish`
+// assertion still holds. Homing the ONE construction here — not inline in the pipeline — is what
+// lets `pnpm test:rls` execute the exact engine the push path runs (projection-apply.ts header).
+export { createServerProjectionEngine } from './projection-apply.js';
+
 /**
  * Runs `fn` inside a transaction bound to `tenantId`.
  *

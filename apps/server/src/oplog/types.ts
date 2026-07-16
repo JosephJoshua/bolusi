@@ -1,7 +1,7 @@
 // Shared types for the server op-acceptance pipeline (05 §8–9, 10-db §3). No HTTP here — the
 // pipeline is a pure function of deps + batch (task 16 wires it to POST /v1/sync/push).
-import type { CryptoPort } from '@bolusi/core';
-import type { ForTenant } from '@bolusi/db-server';
+import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
+import type { DB, ForTenant } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
 
 /**
@@ -32,6 +32,17 @@ export interface OplogPipelineDeps {
   readonly newId: () => string;
   /** (type, schemaVersion) → payload validator (task 11's @bolusi/modules registry). */
   readonly registry: OpRegistry;
+  /**
+   * Op type → projection applier (04 §4) — the SAME appliers the client runs (04 §2, T-8). The
+   * pipeline folds every ACCEPTED op into the server read models inside the push transaction
+   * (10-db §3 step 6, 04 §5.1 step 6), advancing `applied_server_seq` via the server watermark
+   * store. Empty until a module registers (tasks 17/25/43) — with no registered applier every
+   * accepted op is a defined no-op (engine.ts: `unregistered`), so the log fills but no projection
+   * moves, which is the honest v0 state of a server that folds no modules yet. Derived from the
+   * SAME module list as `registry` at the composition root (deps.ts), so validation and folding
+   * never diverge (CLAUDE.md §2.8).
+   */
+  readonly projections: ProjectionRegistry<DB>;
 }
 
 /** The token-authenticated device pushing this batch (api/01 §2; task 16 supplies it). */

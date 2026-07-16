@@ -24,6 +24,7 @@ export function createSyncRouter(deps: ServerDeps) {
           now: deps.now,
           newId: deps.newOpLogId,
           registry: deps.opRegistry,
+          projections: deps.projections,
           pokeHub: deps.pokeHub,
         },
         { deviceId: device.deviceId, tenantId: device.tenantId },

@@ -2,8 +2,15 @@
 // touch that is an I/O boundary or a not-yet-built collaborator is injected here — so tests swap
 // fakes (rate-limit stores, token verifier, forTenant, clock) and later tasks (13/16/…) drop in
 // real implementations without reshaping the skeleton.
-import { forTenant as dbForTenant, type ForTenant } from '@bolusi/db-server';
-import type { CryptoPort } from '@bolusi/core';
+import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
+import {
+  registerModules,
+  type AnyModuleDefinition,
+  type CryptoPort,
+  type ModuleRegistry,
+  type OperationDeclaration,
+  type ProjectionRegistry,
+} from '@bolusi/core';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
@@ -54,15 +61,59 @@ export const DEFAULT_DEVICE_RATE_LIMITS: DeviceRateLimits = {
 export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
 
 /**
- * The default server op registry (05 §8): EMPTY until a module registers its op types (the platform
- * module lands with task 17, notes with task 25). With no registered type, every pushed op resolves
- * `unknown` → `UNKNOWN_TYPE` — the honest v0 state of a server that folds no modules yet. Tests
- * inject a registry covering the op types they push; tasks 17/25 replace this with the assembled
- * `@bolusi/core` module registry adapter.
+ * The server's module list — the ONE list tasks 17 (platform), 25 (notes), 43 (auth) append their
+ * `defineModule` result to. `registerModules` turns it into BOTH the op-payload validators the push
+ * pipeline's schema step consumes AND the projection appliers its apply step runs (10-db §3 step 6),
+ * so validation and folding can never name different module sets (CLAUDE.md §2.8). This is the ring
+ * task 49 closed: 08 punted server embedding to "07/16", 16 to "17", 25 assumed "the registration
+ * list nobody creates" — all pointing at a list that did not exist. It exists here now.
+ *
+ * EMPTY at v0: no module ships appliers yet (17/25/43 are todo). With an empty list every pushed op
+ * resolves `unknown` → `UNKNOWN_TYPE` and every accepted op folds as a defined no-op — the honest
+ * state of a server that folds no modules, not a silent gap.
  */
-export const EMPTY_OP_REGISTRY: OpRegistry = {
-  resolve: () => ({ kind: 'unknown' }),
-};
+export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [];
+
+const serverModuleRegistry: ModuleRegistry<DB> = registerModules(SERVER_MODULES);
+
+/** Op type → declaring module's `OperationDeclaration`, flattened from SERVER_MODULES for the
+ *  push pipeline's schema step (05 §8). One map, so a duplicate type would have thrown in
+ *  `registerModules` before reaching here (04 §1). */
+function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
+  const byType = new Map<string, OperationDeclaration<DB>>();
+  for (const module of registry.modules) {
+    for (const [type, declaration] of Object.entries(module.operations)) {
+      byType.set(type, declaration);
+    }
+  }
+  return {
+    resolve(type) {
+      const declaration = byType.get(type);
+      if (declaration === undefined) return { kind: 'unknown' };
+      // `.strict()` payload schema (04 §3): a parse throw is a SCHEMA_INVALID payload, never a
+      // crash — classifySchema turns `false` into the distinct rejection code (05 §8).
+      return {
+        kind: 'known',
+        validate: (payload) => {
+          try {
+            declaration.payload.parse(payload);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      };
+    },
+  };
+}
+
+/**
+ * The default server op registry (05 §8), derived from SERVER_MODULES. EMPTY today (⇒ every pushed
+ * op is `UNKNOWN_TYPE`), which is why the pipeline suite injects a registry covering the types it
+ * pushes. When 17/25/43 add their modules, the SAME list feeds `projections` below, so a validated
+ * type always has an applier and vice versa.
+ */
+export const serverOpRegistry: OpRegistry = deriveOpRegistry(serverModuleRegistry);
 
 export interface ServerDeps {
   readonly now: () => number;
@@ -90,6 +141,9 @@ export interface ServerDeps {
   readonly newOpLogId: () => string;
   /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Empty by default. */
   readonly opRegistry: OpRegistry;
+  /** Op type → projection applier (04 §4) for the push pipeline's apply step (10-db §3 step 6).
+   *  Derived from the SAME SERVER_MODULES list as `opRegistry`; empty by default. */
+  readonly projections: ProjectionRegistry<DB>;
   /** In-process scoped `sync.poke` hub (api/00 §12.1); default has zero subscribers (task 20 subs). */
   readonly pokeHub: PokeHub;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
@@ -131,7 +185,8 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     clientIp: overrides.clientIp ?? defaultClientIp,
     serverCrypto: overrides.serverCrypto ?? serverCryptoPort,
     newOpLogId: overrides.newOpLogId ?? (() => uuidv7(now())),
-    opRegistry: overrides.opRegistry ?? EMPTY_OP_REGISTRY,
+    opRegistry: overrides.opRegistry ?? serverOpRegistry,
+    projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),
