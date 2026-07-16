@@ -83,6 +83,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 72 | `06 §3.2` says `mediaRefSchema` lives in `@bolusi/core` — which **may not import zod** (`08 §3.3`, and core's own `strict-schema.ts:6`); the violation would compile + lint green and break only at runtime. Ruled to `@bolusi/schemas`; spec text still wrong (from task 18) | todo | — |
 | 73 | **HIGH — owner directive (D16)** L3 integration (378 tests) runs on PGlite, which measurably missed the int8 silent bug (14/14 green vs real `pg` 4 red) and makes RLS tests vacuous (owner bypasses RLS); move to real PG16 via testcontainers + Ryuk | in-progress | — |
 | 74 | 11 raw-`sql<T>` readers resolve their keys only because `CamelCasePlugin` is wired; nothing asserts it. `pull.ts:411` launders a missing key into a plausible serverSeq of 1; `oplog-source.ts:229` is a no-op self-alias at task 46's own fix site (from review-18) | todo | — |
+| 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
