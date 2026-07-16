@@ -310,6 +310,9 @@ importers:
       kysely:
         specifier: 'catalog:'
         version: 0.29.3
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@bolusi/db-client':
         specifier: workspace:*
@@ -329,9 +332,6 @@ importers:
       better-sqlite3:
         specifier: 'catalog:'
         version: 12.11.1
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   packages/db-client:
     dependencies:

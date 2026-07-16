@@ -11,11 +11,17 @@ export {
   type AnyCommandDeclaration,
   type AnyQueryDeclaration,
   type CommandDeclaration,
+  // 01 §8.1's conflict declaration (extends 04 §3) — the server's Rule-1 detection reads it, so it
+  // must cross the package boundary as a type.
+  type ConflictDeclaration,
+  type ConflictSeverity,
   type ModuleDefinition,
   type ModuleManifest,
   type ModuleMigration,
   type ModuleProjections,
   type OperationDeclaration,
+  // 01 §6's envelope scope (`storeId: null` = tenant-scoped).
+  type OperationScope,
   type QueryDeclaration,
 } from './define-module.js';
 

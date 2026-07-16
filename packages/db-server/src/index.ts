@@ -49,6 +49,20 @@ export { createServerWatermarkStore } from './watermarks.js';
 // lets `pnpm test:rls` execute the exact engine the push path runs (projection-apply.ts header).
 export { createServerProjectionEngine } from './projection-apply.js';
 
+// Task 17 — Rule 1's candidate query (01 §8.2), homed here for the third time for the same reason
+// (conflict-candidates.ts header): `pnpm test:rls` is `--project db-server`, so this is the only
+// package whose code the attributed real-PG16 lane can execute, and D16 forbids a substitute from
+// being the sole witness for a claim about the production driver. Rule 1 is an `int8` comparison
+// (`server_seq > last_pull_cursor`) — the exact class PGlite is measurably blind to (T-14f: 14/14
+// green vs 4 red on real `pg`). Same D7 weighing as the two above: it CONSUMES a tenant-bound
+// handle rather than producing one, and returns plain records with no `selectFrom`, so the
+// `queryish` assertion in export-surface.test.ts still holds.
+export {
+  findRule1Candidates,
+  type Rule1Candidate,
+  type Rule1Probe,
+} from './conflict-candidates.js';
+
 /**
  * Runs `fn` inside a transaction bound to `tenantId`.
  *

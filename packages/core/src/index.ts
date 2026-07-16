@@ -12,5 +12,6 @@ export * from './oplog/index.js';
 export * from './projection/index.js';
 export * from './runtime/index.js';
 export * from './module/index.js';
+export * from './platform/index.js';
 export * from './query/index.js';
 export * from './sync/index.js';

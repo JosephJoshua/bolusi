@@ -1,8 +1,10 @@
 // Shared types for the server op-acceptance pipeline (05 §8–9, 10-db §3). No HTTP here — the
 // pipeline is a pure function of deps + batch (task 16 wires it to POST /v1/sync/push).
 import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
-import type { DB, ForTenant } from '@bolusi/db-server';
+import type { DB, ForTenant, TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
+
+import type { DetectConflictsResult, SurfacedConflict } from '../sync/conflict-detection.js';
 
 /**
  * The registry seam. The real (type, schemaVersion) → Zod payload registry is @bolusi/modules
@@ -43,6 +45,25 @@ export interface OplogPipelineDeps {
    * never diverge (CLAUDE.md §2.8).
    */
   readonly projections: ProjectionRegistry<DB>;
+  /**
+   * Conflict detection (01 §8.2), run AFTER the acceptance loop inside the push transaction
+   * (10-db §3). Injected so the pipeline neither owns the rules nor depends on the system-device
+   * key material; absent ⇒ no detection (a deployment that pushes but detects nothing).
+   *
+   * It receives the pipeline's OWN transaction handle — that is the atomicity contract: the
+   * detection ops it emits are inserted, chained and folded in this transaction, so they commit
+   * with the push or vanish with it.
+   */
+  readonly detectConflicts?: (
+    db: TenantDb,
+    tenantId: string,
+    accepted: readonly SignedOperation[],
+  ) => Promise<DetectConflictsResult>;
+  /**
+   * Fired once per SURFACED (significant) conflict, AFTER the transaction commits (03 §7). Task 21
+   * subscribes to deliver push category `conflict`; the default is absent (no delivery).
+   */
+  readonly onConflictSurfaced?: (conflict: SurfacedConflict) => Promise<void>;
 }
 
 /** The token-authenticated device pushing this batch (api/01 §2; task 16 supplies it). */

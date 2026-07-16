@@ -28,6 +28,8 @@ import { base64ToBytes } from '@bolusi/core';
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
 
+import type { SurfacedConflict } from '../sync/conflict-detection.js';
+
 import { recordAnomaly, type AnomalyKind } from './anomalies.js';
 import { insertOperationRow } from './persist.js';
 import { allocateServerSeq, lockTenantCounter } from './server-seq.js';
@@ -87,7 +89,10 @@ export async function processPushBatch(
   identity: PushIdentity,
   ops: PushBatch,
 ): Promise<ProcessPushResult> {
-  return deps.forTenant(identity.tenantId, async (db) => {
+  // Collected INSIDE the transaction, fired AFTER it commits (see the tail of this function).
+  const surfacedOut: SurfacedConflict[] = [];
+
+  const result = await deps.forTenant(identity.tenantId, async (db) => {
     const device = await loadDevice(db, identity.deviceId);
     if (device === undefined) {
       // The bearer-auth layer (task 16) guarantees an enrolled device before we get here; an
@@ -121,6 +126,10 @@ export async function processPushBatch(
     );
 
     const results: PushOpResult[] = [];
+    /** The ops this batch accepted, in acceptance order — conflict detection's input (01 §8.2). */
+    const accepted: SignedOperation[] = [];
+    /** Significant conflicts, for the POST-COMMIT hook (03 §7). Collected, never fired, in here. */
+    const surfaced: SurfacedConflict[] = [];
     let head: ChainHead = { seq: device.lastSeq, hash: device.lastHash };
     let halted = false;
 
@@ -236,7 +245,29 @@ export async function processPushBatch(
       }
 
       head = { seq: op.seq, hash: op.hash };
+      accepted.push(op);
       results.push({ id: op.id, status: 'accepted', serverSeq });
+    }
+
+    // Conflict detection (01 §8.2) — AFTER the acceptance loop, SAME transaction (10-db §3), over
+    // the ops just accepted. It reads the log (including this batch's inserts) and the projections
+    // (including this batch's folds), then emits `platform.conflict_detected` through the system
+    // device: chained via `system_device_chain_state`, signed with the tenant system key, and
+    // allocated a serverSeq from the SAME in-loop `UPDATE … RETURNING` under the counter lock this
+    // transaction already holds — so system ops ride the same per-tenant gapless stream.
+    //
+    // Injected, and absent by default: a deployment with no conflict detector must push normally.
+    // An all-duplicate or all-rejected batch accepts nothing, so `accepted` is empty and no
+    // detection runs — which is also why a re-push mints no second conflict (05 §5).
+    if (deps.detectConflicts !== undefined && accepted.length > 0) {
+      const detection = await deps.detectConflicts(db, identity.tenantId, accepted);
+      for (const op of detection.ops) {
+        // The detection op folds through the SAME apply step as any accepted op — 10-db §3's
+        // "INSERT operations → apply the conflicts projection". `appendSystemOp` already INSERTed
+        // it, so the engine reads it as present and folds it into `conflicts`.
+        await projectionEngine.applyPulledOp(op);
+      }
+      surfaced.push(...detection.surfaced);
     }
 
     // Advance the device chain-head cache + record contact once (10-db §3 tail).
@@ -250,6 +281,28 @@ export async function processPushBatch(
       .where('id', '=', device.id)
       .execute();
 
+    surfacedOut.push(...surfaced);
     return { results };
   });
+
+  // ── THE POST-COMMIT HOOK (03 §7) ────────────────────────────────────────────────────────────
+  //
+  // AFTER the transaction, never inside it, for two independent reasons:
+  //
+  //  1. A hook that fired inside would announce conflicts a rollback then erased — a push notice
+  //     for a conflict no device can ever pull. `forTenant` has returned here, so the commit is a
+  //     fact, and an aborted transaction throws before this line and fires nothing.
+  //  2. The hook is task 21's delivery seam (push category `conflict`). Delivery is network I/O:
+  //     inside the transaction it would hold the per-tenant counter lock — which serializes EVERY
+  //     push for the tenant (10-db §3) — for the duration of an HTTP call to Expo/FCM.
+  //
+  // Errors are NOT swallowed here: a hook that throws fails the push RESPONSE while the ops stay
+  // committed, which is the same shape task 15's client already handles (a push whose result never
+  // arrived is retried, and re-pushed ops are `duplicate` — 05 §5). Swallowing would be the
+  // alternative and it is worse: a permanently undelivered notification with no signal anywhere.
+  for (const conflict of surfacedOut) {
+    await deps.onConflictSurfaced?.(conflict);
+  }
+
+  return result;
 }

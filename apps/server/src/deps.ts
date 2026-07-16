@@ -4,6 +4,7 @@
 // real implementations without reshaping the skeleton.
 import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
 import {
+  platformModule,
   registerModules,
   type AnyModuleDefinition,
   type CryptoPort,
@@ -68,11 +69,26 @@ export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
  * task 49 closed: 08 punted server embedding to "07/16", 16 to "17", 25 assumed "the registration
  * list nobody creates" — all pointing at a list that did not exist. It exists here now.
  *
- * EMPTY at v0: no module ships appliers yet (17/25/43 are todo). With an empty list every pushed op
- * resolves `unknown` → `UNKNOWN_TYPE` and every accepted op folds as a defined no-op — the honest
- * state of a server that folds no modules, not a silent gap.
+ * Registered today: `platform` (task 17) — `conflicts` + `user_prefs`. Still MISSING: `notes`
+ * (task 25) and `auth` (task 43); until they append here, their op types are `UNKNOWN_TYPE` and
+ * their four projection tables stay empty in production. That is 2 of 6 server projection tables
+ * folded — stated because a registration list's failure mode is a silent omission, and the honest
+ * count belongs next to the list rather than in a report nobody re-reads.
+ *
+ * ON THE CAST. The appliers are typed against a dialect-neutral `PlatformDatabase` (04 §2) — the
+ * one shape that can run on BOTH Postgres and SQLite, which is what makes them one applier instead
+ * of two copies (§2.8). `DB` (db-server's generated schema) is a different type: same columns, but
+ * `bigint` arrives as `Int8 = ColumnType<string, …>` and it carries 30-odd tables the module never
+ * names. Neither is assignable to the other, and `apply(db: Kysely<DB>, …)` puts `DB` in a
+ * contravariant position, so no variance annotation rescues it. The cast is where "one applier,
+ * two engines" is paid for, and it is sound in exactly the way the T-8 conformance suite proves:
+ * the appliers touch only the declared columns, through Kysely's dialect-neutral builder, and the
+ * suite folds them against a real Postgres and a real SQLite and asserts byte-identical oracle
+ * digests. Tasks 25/43 will cast here identically.
  */
-export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [];
+export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [
+  platformModule as unknown as AnyModuleDefinition<DB>,
+];
 
 const serverModuleRegistry: ModuleRegistry<DB> = registerModules(SERVER_MODULES);
 
