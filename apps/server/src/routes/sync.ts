@@ -26,6 +26,10 @@ export function createSyncRouter(deps: ServerDeps) {
           registry: deps.opRegistry,
           projections: deps.projections,
           pokeHub: deps.pokeHub,
+          ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
+          ...(deps.onConflictSurfaced === undefined
+            ? {}
+            : { onConflictSurfaced: deps.onConflictSurfaced }),
         },
         { deviceId: device.deviceId, tenantId: device.tenantId },
         c.req.valid('json'),

@@ -82,6 +82,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 74 | `04 §3`'s registry-entry shape lists neither `conflict` (mandated by 01 §8.1, which says it "extends 04 §3") nor a way to express 01 §6's tenant-scoped op; both now ship in code — 04 is the owning doc and is stale (from task 17) | todo | — |
 | 75 | `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale` — the column holds `'id'\|'en'`. Inert (the applier always supplies locale) but a decoy aimed at task 21, which reads this column and whose brief already repeats the wrong value (from task 17) | todo | — |
 | 76 | the selectable-locale list is declared **twice** (`i18n`'s `SELECTABLE_LOCALES`, core's `LOCALE_VALUES`) because core is pure-TS and cannot import i18n; no gate compares them — adding `zh` to one silently breaks the toggle or the payload. Decide with task 72 (same boundary shape) (from task 17) | todo | — |
+| 77 | **HIGH** conflict detection is built + wired into the production push route but **OFF in production**: signing `platform.conflict_detected` needs the tenant system-device key and there is NO server loader (`config.ts` reads DB+port only; provisioning writes a file nothing reads). Provide a `SystemKeyStore` (§6: key-loading mechanism is a deployment decision) (from task 17) | todo | 17, 13 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

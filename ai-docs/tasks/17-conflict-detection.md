@@ -186,6 +186,22 @@ does NOT typecheck test files** (it builds the build tsconfigs); `pnpm typecheck
 typecheck`) does — my repeated `tsc -b EXIT=0` was never the full typecheck, and two type errors in
 my own tests were invisible until I ran the real one.
 
+**Production wiring — closed the ring I nearly left open (the same trap, one layer up).** A trace
+found `detectConflicts`/`onConflictSurfaced` accepted by the pipeline but **never passed by the
+production route** (`resolveDeps → routes/sync.ts → runPush → processPushBatch`) — a detection engine
+tested green through `processPushBatch` that production would never call. Built the composition seam
+(`conflict-wiring.ts`): a `SystemKeyStore` port + a DB-backed `systemIdentity` resolver, threaded
+through all three layers. Detection is now ENABLED IFF a key store is injected — the honest v0
+default, because **no secret-store loader exists** (`config.ts` reads DB+port only; 01 §3.6 gives key
+storage to "the deployment doc"). Wired "off by default", NOT "throw when unconfigured": the latter
+would 500 the first real collision inside the push transaction and wedge sync for the tenant.
+Falsified through `runPush` (dropped the thread → the end-to-end test went RED, construction tests
+stayed green). Filed as **task 77** (HIGH): provide a real `SystemKeyStore` — the key-loading
+mechanism is a §6 deployment decision. Denominator: with `SERVER_MODULES = [platform]` and no
+platform op declaring a conflict, production detects nothing until task 25 registers a conflicting
+`notes` type even with a key store — the thread test swaps in a notes-carrying list (what
+`SERVER_MODULES` holds post-25) to exercise it today.
+
 **Not done / out of scope — stated, not implied.** No client-side command/query integration test
 (`acknowledgeConflict`'s `INVALID_TRANSITION`, `listConflicts` staff denial, `setLocale`
 `storeId: null` end-to-end) — those need the client command runtime wired to a device DB, which is
