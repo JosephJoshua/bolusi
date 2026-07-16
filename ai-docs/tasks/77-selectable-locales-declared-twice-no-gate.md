@@ -1,4 +1,4 @@
-# TASK 76 — the selectable-locale list is declared **twice** (`@bolusi/i18n` and `@bolusi/core`) and no gate compares them
+# TASK 77 — the selectable-locale list is declared **twice** (`@bolusi/i18n` and `@bolusi/core`) and no gate compares them
 
 **Status:** todo
 **Priority:** LOW-MEDIUM — a §2.8 duplication whose drift mode is silent and user-visible.

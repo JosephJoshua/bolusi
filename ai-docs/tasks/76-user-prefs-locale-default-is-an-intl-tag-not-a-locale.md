@@ -1,4 +1,4 @@
-# TASK 75 — `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale`; the column holds `'id' | 'en'`
+# TASK 76 — `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale`; the column holds `'id' | 'en'`
 
 **Status:** todo
 **Priority:** MEDIUM — inert today, but it is a decoy pointed directly at task 21, which is unstarted and will read this column.
@@ -40,4 +40,4 @@ Note the near-miss: task 49's write-up and task 17's brief both describe the tra
 
 ## Related, same file, worth deciding together
 
-`packages/core/src/platform/constants.ts`'s `LOCALE_VALUES = ['id','en']` is a **second statement** of `packages/i18n/src/locale.ts`'s `SELECTABLE_LOCALES`. They can drift and no gate compares them — see task 76.
+`packages/core/src/platform/constants.ts`'s `LOCALE_VALUES = ['id','en']` is a **second statement** of `packages/i18n/src/locale.ts`'s `SELECTABLE_LOCALES`. They can drift and no gate compares them — see task 77.

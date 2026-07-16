@@ -1,4 +1,4 @@
-# TASK 74 — `04 §3`'s registry-entry shape omits `conflict` and has no way to express `01 §6`'s tenant-scoped op
+# TASK 75 — `04 §3`'s registry-entry shape omits `conflict` and has no way to express `01 §6`'s tenant-scoped op
 
 **Status:** todo
 **Priority:** MEDIUM — a spec/code divergence in the contended module contract. The CODE is now correct and shipped (task 17); `04` is the owning doc and does not describe two fields it now has.

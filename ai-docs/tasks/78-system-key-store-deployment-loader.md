@@ -1,4 +1,4 @@
-# TASK 77 — no server loader for the tenant system-device signing key; conflict detection is wired but OFF until one exists
+# TASK 78 — no server loader for the tenant system-device signing key; conflict detection is wired but OFF until one exists
 
 **Status:** todo
 **Priority:** HIGH — conflict detection is fully built, tested, and wired into the production push route, but **disabled in production** until a `SystemKeyStore` is provided. Without this, the server accepts colliding edits and detects nothing — silently.
