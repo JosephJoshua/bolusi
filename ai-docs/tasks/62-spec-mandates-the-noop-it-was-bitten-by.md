@@ -1,6 +1,6 @@
 # TASK 62 — `08 §5.6`'s normative build rule prescribes, as its worked example, the exact no-op that has now failed four times
 
-**Status:** done
+**Status:** in-progress
 **Priority:** **MEDIUM — but it is an active instruction, not a passive error.** Nothing is broken today (task 55 fixed the live instances). The defect is that the spec tells the *next* agent to do the thing that failed four times, and it reads as authoritative because it is.
 **Depends on:** 55
 **Blocks:** —

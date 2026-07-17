@@ -1,6 +1,6 @@
 # TASK 72 — `06 §3.2` puts `mediaRefSchema` in a package that structurally cannot author it: it contradicts `08 §3.3`
 
-**Status:** done
+**Status:** in-progress
 **Priority:** **MEDIUM** — no live defect (nothing has built it yet; task 18 was ruled to `@bolusi/schemas` before writing a line). The defect is that the spec **instructs the next agent to commit a boundary violation that would compile, lint green, and break only at runtime as a missing dep in `dist`.**
 **Depends on:** —
 **Blocks:** —
