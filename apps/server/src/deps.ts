@@ -4,6 +4,7 @@
 // real implementations without reshaping the skeleton.
 import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
 import {
+  authModule,
   platformModule,
   registerModules,
   type AnyModuleDefinition,
@@ -75,11 +76,12 @@ export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
  * task 49 closed: 08 punted server embedding to "07/16", 16 to "17", 25 assumed "the registration
  * list nobody creates" — all pointing at a list that did not exist. It exists here now.
  *
- * Registered today: `platform` (task 17) — `conflicts` + `user_prefs`. Still MISSING: `notes`
- * (task 25) and `auth` (task 43); until they append here, their op types are `UNKNOWN_TYPE` and
- * their four projection tables stay empty in production. That is 2 of 6 server projection tables
- * folded — stated because a registration list's failure mode is a silent omission, and the honest
- * count belongs next to the list rather than in a report nobody re-reads.
+ * Registered today: `platform` (task 17) — `conflicts` + `user_prefs`; `auth` (task 43) —
+ * `auth_sessions` + `pin_lockout_events` + `auth_permission_denials`. Still MISSING: `notes`
+ * (task 25); until it appends here, its op types are `UNKNOWN_TYPE` and its projection table stays
+ * empty in production. That is 5 of 6 server projection tables folded — stated because a
+ * registration list's failure mode is a silent omission, and the honest count belongs next to the
+ * list rather than in a report nobody re-reads.
  *
  * ON THE CAST. The appliers are typed against a dialect-neutral `PlatformDatabase` (04 §2) — the
  * one shape that can run on BOTH Postgres and SQLite, which is what makes them one applier instead
@@ -94,6 +96,7 @@ export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
  */
 export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [
   platformModule as unknown as AnyModuleDefinition<DB>,
+  authModule as unknown as AnyModuleDefinition<DB>,
 ];
 
 const serverModuleRegistry: ModuleRegistry<DB> = registerModules(SERVER_MODULES);
@@ -132,10 +135,10 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
 /**
  * The default server op registry (05 §8), derived from SERVER_MODULES.
  *
- * Carries the `platform.*` types today (task 17); `notes.*` (25) and `auth.*` (43) are still
- * `UNKNOWN_TYPE` until those modules append to the list above. That is why the pipeline suite
- * injects a registry covering the types IT pushes rather than relying on this one. The SAME list
- * feeds `projections` below, so a validated type always has an applier and vice versa.
+ * Carries the `platform.*` (task 17) and `auth.*` (task 43) types today; `notes.*` (25) is still
+ * `UNKNOWN_TYPE` until that module appends to the list above. That is why the pipeline suite injects
+ * a registry covering the types IT pushes rather than relying on this one. The SAME list feeds
+ * `projections` below, so a validated type always has an applier and vice versa.
  */
 export const serverOpRegistry: OpRegistry = deriveOpRegistry(serverModuleRegistry);
 
@@ -164,12 +167,12 @@ export interface ServerDeps {
   /** Fresh ids for `device_anomalies` rows the push pipeline writes (05 §3). */
   readonly newOpLogId: () => string;
   /** (type, schemaVersion) → payload validator for the push pipeline (05 §8). Derived from
-   *  SERVER_MODULES — `platform.*` today; 25/43 pending. */
+   *  SERVER_MODULES — `platform.*` + `auth.*` today; `notes` (25) pending. */
   readonly opRegistry: OpRegistry;
   /** Op type → projection applier (04 §4) for the push pipeline's apply step (10-db §3 step 6).
-   *  Derived from the SAME SERVER_MODULES list as `opRegistry` — the `platform` appliers today
-   *  (`conflicts` + `user_prefs`); `notes` (25) and the auth tables (43) fold nothing until those
-   *  modules register. */
+   *  Derived from the SAME SERVER_MODULES list as `opRegistry` — the `platform` appliers
+   *  (`conflicts` + `user_prefs`) and the `auth` appliers (`auth_sessions` + `pin_lockout_events` +
+   *  `auth_permission_denials`); `notes` (25) folds nothing until it registers. */
   readonly projections: ProjectionRegistry<DB>;
   /** Conflict detection (01 §8.2), run inside the push transaction. `undefined` ⇒ disabled — the
    *  v0 default, because no `SystemKeyStore` is configured (conflict-wiring.ts). Built from
