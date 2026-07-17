@@ -15,7 +15,7 @@
     "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
     "test": "tsc -b && vitest run",
     "test:jcs-hermes": "node scripts/hermes-vectors/run.mjs",
-    "test:ed25519-interop": "tsc -b && vitest run --project test-support",
+    "test:ed25519-interop": "tsc -b && vitest run --project test-support src/crypto/noble-port.test.ts",
     "falsify:crypto": "node scripts/falsify-guards.mjs",
     "test:server": "tsc -b && vitest run --project server",
     "test:rls": "tsc -b && vitest run --project db-server",
