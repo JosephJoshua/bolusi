@@ -54,9 +54,14 @@ export interface EnrollmentController {
 export interface EnrollmentPlatform {
   readonly loginTransport: LoginTransportPort;
   readonly enrollTransport: EnrollTransportPort;
-  /** The SecureStore keystore. Used BOTH as the enrollment keystore (persists the seed) AND as the
-   *  runtime's signing key — the SAME object, so the seed `runEnrollment` caches is what the genesis
-   *  is signed with. */
+  /**
+   * The SecureStore keystore. Used BOTH as the enrollment keystore (persists the seed) AND as the
+   * runtime's signing key — the SAME OBJECT, so whatever seed sits in its cache is what the genesis is
+   * signed with. On a FRESH enroll `runEnrollment` persists-and-caches the seed; on a RESUME after a
+   * restart the keystore is rebuilt with an EMPTY cache, so `runEnrollment` reloads the persisted seed
+   * from SecureStore before the genesis (enrollment.ts `loadOrCreateDraft`). The invariant this field's
+   * name implies is object-identity, held across both — not "the same object always already holds it".
+   */
   readonly keystore: KeyStorePort;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;

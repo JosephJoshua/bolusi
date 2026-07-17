@@ -20,10 +20,13 @@
 // never starts. Reported in the task, not asserted here.
 import {
   base64ToBytes,
+  bytesToBase64,
   createUuidV7Generator,
+  ENROLLMENT_DRAFT_KEY,
   readDeviceId,
   readStoreId,
   verifyOp,
+  writeMeta,
   type DeviceBundle,
   type EnrollRequest,
   type EnrollResponse,
@@ -50,6 +53,8 @@ vi.mock('expo-secure-store', () => {
     }),
   };
 });
+
+import * as SecureStore from 'expo-secure-store';
 
 import { bootstrap, type Bootstrapped } from './bootstrap.js';
 import { createAppEnrollment, type EnrollmentPlatform } from './enrollment.js';
@@ -89,6 +94,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await app.close();
+  // Reset the mocked SecureStore between tests — the mock's backing Map lives in module scope, so a
+  // seed/token persisted by one test would leak into the next (a determinism hole, T-6).
+  await SecureStore.deleteItemAsync('bolusi.device_private_key');
+  await SecureStore.deleteItemAsync('bolusi.device_token');
   vi.clearAllMocks();
 });
 
@@ -285,4 +294,62 @@ test('the enroll POST carries the client-generated identity, not the server-echo
   expect(body.deviceId).toBe(deviceId);
   expect(body.storeId).toBe(STORE_ID);
   expect(body.platform).toBe('android');
+});
+
+test('RESUME after crash-before-genesis: a FRESH keystore reloads the seed and completes enrollment', async () => {
+  // THE REGRESSION (review-92 HIGH). The crash window (§4.3): the first attempt persisted the private
+  // seed to SecureStore and wrote the enrollment draft, then the app was KILLED before the seq-1
+  // genesis. On restart `index.ts` rebuilds `new SecureStoreKeyStore()` with an EMPTY in-memory cache.
+  // Before the fix, the retry's genesis emit called `getSigningKey()` on that empty cache and threw
+  // "device signing key not loaded" BEFORE `deviceId` persisted — `classifyFailure` bucketed the
+  // status-less error as `offline`, and every retry repeated: a permanently un-enrollable device.
+  //
+  // Set up EXACTLY that persisted state, then resume with a fresh keystore.
+  const prng = mulberry32(0x99);
+  const ids = createUuidV7Generator({
+    now: () => FIXED_NOW,
+    randomBytes: (n) => prngBytes(prng, n),
+  });
+  const keypair = noblePort.ed25519Keygen(prngBytes(prng, 32));
+  const draftDeviceId = ids();
+
+  // (1) the seed sits in SecureStore, exactly as the first attempt's `persistDevicePrivateKey` left it
+  //     (a throwaway keystore writes it; the resume controller below gets a SEPARATE, empty-cache one).
+  await new SecureStoreKeyStore().persistDevicePrivateKey(keypair.secretKey);
+  // (2) the draft is in meta_kv; its public key matches the persisted seed (as the first attempt wrote).
+  await writeMeta(
+    app.db.db,
+    ENROLLMENT_DRAFT_KEY,
+    JSON.stringify({
+      deviceId: draftDeviceId,
+      idempotencyKey: ids(),
+      devicePublicKeyB64: bytesToBase64(keypair.publicKey),
+    }),
+  );
+  // (3) NO deviceId meta, NO genesis op — the device is mid-enrollment, not enrolled.
+  expect(await readDeviceId(app.db.db)).toBeNull();
+
+  // THE RESTART: a fresh controller with a FRESH `SecureStoreKeyStore` (empty cache) — production shape.
+  const { platform } = platformFor();
+  let enrolledWith: string | null = null;
+  const { controller } = createAppEnrollment(app, platform, (deviceId) => {
+    enrolledWith = deviceId;
+  });
+
+  // The retry must COMPLETE — with the fix reverted this rejects "device signing key not loaded".
+  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+
+  // The SAME device id from the draft is now enrolled — no fresh keypair, no double-register (§4.3).
+  expect(await readDeviceId(app.db.db)).toBe(draftDeviceId);
+  expect(enrolledWith).toBe(draftDeviceId);
+
+  // The genesis was appended and is signed with the RESUMED seed — the one reloaded from SecureStore,
+  // proving the resume branch restored the cache the synchronous signer reads.
+  const genesis = await genesisOp();
+  expect(genesis).toBeDefined();
+  const op = genesis as SignedOperation;
+  expect(op.seq).toBe(1);
+  expect(op.entityId).toBe(draftDeviceId);
+  expect(op.previousHash).toBe(GENESIS_PREVIOUS_HASH);
+  expect(verifyOp(op, keypair.publicKey, noblePort)).toBe(true);
 });
