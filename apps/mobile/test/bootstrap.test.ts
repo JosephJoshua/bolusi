@@ -253,6 +253,20 @@ describe('the SQLCipher key (security-guide §6.4) — a §2.5 security surface'
     expect(vi.mocked(SecureStore.setItemAsync).mock.calls).toHaveLength(1);
   });
 
+  test('concurrent boots on SEPARATE keystore instances still mint ONE key (production builds a fresh keystore per boot)', async () => {
+    // The race that matters in production: `index.ts` constructs a NEW `SecureStoreDbKeyStore` on
+    // every `boot()`, so a per-instance single-flight would let two boots each read null, each
+    // generate, and the second overwrite the first — orphaning the DB permanently (review-50b).
+    // The single-flight is module-scoped precisely so the guard outlives any one instance.
+    const [a, b] = await Promise.all([
+      new SecureStoreDbKeyStore(fakeCrypto).ensureDatabaseEncryptionKey(),
+      new SecureStoreDbKeyStore(fakeCrypto).ensureDatabaseEncryptionKey(),
+    ]);
+
+    expect(a).toBe(b);
+    expect(vi.mocked(SecureStore.setItemAsync).mock.calls).toHaveLength(1);
+  });
+
   test('NO KEY ⇒ refuses to open — never a silent plaintext fallback (SEC-DEV-06)', async () => {
     // The adversarial case. A bootstrap that degraded to an unencrypted open would put a shop's
     // data in plaintext on disk and boot green while doing it.

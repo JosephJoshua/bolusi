@@ -60,10 +60,15 @@ const OPTIONS: SecureStore.SecureStoreOptions = {
  * Satisfies `DbKeyStore` (db-client) by structure, not by inheritance: db-client declares that
  * interface locally and on purpose so it need not import a port module from a contended package.
  */
-export class SecureStoreDbKeyStore implements DbKeyStore {
-  /** Single-flight for `ensureDatabaseEncryptionKey` — see its comment for why this is required. */
-  #generating: Promise<string> | null = null;
+// MODULE-SCOPED single-flight (mirrors `current` in connection.ts:113). The guard must outlive any
+// single instance: production builds a FRESH `SecureStoreDbKeyStore` on every `boot()` (index.ts),
+// so a per-instance promise would let two concurrent boots each read `null`, each generate, and the
+// second `setItemAsync` overwrite the first — orphaning the DB under a key nobody has, permanently,
+// no escrow. Keyed at module scope, "exactly one generation per PROCESS" is true regardless of how
+// many keystores or boots race. Reset in `finally` so a post-wipe re-enrol can generate again.
+let inFlightKeyGeneration: Promise<string> | null = null;
 
+export class SecureStoreDbKeyStore implements DbKeyStore {
   /**
    * @param crypto The CSPRNG (§6.4: "32 CSPRNG bytes (quick-crypto)"). Injected rather than
    *   imported so this class is drivable under Node — and so the randomness source is a stated
@@ -95,14 +100,15 @@ export class SecureStoreDbKeyStore implements DbKeyStore {
    * SINGLE-FLIGHT FOR THE SAME REASON. Two concurrent callers on a fresh device would each read
    * `null`, each generate, and the second `setItemAsync` would overwrite the first — after the
    * first had already opened the DB under its value. That is the orphaning bug arriving by race
-   * rather than by edit. The promise is shared so exactly one generation happens per process.
+   * rather than by edit. The promise is shared AT MODULE SCOPE (not per-instance — production builds a fresh keystore
+   * per boot), so exactly one generation happens per process however many boots or instances race.
    */
   async ensureDatabaseEncryptionKey(): Promise<string> {
-    this.#generating ??= this.#readOrGenerate();
+    inFlightKeyGeneration ??= this.#readOrGenerate();
     try {
-      return await this.#generating;
+      return await inFlightKeyGeneration;
     } finally {
-      this.#generating = null;
+      inFlightKeyGeneration = null;
     }
   }
 
