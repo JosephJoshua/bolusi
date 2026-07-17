@@ -48,8 +48,12 @@ export async function readPushBatch<DB>(
   db: Kysely<DB>,
   limit: number = MAX_PUSH_OPS,
 ): Promise<SignedOperation[]> {
+  // `signed_core_jcs` is ALIASED to its result key rather than relying on `CamelCasePlugin` to
+  // rewrite it (10-db §11.4; task 74): without the plugin a bare column would arrive as
+  // `signed_core_jcs`, `row.signedCoreJcs` would be undefined, and `JSON.parse(undefined)` would
+  // throw on every honest op. The quoted alias is inert whether or not the plugin is wired.
   const result = await sql<LocalOpRow>`
-    SELECT id, seq, signed_core_jcs, hash, signature FROM operations
+    SELECT id, seq, signed_core_jcs AS "signedCoreJcs", hash, signature FROM operations
     WHERE sync_status = 'local' ORDER BY seq LIMIT ${limit}
   `.execute(db);
   return result.rows.map((row) => {
@@ -248,8 +252,12 @@ function emit<DB>(deps: PushPhaseDeps<DB>, event: Parameters<SyncSurfacePort['em
 }
 
 async function readSyncStatus<DB>(db: Kysely<DB>, id: string): Promise<OpSyncStatus | null> {
+  // `sync_status AS "syncStatus"` resolves the result key by construction, not via `CamelCasePlugin`
+  // (10-db §11.4; task 74). Without the plugin a bare column arrives as `sync_status`, `syncStatus`
+  // is undefined, and this returns `null` → `applyPushResult` treats the op as 'ignored' and never
+  // marks it, so an accepted op sticks at 'local' and re-sends forever. Silent. The alias is inert.
   const result = await sql<{ syncStatus: string }>`
-    SELECT sync_status FROM operations WHERE id = ${id}
+    SELECT sync_status AS "syncStatus" FROM operations WHERE id = ${id}
   `.execute(db);
   const status = result.rows[0]?.syncStatus;
   if (status === 'local' || status === 'synced' || status === 'rejected') return status;

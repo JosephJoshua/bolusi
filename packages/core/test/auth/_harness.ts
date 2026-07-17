@@ -10,10 +10,11 @@
 //
 // Auth code is imported from `../../src/index.js` (SRC, not dist) so the suite exercises this
 // worktree's source, never a stale `@bolusi/core` build (T-14c).
-import { CamelCasePlugin, Kysely, sql } from 'kysely';
+import { CamelCasePlugin, Kysely } from 'kysely';
 
 import {
   createClientDialect,
+  createClientOpStore,
   runClientMigrations,
   type ClientDatabase,
   type DbDriver,
@@ -40,7 +41,6 @@ import {
   type KdfParams,
   type KeyStorePort,
   type OpAppendStore,
-  type OpAppendTx,
   type PinVerifier,
   type SigningKeyPort,
 } from '../../src/index.js';
@@ -65,74 +65,16 @@ export async function openFreshClientDb(): Promise<{
   return { driver, db };
 }
 
-/** The op store over the REAL driver — one transaction per command, shared with the projection seam. */
+/**
+ * The op store over the REAL driver — one transaction per command, shared with the projection seam.
+ *
+ * DELEGATES to the PRODUCTION `createClientOpStore` (@bolusi/db-client) — CLAUDE.md §2.8. This used
+ * to be a ~60-line `SqliteOpStore` copy of the shipping store; promoting the real one here means the
+ * whole auth suite (genesis, chaining, tamper, atomicity) now exercises production code, not a
+ * parallel fixture that could silently drift from it.
+ */
 export function createSqliteOpStore(driver: DbDriver, db: Kysely<ClientDatabase>): OpAppendStore {
-  return new SqliteOpStore(driver, db);
-}
-
-/** The op store over the REAL driver — one transaction per command, shared with the projection seam. */
-class SqliteOpStore implements OpAppendStore {
-  constructor(
-    private readonly driver: DbDriver,
-    private readonly db: Kysely<ClientDatabase>,
-  ) {}
-
-  async transaction<T>(fn: (tx: OpAppendTx) => Promise<T>): Promise<T> {
-    await this.driver.begin();
-    try {
-      const result = await fn({
-        readChainHead: async (deviceId) => {
-          const rows = await sql<{ seq: number; hash: string }>`
-            SELECT seq, hash FROM operations WHERE device_id = ${deviceId}
-            ORDER BY seq DESC LIMIT 1
-          `.execute(this.db);
-          const head = rows.rows[0];
-          return head === undefined ? null : { seq: head.seq, hash: head.hash };
-        },
-        hasOp: async (id) => {
-          const rows = await sql<{ one: number }>`
-            SELECT 1 AS one FROM operations WHERE id = ${id} LIMIT 1
-          `.execute(this.db);
-          return rows.rows.length > 0;
-        },
-        insertOp: async ({ op, signedCoreJcs }) => {
-          await this.db
-            .insertInto('operations')
-            .values({
-              id: op.id,
-              tenantId: op.tenantId,
-              storeId: op.storeId,
-              userId: op.userId,
-              deviceId: op.deviceId,
-              seq: op.seq,
-              type: op.type,
-              entityType: op.entityType,
-              entityId: op.entityId,
-              schemaVersion: op.schemaVersion,
-              payload: JSON.stringify(op.payload),
-              timestampMs: op.timestamp,
-              location: op.location === null ? null : JSON.stringify(op.location),
-              source: op.source,
-              agentInitiated: op.agentInitiated ? 1 : 0,
-              agentConversationId: op.agentConversationId,
-              previousHash: op.previousHash,
-              hash: op.hash,
-              signature: op.signature,
-              signedCoreJcs,
-              syncStatus: 'local',
-              serverSeq: null,
-              syncedAt: null,
-            })
-            .execute();
-        },
-      });
-      await this.driver.commit();
-      return result;
-    } catch (error) {
-      await this.driver.rollback();
-      throw error;
-    }
-  }
+  return createClientOpStore({ db, driver });
 }
 
 /** In-memory `KeyStorePort` (SecureStore fake). Caches the seed for the sync signing seam. */
@@ -393,7 +335,7 @@ export async function openAuthHarness(
     device: { tenantId, storeId, deviceId },
     evaluator,
     operations: authOperationRegistry,
-    store: new SqliteOpStore(driver, db),
+    store: createClientOpStore({ db, driver }),
     crypto,
     clock: clockPort,
     idSource,

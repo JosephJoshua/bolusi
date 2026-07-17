@@ -1,6 +1,6 @@
 # TASK 92 — the mobile command-runtime composition + the enrollment caller: a production device cannot enroll
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH** — this is the layer BELOW task 89's four producers. With 88+89 landed, the sync loop is real and starts on an enrolled device — but nothing lets a production device BECOME enrolled, so on real hardware the loop never starts. It also blocks the notes module (task 25), the first surface to run commands.
 **Depends on:** 14, 50, 88, 89
 **Blocks:** 25, and the production-enrollment path of 89

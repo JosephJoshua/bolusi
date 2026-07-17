@@ -48,8 +48,12 @@ export function createServerWatermarkStore<DB>(db: Kysely<DB>, tenantId: string)
       // real `pg` driver hands `applied_server_seq` back as a STRING, and a type assertion makes
       // tsc agree with the wrong thing. Naming the honest union is what forces the seam below to
       // exist, and what makes deleting it a type error rather than a silent string watermark.
+      // `AS "appliedServerSeq"` resolves the result key by construction, not via `CamelCasePlugin`
+      // (10-db §11.4; task 74). Without the plugin a bare column arrives as `applied_server_seq`,
+      // `row.appliedServerSeq` is undefined, and `int8ToNumber(undefined)` throws — loud here (no
+      // `?? 0` to launder it), but the coupling was still unasserted. The quoted alias is inert.
       const result = await sql<{ appliedServerSeq: Int8Value }>`
-        SELECT applied_server_seq FROM projection_watermarks
+        SELECT applied_server_seq AS "appliedServerSeq" FROM projection_watermarks
         WHERE tenant_id = ${tenantId} AND module_id = ${moduleId}
       `.execute(db);
       const row = result.rows[0];

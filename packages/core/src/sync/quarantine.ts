@@ -131,6 +131,10 @@ export async function insertQuarantinedOp<DB>(db: Kysely<DB>, row: QuarantinedOp
 
 /** Every quarantined op, oldest `server_seq` first (the order they would have applied in). */
 export async function readQuarantinedOps<DB>(db: Kysely<DB>): Promise<QuarantinedOp[]> {
+  // Columns ALIASED to their camelCase result key, not relying on `CamelCasePlugin` (10-db §11.4;
+  // task 74): without the plugin `deviceId`/`serverSeq`/`signedCoreJcs`/`quarantinedAt` would be
+  // undefined (and `Number(undefined)` = NaN for the two counters), silently corrupting the release
+  // ordering and the reconstructed op. The quoted aliases are inert under both wirings.
   const result = await sql<{
     id: string;
     deviceId: string;
@@ -141,7 +145,9 @@ export async function readQuarantinedOps<DB>(db: Kysely<DB>): Promise<Quarantine
     reason: string;
     quarantinedAt: number;
   }>`
-    SELECT id, device_id, server_seq, signed_core_jcs, hash, signature, reason, quarantined_at
+    SELECT id, device_id AS "deviceId", server_seq AS "serverSeq",
+           signed_core_jcs AS "signedCoreJcs", hash, signature, reason,
+           quarantined_at AS "quarantinedAt"
     FROM quarantined_ops ORDER BY server_seq
   `.execute(db);
   return result.rows.map((row) => ({

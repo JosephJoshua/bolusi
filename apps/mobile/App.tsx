@@ -30,10 +30,14 @@ import {
 } from './src/navigation/zone.js';
 import { EnrollmentScreen } from './src/screens/enrollment/EnrollmentScreen.js';
 import {
+  canSubmitConfirm,
+  canSubmitCredentials,
+  classifyFailure,
   initialEnrollmentState,
   needsDiscardConfirm,
   type EnrollmentState,
 } from './src/screens/enrollment/model.js';
+import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
@@ -74,6 +78,13 @@ export interface AppProps {
   readonly onSelectLocale: (locale: Locale) => void;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
+  /**
+   * The enrollment caller (api/02-auth §4). `login` mints the control session + store list;
+   * `enroll` registers the device, appends the genesis, persists the identity, and starts the loop.
+   * Root supplies the real one (index.ts binds the transports + keystore + runtime); a test injects a
+   * fake. Both reject on failure, and the wizard buckets it (`classifyFailure`).
+   */
+  readonly enrollment: EnrollmentController;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
@@ -116,6 +127,46 @@ export default function App(props: AppProps): React.JSX.Element {
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
 
+  // Step 1 (§4.2): log in. On success, advance to the confirm step carrying the tenant/store choices;
+  // auto-select the store when there is exactly one (nothing to disambiguate). On failure, bucket it
+  // into one of the four human actions (`classifyFailure`) — never a raw server string.
+  const runLogin = (): void => {
+    if (enrollment.busy || !canSubmitCredentials(enrollment)) return;
+    setEnrollment((s) => ({ ...s, busy: true, failure: null }));
+    props.enrollment
+      .login({ loginIdentifier: enrollment.loginIdentifier.trim(), password: enrollment.password })
+      .then((login) =>
+        setEnrollment((s) => ({
+          ...s,
+          busy: false,
+          login,
+          step: 'confirm',
+          selectedStoreId:
+            login.stores.length === 1 ? (login.stores[0]?.id ?? null) : s.selectedStoreId,
+        })),
+      )
+      .catch((error: unknown) =>
+        setEnrollment((s) => ({ ...s, busy: false, failure: classifyFailure(error) })),
+      );
+  };
+
+  // Step 2 (§4.3 + §4.1 steps 4–6): register + genesis + persist. The state is captured BEFORE the
+  // async call so a concurrent edit cannot change what was submitted. On success the wizard shows the
+  // done step; Root has already re-derived the enrolled deviceId and started the loop (`onEnrolled`).
+  const runEnroll = (): void => {
+    if (enrollment.busy || !canSubmitConfirm(enrollment)) return;
+    const { login, selectedStoreId } = enrollment;
+    if (login === null || selectedStoreId === null) return;
+    const deviceName = enrollment.deviceName.trim();
+    setEnrollment((s) => ({ ...s, busy: true, failure: null }));
+    props.enrollment
+      .enroll({ login, storeId: selectedStoreId, deviceName })
+      .then(() => setEnrollment((s) => ({ ...s, busy: false, step: 'done' })))
+      .catch((error: unknown) =>
+        setEnrollment((s) => ({ ...s, busy: false, failure: classifyFailure(error) })),
+      );
+  };
+
   const chip = useMemo(() => syncChipState(props.sync), [props.sync]);
   const currentUser = useMemo(() => {
     if (props.session === null) return null;
@@ -131,8 +182,8 @@ export default function App(props: AppProps): React.JSX.Element {
           <EnrollmentScreen
             state={{ ...enrollment, revoked }}
             onChange={(patch) => setEnrollment((previous) => ({ ...previous, ...patch }))}
-            onLogin={noop}
-            onEnroll={noop}
+            onLogin={runLogin}
+            onEnroll={runEnroll}
             onFinish={() => setEnrollment(initialEnrollmentState())}
             onBack={goBack}
             discardPrompt={discardPrompt}

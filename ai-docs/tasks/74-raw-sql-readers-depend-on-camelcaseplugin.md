@@ -1,6 +1,6 @@
 # TASK 74 — 11 raw-`sql<T>` readers are green only because `CamelCasePlugin` is wired, and nothing asserts that dependency
 
-**Status:** todo
+**Status:** done
 **Priority:** **MEDIUM** — zero live bugs today (every production Kysely wires the plugin). It is a **latent trap with a silent failure mode**, and the repo has already paid for this exact class three times (tasks 39, 46, 18).
 **Depends on:** —
 **Blocks:** —

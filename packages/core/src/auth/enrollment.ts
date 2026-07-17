@@ -35,7 +35,7 @@ import {
 } from './repo.js';
 
 /** The `meta_kv` key holding the in-flight enrollment draft (crash-retry state). */
-const ENROLLMENT_DRAFT_KEY = 'auth.enrollment_draft';
+export const ENROLLMENT_DRAFT_KEY = 'auth.enrollment_draft';
 
 /** The persisted, crash-durable part of an in-flight enrollment (§4.3 Idempotency-Key reuse). */
 interface EnrollmentDraft {
@@ -147,7 +147,20 @@ export async function runEnrollment<DB>(
  */
 async function loadOrCreateDraft<DB>(deps: EnrollmentDeps<DB>): Promise<EnrollmentDraft> {
   const existing = await readMeta(deps.db, ENROLLMENT_DRAFT_KEY);
-  if (existing !== null) return JSON.parse(existing) as EnrollmentDraft;
+  if (existing !== null) {
+    // RESUME (§4.3). The private seed was persisted to SecureStore on the FIRST attempt (the fresh
+    // branch below, via `persistDevicePrivateKey`), but after a process restart it is NOT in the
+    // keystore's in-memory cache. The genesis emit signs SYNCHRONOUSLY through `getSigningKey()`
+    // (05 §2.2), which reads ONLY that cache — so reload it here, on the one branch that skips the
+    // persist-and-cache. Without this, a crash between the enroll POST and the genesis leaves the
+    // device PERMANENTLY un-enrollable: on a fresh keystore every retry throws "device signing key
+    // not loaded" before `deviceId` persists, and the wizard buckets the status-less error as
+    // "offline" forever. A draft can only exist once the seed was persisted (the fresh branch writes
+    // the seed BEFORE the draft), so the reload always finds it. This makes the two branches
+    // symmetric: fresh persists-and-caches, resume reloads.
+    await deps.keystore.loadSigningKey();
+    return JSON.parse(existing) as EnrollmentDraft;
+  }
 
   const deviceId = deps.idSource();
   const keypair = deps.crypto.ed25519Keygen();

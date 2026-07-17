@@ -55,6 +55,10 @@ export async function replaceDeviceRegistry<DB>(
 export async function readDeviceRegistry<DB>(
   db: Kysely<DB>,
 ): Promise<Map<string, DeviceRegistryEntry>> {
+  // Columns ALIASED to their camelCase result key, not relying on `CamelCasePlugin` (10-db §11.4;
+  // task 74): without the plugin `storeId`/`signingKeyPublic`/`revokedAt` would be undefined, and a
+  // verifier handed a device with NO public key rejects every pulled op it should accept. The
+  // quoted aliases are inert whether or not the plugin is wired.
   const result = await sql<{
     id: string;
     storeId: string | null;
@@ -63,7 +67,9 @@ export async function readDeviceRegistry<DB>(
     status: string;
     revokedAt: number | null;
   }>`
-    SELECT id, store_id, kind, signing_key_public, status, revoked_at FROM device_registry
+    SELECT id, store_id AS "storeId", kind, signing_key_public AS "signingKeyPublic",
+           status, revoked_at AS "revokedAt"
+    FROM device_registry
   `.execute(db);
   const entries = new Map<string, DeviceRegistryEntry>();
   for (const row of result.rows) {

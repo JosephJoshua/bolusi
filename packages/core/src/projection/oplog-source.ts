@@ -3,8 +3,10 @@
 // The engine folds the operation log into projections, so it reads `operations` directly
 // through the injected `ProjectionDb` — the op log lives in the SAME database (client
 // SQLite or server Postgres). Every read is dialect-neutral raw `sql` over the verbatim
-// snake_case columns (10-db §2); CamelCasePlugin rewrites RESULT keys to camelCase (it does
-// not touch identifiers inside a raw fragment), so rows come back keyed camelCase.
+// snake_case columns (10-db §2), each EXPLICITLY ALIASED to the camelCase key the row type
+// names (`server_seq AS "serverSeq"`) — NOT relying on `CamelCasePlugin` to rewrite raw-`sql`
+// result keys. The plugin does do that rewrite when wired, but a reader that depends on it
+// silently returns `undefined` the moment a Kysely is built without it (task 74; T-14f).
 //
 // Canonical order is `(timestamp ASC, deviceId ASC, seq ASC)` (05 §4). We sort in SQL here
 // (unlike the oracle, which sorts in JS): the ordering columns are `timestamp_ms` (integer),
@@ -32,7 +34,8 @@ export interface CanonicalCursor {
 }
 
 /**
- * The op-log columns a projection read needs, keyed camelCase (CamelCasePlugin result keys).
+ * The op-log columns a projection read needs, keyed camelCase — resolved by the explicit `AS`
+ * aliases in `OP_COLUMNS`, not by `CamelCasePlugin` (task 74).
  *
  * THESE TYPES ARE THE DRIVERS' TRUTH, NOT THE ENVELOPE'S (task 48). `RawOpRow` annotates a raw
  * `sql<>` result, and such an annotation is an ASSERTION the compiler simply believes — it derives
@@ -73,11 +76,23 @@ interface RawOpRow {
   signature: string;
 }
 
-/** The verbatim column list read for reconstruction, in a stable order. */
+/**
+ * The column list read for reconstruction, in a stable order, each snake column ALIASED to the
+ * camelCase key `RawOpRow` names (10-db §11.4; task 74).
+ *
+ * The aliases are load-bearing, not cosmetic: `CamelCasePlugin` rewrites raw-`sql` RESULT keys, so
+ * a bare `SELECT tenant_id` arrives as `tenantId` WITH the plugin and `tenant_id` WITHOUT it — and
+ * `reconstructOperation` reads `row.tenantId`/`row.timestampMs`, which would then be undefined
+ * (`int8ToNumber(undefined)` throws; the rest silently vanish). A quoted alias with no underscore
+ * is inert under both wirings, so the keys resolve by construction rather than by the coincidence
+ * of a wired plugin.
+ */
 const OP_COLUMNS = sql`
-  id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-  schema_version, payload, timestamp_ms, location, source, agent_initiated,
-  agent_conversation_id, previous_hash, hash, signature
+  id, tenant_id AS "tenantId", store_id AS "storeId", user_id AS "userId",
+  device_id AS "deviceId", seq, type, entity_type AS "entityType", entity_id AS "entityId",
+  schema_version AS "schemaVersion", payload, timestamp_ms AS "timestampMs", location, source,
+  agent_initiated AS "agentInitiated", agent_conversation_id AS "agentConversationId",
+  previous_hash AS "previousHash", hash, signature
 `;
 
 /** The canonical `(timestamp, deviceId, seq)` position of an op. */
@@ -226,8 +241,14 @@ export async function highestContiguousServerSeq<DB>(
   // coerces (`"1" > 1` is false too) and so never fired either. Every test lane ran a driver that
   // hands back numbers, so nothing went red (task 46; testing-guide T-14f). Widening the
   // annotation to the truth is half the fix: it makes the compiler force the normalisation.
+  // `AS "serverSeq"` — a REAL alias to the camelCase result key. This line previously read
+  // `server_seq AS server_seq`: a NO-OP self-alias that looked like the task-18 hardening but
+  // resolved the `serverSeq` key ONLY via `CamelCasePlugin` (10-db §11.4). Without the plugin
+  // `row.serverSeq` was undefined and the walk threw — at task 46's OWN fix site, under a comment
+  // all about int8, so the second dimension went unseen (task 74; T-15: a hardened line is not a
+  // verified line). The quoted alias binds the key by construction under both wirings.
   const result = await sql<{ serverSeq: Int8Value }>`
-    SELECT server_seq AS server_seq FROM operations
+    SELECT server_seq AS "serverSeq" FROM operations
     WHERE server_seq > ${from}
     ORDER BY server_seq
   `.execute(db);

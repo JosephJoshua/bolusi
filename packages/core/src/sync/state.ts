@@ -57,10 +57,19 @@ interface SyncStateRow {
 
 /** Read the singleton (10-db §9.3). @throws {Error} when the seeded row is absent. */
 export async function readSyncState<DB>(db: Kysely<DB>): Promise<SyncState> {
+  // Columns ALIASED to their camelCase result key, NOT relying on `CamelCasePlugin` to rewrite
+  // them (10-db §11.4; task 74). The plugin rewrites raw-`sql` RESULT keys too, so a bare
+  // `SELECT pull_cursor` arrives as `pullCursor` WITH the plugin and `pull_cursor` (i.e.
+  // `row.pullCursor === undefined` → `cursor: NaN`, silent) WITHOUT it. A quoted alias with no
+  // underscore is inert under both wirings, so `SyncStateRow`'s keys resolve by construction.
   const result = await sql<SyncStateRow>`
-    SELECT pull_cursor, devices_directory_version, last_successful_sync_at, last_push_at,
-           last_pull_at, last_server_time, last_server_time_received_at, last_sync_error,
-           backoff_until, push_halted, sync_disabled, sync_disabled_reason
+    SELECT pull_cursor AS "pullCursor", devices_directory_version AS "devicesDirectoryVersion",
+           last_successful_sync_at AS "lastSuccessfulSyncAt", last_push_at AS "lastPushAt",
+           last_pull_at AS "lastPullAt", last_server_time AS "lastServerTime",
+           last_server_time_received_at AS "lastServerTimeReceivedAt",
+           last_sync_error AS "lastSyncError", backoff_until AS "backoffUntil",
+           push_halted AS "pushHalted", sync_disabled AS "syncDisabled",
+           sync_disabled_reason AS "syncDisabledReason"
     FROM sync_state WHERE id = 1
   `.execute(db);
   const row = result.rows[0];

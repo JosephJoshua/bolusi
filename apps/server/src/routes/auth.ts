@@ -71,6 +71,14 @@ export function createAuthRouter(deps: ServerDeps) {
             userId: cred.userId,
             now: t,
           });
+          // The tenant's display name — the enrollment confirm step renders it (api/02-auth §4.2)
+          // so the owner reads what they are binding to before the irreversible enroll POST. Read
+          // here, not fabricated client-side: the wire carries the fact, never a guess (T-19).
+          const tenant = await db
+            .selectFrom('tenants')
+            .select(['name'])
+            .where('id', '=', cred.tenantId)
+            .executeTakeFirstOrThrow();
           const user = await db
             .selectFrom('users')
             .select(['id', 'name'])
@@ -91,13 +99,14 @@ export function createAuthRouter(deps: ServerDeps) {
             after: { userId: cred.userId },
             at: t,
           });
-          return { session, user, stores };
+          return { session, user, stores, tenant };
         });
 
         const res: LoginRes = {
           controlSession: result.session.token,
           expiresAt: result.session.expiresAt,
           tenantId: cred.tenantId,
+          tenantName: result.tenant.name,
           user: { id: result.user.id, name: result.user.name },
           stores: result.stores.map((s) => ({ id: s.id, name: s.name })),
         };
