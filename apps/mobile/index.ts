@@ -68,11 +68,12 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
  * whole sync client runs under fakes in CI.
  *
  * Returns `null` for an UNENROLLED device (`app.deviceId === null`): no loop is constructed for a
- * device that cannot sync. In production this is always the case today — no enrollment path persists a
- * `deviceId` (the genesis append awaits the command-runtime composition task) — so the loop stays
- * unstarted, honestly, until that lands. `EXPO_PUBLIC_API_URL` is the server base (08 §6.1); Expo
- * inlines `EXPO_PUBLIC_*` into the bundle at build. The `bdt_` device token is read PER CALL from
- * SecureStore (never cached), so a revoked device stops authenticating at once (api/02-auth §7.3).
+ * device that cannot sync. Since task 92 the enrollment path is REAL — `createEnrollment` (below)
+ * appends the genesis and persists `deviceId`, and Root starts this loop on enroll success — so a FRESH
+ * device returns `null` here only until the wizard runs, not forever. `EXPO_PUBLIC_API_URL` is the
+ * server base (08 §6.1); Expo inlines `EXPO_PUBLIC_*` into the bundle at build. The `bdt_` device token
+ * is read PER CALL from SecureStore (never cached), so a revoked device stops authenticating at once
+ * (api/02-auth §7.3).
  */
 // `EXPO_PUBLIC_API_URL` is read HERE (the native-binding site) so Expo inlines it at build; the guard
 // itself lives in bootstrap/config.ts, pure and unit-tested. `?? ''` used to sit on this read — the
