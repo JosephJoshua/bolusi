@@ -25,7 +25,14 @@ import type { IdSource } from '../runtime/ports.js';
 import { applyBundle } from './bundle-apply.js';
 import { AUTH_ENTITY, AUTH_OP } from './operations.js';
 import type { EnrollResponse, EnrollTransportPort, KeyStorePort } from './ports.js';
-import { deleteMeta, deviceHasGenesis, readMeta, writeMeta } from './repo.js';
+import {
+  deleteMeta,
+  deviceHasGenesis,
+  readMeta,
+  writeMeta,
+  DEVICE_ID_META_KEY,
+  STORE_ID_META_KEY,
+} from './repo.js';
 
 /** The `meta_kv` key holding the in-flight enrollment draft (crash-retry state). */
 const ENROLLMENT_DRAFT_KEY = 'auth.enrollment_draft';
@@ -119,6 +126,15 @@ export async function runEnrollment<DB>(
       source: 'system',
     });
   }
+
+  // Step 7 — persist the device identity to `meta_kv` (10-db §9; task 88), BEFORE the draft is
+  // deleted. The ordering is the guarantee: a crash between these writes and the delete leaves a
+  // device whose identity is recoverable (deviceId/storeId already durable AND the draft still
+  // there), never one whose identity is gone. `storeId` comes from the ENROLL RESPONSE, not the
+  // bundle — §7.4's store binding is irreversible and `applyBundle` runs on every refresh, so
+  // writing it here is the one place a store binding may be set (bundle-apply.ts writes only tenant).
+  await writeMeta(deps.db, DEVICE_ID_META_KEY, draft.deviceId);
+  await writeMeta(deps.db, STORE_ID_META_KEY, response.store.id);
 
   await deleteMeta(deps.db, ENROLLMENT_DRAFT_KEY); // enrollment complete — the draft is spent
   return { deviceId: draft.deviceId, response, genesis, loggedIn: false };

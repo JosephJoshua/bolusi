@@ -45,7 +45,20 @@ export interface DirectoryGrantRow {
   readonly storeId: string | null;
 }
 
-// ── meta_kv (tenant id) ──────────────────────────────────────────────────────────────────────────
+// ── meta_kv (device identity) ──────────────────────────────────────────────────────────────────
+
+/**
+ * `meta_kv` key holding the device's own id (10-db §9.1 names it; api/02-auth §4.1). Written once
+ * by enrollment (enrollment.ts) — the id the sync loop speaks for (`SyncLoopOptions.deviceId`).
+ */
+export const DEVICE_ID_META_KEY = 'deviceId';
+
+/**
+ * `meta_kv` key holding the device's bound store id (10-db §9.1 names it). Written once by
+ * enrollment from the ENROLL RESPONSE, never by `applyBundle`: §7.4's store binding is irreversible,
+ * and a bundle refresh must not be able to silently re-bind the device's store (bundle-apply.ts).
+ */
+export const STORE_ID_META_KEY = 'storeId';
 
 /** Read the device's tenant id from `meta_kv` (10-db §9.1), or null when unbootstrapped. */
 export async function readTenantId<DB>(db: Kysely<DB>): Promise<string | null> {
@@ -53,6 +66,20 @@ export async function readTenantId<DB>(db: Kysely<DB>): Promise<string | null> {
     SELECT value FROM meta_kv WHERE key = ${TENANT_ID_META_KEY}
   `.execute(db);
   return rows.rows[0]?.value ?? null;
+}
+
+/**
+ * Read the device's own id from `meta_kv` (10-db §9.1), or null when the device is not yet enrolled
+ * — the boot signal that gates the sync loop (task 89). Mirrors `readTenantId` (§2.8: one accessor
+ * pattern, not a fourth); a null answer is the true "unenrolled" state, never a default.
+ */
+export async function readDeviceId<DB>(db: Kysely<DB>): Promise<string | null> {
+  return readMeta(db, DEVICE_ID_META_KEY);
+}
+
+/** Read the device's bound store id from `meta_kv` (10-db §9.1), or null when unenrolled. */
+export async function readStoreId<DB>(db: Kysely<DB>): Promise<string | null> {
+  return readMeta(db, STORE_ID_META_KEY);
 }
 
 /** Read a `meta_kv` value by key (10-db §9.1), or null. */

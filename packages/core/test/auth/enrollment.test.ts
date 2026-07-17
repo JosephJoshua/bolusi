@@ -3,22 +3,26 @@
 // enrollment logs nobody in (§4.4). Real client DB, real command runtime for the genesis op.
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { ClientDatabase, DbDriver } from '@bolusi/db-client';
+import { createClientDialect, type ClientDatabase, type DbDriver } from '@bolusi/db-client';
 import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
-import { sql } from 'kysely';
-import type { Kysely } from 'kysely';
+import { CamelCasePlugin, Kysely, sql } from 'kysely';
 
 import {
+  applyBundle,
   assemblePermissionRegistry,
   authOperationRegistry,
   changePinCommand,
   CommandRuntime,
   createDirectorySource,
   createUuidV7Generator,
+  DEVICE_ID_META_KEY,
   DomainError,
   PermissionEvaluator,
+  readDeviceId,
+  readStoreId,
   readTenantId,
   runEnrollment,
+  STORE_ID_META_KEY,
   type DeviceBundle,
   type DeviceIdentity,
   type EnrollmentDeps,
@@ -97,8 +101,22 @@ interface Fixture {
   close(): Promise<void>;
 }
 
-async function fixture(seed: number, keystore?: KeyStorePort): Promise<Fixture> {
-  const { driver, db } = await openFreshClientDb();
+async function fixture(
+  seed: number,
+  keystore?: KeyStorePort,
+  wrapDriver?: (driver: DbDriver) => DbDriver,
+): Promise<Fixture> {
+  const { driver, db: freshDb } = await openFreshClientDb();
+  // A driver wrapper (crash injection) must sit UNDER the whole enrollment path — `deps.db`, the
+  // evaluator's reads, and the op store — so build one Kysely over the effective driver and hand it
+  // everywhere. `driver` (raw) stays exposed so a test can read back through a FRESH handle (T-14b).
+  const effectiveDriver = wrapDriver ? wrapDriver(driver) : driver;
+  const db = wrapDriver
+    ? new Kysely<ClientDatabase>({
+        dialect: createClientDialect(effectiveDriver),
+        plugins: [new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })],
+      })
+    : freshDb;
   const clock = makeFakeClock(START);
   const prng = mulberry32(seed);
   const idSource = createUuidV7Generator({
@@ -164,7 +182,7 @@ async function fixture(seed: number, keystore?: KeyStorePort): Promise<Fixture> 
       device,
       evaluator,
       operations: authOperationRegistry,
-      store: createSqliteOpStore(driver, db),
+      store: createSqliteOpStore(effectiveDriver, db),
       crypto: noblePort,
       clock: { now: () => clock.now() },
       idSource,
@@ -325,5 +343,112 @@ describe('enrollment crash-retry (api/02-auth §4.3)', () => {
       .execute();
     expect(genesis).toHaveLength(1);
     expect(result.deviceId).toBe(genesis[0]!.deviceId);
+  });
+});
+
+/** A fresh Kysely over an already-open driver — the "restart" read that proves persistence, not a
+ *  handle-local cache (T-14b: "a test that only reads back in-process proves nothing"). */
+function freshHandle(driver: DbDriver): Kysely<ClientDatabase> {
+  return new Kysely<ClientDatabase>({
+    dialect: createClientDialect(driver),
+    plugins: [new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })],
+  });
+}
+
+/** Every `meta_kv` key currently present, ascending — the denominator (T-14), not a presence spot-check. */
+async function metaKeys(db: Kysely<ClientDatabase>): Promise<string[]> {
+  const rows = await sql<{ key: string }>`SELECT key FROM meta_kv ORDER BY key`.execute(db);
+  return rows.rows.map((r) => r.key);
+}
+
+/**
+ * A `DbDriver` that dies on the `meta_kv` draft delete — the crash injected BETWEEN the identity
+ * writes and the draft delete (enrollment.ts's last two steps). Wrapping the driver puts the fault
+ * UNDER the whole path (the I/O boundary the dialect calls per query), so it fires exactly once, at
+ * the one `DELETE FROM meta_kv` enrollment issues.
+ */
+function crashOnDraftDelete(inner: DbDriver): DbDriver {
+  return {
+    execute: (statement, params) => {
+      if (/delete\s+from\s+"?meta_kv"?/i.test(statement)) {
+        return Promise.reject(new Error('crash: process died before the enrollment draft delete'));
+      }
+      return inner.execute(statement, params);
+    },
+    executeBatch: (commands) => inner.executeBatch(commands),
+    prepare: (statement) => inner.prepare(statement),
+    begin: () => inner.begin(),
+    commit: () => inner.commit(),
+    rollback: () => inner.rollback(),
+    close: () => inner.close(),
+  };
+}
+
+describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7.4)', () => {
+  it('persists deviceId + storeId to meta_kv, readable through a FRESH handle (T-14b restart)', async () => {
+    fx = await fixture(11);
+    const result = await runEnrollment(fx.deps, fx.params);
+
+    // A brand-new Kysely over the same driver: what survives here is in the DB, not this handle's cache.
+    const restarted = freshHandle(fx.driver);
+    expect(await readDeviceId(restarted)).toBe(result.deviceId);
+    // storeId comes from the ENROLL RESPONSE (response.store.id), which the fixture builds as the store param.
+    expect(await readStoreId(restarted)).toBe(fx.params.storeId);
+  });
+
+  it('after enrollment meta_kv holds EXACTLY {tenantId, deviceId, storeId} — the draft is spent (T-14)', async () => {
+    // A presence spot-check would pass on a row that also wrote six keys nobody declared; assert the
+    // whole set. tenantId is applyBundle's; deviceId/storeId are task 88's; the draft is deleted.
+    fx = await fixture(12);
+    await runEnrollment(fx.deps, fx.params);
+    expect(await metaKeys(fx.db)).toStrictEqual([
+      DEVICE_ID_META_KEY,
+      STORE_ID_META_KEY,
+      'tenantId',
+    ]);
+    // The three keys the two producers own — no draft, no seventh key.
+    expect([DEVICE_ID_META_KEY, STORE_ID_META_KEY]).toStrictEqual(['deviceId', 'storeId']);
+  });
+
+  it('a crash on the draft delete leaves the identity DURABLE and the draft recoverable (ordering)', async () => {
+    // The identity writes precede the draft delete, so a crash between them can never lose the
+    // identity: deviceId/storeId are already committed AND the draft is still there (§4.3 recovery).
+    fx = await fixture(13, undefined, crashOnDraftDelete);
+    await expect(runEnrollment(fx.deps, fx.params)).rejects.toThrow(/before the enrollment draft/);
+
+    const deviceId = fx.transport.calls[0]!.body.deviceId; // the id the POST carried = draft.deviceId
+    const restarted = freshHandle(fx.driver);
+    expect(await readDeviceId(restarted)).toBe(deviceId);
+    expect(await readStoreId(restarted)).toBe(fx.params.storeId);
+    // The draft is NOT gone (the delete never ran) — identity is recoverable from BOTH places.
+    expect(await metaKeys(restarted)).toStrictEqual([
+      'auth.enrollment_draft',
+      DEVICE_ID_META_KEY,
+      STORE_ID_META_KEY,
+      'tenantId',
+    ]);
+  });
+
+  it('a bundle refresh naming a DIFFERENT store does NOT rewrite storeId (§7.4 irreversible binding)', async () => {
+    // The one judgement in task 88: storeId is written by enrollment, never by applyBundle — a
+    // server-side bundle change must not silently re-bind the device's store (an operator round-trip
+    // to undo, §7.4). If applyBundle ever wrote storeId, this goes red.
+    fx = await fixture(14);
+    await runEnrollment(fx.deps, fx.params);
+    expect(await readStoreId(fx.db)).toBe(fx.params.storeId);
+
+    const otherStore = fx.deps.idSource();
+    const rebind: DeviceBundle = {
+      tenant: { id: fx.tenantId, name: 'Bolusi Papua' },
+      store: { id: otherStore, name: 'A Different Store' },
+      settings: { idleLockSeconds: 300 },
+      users: [],
+      rolesSnapshot: [],
+      permissionsSnapshot: [],
+    };
+    await applyBundle(fx.db, rebind);
+
+    expect(await readStoreId(fx.db)).toBe(fx.params.storeId); // unchanged — the binding held
+    expect(otherStore).not.toBe(fx.params.storeId); // control: the refresh really named a new store
   });
 });
