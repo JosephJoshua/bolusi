@@ -98,6 +98,10 @@ const clearLockoutInput = strictUuidFields<ClearLockoutInput>(['targetUserId']);
  * `auth.changePin` (permission `auth.pin_change`, every role). SELF-ONLY: the handler rejects a
  * non-self target with `restriction_violated` (02-permissions §5.4.6) — this check is IN the pure
  * handler, so it runs on every execution and a client that calls `execute` directly cannot skip it.
+ *
+ * The handler is pure and cannot emit, so it only DECLARES the denial by throwing; the command
+ * runtime EMITS the `auth.permission_denied` op (reason `restriction_violated`) when it sees this
+ * throw (02 §7 amended "Emitted by") — so this restriction denial is audited like any other.
  */
 export const changePinCommand: CommandDefinition<PinChangeInput> = {
   name: 'changePin',
@@ -105,9 +109,8 @@ export const changePinCommand: CommandDefinition<PinChangeInput> = {
   input: pinChangeInput,
   handler: (input, ctx): CommandHandlerResult => {
     if (input.targetUserId !== ctx.userId) {
-      throw new DomainError(
-        'PERMISSION_DENIED',
-        { target: 'changePin', reason: 'restriction_violated' },
+      throw restrictionViolated(
+        'changePin',
         'auth.pin_change may target only the acting user (02-permissions §5.4.6)',
       );
     }
@@ -295,12 +298,19 @@ export async function resetPin<DB>(
 ): Promise<PendingVerifier> {
   assertPinFormat(input.newPin);
   if (!(await userInDirectory(deps.db, input.targetUserId))) {
-    throw restrictionViolated('resetPin', 'target is not in this device’s directory (§5.4.6)');
+    return deps.runtime.denyRestriction(
+      input.actorUserId,
+      resetPinCommand.permission,
+      resetPinCommand.name,
+      'target is not in this device’s directory (§5.4.6)',
+    );
   }
   const targetIsMainOwner = await holdsMainOwnerRole(deps.db, input.targetUserId);
   if (targetIsMainOwner && !(await holdsMainOwnerRole(deps.db, input.actorUserId))) {
-    throw restrictionViolated(
-      'resetPin',
+    return deps.runtime.denyRestriction(
+      input.actorUserId,
+      resetPinCommand.permission,
+      resetPinCommand.name,
       'resetting a main_owner-role holder requires the actor to hold main_owner (§6.6)',
     );
   }
@@ -325,8 +335,10 @@ export async function clearPinLockoutFlow<DB>(
   input: { readonly actorUserId: string; readonly targetUserId: string },
 ): Promise<CommandOutcome> {
   if (!(await userInDirectory(deps.db, input.targetUserId))) {
-    throw restrictionViolated(
-      'clearPinLockout',
+    return deps.runtime.denyRestriction(
+      input.actorUserId,
+      clearPinLockoutCommand.permission,
+      clearPinLockoutCommand.name,
       'target is not in this device’s directory (§5.4.6)',
     );
   }
@@ -399,6 +411,13 @@ function refFromAppended(outcome: CommandOutcome): CanonicalRef {
   });
 }
 
+/**
+ * Build a §5.4.6 restriction denial as a `DomainError` — for a check that runs INSIDE a pure command
+ * handler (`changePinCommand`), which cannot emit. Throwing it DECLARES the denial; the command
+ * runtime recognises `reason: 'restriction_violated'` and EMITS the `auth.permission_denied` op
+ * (02 §7 amended). The orchestrators (reset/clear), which run OUTSIDE a pure handler, instead call
+ * `runtime.denyRestriction` directly — both routes reach the one enforcement point / one emitter.
+ */
 function restrictionViolated(target: string, detail: string): DomainError {
   return new DomainError('PERMISSION_DENIED', { target, reason: 'restriction_violated' }, detail);
 }

@@ -428,8 +428,31 @@ export class CommandRuntime {
     );
 
     // Step 3 — the handler. PURE (§5.2): its whole surface is the ctx built here.
+    //
+    // A handler may DECLARE a §5.4 restriction denial (e.g. auth.pin_change targeting non-self,
+    // 02 §5.4.6) by throwing PERMISSION_DENIED/restriction_violated. It cannot EMIT the audit op —
+    // it is pure — so the runtime does it here, through the SAME enforcement point step 2 uses
+    // (02 §7 amended "Emitted by"): the handler declares, the runtime emits. Without this a
+    // handler-level restriction denial is invisible in the FR-1045 audit — the exact gap task 44
+    // closes. `denyRestriction` records (throttled, in try/catch) then throws, so the denial can
+    // never slip the audit AND a failed audit can never un-deny it (task 10 ordering).
     const handlerCtx = this.#contextFor(ctx.userId, command.name, invocation);
-    const handlerResult = await command.handler(input, handlerCtx);
+    let handlerResult: CommandHandlerResult<TResult>;
+    try {
+      handlerResult = await command.handler(input, handlerCtx);
+    } catch (cause) {
+      if (isRestrictionDenial(cause)) {
+        await this.#enforcement.denyRestriction(
+          identity,
+          command.permission,
+          command.name,
+          'command',
+          invocation,
+          cause.message,
+        );
+      }
+      throw cause;
+    }
 
     // Steps 4–6 — completion + atomic append + projection.
     //
@@ -477,6 +500,34 @@ export class CommandRuntime {
    */
   async emitRuntimeOp(draft: RuntimeEmissionDraft): Promise<readonly AppendedOp[]> {
     return this.#emitSanctioned(draft);
+  }
+
+  /**
+   * Emit + throw a HANDLER-DECLARED §5.4 restriction denial (02 §7), for the offline PIN command
+   * handlers (02 §5.4.6) whose targeting / privileged-target restrictions need the directory and are
+   * therefore decided OUTSIDE a pure handler (in the orchestrators, pin-flows.ts). They DECLARE the
+   * denial and the runtime EMITS it, through the ONE `DenialEmitter` — so `auth.permission_denied`
+   * stays a single-path sanctioned emission (04 §5.1) with the §7 throttle, never a parallel channel
+   * (CLAUDE.md §2.8). This routes through the SAME enforcement point step 2 uses; the emit is awaited
+   * before the throw and the throw is unconditional on it (see `PermissionEnforcementPoint`).
+   *
+   * @throws {DomainError} always `PERMISSION_DENIED`, reason `restriction_violated`.
+   */
+  denyRestriction(
+    userId: string,
+    permissionId: string,
+    target: string,
+    detail: string,
+    invocation?: Partial<InvocationMeta>,
+  ): Promise<never> {
+    return this.#enforcement.denyRestriction(
+      this.#identityFor(userId),
+      permissionId,
+      target,
+      'command',
+      { ...defaultInvocation(), ...invocation },
+      detail,
+    );
   }
 
   async #emitSanctioned(draft: RuntimeEmissionDraft): Promise<readonly AppendedOp[]> {
@@ -549,6 +600,24 @@ const OP_SOURCES: readonly string[] = ['ui', 'agent', 'api', 'system'];
  */
 function asOpSource(source: string): OpSource {
   return (OP_SOURCES.includes(source) ? source : 'system') as OpSource;
+}
+
+/**
+ * A handler-DECLARED §5.4 restriction denial: a `PERMISSION_DENIED` DomainError carrying
+ * `reason: 'restriction_violated'` (02 §7).
+ *
+ * The evaluator NEVER produces this reason (authz/evaluate.ts — `restriction_violated` is the §5.4
+ * handler-level reason, asserted by evaluate.test.ts), so matching it re-emits ONLY handler-declared
+ * restriction denials, never an evaluator denial (which step 2 already emitted). That is what keeps
+ * the audit from being double-written: an evaluator denial thrown from step 2 is outside this catch,
+ * and a handler's own `ctx.requirePermission` denial carries an evaluator reason, not this one.
+ */
+function isRestrictionDenial(cause: unknown): cause is DomainError {
+  return (
+    cause instanceof DomainError &&
+    cause.code === 'PERMISSION_DENIED' &&
+    (cause.details as { reason?: unknown } | undefined)?.reason === 'restriction_violated'
+  );
 }
 
 /**

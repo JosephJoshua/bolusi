@@ -112,7 +112,7 @@ async function expectDomain(
 }
 
 describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', () => {
-  it('auth.changePin targeting non-self → PERMISSION_DENIED reason restriction_violated (§5.4.6)', async () => {
+  it('auth.changePin targeting non-self → PERMISSION_DENIED restriction_violated, AUDITED (§5.4.6, §7)', async () => {
     const s = await setup(1);
     const err = await expectDomain(
       s.h.runtime.execute(
@@ -124,8 +124,24 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
       'restriction_violated',
     );
     expect(err.details).toMatchObject({ reason: 'restriction_violated' });
-    // Nothing was appended — the pure handler threw before any op.
-    expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_changed')).toHaveLength(0);
+    // The pure handler DECLARED the restriction (it cannot emit); the runtime EMITTED the denial op
+    // through the same enforcement point an evaluator denial uses (02 §7 amended "Emitted by").
+    const all = await s.pinOps();
+    expect(
+      all.filter((o) => o.type === 'auth.pin_changed'),
+      'no business op appended',
+    ).toHaveLength(0);
+    const denials = all.filter((o) => o.type === 'auth.permission_denied');
+    expect(denials, 'exactly one denial op — the WHOLE set, not a sample (T-14)').toHaveLength(1);
+    expect(denials[0]!.userId, 'attributed to the denied actor').toBe(s.h.staffId);
+    expect(JSON.parse(denials[0]!.payload)).toEqual({
+      permissionId: 'auth.pin_change',
+      surface: 'command',
+      target: 'changePin',
+      reason: 'restriction_violated',
+      scopeStoreId: s.h.storeId,
+      suppressedRepeats: 0,
+    });
   });
 
   it('auth.resetPin without auth.user_reset_pin → PERMISSION_DENIED + auth.permission_denied emitted', async () => {
@@ -145,7 +161,7 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
     expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_reset')).toHaveLength(0);
   });
 
-  it('reset target absent from users_directory → denied restriction_violated (no op)', async () => {
+  it('reset target absent from users_directory → denied restriction_violated, AUDITED (§5.4.6, §7)', async () => {
     const s = await setup(3);
     await expectDomain(
       resetPin(s.flowDeps(), {
@@ -156,10 +172,26 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
       'PERMISSION_DENIED',
       'restriction_violated',
     );
-    expect(await s.pinOps()).toHaveLength(0);
+    // The lossy bug this task closes: the restriction denied, and the audit records it (was: no op).
+    const all = await s.pinOps();
+    expect(
+      all.filter((o) => o.type === 'auth.pin_reset'),
+      'no business op',
+    ).toHaveLength(0);
+    const denials = all.filter((o) => o.type === 'auth.permission_denied');
+    expect(denials, 'exactly one denial op — the WHOLE set (T-14)').toHaveLength(1);
+    expect(denials[0]!.userId).toBe(s.h.ownerId);
+    expect(JSON.parse(denials[0]!.payload)).toEqual({
+      permissionId: 'auth.user_reset_pin',
+      surface: 'command',
+      target: 'resetPin',
+      reason: 'restriction_violated',
+      scopeStoreId: s.h.storeId,
+      suppressedRepeats: 0,
+    });
   });
 
-  it('auth.clearPinLockout without auth.pin_unlock → denied (+ denial op)', async () => {
+  it('auth.clearPinLockout without auth.pin_unlock → denied (+ evaluator denial op, reason not_granted)', async () => {
     const s = await setup(4);
     // Lock the store owner directly, then a staff member (no pin_unlock) tries to clear it.
     await writePinAttempt(s.h.db, {
@@ -176,12 +208,55 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
       }),
       'PERMISSION_DENIED',
     );
-    expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_lockout_cleared')).toHaveLength(0);
+    const all = await s.pinOps();
+    expect(
+      all.filter((o) => o.type === 'auth.pin_lockout_cleared'),
+      'no business op',
+    ).toHaveLength(0);
+    // POSITIVE CONTROL / distinct-reason: the EVALUATOR denial (staff lacks the permission) has
+    // always been logged — reason `not_granted`, distinct from a `restriction_violated` denial.
+    const denials = all.filter((o) => o.type === 'auth.permission_denied');
+    expect(denials, 'exactly one denial op').toHaveLength(1);
+    expect(JSON.parse(denials[0]!.payload)).toMatchObject({
+      permissionId: 'auth.pin_unlock',
+      target: 'clearPinLockout',
+      reason: 'not_granted',
+    });
+  });
+
+  it('clearPinLockout target absent from users_directory → restriction_violated, AUDITED (§5.4.6, §7)', async () => {
+    const s = await setup(12);
+    // Owner HOLDS auth.pin_unlock, so the denial is the DIRECTORY restriction, not a permission gap
+    // — the fourth restriction call site, which nobody had enumerated a test for (T-12 sweep).
+    await expectDomain(
+      clearPinLockoutFlow(s.flowDeps(), {
+        actorUserId: s.h.ownerId,
+        targetUserId: 'b2222222-2222-7222-8222-222222222222',
+      }),
+      'PERMISSION_DENIED',
+      'restriction_violated',
+    );
+    const all = await s.pinOps();
+    expect(
+      all.filter((o) => o.type === 'auth.pin_lockout_cleared'),
+      'no business op',
+    ).toHaveLength(0);
+    const denials = all.filter((o) => o.type === 'auth.permission_denied');
+    expect(denials, 'exactly one denial op — the WHOLE set (T-14)').toHaveLength(1);
+    expect(denials[0]!.userId).toBe(s.h.ownerId);
+    expect(JSON.parse(denials[0]!.payload)).toEqual({
+      permissionId: 'auth.pin_unlock',
+      surface: 'command',
+      target: 'clearPinLockout',
+      reason: 'restriction_violated',
+      scopeStoreId: s.h.storeId,
+      suppressedRepeats: 0,
+    });
   });
 });
 
 describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §6.6)', () => {
-  it('store_owner resetting a main_owner-role holder → denied at the command layer', async () => {
+  it('store_owner resetting a main_owner-role holder → denied at the command layer, AUDITED (§7)', async () => {
     const s = await setup(5);
     // storeOwner HOLDS auth.user_reset_pin, but the target (owner) holds main_owner and the actor does
     // not → the privileged-target rule denies BEFORE the command's permission check.
@@ -194,7 +269,24 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
       'PERMISSION_DENIED',
       'restriction_violated',
     );
-    expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_reset')).toHaveLength(0);
+    const all = await s.pinOps();
+    expect(
+      all.filter((o) => o.type === 'auth.pin_reset'),
+      'no business op',
+    ).toHaveLength(0);
+    // The audit is weakest exactly where the attack is worst — this is the case that MUST be logged
+    // (task 28's privileged-target matrix reads it back). It now is.
+    const denials = all.filter((o) => o.type === 'auth.permission_denied');
+    expect(denials, 'exactly one denial op — the WHOLE set (T-14)').toHaveLength(1);
+    expect(denials[0]!.userId, 'attributed to the denied store_owner').toBe(s.h.storeOwnerId);
+    expect(JSON.parse(denials[0]!.payload)).toEqual({
+      permissionId: 'auth.user_reset_pin',
+      surface: 'command',
+      target: 'resetPin',
+      reason: 'restriction_violated',
+      scopeStoreId: s.h.storeId,
+      suppressedRepeats: 0,
+    });
     // (Forged-op push → SCOPE_VIOLATION is the server arm, tasks 13/16 — not implemented here.)
   });
 
