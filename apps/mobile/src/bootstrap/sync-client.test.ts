@@ -35,7 +35,9 @@ const DEVICE_ID = '00000000-0000-4000-8000-0000000000ab';
  *  backoff is asserted by the loop STATE ('backoff'), never by advancing wall-clock time (T-6). */
 class RecordingTimer {
   scheduled = 0;
-  schedule(_delayMs: number, _fn: () => void): () => void {
+  // Fewer params than `TimerPort.schedule` is assignable (and avoids unused-var lint): this fake
+  // never fires, so it needs neither the delay nor the callback.
+  schedule(): () => void {
     this.scheduled += 1;
     return () => undefined;
   }

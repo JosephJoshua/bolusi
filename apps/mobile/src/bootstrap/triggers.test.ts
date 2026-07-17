@@ -133,6 +133,7 @@ describe('(b) the append trigger — debounced 3 s (api/01-sync §5)', () => {
       },
       timer,
       appState: appState().port,
+      netInfo: netInfo().port,
     });
     expect(() => triggers.scheduler.schedule()).not.toThrow();
   });
