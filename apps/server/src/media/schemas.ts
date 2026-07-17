@@ -1,8 +1,10 @@
 // Wire schemas for the media surface (api/03-media §3). Kept LOCAL to @bolusi/server rather than
 // in the CONTENDED @bolusi/schemas package: task 02 shipped no media DTOs, and touching that
-// shared package needs serialization (CLAUDE.md §4). Lifting these into @bolusi/schemas for the
-// task-18 client + RPC reuse is a coordinated follow-up (noted for task 31); the server validates
-// and infers response types from here today.
+// shared package needs serialization (CLAUDE.md §4). These are the SERVER wire DTOs
+// (zMediaInitBody etc.); the shared payload fragment zMediaRef already lives in @bolusi/schemas
+// (task 18, packages/schemas/src/media.ts). Lifting these server DTOs into @bolusi/schemas for
+// client + RPC reuse is an untracked follow-up (NOT task 31 — that shipped the SEC-META ownership
+// gate); the server validates and infers response types from here today.
 //
 // Deliberate split of concerns with the ERROR CODES: `mime` and `sizeBytes` upper bound are NOT
 // enforced here — a bad mime must be `422 MIME_UNSUPPORTED` and an oversize `413 MEDIA_TOO_LARGE`

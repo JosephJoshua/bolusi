@@ -1,5 +1,5 @@
 # TASK 54 — SEC-AUTH-06/11's server legs are unclaimed and invisible: a "client arm" title retired the whole id
-**Status:** in-review — **premise moved; no code shipped. Needs an owner decision (below), not an implementation.**
+**Status:** done — **premise moved; no code shipped. Needs an owner decision (below), not an implementation.**
 **Depends on:** 31
 
 ## Outcome (2026-07-15) — the legs were already shipped; the sweep found the real instances two ids over

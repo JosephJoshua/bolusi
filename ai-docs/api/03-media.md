@@ -80,6 +80,7 @@ Server steps, in one transaction plus a blob write:
 
 - Scope per §2. Only `complete` media is downloadable; a `receiving` id ⇒ `404 MEDIA_NOT_FOUND` (indistinguishable from absent — an unfinished upload is not yet evidence).
 - Response: raw bytes, `Content-Type` = stored mime, `Content-Length`, `ETag: "<sha256>"`, `Cache-Control: private, max-age=31536000, immutable` (media never changes — §5). `If-None-Match` ⇒ `304`. Range requests are **not** supported in v0 (photos are ≤ 300 KiB); v1 video adds them.
+- The `ETag: "<sha256>"` + `If-None-Match ⇒ 304` pair is **not only** a caching affordance: because the `ETag` **is** the server's stored `sha256`, it is also the hash-comparison path §8's `MEDIA_IMMUTABLE` recovery uses (task 18's `matchesServerHash`). A `304` proves the server holds our exact bytes with **no body crossing the wire**; a `200` proves it holds different bytes. This is the only place the server's hash reaches the client (see §8's open-owner note on the field-route alternative).
 - The client verifies downloaded bytes against the signed `mediaRef.sha256` (06-media-pipeline §6) — trust, but verify, same doctrine as pull-side signature checks (api/01-sync §4).
 
 ## 4. Chunk size — 256 KiB, pinned
@@ -128,7 +129,7 @@ Errors use the standard envelope and transport vocabulary (`api/00-conventions.m
 | 401 | `AUTH_TOKEN_INVALID` | Unknown or expired device token (api/00 §7) | Re-auth flow per api/02-auth; halt drain |
 | 401 | `DEVICE_REVOKED` | Device revoked | Halt drain; item flagged; re-enroll (mirrors 05-operation-log §8) |
 | 404 | `MEDIA_NOT_FOUND` | Unknown id, out-of-scope, other device's in-flight upload, or not-yet-complete on download | Upload: re-run `init`. Download: retry later (op may precede media) |
-| 409 | `MEDIA_IMMUTABLE` | `init`/`PUT` against a `complete` id | Treat as success if own sha256 matches server's (item is uploaded); else `LOCAL_CORRUPT`-class surfacing — never overwrite |
+| 409 | `MEDIA_IMMUTABLE` | `init`/`PUT` against a `complete` id | Compare own `sha256` to the server's via a conditional `GET /v1/media/:id` with `If-None-Match: "<sha256>"` (§3.5): `304` ⇒ bytes match, mark the item `uploaded` (treat as success); `200` ⇒ server holds different bytes ⇒ `LOCAL_CORRUPT`-class surfacing, never overwrite; any other response ⇒ cannot confirm ⇒ `LOCAL_CORRUPT`-class (fail closed). **The `409` alone carries no hash — the server renders `MEDIA_IMMUTABLE` with no `details` — so a match must NEVER be inferred from the code.** Shipped as `MediaTransportPort.matchesServerHash` (task 18) |
 | 409 | `INIT_MISMATCH` | Re-init body differs from stored init | Bug or tamper; mark `failed`, surface, no auto-retry |
 | 413 | `MEDIA_TOO_LARGE` | `sizeBytes` over cap (10 MiB) | Bug (client compression contract violated); surface |
 | 413 | `CHUNK_TOO_LARGE` | Body exceeded `bodyLimit` | Bug; surface |
@@ -144,6 +145,8 @@ Errors use the standard envelope and transport vocabulary (`api/00-conventions.m
 | 500 | `STORAGE_ERROR` | Blob store write/read failure | Retryable with backoff |
 
 Every non-retryable failure must be user-visible (06-media-pipeline §8) — silent loss of evidence is the worst outcome this protocol can produce.
+
+> **`MEDIA_IMMUTABLE` hash-comparison mechanism (open owner decision).** The row above describes what **ships today** (task 18): the conditional-`GET` `ETag`/`If-None-Match` path (§3.5), chosen because it needed **no wire change**. No endpoint returns the server's `sha256` directly — not `init` (§3.1), `status` (§3.3), nor the `409` body. An alternative remains an **owner call, not decided here**: have `init`/`status` return the stored `sha256` outright (it is not a secret — the client signed it), collapsing the rule to a plain field comparison and dropping a round-trip from the resume path. That is a versioned-wire change (see "Change control") touching the server (task 19) and `zMediaStatusResponse`, so it must be ratified before the ETag route is retired.
 
 ## 9. Required adversarial tests (before review — CLAUDE.md §2.5)
 

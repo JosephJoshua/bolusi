@@ -1,6 +1,6 @@
 # TASK 70 — SEC-DEV-04's §218 cannot be built as written: it contradicts api/02-auth §7.3 and asks for a result the wire never produces
 
-**Status:** todo
+**Status:** in-progress
 
 > **OWNER RULING (2026-07-17):** RULED: §218 is over-specified (D18). Drop 'kept + surfaced as rejected'; the guarantee is wiped-not-leaked, matching §7.3. Edit the guide, then retire SEC-DEV-04 honestly.
 

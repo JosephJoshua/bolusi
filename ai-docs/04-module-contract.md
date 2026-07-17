@@ -43,6 +43,8 @@ operations: {
     payload: z.object({ title: z.string().min(1), body: z.string() }).strict(),
     reversal: 'Reversed by notes.note_archived on the same entityId.',   // MANDATORY (05 §7)
     apply: notesApplier,        // §4
+    // conflict: { key: 'note.body', severity: 'minor' },  // OPTIONAL — 01 §8.1; absent ⇒ this type never produces a Conflict
+    // scope: 'tenant',                                     // OPTIONAL — 01 §6; default 'store' (device's store); 'tenant' ⇒ storeId = null
   },
 }
 ```
@@ -51,6 +53,8 @@ operations: {
 - `payload` schemas are `.strict()` — unknown keys rejected. Money fields are integer IDR. No floats (05 §3).
 - Bumping a payload shape = new `schemaVersion` + the applier must handle **all** historical versions forever (old ops never disappear).
 - `reversal` is documentation in v0; executable `buildReversal` slots in for V2 without contract change.
+- `conflict?: { key, severity }` — **OPTIONAL**, semantics owned by **01 §8.1** (which frames itself as *extending* this registry entry, the way `permissions` in §1 is owned by 02 §3). It is the only thing that makes two accepted ops on one entity a collision rather than a sequence: the server's Rule-1 detection keys off `(entityId, conflict.key)`. `severity` (`minor | significant`) is **static** per op type (01 §8.3 — v0 has no payload-dependent severity). Absent ⇒ the type never produces a Conflict record.
+- `scope?: 'store' | 'tenant'` — **OPTIONAL, default `'store'`**. The envelope scope the op is recorded in (05 §2.1: `storeId` null = tenant-scoped). Declared on the **type** and resolved by `ctx.op()` from this registry — the same rationale as `schemaVersion`: it is a property of the type, not of the emission, and a handler that could state its own scope could record an op in a store it was not authorized in. `'store'` resolves to the device's store (02 §5.2's v0 rule — what every op type got before this field existed, so omitting it is unchanged behaviour); `'tenant'` records `storeId = null`. Required by **01 §6**, which states the *fact* that `platform.user_locale_changed` is tenant-scoped (the preference follows the user to every device) but named no mechanism before this field.
 
 ## 4. Projection engine
 
@@ -123,7 +127,10 @@ execute(command, rawInput, ctx):
   2. ctx.requirePermission(command.permission)      // fail closed — 02-permissions
   3. result = command.handler(input, ctx)           // PURE: reads via ctx.query only
   4. runtime completes op drafts with EVERY envelope field per 05 §2.1
-     (location via LocationPort.getBestFix() — 08-stack §3.2; null never blocks)
+     (location via LocationPort.getBestFix() — 08-stack §3.2; null never blocks;
+      storeId from the op type's declared `scope` (§3) — the device's store for a
+      'store' type, null for a 'tenant' type — resolved from the registry, never
+      caller-supplied)
   5. append locally (atomic with 6)
   6. apply projections
   7. schedule sync (debounced)

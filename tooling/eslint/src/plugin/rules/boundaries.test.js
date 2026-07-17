@@ -122,6 +122,28 @@ tester.run('boundaries', rule, {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/core/test/projection/better-sqlite3-driver.ts',
     },
+    // @electric-sql/pglite is the harness's OWN shipping driver (a runtime dep — the harness IS test
+    // tooling), so like better-sqlite3's harness row it is unrestricted here. This is the positive
+    // control on the exemption: the fix is not a blanket pglite ban (task 42, review-03).
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/harness/src/device.ts',
+    },
+    // ...and core's applier-conformance suite drives the projection engine against in-process PGlite
+    // (task 11 — T-8): test/ files only, never shipping source (invalid cases below).
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/core/test/module/applier-conformance.test.ts',
+    },
+    // ...and db-server / apps-server carry pglite as a devDep for their own test lanes.
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/db-server/test/watermarks.test.ts',
+    },
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/apps/server/test/integration/projection.test.ts',
+    },
     // db-client test/tooling files may use Node builtins; only its shipping source may not
     {
       code: `import { mkdtempSync } from 'node:fs';`,
@@ -297,6 +319,38 @@ tester.run('boundaries', rule, {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/core/src/projection/engine.ts',
       errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    // @electric-sql/pglite is the SAME class as better-sqlite3, and until task 42 the lock did not
+    // name it — so a real Postgres engine reached shipping source uncaught (review-03's positive
+    // control: better-sqlite3 BLOCKED, pglite CLEAN, same file). These fixtures pin the gap shut in
+    // each testOnly owner's SHIPPING source:
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/core/src/projection/engine.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/db-server/src/pool.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/apps/server/src/db.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    // ...and outside every pglite owner → the ownerless driver lock (db-client is Hermes-only and
+    // never runs Postgres; even a test file there is barred — the driver is injected, never imported)
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/db-client/src/connection.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // ...dynamic import from a non-owner is caught too (same visitor as op-sqlite's dynamic case)
+    {
+      code: `const mod = await import('@electric-sql/pglite');`,
+      filename: '/repo/packages/schemas/src/envelope.ts',
+      errors: [{ messageId: 'dbDriver' }],
     },
     // op-sqlite outside db-client, from the app that actually ships it (primary fixture)
     {

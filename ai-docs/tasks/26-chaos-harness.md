@@ -1,7 +1,13 @@
 # TASK 26 — chaos-harness (@bolusi/harness + test-support determinism kit, multi-device sim, full CHAOS catalog, oracle wiring)
 
-**Status:** todo
+**Status:** in-progress
 **Depends on:** 06, 07, 08, 15, 16
+
+## Progress (2026-07-17 — §3.3 determinism kit SHIPPED + merged; harness deferred, blocked on task 25)
+
+The **determinism kit is done and on main** (reviewed MERGE-CLEAN, falsified §2.11): `@bolusi/test-support/src/determinism/` now carries `clock.ts` (FakeClock — forward-only `advance`, roll-back-capable `set`, integer-ms), `id-source.ts` (seeded UUIDv7 that WIRES core's `createUuidV7Generator` over FakeClock+PRNG — encodes fake-clock ms, not wall-clock), `keypair.ts` (`deriveDeviceKeypair` = `SHA-256(u32be(seed)‖u32be(deviceIndex))` as the RFC-8032 Ed25519 seed, distinct per device, sign→verify positive control), and `script.ts` (`generateScript` — 20/60/15/5 op mix, 30% recency bias, v1→v2 cutover seam, per-op unique values). 31 falsified tests; reimplements nothing (§2.8 — wires core + noblePort + the pre-existing `prng.ts`).
+
+**The rest is genuinely blocked, not skipped** (verified, not assumed): `packages/modules/src/notes/index.ts` is a 3-line placeholder (only `NOTES_MODULE_ID`) — §3.2 makes the notes module the workload for **every** scenario, so `Harness`, all 12 CHAOS scenarios, `fixture.ts`/`canonical-fold.ts`/`raw-wire.ts`/`fault-fetch.ts`/`reporter.ts`/`volumes.ts`, and the `pnpm chaos` CI stage cannot be built without stubbing the workload — which would ship a harness that "drives nothing while reporting 0 failures", the exact §2.11 class. `pnpm chaos` remains the honest not-implemented placeholder; `chaos:nightly` unset. **Resume when task 25 (notes workload) merges.** (Note: task 17 conflict-detection is already **done** — CHAOS-07's conflict legs are unblocked; 18/19 and 13/14 also merged. Task 25 is the sole remaining structural blocker. The consolidation of the ad-hoc FakeClocks in `@bolusi/core`'s test tree is deferred to its own post-quiesce task — §4 forbids reaching into that contended tree now.)
 
 ## Goal
 

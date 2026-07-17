@@ -69,7 +69,7 @@ FR-816's word "embedded" is therefore satisfied by cryptographic binding, not by
 
 ### 3.2 `mediaRef` — the shared payload fragment
 
-Defined once in `@bolusi/core` as `mediaRefSchema` (Zod, `.strict()`); any module payload that attaches media embeds it. Never redefine per module (CLAUDE.md §2.8).
+Defined once in `@bolusi/schemas` as `zMediaRef` (Zod, `z.strictObject` — i.e. `.strict()`, `packages/schemas/src/media.ts`); any module payload that attaches media embeds it. Never redefine per module (CLAUDE.md §2.8). It lives in `@bolusi/schemas`, **not** `@bolusi/core`, and must not be moved back: `08 §3.3`'s import matrix forbids `core` from importing `zod` (core is platform-free and zod-free by design — `packages/core/src/module/strict-schema.ts` states this in code), while the primitives `zMediaRef` composes (`zUuidV7`, `zSha256Hex`, `zMsEpoch`, `zLocation`) already live in `@bolusi/schemas`, which alone carries the `lat`/`lng`/`accuracyMeters` float carve-out (`08 §5.2`, `envelope.ts`). Caveat for the next reader: `08 §3.3`'s positive allow-matrix is **not yet gate-enforced** — `bolusi/boundaries` is a deny-list and `zod` is not on it (owner: task 28) — so a `zod` import inside `core` would compile and lint green and fail only at runtime as a missing `dist` dependency; the boundary here is prose until task 28 lands the allow-matrix.
 
 | Field | Type | Semantics |
 | ----- | ---- | --------- |
