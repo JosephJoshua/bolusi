@@ -26,9 +26,10 @@ import type { SystemSigner } from '../../../src/oplog/system-op.js';
 import type { OpRegistry } from '../../../src/oplog/types.js';
 import { ProjectionRegistry, type ProjectionApplier } from '@bolusi/core';
 import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
-import { migrateToLatest, type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
-import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
+import { createTestDatabase } from '@bolusi/db-server/testing';
+import { sql, type Kysely } from 'kysely';
+import { afterEach, beforeEach, describe, expect, inject, test } from 'vitest';
 
 import { InProcessPokeHub } from '../../../src/realtime/poke-hub.js';
 import { seedDevice, seedWorld } from '../oplog/helpers.js';
@@ -40,6 +41,7 @@ const NOTE_ARCHIVED = 'notes.note_archived';
 
 let db: Kysely<DB>;
 let appForTenant: ForTenant;
+let closeDb: (() => Promise<void>) | undefined;
 
 function forTenantOn(handle: Kysely<DB>, role?: string): ForTenant {
   return <T>(tenantId: string, fn: (tdb: TenantDb) => Promise<T>) =>
@@ -51,19 +53,24 @@ function forTenantOn(handle: Kysely<DB>, role?: string): ForTenant {
 }
 
 beforeEach(async () => {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pglite = new PGlite();
-  await pglite.waitReady;
-  db = new Kysely<DB>({
-    dialect: new PGliteDialect({ pglite }),
-    plugins: [new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })],
-  });
-  await migrateToLatest(db);
+  // Real PG16 clone from the pre-migrated template (D16, task 81) — the seam owns `pg` so this
+  // file does not; the production HTTP push path this suite exercises now runs over the real driver.
+  const handle = await createTestDatabase(
+    {
+      maintenanceUri: inject('pgMaintenanceUri'),
+      baseUri: inject('pgBaseUri'),
+      owner: inject('pgOwner'),
+    },
+    expect.getState().testPath,
+  );
+  db = handle.db;
+  closeDb = handle.close;
   appForTenant = forTenantOn(db, APP_ROLE);
 }, 120_000);
 
 afterEach(async () => {
-  await db?.destroy();
+  await closeDb?.();
+  closeDb = undefined;
 });
 
 /** Member device (at genesis head) + second device + the tenant system device (01 §3.6). */

@@ -1,41 +1,40 @@
 // Shared harness for the server op-acceptance pipeline suite (task 07; 05 §8–9, 10-db §3).
 //
-// PGlite embeds a real PostgreSQL, so the append-only trigger, RLS FORCE/policies, the
-// tenant_op_counters row lock, and jsonb all behave as production — the fast L3 loop
-// (testing-guide §2.1). The pipeline under test runs through `appForTenant` (SET LOCAL ROLE
-// bolusi_app), so RLS + the read-append grant on `operations` are actually exercised, never
-// bypassed vacuously (testing-guide §2.5). Seeding uses the owner handle (bypasses RLS) — a
-// fixture's job is to put rows on the other side of the boundary for a probe to fail to reach.
+// Real PostgreSQL 16 in a container, over the real `pg` driver (D16, task 81) — cloned per file
+// from the pre-migrated template, so the append-only trigger, RLS FORCE/policies, the
+// tenant_op_counters row lock, jsonb AND the driver's int8-as-string marshalling all behave as
+// production. The pipeline under test runs through `appForTenant` (SET LOCAL ROLE bolusi_app), so
+// RLS + the read-append grant on `operations` are actually exercised, never bypassed vacuously
+// (testing-guide §2.5). Seeding uses the owner handle (bypasses RLS) — a fixture's job is to put
+// rows on the other side of the boundary for a probe to fail to reach.
 //
-// WHY PGLITE (not the db-server test:rls Postgres lane): `pg` is boundary-locked to
-// packages/db-server, so apps/server test code cannot open a real-Postgres pool. The genuinely
-// CONCURRENT serverSeq race (two pool connections) therefore lives in
-// packages/db-server/test/oplog-server-seq-concurrency.test.ts under `pnpm test:rls`; this lane
-// proves the pipeline's per-op accounting + that it emits the FOR UPDATE lock (query spy).
-import {
-  CamelCasePlugin,
-  Kysely,
-  PGliteDialect,
-  sql,
-  type LogEvent,
-  type Selectable,
-} from 'kysely';
+// WHY NOT PGlite ANY MORE — the old header's stated reason was FALSE. It read: "`pg` is
+// boundary-locked to packages/db-server, so apps/server test code cannot open a real-Postgres
+// pool." apps/server never needed `pg`; it needed a `Kysely<DB>` over a real database, and
+// `@bolusi/db-server/testing`'s `createTestDatabase` hands it one — clone + stamp assertion +
+// `pg.Pool` + CamelCasePlugin all owned inside db-server, so `pg` still never crosses the boundary
+// (task 81's ruling; the boundary is discharged by code, not asserted by a comment). PGlite was
+// also measurably BLIND to the silent int8 class the pipeline's serverSeq accounting depends on
+// (D16 / T-14f: 14/14 GREEN on PGlite vs 4 RED on real `pg`), which is the whole reason to move.
+import { sql, type Kysely, type Selectable } from 'kysely';
+import { expect, inject } from 'vitest';
 import { z } from 'zod';
 
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import type { OpRegistry, OplogPipelineDeps } from '../../../src/oplog/types.js';
 import { ProjectionRegistry, type CryptoPort } from '@bolusi/core';
-import { migrateToLatest, type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
+import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
+import { createTestDatabase } from '@bolusi/db-server/testing';
 import { mulberry32, uuidV7, type ChainWorld } from '@bolusi/test-support';
 
 /** §6.3 request-handler role — NOBYPASSRLS; what makes RLS undefeatable from the pipeline. */
 export const APP_ROLE = 'bolusi_app';
 
-/** 10-db §11.4 shared camel-case config (must match production's mapping). */
-const CAMEL_CASE_OPTIONS = { underscoreBetweenUppercaseLetters: true } as const;
-
 export interface OplogTestDb {
-  /** Owner/superuser handle (PGlite connects as superuser → bypasses RLS). Seeding goes here. */
+  /**
+   * Owner handle. Seeding goes here — the container's default `postgres` user is a SUPERUSER, so it
+   * bypasses RLS even under FORCE, which is exactly what a fixture needs and a PROBE must never use.
+   */
   readonly db: Kysely<DB>;
   /** The pipeline path: `forTenant` running `SET LOCAL ROLE bolusi_app` first → RLS enforced. */
   readonly appForTenant: ForTenant;
@@ -43,6 +42,8 @@ export interface OplogTestDb {
   readonly ownerForTenant: ForTenant;
   /** Every SQL string the app-role path executed, in order (FOR UPDATE spy, testing-guide T-11). */
   readonly appStatements: string[];
+  /** Provenance: which real PostgreSQL database answered (T-14d). Printed by suites that assert it. */
+  readonly provenance: string;
   readonly close: () => Promise<void>;
 }
 
@@ -58,28 +59,28 @@ function forTenantOn(db: Kysely<DB>, role?: string): ForTenant {
 }
 
 export async function makeOplogTestDb(): Promise<OplogTestDb> {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pglite = new PGlite();
-  await pglite.waitReady;
-
   const appStatements: string[] = [];
-  const db = new Kysely<DB>({
-    dialect: new PGliteDialect({ pglite }),
-    plugins: [new CamelCasePlugin({ ...CAMEL_CASE_OPTIONS })],
-    log: (event: LogEvent) => {
-      // Only the app-role path's statements are of interest to the FOR UPDATE spy; seeding noise
-      // on the owner handle would bury it. We tag by capturing everything and the spy filters.
-      appStatements.push(event.query.sql);
+
+  // The seam owns the clone + stamp assertion + `pg.Pool` + CamelCasePlugin (§2.8). We only pass an
+  // onQuery spy: capture EVERYTHING (owner seeding + app path) and let the FOR UPDATE spy filter —
+  // the seeding noise on the owner handle would otherwise bury the app path's statements.
+  const { db, provenance, close } = await createTestDatabase(
+    {
+      maintenanceUri: inject('pgMaintenanceUri'),
+      baseUri: inject('pgBaseUri'),
+      owner: inject('pgOwner'),
     },
-  });
-  await migrateToLatest(db);
+    expect.getState().testPath,
+    { onQuery: (statement) => appStatements.push(statement) },
+  );
 
   return {
     db,
     appForTenant: forTenantOn(db, APP_ROLE),
     ownerForTenant: forTenantOn(db),
     appStatements,
-    close: () => db.destroy(),
+    provenance,
+    close,
   };
 }
 
