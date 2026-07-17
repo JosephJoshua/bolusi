@@ -32,7 +32,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | done | 14, 22, 23 |
-| 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24, 49, 50 |
+| 25 | notes-reference-module DATA LAYER (ops v1+v2, applier, commands, queries, conflict-checks, SERVER_MODULES registration, i18n catalogs) — screens carved to 96 (D17) | todo | 11, 18, 24, 49, 50 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | in-progress | 06, 07, 08, 15, 16 |
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26, 50 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
@@ -96,6 +96,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 93 | the db-client load-flake class (task 67) also in apps/mobile bootstrap tests + secret-scan, still on default 5000ms — same measured nondeterminism, pre-emptive (from task 67 sweep) | todo | 67 |
 | 94 | **MEDIUM** an enrolled device shows BLANK metadata: `index.ts` hands `Root` a hardcoded empty `deviceInfo`, so Settings renders no device name/store/tenant for a device that now enrolls (task 92); and the enroll POST sends `appVersion: ''` (expo-constants unpinned). Values all exist in `meta_kv` + the directory; wire them (from task 92) | todo | 24, 92 |
 | 95 | the DB-driver testOnly lock is bypassed by SUBPATH imports (`@electric-sql/pglite/worker` = real DB surface) — same gap for better-sqlite3/pg; normalize to package root (from task 42 review) | todo | 42 |
+| 96 | notes module SCREENS (NotesList/NoteEditor/NoteDetail) — 4 states, ConfirmSheet, optimistic save, thumbnail, i18n live-switch; carved from 25, frontend-phase (D17) | todo | 25, 24, 18 |
 
 | 79 | `api/03 §8`'s `MEDIA_IMMUTABLE` rule says compare own sha256 to **the server's** — no endpoint returns it (`status`/`init` carry no hash; the 409 has no `details`, and `media.ts:215` returns before the field check). Only §3.5's `ETag` exposes it. Shipped via conditional-GET `If-None-Match`, fails closed; spec text still unimplementable — 4th of the class (62/70/72) (from task 18) | done | — |
 | 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | done | — |
