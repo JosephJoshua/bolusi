@@ -1,6 +1,6 @@
 # TASK 26 — chaos-harness (@bolusi/harness + test-support determinism kit, multi-device sim, full CHAOS catalog, oracle wiring)
 
-**Status:** todo
+**Status:** in-progress
 **Depends on:** 06, 07, 08, 15, 16
 
 ## Goal
