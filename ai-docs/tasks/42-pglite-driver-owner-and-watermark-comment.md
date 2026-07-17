@@ -1,5 +1,5 @@
 # TASK 42 — `@electric-sql/pglite` escapes the DB-driver lock; the watermark `Number()` comment overstates its evidence
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW (both latent; both are "a guard/comment doesn't cover what it claims"). From task 11 review (review-03).
 **Depends on:** 11
 
