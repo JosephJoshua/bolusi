@@ -44,3 +44,7 @@ The enrollment caller is not just `runtimeFor`. `App.tsx`'s `onLogin`/`onEnroll`
 - `runEnrollment` runs end-to-end through it (login → enroll → bundle persist → genesis → task 88's `deviceId`/`storeId` persist), and on success the sync loop (task 89) starts — `lastSuccessfulSyncAt` becomes real without a reboot.
 - `LoginRes.tenantName` reconciled (spec + server + client agree) — the wizard's confirm step renders a real tenant name.
 - On-device E2E (`eas build`, cold boot, enroll) remains owed to **27a** — this task closes the headless-composable half; state the device half as owed (D12/D13).
+
+## Carry-in from review-89 (non-blocking on 88/89; YOUR lane)
+
+`apps/mobile/index.ts` has `API_BASE_URL = process.env['EXPO_PUBLIC_API_URL'] ?? ''` — an empty-string fallback that yields **relative URLs** if the env var is unset (T-19's shape: `?? ''` on a value you failed to read). It is latent today because it sits behind the unenrolled gate (`createSync` returns null until enrollment wires up — this task), so no production device reaches it yet. **When this task composes the login+enroll transports, fix it** — an unset API URL should fail loudly at boot, not silently POST to a relative path. Same family as the `??`-laundering this session filed as T-19.
