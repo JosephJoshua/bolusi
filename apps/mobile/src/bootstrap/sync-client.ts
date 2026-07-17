@@ -241,6 +241,13 @@ export interface SyncClientForAppConfig {
   readonly timer?: TimerPort;
   /** Injected for tests; defaults to the global `fetch`. */
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Invoked AFTER a `'refreshed'` bundle commit so the permission evaluator can invalidate its memo
+   * (02-permissions §6 (a): "a bundle refresh wrote a directory table"). Supplied by the composition
+   * root once a runtime — hence an evaluator — is composed (the enrollment/runtime task); until then
+   * the bundle producer's seam stays `undefined` by design.
+   */
+  readonly onBundleRefreshed?: () => void | Promise<void>;
 }
 
 /**
@@ -262,6 +269,9 @@ export function createSyncClientForApp(
     deviceToken: config.loadDeviceToken,
     db: app.db,
     ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+    ...(config.onBundleRefreshed === undefined
+      ? {}
+      : { onBundleRefreshed: config.onBundleRefreshed }),
   });
   return createSyncClient({
     db: app.db,
