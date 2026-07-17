@@ -171,19 +171,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:ed25519-interop
 
-  # Stage 8 — server integration vs PGlite (08 §5.6). Every-PR gate: the Hono app's
-  # integration suite (22 files / 162 tests) against the real middleware chain, incl. the
+  # Stage 8 — server integration vs REAL postgres:16 in a testcontainer (08 §5.6, D16, task 81).
+  # Every-PR gate: the Hono app's integration suite against the real middleware chain, incl. the
   # SEC-SYNC gzip/auth adversarial tests (security-guide §4.2).
   #
-  # NO postgres service container BY DESIGN — and this is load-bearing, not an omission.
-  # Every DB-backed test here boots its own in-process PGlite (`new PGlite()` via
-  # PGliteDialect, apps/server/test/helpers/{media-db,pglite-tenant}.ts). The suite opens no
-  # TCP connection and reads no DATABASE_URL: verified by running it with DATABASE_URL
-  # pointed at a black hole — 22/22 files still passed. Adding a service container here
-  # would be cargo-cult: it would sit idle and imply a real-PG witness this lane does NOT
-  # provide. The real-Postgres-16 witness is stage 9 (rls-witness), which 08 §2.5 requires
-  # precisely because WASM must not be the only RLS witness. Nothing in this job may be read
-  # as evidence about real-PG behaviour.
+  # WAS PGlite; NO LONGER. The old comment here claimed "NO postgres service container BY DESIGN …
+  # every DB-backed test boots its own in-process PGlite" — true until task 81 moved this lane onto
+  # the SAME real-PG16 machinery db-server uses (rls-witness, stage 9). `test:server` now boots its
+  # OWN postgres:16 container via `@bolusi/db-server/testing` (the seam owns `pg`; apps/server never
+  # imports a driver), migrates a template once, clones a database per test, and connects as
+  # `bolusi_app` (NOBYPASSRLS) so RLS is non-vacuous (T-14b). PGlite is GONE from apps/server — the
+  # push pipeline, validation stages, conflict-detection and projection-apply were witnessed only by
+  # a lane blind to the silent int8 class (D16 / T-14f); they now run over the production driver.
+  #
+  # STILL NO `services:` BLOCK, and that is the fix, not an omission (same ruling as rls-witness):
+  # testcontainers boots and OWNS the container from inside the process, with an ephemeral port and
+  # a per-run attribution stamp asserted before any test — a declared `services:` postgres would sit
+  # UNUSED while every test connected to the testcontainer, a real green with fictional provenance
+  # (T-14d). Docker is available on ubuntu-latest, which is what makes the container lane viable, and
+  # Ryuk reaps it however the job ends.
   #
   # `tsc -b` is inside `test:server` per the 08 §5.6 normative convention (cross-package dist
   # imports must build first), so `needs: install` alone is sufficient on a cold runner.
@@ -198,7 +204,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: server integration suite vs in-process PGlite
+      - name: server integration suite vs real Postgres 16 (testcontainers, D16)
         run: pnpm test:server
 
   # Gitleaks job (security-guide §10, SEC-SECRET-02): full-history scan.
