@@ -1,6 +1,6 @@
 # TASK 84 — `security-guide §6` never says it is Android-only, and iOS's `§7.4` legs do not exist: the SQLCipher DB restores from an iCloud backup while its key does not
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH** — a security guarantee (`api/02-auth §7.4`) with a built, guarded, falsified leg on one shipped platform and **no leg at all** on the other, which D17 made first-class.
 **Depends on:** 83 (the Keychain and the file-protection controls are scoped to a bundle identifier that is currently a placeholder), 85 (nothing here is verifiable until iOS can be built)
 **SEC ids owned by THIS task:** **none yet — deliberately.** See §The SEC scope ruling.

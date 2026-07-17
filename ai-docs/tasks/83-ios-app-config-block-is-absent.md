@@ -1,6 +1,6 @@
 # TASK 83 — `app.config.ts` has no `ios` block, so the real prebuild pipeline silently ships `com.placeholder.appid` as the iOS app identity — and every iOS security control is null
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH — a LIVE artifact defect, not a gap.** Produced, not inferred (task 80's probe). It is unreachable today only because no iOS build lane exists (task 85) — the moment one does, this is what ships.
 **Depends on:** —
 **Blocks:** 84 (the iOS §7.4 legs need a real bundle identifier to be scoped to), 85
