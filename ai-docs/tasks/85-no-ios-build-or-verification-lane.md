@@ -2,7 +2,7 @@
 
 **Status:** todo
 
-> **OWNER RULING (2026-07-17):** RULED: full iOS parity push (D18). iOS is co-equal. This task = the on-device build/verification LANE, which needs a macOS runner/EAS the owner must provision — flagged as infra, not a coding task.
+> **OWNER RULING (2026-07-17):** BOTH lanes (D18 §5): GitHub Actions `macos-latest` (unsigned Simulator build + boot — I write the CI job, verifies tasks 83/84/87's generated Info.plist) AND EAS Build (signed real-device/TestFlight). **Coding waits on impl-ios (83/84/87) landing the iOS `app.config.ts` block.** **OWNER PROVISIONING (the gate, see D18 §5): Apple Developer Program (\$99/yr, 24-48h), an Expo/EAS account, GitHub macOS minutes enabled, and eventually a physical iPhone for the on-device §7.4/backup claims the Simulator cannot verify.**
 
 **Priority:** **HIGH — the precondition for every other iOS leg.** Tasks 83 and 84 can each land a config value and an artifact guard, but **nothing about iOS can be verified on a target** until this is answered. It also carries an owner decision.
 **Depends on:** —

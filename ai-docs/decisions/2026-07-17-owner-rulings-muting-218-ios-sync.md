@@ -34,3 +34,25 @@ The app boots its data layer but does not sync. That is the biggest functional g
 - **88:** enrollment persists `deviceId`/`storeId` to `meta_kv` (`10-db §9` names them; today enrollment returns the id and drops it).
 - **89:** the `BundleRefreshPort` producer (task 14 shipped `applyBundle`, not the fetch half), the `SyncLoop` construction, an enrollment caller (`runEnrollment` has zero prod callers), NetInfo (pin it — `08 §2.2`, was a §6 stop-and-ask). After this, `lastSuccessfulSyncAt` becomes real and the never-connected banner clears on first sync.
 - Then v0's exit path (notes 25, emulator lane 27a) has a syncing app to run against.
+
+## 5. iOS build/verification lane (task 85) → **BOTH GitHub Actions `macos-latest` AND EAS Build** (owner, 2026-07-17)
+
+Two complementary lanes, because they close different parts of the gap:
+
+- **GitHub Actions `macos-latest`** — the fast verification lane. A macOS CI job runs `expo prebuild --platform ios` + `xcodebuild` for the **iOS Simulator, UNSIGNED** (Simulator builds need no Apple signing), and boots the app. Catches: compile/link errors, does-it-launch, do-permission-prompts-fire, does the generated `Info.plist`/entitlements match tasks 83/84/87. Driven entirely from `.github/workflows/ci.yml` — I write it; no SSH, no rental. Pay-per-minute (macOS runners bill ~10× Linux; keep the job lean — prebuild + one Simulator build, not the full suite).
+- **EAS Build** (`eas build --platform ios`) — the real-artifact lane. Produces a **signed** iOS build for a physical device / TestFlight. Handles the Mac + Xcode + signing. Needed for anything past the Simulator (real Keychain semantics, real backup/restore = the §7.4 and backup-exclusion claims the Simulator cannot verify).
+
+**The honest ceiling, restated:** GH Actions macOS closes the **build + Simulator-runtime** gap. EAS closes the **signed-build** gap. **Neither closes the on-device-behaviour gap** — Simulator Keychain/backup/restore differ from a device, and EAS builds an artifact but does not run it on hardware here. The §7.4 "never resurrected" and real-restore claims stay **device-unverified until a physical iPhone runs a build** (D12/D13, now doubled and explicit).
+
+**Sequencing:** the lane implementation waits on **impl-ios (tasks 83/84/87)** landing a correct `app.config.ts` iOS block — an EAS/prebuild lane over a placeholder bundle id would bake the wrong identity. Task 85's coding is: write the macOS CI job + `eas.json` on top of that config.
+
+### OWNER PROVISIONING — the long pole; start these in parallel, only you can do them
+
+An autonomous agent cannot create accounts, accept ToS, or attach billing. To make either lane actually RUN:
+
+1. **Apple Developer Program** — US$99/yr, enrollment can take 24–48h (identity verification). **Required for EAS signed builds and TestFlight.** NOT required for the GH Actions unsigned-Simulator job.
+2. **Expo / EAS account** — free tier exists; `eas build` iOS needs the Apple Developer account attached to it (EAS manages the certs/profiles once you authenticate). You create the account + run `eas login` once (or supply an EAS access token as a CI secret).
+3. **GitHub macOS minutes** — free on public repos; on a **private** repo, macOS minutes bill at ~10× Linux and need a billing method on the GitHub org. Confirm which the repo is and that macOS minutes are enabled.
+4. **A physical iPhone** (eventually) — the only thing that closes the on-device gap for §7.4/backup. Not needed for v0's config+Simulator verification; needed before an iOS launch. Same shape as the deferred Android device farm (D12).
+
+**Nothing else in the build blocks on this** — impl-ios ships the config-level iOS legs headless now; the lane just makes them runtime-verifiable once the accounts exist.
