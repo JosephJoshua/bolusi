@@ -67,3 +67,44 @@ Rejected, with reasons:
 - **Report before/after wall-clock** for `test:server` and the full suite, with `EXIT=` lines and a `Test Files N passed` denominator (T-18 — a "completed (exit code 0)" notification described an `EXIT=1` run twice during task 73 alone).
 - **Never `.withReuse()`** — see 73's finding: reuse returns before `getReaper()` and never applies the `session-id` label Ryuk reaps by, so a reused container is never cleaned up. Verified in testcontainers 12.0.4's own source and by a 13-day-old orphan on the dev box carrying exactly that label fingerprint.
 - Assert the denominator: how many of the 50 moved, how many did not, and **which**.
+
+## Outcome (task 81)
+
+**Done. `apps/server` runs on the same real-PG16 lane as db-server; PGlite is deleted from `apps/server`.**
+
+### The denominator (measured, not the brief's estimate — the file count grew since it was written)
+`apps/server` has **54** test files, not 50. **43 moved to real PG16** (every DB-backed file — oplog, sync, media, identity, tenant — reached through the migrated harnesses); **11 use no DB** (pure `app.fetch`/crypto/unit: `config`, `gzip-decompress`, `middleware-order`, `rate-limit`, `oplog/no-http-boundary`, `sec-sync` (top-level), `security/sec-dev`, `src/media/{assemble,blob-store}`, `src/oplog/skew`, one identity file). Corroboration: the 43 are **exactly** the files that went RED when Postgres crashed mid-bring-up (below) — a clean witness that the count is the real one.
+`grep` for `@electric-sql/pglite` under `apps/server` now returns **zero**. The seam (`createTestDatabase`) is the only place a test `Kysely<DB>` is built, and it lives in db-server, so `pg` never crossed the boundary (lint `bolusi/boundaries` enforces it; a shipping-source import of the seam still fails — falsified).
+
+### One container or two — TWO, and the measurement that decided it
+`vitest`'s `provide` is **per-project** (confirmed in the vitest 4 docs: project context overrides root), so a value db-server's globalSetup provides is injectable only by db-server tests. The connection-budget guard must also check **each project's** live `maxWorkers` against the container it will use — review-73's fix, which a root-level project-blind setup cannot preserve. So each project boots its OWN container; they run in different `sequence.groupOrder`s (db-server=1, server=2), never both hot. Measured cost of two containers: `pnpm test` boots both in ~9 s total (fsync-off boot ~7–9 s each), full suite green — affordable, so the guard-integrity win is free.
+
+### `pnpm test` — the acceptance gate (read the log, not the exit code, T-18)
+`Test Files 198 passed (198)`, `Tests 2856 passed (2856)`, `EXIT=0`. Both lanes' `lane UP …` provenance lines printed. The **zero-tests trap that blocked task 73 did NOT reappear**: `server` sits in its own `sequence.groupOrder: 2` (db-server is 1, the ~10 no-`maxWorkers` projects share the implicit 0), so no two projects share a group with different `maxWorkers`.
+
+### Wall-clock (MEASURED on the same loaded box, EXIT lines read from the logs — not inherited)
+Measured both ends myself (a throwaway worktree at `c168fc6` for the before, so the comparison is apples-to-apples on the same host), rather than quoting the brief's 550–685 s estimate:
+
+| lane | before (PGlite, `fileParallelism: false` — c168fc6) | after (real PG16, parallel — this branch) |
+| ---- | --------------------------------------------------- | ----------------------------------------- |
+| `pnpm test:server` (incl. `tsc -b`) | **9:29.25 = 569 s**, 54 files / 406 tests, `EXIT=0` | **1:10.55 = 71 s**, 54 files / 406 tests, `EXIT=0` (vitest-only 24.6 s) |
+| `pnpm test` full (incl. `tsc -b`) | — | **2:11.5**, 198 files / 2856 tests, `EXIT=0` (vitest-only 54.6 s) |
+
+**~8× faster** (569 s → 71 s), same 54 files / 406 tests, both `EXIT=0`. The move is for **FIDELITY** (D16), not speed — but real-PG won wall-clock decisively anyway: the substitute's per-file cost was WASM-boot-plus-migrate, which template cloning removes (the brief's hypothesis, now confirmed by measurement rather than inherited — T-16 clause 6). The 569 s lands inside the brief's 550–685 s estimate, which is a nice cross-check but not the number I'm reporting.
+
+### The value proof — honest statement (T-11)
+No apps/server assertion produced a **new red** on real PG16 that PGlite hid: all 406 apps/server tests pass on real `pg`. That is expected and I am stating it rather than manufacturing a red — the int8/marshalling-sensitive code was **relocated into db-server** (watermark store, projection engine, Rule-1 candidates — `db-server/src/index.ts`), where `test:rls` already witnesses the silent class over the real driver. What moving `apps/server` buys is: **RLS that can actually fail** (proven below), **PG16 version parity** (PGlite embeds PG18), and the **real `pg` driver** under the push pipeline / validation / conflict / projection orchestration that lived only behind the blind lane. (The int8 "alibi" trap in T-14f — 2^53 is green *with* the bug — is why I did not go fishing for a fake red here.)
+
+### RLS falsification, with its positive control (T-14b / T-17)
+Target: `SEC-MEDIA-03` (`sec-media.test.ts`), a cross-tenant fence with a control. Neutered `SET LOCAL ROLE bolusi_app` in the media harness → the probe ran as the container's default `postgres` **superuser** → the fence went **RED**: `expected [ Array(1) ] to deeply equal []` at line 198 — the superuser read tenant B's media across the boundary (RLS bypassed under FORCE). That the row was **visible** to the superuser is the positive control: the fixture is real; RLS is what hides it. Restored → GREEN (6/6). **The ROLE closes it, not the engine** (T-14b), exactly as the brief warned.
+
+### Two operational defects found and fixed by construction (both measured, both falsified by watching them fail)
+1. **Postgres CRASH under full parallelism.** First full run: **43/54 files failed**, `the database system is in recovery mode` + `Connection terminated unexpectedly` (NOT `too many clients` — a crash, not a connection-cap rejection; host had 42 GB free, so not OOM). Cause: `CREATE DATABASE … TEMPLATE` forces a cluster checkpoint+fsync, and per-file clones at `maxWorkers: 24` on a shared box made that an fsync storm. Fix: the container is ephemeral (Ryuk reaps it), so it runs `fsync=off synchronous_commit=off full_page_writes=off` — durability an throwaway test cluster has no use for. Re-run: **43/54 failing → 0**.
+2. **Process HANG after "Test Files N passed".** Even a passing single file hung ~4 min post-summary. The Node diagnostic report (`--report-on-signal`, SIGUSR2) showed the **one** referenced+active handle was a vitest worker IPC **pipe** — the fork worker's idle `pg` pool pinned its event loop, so the worker never exited and the main process waited on it. Fix: `allowExitOnIdle: true` on every pool, so an idle pool never keeps its worker alive. Re-run: 4 min hang → **clean `Exit status: 0` in 34 s**. (db-server's per-file/`beforeAll` harness never hit this because it holds one pool per file; apps/server's `beforeEach` harnesses cycle many.)
+
+Note also: `createTestDatabase` mints a **per-call** clone name (file prefix + per-process counter), because apps/server's harnesses clone per **test** (`beforeEach`), not per file — without it the second `beforeEach` failed `CREATE DATABASE … already exists`.
+
+### CI
+`.github/workflows/ci.yml` stage 8 (`server-integration`) corrected: it claimed "NO postgres service container BY DESIGN … in-process PGlite" and "22 files / 162 tests" — now false. It runs real PG16 via testcontainers; still **no `services:` block** (same ruling as `rls-witness` — a declared service would sit unused while tests hit the testcontainer, a real green with fictional provenance, T-14d). Stage 4 `unit` (`pnpm test`) already needs Docker post-73; it now boots two containers, unchanged and green on ubuntu-latest.
+
+### Never `.withReuse()` — kept. No orphan of mine survives (Ryuk reaps on any exit; `pnpm db:down` untouched).
