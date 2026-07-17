@@ -69,6 +69,8 @@ export interface LoginRes {
   controlSession: string;
   expiresAt: number;
   tenantId: string;
+  /** The tenant's display name — the enrollment CONFIRM step renders it (api/02-auth §4.2). */
+  tenantName: string;
   user: { id: string; name: string };
   stores: Array<{ id: string; name: string }>;
 }
