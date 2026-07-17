@@ -13,7 +13,9 @@
  *   ABSENT:  the sync LOOP does not run, because nothing enrolls. `App`'s `onEnroll`/`onLogin` are
  *            inert (see below), so no device ever obtains a deviceId or a device token, so there is
  *            nothing to sync with. The transport and the trigger adapters are BUILT
- *            (`transport.ts`, `triggers.ts`) and tested; what is missing is the enrollment flow that
+ *            (`transport.ts`, `triggers.ts`) and tested; what is missing is NOT just enrollment but
+ *            the sync-loop WIRING itself — the `SyncLoop` construction and `BundleRefreshPort`
+ *            producer that tasks 88/89 add. Sync is unwired, not merely waiting on data. What is missing is the enrollment flow that
  *            would give them a device to speak for. Filed, not faked.
  *
  * ── THE GATE IS STILL A GATE (task 24's property — do not break it) ────────────────────────────

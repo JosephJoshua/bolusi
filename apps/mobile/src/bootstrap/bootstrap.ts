@@ -13,12 +13,17 @@
 //            `registerModules(CLIENT_MODULES)`, the projection engine, and `readSyncState` — the
 //            LAST of which is what finally makes the Sync Status screen's freshness a fact read
 //            from the database rather than a literal in a component.
-//   ABSENT:  the sync LOOP does not start on any device today, and that is a DATA state, not a
-//            missing branch — `startSync` is on the live path, gated on a persisted `deviceId`.
-//            Nothing enrolls (App.tsx's `onEnroll` is inert), and task 14's enrollment never writes
-//            `deviceId`/`storeId` to `meta_kv` even though 10-db §9 names them, so the gate is
-//            never satisfied. Both are filed. The gate is REAL: the moment enrollment persists an
-//            id, sync starts — no code here changes.
+//   ABSENT:  the sync LOOP does not start on any device today, and it is NOT merely waiting on data
+//            — it is UNWIRED. There is no `startSync` symbol anywhere (this header once claimed one
+//            'on the live path gated on a persisted deviceId'; that was false — the exact §2.11
+//            comment-as-guard trap this repo keeps shipping, caught by review-50b). Making sync run
+//            is task 89: ~57 lines of REQUIRED code — a `BundleRefreshPort` producer (task 14
+//            shipped `applyBundle`, not the fetch half), the `SyncLoop` construction, an enrollment
+//            caller (`runEnrollment` has zero prod callers), and NetInfo. Plus task 88: enrollment
+//            never writes `deviceId`/`storeId` to `meta_kv` though 10-db §9 names them. Until 88+89
+//            land, `lastSuccessfulSyncAt` is null on every device and the banner is permanently
+//            `stale`. Do NOT read the green sync-loop UNIT tests as 'sync works' — it is inert by
+//            design in this scope. `transport.ts`/`triggers.ts` say the same in their headers.
 //
 // ── ONE CONNECTION, APP-WIDE (08 §2.2) ────────────────────────────────────────────────────────
 // op-sqlite's rule is EXACTLY ONE open connection per database, app-wide; concurrency comes from
