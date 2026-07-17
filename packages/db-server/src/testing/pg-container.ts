@@ -121,7 +121,9 @@ export async function startPgLane(
   actualMaxWorkers: number,
 ): Promise<PgLane> {
   // A token unique to THIS process, so a database created by any other run is detectably foreign.
-  const owner = `task73-${process.pid}-${Date.now().toString(36)}`;
+  // Prefix is lane-neutral (`l3lane-`), not a task id: both db-server's and apps/server's lanes and
+  // every future consumer share this seam, so a `task73-`/`task81-` marker would only mislead.
+  const owner = `l3lane-${process.pid}-${Date.now().toString(36)}`;
 
   const container = await new PostgreSqlContainer(PG_IMAGE)
     // No `.withReuse()` — see this file's header. Reuse silently opts out of Ryuk, which is the

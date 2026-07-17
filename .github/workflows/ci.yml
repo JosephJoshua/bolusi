@@ -281,7 +281,7 @@ jobs:
       # derived from it, every cloned database is stamped at creation with a token unique to this
       # run, and the suite refuses an absent or foreign stamp before any test executes
       # (packages/db-server/src/testing/pg-container.ts). The provenance line it prints on every
-      # run — "PostgreSQL 16.14 … owned by 'task73-<pid>-<t>'" — is the evidence §2.1 asks for.
+      # run — "PostgreSQL 16.14 … owned by 'l3lane-<pid>-<t>'" — is the evidence §2.1 asks for.
       - name: RLS suite vs real Postgres 16 (testcontainers, D16)
         run: pnpm test:rls
 
