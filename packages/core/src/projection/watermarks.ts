@@ -70,10 +70,15 @@ export interface WatermarkStore {
 export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
   return {
     async read(moduleId: string): Promise<WatermarkState> {
-      // The asserted type is the drivers' truth, not `number`: Postgres returns `bigint` as a
-      // STRING (int8 exceeds JS's safe integer range, so the pg wire protocol will not silently
-      // narrow it), while SQLite returns a number. A raw-`sql<>` annotation is believed by the
-      // compiler and checked by nobody, so claiming `number` here would just hide that.
+      // The asserted type is the union the DRIVERS actually produce, not `number`: the real `pg`
+      // driver returns int8 as a STRING — int8's range exceeds JS's safe integers, so node-postgres
+      // will not silently narrow it — while SQLite AND PGlite return a number (PGlite, this suite's
+      // ONLY Postgres, hands back a `number` in range and a `bigint` past 2^53 — never a string). So
+      // the STRING branch is DEFENDED here but not DEMONSTRATED by this suite: the cast below is a
+      // no-op on PGlite, and the string is exercised on real `pg` by
+      // db-server/test/projection-int8-marshalling.test.ts (full driver matrix: int8.ts). A
+      // raw-`sql<>` annotation is believed by the compiler and checked by nobody, so claiming
+      // `number` here would just hide the string a shipping build against real `pg` will meet.
       const result = await sql<{
         appliedServerSeq: string | number | bigint;
         appliedLocalSeq: string | number | bigint;

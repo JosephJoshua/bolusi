@@ -6,7 +6,11 @@
 //      better-sqlite3 → harness, plus db-client AND core TEST/TOOLING files only — it is the
 //      CI adapter behind the shim dialect (testing-guide §2.3) that the driver-conformance
 //      suite and the core projection-engine tests both drive, and must never reach shipping
-//      source)
+//      source; @electric-sql/pglite → harness (ships legitimately as test tooling — a runtime
+//      dep there, held out of every SHIPPING_WORKSPACES bundle by shipping-deps.test.ts), plus
+//      core, db-server AND apps/server TEST/TOOLING files only — it is the in-process Postgres
+//      the applier-conformance suite runs, a test-only engine that must never reach shipping
+//      source any more than better-sqlite3 does)
 //   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
 //   3. */screens subpaths importable only from apps/mobile
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
@@ -73,7 +77,13 @@ function packageRoot(source) {
 // DB drivers may be imported only by their owning wrapper (08 §3.3 hard rule 2).
 // `testOnly` owners may import the driver from test/tooling files but NOT from shipping
 // source: better-sqlite3 is test-only (08 §2.5) and backs both the harness's simulated
-// devices and db-client's CI conformance adapter (testing-guide §2.3).
+// devices and db-client's CI conformance adapter (testing-guide §2.3). @electric-sql/pglite is
+// the same species — a test-only engine (the in-process Postgres the applier-conformance suite
+// runs) — with one asymmetry: the harness ships it as a REAL runtime dep (test tooling is what
+// the harness IS), so harness is an UNRESTRICTED owner, while core/db-server/apps-server carry it
+// as a devDep and are `testOnly`. Without an entry here nothing catches pglite in shipping source:
+// the lock looked complete because it named the driver everyone tests with (better-sqlite3) and
+// missed the one it did not (review-03, task 42 — a guard that covers the cases you think of).
 const DB_DRIVER_OWNERS = new Map([
   ['@op-engineering/op-sqlite', [{ workspace: 'packages/db-client' }]],
   ['pg', [{ workspace: 'packages/db-server' }]],
@@ -96,6 +106,22 @@ const DB_DRIVER_OWNERS = new Map([
       // apps/mobile declares no test-only driver as a runtime dep (devDependencies is where it
       // belongs — the db-client shape).
       { workspace: 'apps/mobile', testOnly: true },
+    ],
+  ],
+  [
+    '@electric-sql/pglite',
+    [
+      // The harness ships pglite as a real runtime dependency (it is test tooling, held out of
+      // every shipping bundle by shipping-deps.test.ts's SHIPPING_WORKSPACES sweep), so it is an
+      // unrestricted owner — no `testOnly`. This is the positive control on the exemption: a
+      // pglite import in packages/harness stays CLEAN, so the fix is not a blanket ban.
+      { workspace: 'packages/harness' },
+      // core's applier-conformance suite (task 11 — T-8) runs the projection engine against a real
+      // Postgres via in-process PGlite; test/tooling files only, shipping core stays clean.
+      { workspace: 'packages/core', testOnly: true },
+      // db-server and apps/server carry pglite as a devDep for the same test-only reason.
+      { workspace: 'packages/db-server', testOnly: true },
+      { workspace: 'apps/server', testOnly: true },
     ],
   ],
 ]);
