@@ -31,6 +31,10 @@ import {
 
 const TENANT = '00000000-0000-7000-8000-00000000t001';
 const STORE = '00000000-0000-7000-8000-00000000s001';
+/** A different store WITHIN the caller's tenant — excluded by the store clause (queries.ts). */
+const STORE_OTHER = '00000000-0000-7000-8000-00000000s002';
+/** A different tenant — excluded by the tenant clause. */
+const OTHER_TENANT = '00000000-0000-7000-8000-00000000t002';
 const DEVICE = '00000000-0000-7000-8000-00000000d001';
 const USER_A = '00000000-0000-7000-8000-0000000user-a';
 const USER_B = '00000000-0000-7000-8000-0000000user-b';
@@ -43,7 +47,7 @@ const authProjection = {
   tables: authModule.projections.tables,
   appliers: Object.fromEntries(
     Object.entries(authModule.operations).map(([type, decl]) => [type, decl.apply]),
-  ) as Record<string, ProjectionApplier<ClientDatabase>>,
+  ) as Record<string, ProjectionApplier<AuthDatabase>>,
 } as unknown as ModuleProjectionManifest<ClientDatabase>;
 
 let seqCounter = 0;
@@ -347,6 +351,67 @@ describe('permission denial audit (auth_permission_denials) — the load-bearing
       expect(row?.reason).toBe('not_granted');
       expect(row?.scopeStoreId).toBeNull();
       expect(row?.suppressedRepeats).toBe(0);
+    } finally {
+      await h.close();
+    }
+  });
+
+  test('SCOPING (security): excludes foreign-store (same tenant) and foreign-tenant rows; keeps own-store + tenant-wide (null store)', async () => {
+    // WHY THIS TEST EXISTS, LOUDLY. `auth.audit_view` is a STORE-scoped permission (02 §11.1) and
+    // server RLS is TENANT-only (db-server enableTenantRls has no store predicate), so the store
+    // clause at queries.ts (`storeId = qctx.storeId OR storeId IS NULL`) is the SOLE cross-store
+    // control for the FR-1045 audit trail. A sole security control with no adversarial test is the
+    // SEC-META-01 class this repo has shipped broken. This test seeds THREE isolation buckets via
+    // REAL ops through the engine (not hand-INSERTed rows — T-14b) and pins that the caller sees
+    // ONLY their own store + tenant-wide rows; the two falsifications (one per where-clause) are
+    // recorded in the task Outcome.
+    const h = await openAuthHarness();
+    try {
+      const denial = (entityId: string, over: Partial<SignedOperation>): SignedOperation =>
+        op({
+          type: 'auth.permission_denied',
+          entityType: 'permission_denial',
+          entityId,
+          userId: USER_A,
+          payload: {
+            permissionId: 'auth.audit_view',
+            surface: 'query',
+            target: 'auth.listPermissionDenials',
+            reason: 'not_granted',
+            scopeStoreId: null,
+            suppressedRepeats: 0,
+          },
+          ts: 1000,
+          ...over,
+        });
+
+      const ops: SignedOperation[] = [
+        // (a) the caller's OWN store, own tenant — MUST be visible.
+        denial('d-own', { tenantId: TENANT, storeId: STORE, timestamp: 1000 }),
+        // (b) a DIFFERENT store within the caller's SAME tenant — MUST be hidden. Only the store
+        //     clause excludes it (RLS is tenant-only, so RLS would let it through). Leaks if the
+        //     store clause is dropped.
+        denial('d-foreign-store', { tenantId: TENANT, storeId: STORE_OTHER, timestamp: 1100 }),
+        // (c) a DIFFERENT tenant, deliberately at the SAME store id — MUST be hidden. Only the
+        //     tenant clause excludes it (it passes the store clause), so it isolates the tenant
+        //     clause: leaks iff the tenant clause is dropped.
+        denial('d-foreign-tenant', { tenantId: OTHER_TENANT, storeId: STORE, timestamp: 1200 }),
+        // (d) a TENANT-WIDE denial (store_id NULL) in the caller's tenant — MUST be visible (the
+        //     `storeId IS NULL` arm), so a store-exclusion fix does not also hide legitimate
+        //     tenant-wide audit rows.
+        denial('d-tenant-wide', { tenantId: TENANT, storeId: null, timestamp: 1300 }),
+      ];
+      await deliverAppended(h, ops);
+      // T-14b: all four rows really landed — the assertion below proves EXCLUSION, which is vacuous
+      // if the excluded rows were never folded in the first place.
+      expect(await countRows(h.db, 'auth_permission_denials')).toBe(4);
+
+      const page = await listPermissionDenialsHandler(listInput(), qctx(h));
+      const ids = page.rows.map((r) => r.id);
+      // ONLY own-store (a) + tenant-wide (d), newest-first. NOT the foreign-store or foreign-tenant.
+      expect(ids).toEqual(['d-tenant-wide', 'd-own']);
+      expect(ids).not.toContain('d-foreign-store'); // cross-store isolation (the sole control)
+      expect(ids).not.toContain('d-foreign-tenant'); // cross-tenant isolation
     } finally {
       await h.close();
     }
