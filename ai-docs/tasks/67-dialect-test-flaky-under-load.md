@@ -1,6 +1,6 @@
 # TASK 67 — `db-client/test/dialect.test.ts > "rolls back on error"` times out at 5000ms under parallel load
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **LOW** — a real T-10 violation (a flaky test is a P1 *bug*, but this one is a test-harness fragility, not a product defect). It has never gone red in isolation; it reds only when the machine is saturated.
 **Depends on:** —
 **Blocks:** —
