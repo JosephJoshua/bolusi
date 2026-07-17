@@ -1,5 +1,5 @@
 # TASK 44 — `restriction_violated` denials emit no audit op: the audit is weakest where the attack is worst
-**Status:** in-progress
+**Status:** done
 **Priority:** P2 — **the only LOSSY finding on the auth surface.** A missing applier can be backfilled from the log later (task 43); **an op never emitted is data that does not exist.**
 **Depends on:** 14
 
