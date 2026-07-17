@@ -1,5 +1,5 @@
 # TASK 43 — the auth projections have no appliers and no owner: `auth.*` ops are write-only
-**Status:** in-progress
+**Status:** done
 **Priority:** HIGH (a specified audit trail is currently unreadable; nothing fails, which is why nobody noticed)
 **Depends on:** 11, 14
 

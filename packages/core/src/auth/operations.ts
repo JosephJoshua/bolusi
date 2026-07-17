@@ -37,12 +37,25 @@ export const AUTH_ENTITY = {
   permissionDenial: 'permission_denial',
 } as const;
 
-/** The permission ids the auth commands require (02-permissions §11.1). */
+/**
+ * The `auth` module's permission ids (02-permissions §11.1) — the COMPLETE registry, keyed by a
+ * stable camelCase alias. The auth commands (pin-flows.ts) and the `listPermissionDenials` query
+ * (queries.ts) reference these, and the module manifest (module.ts) declares them with their
+ * canonical scope/isDangerous/description — one home for the string (CLAUDE.md §2.8).
+ */
 export const AUTH_PERMISSION = {
-  pinChange: 'auth.pin_change',
+  userCreate: 'auth.user_create',
+  userEdit: 'auth.user_edit',
+  userDeactivate: 'auth.user_deactivate',
   userResetPin: 'auth.user_reset_pin',
+  pinChange: 'auth.pin_change',
   pinUnlock: 'auth.pin_unlock',
+  roleManage: 'auth.role_manage',
   deviceEnroll: 'auth.device_enroll',
+  deviceRevoke: 'auth.device_revoke',
+  deviceRead: 'auth.device_read',
+  tenantConfigure: 'auth.tenant_configure',
+  auditView: 'auth.audit_view',
 } as const;
 
 /** The `main_owner` role id (02-permissions §10) — the privileged-target rule pivots on it (§6.6). */
