@@ -1,6 +1,6 @@
 # TASK 81 — `apps/server`'s 50 integration files are still on PGlite; move them onto the real-PG16 lane task 73 built
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** HIGH — this is where D16's remaining exposure lives. Task 73 moved `db-server` (15 files, 124 tests) onto real PG16 and left `apps/server` (50 files) on the substitute. The push pipeline, the validation stages, the conflict-detection engine and the projection-apply step all live in `apps/server`, and all are still witnessed only by a lane measured blind to the silent bug class.
 **Depends on:** 73 (landed the container/template lane and the `@bolusi/db-server/testing` seam this consumes)
 **Blocks:** —
