@@ -408,10 +408,32 @@ async function hasOp<DB>(db: Kysely<DB>, id: string): Promise<boolean> {
  * the push half — no code path stores a push-ack serverSeq — and TASK 49 carries the doc fix.
  */
 async function nextArrivalSeq<DB>(db: Kysely<DB>): Promise<number> {
-  const result = await sql<{ maxSeq: number | null }>`
-    SELECT MAX(server_seq) AS max_seq FROM operations
+  // `AS "maxSeq"` resolves the result key by construction, not via `CamelCasePlugin` (10-db §11.4;
+  // task 74). The annotation is `maxSeq?` — OPTIONAL — because a raw-`sql` key genuinely CAN be
+  // absent at runtime (the whole bug class: without the plugin a bare `AS max_seq` never binds
+  // `maxSeq`), and typing it present is the assertion `tsc` believes and never checks (T-14f).
+  //
+  // `MAX(...)` over no GROUP BY ALWAYS returns exactly one row, whose column is NULL on an empty
+  // log. The `?? 0` this used to carry conflated two different facts — an empty log (NULL → start
+  // at 1, correct) and a MISSING KEY (undefined → 1, WRONG) — laundering a wrong serverSeq of 1 out
+  // with no error (T-19). They are now distinguished: NULL is the empty log; an absent `maxSeq`
+  // THROWS, because a sequence number is the last place a plausible default belongs.
+  const result = await sql<{ maxSeq?: number | null }>`
+    SELECT MAX(server_seq) AS "maxSeq" FROM operations
   `.execute(db);
-  return Number(result.rows[0]?.maxSeq ?? 0) + 1;
+  const row = result.rows[0];
+  if (row === undefined) {
+    throw new Error(
+      'nextArrivalSeq: MAX(server_seq) returned no row — impossible for an aggregate',
+    );
+  }
+  if (row.maxSeq === undefined) {
+    throw new Error(
+      'nextArrivalSeq: the `maxSeq` result key did not bind — a raw-`sql` key failed to resolve. ' +
+        'Refusing to launder a missing read into a plausible serverSeq of 1 (task 74; T-19).',
+    );
+  }
+  return (row.maxSeq === null ? 0 : Number(row.maxSeq)) + 1;
 }
 
 /**

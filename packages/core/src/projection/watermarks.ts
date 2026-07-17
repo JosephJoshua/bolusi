@@ -70,35 +70,36 @@ export interface WatermarkStore {
 export function createSqlWatermarkStore<DB>(db: Kysely<DB>): WatermarkStore {
   return {
     async read(moduleId: string): Promise<WatermarkState> {
+      // Columns ALIASED to their camelCase result key, not relying on `CamelCasePlugin` to rewrite
+      // raw-`sql` result keys (10-db §11.4; task 74). Without the plugin a bare `SELECT
+      // applied_server_seq` arrives as `applied_server_seq`, `row.appliedServerSeq` is undefined,
+      // and the `?? 0` this used to carry laundered it into a SILENT watermark of 0 (T-19) — a
+      // stalled projection with no error. Both columns are `NOT NULL DEFAULT 0` (10-db §9.1), so
+      // `?? 0` could NEVER fire for a legitimate null; it only ever masked a missing key. It is
+      // gone: a resolved value is normalised, an unresolved key makes `int8ToNumber(undefined)`
+      // throw loudly — exactly what the server reader (db-server/watermarks.ts) does.
+      //
       // The asserted type is the drivers' truth, not `number`: Postgres returns `bigint` as a
-      // STRING (int8 exceeds JS's safe integer range, so the pg wire protocol will not silently
-      // narrow it), while SQLite returns a number. A raw-`sql<>` annotation is believed by the
-      // compiler and checked by nobody, so claiming `number` here would just hide that.
+      // STRING (int8 exceeds JS's safe integer range), while SQLite returns a number. `int8ToNumber`
+      // is the ONE seam that normalises whatever the driver handed back (task 46; int8.ts refuses
+      // past 2^53 rather than round a watermark into a wrong-but-silent value).
       const result = await sql<{
         appliedServerSeq: string | number | bigint;
         appliedLocalSeq: string | number | bigint;
       }>`
-        SELECT applied_server_seq, applied_local_seq
+        SELECT applied_server_seq AS "appliedServerSeq", applied_local_seq AS "appliedLocalSeq"
         FROM projection_watermarks WHERE module_id = ${moduleId}
       `.execute(db);
       const row = result.rows[0];
-      // `int8ToNumber` normalises whatever the driver handed back, keeping `WatermarkState` honest
-      // about being numbers on both engines — a divergence the both-engine run surfaced.
-      //
-      // This was a plain `Number(...)`, which was right about the LIVE bug and silently lossy past
-      // 2^53. Task 46 found the same mechanism twelve lines away in oplog-source's walk, where it
-      // was NOT cast at all: one function had the cast, the neighbouring one did not. That is what
-      // a per-call-site convention buys, so both now go through the one seam (CLAUDE.md §2.8),
-      // which additionally refuses out-of-range values rather than rounding them (see int8.ts).
       return {
         appliedServerSeq:
           row === undefined
             ? 0
-            : int8ToNumber(row.appliedServerSeq ?? 0, 'projection_watermarks.applied_server_seq'),
+            : int8ToNumber(row.appliedServerSeq, 'projection_watermarks.applied_server_seq'),
         appliedLocalSeq:
           row === undefined
             ? 0
-            : int8ToNumber(row.appliedLocalSeq ?? 0, 'projection_watermarks.applied_local_seq'),
+            : int8ToNumber(row.appliedLocalSeq, 'projection_watermarks.applied_local_seq'),
       };
     },
     async advanceServerSeq(moduleId: string, value: number): Promise<void> {
