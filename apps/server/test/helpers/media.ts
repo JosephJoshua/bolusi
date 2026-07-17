@@ -1,4 +1,5 @@
-// Media integration harness: a temp blob dir, a migrated PGlite DB with RLS-aware forTenant, the
+// Media integration harness: a temp blob dir, a real PostgreSQL 16 DB (cloned per test) with
+// RLS-aware forTenant, the
 // real production `createApp` wired to them, plus deterministic fixtures/seeders and request
 // builders. Fixtures are seeded through the OWNER handle (bypasses RLS) so a probe can then fail to
 // reach them under `SET LOCAL ROLE bolusi_app` — the non-vacuous pattern (testing-guide §2.5).

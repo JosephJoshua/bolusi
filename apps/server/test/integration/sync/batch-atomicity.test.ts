@@ -16,8 +16,8 @@
 //
 // Both tests below run the REAL task-08 engine (`ProjectionEngine` + `highestContiguousServerSeq`)
 // over the REAL server tables (`operations`, `projection_watermarks`) via this task's server
-// watermark store, on PGlite — which embeds a real PostgreSQL, so transaction abort/rollback is
-// genuine Postgres MVCC, not an emulation. The falsification test is the deliverable: it exhibits
+// watermark store, on real PostgreSQL 16 (task 81) over the real `pg` driver — so transaction
+// abort/rollback is genuine Postgres MVCC. The falsification test is the deliverable: it exhibits
 // the exact skip the atomic path prevents.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 import type { Kysely } from 'kysely';

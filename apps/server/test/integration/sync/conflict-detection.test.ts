@@ -7,18 +7,25 @@
 //
 // ── WHICH LANE PROVES WHAT (T-14f rule 3 / D16) ───────────────────────────────────────────────
 //
-// This file runs on **PGlite (PG18, in-process)**, because `pg` is boundary-locked to
-// `packages/db-server` and `pnpm test:rls` is `--project db-server` — an apps/server integration
-// test structurally cannot reach real PG16 today (task 73 owns that; the constraint was found
-// independently by review-49). So this lane proves the RULES: what conflicts, what severity, the
-// pair dedupe, the emission, the lifecycle, the atomicity of the block.
+// This file runs on **real PostgreSQL 16** (task 81): its DB comes from `oplog/helpers.js`, which
+// clones a per-file database from the migrated template over the real `pg` driver. The old header
+// here asserted the opposite — "an apps/server integration test structurally cannot reach real PG16
+// today" — and that authoritative-but-false comment is exactly the T-15/§2.11 class task 81 exists
+// to kill: the `pg.Pool` is owned inside `@bolusi/db-server/testing`, so this test reaches real PG16
+// WITHOUT importing `pg`. It proves the RULES through the production pipeline: what conflicts, what
+// severity, the pair dedupe, the emission, the lifecycle, the atomicity of the block.
 //
-// It does NOT prove the one claim PGlite is measurably blind to — Rule 1's
-// `serverSeq(P) > last_pull_cursor(O.device)` int8 comparison (T-14f: 14/14 green on PGlite vs 4
-// red on real `pg`). That claim is proven by
-// `packages/db-server/test/conflict-candidates-pg.test.ts` on the attributed real-PG16 lane,
-// executing THE SAME `findRule1Candidates` this pipeline calls — not a copy. Neither lane is the
-// sole witness for anything the other owns.
+// The old header also disclaimed that this file "does NOT prove the int8 comparison … PGlite
+// measurably blind" — and that reason was itself imprecise, so the honest correction is worth the
+// lines. Rule 1's `serverSeq(P) > last_pull_cursor(O.device)` comparison is done BY POSTGRES,
+// column-to-column (`conflict-candidates.ts:116` — `.whereRef('o.serverSeq', '>', 'd.lastPullCursor')`),
+// so NO `int8` ever crosses the driver into JS to be compared. It is therefore NOT the JS-marshalling
+// class T-14f names (that was `highestContiguousServerSeq`'s `"1" === 1`, task 46), and neither
+// PGlite nor real `pg` was ever "blind" to it. What running on real `pg` here does buy is executing
+// `findRule1Candidates` — the real query, over the real driver — as part of the real pipeline; the
+// dedicated real-driver witness for that query (result marshalling, the row-value ordering) stays
+// in `packages/db-server/test/conflict-candidates-pg.test.ts` (verified present), executing THE SAME
+// function this pipeline calls. Neither lane is the sole witness for anything the other owns.
 import {
   platformModule,
   PLATFORM_OP,

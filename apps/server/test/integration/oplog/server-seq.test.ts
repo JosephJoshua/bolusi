@@ -1,14 +1,15 @@
 // serverSeq allocation through the PIPELINE (10-db §3): only accepted ops consume a value, the
 // stream is dense per tenant, tenants are independent, and the counter row is actually LOCKED.
 //
-// SCOPE OF THIS LANE: PGlite drives one in-process connection, so two transactions here cannot
-// genuinely RACE — Kysely serialises them on the single connection. A "concurrent" test on PGlite
-// would therefore pass with the FOR UPDATE lock ABSENT and prove nothing (testing-guide T-11).
-// The split, forced by the `pg` boundary lock (only packages/db-server may open a real pool):
+// SCOPE OF THIS LANE: real PostgreSQL 16 (task 81), but these tests run SEQUENTIALLY — they assert
+// per-op accounting and prove the pipeline EMITS the FOR UPDATE lock (statement spy); they do not
+// spawn concurrent transactions, so they cannot themselves witness a genuine race. (A race is now
+// expressible here in principle — this lane runs a real `pg` pool, not PGlite's single in-process
+// connection — but the dedicated race harness lives once, in db-server, §2.8.) The split:
 //   - HERE: the pipeline's per-op accounting + proof it EMITS the FOR UPDATE lock (statement spy).
 //   - packages/db-server/test/oplog-server-seq-concurrency.test.ts under `pnpm test:rls`: the same
-//     statements raced across REAL pooled connections against postgres:16 — where a missing lock
-//     produces duplicate/lost serverSeq and the assertions go red.
+//     statements raced across REAL concurrent pooled connections against postgres:16 — where a
+//     missing lock produces duplicate/lost serverSeq and the assertions go red.
 import { breakPreviousHash, ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -156,8 +157,9 @@ describe('the counter row lock is actually taken (statement spy)', () => {
     ]);
 
     // This is what ties THIS pipeline to the lock the real-Postgres race proves out: without the
-    // FOR UPDATE the race in db-server's lane produces duplicate serverSeq, and a PGlite-only
-    // suite would never notice.
+    // FOR UPDATE the race in db-server's lane produces duplicate serverSeq. This sequential suite
+    // cannot see the race itself, so it asserts the lock is EMITTED; db-server's concurrency test
+    // runs it under real contention.
     const locking = testDb.appStatements.filter(
       (s) => /tenant_op_counters/i.test(s) && /for update/i.test(s),
     );
