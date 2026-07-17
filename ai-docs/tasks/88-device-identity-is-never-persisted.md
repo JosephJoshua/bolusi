@@ -1,6 +1,6 @@
 # TASK 88 — `deviceId`/`storeId` are never written to `meta_kv`; no device can be known-enrolled at boot
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH** — blocks the sync loop, the zone gate's `device` input, and therefore v0's exit. `10-db §9` names these keys normatively; nothing produces two of the three.
 **Depends on:** 14
 **Blocks:** 25, 27a, 89
