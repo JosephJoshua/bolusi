@@ -1,6 +1,9 @@
 # TASK 85 — iOS is a declared platform with no way to build it and no target to run it on: `08 §5.5`'s four profiles are Android-APK **by spec**, and all 10 CI jobs are `ubuntu-latest`
 
 **Status:** todo
+
+> **OWNER RULING (2026-07-17):** RULED: full iOS parity push (D18). iOS is co-equal. This task = the on-device build/verification LANE, which needs a macOS runner/EAS the owner must provision — flagged as infra, not a coding task.
+
 **Priority:** **HIGH — the precondition for every other iOS leg.** Tasks 83 and 84 can each land a config value and an artifact guard, but **nothing about iOS can be verified on a target** until this is answered. It also carries an owner decision.
 **Depends on:** —
 **Blocks:** 83's on-target verification, 84, task 27's iOS lanes

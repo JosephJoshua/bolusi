@@ -1,6 +1,9 @@
 # TASK 59 — `api/04-push §5`'s muting model **cannot work on Android**: channel importance is immutable to the app after creation, and the function that would change it has zero callers
 
 **Status:** todo
+
+> **OWNER RULING (2026-07-17):** Push muting RULED: deep-link to the OS per-channel/notification settings (both platforms). See D18. api/04-push §5 rewrite + delete applyChannelImportance. Buildable; depends on 21.
+
 **Priority:** **HIGH — needs an owner decision before implementation** (see §The decision). The specified mechanism is not implementable on the target OS. A shop owner who mutes a category gets a toggle that cannot suppress anything.
 **Depends on:** 21 (push wiring) — but the **decision** does not; make it first.
 **Blocks:** the settings mute toggle (`04-push §5`, FR-1150)
