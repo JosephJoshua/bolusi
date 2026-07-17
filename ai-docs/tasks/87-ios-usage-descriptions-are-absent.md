@@ -1,11 +1,37 @@
 # TASK 87 — `expo-location`'s config plugin is unregistered: Android gets its permissions free via manifest merging, iOS gets no `NSLocationWhenInUseUsageDescription` — and `Root.tsx:89` requests location at every boot
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH** — the highest-consequence iOS finding in the audit. The Android leg is covered **by accident**, by a platform mechanism iOS does not have, which is why nothing has ever noticed. Apple documents termination for this; see §What is verified for exactly how far that claim goes.
 **Depends on:** 83 (`app.config.ts`'s `ios` block), 85 (nothing here is runtime-verifiable until iOS can be built)
 **Blocks:** any iOS boot; task 82's capture path has the identical shape
 **SEC ids owned by THIS task:** none.
 **Filed by:** task 80 (iOS parity audit), 2026-07-16, under **D17**.
+
+## Outcome (2026-07-17) — the premise was REFUTED by the artifact; shipped the real fix (deliberate copy, no over-declaration)
+
+**This task was filed on a dead premise, and producing the artifact refuted it — the exact T-16 / §2.1 pattern ("a mention is not a producer; trace to one, before declaring something unshipped as well as after"; task 54's shape).** The premise — *"iOS gets NO `NSLocationWhenInUseUsageDescription`; Apple terminates the app at boot"* — is **false**. Compiling the real prebuild pipeline (`getPrebuildConfigAsync` + `compileModsAsync`, `platforms: ['ios']`) over the **shipping** config shows the generated Info.plist **already carries** `NSLocationWhenInUseUsageDescription`, `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSMotionUsageDescription`, `NSLocationAlways*` — because **Expo autolinking applies these config plugins** (`getPrebuildConfig.js` → `withLegacyExpoPlugins`, gated by `shouldSkipAutoPlugin` on the real autolinked-module list) **even when they are absent from `plugins`**. Task 80 read the **static** `ios.infoPlist` (`null`) and the explicit `plugins` list, and never compiled the iOS mods — a source-vs-artifact miss. So "the other platform was the guard" understated it: **autolinking was covering BOTH platforms**, invisibly, with the library **English default** strings.
+
+**The real defects (two, opposite directions), and the corrected fix:**
+1. **Wrong copy** — the autolinked keys shipped the English default (`"Allow $(PRODUCT_NAME) to access your location"`) on an **Indonesian-first, tech-inadept** product, in an iOS **system dialog** our i18n runtime + lint rule cannot see.
+2. **Over-declaration** — the autolinked defaults also shipped usage strings for permissions the app never requests (`NSLocationAlways*`, `NSMotionUsageDescription`, `NSMicrophoneUsageDescription`) — an **App Store rejection risk**.
+
+**What shipped:** explicit `['expo-location', …]` and `['expo-camera', …]` entries in `plugins` — which **win over the autolinked defaults** (verified: Expo skips the auto-application once the user registers the plugin). `expo-location`: `locationWhenInUsePermission` = Indonesian copy (foreground only — `ports/location.ts` uses `requestForegroundPermissionsAsync`), `locationAlways*`/`motionUsagePermission`/background = `false`. `expo-camera`: `cameraPermission` = Indonesian copy (photos only — reuses the `media.permission.camera` voice), `microphonePermission`/`recordAudioAndroid` = `false`. The guard is `apps/mobile/test/ios-config.test.ts`.
+
+**Before → after, on the GENERATED Info.plist:**
+
+| key | before (autolinked default) | after |
+| --- | --- | --- |
+| `NSLocationWhenInUseUsageDescription` | `Allow $(PRODUCT_NAME) to access your location` | `Izinkan aplikasi memakai lokasi untuk mencatat tempat pekerjaan dilakukan.` |
+| `NSCameraUsageDescription` | `Allow $(PRODUCT_NAME) to access your camera` | `Izinkan aplikasi memakai kamera untuk ambil foto.` |
+| `NSLocationAlways*` / `NSMotionUsageDescription` / `NSMicrophoneUsageDescription` | English defaults present | **absent** |
+
+**The guard asserts the DELIBERATE string, not mere presence** — because autolinking supplies the English default even when unregistered, a presence-only guard would stay green after someone deleted the registration (green for the wrong reason). It also asserts the over-declared keys are **absent**, and carries a **denominator** (T-14): it enumerates the app's native deps against a `module → required iOS usage descriptions` map and RED-fails a starved (zero-module) enumeration. When task 82 wires capture it inherits the `expo-camera` row for free.
+
+**Falsified** (§2.11 — each broken, red observed, reverted; restored → green): (a) **unregister `expo-location`** → `NSLocationWhenInUseUsageDescription` reverts to the English default → RED `expected 'Allow $(PRODUCT_NAME) to access your location' to be 'Izinkan…'` (this is the load-bearing one — it defeats the autolinking trap); (b) **re-enable motion** (`motionUsagePermission` unset) → `NSMotionUsageDescription` reappears → RED `expected '…detect your current motion activity' to be undefined`; (c) **empty the denominator map** → RED `expected 0 to be greater than 0` (starved guard).
+
+**Related finding, NOT owned here:** `NSFaceIDUsageDescription` still ships the English default via `expo-secure-store` (task 58's plugin), for a Face ID feature the app does not use (`requireAuthentication` unset) — a third over-declaration. `expo-secure-store`'s `faceIDPermission: false` would remove it; left to task 58's owner to avoid touching its backup-exclusion config. `NSLocalNetworkUsageDescription` (expo-dev-client) is dev-build-only and not shipped to the App Store.
+
+**Residual risk (D12/D13 doubled, per D18 §3), in the required words:** the usage descriptions are verified in the generated Info.plist; that iOS at runtime shows these strings (or terminates on a missing one) is **unverified on a real iPhone — no iOS hardware or Simulator exists on this infrastructure** (task 85). The permission copy is Indonesian because iOS renders the single static Info.plist string regardless of device locale (no per-locale `InfoPlist.strings` in v0); it is owner-facing and should be owner-confirmed.
 
 ## The finding — both artifacts produced, side by side
 
