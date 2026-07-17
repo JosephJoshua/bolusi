@@ -88,6 +88,17 @@ test('control_sessions stores the hash only — the plaintext token is never at 
   expect(rows.some((r) => r.tokenHash === sha256Hex(control))).toBe(true);
 });
 
+test('a successful login returns the tenant display name for the enrollment confirm step (§4.2)', async () => {
+  await ownerTenant();
+  const res = await login(h, 'ocep', PASSWORD);
+  expect(res.status).toBe(200);
+  // The wizard's confirm step renders this (design-system §8.5) so the owner reads WHAT they are
+  // binding to before the irreversible enroll POST. It is the tenant's real name, read from the
+  // `tenants` row under `forTenant` — never fabricated client-side (T-19).
+  expect(res.body['tenantName']).toBe('T');
+  expect(res.body['tenantId']).toBeDefined();
+});
+
 test('§9 login limits: 6th failure for one identifier within 15 min → 429 (locked), unlocks after the window; 31st request/IP/hour → 429', async () => {
   await ownerTenant();
 

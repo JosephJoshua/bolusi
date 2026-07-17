@@ -60,11 +60,10 @@ export interface BundleRefreshConfig {
   readonly db: ClientDb;
   /**
    * Invoked AFTER a `'refreshed'` commit so a caller holding the permission memo can invalidate it
-   * (02-permissions §6: "a bundle refresh wrote a directory table"). Optional and undefined today: no
-   * command runtime — hence no `PermissionEvaluator` — is composed at sync-loop scope yet (that is the
-   * mobile command-runtime composition task; see the enrollment-caller seam). A CLEAN injected seam,
-   * not a resolving no-op — when the evaluator exists, the composition root passes its
-   * `onBundleRefresh` here.
+   * (02-permissions §6: "a bundle refresh wrote a directory table"). Wired since task 92: the
+   * composition root builds ONE `PermissionEvaluator` (bootstrap/runtime.ts) and passes its
+   * `onBundleRefresh` through `createSyncClientForApp`. Still OPTIONAL — a Node test or a device with
+   * no runtime composed leaves it undefined — and a CLEAN injected seam, never a resolving no-op.
    */
   readonly onBundleRefreshed?: () => void | Promise<void>;
   /** Injected for tests; defaults to the global. */

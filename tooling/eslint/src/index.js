@@ -82,6 +82,11 @@ export default tseslint.config(
             'packages/core/test/oplog/append.test.ts',
             'packages/core/test/oplog/chain.test.ts',
             'packages/core/test/oplog/tamper-fixtures.test.ts',
+            // The production client OpAppendStore's own test (task 92) drives the real
+            // `appendLocalOps` path into the production store to prove signed/chained persistence —
+            // the same "the test must attempt the path it validates" exemption as the core oplog
+            // tests above; production code still cannot reach the append path.
+            'packages/db-client/test/op-store.test.ts',
           ],
         },
       ],

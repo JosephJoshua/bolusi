@@ -24,6 +24,8 @@ export {
   type PropertySortingVector,
   type Sha256Vector,
 } from './crypto/vectors.js';
+// The determinism kit (testing-guide §3.3): PRNG, FakeClock, seeded UUIDv7 IdSource, seeded
+// device keypairs, and the notes op-script generator — every seam a chaos run reproduces from.
 export {
   mulberry32,
   pick,
@@ -31,7 +33,16 @@ export {
   randomInt,
   shuffle,
   type Prng,
-} from './determinism/prng.js';
+  FakeClock,
+  makeIdSource,
+  deriveDeviceKeypair,
+  type DeviceKeypair,
+  generateScript,
+  RECENCY_WINDOW,
+  type GenerateScriptOptions,
+  type ScriptOp,
+  type ScriptOpKind,
+} from './determinism/index.js';
 
 // Driver-conformance suite (task 04) — identical statement set against better-sqlite3 in
 // CI and op-sqlite on device (testing-guide §2.3).

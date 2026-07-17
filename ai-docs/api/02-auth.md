@@ -102,6 +102,10 @@ type LoginRes = {
   controlSession: string;      // opaque, 32 CSPRNG bytes base64url, prefix "bcs_"
   expiresAt: number;           // ms epoch; TTL 10 min, single user, server-side store (hash only)
   tenantId: string;
+  tenantName: string;          // the tenant's display name — rendered on the enrollment CONFIRM step
+                               // (§4.1 step 3; design-system §8.5) so the owner reads WHAT they are
+                               // binding to before the irreversible enroll POST. Confirm precedes
+                               // enroll, so login is the only round trip that can supply it.
   user: { id: string; name: string };
   stores: Array<{ id: string; name: string }>;   // stores in the user's storeIds
 };

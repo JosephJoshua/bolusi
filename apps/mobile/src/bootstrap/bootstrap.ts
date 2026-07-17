@@ -19,13 +19,14 @@
 //            then hydrates and starts it. Root reads `loopState`/`isOffline`/`SyncState` from that
 //            live client, so `lastSuccessfulSyncAt` becomes a real timestamp and the banner clears on
 //            the first cycle. Proven end-to-end in `sync-client.test.ts` against a fake transport.
-//   STILL ABSENT — the ENROLLMENT PATH: a PRODUCTION device cannot yet REACH the enrolled state.
-//            `runEnrollment`'s genesis append (`auth.device_enrolled`, seq 1) needs a composed
-//            `CommandRuntime` — an `OpAppendStore` over db-client — which no task has built (the mobile
-//            command-runtime composition task). Until it lands, `deviceId` is null on a real device,
-//            so `bootstrap` returns `deviceId: null` and the loop is deliberately NOT started. Do NOT
-//            read the green sync-loop tests as 'a real device syncs' — they prove the loop GIVEN an
-//            enrolled device's persisted state, which production cannot yet produce.
+//   WIRED (task 92): the ENROLLMENT PATH. A production device now REACHES the enrolled state —
+//            `runEnrollment`'s genesis append (`auth.device_enrolled`, seq 1) runs through the composed
+//            `CommandRuntime` (bootstrap/runtime.ts) over the production `OpAppendStore`
+//            (`@bolusi/db-client`), and `deviceId`/`storeId` persist to `meta_kv`. So on the NEXT boot
+//            after enrollment (and live, via Root's re-derive), this `readDeviceId` returns a real id
+//            and the loop starts. A FRESH, never-enrolled device still reads `deviceId: null` here —
+//            the honest unenrolled state — and the loop stays unstarted until the wizard runs. The
+//            on-device/on-server leg (a real POST, SQLCipher at rest) is owed to task 27a (D12/D13).
 //
 // ── ONE CONNECTION, APP-WIDE (08 §2.2) ────────────────────────────────────────────────────────
 // op-sqlite's rule is EXACTLY ONE open connection per database, app-wide; concurrency comes from
