@@ -1,6 +1,6 @@
 # TASK 88 — `deviceId`/`storeId` are never written to `meta_kv`; no device can be known-enrolled at boot
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH** — blocks the sync loop, the zone gate's `device` input, and therefore v0's exit. `10-db §9` names these keys normatively; nothing produces two of the three.
 **Depends on:** 14
 **Blocks:** 25, 27a, 89
@@ -65,3 +65,11 @@ Write `deviceId` and `storeId` to `meta_kv` at the point enrollment succeeds —
 - **A bundle refresh does NOT rewrite `storeId`** — the adversarial test for the §7.4 judgement above. Drive `applyBundle` with a bundle naming a different store and assert the stored `storeId` is unchanged.
 - **Falsify** (§2.11): delete each `writeMeta` line, watch a specific test go red, restore. Report as "broke X, saw Y fail, reverted".
 - **Denominator** (T-14): assert the full `meta_kv` key set after enrollment, not just that the two keys exist — a test asserting presence passes on a row that also wrote six keys nobody declared.
+
+## Outcome (2026-07-17)
+
+Shipped. `enrollment.ts` writes `deviceId` (from `draft.deviceId`) and `storeId` (from `response.store.id`, NOT the bundle — §7.4) to `meta_kv` **before** `deleteMeta(ENROLLMENT_DRAFT_KEY)`. New `DEVICE_ID_META_KEY`/`STORE_ID_META_KEY` + `readDeviceId`/`readStoreId` accessors mirror `readTenantId` (repo.ts; §2.8 — no fourth accessor pattern). Tests in `packages/core/test/auth/enrollment.test.ts` (8/8, real client DB): read-back through a FRESH handle (T-14b), exact `meta_kv` key set `{deviceId, storeId, tenantId}` (T-14 denominator), the ordering crash-injection (a `DbDriver` wrapper that throws on the `meta_kv` draft delete → identity durable + draft still present), and the §7.4 adversarial (a bundle naming a different store does NOT rewrite `storeId`).
+
+**Falsifications (§2.11, all reverted):** deleted the `deviceId` write → 3 red (persistence, denominator, ordering); deleted the `storeId` write → 4 red (+ §7.4); injected an illegal `writeMeta(STORE_ID_META_KEY, bundle.store.id)` into `applyBundle` → the §7.4 test went red. Restored → 8/8 green.
+
+**The CALLER is task 92, not this task.** This is the *writer*; the *producer* that calls `runEnrollment` (and thus exercises this write in production) is the enrollment caller, which needs a composed `CommandRuntime` for the genesis append — an `OpAppendStore` that no task has built. So today this write is exercised by a test; in production it runs once **task 92** lands. `readDeviceId` is already consumed by `bootstrap()` as the sync-loop gate (task 89).

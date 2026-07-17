@@ -32,7 +32,7 @@ export interface SyncTransportConfig {
  * a network-class failure → backoff (03 §10) — the correct reading of "something between us and the
  * server answered".
  */
-async function toTransportError(response: Response): Promise<SyncTransportError> {
+export async function toTransportError(response: Response): Promise<SyncTransportError> {
   let code: string | null = null;
   let message = `HTTP ${String(response.status)}`;
   try {

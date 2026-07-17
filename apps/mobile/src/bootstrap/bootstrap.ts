@@ -10,20 +10,22 @@
 // would boot, screens would render, tests would pass, and nothing would persist.
 //
 //   REAL:    the SQLCipher key (ports/db-keystore.ts), `openClientDb`, `runClientMigrations`,
-//            `registerModules(CLIENT_MODULES)`, the projection engine, and `readSyncState` — the
-//            LAST of which is what finally makes the Sync Status screen's freshness a fact read
-//            from the database rather than a literal in a component.
-//   ABSENT:  the sync LOOP does not start on any device today, and it is NOT merely waiting on data
-//            — it is UNWIRED. There is no `startSync` symbol anywhere (this header once claimed one
-//            'on the live path gated on a persisted deviceId'; that was false — the exact §2.11
-//            comment-as-guard trap this repo keeps shipping, caught by review-50b). Making sync run
-//            is task 89: ~57 lines of REQUIRED code — a `BundleRefreshPort` producer (task 14
-//            shipped `applyBundle`, not the fetch half), the `SyncLoop` construction, an enrollment
-//            caller (`runEnrollment` has zero prod callers), and NetInfo. Plus task 88: enrollment
-//            never writes `deviceId`/`storeId` to `meta_kv` though 10-db §9 names them. Until 88+89
-//            land, `lastSuccessfulSyncAt` is null on every device and the banner is permanently
-//            `stale`. Do NOT read the green sync-loop UNIT tests as 'sync works' — it is inert by
-//            design in this scope. `transport.ts`/`triggers.ts` say the same in their headers.
+//            `registerModules(CLIENT_MODULES)`, the projection engine, `readSyncState`, and — since
+//            task 88 — `readDeviceId`, which exposes the enrolled device id (`deviceId` in `meta_kv`)
+//            as the boot signal that gates the sync loop.
+//   WIRED (task 89): the sync LOOP is now constructed and started when `deviceId` is non-null —
+//            `createSyncClientForApp` (sync-client.ts) assembles the loop with the fetch transport,
+//            the `BundleRefreshPort` producer (bundle.ts), NetInfo (trigger (a)), and the §5 triggers,
+//            then hydrates and starts it. Root reads `loopState`/`isOffline`/`SyncState` from that
+//            live client, so `lastSuccessfulSyncAt` becomes a real timestamp and the banner clears on
+//            the first cycle. Proven end-to-end in `sync-client.test.ts` against a fake transport.
+//   STILL ABSENT — the ENROLLMENT PATH: a PRODUCTION device cannot yet REACH the enrolled state.
+//            `runEnrollment`'s genesis append (`auth.device_enrolled`, seq 1) needs a composed
+//            `CommandRuntime` — an `OpAppendStore` over db-client — which no task has built (the mobile
+//            command-runtime composition task). Until it lands, `deviceId` is null on a real device,
+//            so `bootstrap` returns `deviceId: null` and the loop is deliberately NOT started. Do NOT
+//            read the green sync-loop tests as 'a real device syncs' — they prove the loop GIVEN an
+//            enrolled device's persisted state, which production cannot yet produce.
 //
 // ── ONE CONNECTION, APP-WIDE (08 §2.2) ────────────────────────────────────────────────────────
 // op-sqlite's rule is EXACTLY ONE open connection per database, app-wide; concurrency comes from
@@ -39,6 +41,7 @@
 // migrations below run against a REAL SQLite engine in CI rather than a fake handle.
 import {
   createProjectionEngine,
+  readDeviceId,
   readSyncState,
   registerModules,
   type ClockPort,
@@ -95,6 +98,14 @@ export interface Bootstrapped {
    * fresh" — the one lie this product must never tell (design-system §4 rule 5).
    */
   readonly syncState: SyncState;
+  /**
+   * The enrolled device's id, READ FROM `meta_kv` (task 88), or `null` when the device is not yet
+   * enrolled. This is the boot signal that gates the sync loop (task 89): a non-null value means the
+   * loop can be constructed and started; `null` is the true "unenrolled" state — no device can enroll
+   * until the mobile command-runtime composition lands (the genesis append), so in production this is
+   * `null` today, and the sync loop is deliberately not started. Never defaulted — the null is read.
+   */
+  readonly deviceId: string | null;
   close(): Promise<void>;
 }
 
@@ -146,12 +157,17 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     //    than the schema failure it is. That throw is why this call is also a migration assertion.
     const syncState = await readSyncState(db.db as never);
 
+    // Is this device enrolled? `readDeviceId` returns the id `meta_kv` holds (task 88) or null. The
+    // sync loop is constructed iff this is non-null (Root/index) — the real gate, not a comment.
+    const deviceId = await readDeviceId(db.db as never);
+
     return {
       db,
       registry,
       engine,
       migrationsApplied: applied,
       syncState,
+      deviceId,
       close: () => db.close(),
     };
   } catch (error) {

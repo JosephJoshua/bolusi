@@ -3,12 +3,16 @@ import { Platform } from 'react-native';
 
 import { openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
-import { bootstrap } from './src/bootstrap/bootstrap.js';
+import { bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
 import { Root } from './src/bootstrap/Root.js';
+import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
+import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
+import { SecureStoreKeyStore } from './src/ports/keystore.js';
 import { fileLocaleStore } from './src/ports/locale-store.js';
+import { netInfoPort } from './src/ports/netinfo.js';
 
 /**
  * The registered root.
@@ -48,9 +52,39 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   });
 }
 
+/**
+ * THE OTHER NATIVE-BINDING SITE (task 89): NetInfo and RN `AppState` are native modules that cannot
+ * load under Node, so — like op-sqlite above — they are imported HERE and injected downward through
+ * `createSync`. `Root`/`sync-client` name only the `NetInfoPort` / `AppStatePort` interfaces, so the
+ * whole sync client runs under fakes in CI.
+ *
+ * Returns `null` for an UNENROLLED device (`app.deviceId === null`): no loop is constructed for a
+ * device that cannot sync. In production this is always the case today — no enrollment path persists a
+ * `deviceId` (the genesis append awaits the command-runtime composition task) — so the loop stays
+ * unstarted, honestly, until that lands. `EXPO_PUBLIC_API_URL` is the server base (08 §6.1); Expo
+ * inlines `EXPO_PUBLIC_*` into the bundle at build. The `bdt_` device token is read PER CALL from
+ * SecureStore (never cached), so a revoked device stops authenticating at once (api/02-auth §7.3).
+ */
+const API_BASE_URL = (process.env['EXPO_PUBLIC_API_URL'] ?? '').replace(/\/+$/, '');
+
+function createSync(app: Bootstrapped): SyncClient | null {
+  if (app.deviceId === null) return null;
+  const keystore = new SecureStoreKeyStore();
+  return createSyncClientForApp(app, {
+    baseUrl: API_BASE_URL,
+    deviceId: app.deviceId,
+    loadDeviceToken: () => keystore.loadDeviceToken(),
+    crypto: quickCryptoPort,
+    clock: systemClock,
+    appState: appStatePort,
+    netInfo: netInfoPort,
+  });
+}
+
 function Bootstrapped(): React.JSX.Element | null {
   return Root({
     boot,
+    createSync,
     localeStore: fileLocaleStore,
     deviceInfo: {
       deviceId: '',
