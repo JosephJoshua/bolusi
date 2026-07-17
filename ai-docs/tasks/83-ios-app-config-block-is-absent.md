@@ -1,11 +1,26 @@
 # TASK 83 — `app.config.ts` has no `ios` block, so the real prebuild pipeline silently ships `com.placeholder.appid` as the iOS app identity — and every iOS security control is null
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH — a LIVE artifact defect, not a gap.** Produced, not inferred (task 80's probe). It is unreachable today only because no iOS build lane exists (task 85) — the moment one does, this is what ships.
 **Depends on:** —
 **Blocks:** 84 (the iOS §7.4 legs need a real bundle identifier to be scoped to), 85
 **SEC ids owned by THIS task:** none — see task 84 for the SEC scope ruling. **Do not mint an id here**: an id with no producer is the class this repo keeps shipping.
 **Filed by:** task 80 (iOS parity audit), 2026-07-16, under **D17**.
+
+## Outcome (2026-07-17) — shipped; the placeholder is dead, asserted on the generated artifact
+
+**What shipped:** `app.config.ts` now carries `ios: { bundleIdentifier: 'com.bolusi.app' }` (owner-directed under D18 §3; mirrors `android.package`, the already-shipped Android identity). The guard is `apps/mobile/test/ios-config.test.ts` — resolves the REAL prebuild config (`getPrebuildConfigAsync`, `platforms: ['ios']`, through `expo` → `@expo/cli`, the exact copy real prebuild loads) and asserts the **generated** `ios.bundleIdentifier`.
+
+**Before → after, on the GENERATED artifact** (produced with the faithful pipeline, not grepped — T-16):
+
+| | resolved `ios.bundleIdentifier` |
+| - | - |
+| before | `com.placeholder.appid` (synthesized by `@expo/prebuild-config`'s `?? 'com.placeholder.appid'`, silently, no warning) |
+| after | `com.bolusi.app` |
+
+**Falsified** (§2.11 — broke it, watched it go red, reverted): removed the `bundleIdentifier` from `app.config.ts` → **RED**, `AssertionError: expected 'com.placeholder.appid' to be 'com.bolusi.app'` (and the not-placeholder assertion also red) — proving the guard catches the silent synthesis, not merely absence. Restored → green (2 tests). A presence-only guard would stay green against the placeholder, which is the actual bug, so the placeholder is named and refused explicitly.
+
+**Residual risk (D12/D13 doubled, per D18 §3), in the required words:** the bundle identifier is verified in the generated Info.plist/config; that iOS at runtime scopes the Keychain / APNs to it is **unverified on a real iPhone — no iOS hardware or Simulator exists on this infrastructure** (Linux host, no Xcode, CI ubuntu-latest; task 85's gap).
 
 ## The finding — produced from the real pipeline, not grepped
 

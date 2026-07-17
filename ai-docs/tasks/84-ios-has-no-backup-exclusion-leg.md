@@ -1,10 +1,27 @@
 # TASK 84 — `security-guide §6` never says it is Android-only, and iOS's `§7.4` legs do not exist: the SQLCipher DB restores from an iCloud backup while its key does not
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH** — a security guarantee (`api/02-auth §7.4`) with a built, guarded, falsified leg on one shipped platform and **no leg at all** on the other, which D17 made first-class.
 **Depends on:** 83 (the Keychain and the file-protection controls are scoped to a bundle identifier that is currently a placeholder), 85 (nothing here is verifiable until iOS can be built)
 **SEC ids owned by THIS task:** **none yet — deliberately.** See §The SEC scope ruling.
 **Filed by:** task 80 (iOS parity audit), 2026-07-16, under **D17**.
+
+## Outcome (2026-07-17) — the `isExcludedFromBackupKey` premise does not survive Apple's docs; shipped the §6 statement, no fake control, no SEC id
+
+**The brief's docs-to-read said: *"If the semantics have moved, the premise moved — stop and report."* They did. Verified against Apple's own docs (via Context7 + Apple Developer / QA1719), the artifact-level control this task was scoped to build does not exist:**
+
+- **`isExcludedFromBackupKey` is RUNTIME-ONLY and ADVISORY.** Apple: set via `URL.setResourceValues(_:)` **after the file exists** — there is **no Info.plist / entitlements form** — and *"it's not a mechanism to guarantee those items never appear in a backup or on a restored device."* So there is **nothing to assert in the generated Info.plist/entitlements** (the acceptance's literal ask is unsatisfiable for iOS), and no iOS target here to set or observe it.
+- **`NSFileProtection` is not backup exclusion.** The `com.apple.developer.default-data-protection` entitlement's background-safe value (`NSFileProtectionCompleteUntilFirstUserAuthentication`) is already the OS default → declaring it is a well-typed no-op (T-15); `NSFileProtectionComplete` breaks background sync (`expo-background-task`) and Apple advises against the entitlement for background apps. Shipping it as a "backup control" would be a false-assurance artifact (§2.11). **Considered and rejected — recorded so it is not re-derived.**
+
+So there is **no honest artifact-level iOS backup-exclusion guard to ship**, and therefore **no SEC id** (the ruling held: no id without a falsified producer; SEC-DEV-08 stays Android-scoped, no `SEC-DEV-09`).
+
+**What shipped (spec-only, its own commit — CLAUDE.md §4):** `security-guide §6.6` + a new §6.2 checklist bullet, stating explicitly that the backup-exclusion checklist is **Android-only**, that iOS is uncovered and why (the two bullets above), what **does** hold on iOS (`keychainAccessible: THIS_DEVICE_ONLY` — the §7.4 leg, confirmed present in `ports/keystore.ts` + `ports/db-keystore.ts`, asserted in `keystore.test.ts`), and the premises the ruling rests on.
+
+**The open question — ANSWERED from source (T-11), and it is a P1 (task 84's flagged second finding):** on an iOS restore-to-new-hardware, `bolusi.db` **restores** (unexcludable) while `db_encryption_key` does **not** (THIS_DEVICE_ONLY). Bootstrap reads no key → `SecureStoreDbKeyStore.ensureDatabaseEncryptionKey()` **mints a fresh key** → `openClientDb` opens the restored old-key file with the new key → SQLCipher throws `not_a_database` (`driver.ts` maps `file is not a database`) → `Root.tsx`'s `boot()` (deliberately not wrapped in try/catch) leaves `app === null` → **renders nothing, permanently, no recovery path.** Android is not exposed (task 58 excludes the DB, so a restored device has no file → clean re-enrol). The customer is a phone-repair franchise; restore is near the median device event. **Reported to the orchestrator (not filed as a numbered task — the 9x space is actively contended across branches; the finding is durably recorded here + in §6.6).** The fix is the bootstrap error surface (catch `not_a_database`/`missing_key` → wipe + re-enrol) owed to **task 27a**, not this backup control.
+
+**Premise named (per the §Note):** this rests on (1) Android-first history, (2) every record server-synced so nothing local is worth restoring (re-enrol + re-pull is the intended recovery), (3) the franchise wipe/restore/hand-me-down lifecycle, (4) no iOS runnable target here (task 85). If (2) or (4) change, the runtime `isExcludedFromBackupKey` call + the boot recovery path become the producer, and only then does an iOS SEC id earn its place.
+
+**Residual risk (D12/D13 doubled, per D18 §3), in the required words:** the §7.4 iOS leg (`keychainAccessible`) is verified present in source and its call asserted; that a real iCloud/Finder restore behaves as reasoned is **unverified on a real iPhone — no iOS hardware or Simulator exists on this infrastructure** (task 85). No green here is a device-verified restore.
 
 ## The SEC scope ruling (task 80's first decision — read before touching `security-guide`)
 
