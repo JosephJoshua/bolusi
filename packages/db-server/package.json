@@ -12,6 +12,10 @@
     "./testing": {
       "types": "./dist/testing/pg-container.d.ts",
       "default": "./dist/testing/pg-container.js"
+    },
+    "./testing/budget": {
+      "types": "./dist/testing/budget.d.ts",
+      "default": "./dist/testing/budget.js"
     }
   },
   "files": [
