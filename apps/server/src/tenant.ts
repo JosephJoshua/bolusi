@@ -25,8 +25,8 @@ export function tenantIdFromContext(c: Context<AppEnv>): string {
 
 export type WithTenant = <T>(c: Context<AppEnv>, fn: (db: TenantDb) => Promise<T>) => Promise<T>;
 
-/** Binds a `withTenant(c, fn)` to a `forTenant` (db-server's in production; a PGlite-backed one
- *  in the fast L3 loop). It derives the tenant id from context and runs `fn` inside the tx. */
+/** Binds a `withTenant(c, fn)` to a `forTenant` (db-server's in production; a real-PG16-backed one
+ *  in the L3 test lane). It derives the tenant id from context and runs `fn` inside the tx. */
 export function createWithTenant(forTenant: ForTenant): WithTenant {
   return (c, fn) => forTenant(tenantIdFromContext(c), fn);
 }

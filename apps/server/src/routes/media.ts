@@ -55,7 +55,12 @@ function locationEqual(a: unknown, b: LocationValue): boolean {
   return l['lat'] === b.lat && l['lng'] === b.lng && l['accuracyMeters'] === b.accuracyMeters;
 }
 
-/** Coerce a bytea read (Buffer on pg, Uint8Array on PGlite) to a plain Uint8Array. */
+/**
+ * Coerce a bytea read to a plain Uint8Array. node-postgres (the production and now the only test
+ * driver, task 81) returns bytea as a Buffer — already a Uint8Array — so the fast path returns it
+ * as-is. The fallback is kept as a DEFENSIVE guard for any driver/shim that hands back a plain
+ * array-like (it is no longer exercised by a test lane, so it stays rather than being trusted).
+ */
 function toUint8(value: unknown): Uint8Array {
   return value instanceof Uint8Array ? value : Uint8Array.from(value as ArrayLike<number>);
 }

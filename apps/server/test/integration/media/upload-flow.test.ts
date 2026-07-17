@@ -1,5 +1,5 @@
 // Full-flow media integration (api/03-media): init → PUT chunks → status resume → complete →
-// download round-trip, on the real production app.fetch over a migrated PGlite DB with RLS-aware
+// download round-trip, on the real production app.fetch over a real PostgreSQL 16 DB with RLS-aware
 // forTenant (SET LOCAL ROLE bolusi_app). Witnesses server-authoritative resume, idempotent replay,
 // and a byte-exact download.
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';

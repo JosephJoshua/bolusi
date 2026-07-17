@@ -9,8 +9,9 @@
 // puller could advance its cursor past an op still uncommitted and miss it forever. The row lock
 // makes serverSeq commit-ordered within a tenant, which is what makes `WHERE server_seq > cursor`
 // safe (§3). The genuine-concurrency proof lives in db-server's real-Postgres lane
-// (packages/db-server/test/oplog-server-seq-concurrency.test.ts) — PGlite cannot race one
-// in-process connection, so a sequential test there would pass even with the lock absent.
+// (packages/db-server/test/oplog-server-seq-concurrency.test.ts), which races two REAL pooled
+// connections; a sequential test proves only that the lock is EMITTED, never that it holds under
+// contention.
 import { sql } from 'kysely';
 
 import type { TenantDb } from '@bolusi/db-server';

@@ -180,7 +180,7 @@ describe('validation errors (api/00 §7.1)', () => {
 
 describe('2xx bodies never contain error', () => {
   // The sync push handler is a real DB-backed handler now (task 16), so an empty (valid) push needs
-  // a migrated PGlite DB + a seeded device; it accepts nothing → 200 with no error key.
+  // a migrated real-PG16 DB + a seeded device; it accepts nothing → 200 with no error key.
   test('a valid identity push → 200 with no error key', async () => {
     const h = await makeSyncHarness();
     try {

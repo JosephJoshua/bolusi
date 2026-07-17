@@ -152,6 +152,21 @@ tester.run('boundaries', rule, {
       code: `import { openClientDb } from '@bolusi/db-client';`,
       filename: '/repo/packages/harness/src/device.ts',
     },
+    // the test-only lane seam (@bolusi/db-server/testing[/budget]) is importable from NON-shipping
+    // files so apps/server's L3 suites reach real PG16 while `pg` stays locked to db-server (task
+    // 81). Test helper, .test.ts, and vitest.config — all outside shipping source (invalid below).
+    {
+      code: `import { createTestDatabase } from '@bolusi/db-server/testing';`,
+      filename: '/repo/apps/server/test/helpers/media-db.ts',
+    },
+    {
+      code: `import { setupPgLane } from '@bolusi/db-server/testing';`,
+      filename: '/repo/apps/server/test/integration/oplog/helpers.test.ts',
+    },
+    {
+      code: `import { MAX_PARALLEL_FILES } from '@bolusi/db-server/testing/budget';`,
+      filename: '/repo/apps/server/vitest.config.ts',
+    },
   ],
   invalid: [
     // styling/animation libraries are banned in v0 (design-system §7 lint (c) + 08 §2.6) — added
@@ -330,6 +345,13 @@ tester.run('boundaries', rule, {
     {
       code: `import { pool } from '@bolusi/db-server/internal/pool';`,
       filename: '/repo/apps/server/src/routers/sync.ts',
+      errors: [{ messageId: 'dbServerDeepImport' }],
+    },
+    // the /testing carve-out is SCOPED to non-shipping files: the raw-handle test factory must
+    // never reach production source, or FR-1039 is weakened (task 81). Same seam, SHIPPING file:
+    {
+      code: `import { createTestDatabase } from '@bolusi/db-server/testing';`,
+      filename: '/repo/apps/server/src/deps.ts',
       errors: [{ messageId: 'dbServerDeepImport' }],
     },
     // dynamic import is covered too

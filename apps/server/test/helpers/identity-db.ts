@@ -1,11 +1,16 @@
-// Identity test harness (testing-guide §2.5): a migrated PGlite DB with the PRODUCTION query
-// shape — forTenant runs `SET LOCAL ROLE bolusi_app` + transaction-local set_config, so RLS is
-// actually exercised (a suite that skipped SET ROLE would pass vacuously as the PGlite superuser).
-// The owner handle seeds fixtures (legitimately bypassing RLS). The AuthDirectory calls the D14
-// SECURITY DEFINER functions, exactly as production does through @bolusi/db-server.
-import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
+// Identity test harness (testing-guide §2.5): real PostgreSQL 16 in a container (D16, task 81),
+// cloned per test from the pre-migrated template via `@bolusi/db-server/testing` so `pg` never
+// crosses the boundary. The PRODUCTION query shape — forTenant runs `SET LOCAL ROLE bolusi_app` +
+// transaction-local set_config — so RLS is actually exercised (the container's default `postgres`
+// user is a SUPERUSER and bypasses RLS under FORCE, so a suite that skipped SET ROLE would pass
+// vacuously, exactly as it would as the PGlite superuser — T-14b). The owner handle seeds fixtures
+// (legitimately bypassing RLS). The AuthDirectory calls the D14 SECURITY DEFINER functions, exactly
+// as production does through @bolusi/db-server, now over the real `pg` driver.
+import { sql, type Kysely } from 'kysely';
+import { expect, inject } from 'vitest';
 
-import { migrateToLatest, type DB, type ForTenant } from '@bolusi/db-server';
+import { type DB, type ForTenant } from '@bolusi/db-server';
+import { createTestDatabase } from '@bolusi/db-server/testing';
 
 import type { AuthDirectory } from '../../src/auth/directory.js';
 import type { PasswordKdf } from '../../src/crypto/index.js';
@@ -17,18 +22,20 @@ export interface IdentityDb {
   readonly forTenant: ForTenant;
   /** Cross-tenant lookups over the D14 definer functions (as production wires them). */
   readonly authDirectory: AuthDirectory;
+  /** Provenance: which real PostgreSQL database answered (T-14d). */
+  readonly provenance: string;
   close(): Promise<void>;
 }
 
 export async function makeIdentityDb(): Promise<IdentityDb> {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pglite = new PGlite();
-  await pglite.waitReady;
-  const db = new Kysely<DB>({
-    dialect: new PGliteDialect({ pglite }),
-    plugins: [new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })],
-  });
-  await migrateToLatest(db);
+  const { db, provenance, close } = await createTestDatabase(
+    {
+      maintenanceUri: inject('pgMaintenanceUri'),
+      baseUri: inject('pgBaseUri'),
+      owner: inject('pgOwner'),
+    },
+    expect.getState().testPath,
+  );
 
   const forTenant: ForTenant = (tenantId, fn) =>
     db.transaction().execute(async (trx) => {
@@ -76,7 +83,7 @@ export async function makeIdentityDb(): Promise<IdentityDb> {
     },
   };
 
-  return { db, forTenant, authDirectory, close: () => db.destroy() };
+  return { db, forTenant, authDirectory, provenance, close };
 }
 
 // ---- A fast, consistent test KDF (real argon2id is deliberately slow) --------------------------

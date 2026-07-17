@@ -70,8 +70,12 @@
 // entire structural argument for preferring testcontainers over the hand-rolled compose lane.
 // So: no reuse. The container is started per run and Ryuk reaps it however the run dies.
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { Kysely, PostgresDialect } from 'kysely';
 import pg from 'pg';
 
+import { createCamelCasePlugin } from '../camel-case.js';
+import type { DB } from '../generated/db.js';
+import { migrateToLatest } from '../migrator.js';
 import { HEADROOM, MAX_CONNECTIONS, POOL_PER_FILE } from './budget.js';
 
 /** The production major, stated in code where a test can read it (D16, T-14f rule 3). */
@@ -117,12 +121,32 @@ export async function startPgLane(
   actualMaxWorkers: number,
 ): Promise<PgLane> {
   // A token unique to THIS process, so a database created by any other run is detectably foreign.
-  const owner = `task73-${process.pid}-${Date.now().toString(36)}`;
+  // Prefix is lane-neutral (`l3lane-`), not a task id: both db-server's and apps/server's lanes and
+  // every future consumer share this seam, so a `task73-`/`task81-` marker would only mislead.
+  const owner = `l3lane-${process.pid}-${Date.now().toString(36)}`;
 
   const container = await new PostgreSqlContainer(PG_IMAGE)
     // No `.withReuse()` — see this file's header. Reuse silently opts out of Ryuk, which is the
     // one structural reason to be on testcontainers at all.
-    .withCommand(['postgres', '-c', `max_connections=${MAX_CONNECTIONS}`])
+    .withCommand([
+      'postgres',
+      '-c',
+      `max_connections=${MAX_CONNECTIONS}`,
+      // DURABILITY OFF — this container is EPHEMERAL (Ryuk reaps it; its data never outlives the
+      // run), so crash-safety buys nothing and its cost is real. `CREATE DATABASE … TEMPLATE` forces
+      // a checkpoint + fsync of the whole cluster; under `apps/server`'s per-file clone parallelism
+      // on a shared box that fsync storm is what took the container into "the database system is in
+      // recovery mode" (task 81, measured — 43/54 files failed with the flags OFF). Turning fsync,
+      // synchronous_commit and full_page_writes off removes the disk-durability work an ephemeral
+      // test cluster has no use for and makes the clone a memory/copy op. Standard for a throwaway
+      // test Postgres; NEVER for production.
+      '-c',
+      'fsync=off',
+      '-c',
+      'synchronous_commit=off',
+      '-c',
+      'full_page_writes=off',
+    ])
     // db-lane.mjs records a real flake: an init checkpoint took 31 s and overran a healthcheck
     // start period. This box runs 76 containers; be generous rather than flaky (T-10).
     .withStartupTimeout(180_000)
@@ -324,7 +348,7 @@ export async function assertConnectionBudget(
  * check meant to reject it (db-lane.mjs's rule, kept verbatim in spirit).
  */
 export async function assertAttribution(uri: string, expectedOwner: string): Promise<string> {
-  const pool = new pg.Pool({ connectionString: uri, max: 1 });
+  const pool = new pg.Pool({ connectionString: uri, max: 1, allowExitOnIdle: true });
   try {
     const { rows } = await pool.query<{ owner: string | null; database: string; version: string }>(
       `SELECT current_setting('${DB_OWNER_SETTING}', true) AS owner,
@@ -399,4 +423,220 @@ function quoteIdent(name: string): string {
 /** Literal quoting for `ALTER DATABASE … SET`, which cannot take a bound parameter either. */
 function quoteLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+// =================================================================================================
+// THE CONSUMER-FACING SEAM — the ONE place `pg` becomes a `Kysely<DB>` (task 81)
+// -------------------------------------------------------------------------------------------------
+// task 73 shipped the container/template/clone machinery above and exported it under `./testing`,
+// but it exported ZERO `Kysely`: db-server's own harness (`test/helpers/test-db.ts`) turned a URI
+// into a handle with its OWN `import pg from 'pg'` + `new pg.Pool(...)` + `CamelCasePlugin`. That is
+// exactly the line `apps/server` may not write — `pg` is boundary-locked to this package (08 §3.3).
+//
+// So the factory that owns clone + stamp-assertion + `pg.Pool` + `CamelCasePlugin` lives HERE, once
+// (CLAUDE.md §2.8), and is imported by BOTH db-server's harness and apps/server's — which reach a
+// real PG16 database WITHOUT importing `pg`, because this seam holds the only `pg.Pool` construction
+// a test's Kysely is built on. `pg` never leaves db-server; the boundary ruling is discharged by
+// this code, not asserted by a comment (task 81, correcting the earlier "hands apps/server a
+// Kysely<DB>" claim that had no producer — T-16).
+
+/** Serializable lane coordinates a test file needs to clone and connect. Provided by globalSetup. */
+export interface TestLaneCoords {
+  /** Maintenance-database URI — `CREATE DATABASE … TEMPLATE` is issued from here, never the template. */
+  readonly maintenanceUri: string;
+  /** Base URI whose database component each file swaps for its own clone. */
+  readonly baseUri: string;
+  /** The token every database of this run is stamped with (T-14d). */
+  readonly owner: string;
+}
+
+/** Options a consumer may pass through to the underlying Kysely handle. */
+export interface CreateTestDatabaseOptions {
+  /** Receives every SQL string Kysely executes, in order (for statement-ordering / FOR UPDATE spies). */
+  readonly onQuery?: (sql: string) => void;
+}
+
+/** A per-file database handle plus the provenance line proving WHICH database answered (T-14d). */
+export interface TestDatabaseHandle {
+  readonly db: Kysely<DB>;
+  /** `assertAttribution`'s return: "PostgreSQL 16.14 … db '<clone>' … owned by '<run>'". */
+  readonly provenance: string;
+  readonly close: () => Promise<void>;
+}
+
+/**
+ * Per-process monotonic counter, appended to each clone's file-derived name so repeated calls in
+ * one file (per-test harnesses) do not collide on `CREATE DATABASE`. Per-worker because vitest runs
+ * each test file in one worker; the file-name prefix keeps every name traceable to its source file.
+ */
+let cloneSequence = 0;
+
+/**
+ * Clones this test file's OWN database from the pre-migrated template, asserts it belongs to THIS
+ * run, and returns a `Kysely<DB>` over it. The single construction of `pg.Pool` + `CamelCasePlugin`
+ * for every L3 test in the repo — db-server's and apps/server's alike.
+ *
+ * `testPath` is the file's own identity (`expect.getState().testPath`). It is REQUIRED and rejected
+ * when absent: a default would manufacture a plausible database name from a failed read, and two
+ * files that both failed the read would then SHARE a database — the cross-file interference this
+ * design exists to remove, resurfacing as an irreproducible flake (T-19, task 73's own rule).
+ *
+ * EACH CALL gets a FRESH database, not each file. db-server's harness clones once per file
+ * (`beforeAll`), but apps/server's suites clone per test (`beforeEach` + `close()` in `afterEach`)
+ * — the shape the PGlite harness had, kept unchanged so no test file is rewritten. So the clone
+ * name is the file identity (the traceable prefix a failure names) PLUS a per-process counter that
+ * makes repeated calls in one file collision-free; without it the second `beforeEach` clone would
+ * fail `CREATE DATABASE … already exists`. A clone is a filesystem copy (milliseconds) — cheaper
+ * than the WASM-boot-plus-migrate PGlite paid per test — and the container is ephemeral, so the
+ * extra per-test databases are reaped with it (Ryuk).
+ */
+export async function createTestDatabase(
+  lane: TestLaneCoords,
+  testPath: string | undefined,
+  options: CreateTestDatabaseOptions = {},
+): Promise<TestDatabaseHandle> {
+  if (testPath === undefined || testPath === '') {
+    throw new Error(
+      'db-server: cannot resolve this test file path, so its database name would not be unique. ' +
+        'Two files sharing a database is the interference this lane exists to remove (task 73). ' +
+        'Pass expect.getState().testPath — do NOT default it (T-19).',
+    );
+  }
+
+  cloneSequence += 1;
+  const database = `${databaseNameFor(testPath)}_${cloneSequence.toString(36)}`;
+  await createDatabaseFromTemplate({ maintenanceUri: lane.maintenanceUri }, database, lane.owner);
+
+  const uri = lane.baseUri.replace(/\/[^/?]*(\?|$)/, `/${database}$1`);
+
+  // Attribution is asserted per file, on the exact connection string the test's pool will use — a
+  // guard that verifies a DIFFERENT connection from the one under test is theatre. Fails CLOSED on
+  // an absent stamp.
+  const provenance = await assertAttribution(uri, lane.owner);
+
+  const db = new Kysely<DB>({
+    dialect: new PostgresDialect({
+      // `allowExitOnIdle` so an idle pool NEVER keeps its worker alive. vitest runs each file in a
+      // fork worker and waits (via the IPC pipe) for it to exit; a pg pool whose last connection is
+      // idle otherwise pins the worker's event loop, so the worker never exits and the whole run
+      // HANGS after "Test Files N passed" (task 81 — measured: the sole referenced handle in a hung
+      // run was that IPC pipe). `close()`/`db.destroy()` still ends the pool explicitly per test;
+      // this is the belt to that braces, covering any path that resolves without a matching close.
+      pool: new pg.Pool({ connectionString: uri, max: POOL_PER_FILE, allowExitOnIdle: true }),
+    }),
+    plugins: [createCamelCasePlugin()],
+    // exactOptionalPropertyTypes (08 §4.1): `log: undefined` is a type error, so the key must be
+    // ABSENT rather than undefined when no spy is wanted.
+    ...(options.onQuery === undefined
+      ? {}
+      : { log: (event) => options.onQuery?.(event.query.sql) }),
+  });
+
+  return { db, provenance, close: () => db.destroy() };
+}
+
+/**
+ * Migrates the template ONCE — the only code permitted to open a connection to the template.
+ *
+ * `db.destroy()` in the finally is not politeness: a surviving connection makes every later
+ * `CREATE DATABASE … TEMPLATE` fail with "There is 1 other session using the database", and
+ * `assertTemplateUnused` (run immediately after `startPgLane` calls this) is the backstop that
+ * turns a leak into a loud, attributed error rather than a distant one.
+ *
+ * It lives in the seam so a consumer's globalSetup (apps/server's) never constructs a `pg.Pool`
+ * to run migrations — the same boundary reason `createTestDatabase` exists (§2.8).
+ */
+export async function migrateTemplate(templateUri: string): Promise<void> {
+  const db = new Kysely<unknown>({
+    dialect: new PostgresDialect({
+      pool: new pg.Pool({ connectionString: templateUri, max: 1, allowExitOnIdle: true }),
+    }),
+  });
+  try {
+    await migrateToLatest(db as never);
+  } finally {
+    await db.destroy();
+  }
+}
+
+// =================================================================================================
+// THE SHARED globalSetup — ONE lane bring-up, reused by every project that runs L3 (task 81, §2.8)
+// -------------------------------------------------------------------------------------------------
+// db-server and apps/server each get their OWN container (vitest `provide` is per-project, so two
+// projects cannot share provided values, and each project's connection budget must be checked
+// against its OWN live maxWorkers — the review-73 fix that a root-level, project-blind setup could
+// not preserve). But the bring-up itself — boot, migrate-once, assert-attribution, provide, log —
+// is identical, so it lives here once and each project's globalSetup is a two-line delegation.
+//
+// The `ProvidedContext` augmentation for `inject('pgMaintenanceUri' | 'pgOwner' | 'pgBaseUri')`
+// canNOT live in this file: it is `src`, where `vitest` is not resolvable (it is a test-only
+// devDep). It lives in each project's globalSetup — where vitest IS in scope and the augmentation
+// naturally sits — and the keys below are plain string literals, so this seam needs no vitest types.
+
+/**
+ * The structural shape of the `project` argument vitest hands a globalSetup. Deliberately NOT
+ * vitest's `TestProject` import: the seam stays runtime-free of vitest, and this names only the two
+ * members the bring-up reads — `provide` (to publish the lane) and `config.maxWorkers` (the LIVE
+ * parallelism the budget must be checked against).
+ */
+export interface LaneGlobalSetupProject {
+  readonly name?: string;
+  provide: <K extends 'pgMaintenanceUri' | 'pgOwner' | 'pgBaseUri'>(key: K, value: string) => void;
+  readonly config?: { readonly maxWorkers?: unknown };
+}
+
+/**
+ * The worker count VITEST ACTUALLY RESOLVED, read from the live project config — NOT a constant.
+ *
+ * review-73 proved this distinction IS the guard: when the budget check compared its own constant,
+ * `maxWorkers: 110` sailed through (24 × 2 + 10 ≤ 197) while the run opened 220 connections. It
+ * THROWS rather than defaulting: a `?? MAX_PARALLEL_FILES` would resurrect that exact defect, and a
+ * default plausible in the domain is indistinguishable from a real reading (T-19).
+ */
+export function resolveMaxWorkers(project: LaneGlobalSetupProject): number {
+  const raw = project.config?.maxWorkers;
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw;
+  throw new Error(
+    `db-server: ABORT — vitest's resolved maxWorkers is ${JSON.stringify(raw)}, not a positive ` +
+      'integer, so the connection budget cannot be checked against the parallelism this run will ' +
+      'actually use.\n' +
+      'vitest.config.ts must set `maxWorkers` to a number (import MAX_PARALLEL_FILES from ' +
+      '@bolusi/db-server/testing). Refusing rather than assuming: a guard that assumes its own ' +
+      'answer is the defect review-73 found (task 73).',
+  );
+}
+
+/**
+ * Boots one container, migrates the template once, asserts THIS run owns it, and publishes the lane
+ * to the project's tests. Returns a teardown that stops the container (Ryuk is the guarantee; this
+ * is the fast path). Every project's globalSetup is just `teardown = await setupPgLane(project)`.
+ */
+export async function setupPgLane(project: LaneGlobalSetupProject): Promise<() => Promise<void>> {
+  const started = Date.now();
+  const maxWorkers = resolveMaxWorkers(project);
+
+  const lane = await startPgLane(migrateTemplate, maxWorkers);
+
+  const provenance = await assertAttribution(
+    uriForDatabase(lane.container, TEMPLATE_DATABASE),
+    lane.owner,
+  );
+
+  project.provide('pgMaintenanceUri', lane.maintenanceUri);
+  project.provide('pgOwner', lane.owner);
+  project.provide('pgBaseUri', lane.container.getConnectionUri());
+
+  // Provenance, printed on every run: which database produced the numbers that follow (§2.1). The
+  // template is stamped and verified BEFORE any clone, so every clone inherits a checked stamp.
+  const label = project.name ?? 'db';
+  console.log(
+    `${label}: lane UP in ${Date.now() - started}ms — ${provenance} · template ` +
+      `'${TEMPLATE_DATABASE}' migrated once · budget OK for ${maxWorkers} live workers`,
+  );
+
+  return async () => {
+    // Best-effort. Ryuk is the guarantee — if this process is SIGKILLed, teardown never runs and
+    // Ryuk reaps the container anyway (the structural argument for testcontainers, task 73).
+    await lane.container.stop();
+  };
 }

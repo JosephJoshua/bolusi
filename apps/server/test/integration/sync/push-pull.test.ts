@@ -1,5 +1,5 @@
 // Push/pull behaviour + pagination + poke (api/01-sync §3–4; task 16 acceptance "Push behaviour",
-// "Pull pagination boundary", "Poke hook"). The real app.fetch + task-07 pipeline over PGlite.
+// "Pull pagination boundary", "Poke hook"). The real app.fetch + task-07 pipeline over real PG16.
 import { verifyOp } from '@bolusi/core';
 import type { PullResponse, PushResponse, SignedOperation } from '@bolusi/schemas';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';

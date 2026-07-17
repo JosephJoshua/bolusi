@@ -24,20 +24,13 @@
 // Both reasons are gone. `CREATE DATABASE … TEMPLATE <pre-migrated>` is a filesystem-level copy:
 // no WASM boot, no migrate, milliseconds. Each file gets a private database, so there is nothing
 // left to race and nothing left to serialise for.
-import { Kysely, PostgresDialect, sql, type KyselyConfig } from 'kysely';
-import pg from 'pg';
+import { sql, type Kysely } from 'kysely';
 import { expect, inject } from 'vitest';
 
-import { createCamelCasePlugin } from '../../src/camel-case.js';
 import { createForTenant, type ForTenant } from '../../src/for-tenant.js';
 import type { DB } from '../../src/generated/db.js';
 import { APP_ROLE } from '../../src/schema/security.js';
-import {
-  assertAttribution,
-  createDatabaseFromTemplate,
-  databaseNameFor,
-  POOL_PER_FILE,
-} from '../../src/testing/pg-container.js';
+import { createTestDatabase } from '../../src/testing/pg-container.js';
 
 /**
  * The lane identifier the suites report in their T-14 "which engine answered" assertions.
@@ -97,43 +90,21 @@ export interface TestDb {
  * produced it (task 73) rather than a random id nobody can trace back.
  */
 export async function createTestDb(options: TestDbOptions = {}): Promise<TestDb> {
-  const maintenanceUri = inject('pgMaintenanceUri');
-  const owner = inject('pgOwner');
-  const baseUri = inject('pgBaseUri');
-
-  // The file identity comes from vitest's own state — the same string vitest prints in a failure,
-  // which is what makes the database name traceable back to the file that owns it.
-  //
-  // NO `?? 'fallback'` HERE, on purpose (T-19). A default would manufacture a plausible database
-  // name out of a failed read, and two files that both failed the read would then SHARE a
-  // database — silently reintroducing the exact cross-file interference this design exists to
-  // remove, as a flake nobody could reproduce. If vitest stops reporting a test path, that must
-  // stop the run.
-  const testPath = expect.getState().testPath;
-  if (testPath === undefined || testPath === '') {
-    throw new Error(
-      'db-server: cannot resolve this test file path, so its database name would not be unique. ' +
-        'Two files sharing a database is the interference this lane exists to remove (task 73).',
-    );
-  }
-  const database = databaseNameFor(testPath);
-
-  await createDatabaseFromTemplate({ maintenanceUri }, database, owner);
-
-  const uri = baseUri.replace(/\/[^/?]*(\?|$)/, `/${database}$1`);
-
-  // Attribution is asserted per file, not just once at boot: this is the handle the test actually
-  // uses, and a guard that verifies a DIFFERENT connection from the one under test is theatre
-  // (db-target.ts's rule, kept). It fails CLOSED on an absent stamp.
-  await assertAttribution(uri, owner);
-
-  const db = new Kysely<DB>({
-    dialect: new PostgresDialect({
-      pool: new pg.Pool({ connectionString: uri, max: POOL_PER_FILE }),
-    }),
-    plugins: [createCamelCasePlugin()],
-    ...kyselyLog(options),
-  });
+  // The clone + stamp assertion + `pg.Pool` + `CamelCasePlugin` are the seam's `createTestDatabase`
+  // (task 81, §2.8) — the ONE place a test's `Kysely<DB>` is built on a real `pg` pool. This helper
+  // adds only what is db-server-specific: the forTenant wrappers and the migration suite's empty-DB
+  // path. The file identity comes from vitest's own state (the same string vitest prints in a
+  // failure), and `createTestDatabase` rejects an absent path rather than defaulting it (T-19).
+  const handle = await createTestDatabase(
+    {
+      maintenanceUri: inject('pgMaintenanceUri'),
+      baseUri: inject('pgBaseUri'),
+      owner: inject('pgOwner'),
+    },
+    expect.getState().testPath,
+    options.onQuery === undefined ? {} : { onQuery: options.onQuery },
+  );
+  const { db } = handle;
 
   if (options.skipMigrations === true) {
     // The migration suite drives the migrator from zero itself, so hand it an EMPTY database
@@ -149,23 +120,6 @@ export async function createTestDb(options: TestDbOptions = {}): Promise<TestDb>
     db,
     appForTenant: createForTenant(db, { role: APP_ROLE }),
     ownerForTenant: createForTenant(db),
-    close: () => db.destroy(),
-  };
-}
-
-/**
- * The `log` half of a Kysely config, or nothing at all.
- *
- * Returned as a spreadable object rather than a possibly-undefined value because the repo runs
- * `exactOptionalPropertyTypes` (08 §4.1): passing `log: undefined` explicitly is a type error,
- * so the key has to be absent, not undefined.
- */
-function kyselyLog(options: TestDbOptions): Pick<KyselyConfig, 'log'> | Record<string, never> {
-  const { onQuery } = options;
-  if (onQuery === undefined) return {};
-  return {
-    log: (event) => {
-      onQuery(event.query.sql);
-    },
+    close: handle.close,
   };
 }

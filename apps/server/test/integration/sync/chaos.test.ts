@@ -1,5 +1,5 @@
 // CHAOS-01..05 — the SERVER legs, in-process (testing-guide §3.1 server half: production app.fetch
-// over PGlite, seeded tenant/stores/devices, real signed chains + raw tamper payloads). The full
+// over real PG16, seeded tenant/stores/devices, real signed chains + raw tamper payloads). The full
 // multi-device convergence versions (client digests, arrival-order permutations, the sync loop's
 // resume) are task 26's `@bolusi/harness`; the fixture helpers here (makeSyncHarness + the tamper
 // builders) are structured for it to reuse.

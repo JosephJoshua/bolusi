@@ -28,7 +28,7 @@ async function responseWithStatus(status: number): Promise<Response> {
   switch (status) {
     case 200: {
       // The sync push handler is a real DB-backed handler now (task 16); an empty (valid) push over
-      // a migrated PGlite DB + seeded device accepts nothing → 200. Detach the headers into a fresh
+      // a migrated real-PG16 DB + seeded device accepts nothing → 200. Detach the headers into a fresh
       // Response so the harness can close (the assertions read only headers, never the body).
       const h = await makeSyncHarness();
       try {

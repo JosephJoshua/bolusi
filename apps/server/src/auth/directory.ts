@@ -3,7 +3,7 @@
 // credential before it is known, which forTenant cannot express; db-server exposes three narrow,
 // definer-gated lookups for exactly this. This port lets the app depend on their SHAPE while the
 // production binding wires the real db-server functions and tests inject a fake over a migrated
-// PGlite DB (the auth bootstrap is inherently cross-tenant, so the fake reads as owner — that is
+// real-PG16 DB (the auth bootstrap is inherently cross-tenant, so the fake reads as owner — that is
 // correct, not a shortcut: RLS is precisely what these three reads do not rely on).
 import {
   findControlSessionByTokenHash,

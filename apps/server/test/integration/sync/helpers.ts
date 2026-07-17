@@ -1,15 +1,20 @@
 // Sync integration harness (testing-guide §3.1): the REAL production `createApp` (full middleware
-// chain) over a migrated PGlite DB with RLS-aware `forTenant` (SET LOCAL ROLE bolusi_app), the
-// task-07 push pipeline verifying real Ed25519 chains, and a recording poke hub. PGlite embeds a
-// real PostgreSQL, so `set_config`, RLS FORCE/policies, the tenant_op_counters row lock, and the
-// append-only trigger all behave as production. The genuinely CONCURRENT and crash-recovery legs
-// (which PGlite's single connection cannot express — T-11) live in the db-server `test:rls` lane.
+// chain) over real PostgreSQL 16 in a container (D16, task 81) with RLS-aware `forTenant` (SET LOCAL
+// ROLE bolusi_app), the task-07 push pipeline verifying real Ed25519 chains, and a recording poke
+// hub. The database is cloned per file from the pre-migrated template via `@bolusi/db-server/testing`
+// — `pg` never crosses the boundary — so `set_config`, RLS FORCE/policies, the tenant_op_counters
+// row lock, the append-only trigger AND the driver's int8-as-string marshalling behave as
+// production. (Previously PGlite: real Postgres, but the WRONG driver — blind to the silent int8
+// class the pull cursor/serverSeq accounting rides on, D16 / T-14f.) The genuinely CONCURRENT and
+// crash-recovery legs (a two-connection race) live in the db-server `test:rls` lane.
 //
 // Fixture helpers are structured for reuse by task 26's multi-device harness (task 16 acceptance).
-import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
+import { expect, inject } from 'vitest';
 
 import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
-import { migrateToLatest, type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
+import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
+import { createTestDatabase } from '@bolusi/db-server/testing';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { createApp } from '../../../src/app.js';
@@ -22,7 +27,6 @@ import { InProcessPokeHub, type PokeScope } from '../../../src/realtime/poke-hub
 import { testRegistry } from '../oplog/helpers.js';
 
 const APP_ROLE = 'bolusi_app';
-const CAMEL_CASE_OPTIONS = { underscoreBetweenUppercaseLetters: true } as const;
 
 /** Near the ChainBuilder default op-timestamp base (1_726_000_000_000) so a fresh device's ops are
  *  inside the 48h skew window (05 §6) — no spurious CLOCK_SKEW anomalies in the happy path. */
@@ -59,6 +63,8 @@ export interface SyncHarness {
   /** Route keys of handlers that ran (the onStub seam) — a "handler executed" witness. */
   readonly stubCalls: string[];
   readonly tokenStore: InMemoryTokenStore;
+  /** Provenance: which real PostgreSQL database answered (T-14d). */
+  readonly provenance: string;
   /** Seed a fresh tenant+store+device+user, enroll its token; returns its chain builder. */
   seedDevice(
     seed: number,
@@ -99,14 +105,16 @@ function tokenFor(seed: number): string {
 export async function makeSyncHarness(
   options: { readonly registry?: OpRegistry; readonly overrides?: Partial<ServerDeps> } = {},
 ): Promise<SyncHarness> {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pglite = new PGlite();
-  await pglite.waitReady;
-  const db = new Kysely<DB>({
-    dialect: new PGliteDialect({ pglite }),
-    plugins: [new CamelCasePlugin({ ...CAMEL_CASE_OPTIONS })],
-  });
-  await migrateToLatest(db);
+  // Clone this file's own real PG16 database from the pre-migrated template (§2.8 — the seam owns
+  // the `pg.Pool` + CamelCasePlugin so `pg` never crosses the boundary). `close` destroys the pool.
+  const { db, provenance, close } = await createTestDatabase(
+    {
+      maintenanceUri: inject('pgMaintenanceUri'),
+      baseUri: inject('pgBaseUri'),
+      owner: inject('pgOwner'),
+    },
+    expect.getState().testPath,
+  );
 
   const appForTenant = forTenantOn(db, APP_ROLE);
   const clock = makeFakeClock();
@@ -293,7 +301,8 @@ export async function makeSyncHarness(
     revokeDevice,
     push,
     pull,
-    close: () => db.destroy(),
+    provenance,
+    close,
   };
 }
 

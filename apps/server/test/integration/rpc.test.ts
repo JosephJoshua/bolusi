@@ -22,7 +22,7 @@ describe('@bolusi/server/client is types-only', () => {
 
 describe('hc<AppType> smoke test', () => {
   // The sync push handler is no longer a stub (task 16): it runs the task-07 pipeline inside a
-  // forTenant transaction, so the RPC round-trip needs a real (PGlite) DB with a seeded device.
+  // forTenant transaction, so the RPC round-trip needs a real PG16 DB with a seeded device.
   let h: SyncHarness;
   beforeEach(async () => {
     h = await makeSyncHarness();

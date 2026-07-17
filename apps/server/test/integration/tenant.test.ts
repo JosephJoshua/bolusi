@@ -2,9 +2,9 @@
 //  - UNIT: the helper derives tenantId ONLY from the bearer context — a body/path/header tenant
 //    is structurally inaccessible to it (its signature is (c, fn)); it delegates to the injected
 //    forTenant with exactly the context tenant id.
-//  - L3 (PGlite): driving the real helper through a PGlite-backed forTenant, the transaction's
-//    FIRST statement is `set_config('app.tenant_id', $1, true)` (id bound, not interpolated) and
-//    current_setting inside the callback equals the context tenant id.
+//  - L3 (real PG16): driving the real helper through a real-Postgres-backed forTenant, the
+//    transaction's FIRST statement is `set_config('app.tenant_id', $1, true)` (id bound, not
+//    interpolated) and current_setting inside the callback equals the context tenant id.
 import { sql } from 'kysely';
 import { afterEach, describe, expect, test } from 'vitest';
 
@@ -15,7 +15,7 @@ import type { AppEnv } from '../../src/env.js';
 import { ApiError } from '../../src/errors.js';
 import { createWithTenant, tenantIdFromContext } from '../../src/tenant.js';
 import { makeFixture } from '../helpers/fixtures.js';
-import { makePgliteForTenant, type PgliteTenant } from '../helpers/pglite-tenant.js';
+import { makeRealPgForTenant, type RealPgTenant } from '../helpers/real-pg-tenant.js';
 
 function ctxWithDevice(tenantId: string): Context<AppEnv> {
   return {
@@ -76,15 +76,15 @@ describe('createWithTenant delegates the context tenant id to forTenant (unit)',
   });
 });
 
-describe('L3: the first statement is set_config against real Postgres (PGlite)', () => {
-  let pg: PgliteTenant | undefined;
+describe('L3: the first statement is set_config against real Postgres 16', () => {
+  let pg: RealPgTenant | undefined;
   afterEach(async () => {
     await pg?.close();
     pg = undefined;
   });
 
   test('set_config is first, id bound as $1, and current_setting equals the context tenant', async () => {
-    pg = await makePgliteForTenant();
+    pg = await makeRealPgForTenant();
     const withTenant = createWithTenant(pg.forTenant);
     const fx = makeFixture('wt-l3');
 
