@@ -1,6 +1,6 @@
 # TASK 87 — `expo-location`'s config plugin is unregistered: Android gets its permissions free via manifest merging, iOS gets no `NSLocationWhenInUseUsageDescription` — and `Root.tsx:89` requests location at every boot
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH** — the highest-consequence iOS finding in the audit. The Android leg is covered **by accident**, by a platform mechanism iOS does not have, which is why nothing has ever noticed. Apple documents termination for this; see §What is verified for exactly how far that claim goes.
 **Depends on:** 83 (`app.config.ts`'s `ios` block), 85 (nothing here is runtime-verifiable until iOS can be built)
 **Blocks:** any iOS boot; task 82's capture path has the identical shape
