@@ -44,15 +44,44 @@ function appState(initial: AppStatus = 'active') {
   };
 }
 
-function harness(initial: AppStatus = 'active') {
+/** A fake `NetInfoPort`. Fires the listener ONCE immediately with the current state, then on every
+ *  change — the `@react-native-community/netinfo` `addEventListener` contract the adapter relies on. */
+function netInfo(initial = false) {
+  let connected = initial;
+  const listeners = new Set<(c: boolean) => void>();
+  return {
+    port: {
+      subscribe: (listener: (c: boolean) => void) => {
+        listeners.add(listener);
+        listener(connected);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+    emit(next: boolean) {
+      connected = next;
+      for (const listener of listeners) listener(next);
+    },
+    get listenerCount() {
+      return listeners.size;
+    },
+  };
+}
+
+/** Default OFFLINE so the (b)/(c)/(e) suites test their trigger in isolation — connectivity is (a)'s
+ *  own suite. A boot that is offline never fires `connectivity`, so those assertions stay exact. */
+function harness(initial: AppStatus = 'active', online = false) {
   const reasons: SyncTriggerReason[] = [];
   const state = appState(initial);
+  const net = netInfo(online);
   const triggers = createSyncTriggers({
     requestSync: (reason) => reasons.push(reason),
     timer,
     appState: state.port,
+    netInfo: net.port,
   });
-  return { reasons, state, triggers };
+  return { reasons, state, net, triggers };
 }
 
 beforeEach(() => {
@@ -205,24 +234,86 @@ describe('(e) manual pull-to-refresh', () => {
   });
 });
 
-describe('(a) connectivity and (d) background task are ABSENT — stated, not faked', () => {
-  test('no trigger set fires `connectivity` or `background`', async () => {
-    // NOT a test that the app is correct — a test that this file's ABSENCE claim is true. If a
-    // later task wires NetInfo or the background task, this fails and must be updated, which is the
-    // point: the honest gap is asserted rather than described in a comment nothing reads. (A
-    // comment is a hypothesis, not evidence — CLAUDE.md §2.11.)
-    const h = harness('active');
+describe('(a) connectivity — NetInfo listener (api/01-sync §5; task 89)', () => {
+  test('an already-online boot syncs IMMEDIATELY — NetInfo fires on subscribe (the boot sync)', async () => {
+    // The `null → connected` reading at start is a regain and kicks the initial sync, before any
+    // interval tick. This is the line that makes "the loop starts on an enrolled device" true.
+    const h = harness('active', true);
+    h.triggers.start();
+    expect(h.reasons).toStrictEqual(['connectivity']);
+    h.triggers.stop();
+  });
+
+  test('regaining connectivity fires `connectivity` — the ONE reason that also breaks a backoff early (03 §10)', () => {
+    // `EARLY_EXIT_REASONS` is {manual, connectivity}: with (a) wired, a device inside a 5-minute
+    // backoff resumes the moment the network returns instead of waiting the timer out.
+    const h = harness('active', false); // boots offline
+    h.triggers.start();
+    expect(h.reasons).toStrictEqual([]); // offline boot: nothing yet
+
+    h.net.emit(true);
+    expect(h.reasons).toStrictEqual(['connectivity']);
+    h.triggers.stop();
+  });
+
+  test('a repeated connected reading is ABSORBED — NetInfo chatter must not spin the loop', () => {
+    // wifi→wifi detail changes re-fire the listener with `connected: true`; only a transition INTO
+    // connectivity is new information. Without this, every network blip would start a cycle.
+    const h = harness('active', true);
+    h.triggers.start(); // one boot sync
+    h.net.emit(true);
+    h.net.emit(true);
+    expect(h.reasons).toStrictEqual(['connectivity']);
+    h.triggers.stop();
+  });
+
+  test('losing connectivity NEVER syncs; a later regain fires again — the control against a latch', () => {
+    // T-14b: a trigger that fired once and then latched would pass the tests above. Prove a second
+    // genuine regain fires a second time, and that `→ false` is silent.
+    const h = harness('active', false);
+    h.triggers.start();
+    h.net.emit(true); // regain #1
+    h.net.emit(false); // lost — silent
+    h.net.emit(true); // regain #2
+    expect(h.reasons).toStrictEqual(['connectivity', 'connectivity']);
+    h.triggers.stop();
+  });
+
+  test('stop() unsubscribes NetInfo — no leaked listener, no connectivity after stop', () => {
+    const h = harness('active', false);
+    h.triggers.start();
+    expect(h.net.listenerCount).toBe(1);
+
+    h.triggers.stop();
+    expect(h.net.listenerCount).toBe(0);
+    h.net.emit(true);
+    expect(h.reasons).toStrictEqual([]);
+  });
+});
+
+describe('(d) background task is ABSENT — stated, not faked', () => {
+  test('no trigger set fires `background` — and the denominator now INCLUDES connectivity', async () => {
+    // (a) landed (task 89), so this flipped: connectivity is now producible and IS asserted; only
+    // (d) remains absent. If a later task wires the background task, this fails and must be updated —
+    // the honest gap asserted rather than described in a comment nothing reads (§2.11).
+    const h = harness('active', true);
     h.triggers.start();
     h.triggers.scheduler.schedule();
     h.triggers.requestManual();
     h.state.emit('background');
     h.state.emit('active');
+    h.net.emit(false);
+    h.net.emit(true);
     await vi.advanceTimersByTimeAsync(FOREGROUND_INTERVAL_MS * 5);
     h.triggers.stop();
 
-    expect(h.reasons).not.toContain('connectivity');
     expect(h.reasons).not.toContain('background');
-    // The denominator: the reasons this adapter CAN produce today.
-    expect([...new Set(h.reasons)].sort()).toStrictEqual(['append', 'manual', 'periodic']);
+    // The denominator: the reasons this adapter CAN produce today — (a)/(b)/(c)/(e), not (d).
+    expect([...new Set(h.reasons)].sort()).toStrictEqual([
+      'append',
+      'connectivity',
+      'manual',
+      'periodic',
+    ]);
   });
 });
