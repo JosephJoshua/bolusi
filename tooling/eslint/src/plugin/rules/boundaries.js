@@ -14,7 +14,10 @@
 //   6. §3.4 platform-free deny prefixes for core/schemas/i18n/modules-manifest
 //      (incl. @noble/* — crypto providers are injected via CryptoPort, never imported;
 //      added by task 03, the task that introduced noble to the repo)
-//   7. forTenant-only / no-raw-db-handle lock: no deep imports into @bolusi/db-server (FR-1039)
+//   7. forTenant-only / no-raw-db-handle lock: no deep imports into @bolusi/db-server (FR-1039),
+//      EXCEPT the test-only lane seam `@bolusi/db-server/testing[/budget]` from NON-shipping files
+//      (tests, harness helpers, vitest configs) — how apps/server's L3 suites reach real PG16 while
+//      `pg` stays locked to db-server (task 81). Shipping source stays fully banned.
 // NOT YET IMPLEMENTED: the full §3.3 POSITIVE allow-matrix ("anything not listed is
 // forbidden" — e.g. schemas importing @bolusi/core would pass today). Owner: task 28
 // (security-sweep) hardens this rule to the full matrix, or earlier if a task adds a
@@ -301,6 +304,18 @@ export default {
       }
       // 7. forTenant-only / no-raw-db-handle import lock.
       if (source.startsWith('@bolusi/db-server/') && workspace !== 'packages/db-server') {
+        // EXCEPTION: the test-only lane seam `@bolusi/db-server/testing[/budget]` may be imported by
+        // NON-shipping files (tests, harness helpers, vitest configs) so apps/server's L3 suites
+        // reach real PG16 WITHOUT importing `pg` — the seam owns the `pg.Pool`, so `pg` stays locked
+        // to db-server (task 81's boundary ruling: option (c)). This does NOT weaken FR-1039, which
+        // is about the PRODUCTION raw handle: `isOutsideShippingSource` keeps every SHIPPING file
+        // banned, so no production code can reach the raw-`Kysely<DB>` test factory. Same shape as
+        // the `testOnly` DB-driver grants above (better-sqlite3 for core/db-client test code).
+        const isTestingSeam =
+          source === '@bolusi/db-server/testing' || source.startsWith('@bolusi/db-server/testing/');
+        if (isTestingSeam && isOutsideShippingSource(filename)) {
+          return;
+        }
         context.report({ node, messageId: 'dbServerDeepImport', data: { source } });
       }
     }
