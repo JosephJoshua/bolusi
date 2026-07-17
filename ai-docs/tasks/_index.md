@@ -33,7 +33,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | done | 14, 22, 23 |
 | 25 | notes-reference-module (ops v1+v2, commands, projections, queries, screens, conflicts) | todo | 11, 18, 24, 49, 50 |
-| 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | todo | 06, 07, 08, 15, 16 |
+| 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | in-progress | 06, 07, 08, 15, 16 |
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26, 50 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
@@ -50,8 +50,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
 | 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | todo | 10 |
 | 41 | tenant-counter lock is taken AFTER the chain-head read it should protect (comment + 10-db §3 claim otherwise); latent, UNIQUE backstops it (from task 07 review) | todo | 07 |
-| 42 | @electric-sql/pglite escapes the DB-driver testOnly lock; watermark Number() comment overstates its evidence (from task 11 review) | todo | 11 |
-| 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | todo | 11, 14, 49 |
+| 42 | @electric-sql/pglite escapes the DB-driver testOnly lock; watermark Number() comment overstates its evidence (from task 11 review) | in-progress | 11 |
+| 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | in-progress | 11, 14, 49 |
 | 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | todo | 14 |
 | 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | todo | 14 |
 | 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | done | 08 |
@@ -82,7 +82,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 71 | ledger Status is written twice (index row + file `**Status:**`) and the merge procedure touches one — make the writeback single-action; task 66's gate is only the backstop (from task 66) | done | 66 |
 | 72 | `06 §3.2` says `mediaRefSchema` lives in `@bolusi/core` — which **may not import zod** (`08 §3.3`, and core's own `strict-schema.ts:6`); the violation would compile + lint green and break only at runtime. Ruled to `@bolusi/schemas`; spec text still wrong (from task 18) | done | — |
 | 73 | **HIGH — owner directive (D16)** L3 integration (378 tests) runs on PGlite, which measurably missed the int8 silent bug (14/14 green vs real `pg` 4 red) and makes RLS tests vacuous (owner bypasses RLS); move to real PG16 via testcontainers + Ryuk | done | — |
-| 74 | 11 raw-`sql<T>` readers resolve their keys only because `CamelCasePlugin` is wired; nothing asserts it. `pull.ts:411` launders a missing key into a plausible serverSeq of 1; `oplog-source.ts:229` is a no-op self-alias at task 46's own fix site (from review-18) | todo | — |
+| 74 | 11 raw-`sql<T>` readers resolve their keys only because `CamelCasePlugin` is wired; nothing asserts it. `pull.ts:411` launders a missing key into a plausible serverSeq of 1; `oplog-source.ts:229` is a no-op self-alias at task 46's own fix site (from review-18) | in-progress | — |
 | 75 | `04 §3`'s registry-entry shape lists neither `conflict` (mandated by 01 §8.1, which says it "extends 04 §3") nor a way to express 01 §6's tenant-scoped op; both now ship in code — 04 is the owning doc and is stale (from task 17) | done | — |
 | 76 | `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale` — the column holds `'id'\|'en'`. Inert (the applier always supplies locale) but a decoy aimed at task 21, which reads this column and whose brief already repeats the wrong value (from task 17) | todo | — |
 | 77 | the selectable-locale list is declared **twice** (`i18n`'s `SELECTABLE_LOCALES`, core's `LOCALE_VALUES`) because core is pure-TS and cannot import i18n; no gate compares them — adding `zh` to one silently breaks the toggle or the payload. Decide with task 72 (same boundary shape) (from task 17) | todo | — |
