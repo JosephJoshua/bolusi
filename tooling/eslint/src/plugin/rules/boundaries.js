@@ -85,6 +85,17 @@ const DB_DRIVER_OWNERS = new Map([
       // core's projection-engine tests (task 08) drive the shim dialect over better-sqlite3
       // :memory: (testing-guide §2.3); test/tooling files only — shipping core stays clean.
       { workspace: 'packages/core', testOnly: true },
+      // apps/mobile's bootstrap suite (task 50) drives the REAL `bootstrap()` — open, migrate,
+      // register — over better-sqlite3 :memory:, for the same reason and under the same rule as
+      // core's entry above: op-sqlite is a JSI native module that cannot load under Node
+      // (testing-guide §2.3), so the CI adapter is the only way to run the real migrations against
+      // a real SQLite engine. Shipping mobile source stays clean — `testOnly` is what enforces
+      // that, and it matters more here than anywhere: apps/mobile is the DEVICE BUNDLE, so a
+      // better-sqlite3 import reaching shipping source would try to bundle a Node addon into an
+      // APK. The `dependencies` half of the same lock is `shipping-deps.test.ts`, which asserts
+      // apps/mobile declares no test-only driver as a runtime dep (devDependencies is where it
+      // belongs — the db-client shape).
+      { workspace: 'apps/mobile', testOnly: true },
     ],
   ],
 ]);

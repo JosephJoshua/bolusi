@@ -1,5 +1,5 @@
 # TASK 50 — the app shell boots, the data layer doesn't: DB open, migrations, module registration, transport, sync triggers
-**Status:** in-progress
+**Status:** in-review
 **Priority:** HIGH — v0's exit runs through task 25 (notes) and 27a (emulator lane), and neither can run against a shell with no data layer.
 **Depends on:** 15, 18, 24
 

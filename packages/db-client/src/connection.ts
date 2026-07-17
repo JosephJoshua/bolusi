@@ -46,16 +46,27 @@ export const CLIENT_PRAGMAS: readonly string[] = [
 ];
 
 /**
- * The DB-key surface of `@bolusi/core`'s `KeyStorePort` (08 §3.2), declared structurally
- * and ON PURPOSE:
+ * The DB-key surface, declared structurally and ON PURPOSE: `@bolusi/core` is contended
+ * and owned by other tasks, so this package types the seam it needs rather than importing
+ * a port module from it.
  *
- *  - `@bolusi/core` is contended and owned by other tasks — this package does not edit it.
- *  - Structural typing means the real SecureStore-backed `KeyStorePort` (tasks 14/24)
- *    satisfies this without db-client importing core's port module at all.
+ * WHO IMPLEMENTS THIS (corrected by task 50 — the previous text was checked and was wrong).
+ * It said the real SecureStore-backed `KeyStorePort` (tasks 14/24) satisfies this. It does
+ * not, and never did: `KeyStorePort` (core/auth/ports.ts) declares no
+ * `getDatabaseEncryptionKey` — its own `wipe()` doc says "The DB key is owned elsewhere" —
+ * and `apps/mobile`'s `SecureStoreKeyStore` explicitly disclaims the key. Assigning one to
+ * a `DbKeyStore` is `TS2741: Property 'getDatabaseEncryptionKey' is missing`, verified by
+ * construction. The two files each named the other as owner and the ring closed, so until
+ * task 50 this interface had two consumers and ZERO producers — every other reference in
+ * the repo was a test fake, which is why nothing failed (T-16: a mention is not a producer).
  *
- * The key is 32 CSPRNG bytes as hex, generated once at enrollment and stored in
- * expo-secure-store — encrypted-at-rest storage that app code can read back, NOT a
- * hardware enclave (security-guide §6.2: qualified claims only).
+ * The producer is `apps/mobile/src/ports/db-keystore.ts` (`SecureStoreDbKeyStore`), which
+ * satisfies this structurally and owns generate-once. See its header for why the SecureStore
+ * binding lives in the app rather than here.
+ *
+ * The key is 32 CSPRNG bytes as hex, generated once and stored in expo-secure-store —
+ * encrypted-at-rest storage that app code can read back, NOT a hardware enclave
+ * (security-guide §6.2: qualified claims only).
  */
 export interface DbKeyStore {
   getDatabaseEncryptionKey(): Promise<string | null>;

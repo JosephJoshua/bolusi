@@ -36,9 +36,13 @@
  * actual question, and it escalates on a clock rather than on connectivity.
  */
 
+import {
+  stalenessLevel,
+  type StalenessLevel,
+  type SyncLoopState,
+  type SyncState,
+} from '@bolusi/core';
 import type { BannerCause } from '@bolusi/ui';
-
-import { stalenessLevel, type StalenessLevel, type SyncState } from '../../sync/contract.js';
 
 /** 03-state-machines §Operation.syncStatus. */
 export type OperationSyncStatus = 'local' | 'synced' | 'rejected';
@@ -85,10 +89,20 @@ export interface QuarantinedOpRow {
 
 /**
  * Everything the screen renders from. `SyncState` and the derived counts arrive SEPARATELY and
- * deliberately (01 §5.2: the counts are derived queries, never stored) — see `contract.ts`.
+ * deliberately (01 §5.2: the counts are derived queries, never stored).
+ *
+ * `SyncState` is `@bolusi/core`'s, since task 15 landed it and task 50 deleted the local stopgap
+ * (`src/sync/contract.ts`) rather than keep a second definition (§2.8). The repoint was a rename,
+ * not a rewrite, exactly as task 24 shaped it — with ONE structural difference worth stating:
+ * `loopState` is NOT on the real `SyncState`, because 03 §10 says the loop's state is in-memory
+ * ("one instance per app process"), never a persisted column. It therefore arrives here as its own
+ * field, read from the live `SyncLoop.state`. That is the type system recording a real fact about
+ * the system rather than a shape this screen preferred.
  */
 export interface SyncStatusInput {
   readonly state: SyncState;
+  /** The live loop's state (03 §10) — in-memory, never persisted, so never part of `SyncState`. */
+  readonly loopState: SyncLoopState;
   readonly pendingOperationCount: number;
   readonly pendingMediaCount: number;
   readonly rejected: readonly RejectedOpRow[];
@@ -158,7 +172,7 @@ export type Reassurance =
 export function reassurance(input: SyncStatusInput): Reassurance {
   const problems = syncProblems(input);
   if (problems.length > 0) return { kind: 'attention', problems };
-  if (input.state.loopState === 'pushing' || input.state.loopState === 'pulling') {
+  if (input.loopState === 'pushing' || input.loopState === 'pulling') {
     return { kind: 'syncing' };
   }
   if (input.pendingOperationCount > 0 || input.pendingMediaCount > 0) {
@@ -177,7 +191,11 @@ export const REASSURANCE_KEY = {
 
 /** The staleness tier the FreshnessCell and the banner both render (03 §8; design-system §3.11). */
 export function staleness(input: SyncStatusInput): StalenessLevel {
-  return stalenessLevel(input.state, input.now);
+  // core's `stalenessLevel` takes a `ClockPort`, not a number: `now` is an INPUT to this screen
+  // (design-system renders from a snapshot), so it is adapted rather than read. No `?? Date.now()`
+  // anywhere on this path — a default here would compute freshness from a clock the caller never
+  // supplied, which is the one lie this screen exists to prevent (T-19).
+  return stalenessLevel(input.state, { now: () => input.now });
 }
 
 /**
@@ -216,7 +234,7 @@ export type SyncChipState = 'synced' | 'pending' | 'syncing' | 'offline' | 'atte
  */
 export function syncChipState(input: SyncStatusInput): SyncChipState {
   if (syncProblems(input).length > 0) return 'attention';
-  if (input.state.loopState === 'pushing' || input.state.loopState === 'pulling') return 'syncing';
+  if (input.loopState === 'pushing' || input.loopState === 'pulling') return 'syncing';
   if (input.isOffline) return 'offline';
   if (input.pendingOperationCount > 0) return 'pending';
   return 'synced';

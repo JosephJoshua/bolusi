@@ -17,3 +17,15 @@
 import { DEFAULT_LOCALE, initI18n } from '@bolusi/i18n';
 
 initI18n({ locale: DEFAULT_LOCALE });
+
+/**
+ * React 19's act() opt-in. Without it, `test-renderer`'s `act` warns "The current testing
+ * environment is not configured to support act(...)" on every screen render and — the part that
+ * matters — React does not guarantee that effects and state updates have FLUSHED when act returns.
+ * A screen test could then assert against a tree that had not finished rendering, which fails in
+ * the one direction a test must not: silently, and usually green.
+ *
+ * Set here rather than per-suite so it cannot be forgotten by the next screen test (task 50 added
+ * the first one — `screens/enrollment/EnrollmentScreen.test.tsx`).
+ */
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
