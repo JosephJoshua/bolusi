@@ -31,6 +31,9 @@ export type {
 
 export { createClientDialect } from './dialect/index.js';
 
+export { createClientOpStore } from './op-store.js';
+export type { OpStoreConnection } from './op-store.js';
+
 export { CLIENT_MIGRATIONS, runClientMigrations } from './migrations/runner.js';
 export type { MigrationRunResult, RunMigrationsOptions } from './migrations/runner.js';
 export type { ClientMigration } from './migrations/types.js';
