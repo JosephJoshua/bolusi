@@ -1,6 +1,6 @@
 # TASK 75 — `04 §3`'s registry-entry shape omits `conflict` and has no way to express `01 §6`'s tenant-scoped op
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — a spec/code divergence in the contended module contract. The CODE is now correct and shipped (task 17); `04` is the owning doc and does not describe two fields it now has.
 **Depends on:** —
 **Filed by:** impl-17, 2026-07-16 (spec change is its own task — CLAUDE.md §4)
