@@ -372,3 +372,30 @@ describe('SyncState is READ FROM THE DATABASE, not asserted by a component', () 
     await second.close();
   });
 });
+
+describe('deviceId is READ FROM meta_kv — the enrolled-device gate for the sync loop (task 88/89)', () => {
+  test('a fresh device reads deviceId = null — unenrolled, so the loop is NOT constructed', async () => {
+    // The true state of every device this code can produce today: no enrollment path persists a
+    // deviceId (the genesis append needs the command-runtime composition that no task has built), so
+    // `deviceId` is null and Root/index start no loop. Null is READ from the column, never defaulted.
+    const app = await boot();
+    expect(app.deviceId).toBeNull();
+    await app.close();
+  });
+
+  test('a persisted deviceId is read back on the next boot — the gate the loop gates on is REAL', async () => {
+    // Task 88 writes deviceId to meta_kv on enrollment; here we write it directly (production writes
+    // it via runEnrollment, which awaits the command-runtime composition) and prove bootstrap reads
+    // the real value. This is the §2.11 falsification target: the loop starts BECAUSE this is non-null.
+    const location = join(tempDir, 'enrolled.db');
+    const first = await boot(location);
+    await sql`INSERT INTO meta_kv (key, value) VALUES ('deviceId', 'device-abc')`.execute(
+      first.db.db,
+    );
+    await first.close();
+
+    const second = await boot(location);
+    expect(second.deviceId).toBe('device-abc');
+    await second.close();
+  });
+});
