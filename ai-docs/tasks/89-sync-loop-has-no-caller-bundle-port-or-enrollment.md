@@ -1,6 +1,6 @@
 # TASK 89 — the sync loop can never start: `BundleRefreshPort` has no producer, enrollment has no caller, NetInfo is unpinned
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH** — task 15 shipped a correct sync loop that nothing can construct or start. Every staleness banner on every device is permanent until this lands.
 **Depends on:** 14, 15, 50, 88
 **Blocks:** 25, 27a
