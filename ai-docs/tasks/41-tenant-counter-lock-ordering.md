@@ -1,5 +1,5 @@
 # TASK 41 — the tenant-counter lock is taken *after* the chain-head read it should protect
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW (latent; a `UNIQUE` constraint makes it fail closed, not corrupt). Also fix the comment, which is currently false.
 **Depends on:** 07
 
