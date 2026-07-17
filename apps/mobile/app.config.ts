@@ -25,6 +25,16 @@ const config: ExpoConfig = {
     // legs are asserted against the GENERATED manifest in test/android-backup.test.ts.
     allowBackup: false,
   },
+  ios: {
+    // The iOS app identity (api/02-auth §7.4 scopes the Keychain to it; api/04-push ties APNs to
+    // it; the App Store identity cannot be changed after release). Owner-chosen, mirrors
+    // `android.package`. WITHOUT this block, `@expo/prebuild-config`'s `getPrebuildConfig.js`
+    // synthesizes `com.placeholder.appid` via `?? 'com.placeholder.appid'` — silently, no warning
+    // (task 83; the exact T-19 "?? on a failed read is a lie generator" shape, in upstream Expo).
+    // The GENERATED bundle id is asserted (com.bolusi.app, NOT the placeholder) and falsified in
+    // test/ios-config.test.ts.
+    bundleIdentifier: 'com.bolusi.app',
+  },
   extra: {
     apiUrl: process.env['EXPO_PUBLIC_API_URL'] ?? null,
   },
@@ -52,6 +62,60 @@ const config: ExpoConfig = {
     'expo-dev-client',
     // quick-crypto ships its own config plugin (peer: expo-build-properties) — 08 §2.2.
     'react-native-quick-crypto',
+    // ── iOS usage descriptions, made DELIBERATE (task 87, D18 §3) ─────────────────────────────
+    // The premise task 87 was filed on ("iOS gets NO NSLocationWhenInUseUsageDescription; Apple
+    // terminates the app at boot") is REFUTED by the generated artifact. Expo AUTOLINKING already
+    // applies these plugins (getPrebuildConfig.js → withLegacyExpoPlugins, gated on the real
+    // autolinked module list) even when they are absent from this array — so the compiled Info.plist
+    // ALREADY carries NSLocationWhenInUseUsageDescription / NSCameraUsageDescription, with the
+    // library ENGLISH DEFAULT strings ("Allow $(PRODUCT_NAME) to access your location"). Task 80 read
+    // the STATIC `ios.infoPlist` (null) and the explicit `plugins` list, and missed the autolinked
+    // mods — a source-vs-artifact miss (T-16: produce the artifact). The Android leg is the same
+    // mechanism (manifest merge), so "the other platform was the guard" understated it: autolinking
+    // was covering BOTH platforms, invisibly.
+    //
+    // Registering explicitly does three real things the autolinked defaults do not:
+    //   1. Replaces the English defaults with Indonesian-first, purpose-specific copy — the users are
+    //      tech-inadept and Indonesian-first (00-product-overview), and iOS renders this string in a
+    //      SYSTEM dialog our i18n runtime and lint rule cannot see (07-i18n; the notifications.ts
+    //      channel-name trap). The string is Indonesian because the OS shows the single static value
+    //      regardless of device locale (no per-locale InfoPlist.strings in v0).
+    //   2. DISABLES the over-declared permissions the autolinked defaults ship: the app requests only
+    //      FOREGROUND location (ports/location.ts → requestForegroundPermissionsAsync) and captures
+    //      PHOTOS ONLY (media.permission.camera: "ambil foto"). Shipping NSLocationAlways* / NSMotion*
+    //      / NSMicrophone* usage strings for permissions the app never requests is an App Store
+    //      rejection risk, so each is set `false` (applyPermissions DELETES a key whose value is
+    //      `false`; an UNSET key falls through to the English default — verified in
+    //      @expo/config-plugins IOSConfig.Permissions.applyPermissions).
+    //   3. Makes the config deliberate rather than an autolinking side-effect nobody chose.
+    // The GENERATED Info.plist is asserted (the Indonesian strings present, the unused keys ABSENT)
+    // and falsified in test/ios-config.test.ts — unregister → the key reverts to the English default
+    // → RED, which is why asserting the DELIBERATE string (not mere presence) is load-bearing.
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          'Izinkan aplikasi memakai lokasi untuk mencatat tempat pekerjaan dilakukan.',
+        locationAlwaysAndWhenInUsePermission: false,
+        locationAlwaysPermission: false,
+        motionUsagePermission: false,
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false,
+      },
+    ],
+    // expo-camera is registered now, before task 82 wires capture, so the plist/manifest are correct
+    // on both platforms the moment capture lands — and so the denominator guard covers it (task 87
+    // acceptance / the cross-reference to 82). Photos only: microphone + Android RECORD_AUDIO are
+    // disabled (the app has no audio/video path; 06-media-pipeline is stills). If task 82 adds
+    // audio/video, flip microphonePermission to an Indonesian string and recordAudioAndroid to true.
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      },
+    ],
   ],
 };
 
