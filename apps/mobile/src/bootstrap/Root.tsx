@@ -13,12 +13,14 @@
  *            reports an enrolled `deviceId` (`meta_kv`, task 88), `createSync` constructs and starts
  *            the real loop, and this component reads `loopState` / `isOffline` / `SyncState` from that
  *            LIVE client. On the first cycle `lastSuccessfulSyncAt` becomes real and the banner clears.
- *   ABSENT:  the ENROLLMENT PATH. `App`'s `onEnroll`/`onLogin` are still inert, and — more
- *            fundamentally — a production device cannot become enrolled: `runEnrollment`'s genesis
- *            append needs a composed `CommandRuntime` (an `OpAppendStore` over db-client) that no task
- *            has built yet (the mobile command-runtime composition task). So `boot().deviceId` is null
- *            on a real device, `createSync` returns null, and no loop starts — the TRUE state, read,
- *            not a stub. The moment enrollment persists a `deviceId`, this constructs the loop.
+ *   REAL (task 92):  the ENROLLMENT PATH. `createEnrollment` wires `App`'s `onLogin`/`onEnroll` to the
+ *            login + enroll transports → `runEnrollment` → the composed `CommandRuntime`'s genesis
+ *            append (bootstrap/runtime.ts) over the production `OpAppendStore` → `deviceId`/`storeId`
+ *            persisted (task 88). On enroll SUCCESS `onEnrolled` re-derives the enrolled `Bootstrapped`
+ *            and starts the loop LIVE — no reboot — and wires the evaluator's `onBundleRefresh` memo
+ *            invalidation into the bundle refresh. A FRESH device still starts unenrolled (`deviceId`
+ *            null, no loop) — the true state — until the wizard runs. What stays headless-only is the
+ *            on-device/on-server leg (a real POST, SQLCipher at rest), owed to task 27a (D12/D13).
  *
  * ── THE GATE IS STILL A GATE (task 24's property — do not break it) ────────────────────────────
  * `resolveZone` is a pure function of device status + session + lock, recomputed on every render,

@@ -7,15 +7,15 @@
 // device syncs — `lastSuccessfulSyncAt` stops being `null` on the first cycle and the never-connected
 // banner clears.
 //
-// ── WHAT THIS DELIVERS, AND WHAT IT DOES NOT (read before assuming "a real device syncs") ────────
+// ── WHAT THIS DELIVERS (read before assuming "a real device syncs") ──────────────────────────────
 // This makes the loop RUN when given an enrolled device's persisted state (`deviceId` in `meta_kv`,
 // the seeded `sync_state`, any local ops). It is proven end-to-end in `sync-client.test.ts` against a
-// fake transport with fake timers and ZERO sockets. It does NOT make a PRODUCTION device reach that
-// enrolled state on its own: enrollment's genesis append needs a composed `CommandRuntime` (an
-// `OpAppendStore` over db-client), which no task has built yet — the mobile command-runtime
-// composition task. Until that lands, the enrollment caller (App's `onEnroll`) can log in and POST
-// enroll but cannot append the genesis op, so `deviceId` is not persisted on a real device. The loop
-// is real; the path a device takes to become enrolled is the seam that task fills.
+// fake transport with fake timers and ZERO sockets. A production device now REACHES that enrolled
+// state: the command-runtime composition + enrollment caller (bootstrap/runtime.ts, bootstrap/
+// enrollment.ts — task 92) append the signed genesis and persist `deviceId`, and Root starts THIS
+// loop on enroll success (no reboot). What remains headless-only is the on-device/on-server leg — a
+// real POST, a real SQLCipher file at rest — owed to task 27a (D12/D13); the fake transport here does
+// not exercise it.
 //
 // ── THE REACTIVE VIEW (why this owns state Root reads) ───────────────────────────────────────────
 // Root must reflect two things that change over time: the loop's state (03 §10) and connectivity

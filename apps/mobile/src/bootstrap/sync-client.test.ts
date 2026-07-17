@@ -6,10 +6,11 @@
 // assertion is T-19: after the first cycle `lastSuccessfulSyncAt` is a REAL timestamp READ FROM
 // `sync_state` — never `?? Date.now()`, never a literal — so the never-connected banner clears.
 //
-// WHAT THIS DOES NOT CLAIM: that a PRODUCTION device reaches this enrolled state. That needs the
-// genesis append (the mobile command-runtime composition task). This proves the loop, given the
-// state; sync-client.ts's header states the boundary. The falsifications below break each wiring
-// (bundle, transport, the connectivity trigger) and watch the cycle fail LOUDLY (§2.11).
+// WHAT THIS PROVES, PRECISELY: the loop, GIVEN an enrolled device's persisted state. A production
+// device now REACHES that state through the enrollment composition (task 92, `enrollment.test.ts`);
+// this file is still the sync-loop lane, so it starts from the persisted state rather than producing
+// it. The falsifications below break each wiring (bundle, transport, the connectivity trigger) and
+// watch the cycle fail LOUDLY (§2.11).
 import { readSyncState, stalenessLevel, SyncTransportError } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import type {
