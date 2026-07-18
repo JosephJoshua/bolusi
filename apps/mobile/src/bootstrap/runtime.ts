@@ -37,6 +37,7 @@ import {
 import { createClientOpStore } from '@bolusi/db-client';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { systemTimer } from '../ports/timer.js';
 
 /** The platform ports the command runtime needs, injected (08 §3.2). */
 export interface AppRuntimeDeps {
@@ -98,6 +99,18 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         signingKey: deps.signingKey,
         applyProjection,
         syncScheduler: deps.syncScheduler,
+        // Task 40's liveness bound, ACTIVATED here (task 102). The mechanism (`#recordBounded` in
+        // core's enforcement point) is OFF unless a `RuntimeTimerPort` is wired: a denied command's
+        // best-effort `auth.permission_denied` append is otherwise awaited UNBOUNDED, so a stuck
+        // op-sqlite WAL lock on the one path an attacker can provoke at will (a denial) would wedge
+        // `execute()` forever on-device. `systemTimer` — the app's single `setTimeout` binding, already
+        // the sync loop's `TimerPort` — structurally satisfies `RuntimeTimerPort` (identical
+        // `schedule(delayMs, fn) => cancel`), so this reuses it rather than adding a second timer
+        // (§2.8). No budget override: the default `DENIAL_AUDIT_EMIT_TIMEOUT_MS` (2 s) applies. The deny
+        // itself is NEVER conditional on the audit — a bounded-out emit is thrown-through regardless
+        // (runtime/enforce.ts); this only stops it waiting FOREVER. Proven by runtime.test.ts, which
+        // wedges when this line is removed.
+        denialAuditTimer: systemTimer,
       }).commands;
     },
   };
