@@ -28,7 +28,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { closeClientDb, DbOpenError, isClientDbOpen } from '@bolusi/db-client';
+import {
+  closeClientDb,
+  DbOpenError,
+  isClientDbOpen,
+  toDbError,
+  type DbDriver,
+  type DbDriverOpenParams,
+} from '@bolusi/db-client';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -42,6 +49,7 @@ vi.mock('expo-secure-store', () => ({
 import * as SecureStore from 'expo-secure-store';
 
 import { bootstrap } from '../src/bootstrap/bootstrap.js';
+import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
 import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
 import { SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
 import { openBetterSqlite3Driver, openedWith, resetOpenedWith } from './better-sqlite3-driver.js';
@@ -405,5 +413,144 @@ describe('deviceId is READ FROM meta_kv — the enrolled-device gate for the syn
     const second = await boot(location);
     expect(second.deviceId).toBe('device-abc');
     await second.close();
+  });
+});
+
+describe('restore-to-new-hardware self-heals instead of bricking (task 91 — security-guide §6.6)', () => {
+  // THE REPRODUCTION (T-11), and its honest limit (D12/D13). A real iOS restore restores `bolusi.db`
+  // but not its THIS_DEVICE_ONLY key, so `bootstrap` mints a fresh key and SQLCipher rejects the
+  // old-key file with "file is not a database". better-sqlite3 has NO SQLCipher build (it ignores
+  // the key), so that rejection can never occur here — it is INJECTED at the driver seam, exactly
+  // where op-sqlite would raise it, and routed through the REAL `openClientDb` → `sanitizeOpenFailure`
+  // producer. What the wrong-key SQLCipher decryption itself does on a device is unverified (no iOS
+  // target, task 85); what IS verified is that the boot no longer renders nothing on that error kind.
+
+  /** A driver that raises SQLCipher's wrong-key symptom on its first open, then opens for real. */
+  function throwOnceThenDelegate(
+    nativeMessage: string,
+  ): (p: DbDriverOpenParams) => Promise<DbDriver> {
+    let thrown = false;
+    return (params) => {
+      if (!thrown) {
+        thrown = true;
+        return Promise.reject(toDbError(new Error(nativeMessage)));
+      }
+      return openBetterSqlite3Driver(params);
+    };
+  }
+
+  function bootWith(driverFactory: (p: DbDriverOpenParams) => Promise<DbDriver>, location: string) {
+    return bootstrap({
+      driverFactory,
+      keyStore: new SecureStoreDbKeyStore(fakeCrypto),
+      crypto: fakeCrypto,
+      clock,
+      databaseLocation: location,
+    });
+  }
+
+  test('the REAL openClientDb emits the kind the classifier heals — and a transient one it does NOT', async () => {
+    // T-16: pin the classifier to the actual producer, not a hand-built lookalike. A wrong-key open
+    // and a transient I/O open share the SAME `driver_open_failed` code; only the message tells them
+    // apart, which is the whole reason the classifier sub-classifies rather than trusting the code.
+    const wrongKey = await bootWith(
+      throwOnceThenDelegate('file is not a database'),
+      ':memory:',
+    ).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(wrongKey).toBeInstanceOf(DbOpenError);
+    expect((wrongKey as DbOpenError).code).toBe('driver_open_failed');
+    expect(isUnrecoverableLocalDbError(wrongKey)).toBe(true);
+
+    await closeClientDb();
+    const transient = await bootWith(throwOnceThenDelegate('disk I/O error'), ':memory:').then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(transient).toBeInstanceOf(DbOpenError);
+    expect((transient as DbOpenError).code).toBe('driver_open_failed');
+    // SAME code, opposite verdict — the fail-safe lives here.
+    expect(isUnrecoverableLocalDbError(transient)).toBe(false);
+  });
+
+  test('a restored old-key DB WIPES and re-enrols: deviceId → null, the DB data + key are cleared', async () => {
+    const location = join(tempDir, 'restored.db');
+    // The "restored" device: a real DB with enrolled state + a probe row, on disk under key A.
+    const restored = await boot(location);
+    await sql`INSERT INTO meta_kv (key, value) VALUES ('deviceId', 'device-abc')`.execute(
+      restored.db.db,
+    );
+    await sql`INSERT INTO meta_kv (key, value) VALUES ('probe', 'unsynced-work')`.execute(
+      restored.db.db,
+    );
+    await restored.close();
+    const keyBeforeWipe = secureStore.get('bolusi.db_encryption_key');
+    expect(keyBeforeWipe).toMatch(/^[0-9a-f]{64}$/);
+
+    // The wipe: REAL crypto-erase of the key (SecureStore.deleteItemAsync) + delete the DB file. The
+    // file leg stands in for `deleteOpSqliteDatabase` (op-sqlite, native — unrunnable in Node,
+    // D12/D13); the key leg is the production `SecureStoreDbKeyStore.wipe()` verbatim.
+    const keyStore = new SecureStoreDbKeyStore(fakeCrypto);
+    const wipeLocalData = vi.fn(async () => {
+      await keyStore.wipe();
+      for (const f of [location, `${location}-wal`, `${location}-shm`]) rmSync(f, { force: true });
+    });
+
+    // ONE factory across BOTH boots: the first open (the restored old-key file) throws, the second
+    // (after the wipe) delegates to a real open. A fresh factory per boot would throw on both and
+    // defeat the heal.
+    const driverFactory = throwOnceThenDelegate('file is not a database');
+    const healed = await bootWithLocalRecovery({
+      boot: () => bootWith(driverFactory, location),
+      wipeLocalData,
+    });
+
+    // Recovered to a FRESH, unenrolled app — deviceId null routes to the enrollment wizard, NOT the
+    // restored device-abc. Reaching this at all (vs. `app === null` forever) is the un-brick.
+    expect(healed.deviceId).toBeNull();
+    expect(wipeLocalData).toHaveBeenCalledTimes(1);
+    // The wipe cleared the DB: the restored rows are gone (the file was deleted, not reopened).
+    const probe = await sql<{
+      value: string;
+    }>`SELECT value FROM meta_kv WHERE key = 'probe'`.execute(healed.db.db);
+    expect(probe.rows).toHaveLength(0);
+    // The wipe cleared the key: a NEW one was minted on the healed boot (fakeCrypto never repeats).
+    const keyAfterWipe = secureStore.get('bolusi.db_encryption_key');
+    expect(keyAfterWipe).toMatch(/^[0-9a-f]{64}$/);
+    expect(keyAfterWipe).not.toBe(keyBeforeWipe);
+    await healed.close();
+  });
+
+  test('positive control (T-17): a correct-key boot opens and is returned WITHOUT wiping', async () => {
+    // Proves the catch did not swallow every open into a wipe/re-enrol loop — the healthy boot path
+    // is untouched.
+    const wipeLocalData = vi.fn(async () => undefined);
+    const app = await bootWithLocalRecovery({
+      boot: () => bootWith(openBetterSqlite3Driver, ':memory:'),
+      wipeLocalData,
+    });
+
+    expect(isClientDbOpen()).toBe(true);
+    expect(app.deviceId).toBeNull(); // fresh, unenrolled — read from the column, never wiped into
+    expect(wipeLocalData).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  test('fail-safe: a TRANSIENT open error surfaces WITHOUT wiping the (good) DB', async () => {
+    // The §2.5-adjacent data-safety arm over the REAL bootstrap: a flaky/disk open error must not
+    // reach the wipe. A driver that keeps failing transiently → the error surfaces, DB untouched.
+    const wipeLocalData = vi.fn(async () => undefined);
+    const alwaysTransient = (): Promise<DbDriver> =>
+      Promise.reject(toDbError(new Error('disk I/O error')));
+
+    await expect(
+      bootWithLocalRecovery({
+        boot: () => bootWith(alwaysTransient, ':memory:'),
+        wipeLocalData,
+      }),
+    ).rejects.toMatchObject({ code: 'driver_open_failed' });
+    expect(wipeLocalData).not.toHaveBeenCalled();
   });
 });
