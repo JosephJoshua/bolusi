@@ -19,11 +19,15 @@
     "@bolusi/schemas": "workspace:*",
     "@bolusi/test-support": "workspace:*",
     "@bolusi/server": "workspace:*",
+    "@bolusi/db-server": "workspace:*",
+    "@bolusi/db-client": "workspace:*",
+    "kysely": "catalog:",
     "better-sqlite3": "catalog:",
     "@electric-sql/pglite": "catalog:"
   },
   "devDependencies": {
     "@bolusi/tsconfig": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:"
   },
   "scripts": {

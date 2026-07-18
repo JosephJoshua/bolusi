@@ -22,6 +22,12 @@
       "path": "../test-support/tsconfig.build.json"
     },
     {
+      "path": "../db-client/tsconfig.build.json"
+    },
+    {
+      "path": "../db-server/tsconfig.build.json"
+    },
+    {
       "path": "../../apps/server/tsconfig.build.json"
     }
   ]

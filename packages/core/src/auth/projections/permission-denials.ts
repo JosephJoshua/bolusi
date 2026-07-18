@@ -28,12 +28,13 @@ import type { AuthDatabase, AuthPermissionDenialsTable } from '../schema.js';
  * reasons exist (CLAUDE.md §2.8). `scopeStoreId` is `.nullable()` (present-and-null, never absent):
  * null means the check was tenant-scoped, distinct from the envelope's device `storeId`.
  *
- * ON THE DUPLICATE (flagged, not fixed here): `authz/denials.ts` carries `isPermissionDeniedPayload`,
- * a hand-rolled structural predicate written when "no task owned the auth op registry" — its own
- * header says it "should be deleted in favour of [the Zod schema], not kept alongside" once that task
- * lands. This is that schema. Removing the predicate + repointing task 09's tests is an authz-package
- * change (contended, task 45's "auth/core cleanups" surface); filed as a finding, not done here, to
- * keep task 43 to its slice. Both consume `DENIAL_REASONS`, so there is no second reason list.
+ * THE SINGLE PAYLOAD VALIDATOR (task 100). This is now the ONLY `auth.permission_denied` validator.
+ * `authz/denials.ts` once carried a hand-rolled `isPermissionDeniedPayload` written when "no task
+ * owned the auth op registry"; it was strictly LOOSER than this schema — it accepted `permissionId:
+ * ''` and any string `reason` (it did NOT consume `DENIAL_REASONS`), which this schema rejects via
+ * `.min(1)` and `z.enum(DENIAL_REASONS)`. Task 100 deleted the predicate and repointed its two test
+ * consumers here (`permissionDeniedPayload.safeParse(x).success`), so there is now exactly one shape
+ * definition (CLAUDE.md §2.8) and one reason list — this one.
  */
 export const permissionDeniedPayload = z
   .object({
@@ -50,8 +51,7 @@ export const permissionDeniedPayload = z
 // NOT exported: `authz/denials.ts` already exports a `PermissionDeniedPayload` interface (task 09),
 // and two `export *`d names of the same identifier collide into an unusable barrel export. This is
 // the local view the applier casts to; the shape is asserted structurally by `permissionDeniedPayload`
-// above. (The consolidation of the two — this Zod schema replacing denials.ts's hand-rolled
-// `isPermissionDeniedPayload` — is the flagged task-45 follow-up; see the schema's header.)
+// above (task 100 completed the consolidation — see the schema's header).
 type PermissionDeniedPayload = z.infer<typeof permissionDeniedPayload>;
 
 /**
