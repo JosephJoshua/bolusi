@@ -50,6 +50,31 @@ export interface SyncSchedulerPort {
 }
 
 /**
+ * A one-shot delay scheduler (08 §3.2; testing-guide T-6). The runtime uses it to BOUND an await
+ * that would otherwise hang forever — today, the denial-audit emit on the deny path (task 40): a
+ * never-settling client op-append (a stuck op-sqlite WAL lock) must not wedge `execute()`.
+ *
+ * WHY A PORT, AND WHY ITS OWN ONE. @bolusi/core owns no timers (08 §3.3 rule 3): a bare `setTimeout`
+ * here would be untestable without sleeping (T-6) and is trapped by the purity suite
+ * (test/runtime/_purity.ts). So the effect arrives as an interface, exactly as `ClockPort` does.
+ *
+ * This is the SAME SHAPE as the sync loop's `TimerPort` (sync/ports.ts) — deliberately, and by
+ * INTERFACE SEGREGATION, not duplication (§2.8 forbids two IMPLEMENTATIONS of one logic; a port
+ * carries none). It is declared HERE rather than reused from `sync` because `sync` depends on this
+ * layer (`sync/ports.ts` imports `ClockPort` from this file), never the reverse — the runtime must
+ * not reach up into the loop for a foundational effect. One production binding satisfies both: the
+ * app's `setTimeout`-backed `systemTimer` (apps/mobile) drops into this slot with no new code, the
+ * way `SigningKeyPort` and `KeyStorePort` share one impl above.
+ */
+export interface RuntimeTimerPort {
+  /**
+   * Run `fn` after `delayMs`. Returns a canceller; calling it after `fn` fired is a no-op (so the
+   * happy path — the emit resolved first — cancels the pending timeout and leaks nothing).
+   */
+  schedule(delayMs: number, fn: () => void): () => void;
+}
+
+/**
  * UUIDv7 source (05 §2.1 `id`/`entityId`; 08 §2.3). Backs `ctx.newId()`.
  *
  * Injected rather than imported so tests get a seeded, FakeClock-driven source (T-6) and ids —

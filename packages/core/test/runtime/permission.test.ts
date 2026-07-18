@@ -15,6 +15,8 @@ import {
 } from '../../src/index.js';
 
 import {
+  ArmableHangStore,
+  ControllableTimer,
   expectDomainError,
   makeCommandSpy,
   makeRuntimeFixture,
@@ -26,6 +28,29 @@ async function ready(seed: number, options?: Parameters<typeof makeRuntimeFixtur
   await fixture.prime();
   await fixture.enroll();
   return fixture;
+}
+
+/**
+ * Drain all pending microtasks past a macrotask boundary. A resolved-promise await alone would only
+ * advance one link of the deny→emit→race→throw chain; a `setTimeout(0)` fires AFTER the whole
+ * microtask queue, so "did `execute` settle" is answered honestly. Not a sleep (T-6): zero delay,
+ * a real timer only because the suite drives a FakeClock, not `vi.useFakeTimers()`.
+ */
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** Observe a promise's settlement WITHOUT awaiting it — so a still-hung `execute` cannot hang the test. */
+function track(p: Promise<unknown>): { settled: boolean; error?: unknown } {
+  const state: { settled: boolean; error?: unknown } = { settled: false };
+  p.then(
+    () => {
+      state.settled = true;
+    },
+    (error: unknown) => {
+      state.settled = true;
+      state.error = error;
+    },
+  );
+  return state;
 }
 
 function opsOfType(fixture: RuntimeFixture, type: string): SignedOperation[] {
@@ -671,5 +696,117 @@ describe('handler-declared restriction denials are audited (02 §7 amended; §5.
     // The audit append failed, so no denial op landed — proving the deny is INDEPENDENT of it.
     expect(denials(fixture), 'the append failed; the deny did not').toEqual([]);
     expect(businessOps(fixture)).toEqual([]);
+  });
+});
+
+describe('a HUNG denial-audit emit must not wedge execute (task 40 — liveness)', () => {
+  // The deny path awaits `DenialEmitter.record` → `port.emit` → `appendLocalOps` →
+  // `store.transaction` (enforce.ts). A denial is the one thing an attacker can provoke at will, so
+  // that await is the attacker-reachable one. If the client transaction NEVER settles (a stuck
+  // op-sqlite WAL lock), `execute()` never settles and the runtime is wedged forever — there is no
+  // timeout or abort on the chain. Task 40 bounds the emit so a hung audit is abandoned and the deny
+  // still returns. Contrast task 10/44 (a FAILED emit, already swallowed) — here the emit HANGS.
+  const deniedCommand = (fixture: RuntimeFixture) =>
+    // `auth.role_manage` is main_owner-only (§12) — staff is denied, at will.
+    makeCommandSpy(fixture.log, { name: 'manageRoles', permission: 'auth.role_manage' });
+
+  it('WITHOUT the bound (no timer wired) the hung emit wedges execute — the wedge, reproduced (T-11)', async () => {
+    // The pre-task-40 unbounded await, kept in-tree as the falsification witness: it is exactly what
+    // the bounded test below becomes if the bound is removed. `entered` proves the hang is REACHED
+    // (T-14b) — a wedge you never reached is not the wedge.
+    let hang!: ArmableHangStore;
+    const fixture = await ready(40, {
+      wrapStore: (inner) => {
+        hang = new ArmableHangStore(inner);
+        return hang;
+      },
+    });
+    const command = deniedCommand(fixture);
+    hang.armed = true; // arm only AFTER enroll's genesis append
+
+    const p = fixture.runtime.execute(
+      command,
+      { title: 't', body: 'b' },
+      fixture.runtime.createContext(fixture.staffId),
+    );
+    const tracked = track(p);
+
+    expect(hang.entered, 'the audit emit must actually reach the hanging append (T-14b)').toBe(
+      true,
+    );
+    // No bound: nothing can free execute. Draining every microtask leaves it pending — the wedge.
+    await flush();
+    expect(
+      tracked.settled,
+      'unbounded, execute never settles even after the whole queue drains — the liveness bug',
+    ).toBe(false);
+  });
+
+  it('WITH the bound wired, the hung emit no longer wedges — execute rejects PERMISSION_DENIED once it elapses', async () => {
+    const timer = new ControllableTimer();
+    let hang!: ArmableHangStore;
+    const fixture = await ready(41, {
+      denialAuditTimer: timer,
+      wrapStore: (inner) => {
+        hang = new ArmableHangStore(inner);
+        return hang;
+      },
+    });
+    const command = deniedCommand(fixture);
+    hang.armed = true;
+
+    const p = fixture.runtime.execute(
+      command,
+      { title: 't', body: 'b' },
+      fixture.runtime.createContext(fixture.staffId),
+    );
+    const tracked = track(p);
+
+    // Live fixture (T-14b): the emit reached the hang, AND the bound armed exactly one timeout.
+    // Without the fix this second assertion fails CLEANLY (0 ≠ 1) — a discriminating RED, not a
+    // runner hang (T-17).
+    expect(hang.entered, 'the audit emit must reach the hanging append').toBe(true);
+    expect(timer.scheduled, 'the emit await must be bounded by exactly one scheduled timeout').toBe(
+      1,
+    );
+
+    // Genuinely wedged until the bound fires: draining the queue does not settle it.
+    await flush();
+    expect(
+      tracked.settled,
+      'still pending while the emit hangs and the bound has not elapsed',
+    ).toBe(false);
+
+    // The bound elapses.
+    timer.fireAll();
+    await flush();
+
+    // The wedge is gone: execute settled, and it DENIED — unconditionally, despite the dead audit.
+    expect(tracked.settled, 'execute must settle once the bound elapses').toBe(true);
+    expectDomainError(tracked.error, 'PERMISSION_DENIED');
+    // Unconditional deny: the hung append wrote nothing, yet the command still denied — the deny is
+    // independent of the audit (the §6 guarantee task 40 must not weaken).
+    expect(denials(fixture), 'the hung append landed no op — the deny did not wait on it').toEqual(
+      [],
+    );
+    expect(businessOps(fixture), 'a denied command appends no business op').toEqual([]);
+  });
+
+  it('NON-REGRESSION — with the bound wired, a NORMAL denial still records its audit op and cancels the timeout (T-14b)', async () => {
+    // The timeout must not trade a hang for a MISSING audit record. A working emit still lands
+    // exactly one denial op, and the resolved emit cancels the timeout it armed — no per-denial leak.
+    const timer = new ControllableTimer();
+    const fixture = await ready(42, { denialAuditTimer: timer });
+    const command = deniedCommand(fixture);
+
+    const error = await fixture.runtime
+      .execute(command, { title: 't', body: 'b' }, fixture.runtime.createContext(fixture.staffId))
+      .catch((e: unknown) => e);
+
+    expectDomainError(error, 'PERMISSION_DENIED');
+    expect(denials(fixture), 'the happy-path audit trail is intact — one denial op').toHaveLength(
+      1,
+    );
+    expect(timer.scheduled, 'the resolved emit cancels its bound (no dangling timer)').toBe(0);
   });
 });
