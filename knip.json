@@ -2,9 +2,13 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": true,
   "includeEntryExports": true,
+  "ignoreWorkspaces": ["packages/harness"],
   "workspaces": {
     "apps/server": {
       "entry": ["src/index.ts", "src/client.ts", "src/main.ts", "src/cli/*.ts"]
+    },
+    "packages/test-support": {
+      "entry": ["src/index.ts!", "src/knip-canary.ts!"]
     }
   }
 }

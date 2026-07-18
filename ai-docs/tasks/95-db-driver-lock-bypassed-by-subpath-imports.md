@@ -1,6 +1,6 @@
 # TASK 95 — the DB-driver `testOnly` lock is bypassed by SUBPATH imports; `@electric-sql/pglite/worker` exports a real DB surface and escapes it from shipping src
 
-**Status:** todo
+**Status:** done
 **Priority:** **MEDIUM** — a security-adjacent boundary bypass, not a live exploit. It is a **guard that silently checks nothing for a whole class of import** (CLAUDE.md §2.11): the `testOnly` DB-driver lock exists so a real SQL engine cannot be imported from shipping source, and a one-token change to the specifier walks straight through it. No shipping code imports a driver subpath **today** — this is closing the hole before it is used, exactly as §2.11 demands (falsify before you're bitten, not after).
 **Depends on:** 42
 **Blocks:** —

@@ -30,6 +30,7 @@ import {
   type RateLimitStore,
 } from './middleware/rate-limit.js';
 import { serverCryptoPort, type OpRegistry } from './oplog/index.js';
+import { nodeHubScheduler, RealtimeHub, type HubScheduler } from './realtime/hub.js';
 import { InProcessPokeHub, type PokeHub } from './realtime/poke-hub.js';
 import type { SurfacedConflict } from './sync/conflict-detection.js';
 import {
@@ -193,6 +194,12 @@ export interface ServerDeps {
   readonly systemKeyStore?: SystemKeyStore;
   /** In-process scoped `sync.poke` hub (api/00 §12.1); default has zero subscribers (task 20 subs). */
   readonly pokeHub: PokeHub;
+  /** One-shot delay seam for the realtime hub's coalescing + keepalive (api/00 §12.1; T-6). Default
+   *  wraps `unref`'d node timers; tests inject a controllable fake. */
+  readonly realtimeScheduler: HubScheduler;
+  /** WS/SSE fan-out hub (api/00 §12.1). `createRealtimeRouter` subscribes it to `pokeHub` and
+   *  registers a revocation hook (SEC-RT-02); the WS/SSE routes register connections into it. */
+  readonly realtimeHub: RealtimeHub;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -222,6 +229,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   // no-op, exactly like an empty SERVER_MODULES folds nothing. An explicit override wins for tests.
   const newOpLogId = overrides.newOpLogId ?? (() => uuidv7(now()));
   const serverCrypto = overrides.serverCrypto ?? serverCryptoPort;
+  const realtimeScheduler = overrides.realtimeScheduler ?? nodeHubScheduler;
   const detectConflicts =
     overrides.detectConflicts ??
     (overrides.systemKeyStore === undefined
@@ -255,6 +263,8 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     opRegistry: overrides.opRegistry ?? serverOpRegistry,
     projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
+    realtimeScheduler,
+    realtimeHub: overrides.realtimeHub ?? new RealtimeHub({ now, scheduler: realtimeScheduler }),
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.onConflictSurfaced === undefined
       ? {}

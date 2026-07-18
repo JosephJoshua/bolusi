@@ -79,7 +79,9 @@ export async function writeDeviceLocale(store: LocaleStorePort, locale: Locale):
 
 /** Is `locale` one a v0 user may actually be shown? Delegates to 07-i18n's own list, never a copy. */
 function isSelectable(locale: Locale): boolean {
-  return SELECTABLE_LOCALES.includes(locale);
+  // `.some`, not `.includes`: SELECTABLE_LOCALES is a const tuple (`readonly ['id','en']`), so
+  // `.includes` would narrow its argument to `'id' | 'en'` and reject a `Locale` that could be `zh`.
+  return SELECTABLE_LOCALES.some((selectable) => selectable === locale);
 }
 
 /**

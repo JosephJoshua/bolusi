@@ -67,15 +67,8 @@ export function restingStatusFor(severity: 'minor' | 'significant'): ConflictSta
   return severity === 'minor' ? 'auto_resolved' : 'surfaced';
 }
 
-/**
- * The locales `platform.user_locale_changed` accepts (07-i18n §1.1: `z.enum(['id','en'])`).
- *
- * DUPLICATION, DELIBERATE AND FLAGGED. The `Locale` type and `SELECTABLE_LOCALES` are owned by
- * `@bolusi/i18n` (07-i18n §1) — but `@bolusi/core` is PURE TS (08 §3.2) and `@bolusi/i18n` pulls
- * `i18next`, so core cannot import it without dragging a runtime library into the pure package.
- * This list is therefore a SECOND statement of the same fact, and the two can drift: adding `zh` to
- * `SELECTABLE_LOCALES` without adding it here would make the toggle offer a locale whose op the
- * payload schema rejects (07-i18n §1.1 says `zh` "becomes legal here in V2"). Filed as a finding —
- * no gate compares the two lists today.
- */
-export const LOCALE_VALUES = ['id', 'en'] as const;
+// The locales `platform.setLocale` / `platform.user_locale_changed` accept (07-i18n §1.1) are NOT
+// declared here. They are `SELECTABLE_LOCALES`, imported from `@bolusi/schemas` — the ONE list the
+// in-app toggle (@bolusi/i18n) reads too, so the op enum and the toggle cannot drift (CLAUDE.md
+// §2.8). See `commands.ts` / `operations.ts` and `@bolusi/schemas/src/locale.ts` (task 77; this used
+// to be a second hardcoded `LOCALE_VALUES` copy).
