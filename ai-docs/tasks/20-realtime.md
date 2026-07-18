@@ -1,5 +1,5 @@
 # TASK 20 — realtime (WS + SSE server, client poke→pull, polling fallback)
-**Status:** in-progress
+**Status:** done
 **Depends on:** 12, 15
 
 ## Goal

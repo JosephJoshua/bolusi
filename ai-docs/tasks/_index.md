@@ -27,7 +27,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | done | 07, 08, 16, 46, 47, 48, 49 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | done | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
-| 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | in-progress | 12, 15 |
+| 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | done | 12, 15 |
 | 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | todo | 12, 13, 49 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
@@ -104,6 +104,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | todo | 16 |
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | todo | 95 |
+| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
 
 | 79 | `api/03 §8`'s `MEDIA_IMMUTABLE` rule says compare own sha256 to **the server's** — no endpoint returns it (`status`/`init` carry no hash; the 409 has no `details`, and `media.ts:215` returns before the field check). Only §3.5's `ETag` exposes it. Shipped via conditional-GET `If-None-Match`, fails closed; spec text still unimplementable — 4th of the class (62/70/72) (from task 18) | done | — |
 | 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | done | — |
