@@ -205,9 +205,11 @@ export class PermissionEnforcementPoint {
    * it (a stuck op-sqlite WAL lock) would otherwise freeze `execute()` forever — there is no timeout or
    * abort anywhere on the chain (execute → requirePermission → DenialEmitter.record → port.emit →
    * appendLocalOps → store.transaction). With a `RuntimeTimerPort` wired, a hung emit is abandoned after
-   * the budget and REJECTS into the caller's swallowing `catch`, so the denial is thrown unconditionally
-   * — exactly as it is for a FAILED emit (task 10). The bound never makes the deny wait on the audit
-   * SUCCEEDING; it only stops the deny waiting FOREVER.
+   * the budget — the race RESOLVES on timeout, so `#recordBounded` falls straight through the try to the
+   * unconditional throw below (a genuinely FAILED emit instead REJECTS into the swallowing `catch` and
+   * reaches that same throw). Either way the denial is thrown unconditionally — as it is for a FAILED
+   * emit (task 10). The bound never makes the deny wait on the audit SUCCEEDING; it only stops the deny
+   * waiting FOREVER.
    *
    * With no timer wired (`#auditBound === null`) it awaits the emit as before — unchanged for callers
    * that predate the bound.
