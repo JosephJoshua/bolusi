@@ -70,8 +70,15 @@ export function attemptLockKey(userId: string, deviceId: string): string {
   return `${userId}\u0000${deviceId}`;
 }
 
-/** Serialize `fn` against every other in-flight attempt for the same `(userId, deviceId)`. */
-function withAttemptLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+/**
+ * Serialize `fn` against every other in-flight attempt for the same `(userId, deviceId)`.
+ *
+ * Exported because `pin-flows.ts`'s owner-driven writes to the SAME `pin_attempt_state` row
+ * (`clearPinLockoutFlow`, the change/reset counter reset) must share this one lock domain — the
+ * `attemptChains` map above — or they race the verify RMW they sit one file away from. ONE lock, not
+ * a second copy (CLAUDE.md §2.8); the key is always `attemptLockKey(userId, deviceId)`.
+ */
+export function withAttemptLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prior = attemptChains.get(key) ?? Promise.resolve();
   // Chain on SETTLEMENT, not success: a throwing attempt (PIN_LOCKED, a DB error) must not wedge the
   // queue for this user forever — `prior.then(fn, fn)` runs `fn` either way.

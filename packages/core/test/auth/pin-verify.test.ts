@@ -18,6 +18,7 @@ import {
   resetPin,
   verifyPin,
   VerifierBoundsError,
+  withAttemptLock,
   type LockedOutEmitter,
   type PinFlowDeps,
   type PinVerifyResult,
@@ -420,5 +421,117 @@ describe('SEC-AUTH-01 read-side — a tampered verifier row never reaches the KD
     // everything — or a read-side check that mangled valid params — would fail right here.
     expect((await s.attempt(PIN)).ok).toBe(true);
     expect(s.kdf()).toBe(1);
+  });
+});
+
+/** Drain the macro-task queue so an UNsynchronized flow would have completed if it were going to. */
+async function drain(): Promise<void> {
+  for (let i = 0; i < 10; i += 1) await new Promise((r) => setTimeout(r, 0));
+}
+
+describe('SEC-AUTH-02 attempt-lock scope — the sibling pin_attempt_state writes serialize too (F7)', () => {
+  it('an owner lockout-clear serializes behind a verify that is mid-KDF (real interleaving)', async () => {
+    // A gate makes the interleaving exact: the 10th (losing) attempt banks failure #10, then blocks
+    // IN the KDF holding the attempt lock, while the owner tries to clear the same row.
+    let openGate: (() => void) | null = null;
+    let sawKdf: (() => void) | null = null;
+    let gateArmed = false;
+    const base = makeFastCrypto();
+    const crypto = {
+      ...base,
+      kdf: async (pw: Uint8Array, salt: Uint8Array, params: Parameters<typeof base.kdf>[2]) => {
+        if (gateArmed) {
+          sawKdf?.();
+          await new Promise<void>((r) => (openGate = r));
+        }
+        return base.kdf(pw, salt, params);
+      },
+    };
+    const h = await openAuthHarness(30, { crypto, verifiers: { staff: PIN } });
+    harness = h;
+    const emitter = createLockedOutEmitter(h.runtime);
+    const deps = { db: h.db, crypto: h.crypto, clock: h.clock, deviceId: h.deviceId, emitter };
+    const flowDeps: PinFlowDeps<ClientDatabase> = {
+      runtime: h.runtime,
+      db: h.db,
+      crypto: h.crypto,
+      clock: h.clock,
+      idSource: h.idSource,
+      deviceId: h.deviceId,
+      queue: new PinVerifierQueue(),
+      emitter,
+    };
+
+    // Drive staff to 9 consecutive failures (gate disarmed → the KDF runs freely).
+    for (let i = 0; i < 9; i += 1) {
+      const row = await readPinAttempt(h.db, h.staffId, h.deviceId);
+      if (row?.notBefore != null && h.clock.now() < row.notBefore) h.clock.set(row.notBefore);
+      await verifyPin(deps, { userId: h.staffId, pin: '000000' });
+    }
+    const pre = await readPinAttempt(h.db, h.staffId, h.deviceId);
+    expect(pre?.consecutiveFailures).toBe(9);
+    if (pre?.notBefore != null) h.clock.set(pre.notBefore);
+
+    // Arm the gate and fire the 10th attempt.
+    const enteredKdf = new Promise<void>((r) => (sawKdf = r));
+    gateArmed = true;
+    const order: string[] = [];
+    const attemptP = verifyPin(deps, { userId: h.staffId, pin: '000000' }).then((r) => {
+      order.push('attempt');
+      return r;
+    });
+    await enteredKdf; // deterministic: the attempt is mid-KDF, lock held, failure #10 banked
+
+    // Positive control (T-14b): the fixture ACTUALLY interleaved — the attempt is in flight and the
+    // 10th failure is banked (the row reads locked_out), so the window a clear could race is open.
+    expect((await readPinAttempt(h.db, h.staffId, h.deviceId))?.consecutiveFailures).toBe(10);
+
+    const clearP = clearPinLockoutFlow(flowDeps, {
+      actorUserId: h.ownerId,
+      targetUserId: h.staffId,
+    }).then(() => order.push('clear'));
+
+    await drain();
+    // Serialized: the clear has NOT run, and the in-flight attempt's banked row is un-clobbered.
+    expect(order, 'the clear waits behind the mid-KDF attempt').toEqual([]);
+    expect((await readPinAttempt(h.db, h.staffId, h.deviceId))?.consecutiveFailures).toBe(10);
+
+    // Release the KDF: the attempt settles FIRST, then the clear runs — an order, not a race.
+    openGate!();
+    await Promise.all([attemptP, clearP]);
+    expect(order).toEqual(['attempt', 'clear']);
+    expect((await readPinAttempt(h.db, h.staffId, h.deviceId))?.consecutiveFailures).toBe(0);
+  });
+
+  it("a PIN reset's counter clear routes through the attempt lock (held-lock stand-in)", async () => {
+    const s = await setup(31);
+    // Hold the attempt lock for (staff, device) with a promise we control — a stand-in for a verify
+    // in flight. resetPin runs its command + KDF + verifier write freely, then its counter-reset
+    // write must QUEUE behind this held lock (F7), proving that write shares the one lock domain.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const occupied = withAttemptLock(attemptLockKey(s.h.staffId, s.h.deviceId), () => held);
+
+    let resetDone = false;
+    const resetP = resetPin(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+      newPin: '222222',
+    }).then(() => {
+      resetDone = true;
+    });
+
+    await drain();
+    expect(resetDone, "the reset's counter write waits behind the held attempt lock").toBe(false);
+
+    release();
+    await occupied;
+    await resetP;
+    expect(resetDone).toBe(true);
+    // The reset applied: counter is 0 and the new PIN verifies.
+    expect(
+      (await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures ?? 0,
+    ).toBe(0);
+    expect((await s.attempt('222222')).ok).toBe(true);
   });
 });
