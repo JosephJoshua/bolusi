@@ -1,6 +1,6 @@
 # TASK 77 — the selectable-locale list is declared **twice** (`@bolusi/i18n` and `@bolusi/core`) and no gate compares them
 
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW-MEDIUM — a §2.8 duplication whose drift mode is silent and user-visible.
 **Depends on:** —
 **Filed by:** impl-17, 2026-07-16 (self-reported: task 17 created the second copy)
