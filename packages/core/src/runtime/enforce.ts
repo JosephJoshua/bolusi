@@ -15,10 +15,30 @@
 //
 // So both runtimes hold a reference to one instance of this, and it holds the only evaluator
 // reference either of them uses.
-import type { DenialEmitter, DenialSurface } from '../authz/denials.js';
+import type { DenialAttempt, DenialEmitter, DenialSurface } from '../authz/denials.js';
 import type { PermissionEvaluator } from '../authz/memo.js';
 import { DomainError } from '../errors/domain-error.js';
 import type { CommandIdentity, InvocationMeta } from './ctx.js';
+import type { RuntimeTimerPort } from './ports.js';
+
+/**
+ * Default bound on the denial-audit emit (task 40, liveness). A denied command's `auth.permission_denied`
+ * op is best-effort; this is how long the enforcement point waits for its append before abandoning it and
+ * denying anyway. Long enough that a merely-slow / lock-contended client append (op-sqlite WAL) still
+ * records; short enough that a never-settling one cannot wedge `execute()`. Override per app via
+ * `CommandRuntimeOptions.denialAuditTimeoutMs`.
+ */
+export const DENIAL_AUDIT_EMIT_TIMEOUT_MS = 2_000;
+
+/**
+ * The injected bound for the denial-audit emit (task 40). `null` = UNBOUNDED — the pre-task-40 behaviour,
+ * kept so a composition root that does not wire a `RuntimeTimerPort` is byte-for-byte unaffected. When
+ * present, a hung emit is abandoned after `timeoutMs` and the denial proceeds — see `requirePermission`.
+ */
+export interface DenialAuditBound {
+  readonly timer: RuntimeTimerPort;
+  readonly timeoutMs: number;
+}
 
 /**
  * The single enforcement point. Constructed by `CommandRuntime` (which owns the op-emission channel
@@ -27,10 +47,21 @@ import type { CommandIdentity, InvocationMeta } from './ctx.js';
 export class PermissionEnforcementPoint {
   readonly #evaluator: PermissionEvaluator;
   readonly #denialEmitter: DenialEmitter;
+  /**
+   * The task-40 liveness bound, or `null` for the unbounded (pre-task-40) await. Applied to the ONE
+   * emit both `requirePermission` and `denyRestriction` await — a single place, so a hung audit can
+   * wedge neither.
+   */
+  readonly #auditBound: DenialAuditBound | null;
 
-  constructor(evaluator: PermissionEvaluator, denialEmitter: DenialEmitter) {
+  constructor(
+    evaluator: PermissionEvaluator,
+    denialEmitter: DenialEmitter,
+    auditBound: DenialAuditBound | null = null,
+  ) {
     this.#evaluator = evaluator;
     this.#denialEmitter = denialEmitter;
+    this.#auditBound = auditBound;
   }
 
   /**
@@ -83,7 +114,7 @@ export class PermissionEnforcementPoint {
     if (decision.allowed) return;
 
     try {
-      await this.#denialEmitter.record({
+      await this.#recordBounded({
         userId: identity.userId,
         permissionId,
         surface,
@@ -101,7 +132,10 @@ export class PermissionEnforcementPoint {
       // failed to append (task 09's `record` says this explicitly). Swallowing here is what makes
       // the throw below unconditional: if the emission's failure propagated, a full disk or a
       // locked store would turn a denial into a generic error — and a caller distinguishing
-      // "denied" from "log broke" is a caller that can be made to stop denying.
+      // "denied" from "log broke" is a caller that can be made to stop denying. A HUNG emit does
+      // not reach this catch — `#recordBounded` (task 40) bounds it and RESOLVES on timeout, so a
+      // timed-out audit falls straight through the try to the same unconditional throw below.
+      // Failed or hung, the deny is thrown; neither can wedge us forever.
     }
 
     throw new DomainError(
@@ -138,7 +172,7 @@ export class PermissionEnforcementPoint {
     detail: string,
   ): Promise<never> {
     try {
-      await this.#denialEmitter.record({
+      await this.#recordBounded({
         userId: identity.userId,
         permissionId,
         surface,
@@ -152,7 +186,8 @@ export class PermissionEnforcementPoint {
         agentConversationId: invocation.agentConversationId,
       });
     } catch {
-      // Swallow — see the method doc: the deny is not conditional on the audit (task 10).
+      // Swallow — see the method doc: the deny is not conditional on the audit (task 10), and a
+      // hung audit is bounded and treated identically (task 40).
     }
 
     throw new DomainError(
@@ -161,4 +196,53 @@ export class PermissionEnforcementPoint {
       detail,
     );
   }
+
+  /**
+   * Emit the denial audit op, BOUNDED so a never-settling append cannot wedge the caller (task 40).
+   *
+   * This is on the ONE path an attacker can provoke at will: every denial emits `auth.permission_denied`
+   * (02 §7), and a denial is the one thing a denied actor can trigger freely. A wedged client write on
+   * it (a stuck op-sqlite WAL lock) would otherwise freeze `execute()` forever — there is no timeout or
+   * abort anywhere on the chain (execute → requirePermission → DenialEmitter.record → port.emit →
+   * appendLocalOps → store.transaction). With a `RuntimeTimerPort` wired, a hung emit is abandoned after
+   * the budget — the race RESOLVES on timeout, so `#recordBounded` falls straight through the try to the
+   * unconditional throw below (a genuinely FAILED emit instead REJECTS into the swallowing `catch` and
+   * reaches that same throw). Either way the denial is thrown unconditionally — as it is for a FAILED
+   * emit (task 10). The bound never makes the deny wait on the audit SUCCEEDING; it only stops the deny
+   * waiting FOREVER.
+   *
+   * With no timer wired (`#auditBound === null`) it awaits the emit as before — unchanged for callers
+   * that predate the bound.
+   */
+  async #recordBounded(attempt: DenialAttempt): Promise<void> {
+    const emit = this.#denialEmitter.record(attempt);
+    const bound = this.#auditBound;
+    if (bound === null) {
+      await emit;
+      return;
+    }
+    await boundEmit(emit, bound);
+  }
+}
+
+/**
+ * Resolve when `emit` settles OR when the bound elapses — whichever comes first (task 40).
+ *
+ * A timed-out emit makes the race RESOLVE (best-effort audit abandoned); the caller then denies
+ * unconditionally, as it does for a failed emit. A REJECTING emit still rejects the race, into that
+ * same swallowing catch. `Promise.race` keeps a handler on `emit` even after the timeout wins, so a
+ * late rejection from the abandoned append raises no unhandledRejection. The append itself is not —
+ * and cannot be — cancelled from here: a hung client transaction is the store's to resolve; this only
+ * frees `execute()`. The happy path cancels the pending timeout, so nothing leaks.
+ */
+function boundEmit(emit: Promise<unknown>, bound: DenialAuditBound): Promise<unknown> {
+  let cancel: () => void = () => {};
+  const timeout = new Promise<void>((resolve) => {
+    cancel = bound.timer.schedule(bound.timeoutMs, () => {
+      resolve();
+    });
+  });
+  return Promise.race([emit, timeout]).finally(() => {
+    cancel();
+  });
 }

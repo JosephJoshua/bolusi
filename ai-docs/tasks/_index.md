@@ -27,7 +27,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | done | 07, 08, 16, 46, 47, 48, 49 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | done | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
-| 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
+| 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | in-progress | 12, 15 |
 | 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | todo | 12, 13, 49 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
@@ -46,14 +46,14 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
 | 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
 | 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
-| 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | todo | 35 |
+| 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | done | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
-| 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | todo | 10 |
+| 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | done | 10 |
 | 41 | tenant-counter lock is taken AFTER the chain-head read it should protect (comment + 10-db §3 claim otherwise); latent, UNIQUE backstops it (from task 07 review) | done | 07 |
 | 42 | @electric-sql/pglite escapes the DB-driver testOnly lock; watermark Number() comment overstates its evidence (from task 11 review) | done | 11 |
 | 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | done | 11, 14, 49 |
 | 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | done | 14 |
-| 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | in-progress | 14 |
+| 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | done | 14 |
 | 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | done | 08 |
 | 47 | server watermark store has no production caller and no real-PG16 coverage — 3 gates blind to the same `Number()` (from task 16 review) | done | 16 |
 | 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | done | 46 |
@@ -91,15 +91,18 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 88 | `deviceId`/`storeId` are never written to `meta_kv` (10-db §9 names them; only `tenantId` has a producer) — no device is knowable as enrolled at boot (from task 50) | done | 14 |
 | 89 | **HIGH** the sync loop can never start: `BundleRefreshPort` has no producer, enrollment has no caller, NetInfo unpinned — task 15's loop is correct and unconstructable (from task 50) | done | 14, 15, 50, 88 |
 | 90 | the module registration list is declared twice (`SERVER_MODULES` + `CLIENT_MODULES`) with nothing checking they agree; task 25 must edit both and the compiler finds neither (from task 50) | todo | 49, 50 |
-| 91 | **HIGH** iOS restore-to-new-hardware permanently BRICKS the app: restored DB + non-restored THIS_DEVICE_ONLY key → wrong-key open → `boot()` renders nothing forever, no recovery. iOS-triggered (backup asymmetry, task 84), platform-neutral fix (catch not_a_database→wipe+re-enrol). Median device event for a repair franchise (from impl-ios) | todo | — |
+| 91 | **HIGH** iOS restore-to-new-hardware permanently BRICKS the app: restored DB + non-restored THIS_DEVICE_ONLY key → wrong-key open → `boot()` renders nothing forever, no recovery. iOS-triggered (backup asymmetry, task 84), platform-neutral fix (catch not_a_database→wipe+re-enrol). Median device event for a repair franchise (from impl-ios) | done | — |
 | 92 | **HIGH** a production device cannot ENROLL: `runEnrollment`'s genesis append needs a composed `CommandRuntime` → an `OpAppendStore` with NO production producer (only test fixtures); nothing composes the runtime in `apps/mobile`. Plus the enrollment caller (`onLogin`/`onEnroll` noop; `LoginRes` lacks the `tenantName` the wizard needs). Blocks 89's production-enrollment path (from task 89) | done | 14, 50, 88, 89 |
 | 93 | the db-client load-flake class (task 67) also in apps/mobile bootstrap tests + secret-scan, still on default 5000ms — same measured nondeterminism, pre-emptive (from task 67 sweep) | todo | 67 |
 | 94 | **MEDIUM** an enrolled device shows BLANK metadata: `index.ts` hands `Root` a hardcoded empty `deviceInfo`, so Settings renders no device name/store/tenant for a device that now enrolls (task 92); and the enroll POST sends `appVersion: ''` (expo-constants unpinned). Values all exist in `meta_kv` + the directory; wire them (from task 92) | todo | 24, 92 |
 | 95 | the DB-driver testOnly lock is bypassed by SUBPATH imports (`@electric-sql/pglite/worker` = real DB surface) — same gap for better-sqlite3/pg; normalize to package root (from task 42 review) | todo | 42 |
 | 96 | notes module SCREENS (NotesList/NoteEditor/NoteDetail) — 4 states, ConfirmSheet, optimistic save, thumbnail, i18n live-switch; carved from 25, frontend-phase (D17) | todo | 25, 24, 18 |
-| 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | todo | 43 |
+| 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | in-progress | 43 |
 | 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | todo | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | todo | 10 |
+| 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | in-progress | 43, 44, 45 |
+| 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
+| 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | todo | 16 |
 
 | 79 | `api/03 §8`'s `MEDIA_IMMUTABLE` rule says compare own sha256 to **the server's** — no endpoint returns it (`status`/`init` carry no hash; the 409 has no `details`, and `media.ts:215` returns before the field check). Only §3.5's `ETag` exposes it. Shipped via conditional-GET `If-None-Match`, fails closed; spec text still unimplementable — 4th of the class (62/70/72) (from task 18) | done | — |
 | 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | done | — |

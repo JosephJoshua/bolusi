@@ -132,3 +132,55 @@ export const openOpSqliteDriver = async (params: DbDriverOpenParams): Promise<Db
   });
   return createDriver(db);
 };
+
+/** The WAL/SHM sidecars SQLite writes beside a database file (10-db §9: `journal_mode = WAL`). */
+const DB_SIDECAR_SUFFIXES = ['-wal', '-shm'] as const;
+
+/**
+ * Deletes the client database's on-disk files — the main `<name>` file AND its `-wal`/`-shm`
+ * sidecars — at op-sqlite's default location. The DB-file leg of the wipe (api/02-auth §7.3 step 2;
+ * security-guide §6.6's restore recovery).
+ *
+ * WHY THE SIDECARS ARE REMOVED EXPLICITLY (the bug this exists to not have): op-sqlite's own
+ * `db.delete()` removes EXACTLY ONE file — native `opsqlite_remove` is `close(db); remove(db_path)`,
+ * and because this open is keyless and runs no query the connection never enters WAL mode, so
+ * `close()` checkpoints nothing. A `-wal`/`-shm` left behind is (a) after a "crypto-erase", leftover
+ * unreadable old-key ciphertext, and (b) worse — an iOS restore brings the `-wal` by the same
+ * non-excludability as the main DB (task 84), so the next boot's fresh-key DB sits beside a stale
+ * old-key WAL that SQLite may try to recover, re-bricking the very boot this heals. So each sidecar
+ * is removed by name too. Removal is BEST-EFFORT: a cleanly-closed device has no `-wal`/`-shm`, and a
+ * missing sidecar is not an error.
+ *
+ * It lives HERE, and only here, because `@op-engineering/op-sqlite` has exactly one import site in
+ * the repo (08 §3.2/§3.3, lint-enforced by bolusi/boundaries) — apps/mobile cannot reach op-sqlite
+ * directly (nor any React-Native filesystem module), so every file this removes goes through
+ * op-sqlite's per-file `delete()`, and the boot-recovery wipe injects this from the same binding site
+ * as `openOpSqliteDriver`.
+ *
+ * NO `encryptionKey` IS PASSED, AND THAT IS CORRECT, NOT A SEC-DEV-06 HOLE: `open()` is lazy — it
+ * touches no page until the first query — and `delete()` is a filesystem unlink that never decrypts.
+ * So a restored old-key file (unreadable ciphertext to us) is removed without ever being opened for
+ * reading. There is still no unkeyed path that READS data; this only destroys the files.
+ */
+export const deleteOpSqliteDatabase = (params: {
+  readonly name: string;
+  readonly location?: string | undefined;
+}): void => {
+  // Main DB file — op-sqlite's own delete (one file: the db opened by this name).
+  removeOpSqliteFile(params.name, params.location);
+  // WAL/SHM sidecars — removed by name because op-sqlite's delete() above touched only the main file.
+  for (const suffix of DB_SIDECAR_SUFFIXES) {
+    try {
+      removeOpSqliteFile(`${params.name}${suffix}`, params.location);
+    } catch {
+      // Best-effort: no such sidecar (a clean device has none). The goal is "no stale sidecar left",
+      // which an absent one already satisfies — never fail the wipe over it.
+    }
+  }
+};
+
+/** Unlink one file `<location>/<name>` through op-sqlite (keyless, lazy open → filesystem remove). */
+function removeOpSqliteFile(name: string, location: string | undefined): void {
+  const db = open({ name, ...(location === undefined ? {} : { location }) });
+  db.delete();
+}

@@ -21,6 +21,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/check-single-zod.mjs
       - run: node scripts/check-forbidden-packages.mjs
+      # No raw control byte (a NUL delimiter, say) in a text-source file — it turns the file BINARY to
+      # git and its diff unreviewable, while every test stays green (CLAUDE.md §2.9). Also runs in the
+      # pre-commit hook; here it is the backstop for anything committed with --no-verify.
+      - run: node scripts/check-no-control-bytes.mjs
       # 08 §5.6: every test script builds the cross-package dists it imports. Static — no
       # build or database needed — so it runs here in stage 1 and names the offending script
       # in seconds, rather than surfacing as a mystery "Failed to resolve entry for package

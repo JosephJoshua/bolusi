@@ -2,9 +2,11 @@ import { registerRootComponent } from 'expo';
 import { Platform } from 'react-native';
 
 import { createUuidV7Generator } from '@bolusi/core';
-import { openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
+import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
+import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
 import { bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
+import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
 import { requireApiBaseUrl } from './src/bootstrap/config.js';
 import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
 import {
@@ -51,13 +53,33 @@ import { netInfoPort } from './src/ports/netinfo.js';
  * §2.2 says it goes in `package.json`'s `op-sqlite` block, read at native build time. It is there.
  */
 function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
-  return bootstrap({
-    driverFactory: openOpSqliteDriver,
-    // The SQLCipher key store (security-guide §6.4). quick-crypto is the CSPRNG — §6.4 names it,
-    // and D8 makes it the sole on-device provider.
-    keyStore: new SecureStoreDbKeyStore(quickCryptoPort),
-    crypto: quickCryptoPort,
-    clock: systemClock,
+  // ONE key store serves BOTH the boot (mint/read the SQLCipher key — security-guide §6.4; quick-
+  // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
+  const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
+  // `bootWithLocalRecovery` self-heals the one boot failure that is NOT a corrupt data layer but a
+  // FRESH device wearing an old device's ciphertext: an iOS restore-to-new-hardware restores
+  // `bolusi.db` but not its THIS_DEVICE_ONLY key, so the open fails `not_a_database` and — before
+  // this — Root's deliberate no-catch rendered nothing forever (security-guide §6.6). On that class
+  // ONLY it wipes and drops to enrollment; every other failure still surfaces through Root's no-catch.
+  return bootWithLocalRecovery({
+    boot: () =>
+      bootstrap({
+        driverFactory: openOpSqliteDriver,
+        keyStore,
+        crypto: quickCryptoPort,
+        clock: systemClock,
+      }),
+    // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the SQLCipher key
+    // FIRST (the DB is unreadable ciphertext from this moment), then (2) delete the DB file(s) +
+    // WAL/SHM. On new hardware the identity keys (private key, token) are already absent
+    // (THIS_DEVICE_ONLY, never restored), and a fresh empty DB reads `deviceId: null` → the
+    // enrollment wizard, so this destroys exactly what makes the re-open clean. It NEVER opens the DB
+    // unencrypted (SEC-DEV-06). Native, and unverifiable on this infra (no iOS/Android target,
+    // D12/D13) — the heal LOGIC is unit-verified against the `DbOpenError` kinds (recovery.test.ts).
+    wipeLocalData: async () => {
+      await keyStore.wipe();
+      deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });
+    },
   });
 }
 

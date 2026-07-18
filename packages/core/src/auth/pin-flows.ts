@@ -29,7 +29,13 @@ import { DEFAULT_KDF_PARAMS } from '../crypto/port.js';
 import { PIN_KDF_BOUNDS } from './constants.js';
 import { clearLockout, resetForNewVerifier } from './lockout.js';
 import { AUTH_ENTITY, AUTH_OP, AUTH_PERMISSION } from './operations.js';
-import { assertPinFormat, verifyPin, type LockedOutEmitter } from './pin-verify.js';
+import {
+  assertPinFormat,
+  attemptLockKey,
+  verifyPin,
+  withAttemptLock,
+  type LockedOutEmitter,
+} from './pin-verify.js';
 import type { PinVerifierUploadPort, PinVerifierUploadResult } from './ports.js';
 import {
   holdsMainOwnerRole,
@@ -342,18 +348,25 @@ export async function clearPinLockoutFlow<DB>(
       'target is not in this device’s directory (§5.4.6)',
     );
   }
-  const row = await readPinAttempt(deps.db, input.targetUserId, deps.deviceId);
-  // Validate the transition on the PRE-command row; clearLockout throws INVALID_TRANSITION unless
-  // locked, so a no-op clear never emits an op.
-  const cleared = clearLockout(row, input.targetUserId, deps.deviceId);
-  const ctx = deps.runtime.createContext(input.actorUserId);
-  const outcome = await deps.runtime.execute(
-    clearPinLockoutCommand,
-    { targetUserId: input.targetUserId },
-    ctx,
-  );
-  await writePinAttempt(deps.db, cleared);
-  return outcome;
+  // The read→gate→write on `pin_attempt_state` is the SAME read-modify-write `verifyPin` serializes
+  // (pin-verify.ts): read the row, decide the transition on it, write the result. Run it under the
+  // one attempt lock for `(targetUserId, deviceId)`, or an owner's clear races a concurrent losing
+  // attempt — last-write-wins on the counter, and `auth.pin_locked_out` can fire for a user whose row
+  // then reads 0 (F7). Same key, one lock domain — never a second copy (§2.8).
+  return withAttemptLock(attemptLockKey(input.targetUserId, deps.deviceId), async () => {
+    const row = await readPinAttempt(deps.db, input.targetUserId, deps.deviceId);
+    // Validate the transition on the PRE-command row; clearLockout throws INVALID_TRANSITION unless
+    // locked, so a no-op clear never emits an op.
+    const cleared = clearLockout(row, input.targetUserId, deps.deviceId);
+    const ctx = deps.runtime.createContext(input.actorUserId);
+    const outcome = await deps.runtime.execute(
+      clearPinLockoutCommand,
+      { targetUserId: input.targetUserId },
+      ctx,
+    );
+    await writePinAttempt(deps.db, cleared);
+    return outcome;
+  });
 }
 
 /**
@@ -391,8 +404,12 @@ async function emitVerifierChange<DB>(
   const winner = chooseEffectiveVerifier(existing, verifier) ?? verifier;
   await writeVerifier(deps.db, args.targetUserId, winner);
   // A new verifier clears the target's lockout and counter (§6.5) — the auth runtime, not an applier,
-  // touches pin_attempt_state (03 §9.2).
-  await writePinAttempt(deps.db, resetForNewVerifier(args.targetUserId, deps.deviceId));
+  // touches pin_attempt_state (03 §9.2). Under the SAME attempt lock as `verifyPin`: this reset would
+  // otherwise clobber (or be clobbered by) a concurrent losing attempt's counter write — the same
+  // TOCTOU class one file away (F7). Same key, one lock domain (§2.8).
+  await withAttemptLock(attemptLockKey(args.targetUserId, deps.deviceId), () =>
+    writePinAttempt(deps.db, resetForNewVerifier(args.targetUserId, deps.deviceId)),
+  );
 
   const pending: PendingVerifier = { userId: args.targetUserId, verifierRef, verifier };
   deps.queue.enqueue(pending);

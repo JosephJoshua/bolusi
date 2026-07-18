@@ -50,6 +50,31 @@ export interface SyncSchedulerPort {
 }
 
 /**
+ * A one-shot delay scheduler (08 §3.2; testing-guide T-6). The runtime uses it to BOUND an await
+ * that would otherwise hang forever — today, the denial-audit emit on the deny path (task 40): a
+ * never-settling client op-append (a stuck op-sqlite WAL lock) must not wedge `execute()`.
+ *
+ * WHY A PORT, AND WHY ITS OWN ONE. @bolusi/core owns no timers (08 §3.3 rule 3): a bare `setTimeout`
+ * here would be untestable without sleeping (T-6) and is trapped by the purity suite
+ * (test/runtime/_purity.ts). So the effect arrives as an interface, exactly as `ClockPort` does.
+ *
+ * This is the SAME SHAPE as the sync loop's `TimerPort` (sync/ports.ts) — deliberately, and by
+ * INTERFACE SEGREGATION, not duplication (§2.8 forbids two IMPLEMENTATIONS of one logic; a port
+ * carries none). It is declared HERE rather than reused from `sync` because `sync` depends on this
+ * layer (`sync/ports.ts` imports `ClockPort` from this file), never the reverse — the runtime must
+ * not reach up into the loop for a foundational effect. One production binding satisfies both: the
+ * app's `setTimeout`-backed `systemTimer` (apps/mobile) drops into this slot with no new code, the
+ * way `SigningKeyPort` and `KeyStorePort` share one impl above.
+ */
+export interface RuntimeTimerPort {
+  /**
+   * Run `fn` after `delayMs`. Returns a canceller; calling it after `fn` fired is a no-op (so the
+   * happy path — the emit resolved first — cancels the pending timeout and leaks nothing).
+   */
+  schedule(delayMs: number, fn: () => void): () => void;
+}
+
+/**
  * UUIDv7 source (05 §2.1 `id`/`entityId`; 08 §2.3). Backs `ctx.newId()`.
  *
  * Injected rather than imported so tests get a seeded, FakeClock-driven source (T-6) and ids —
@@ -61,11 +86,17 @@ export type IdSource = () => string;
 /**
  * The device's Ed25519 signing key, for the op signature (05 §2.2).
  *
- * **LOCAL SEAM — DELETE WHEN TASK 14 LANDS.** 08 §3.2's real `KeyStorePort` (SecureStore-backed,
- * `bolusi.device_private_key`) is task 14's; this is the single method the command runtime needs
- * from it. When `KeyStorePort` arrives this interface must be DELETED in favour of it, never kept
- * alongside as a second definition of the same seam (CLAUDE.md §2.8). Structural typing means the
- * real port will satisfy this shape without a change at the call sites.
+ * **The command runtime's SEGREGATED view of the key store — keep it; do NOT collapse it.** This is
+ * the one method the runtime needs to sign an op. Task 14's real `KeyStorePort` (08 §3.2:
+ * SecureStore-backed `bolusi.device_private_key`, plus enroll/token/wipe) STRUCTURALLY satisfies this
+ * one-method shape, so the production adapter and the test `FakeKeyStore` drop in with no call-site
+ * change — and so does a bare `{ getSigningKey }`, which is how the runtime tests build the seam.
+ *
+ * This is interface segregation, not duplication. §2.8 forbids two IMPLEMENTATIONS of the same logic;
+ * `SigningKeyPort` carries NO logic and has exactly one impl (`KeyStorePort`). Typing
+ * `CommandRuntime.signingKey` as the full `KeyStorePort` would drag enrollment/token/wipe concerns
+ * into the command runtime and force every runtime test to build a 6-method fake. (Task 14 landed and
+ * correctly did NOT delete this — an earlier "DELETE WHEN TASK 14 LANDS" note here was wrong.)
  */
 export interface SigningKeyPort {
   /** The device's 32-byte RFC 8032 seed. */

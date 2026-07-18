@@ -36,6 +36,7 @@ import {
   type PermissionResult,
   type QueryExecutorPort,
   type QueryHandle,
+  type RuntimeTimerPort,
   type SigningKeyPort,
   type SyncSchedulerPort,
 } from '../../src/index.js';
@@ -203,6 +204,63 @@ export class FaultInjectingStore implements OpAppendStore {
   }
 }
 
+/**
+ * A controllable `RuntimeTimerPort` (task 40). Records each scheduled callback; the test fires them
+ * by hand — no real timer, no sleeping (T-6). `scheduled` is the count of live (uncancelled) timers,
+ * which doubles as proof the bound was actually armed: the wedge fix schedules exactly one.
+ */
+export class ControllableTimer implements RuntimeTimerPort {
+  readonly #timers: { fn: () => void; cancelled: boolean }[] = [];
+
+  schedule(_delayMs: number, fn: () => void): () => void {
+    const entry = { fn, cancelled: false };
+    this.#timers.push(entry);
+    return () => {
+      entry.cancelled = true;
+    };
+  }
+
+  /** Live (scheduled-and-not-cancelled) timers — the fix arms exactly one per bounded emit. */
+  get scheduled(): number {
+    return this.#timers.filter((t) => !t.cancelled).length;
+  }
+
+  /** Fire every live timer — the bound elapses. Cancelled ones (happy path) stay silent. */
+  fireAll(): void {
+    for (const t of this.#timers) {
+      if (!t.cancelled) {
+        t.cancelled = true;
+        t.fn();
+      }
+    }
+  }
+}
+
+/**
+ * A store wrapper whose transaction HANGS once armed (task 40) — a never-settling client op-append,
+ * the "wedged DB write / stuck lock" the denial-audit emit must not block on. Unarmed it delegates,
+ * so `enroll()`'s genesis append still works; the test arms it only for the denied `execute`.
+ *
+ * `entered` is the T-14b liveness proof: the hang is only meaningful if the emit actually REACHED it.
+ * A probe whose target is never entered measures nothing.
+ */
+export class ArmableHangStore implements OpAppendStore {
+  armed = false;
+  entered = false;
+
+  constructor(private readonly inner: OpAppendStore) {}
+
+  transaction<T>(fn: (tx: OpAppendTx) => Promise<T>): Promise<T> {
+    if (this.armed) {
+      this.entered = true;
+      // Never settles: models a transaction that never commits (a stuck WAL lock). The append is
+      // genuinely wedged — only the bound frees `execute()`.
+      return new Promise<T>(() => {});
+    }
+    return this.inner.transaction(fn);
+  }
+}
+
 export const TEST_LOCATION: Location = { lat: -2.533, lng: 140.717, accuracyMeters: 12.5 };
 
 export interface RuntimeFixture {
@@ -267,6 +325,15 @@ export interface FixtureOptions {
    * oracle). Additive — every existing caller keeps `fixtureOperations`.
    */
   readonly operations?: OperationRegistry;
+  /**
+   * Wrap the append store (task 40) — e.g. `(inner) => new ArmableHangStore(inner)` to make the
+   * denial-audit emit hang. Additive: absent, the fixture uses the store (or the fault wrapper) as is.
+   */
+  readonly wrapStore?: (inner: OpAppendStore) => OpAppendStore;
+  /** The task-40 denial-audit liveness bound. Wired only when a test wants the emit bounded. */
+  readonly denialAuditTimer?: RuntimeTimerPort;
+  /** Override the task-40 bound in ms (default `DENIAL_AUDIT_EMIT_TIMEOUT_MS`). */
+  readonly denialAuditTimeoutMs?: number;
 }
 
 /** Build a fully-seeded runtime. Two calls with the same seed reproduce bit-for-bit (T-6). */
@@ -320,8 +387,11 @@ export function makeRuntimeFixture(seed: number, options: FixtureOptions = {}): 
 
   const store = new InMemoryOpStore();
   // The runtime writes through the (optionally faulty) wrapper; assertions read the real store.
-  const appendStore: OpAppendStore =
+  const faultedStore: OpAppendStore =
     options.insertFault === undefined ? store : new FaultInjectingStore(store, options.insertFault);
+  // A further optional wrap (task 40 hang injection). Applied outermost so it sees every transaction.
+  const appendStore: OpAppendStore =
+    options.wrapStore === undefined ? faultedStore : options.wrapStore(faultedStore);
   const location = new CountingLocationPort(
     options.location === undefined ? TEST_LOCATION : options.location,
   );
@@ -352,6 +422,12 @@ export function makeRuntimeFixture(seed: number, options: FixtureOptions = {}): 
     syncScheduler: scheduler,
     ...(options.denialThrottleWindowMs !== undefined
       ? { denialThrottleWindowMs: options.denialThrottleWindowMs }
+      : {}),
+    ...(options.denialAuditTimer !== undefined
+      ? { denialAuditTimer: options.denialAuditTimer }
+      : {}),
+    ...(options.denialAuditTimeoutMs !== undefined
+      ? { denialAuditTimeoutMs: options.denialAuditTimeoutMs }
       : {}),
   });
 

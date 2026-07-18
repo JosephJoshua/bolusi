@@ -50,6 +50,11 @@ export type {
   ClockPort,
   IdSource,
   LocationPort,
+  RuntimeTimerPort,
   SigningKeyPort,
   SyncSchedulerPort,
 } from './ports.js';
+
+// The task-40 liveness bound on the denial-audit emit (its default; the bound itself is wired via
+// `CommandRuntimeOptions.denialAuditTimer`). The enforcement point that applies it is internal.
+export { DENIAL_AUDIT_EMIT_TIMEOUT_MS } from './enforce.js';

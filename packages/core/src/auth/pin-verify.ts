@@ -24,7 +24,7 @@ import {
   type PinAuthState,
 } from './lockout.js';
 import { readPinAttempt, readVerifier, writePinAttempt } from './repo.js';
-import { verifyPinAgainst } from './verifier.js';
+import { assertVerifierInBounds, verifyPinAgainst } from './verifier.js';
 import type { Kysely } from 'kysely';
 
 // ── the attempt lock (api/02-auth §6.5: "10 consecutive failures", not 10 x callers) ─────────────
@@ -70,8 +70,15 @@ export function attemptLockKey(userId: string, deviceId: string): string {
   return `${userId}\u0000${deviceId}`;
 }
 
-/** Serialize `fn` against every other in-flight attempt for the same `(userId, deviceId)`. */
-function withAttemptLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+/**
+ * Serialize `fn` against every other in-flight attempt for the same `(userId, deviceId)`.
+ *
+ * Exported because `pin-flows.ts`'s owner-driven writes to the SAME `pin_attempt_state` row
+ * (`clearPinLockoutFlow`, the change/reset counter reset) must share this one lock domain — the
+ * `attemptChains` map above — or they race the verify RMW they sit one file away from. ONE lock, not
+ * a second copy (CLAUDE.md §2.8); the key is always `attemptLockKey(userId, deviceId)`.
+ */
+export function withAttemptLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prior = attemptChains.get(key) ?? Promise.resolve();
   // Chain on SETTLEMENT, not success: a throwing attempt (PIN_LOCKED, a DB error) must not wedge the
   // queue for this user forever — `prior.then(fn, fn)` runs `fn` either way.
@@ -163,6 +170,13 @@ async function runAttempt<DB>(
       'no PIN verifier for this user — route to the first-PIN flow (api/02-auth §6.6)',
     );
   }
+
+  // Read-side bounds re-check (SEC-AUTH-01, defence in depth). The HOSTILE path is the server bundle,
+  // already gated at bundle-apply.ts; this closes the local-DB-write path so a tampered
+  // `user_pin_verifiers` row (`mKiB = 1 GiB`, a non-argon2id `algo`, or `p ≠ 1`) can never reach the
+  // KDF. Thrown BEFORE the pessimistic bank and the KDF: a corrupt row is not a wrong-PIN attempt, so
+  // it neither burns a guess nor spends ~300 ms deriving a key it would throw away.
+  assertVerifierInBounds(verifier);
 
   // PESSIMISTIC: bank the failure BEFORE the KDF, and clear it on success. A process killed mid-KDF
   // (~300 ms of exposure) leaves the attempt COUNTED, never un-counted — the crash fails CLOSED.
