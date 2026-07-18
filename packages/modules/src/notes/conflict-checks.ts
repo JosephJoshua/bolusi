@@ -19,9 +19,14 @@
 // This predicate therefore takes `archivedByEarlierOp` — "did a canonically-earlier archive land
 // for this note" — NOT a bare "is it archived", so it AGREES with the order-based rule by
 // construction. It does not re-implement detection (no DB, no log query, platform-free); it is the
-// module's declaration of what the check MEANS, so the server's registry and this module cannot
-// disagree about the check's name, key, or severity, and the harness has a pure oracle to assert
-// against. The values below are identical to the server's `NOTES_EDIT_AFTER_ARCHIVE` on purpose.
+// module's declaration of what the check MEANS, and the harness has a pure oracle to assert against.
+//
+// The values below are identical to the server's `NOTES_EDIT_AFTER_ARCHIVE` on purpose — and that
+// identity is ENFORCED, not merely intended. The module cannot import `apps/server`, so the two
+// declarations can only be compared where both are importable: the guard is
+// `apps/server/test/integration/sync/notes-conflict-parity.test.ts`, which imports BOTH and asserts
+// name/appliesTo/conflictKey/severity field-for-field. Drift either side's key or severity and that
+// test goes red (§2.11 — a comment that names a mechanism must be falsifiable; this one is).
 import type { ConflictSeverity } from '@bolusi/core';
 
 import { NOTES_OP } from './constants.js';
@@ -32,9 +37,10 @@ export const EDIT_AFTER_ARCHIVE_KEY = 'note.archived' as const;
 /**
  * The module's declaration of the `notes:edit_after_archive` Rule-2 check (01 §8.2).
  *
- * Mirrors the server's `InvariantCheck` metadata (name, `appliesTo`, `conflictKey`, `severity`) so
- * the two cannot drift on what the check is. The server owns the `fires()` implementation (the log
- * query); this is the module's contribution — the constants the check is built from.
+ * Mirrors the server's `InvariantCheck` metadata (name, `appliesTo`, `conflictKey`, `severity`);
+ * the cross-package parity test (see the header) keeps the two from drifting on what the check is.
+ * The server owns the `fires()` implementation (the log query); this is the module's contribution —
+ * the constants the check is built from.
  */
 export interface EditAfterArchiveDeclaration {
   readonly name: 'notes:edit_after_archive';
