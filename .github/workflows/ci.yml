@@ -346,13 +346,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:appliers
 
-  # Stage 11 — chaos harness. MERGE-GATE PLACEHOLDER —
-  # wired by task 26 (ai-docs/tasks/26-chaos-harness.md); runs `pnpm chaos`.
+  # Stage 11 — chaos harness (testing-guide Part B, D4). The real `@bolusi/server` in-process on
+  # PGlite plus N virtual devices; seeds 1–10 per scenario at CI-scale volumes. PGlite is in-process
+  # WASM (§6.3 "no docker needed"), so — like dual-dialect-appliers — this stage needs no Postgres
+  # container and cannot collide with another worktree's database (T-14d). Every failure prints its
+  # reproducing seed (§3.7).
   chaos-harness:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "merge-gate placeholder — chaos scenarios land with task 26 (pnpm chaos)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm chaos
 
   # Stage 12 — device lane (EAS dev-client build + on-device smoke). PLACEHOLDER —
   # wired by task 27 (ai-docs/tasks/27-device-gates.md); fingerprint-triggered on native change.

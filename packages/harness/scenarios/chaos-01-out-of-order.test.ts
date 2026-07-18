@@ -12,19 +12,21 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  activeVolumes,
   assertBothFoldPaths,
   assertConvergence,
-  CI_VOLUMES,
   resolveSeeds,
   withSeed,
 } from '../src/index.js';
 import { runConvergence } from '../src/convergence.js';
 
-const OPS_PER_DEVICE = CI_VOLUMES.outOfOrderOpsPerDevice; // 500 (§3.6)
+// CI scale = 500 ops/device (§3.6); nightly ×4 via CHAOS_SCALE (activeVolumes), never a hardcode.
+const OPS_PER_DEVICE = activeVolumes().outOfOrderOpsPerDevice;
 const DEVICE_COUNT = 3;
 // A wide shared pool: every note is still edited by multiple devices (same-entity contention), but
-// spreading ~1,275 edits across the pool keeps each entity's re-fold history short (04 §4.2).
-const SHARED_NOTES = 120;
+// spreading edits across the pool keeps each entity's re-fold history (and cost, 04 §4.2) bounded
+// at ~11 edits/note — and it scales WITH the volume so the nightly ×4 run stays tractable too.
+const SHARED_NOTES = Math.max(30, Math.round((OPS_PER_DEVICE * DEVICE_COUNT * 0.85) / 11));
 
 const emptyStatsBase = {
   unregistered: 0,
