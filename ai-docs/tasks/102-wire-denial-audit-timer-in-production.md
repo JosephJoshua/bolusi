@@ -1,6 +1,6 @@
 # TASK 102 — wire `denialAuditTimer` into the production mobile runtime so task 40's liveness bound is ACTIVE (it is currently INERT in production)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **MEDIUM** — task 40 built + tested + falsified the mechanism (a `RuntimeTimerPort`-bounded denial-audit emit so a hung append cannot wedge `execute()`), but it is **OPTIONAL and not passed in production**: `apps/mobile/src/bootstrap/runtime.ts` (~line 90) calls `createModuleRuntime` WITHOUT `denialAuditTimer`, so the shipping app still runs the pre-task-40 UNBOUNDED await. **Until this lands, the wedge task 40 fixed is still live on the device.** "Typed and compiling is not running on the target" (D17 lesson).
 **Depends on:** 40
 **Blocks:** — (completes task 40)
