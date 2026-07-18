@@ -3,6 +3,8 @@
 **Priority:** LOW (fails closed; not a bypass. Filed because the wedge-able path is the attacker-reachable one.)
 **Depends on:** 10
 
+> **PROGRESS (2026-07-18):** the core mechanism is MERGED (`@bolusi/core` `RuntimeTimerPort`-bounded denial-audit emit + falsified: bypass the bound → the bounded test fails cleanly in ~79ms, terminates not hangs). But it is **INERT in production** — `apps/mobile/src/bootstrap/runtime.ts` does not yet pass `denialAuditTimer`, so the shipping app is still wedgeable. **Task 40 stays in-progress; it completes when [[102-wire-denial-audit-timer-in-production]] wires + falsifies the production opt-in.** Do not mark 40 done on the library merge alone (rev-40's explicit finding).
+
 ## Goal
 
 Put a timeout on the denial-audit emit so a never-settling op-append cannot wedge `execute()`.
