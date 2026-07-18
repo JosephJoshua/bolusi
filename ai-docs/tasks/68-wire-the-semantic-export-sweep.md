@@ -1,6 +1,6 @@
 # TASK 68 — wire the semantic unused-export sweep (`knip`) as a pinned dep + CI gate; task 60 proved the config, nothing runs it
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — the sweep exists and is proven (`knip.json` is in the repo, with controls). What is missing is a dependency, a script, and a gate. Today the config is a document, not a mechanism.
 **Depends on:** 60 (which produced and falsified the config)
 **Blocks:** —
