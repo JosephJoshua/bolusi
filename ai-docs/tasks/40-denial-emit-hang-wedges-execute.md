@@ -1,5 +1,5 @@
 # TASK 40 — a hanging denial-audit emit wedges `execute()` forever (liveness, not authz)
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW (fails closed; not a bypass. Filed because the wedge-able path is the attacker-reachable one.)
 **Depends on:** 10
 
