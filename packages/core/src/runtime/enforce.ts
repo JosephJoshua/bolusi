@@ -110,4 +110,55 @@ export class PermissionEnforcementPoint {
       `${identity.userId} lacks ${permissionId} for ${surface} ${target} (02-permissions §4)`,
     );
   }
+
+  /**
+   * Record + throw a **handler-declared** §5.4 restriction denial (02 §7 amended "Emitted by").
+   *
+   * Unlike `requirePermission`, this does NOT consult the evaluator: a §5.4 targeting /
+   * privileged-target restriction (an owner resetting the `main_owner`'s PIN, a PIN change targeting
+   * someone else) needs the directory and is decided INSIDE a handler, so the decision is already
+   * made by the caller. This method's only job is to make that denial AUDITED the same way an
+   * evaluator denial is — through the SAME throttled emitter, so `auth.permission_denied` stays one
+   * emission path and one §7 throttle (CLAUDE.md §2.8), never a second, unthrottled channel.
+   *
+   * SAME ORDER, SAME REASONS AS `requirePermission` (task 10, reviewed and load-bearing): the emit
+   * is awaited BEFORE the throw so a denial is recorded even when the caller swallows the error, and
+   * the throw is NOT conditional on the emission succeeding — the `catch` wraps the AUDIT, not the
+   * DECISION. A restriction denial that was already decided is not un-decided because its audit
+   * record failed to append; that is exactly where fail-closed would go to die.
+   *
+   * @throws {DomainError} always `PERMISSION_DENIED`, reason `restriction_violated`.
+   */
+  async denyRestriction(
+    identity: CommandIdentity,
+    permissionId: string,
+    target: string,
+    surface: DenialSurface,
+    invocation: InvocationMeta,
+    detail: string,
+  ): Promise<never> {
+    try {
+      await this.#denialEmitter.record({
+        userId: identity.userId,
+        permissionId,
+        surface,
+        target,
+        reason: 'restriction_violated',
+        // The EVALUATION scope (§7) — distinct from the envelope's storeId, mirrored from an
+        // evaluator denial so the two denial classes project identically.
+        scopeStoreId: identity.storeId,
+        source: invocation.source,
+        agentInitiated: invocation.agentInitiated,
+        agentConversationId: invocation.agentConversationId,
+      });
+    } catch {
+      // Swallow — see the method doc: the deny is not conditional on the audit (task 10).
+    }
+
+    throw new DomainError(
+      'PERMISSION_DENIED',
+      { permissionId, target, surface, reason: 'restriction_violated' },
+      detail,
+    );
+  }
 }

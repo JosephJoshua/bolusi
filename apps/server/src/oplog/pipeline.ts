@@ -93,6 +93,17 @@ export async function processPushBatch(
   const surfacedOut: SurfacedConflict[] = [];
 
   const result = await deps.forTenant(identity.tenantId, async (db) => {
+    // Take the per-tenant counter lock FIRST — the serialisation point for every push in this
+    // tenant (10-db §3, server-seq.ts). It MUST precede the chain-head read below, because the
+    // head that feeds `classifyChain` is `devices.last_seq/last_hash`: read it BEFORE the lock and
+    // two concurrent same-device pushes both observe the same stale head, both pass the chain
+    // check, and the second insert only fails on the UNIQUE(device_id, seq) backstop instead of a
+    // clean CHAIN_CONFLICT. Under the lock, the second push blocks here, then reads the first's
+    // committed head and rejects cleanly. This is what makes "locked at transaction start" in
+    // server-seq.ts and 10-db §3 literally true (task 41). The UNIQUE constraint stays as defence
+    // in depth — the reorder changes which mechanism catches the race, never whether it is caught.
+    await lockTenantCounter(db, identity.tenantId);
+
     const device = await loadDevice(db, identity.deviceId);
     if (device === undefined) {
       // The bearer-auth layer (task 16) guarantees an enrolled device before we get here; an
@@ -112,8 +123,6 @@ export async function processPushBatch(
         })),
       };
     }
-
-    await lockTenantCounter(db, identity.tenantId);
 
     // The projection engine for this transaction (04 §4). It folds each accepted op into the
     // server read models through `db`, so the fold commits or rolls back WITH the op insert

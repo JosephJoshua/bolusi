@@ -8,7 +8,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { DENIAL_THROTTLE_WINDOW_MS, isPermissionDeniedPayload } from '../../src/index.js';
+import {
+  DENIAL_THROTTLE_WINDOW_MS,
+  DomainError,
+  isPermissionDeniedPayload,
+} from '../../src/index.js';
 
 import {
   expectDomainError,
@@ -587,5 +591,85 @@ describe('ctx.requirePermission — the handler-facing second check (04 §5.2)',
     ).resolves.toBeDefined();
     expect(businessOps(fixture)).toHaveLength(1);
     expect(denials(fixture)).toEqual([]);
+  });
+});
+
+describe('handler-declared restriction denials are audited (02 §7 amended; §5.4)', () => {
+  // A §5.4 targeting/privileged-target restriction is decided by the handler (it needs the
+  // directory), NOT the evaluator — so it cannot be emitted at step 2. The handler is PURE and
+  // cannot emit either; it DECLARES the denial by throwing `restriction_violated`, and the runtime
+  // EMITS the op through the SAME enforcement point an evaluator denial uses. Without this, a
+  // `restriction_violated` denial is invisible in the FR-1045 audit — the class task 44 closes.
+  const declareRestriction = (): void => {
+    throw new DomainError(
+      'PERMISSION_DENIED',
+      { target: 'createNote', reason: 'restriction_violated' },
+      'handler-declared §5.4 restriction',
+    );
+  };
+
+  it('a granted command whose handler DECLARES a restriction is denied AND emits one denial op', async () => {
+    const fixture = await ready(30);
+    const command = makeCommandSpy(fixture.log, { onHandler: declareRestriction });
+
+    const error = await fixture.runtime
+      .execute(command, { title: 't', body: 'b' }, fixture.runtime.createContext(fixture.ownerId))
+      .catch((e: unknown) => e);
+
+    const denied = expectDomainError(error, 'PERMISSION_DENIED');
+    expect(denied.details, 'the reason survives onto the thrown error').toMatchObject({
+      reason: 'restriction_violated',
+    });
+    expect(businessOps(fixture), 'a declined command appends no business op').toEqual([]);
+    const ops = denials(fixture);
+    expect(ops, 'exactly one denial op — the WHOLE set (T-14)').toHaveLength(1);
+    expect(isPermissionDeniedPayload(ops[0]!.payload)).toBe(true);
+    expect(ops[0]!.payload).toMatchObject({
+      permissionId: 'notes.create', // the command's declared permission
+      surface: 'command',
+      target: 'createNote',
+      reason: 'restriction_violated',
+      suppressedRepeats: 0,
+    });
+    expect(ops[0]!.userId, 'attributed to the denied actor').toBe(fixture.ownerId);
+    expect(ops[0]!.entityType).toBe('permission_denial');
+  });
+
+  it('POSITIVE CONTROL — the same command WITHOUT the restriction appends and emits no denial (T-14b)', async () => {
+    const fixture = await ready(31);
+    const command = makeCommandSpy(fixture.log); // handler does not declare a restriction
+
+    await expect(
+      fixture.runtime.execute(
+        command,
+        { title: 't', body: 'b' },
+        fixture.runtime.createContext(fixture.ownerId),
+      ),
+    ).resolves.toBeDefined();
+    expect(businessOps(fixture)).toHaveLength(1);
+    expect(denials(fixture), 'no restriction, no denial').toEqual([]);
+  });
+
+  it('the deny survives a FAILED audit append — a broken log must not authorize (task 10 ordering)', async () => {
+    // The catch wraps the AUDIT, not the DECISION: if the denial op cannot be appended, the command
+    // is STILL denied. A `catch` around a security decision is where fail-closed goes to die.
+    let broken = false;
+    const fixture = await ready(32, {
+      insertFault: () => (broken ? new Error('disk full') : null),
+    });
+    const command = makeCommandSpy(fixture.log, { onHandler: declareRestriction });
+    const ctx = fixture.runtime.createContext(fixture.ownerId);
+    broken = true; // arm the fault only after enrollment
+
+    const error = await fixture.runtime
+      .execute(command, { title: 't', body: 'b' }, ctx)
+      .catch((e: unknown) => e);
+
+    // Denied regardless — the failed emit is swallowed, the throw is unconditional.
+    const denied = expectDomainError(error, 'PERMISSION_DENIED');
+    expect(denied.details).toMatchObject({ reason: 'restriction_violated' });
+    // The audit append failed, so no denial op landed — proving the deny is INDEPENDENT of it.
+    expect(denials(fixture), 'the append failed; the deny did not').toEqual([]);
+    expect(businessOps(fixture)).toEqual([]);
   });
 });
