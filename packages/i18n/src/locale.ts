@@ -1,16 +1,18 @@
-// Locale model (07-i18n §1). Adding a locale is a change to that doc first, then this file.
+// Locale model (07-i18n §1). The vocabulary itself — Locale, LOCALES, DEFAULT_LOCALE,
+// SELECTABLE_LOCALES, isLocale — lives in @bolusi/schemas, the zod-only platform-free package that
+// @bolusi/core ALSO imports (the setLocale / user_locale_changed enums), so the in-app toggle and the
+// op payload cannot drift (CLAUDE.md §2.8; task 77 — it was two hardcoded copies). This file
+// re-exports that vocabulary and keeps the Intl-tag mapping + i18next wiring, which are i18n's own.
+// Adding a locale is a change to 07-i18n §1 first, then @bolusi/schemas' locale.ts.
+export {
+  type Locale,
+  LOCALES,
+  DEFAULT_LOCALE,
+  SELECTABLE_LOCALES,
+  isLocale,
+} from '@bolusi/schemas';
 
-/** BCP 47 primary language subtags — never a region tag; region is a formatting concern (§5). */
-export type Locale = 'id' | 'en' | 'zh';
-
-/** `zh` is scaffolded (type + fallback chain) but has no catalog and is not selectable in v0. */
-export const LOCALES: readonly Locale[] = ['id', 'en', 'zh'];
-
-/** Source language, default, and the tail of every fallback chain (§1, §6). */
-export const DEFAULT_LOCALE: Locale = 'id';
-
-/** Offered by the in-app toggle in v0 (§1). `zh` joins in V2. */
-export const SELECTABLE_LOCALES: readonly Locale[] = ['id', 'en'];
+import type { Locale } from '@bolusi/schemas';
 
 /**
  * Intl locale tag per locale (§1, §5.2). `en` maps to `en-GB` deliberately: dates are day-first
@@ -21,7 +23,3 @@ export const INTL_LOCALE_TAG: Record<Locale, string> = {
   en: 'en-GB',
   zh: 'zh-CN',
 };
-
-export function isLocale(value: string): value is Locale {
-  return (LOCALES as readonly string[]).includes(value);
-}

@@ -488,6 +488,9 @@ importers:
 
   packages/i18n:
     dependencies:
+      '@bolusi/schemas':
+        specifier: workspace:*
+        version: link:../schemas
       i18next:
         specifier: 'catalog:'
         version: 26.3.6(typescript@5.9.3)

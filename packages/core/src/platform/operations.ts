@@ -12,10 +12,11 @@
 // `platform.user_locale_changed` omits it for a different reason 01 §6 states outright: "No
 // conflict declaration (canonical-order LWW)" — two devices setting a locale is not a collision a
 // human should ever hear about; the later one simply wins.
+import { SELECTABLE_LOCALES } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import type { OperationDeclaration } from '../module/define-module.js';
-import { LOCALE_VALUES, PLATFORM_OP } from './constants.js';
+import { PLATFORM_OP } from './constants.js';
 import { conflictAcknowledgedApplier, conflictDetectedApplier } from './projections/conflicts.js';
 import { userLocaleChangedApplier } from './projections/user-prefs.js';
 import type { PlatformDatabase } from './schema.js';
@@ -42,8 +43,12 @@ export const conflictAcknowledgedPayload = z
   })
   .strict();
 
-/** `platform.user_locale_changed` payload (07-i18n §1.1: `z.object({ locale }).strict()`). */
-export const userLocaleChangedPayload = z.object({ locale: z.enum(LOCALE_VALUES) }).strict();
+/**
+ * `platform.user_locale_changed` payload (07-i18n §1.1: `z.object({ locale }).strict()`).
+ * `z.enum(SELECTABLE_LOCALES)` — the same list the in-app toggle offers (@bolusi/i18n), so the op can
+ * never carry a locale no toggle offers (CLAUDE.md §2.8; task 77).
+ */
+export const userLocaleChangedPayload = z.object({ locale: z.enum(SELECTABLE_LOCALES) }).strict();
 
 /** The three platform op declarations (04 §3), keyed by op type. */
 export const platformOperations: Readonly<Record<string, OperationDeclaration<PlatformDatabase>>> =

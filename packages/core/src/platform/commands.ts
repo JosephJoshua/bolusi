@@ -1,10 +1,11 @@
 // The `platform` module's commands (04 §5): `acknowledgeConflict`, `setLocale`.
+import { SELECTABLE_LOCALES } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { DomainError } from '../errors/domain-error.js';
 import type { CommandContext } from '../runtime/ctx.js';
 import type { CommandHandlerResult } from '../runtime/execute.js';
-import { LOCALE_VALUES, PLATFORM_ENTITY, PLATFORM_OP } from './constants.js';
+import { PLATFORM_ENTITY, PLATFORM_OP } from './constants.js';
 import { listConflictsQuery } from './queries.js';
 
 // ── acknowledgeConflict ────────────────────────────────────────────────────────────────────────
@@ -88,7 +89,9 @@ export async function acknowledgeConflictHandler(
 
 // ── setLocale ──────────────────────────────────────────────────────────────────────────────────
 
-export const setLocaleInput = z.object({ locale: z.enum(LOCALE_VALUES) }).strict();
+// `z.enum(SELECTABLE_LOCALES)` — the toggle's own list (07-i18n §1.1). One source, so the input can
+// never accept a locale the toggle does not offer, nor reject one it does (CLAUDE.md §2.8; task 77).
+export const setLocaleInput = z.object({ locale: z.enum(SELECTABLE_LOCALES) }).strict();
 
 export type SetLocaleInput = z.infer<typeof setLocaleInput>;
 
