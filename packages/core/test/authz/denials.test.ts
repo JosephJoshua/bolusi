@@ -8,7 +8,7 @@ import {
   assemblePermissionRegistry,
   DenialEmitter,
   DENIAL_THROTTLE_WINDOW_MS,
-  isPermissionDeniedPayload,
+  permissionDeniedPayload,
   PermissionEvaluator,
   PERMISSION_DENIED_OP_TYPE,
   PERMISSION_DENIAL_ENTITY_TYPE,
@@ -105,7 +105,7 @@ describe('denial payload (§7)', () => {
     await emitter.record({ ...BASE, surface: 'query', target: 'listUsers', scopeStoreId: null });
     expect(port.emissions).toHaveLength(2); // denominator before the loop (T-14)
     for (const { payload } of port.emissions) {
-      expect(isPermissionDeniedPayload(payload)).toBe(true);
+      expect(permissionDeniedPayload.safeParse(payload).success).toBe(true);
     }
   });
 
@@ -118,22 +118,69 @@ describe('denial payload (§7)', () => {
       scopeStoreId: null,
       suppressedRepeats: 0,
     };
-    expect(isPermissionDeniedPayload(complete)).toBe(true);
+    expect(permissionDeniedPayload.safeParse(complete).success).toBe(true);
 
     const keys = Object.keys(complete);
     expect(keys).toHaveLength(6); // the class's denominator
     for (const key of keys) {
       const partial: Record<string, unknown> = { ...complete };
       delete partial[key];
-      expect(isPermissionDeniedPayload(partial), `missing ${key} must be rejected`).toBe(false);
+      expect(
+        permissionDeniedPayload.safeParse(partial).success,
+        `missing ${key} must be rejected`,
+      ).toBe(false);
     }
     // And rejects the bad-value class.
-    expect(isPermissionDeniedPayload({ ...complete, surface: 'screen' })).toBe(false);
-    expect(isPermissionDeniedPayload({ ...complete, suppressedRepeats: -1 })).toBe(false);
-    expect(isPermissionDeniedPayload({ ...complete, suppressedRepeats: 1.5 })).toBe(false);
-    expect(isPermissionDeniedPayload({ ...complete, scopeStoreId: 42 })).toBe(false);
-    expect(isPermissionDeniedPayload({ ...complete, extra: true })).toBe(false);
-    expect(isPermissionDeniedPayload(null)).toBe(false);
+    expect(permissionDeniedPayload.safeParse({ ...complete, surface: 'screen' }).success).toBe(
+      false,
+    );
+    expect(permissionDeniedPayload.safeParse({ ...complete, suppressedRepeats: -1 }).success).toBe(
+      false,
+    );
+    expect(permissionDeniedPayload.safeParse({ ...complete, suppressedRepeats: 1.5 }).success).toBe(
+      false,
+    );
+    expect(permissionDeniedPayload.safeParse({ ...complete, scopeStoreId: 42 }).success).toBe(
+      false,
+    );
+    expect(permissionDeniedPayload.safeParse({ ...complete, extra: true }).success).toBe(false);
+    expect(permissionDeniedPayload.safeParse(null).success).toBe(false);
+  });
+
+  test('STRENGTHENING (task 100): Zod rejects the two inputs the deleted hand-rolled predicate ACCEPTED', () => {
+    // Task 45 proved empirically that the deleted `isPermissionDeniedPayload` and this Zod schema
+    // DISAGREE on exactly two inputs. The predicate checked only `typeof permissionId === 'string'`
+    // and `typeof reason === 'string'`, so it ACCEPTED both below; `permissionDeniedPayload` has
+    // `permissionId: z.string().min(1)` and `reason: z.enum(DENIAL_REASONS)`, so it REJECTS them —
+    // the whole behavior delta of the swap (02-permissions §7: a permission id is never empty; the
+    // reason is a closed DenialReason set). This test is the swap's falsification (CLAUDE.md §2.11).
+    const valid: PermissionDeniedPayload = {
+      permissionId: 'auth.user_create',
+      surface: 'command',
+      target: 'createUser',
+      reason: 'not_granted',
+      scopeStoreId: STORE_A,
+      suppressedRepeats: 0,
+    };
+    // The otherwise-identical valid payload still passes — the swap did not over-tighten.
+    expect(permissionDeniedPayload.safeParse(valid).success).toBe(true);
+
+    // The two divergent inputs: accepted by the deleted predicate, now rejected by Zod.
+    expect(
+      permissionDeniedPayload.safeParse({ ...valid, permissionId: '' }).success,
+      "permissionId: '' — was accepted by the deleted predicate, now rejected",
+    ).toBe(false);
+    expect(
+      permissionDeniedPayload.safeParse({ ...valid, reason: 'made_up_reason' }).success,
+      "reason: 'made_up_reason' — was accepted by the deleted predicate, now rejected",
+    ).toBe(false);
+
+    // ...and it is EXACTLY those two fields: restore each to a legal value and the payload parses
+    // again, so the rejections above are the min(1)/enum, not some unrelated failure.
+    expect(permissionDeniedPayload.safeParse({ ...valid, permissionId: 'a' }).success).toBe(true);
+    expect(permissionDeniedPayload.safeParse({ ...valid, reason: 'missing_scope' }).success).toBe(
+      true,
+    );
   });
 
   test('source / agentInitiated mirror the denied attempt — a denied agent attempt is visible as one', async () => {

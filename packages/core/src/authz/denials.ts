@@ -175,36 +175,9 @@ function throttleKey(userId: string, permissionId: string, target: string): stri
   return `${userId} ${permissionId} ${target}`;
 }
 
-/**
- * Structural validation of a §7 payload: every key present, correct type, `suppressedRepeats` a
- * non-negative integer.
- *
- * `@bolusi/schemas` does NOT yet carry the `auth.permission_denied` Zod payload (02-permissions §7
- * owns the shape; the auth op registry is api/02-auth §6.2). This task was scoped not to touch
- * `packages/schemas`, so the shape is asserted here and the Zod schema remains a follow-up for the
- * task that lands the auth op registry — at which point THIS function should be deleted in favour
- * of it, not kept alongside as a second definition (CLAUDE.md §2.8).
- */
-export function isPermissionDeniedPayload(value: unknown): value is PermissionDeniedPayload {
-  if (typeof value !== 'object' || value === null) return false;
-  const payload = value as Record<string, unknown>;
-  const keys = Object.keys(payload).sort();
-  const expected = [
-    'permissionId',
-    'reason',
-    'scopeStoreId',
-    'suppressedRepeats',
-    'surface',
-    'target',
-  ];
-  if (keys.length !== expected.length) return false;
-  if (!keys.every((key, index) => key === expected[index])) return false;
-  if (typeof payload.permissionId !== 'string') return false;
-  if (payload.surface !== 'command' && payload.surface !== 'query') return false;
-  if (typeof payload.target !== 'string') return false;
-  if (typeof payload.reason !== 'string') return false;
-  if (payload.scopeStoreId !== null && typeof payload.scopeStoreId !== 'string') return false;
-  if (typeof payload.suppressedRepeats !== 'number') return false;
-  if (!Number.isInteger(payload.suppressedRepeats) || payload.suppressedRepeats < 0) return false;
-  return true;
-}
+// The §7 payload's runtime validator is the Zod `permissionDeniedPayload` (auth/projections/
+// permission-denials.ts) — already the authoritative validator on the real op path (auth/module.ts,
+// the op registry). A second hand-rolled predicate lived here while no task owned that registry;
+// task 43 landed the Zod schema, so it was deleted (task 100, CLAUDE.md §2.8). It cannot be imported
+// here: authz must not depend on auth (that inverts auth → authz into a cycle), so the two test
+// consumers call `permissionDeniedPayload.safeParse(x).success` directly.

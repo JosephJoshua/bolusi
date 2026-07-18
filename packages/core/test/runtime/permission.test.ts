@@ -11,7 +11,7 @@ import type { SignedOperation } from '@bolusi/schemas';
 import {
   DENIAL_THROTTLE_WINDOW_MS,
   DomainError,
-  isPermissionDeniedPayload,
+  permissionDeniedPayload,
 } from '../../src/index.js';
 
 import {
@@ -365,9 +365,9 @@ describe('the permission-denied path (02 §4, §7)', () => {
       .catch(() => undefined);
 
     const op = denials(fixture)[0]!;
-    // The payload shape is task 09's (`isPermissionDeniedPayload` is its own validator) — this
-    // asserts the WIRING, not the evaluation.
-    expect(isPermissionDeniedPayload(op.payload)).toBe(true);
+    // The payload shape is validated by the Zod `permissionDeniedPayload` (the auth op registry's
+    // schema, on the real op path) — this asserts the WIRING, not the evaluation.
+    expect(permissionDeniedPayload.safeParse(op.payload).success).toBe(true);
     expect(op.payload).toMatchObject({
       permissionId: 'auth.role_manage',
       surface: 'command',
@@ -648,7 +648,7 @@ describe('handler-declared restriction denials are audited (02 §7 amended; §5.
     expect(businessOps(fixture), 'a declined command appends no business op').toEqual([]);
     const ops = denials(fixture);
     expect(ops, 'exactly one denial op — the WHOLE set (T-14)').toHaveLength(1);
-    expect(isPermissionDeniedPayload(ops[0]!.payload)).toBe(true);
+    expect(permissionDeniedPayload.safeParse(ops[0]!.payload).success).toBe(true);
     expect(ops[0]!.payload).toMatchObject({
       permissionId: 'notes.create', // the command's declared permission
       surface: 'command',
