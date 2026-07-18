@@ -155,6 +155,43 @@ tester.run('boundaries', rule, {
       code: `import { PGlite } from '@electric-sql/pglite';`,
       filename: '/repo/packages/modules/test/support/engines.ts',
     },
+    // ── task 95: SUBPATH imports resolve to the driver's package root, so a subpath is treated
+    // exactly as the bare specifier. VALID side — a driver subpath stays clean wherever the bare
+    // specifier would: a testOnly owner's TEST files, or an unrestricted owner's shipping source.
+    // These prove the generalized packageRoot() lookup (which replaced op-sqlite's per-driver
+    // special case) did NOT over-block. (Denominator: 4 drivers × {bare, subpath} × {shipping,
+    // test} — these are the {subpath, test/owner-clean} rows; the {bare, *} rows are above.)
+    //
+    // pglite/worker (the real DB surface — PGliteWorker) from core's TEST lane: clean (core is a
+    // testOnly owner; test files are permitted). Mirror of the pinned invalid case below.
+    {
+      code: `import { PGliteWorker } from '@electric-sql/pglite/worker';`,
+      filename: '/repo/packages/core/test/module/applier-conformance.test.ts',
+    },
+    // ...and pglite/worker in the harness's OWN shipping source stays CLEAN — the harness is an
+    // UNRESTRICTED owner (task 26 added it to the allowlist; task 42 kept it). The subpath
+    // normalization must not regress that exemption.
+    {
+      code: `import { PGliteWorker } from '@electric-sql/pglite/worker';`,
+      filename: '/repo/packages/harness/src/device.ts',
+    },
+    // better-sqlite3 subpath in a db-client TEST file (its CI conformance adapter): clean.
+    {
+      code: `import Database from 'better-sqlite3/lib/database.js';`,
+      filename: '/repo/packages/db-client/test/better-sqlite3-adapter.ts',
+    },
+    // pg subpath inside db-server (its unrestricted owner) shipping source: clean.
+    {
+      code: `import Client from 'pg/lib/client.js';`,
+      filename: '/repo/packages/db-server/src/pool.ts',
+    },
+    // op-sqlite subpath inside db-client (its unrestricted owner) shipping source: clean — the
+    // generalized packageRoot() keeps @op-engineering/op-sqlite/* resolving to the driver, as the
+    // deleted special case did.
+    {
+      code: `import { open } from '@op-engineering/op-sqlite/sync';`,
+      filename: '/repo/packages/db-client/src/connection.ts',
+    },
     // db-client test/tooling files may use Node builtins; only its shipping source may not
     {
       code: `import { mkdtempSync } from 'node:fs';`,
@@ -373,6 +410,52 @@ tester.run('boundaries', rule, {
     {
       code: `const mod = await import('@electric-sql/pglite');`,
       filename: '/repo/packages/schemas/src/envelope.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // ── task 95: SUBPATH imports must be caught exactly as the bare specifier. INVALID side — a
+    // driver subpath from a shipping non-owner path goes RED with the SAME message the bare
+    // specifier produces from that same path. Before the packageRoot() normalization these three
+    // (pglite, better-sqlite3, pg) escaped uncaught — op-sqlite was already immune via its special
+    // case — which is the whole finding (rev-42). (Denominator: 4 drivers × {bare, subpath} ×
+    // {shipping, test} — these are the {subpath, shipping} rows; {subpath, test/owner-clean} is the
+    // valid block above, {bare, *} are the other driver fixtures.)
+    //
+    // THE LOAD-BEARING CASE. @electric-sql/pglite/worker exports PGliteWorker — a real SQL-running
+    // DB surface — and reached shipping core uncaught. Pinned to the SAME message the bare pglite
+    // import produces from this exact file (dbDriverTestOnly: core is a testOnly owner, shipping
+    // src is barred).
+    {
+      code: `import { PGliteWorker } from '@electric-sql/pglite/worker';`,
+      filename: '/repo/packages/core/src/projection/engine.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    // ...and pglite/live from a true NON-owner (schemas) → the ownerless driver lock, same message
+    // as the bare dynamic-import fixture above.
+    {
+      code: `import x from '@electric-sql/pglite/live';`,
+      filename: '/repo/packages/schemas/src/envelope.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // better-sqlite3 subpath in db-client SHIPPING source → the test-only lock, same as bare.
+    {
+      code: `import Database from 'better-sqlite3/lib/database.js';`,
+      filename: '/repo/packages/db-client/src/adapters/better-sqlite3.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    // pg subpath outside db-server → the driver lock, same as bare `pg`. (Also closes a second
+    // hole: the platform-free prong's /^pg$/ never matched `pg/*`, so before task 95 a pg subpath
+    // escaped BOTH locks.)
+    {
+      code: `import Client from 'pg/lib/client.js';`,
+      filename: '/repo/apps/server/src/db.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // op-sqlite subpath outside db-client → the driver lock. Regression guard for the DELETED
+    // special case: packageRoot() must keep @op-engineering/op-sqlite/* locked (it did via
+    // startsWith before; now via the general mechanism).
+    {
+      code: `import { open } from '@op-engineering/op-sqlite/sync';`,
+      filename: '/repo/packages/core/src/oplog/append.ts',
       errors: [{ messageId: 'dbDriver' }],
     },
     // op-sqlite outside db-client, from the app that actually ships it (primary fixture)
