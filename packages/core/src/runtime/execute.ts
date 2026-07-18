@@ -69,10 +69,15 @@ import type {
   ClockPort,
   IdSource,
   LocationPort,
+  RuntimeTimerPort,
   SigningKeyPort,
   SyncSchedulerPort,
 } from './ports.js';
-import { PermissionEnforcementPoint } from './enforce.js';
+import {
+  DENIAL_AUDIT_EMIT_TIMEOUT_MS,
+  PermissionEnforcementPoint,
+  type DenialAuditBound,
+} from './enforce.js';
 import {
   assertSanctionedEmission,
   type SanctionedRuntimeEmissionType,
@@ -190,6 +195,22 @@ export interface CommandRuntimeOptions {
   readonly syncScheduler: SyncSchedulerPort;
   /** Overrides the §7 denial-throttle window. For the suite's boundary cases only. */
   readonly denialThrottleWindowMs?: number;
+  /**
+   * Bounds the denial-audit emit so a never-settling op-append cannot wedge `execute()` on the deny
+   * path (task 40, liveness). The app binds its `RuntimeTimerPort` (apps/mobile `systemTimer`); a test
+   * binds a controllable one.
+   *
+   * OPTIONAL and OFF when absent — a caller that does not pass it keeps the pre-task-40 unbounded await,
+   * so out-of-tree composition roots are unaffected until they wire it (activation is a one-line add at
+   * the `createModuleRuntime` call site). The deny itself is NEVER conditional on this: a bounded-out
+   * audit is treated like a failed one and the denial is thrown regardless (runtime/enforce.ts).
+   */
+  readonly denialAuditTimer?: RuntimeTimerPort;
+  /**
+   * The task-40 bound in ms (default `DENIAL_AUDIT_EMIT_TIMEOUT_MS`). Only consulted when
+   * `denialAuditTimer` is set.
+   */
+  readonly denialAuditTimeoutMs?: number;
 }
 
 /**
@@ -265,7 +286,21 @@ export class CommandRuntime {
       },
     );
 
-    this.#enforcement = new PermissionEnforcementPoint(this.#evaluator, this.#denialEmitter);
+    // The task-40 liveness bound on the denial-audit emit, or null (unbounded) when no timer is
+    // wired — see `CommandRuntimeOptions.denialAuditTimer`.
+    const denialAuditBound: DenialAuditBound | null =
+      options.denialAuditTimer !== undefined
+        ? {
+            timer: options.denialAuditTimer,
+            timeoutMs: options.denialAuditTimeoutMs ?? DENIAL_AUDIT_EMIT_TIMEOUT_MS,
+          }
+        : null;
+
+    this.#enforcement = new PermissionEnforcementPoint(
+      this.#evaluator,
+      this.#denialEmitter,
+      denialAuditBound,
+    );
   }
 
   /** The denial emitter's throttle state — for diagnostics and for the suite's denominator (T-14). */

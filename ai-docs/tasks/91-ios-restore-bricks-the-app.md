@@ -1,6 +1,6 @@
 # TASK 91 — iOS restore-to-new-hardware permanently bricks the app: restored DB + non-restored key → wrong-key open → `boot()` renders nothing forever
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — a permanent, unrecoverable brick on the target's MEDIAN device event.** The customer is a phone-repair franchise; restoring/replacing a phone is what they do for a living. iOS-triggered, but the fix is platform-neutral defence.
 **Depends on:** — (the fix lives in the bootstrap error surface; overlaps task 27a's device bootstrap)
 **Blocks:** an iOS launch
