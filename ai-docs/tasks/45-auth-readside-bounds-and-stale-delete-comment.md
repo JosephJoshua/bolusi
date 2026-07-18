@@ -1,5 +1,5 @@
 # TASK 45 — `verifyPin` never bounds-checks the verifier it reads; task 10's "DELETE WHEN TASK 14 LANDS" is now false
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW (F2 is defence-in-depth only; F5 is a comment that will mislead the next agent). From review-04's task 14 review.
 **Depends on:** 14
 
