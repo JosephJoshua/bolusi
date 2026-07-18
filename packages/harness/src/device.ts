@@ -12,12 +12,15 @@ import {
   registerModules,
   type AnyModuleDefinition,
   type ApplyMode,
+  type ApplyOutcome,
   type ClockPort,
   type CommandContext,
   type CommandDefinition,
   type LocationPort,
   type ModuleRuntime,
   type ProjectionEngine,
+  type RebuildOutcome,
+  type RunRebuildOptions,
   type SigningKeyPort,
   type SyncSchedulerPort,
 } from '@bolusi/core';
@@ -184,6 +187,34 @@ export class VirtualDevice {
     await insertPulledOp(this.handle.db, op, this.#serverSeqSeen, this.clock.now());
     const outcome = await this.engine.applyPulledOp(op);
     return outcome.mode;
+  }
+
+  /**
+   * Run `fn` in ONE transaction on this device's SINGLE connection (§2.3) — the seam the real
+   * `runPullPhase` requires (its whole contract is "the batch is one transaction", sync/pull.ts).
+   * Driver-level BEGIN/COMMIT so the engine's `db`, the pull phase's `db`, and this transaction all
+   * share the one connection, exactly as the production wiring and core's own sync harness do.
+   */
+  async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    await this.handle.driver.begin();
+    try {
+      const result = await fn();
+      await this.handle.driver.commit();
+      return result;
+    } catch (error) {
+      await this.handle.driver.rollback();
+      throw error;
+    }
+  }
+
+  /** The engine's pull-apply seam (04 §4.2 head/re-fold), for the REAL `runPullPhase` (CHAOS-02/12). */
+  pullApply(op: SignedOperation): Promise<ApplyOutcome> {
+    return this.engine.applyPulledOp(op);
+  }
+
+  /** Run (or resume) a full projection rebuild via the REAL engine (04 §4.3) — CHAOS-08 drives this. */
+  rebuild(moduleId: string, options?: RunRebuildOptions): Promise<RebuildOutcome> {
+    return this.engine.rebuild(moduleId, options);
   }
 
   /** Every op this device holds (its own authored ops + any applied foreign ops), wire shape. */
