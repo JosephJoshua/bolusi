@@ -48,6 +48,8 @@ vi.mock('expo-secure-store', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 
+import { listPermissionDenialsHandler, type ProjectionOperation } from '@bolusi/core';
+
 import { bootstrap } from '../src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
 import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
@@ -314,19 +316,34 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
     // T-14, and the reason this test is written this way: `registerModules([])` SUCCEEDS and returns
     // a registry that folds nothing and answers `undefined` to every lookup. A bootstrap looping
     // over it reports green having registered nothing. So assert the COUNT.
-    expect(CLIENT_MODULES).toHaveLength(2);
-    expect(app.registry.modules.map((m) => m.id)).toStrictEqual(['platform', 'notes']);
+    expect(CLIENT_MODULES).toHaveLength(3);
+    expect(app.registry.modules.map((m) => m.id)).toStrictEqual(['platform', 'notes', 'auth']);
 
     // Op types: the fold denominator. Zero here means the projection engine can apply nothing.
     expect(app.registry.operations.size).toBeGreaterThan(0);
     expect(app.registry.operations.types()).toContain('platform.user_locale_changed');
     // notes (task 25) is now registered — its op types fold on the client.
     expect(app.registry.operations.types()).toContain('notes.note_created');
+    // auth (task 97) is now registered — the device folds `auth.*` instead of dropping it as
+    // `unregistered` (task 43's f-1). This op type is what the falsification below drives.
+    expect(app.registry.operations.types()).toContain('auth.permission_denied');
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(7);
+    expect(app.registry.permissions.size).toBe(19);
     expect(app.registry.permissions.ids()).toStrictEqual([
+      'auth.audit_view',
+      'auth.device_enroll',
+      'auth.device_read',
+      'auth.device_revoke',
+      'auth.pin_change',
+      'auth.pin_unlock',
+      'auth.role_manage',
+      'auth.tenant_configure',
+      'auth.user_create',
+      'auth.user_deactivate',
+      'auth.user_edit',
+      'auth.user_reset_pin',
       'notes.archive',
       'notes.create',
       'notes.edit',
@@ -348,9 +365,94 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
     expect(applier).toBeDefined();
     // notes (task 25) is registered too — its create applier folds through THIS registry.
     expect(app.registry.projections.applierForType('notes.note_created')).toBeDefined();
+    // auth (task 97) is registered too — its denial applier folds through THIS registry.
+    expect(app.registry.projections.applierForType('auth.permission_denied')).toBeDefined();
     // The negative control (T-14b): a registry that answered a function for EVERY string would
     // satisfy the lines above while proving nothing about registration.
     expect(app.registry.projections.applierForType('nonexistent.never_registered')).toBeUndefined();
+    await app.close();
+  });
+});
+
+describe('auth.* ops FOLD on the device — the registration task 97 lit up (§2.11 handoff-ring)', () => {
+  // THE FALSIFICATION, end to end. The three auth projection tables ship in CLIENT_MIGRATIONS and
+  // task 43 registered `authModule` in SERVER_MODULES — but until this task the DEVICE list omitted
+  // it, so `app.engine` folded every `auth.*` op through its `unregistered` no-op (engine.ts) and the
+  // on-device audit/session projections stayed WRITE-ONLY. This drives a REAL denial op through the
+  // SAME append seam runtime.ts binds as `applyProjection` (`engine.asAppendSeam()` wraps exactly
+  // `applyAppendedOp`), then reads it back through the client `listPermissionDenials` query — the
+  // reader the FR-1045 audit trail is meant to be read from (02 §7). It is NOT a hand-INSERTed row
+  // (T-14b): the registered applier is what writes `auth_permission_denials`.
+  //
+  // Remove `authModule` from CLIENT_MODULES and BOTH halves go red: `applyAppendedOp` returns
+  // `{ module: null, mode: 'unregistered', writtenTables: [] }` having written nothing, and the query
+  // returns an empty page. Watched go red on 2026-07-18 (removed the line → module null / rows []),
+  // restored → green.
+  const TENANT = 'tenant-x';
+  const STORE = 'store-x';
+
+  /** A real `auth.permission_denied` op envelope (api/02-auth §6.2; payload shape 02 §7). */
+  function denialOp(): ProjectionOperation {
+    return {
+      id: 'op-denial-1',
+      tenantId: TENANT,
+      storeId: STORE,
+      userId: 'user-x',
+      deviceId: 'device-x',
+      seq: 1,
+      type: 'auth.permission_denied',
+      entityType: 'permission_denial',
+      entityId: 'denial-1',
+      schemaVersion: 1,
+      payload: {
+        permissionId: 'auth.tenant_configure',
+        surface: 'command',
+        target: 'auth.updateTenantConfig',
+        reason: 'not_granted',
+        scopeStoreId: null,
+        suppressedRepeats: 0,
+      } as ProjectionOperation['payload'],
+      timestamp: FIXED_NOW + 100,
+      location: null,
+      source: 'ui',
+      agentInitiated: false,
+      agentConversationId: null,
+      previousHash: '0'.repeat(64),
+      hash: 'op-denial-1'.padEnd(64, '0'),
+      signature: 'sig-op-denial-1',
+    };
+  }
+
+  test('a folded auth.permission_denied becomes readable via the client listPermissionDenials', async () => {
+    const app = await boot();
+
+    // Drive the DEVICE apply path — the exact seam runtime.ts binds as `applyProjection`.
+    const outcome = await app.engine.applyAppendedOp(denialOp());
+
+    // Registration is what makes this fold: an unregistered type is a `null`/`unregistered` no-op
+    // that writes nothing (engine.ts). `module === 'auth'` is the assertion that goes red when the
+    // CLIENT_MODULES line is removed — the whole point of this task.
+    expect(outcome.module).toBe('auth');
+    expect(outcome.mode).toBe('head');
+    expect(outcome.writtenTables).toContain('auth_permission_denials');
+
+    // Read it back through the query the audit trail is meant to be read from (02 §7 / FR-1045).
+    // Not a raw SELECT: the client reader is the surface that was write-only before this task.
+    const page = await listPermissionDenialsHandler(
+      { sort: 'timestampMs.desc', limit: 50 } as Parameters<typeof listPermissionDenialsHandler>[0],
+      {
+        db: app.db.db,
+        tenantId: TENANT,
+        storeId: STORE,
+        userId: 'user-x',
+        hasPermission: () => true,
+      } as unknown as Parameters<typeof listPermissionDenialsHandler>[1],
+    );
+
+    expect(page.rows).toHaveLength(1);
+    expect(page.rows[0]?.id).toBe('denial-1');
+    expect(page.rows[0]?.permissionId).toBe('auth.tenant_configure');
+    expect(page.rows[0]?.reason).toBe('not_granted');
     await app.close();
   });
 });
