@@ -9,6 +9,7 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
+import { makeRealtimeWebSocketServer } from './realtime/serve.js';
 
 const config = loadConfig();
 
@@ -24,6 +25,10 @@ function productionClientIp(c: Context<AppEnv>): string {
 
 const app = createApp({ clientIp: productionClientIp });
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+// The `ws` server for the GET /v1/realtime upgrade (api/00 §12.1). @hono/node-server owns the HTTP
+// `upgrade` handshake and links this `{ noServer: true }` server to the route's `upgradeWebSocket`.
+const websocket = { server: makeRealtimeWebSocketServer() };
+
+serve({ fetch: app.fetch, port: config.port, websocket }, (info) => {
   console.log(`@bolusi/server listening on :${info.port}`);
 });
