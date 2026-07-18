@@ -3,9 +3,16 @@
 // needs (CHAOS-01's arrival-order permutations the protocol itself cannot produce, §3.6).
 //
 // This owns NO protocol logic (T-7): the op is already a signed, chained `SignedOperation`; the
-// insert only writes the operation-log columns 10-db §9.2 declares, exactly as the production pull
-// path's `insertPulledOp` does (syncStatus 'synced', the assigned serverSeq). The row→wire mapper is
-// the inverse of that column list. Folding is the REAL engine (`applyPulledOp`), never re-done here.
+// insert only writes the operation-log columns 10-db §9.2 declares (syncStatus 'synced', the
+// assigned serverSeq), and the row→wire mapper is the inverse of that column list. Folding is the
+// REAL engine (`applyPulledOp`), never re-done here.
+//
+// ONE DELIBERATE DIVERGENCE FROM PRODUCTION `insertPulledOp` (packages/core/src/sync/pull.ts): it
+// stores `signed_core_jcs = signedCoreJcsOf(op, crypto)`; this stores `''`. The harness readback
+// (`readWireOps`) reconstructs the wire op from the plaintext columns and NEVER consumes
+// `signed_core_jcs`, so `''` is inert on every current path — but it is NOT production-parity. A
+// future CHAOS-06 / raw-wire consumer that needs the canonical JCS bytes must compute them (or set
+// this column via the real primitive), NOT trust a stored value here.
 import { CamelCasePlugin, Kysely, sql } from 'kysely';
 
 import {
@@ -124,7 +131,8 @@ export async function insertPulledOp(
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${op.location === null ? null : JSON.stringify(op.location)}, ${op.source},
       ${op.agentInitiated ? 1 : 0}, ${op.agentConversationId}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${''}, 'synced', ${serverSeq}, ${syncedAt}
+      ${op.signature}, ${/* signed_core_jcs — the deliberate non-parity '' from the file header */ ''},
+      'synced', ${serverSeq}, ${syncedAt}
     )
   `.execute(db);
 }

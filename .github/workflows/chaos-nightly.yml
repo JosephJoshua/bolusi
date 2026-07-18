@@ -1,8 +1,10 @@
 # Chaos harness — nightly (testing-guide §3.7). Beyond the per-PR merge gate (seeds 1–10, CI-scale
 # volumes in ci.yml stage 11), the nightly runs 100 PRNG-chosen seeds per scenario at ×4 volumes
-# (`pnpm chaos:nightly` → CHAOS_NIGHTLY=1 CHAOS_SCALE=4). The seed list is LOGGED at run start
-# (reporter.ts) so any nightly failure reproduces locally from its printed seed alone:
-#   CHAOS_SEEDS=<printed seed> pnpm chaos
+# (`pnpm chaos:nightly` → CHAOS_NIGHTLY=1 CHAOS_SCALE=4). The seed list AND the scale are LOGGED at
+# run start (reporter.ts), and each failing test prints its verbatim reproduction command — which
+# MUST carry the scale, because CHAOS_SCALE changes the concrete op sequence (not just the volume),
+# so scale 1 would reproduce a DIFFERENT run:
+#   CHAOS_SEEDS=<printed seed> CHAOS_SCALE=<printed scale> pnpm chaos
 #
 # PGlite is in-process WASM — no Postgres container, no cross-worktree collision (T-14d). The
 # real-Postgres L3 job the §3.7 nightly also names lives in the RLS lane (test:rls), not here.

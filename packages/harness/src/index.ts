@@ -22,6 +22,7 @@ export {
   CI_SEEDS,
   NIGHTLY_SEED_COUNT,
   nightlySeeds,
+  reproductionCommand,
   resolveSeeds,
   seedTag,
   withSeed,
