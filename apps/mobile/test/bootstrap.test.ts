@@ -489,9 +489,15 @@ describe('restore-to-new-hardware self-heals instead of bricking (task 91 — se
     const keyBeforeWipe = secureStore.get('bolusi.db_encryption_key');
     expect(keyBeforeWipe).toMatch(/^[0-9a-f]{64}$/);
 
-    // The wipe: REAL crypto-erase of the key (SecureStore.deleteItemAsync) + delete the DB file. The
-    // file leg stands in for `deleteOpSqliteDatabase` (op-sqlite, native — unrunnable in Node,
-    // D12/D13); the key leg is the production `SecureStoreDbKeyStore.wipe()` verbatim.
+    // The wipe: REAL crypto-erase of the key (SecureStore.deleteItemAsync) + delete the DB files. The
+    // key leg is the production `SecureStoreDbKeyStore.wipe()` verbatim. The file leg mirrors what
+    // production's `deleteOpSqliteDatabase` removes — the main file AND its `-wal`/`-shm` sidecars
+    // (op-sqlite, native — unrunnable in Node, D12/D13); it deletes exactly that set, no more, so this
+    // end-to-end heal is not exercising a more-thorough deletion than production. The REAL sidecar-
+    // unlink logic (that production issues a delete for each of the three) is proven against the
+    // actual `deleteOpSqliteDatabase` in `packages/db-client/test/op-sqlite-delete.test.ts`; deleting
+    // the sidecars here is load-bearing for THIS assertion because better-sqlite3 would otherwise
+    // recover the probe row from the leftover WAL.
     const keyStore = new SecureStoreDbKeyStore(fakeCrypto);
     const wipeLocalData = vi.fn(async () => {
       await keyStore.wipe();
