@@ -24,7 +24,7 @@ import {
   type PinAuthState,
 } from './lockout.js';
 import { readPinAttempt, readVerifier, writePinAttempt } from './repo.js';
-import { verifyPinAgainst } from './verifier.js';
+import { assertVerifierInBounds, verifyPinAgainst } from './verifier.js';
 import type { Kysely } from 'kysely';
 
 // ── the attempt lock (api/02-auth §6.5: "10 consecutive failures", not 10 x callers) ─────────────
@@ -163,6 +163,13 @@ async function runAttempt<DB>(
       'no PIN verifier for this user — route to the first-PIN flow (api/02-auth §6.6)',
     );
   }
+
+  // Read-side bounds re-check (SEC-AUTH-01, defence in depth). The HOSTILE path is the server bundle,
+  // already gated at bundle-apply.ts; this closes the local-DB-write path so a tampered
+  // `user_pin_verifiers` row (`mKiB = 1 GiB`, a non-argon2id `algo`, or `p ≠ 1`) can never reach the
+  // KDF. Thrown BEFORE the pessimistic bank and the KDF: a corrupt row is not a wrong-PIN attempt, so
+  // it neither burns a guess nor spends ~300 ms deriving a key it would throw away.
+  assertVerifierInBounds(verifier);
 
   // PESSIMISTIC: bank the failure BEFORE the KDF, and clear it on success. A process killed mid-KDF
   // (~300 ms of exposure) leaves the attempt COUNTED, never un-counted — the crash fails CLOSED.

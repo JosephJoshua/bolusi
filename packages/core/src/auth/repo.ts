@@ -160,11 +160,17 @@ export async function replaceUserRolesDirectory<DB>(
 
 // ── user_pin_verifiers (bundle + local write; greatest-asOf merge, api/02-auth §5.3) ──────────────
 
-/** The `user_pin_verifiers.params` JSON shape (client-owned; §5.3 self-describing params). */
+/**
+ * The `user_pin_verifiers.params` JSON shape (client-owned; §5.3 self-describing params).
+ *
+ * `p` is typed `number`, not the `1` a legitimately-written row carries: `readVerifier` reads it back
+ * VERBATIM so a tampered `p` is visible to the verify-path bounds check (SEC-AUTH-01), not silently
+ * narrowed to `1` by this cast — a check cannot reject a value the read just invented (T-13).
+ */
 interface StoredParams {
   readonly mKiB: number;
   readonly t: number;
-  readonly p: 1;
+  readonly p: number;
 }
 
 /** Read a user's stored verifier, or null. Reconstructs the self-describing `PinVerifier` (§5.3). */
@@ -190,12 +196,17 @@ export async function readVerifier<DB>(
   const row = rows.rows[0];
   if (row === undefined) return null;
   const params = JSON.parse(row.params) as StoredParams;
+  // Reconstruct from the stored bytes VERBATIM — `algo` and `p` are read back as-is (not hardcoded to
+  // `'argon2id'`/`1`), so a tampered local row is VISIBLE to the caller's bounds check rather than
+  // normalized away before it can be seen (SEC-AUTH-01, T-13). readVerifier does not itself gate: the
+  // verify path re-checks (pin-verify.ts, mirroring the bundle path at bundle-apply.ts), and callers
+  // that only compare `asOf` (bundle-apply merge) never touch these fields.
   return {
-    algorithm: 'argon2id',
+    algorithm: row.algo as PinVerifier['algorithm'],
     saltB64: row.salt,
     mKiB: params.mKiB,
     t: params.t,
-    p: 1,
+    p: params.p as PinVerifier['p'],
     hashB64: row.hash,
     asOf: {
       timestamp: Number(row.asOfTimestamp),

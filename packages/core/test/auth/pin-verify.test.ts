@@ -17,12 +17,13 @@ import {
   readPinAttempt,
   resetPin,
   verifyPin,
+  VerifierBoundsError,
   type LockedOutEmitter,
   type PinFlowDeps,
   type PinVerifyResult,
 } from '../../src/index.js';
 import type { ClientDatabase } from '@bolusi/db-client';
-import { CamelCasePlugin, Kysely } from 'kysely';
+import { CamelCasePlugin, Kysely, sql } from 'kysely';
 import { createClientDialect } from '@bolusi/db-client';
 
 import { makeFastCrypto, openAuthHarness, spyKdf, type AuthHarness } from './_harness.js';
@@ -370,5 +371,54 @@ describe('SEC-AUTH-02/05 class sweep (T-12) + positive controls (T-14b)', () => 
     s.h.clock.set(row!.notBefore!);
     expect((await s.attempt(PIN)).ok).toBe(true);
     expect((await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures).toBe(0);
+  });
+});
+
+describe('SEC-AUTH-01 read-side — a tampered verifier row never reaches the KDF (F2)', () => {
+  // The HOSTILE vector is the SERVER bundle, gated at bundle-apply.ts and proven in verifier.test.ts.
+  // This closes the LOCAL-DB-write path: a tampered `user_pin_verifiers` row (the only entry here) is
+  // rejected on read, before the pessimistic bank and before argon2id runs.
+  async function setParams(
+    s: Setup,
+    params: { mKiB: number; t: number; p: number },
+  ): Promise<void> {
+    await sql`UPDATE user_pin_verifiers SET params = ${JSON.stringify(params)} WHERE user_id = ${s.h.staffId}`.execute(
+      s.h.db,
+    );
+  }
+
+  it('a 1 GiB memoryCost row is rejected before the KDF (T-11 — prove it, then bound it)', async () => {
+    const s = await setup(40);
+    await setParams(s, { mKiB: 1_048_576, t: 3, p: 1 }); // the alarming "1 GiB" verifier
+    await expect(s.attempt(PIN), 'even the CORRECT PIN cannot ride a tampered row').rejects.toThrow(
+      VerifierBoundsError,
+    );
+    expect(s.kdf(), 'the KDF must not run for an out-of-bounds stored verifier').toBe(0);
+    // The banked-failure write is also skipped: a corrupt row is not a wrong-PIN guess.
+    expect(
+      (await readPinAttempt(s.h.db, s.h.staffId, s.h.deviceId))?.consecutiveFailures ?? 0,
+    ).toBe(0);
+  });
+
+  // NOTE on `algo`: the `user_pin_verifiers` DDL carries `CHECK (algo = 'argon2id')`, so a non-argon2id
+  // algo cannot be STORED through the client DB — its read-side check is belt-and-suspenders (readVerifier
+  // reads `row.algo` rather than inventing it, so the guard still holds if that constraint is ever
+  // relaxed) and is not tamper-testable here. `p` lives inside the JSON `params` blob with no such
+  // constraint, so it IS the field that proves the read-side check is non-vacuous:
+  it('a tampered p ≠ 1 is caught — the check reads stored `p`, not a hardcoded constant (T-13)', async () => {
+    const s = await setup(42);
+    // If readVerifier still hardcoded `p: 1`, this row would read back as p=1 and slip past the
+    // bounds check entirely — the exact "validating a value it just invented" trap.
+    await setParams(s, { mKiB: 32_768, t: 3, p: 4 });
+    await expect(s.attempt(PIN)).rejects.toThrow(VerifierBoundsError);
+    expect(s.kdf()).toBe(0);
+  });
+
+  it('POSITIVE CONTROL — an untampered floor-params verifier still verifies (T-14b)', async () => {
+    const s = await setup(43);
+    // The harness builds staff at FLOOR_KDF_PARAMS (mKiB 19456, t 2). A bounds check that rejected
+    // everything — or a read-side check that mangled valid params — would fail right here.
+    expect((await s.attempt(PIN)).ok).toBe(true);
+    expect(s.kdf()).toBe(1);
   });
 });
