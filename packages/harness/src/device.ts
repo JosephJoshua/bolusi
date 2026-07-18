@@ -114,12 +114,18 @@ export class VirtualDevice {
 
     const device = new VirtualDevice(identity, clock, stats, handle, runtime, engine);
 
-    // Genesis (05 §9.5): enroll before the first command, exactly as production bootstrap does.
+    // Genesis (05 §9.5): enroll before the first command, exactly as production bootstrap does. The
+    // payload is the real `auth.device_enrolled` shape (auth/module.ts) so the chain's seq-1 op
+    // validates when the device pushes it to the server (api/02-auth §6.2).
     await runtime.commands.emitRuntimeOp({
       type: GENESIS_OP_TYPE,
       entityType: 'device',
       entityId: identity.deviceId,
-      payload: { enrolledDeviceId: identity.deviceId },
+      payload: {
+        storeId: identity.storeId,
+        deviceName: 'device',
+        devicePublicKeyB64: identity.publicKeyBase64,
+      },
       userId: identity.userId,
     });
 

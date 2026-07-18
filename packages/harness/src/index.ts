@@ -29,3 +29,13 @@ export {
 export { CI_VOLUMES, activeVolumes, scaled, type Volumes } from './volumes.js';
 export { runConvergence, type ConvergenceOptions, type ConvergenceResult } from './convergence.js';
 export { toProjectionManifest, notesProjectionManifest } from './manifest.js';
+export { HarnessServer, type SeededServerDevice } from './server.js';
+export {
+  FaultFetch,
+  NetworkDroppedError,
+  type CapturedRequest,
+  type FaultPoint,
+  type FetchLike,
+  type ScheduledFault,
+} from './fault-fetch.js';
+export { leakedEncodings, privateKeyEncodings } from './key-leak-scan.js';
