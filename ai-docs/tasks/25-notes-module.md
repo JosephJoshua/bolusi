@@ -1,6 +1,6 @@
 # TASK 25 — notes-reference-module (ops v1+v2, commands, projections, queries, conflicts) — DATA LAYER
 
-**Status:** in-progress
+**Status:** done
 **Depends on:** 11, 18, 24
 
 > **SCOPE (2026-07-17 — screens carved to [[96-notes-module-screens]] per D17 "frontend is later").** THIS task delivers the **platform-free data layer** — `manifest`/`operations` (v1+v2)/`applier`/`commands`/`queries`/`conflict-checks`, the `SERVER_MODULES` registration (falsified), the `{id,en}.json` i18n **catalogs**, and every **non-screen** 04 §8 box (manifest correctness, schemaVersion-2 migration, command units, permission-denial at the command/query level — NOT the rendered Unauthorized state, convergence/reorder/replay, two-device offline merge, conflict decls, full rebuild, the **headless** live-query invalidation test, and the op-level media-attach assertion) plus the task-26 chaos prerequisites (`edit_count`, v1→v2 cutover seam). It is the critical-path unblocker for task 26 and must ship complete and falsified.

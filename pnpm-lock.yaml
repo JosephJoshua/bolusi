@@ -161,6 +161,9 @@ importers:
       '@bolusi/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@bolusi/modules':
+        specifier: workspace:*
+        version: link:../../packages/modules
       '@bolusi/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -507,10 +510,34 @@ importers:
       '@bolusi/schemas':
         specifier: workspace:*
         version: link:../schemas
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
+      '@bolusi/db-client':
+        specifier: workspace:*
+        version: link:../db-client
+      '@bolusi/test-support':
+        specifier: workspace:*
+        version: link:../test-support
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.4
+      '@types/better-sqlite3':
+        specifier: 'catalog:'
+        version: 7.6.13
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
+      better-sqlite3:
+        specifier: 'catalog:'
+        version: 12.11.1
+      kysely:
+        specifier: 'catalog:'
+        version: 0.29.3
 
   packages/schemas:
     dependencies:

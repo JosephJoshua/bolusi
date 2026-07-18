@@ -24,12 +24,21 @@
   "dependencies": {
     "@bolusi/core": "workspace:*",
     "@bolusi/schemas": "workspace:*",
-    "@bolusi/i18n": "workspace:*"
+    "@bolusi/i18n": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@bolusi/tsconfig": "workspace:*"
+    "@bolusi/db-client": "workspace:*",
+    "@bolusi/test-support": "workspace:*",
+    "@bolusi/tsconfig": "workspace:*",
+    "@electric-sql/pglite": "catalog:",
+    "@types/better-sqlite3": "catalog:",
+    "@types/node": "catalog:",
+    "better-sqlite3": "catalog:",
+    "kysely": "catalog:"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json && vitest run"
   }
 }

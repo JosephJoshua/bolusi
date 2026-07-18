@@ -306,17 +306,23 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
     // T-14, and the reason this test is written this way: `registerModules([])` SUCCEEDS and returns
     // a registry that folds nothing and answers `undefined` to every lookup. A bootstrap looping
     // over it reports green having registered nothing. So assert the COUNT.
-    expect(CLIENT_MODULES).toHaveLength(1);
-    expect(app.registry.modules.map((m) => m.id)).toStrictEqual(['platform']);
+    expect(CLIENT_MODULES).toHaveLength(2);
+    expect(app.registry.modules.map((m) => m.id)).toStrictEqual(['platform', 'notes']);
 
     // Op types: the fold denominator. Zero here means the projection engine can apply nothing.
     expect(app.registry.operations.size).toBeGreaterThan(0);
     expect(app.registry.operations.types()).toContain('platform.user_locale_changed');
+    // notes (task 25) is now registered — its op types fold on the client.
+    expect(app.registry.operations.types()).toContain('notes.note_created');
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(3);
+    expect(app.registry.permissions.size).toBe(7);
     expect(app.registry.permissions.ids()).toStrictEqual([
+      'notes.archive',
+      'notes.create',
+      'notes.edit',
+      'notes.read',
       'platform.conflict_acknowledge',
       'platform.conflict_view',
       'platform.set_locale',
@@ -332,9 +338,11 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
     // shipping an applier without registering it is a half-fix that looks done and folds nothing.
     const applier = app.registry.projections.applierForType('platform.user_locale_changed');
     expect(applier).toBeDefined();
+    // notes (task 25) is registered too — its create applier folds through THIS registry.
+    expect(app.registry.projections.applierForType('notes.note_created')).toBeDefined();
     // The negative control (T-14b): a registry that answered a function for EVERY string would
-    // satisfy the line above while proving nothing about registration.
-    expect(app.registry.projections.applierForType('notes.note_created')).toBeUndefined();
+    // satisfy the lines above while proving nothing about registration.
+    expect(app.registry.projections.applierForType('nonexistent.never_registered')).toBeUndefined();
     await app.close();
   });
 });

@@ -32,7 +32,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | done | 14, 22, 23 |
-| 25 | notes-reference-module DATA LAYER (ops v1+v2, applier, commands, queries, conflict-checks, SERVER_MODULES registration, i18n catalogs) — screens carved to 96 (D17) | in-progress | 11, 18, 24, 49, 50 |
+| 25 | notes-reference-module DATA LAYER (ops v1+v2, applier, commands, queries, conflict-checks, SERVER_MODULES registration, i18n catalogs) — screens carved to 96 (D17) | done | 11, 18, 24, 49, 50 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | in-progress | 06, 07, 08, 15, 16 |
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26, 50 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
@@ -53,7 +53,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 42 | @electric-sql/pglite escapes the DB-driver testOnly lock; watermark Number() comment overstates its evidence (from task 11 review) | done | 11 |
 | 43 | auth projections have NO appliers and no owner — auth.* ops are write-only; the §7/FR-1045 denial audit trail is unreadable (from task 14) | done | 11, 14, 49 |
 | 44 | `restriction_violated` denials emit NO audit op — the audit is weakest where the attack is worst; doc-first §7 ruling (from task 14 review) | done | 14 |
-| 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | todo | 14 |
+| 45 | auth/core cleanups: verifyPin read-side bounds; task 10's stale DELETE comment; NUL-in-source guard; attempt-lock scope (3 sibling writes unsynchronized) (from task 14 reviews) | in-progress | 14 |
 | 46 | **HIGH** `highestContiguousServerSeq` never advances on real Postgres — pg returns int8 as a string; every test lane uses a non-production driver (from task 16) | done | 08 |
 | 47 | server watermark store has no production caller and no real-PG16 coverage — 3 gates blind to the same `Number()` (from task 16 review) | done | 16 |
 | 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | done | 46 |
@@ -100,6 +100,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | todo | 43 |
 | 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | todo | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | todo | 10 |
+| 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | todo | 43, 44, 45 |
 
 | 79 | `api/03 §8`'s `MEDIA_IMMUTABLE` rule says compare own sha256 to **the server's** — no endpoint returns it (`status`/`init` carry no hash; the 409 has no `details`, and `media.ts:215` returns before the field check). Only §3.5's `ETag` exposes it. Shipped via conditional-GET `If-None-Match`, fails closed; spec text still unimplementable — 4th of the class (62/70/72) (from task 18) | done | — |
 | 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | done | — |

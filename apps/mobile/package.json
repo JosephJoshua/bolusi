@@ -17,6 +17,7 @@
     "@bolusi/core": "workspace:*",
     "@bolusi/db-client": "workspace:*",
     "@bolusi/i18n": "workspace:*",
+    "@bolusi/modules": "workspace:*",
     "@bolusi/schemas": "workspace:*",
     "@bolusi/ui": "workspace:*",
     "@expo/vector-icons": "15.1.1",
