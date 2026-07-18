@@ -27,7 +27,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 17 | conflict-detection (server rules, system-device emission, client projection, acknowledge) | done | 07, 08, 16, 46, 47, 48, 49 |
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | done | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
-| 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | todo | 12, 15 |
+| 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | in-progress | 12, 15 |
 | 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | todo | 12, 13, 49 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
@@ -97,10 +97,10 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 94 | **MEDIUM** an enrolled device shows BLANK metadata: `index.ts` hands `Root` a hardcoded empty `deviceInfo`, so Settings renders no device name/store/tenant for a device that now enrolls (task 92); and the enroll POST sends `appVersion: ''` (expo-constants unpinned). Values all exist in `meta_kv` + the directory; wire them (from task 92) | todo | 24, 92 |
 | 95 | the DB-driver testOnly lock is bypassed by SUBPATH imports (`@electric-sql/pglite/worker` = real DB surface) — same gap for better-sqlite3/pg; normalize to package root (from task 42 review) | todo | 42 |
 | 96 | notes module SCREENS (NotesList/NoteEditor/NoteDetail) — 4 states, ConfirmSheet, optimistic save, thumbnail, i18n live-switch; carved from 25, frontend-phase (D17) | todo | 25, 24, 18 |
-| 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | todo | 43 |
+| 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | in-progress | 43 |
 | 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | todo | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | todo | 10 |
-| 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | todo | 43, 44, 45 |
+| 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | in-progress | 43, 44, 45 |
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | todo | 16 |
 

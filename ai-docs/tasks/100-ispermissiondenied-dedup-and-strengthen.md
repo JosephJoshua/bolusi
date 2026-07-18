@@ -1,6 +1,6 @@
 # TASK 100 — delete the hand-rolled `isPermissionDeniedPayload`, repoint to the Zod validator (a real STRENGTHENING, not a behavior-identical dedup)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **LOW-MEDIUM** — the symbol is test-only, so no production impact today; but it closes a real under-validation AND a T-15 false comment on the denial-audit (FR-1045) surface, and it removes a §2.8 duplicate. Deferred from task 45 because it is NOT behavior-preserving (a behavior change on a security surface deserves its own commit + review — proven, not assumed).
 **Depends on:** 43, 44, 45
 **Blocks:** —

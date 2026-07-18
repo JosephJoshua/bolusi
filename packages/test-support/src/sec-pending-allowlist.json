@@ -3,7 +3,6 @@
   "SEC-AUTH-09": "ai-docs/tasks/28-security-sweep.md",
   "SEC-AUTH-10": "ai-docs/tasks/27-device-gates.md",
   "SEC-DEV-04": "ai-docs/tasks/70-sec-dev-offline-revocation-spec-conflict.md",
-  "SEC-DEV-05": "ai-docs/tasks/26-chaos-harness.md",
   "SEC-DEV-07": "ai-docs/tasks/70-sec-dev-offline-revocation-spec-conflict.md",
   "SEC-TENANT-04": "ai-docs/tasks/28-security-sweep.md",
   "SEC-RT-01": "ai-docs/tasks/20-realtime.md",

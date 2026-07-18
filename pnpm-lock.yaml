@@ -448,6 +448,12 @@ importers:
       '@bolusi/core':
         specifier: workspace:*
         version: link:../core
+      '@bolusi/db-client':
+        specifier: workspace:*
+        version: link:../db-client
+      '@bolusi/db-server':
+        specifier: workspace:*
+        version: link:../db-server
       '@bolusi/modules':
         specifier: workspace:*
         version: link:../modules
@@ -466,10 +472,16 @@ importers:
       better-sqlite3:
         specifier: 'catalog:'
         version: 12.11.1
+      kysely:
+        specifier: 'catalog:'
+        version: 0.29.3
     devDependencies:
       '@bolusi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
+      '@types/better-sqlite3':
+        specifier: 'catalog:'
+        version: 7.6.13
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.1
