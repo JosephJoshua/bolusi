@@ -1,0 +1,25 @@
+{
+  "action": {
+    "archive": "Archive",
+    "attachPhoto": "Attach Photo",
+    "new": "New Note"
+  },
+  "badge": {
+    "archived": "Archived"
+  },
+  "confirm": {
+    "archive": "Archive this note? It isn’t deleted — it moves to the archive."
+  },
+  "editor": {
+    "bodyField": "Body",
+    "titleField": "Title",
+    "titleRequired": "Title is required"
+  },
+  "filter": {
+    "showArchived": "Show archived"
+  },
+  "list": {
+    "empty": "No notes yet. Tap “New Note” to start.",
+    "title": "Notes"
+  }
+}

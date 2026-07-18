@@ -194,12 +194,17 @@ describe('SEC-SYNC-09 pull scope leak probe', () => {
     const b = await h.seedDevice(63); // tenant B, its own store
 
     // a1's chain: genesis (store 1) → a store-1 note → a TENANT-NULL op (storeId explicitly null).
+    // The tenant-null op is the ONE genuinely tenant-scoped v0 type — `platform.user_locale_changed`
+    // (01 §6: the preference follows the user to every device). A store-scoped `notes.note_created`
+    // with a forced null store is not a real op (01 §9: notes are store-scoped) and task 25's applier
+    // now rejects it loudly — so this probe uses the real tenant-scoped type instead.
     const g = a1.builder.genesis();
     const s1note = a1.builder.append(note('store', 'one'));
     const tenantNull = a1.builder.append({
-      type: 'notes.note_created',
-      entityType: 'note',
-      payload: { title: 'tenant', body: 'wide' },
+      type: 'platform.user_locale_changed',
+      entityType: 'user_pref',
+      entityId: a1.world.userId,
+      payload: { locale: 'en' },
       storeId: null,
     });
     const a1push = await pushJson(
@@ -236,6 +241,6 @@ describe('SEC-SYNC-09 pull scope leak probe', () => {
     }
     expect(pulled.some((op) => op.storeId === null)).toBe(true); // tenant-null ops present
     expect(pulled.some((op) => op.storeId === store2)).toBe(false); // zero store-2
-    expect(pulled.length).toBe(3); // genesis + store-1 note + tenant-null note, and nothing else
+    expect(pulled.length).toBe(3); // genesis + store-1 note + tenant-null locale op, and nothing else
   });
 });

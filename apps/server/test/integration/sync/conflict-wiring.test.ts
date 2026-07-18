@@ -215,7 +215,14 @@ function threadTestDeps(
     },
   });
   const platform = resolveDeps({ forTenant: appForTenant }).projections;
-  for (const m of platform.modules()) projections.register(m);
+  for (const m of platform.modules()) {
+    // task 25 registered the REAL `notes` module in SERVER_MODULES, so production `projections`
+    // now carries it. This Gap-B test provides its OWN controlled `notes` appliers above (its
+    // subject is the runPush detector/hook wiring, not the fold), so skip the production one to
+    // avoid a duplicate-op-type registration — the stand-in owns `notes` here by construction.
+    if (m.id === 'notes') continue;
+    projections.register(m);
+  }
 
   // The REAL production builder, over the injected key store — the wiring under test, not a mock.
   const detectConflicts = buildConflictDetection({

@@ -106,6 +106,11 @@ const DB_DRIVER_OWNERS = new Map([
       // apps/mobile declares no test-only driver as a runtime dep (devDependencies is where it
       // belongs — the db-client shape).
       { workspace: 'apps/mobile', testOnly: true },
+      // packages/modules is the FIRST module package outside core (task 25 — `notes`). Its T-8
+      // applier-conformance + engine suites drive the shim over better-sqlite3 :memory(testing-guide
+      // §2.3), for the same reason and under the same rule as core's entry above. test/tooling files
+      // ONLY — shipping the module manifest (dist/) stays driver-free; the drivers are devDeps.
+      { workspace: 'packages/modules', testOnly: true },
     ],
   ],
   [
@@ -122,6 +127,10 @@ const DB_DRIVER_OWNERS = new Map([
       // db-server and apps/server carry pglite as a devDep for the same test-only reason.
       { workspace: 'packages/db-server', testOnly: true },
       { workspace: 'apps/server', testOnly: true },
+      // packages/modules (task 25 — `notes`, the first module outside core) runs the SAME T-8
+      // dual-dialect conformance against in-process PGlite; test/tooling files only, shipping dist
+      // stays clean.
+      { workspace: 'packages/modules', testOnly: true },
     ],
   ],
 ]);

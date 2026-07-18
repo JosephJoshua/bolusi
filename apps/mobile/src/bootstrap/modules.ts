@@ -20,6 +20,7 @@
 // nothing — this repo's signature failure, shipped eight times. So the count is asserted, not
 // assumed, and `bootstrap.test.ts` drives the REAL list rather than a hand-built one.
 import { platformModule, type AnyModuleDefinition } from '@bolusi/core';
+import { notesModule } from '@bolusi/modules/notes';
 
 /**
  * The modules this device registers.
@@ -35,4 +36,8 @@ import { platformModule, type AnyModuleDefinition } from '@bolusi/core';
  */
 export const CLIENT_MODULES: readonly AnyModuleDefinition<never>[] = [
   platformModule as unknown as AnyModuleDefinition<never>,
+  // task 25 (notes): the reference module's data layer — op validators, `notes` projection
+  // appliers, and the notes.* permission vocabulary. Platform-free (`@bolusi/modules/notes`, never
+  // `/screens`), so this is a data-layer registration; the RN screens are task 96.
+  notesModule as unknown as AnyModuleDefinition<never>,
 ];

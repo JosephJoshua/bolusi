@@ -1,0 +1,25 @@
+{
+  "action": {
+    "archive": "Arsipkan",
+    "attachPhoto": "Lampirkan Foto",
+    "new": "Catatan Baru"
+  },
+  "badge": {
+    "archived": "Diarsipkan"
+  },
+  "confirm": {
+    "archive": "Arsipkan catatan ini? Catatan tidak dihapus, hanya dipindah ke arsip."
+  },
+  "editor": {
+    "bodyField": "Isi",
+    "titleField": "Judul",
+    "titleRequired": "Judul belum diisi"
+  },
+  "filter": {
+    "showArchived": "Tampilkan arsip"
+  },
+  "list": {
+    "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",
+    "title": "Catatan"
+  }
+}

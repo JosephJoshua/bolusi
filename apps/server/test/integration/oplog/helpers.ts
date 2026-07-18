@@ -141,6 +141,10 @@ const SCHEMAS: Record<string, z.ZodType> = {
   'auth.pin_lockout_cleared': z.object({}).loose(),
   'platform.conflict_detected': z.object({ opAId: z.string(), opBId: z.string() }).loose(),
   'platform.conflict_acknowledged': z.object({ conflictId: z.string() }).loose(),
+  // The one genuinely TENANT-scoped v0 op type (01 §6): storeId null, folds into user_prefs. Tests
+  // that need a legitimate tenant-null op (e.g. the SEC-SYNC-09 pull-scope probe) use this, not a
+  // store-scoped notes op with a forced null store (which task 25's applier now rejects loudly).
+  'platform.user_locale_changed': z.object({ locale: z.string() }).loose(),
   'notes.note_created': z.object({ title: z.string(), body: z.string() }).loose(),
   'notes.note_body_edited': z.object({ body: z.string() }).loose(),
 };

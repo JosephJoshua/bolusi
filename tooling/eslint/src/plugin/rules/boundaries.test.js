@@ -122,6 +122,12 @@ tester.run('boundaries', rule, {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/core/test/projection/better-sqlite3-driver.ts',
     },
+    // ...and packages/modules (task 25 — `notes`, the first module outside core) drives the shim in
+    // its T-8 conformance suite: test/ files only, never shipping source (invalid case below).
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/modules/test/support/better-sqlite3-driver.ts',
+    },
     // @electric-sql/pglite is the harness's OWN shipping driver (a runtime dep — the harness IS test
     // tooling), so like better-sqlite3's harness row it is unrestricted here. This is the positive
     // control on the exemption: the fix is not a blanket pglite ban (task 42, review-03).
@@ -143,6 +149,11 @@ tester.run('boundaries', rule, {
     {
       code: `import { PGlite } from '@electric-sql/pglite';`,
       filename: '/repo/apps/server/test/integration/projection.test.ts',
+    },
+    // ...and packages/modules (task 25 — `notes`) drives PGlite in its T-8 dual-dialect suite.
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/modules/test/support/engines.ts',
     },
     // db-client test/tooling files may use Node builtins; only its shipping source may not
     {
@@ -320,6 +331,13 @@ tester.run('boundaries', rule, {
       filename: '/repo/packages/core/src/projection/engine.ts',
       errors: [{ messageId: 'dbDriverTestOnly' }],
     },
+    // ...and packages/modules is a test-only owner too (task 25): its SHIPPING source (the manifest
+    // that ships in dist/) is still barred — the drivers belong to its test/ suites only.
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/modules/src/notes/applier.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
     // @electric-sql/pglite is the SAME class as better-sqlite3, and until task 42 the lock did not
     // name it — so a real Postgres engine reached shipping source uncaught (review-03's positive
     // control: better-sqlite3 BLOCKED, pglite CLEAN, same file). These fixtures pin the gap shut in
@@ -332,6 +350,11 @@ tester.run('boundaries', rule, {
     {
       code: `import { PGlite } from '@electric-sql/pglite';`,
       filename: '/repo/packages/db-server/src/pool.ts',
+      errors: [{ messageId: 'dbDriverTestOnly' }],
+    },
+    {
+      code: `import { PGlite } from '@electric-sql/pglite';`,
+      filename: '/repo/packages/modules/src/notes/applier.ts',
       errors: [{ messageId: 'dbDriverTestOnly' }],
     },
     {

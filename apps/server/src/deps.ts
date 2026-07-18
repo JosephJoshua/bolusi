@@ -13,6 +13,7 @@ import {
   type OperationDeclaration,
   type ProjectionRegistry,
 } from '@bolusi/core';
+import { notesModule } from '@bolusi/modules/notes';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
@@ -97,6 +98,11 @@ export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
 export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [
   platformModule as unknown as AnyModuleDefinition<DB>,
   authModule as unknown as AnyModuleDefinition<DB>,
+  // task 25 (notes): its op validators + `notes` projection appliers. Cast per the header — the
+  // appliers are typed against the dialect-neutral `NotesDatabase` (04 §2); the T-8 conformance
+  // suite proves they fold byte-identically on both engines, and notes-registration.test.ts
+  // falsifies THIS line against the real push path (§2.11).
+  notesModule as unknown as AnyModuleDefinition<DB>,
 ];
 
 const serverModuleRegistry: ModuleRegistry<DB> = registerModules(SERVER_MODULES);
