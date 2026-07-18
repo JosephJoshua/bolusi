@@ -61,11 +61,17 @@ export type IdSource = () => string;
 /**
  * The device's Ed25519 signing key, for the op signature (05 §2.2).
  *
- * **LOCAL SEAM — DELETE WHEN TASK 14 LANDS.** 08 §3.2's real `KeyStorePort` (SecureStore-backed,
- * `bolusi.device_private_key`) is task 14's; this is the single method the command runtime needs
- * from it. When `KeyStorePort` arrives this interface must be DELETED in favour of it, never kept
- * alongside as a second definition of the same seam (CLAUDE.md §2.8). Structural typing means the
- * real port will satisfy this shape without a change at the call sites.
+ * **The command runtime's SEGREGATED view of the key store — keep it; do NOT collapse it.** This is
+ * the one method the runtime needs to sign an op. Task 14's real `KeyStorePort` (08 §3.2:
+ * SecureStore-backed `bolusi.device_private_key`, plus enroll/token/wipe) STRUCTURALLY satisfies this
+ * one-method shape, so the production adapter and the test `FakeKeyStore` drop in with no call-site
+ * change — and so does a bare `{ getSigningKey }`, which is how the runtime tests build the seam.
+ *
+ * This is interface segregation, not duplication. §2.8 forbids two IMPLEMENTATIONS of the same logic;
+ * `SigningKeyPort` carries NO logic and has exactly one impl (`KeyStorePort`). Typing
+ * `CommandRuntime.signingKey` as the full `KeyStorePort` would drag enrollment/token/wipe concerns
+ * into the command runtime and force every runtime test to build a 6-method fake. (Task 14 landed and
+ * correctly did NOT delete this — an earlier "DELETE WHEN TASK 14 LANDS" note here was wrong.)
  */
 export interface SigningKeyPort {
   /** The device's 32-byte RFC 8032 seed. */
