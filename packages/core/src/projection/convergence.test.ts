@@ -181,6 +181,73 @@ describe('out-of-order convergence property (CHAOS-01 precursor)', () => {
       await harness.close();
     }
   });
+
+  test('deterministic tie-break: identical timestamp AND deviceId, greater seq wins, every permutation (CHAOS-07ii-seq)', async () => {
+    const create = makeNoteOp({
+      id: 'op-create-seq',
+      entityId: 'n1',
+      type: 'notes.note_created',
+      timestamp: 1000,
+      deviceId: 'dev-a',
+      seq: 1,
+      payload: { title: 'T', body: 'orig' },
+    });
+    // Two edits from the SAME device at the IDENTICAL timestamp — the intra-device
+    // same-millisecond case CHAOS-07ii above cannot reach. CHAOS-07ii ties two DIFFERENT
+    // devices, so `deviceId` resolves the comparison and `seq` is never consulted. Here
+    // timestamp AND deviceId both tie, so `seq` is the SOLE discriminator: the canonical
+    // order is seq ASC (05 §4), so the greater seq sorts LAST and wins the body. This is the
+    // third canonical-order component, which nothing else exercises through the SQL fold
+    // (`ORDER BY timestamp_ms, device_id, seq` in oplog-source.ts) — task 38.
+    const editLowSeq = makeNoteOp({
+      id: 'op-edit-low-seq',
+      entityId: 'n1',
+      type: 'notes.note_body_edited',
+      timestamp: 5000,
+      deviceId: 'dev-a',
+      seq: 2,
+      payload: { body: 'from-seq-2' },
+    });
+    const editHighSeq = makeNoteOp({
+      id: 'op-edit-high-seq',
+      entityId: 'n1',
+      type: 'notes.note_body_edited',
+      timestamp: 5000,
+      deviceId: 'dev-a',
+      seq: 3,
+      payload: { body: 'from-seq-3' },
+    });
+
+    // T-14b — assert the PRECONDITION, not just the outcome: the two edits genuinely tie on
+    // (timestamp, deviceId) and differ ONLY in seq. A tie test whose ops don't actually tie is
+    // this exact bug wearing a fix's clothing — the assertion would pass without seq ever
+    // resolving anything.
+    expect(editLowSeq.timestamp).toBe(editHighSeq.timestamp);
+    expect(editLowSeq.deviceId).toBe(editHighSeq.deviceId);
+    expect(editLowSeq.seq).not.toBe(editHighSeq.seq);
+
+    const ops = [create, editLowSeq, editHighSeq];
+
+    let refolds = 0;
+    for (const arrival of permutations(ops)) {
+      const harness = await openProjectionHarness();
+      await deliverPulled(harness, asPulled(arrival));
+      refolds += harness.engine.stats.snapshot().refolds;
+      const row = await harness.db.selectFrom('notes').selectAll().executeTakeFirstOrThrow();
+      // Greater seq is canonically last ⇒ its body wins, on every arrival order.
+      expect(row.body, `arrival=${arrival.map((o) => o.id).join(',')}`).toBe('from-seq-3');
+      expect(row.editCount).toBe(2); // both edits counted — none lost even when overwritten
+      await harness.close();
+    }
+
+    // T-14 — a case asserts its own coverage. The SQL `ORDER BY … seq` is consulted ONLY on the
+    // re-fold path; if no arrival re-folded, this case would never exercise the seq tie-break in
+    // the fold and the gap would silently reopen. Prove at least one permutation re-folded.
+    expect(
+      refolds,
+      'no re-fold observed — the seq tie-break in the SQL fold went untested',
+    ).toBeGreaterThan(0);
+  });
 });
 
 /** All permutations of a small array (test 8 exhausts the 3! arrival orders). */
