@@ -14,3 +14,8 @@ else
   echo "Install it (https://github.com/gitleaks/gitleaks) — the secret scan is mandatory (security-guide §10)." >&2
   exit 1
 fi
+
+# 3. No raw control byte in tracked text-source files (CLAUDE.md §2.9). A raw NUL delimiter turns a
+# source file BINARY to git and makes its diff unreviewable while every test stays green — write the
+# `\x00` escape, never the byte. CI (stage 1) runs the same check as the backstop.
+node scripts/check-no-control-bytes.mjs
