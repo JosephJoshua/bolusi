@@ -100,7 +100,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | in-progress | 43 |
 | 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | todo | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | todo | 10 |
-| 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | in-progress | 43, 44, 45 |
+| 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | done | 43, 44, 45 |
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | todo | 16 |
 
