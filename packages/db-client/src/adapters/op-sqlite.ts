@@ -132,3 +132,27 @@ export const openOpSqliteDriver = async (params: DbDriverOpenParams): Promise<Db
   });
   return createDriver(db);
 };
+
+/**
+ * Deletes the client database FILE (and its WAL/SHM sidecars) at op-sqlite's default location —
+ * the DB-file leg of the wipe (api/02-auth §7.3 step 2; security-guide §6.6's restore recovery).
+ *
+ * It lives HERE, and only here, because `@op-engineering/op-sqlite` has exactly one import site in
+ * the repo (08 §3.2/§3.3, lint-enforced by bolusi/boundaries) — apps/mobile cannot reach op-sqlite
+ * directly, so the boot-recovery wipe injects this from the same binding site as `openOpSqliteDriver`.
+ *
+ * NO `encryptionKey` IS PASSED, AND THAT IS CORRECT, NOT A SEC-DEV-06 HOLE: `open()` is lazy — it
+ * touches no page until the first query — and `delete()` is a filesystem unlink that never decrypts.
+ * So a restored old-key file (unreadable ciphertext to us) is removed without ever being opened for
+ * reading. There is still no unkeyed path that READS data; this only destroys the file.
+ */
+export const deleteOpSqliteDatabase = (params: {
+  readonly name: string;
+  readonly location?: string | undefined;
+}): void => {
+  const db = open({
+    name: params.name,
+    ...(params.location === undefined ? {} : { location: params.location }),
+  });
+  db.delete();
+};
