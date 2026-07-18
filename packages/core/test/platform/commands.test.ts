@@ -27,9 +27,11 @@
 // conformance suite.
 import { DomainError } from '../../src/errors/domain-error.js';
 import { registerModules, type AnyModuleDefinition } from '../../src/module/registry.js';
+import { setLocaleInput } from '../../src/platform/commands.js';
 import { platformModule } from '../../src/platform/index.js';
+import { userLocaleChangedPayload } from '../../src/platform/operations.js';
 import { QueryRuntime } from '../../src/query/execute.js';
-import type { SignedOperation } from '@bolusi/schemas';
+import { LOCALES, SELECTABLE_LOCALES, type Locale, type SignedOperation } from '@bolusi/schemas';
 import type { Kysely } from 'kysely';
 
 import type { AppendedOp } from '../../src/oplog/append.js';
@@ -361,5 +363,45 @@ describe('listConflicts — permission denial (02 §12, FR-1036)', () => {
 
     expect((error as Error).message).toMatch(/READ the database/);
     expect(error).not.toBeInstanceOf(DomainError);
+  });
+});
+
+// ── Task 77: the selectable-locale list is declared ONCE ─────────────────────────────────────────
+//
+// `SELECTABLE_LOCALES` (@bolusi/schemas) is the single source both the in-app toggle (@bolusi/i18n
+// re-exports it) and these platform enums read. Before task 77, core carried its own `LOCALE_VALUES`
+// copy and nothing compared the two — adding `zh` to one silently broke the other (07-i18n §1.1: the
+// toggle offers a locale the payload rejects, or the payload accepts one no toggle offers). These
+// tests pin `setLocale`'s accepted set TO that shared list, so a re-introduced copy that diverged —
+// or the enum being widened to `LOCALES` — goes red instead of shipping the drift.
+describe('setLocale / user_locale_changed accept EXACTLY SELECTABLE_LOCALES (task 77, §2.8)', () => {
+  test('every selectable locale is accepted by BOTH the input and the payload — non-empty (T-14)', () => {
+    // T-14 denominator: the list is not empty, so "all accepted" is not vacuously true over [].
+    expect(SELECTABLE_LOCALES.length).toBeGreaterThan(0);
+    for (const locale of SELECTABLE_LOCALES) {
+      expect(setLocaleInput.safeParse({ locale }).success).toBe(true);
+      expect(userLocaleChangedPayload.safeParse({ locale }).success).toBe(true);
+    }
+  });
+
+  test('a scaffolded-but-not-selectable locale (zh) is REJECTED by both — the enum is the toggle list, not LOCALES', () => {
+    // The complement is non-empty in v0 (`LOCALES` has `zh`, `SELECTABLE_LOCALES` does not), so this
+    // is a real discrimination — not a set that happens to equal `LOCALES`. If the enum were widened
+    // to `LOCALES`, or `zh` were added to only ONE of the two lists, this goes red. (In V2, when `zh`
+    // joins `SELECTABLE_LOCALES`, this test is revisited — which is the conscious V2 gate.)
+    const notSelectable = LOCALES.filter(
+      (l) => !(SELECTABLE_LOCALES as readonly Locale[]).includes(l),
+    );
+    expect(notSelectable.length).toBeGreaterThan(0);
+    expect(notSelectable).toContain('zh');
+    for (const locale of notSelectable) {
+      expect(setLocaleInput.safeParse({ locale }).success).toBe(false);
+      expect(userLocaleChangedPayload.safeParse({ locale }).success).toBe(false);
+    }
+  });
+
+  test('an unknown language code is rejected — the enum is closed', () => {
+    expect(setLocaleInput.safeParse({ locale: 'fr' }).success).toBe(false);
+    expect(userLocaleChangedPayload.safeParse({ locale: 'fr' }).success).toBe(false);
   });
 });

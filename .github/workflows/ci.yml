@@ -49,6 +49,35 @@ jobs:
       # id/en parity, ICU restricted subset, error-code coverage, extraction, codegen staleness.
       - run: pnpm i18n:check
 
+  # Unused-export sweep (task 68; CLAUDE.md §2.11 / testing-guide T-14, T-16). Static — knip runs
+  # the TypeScript language service over SOURCE (no dist, no build, no database), so `needs:
+  # install` is sufficient and it slots beside lint/typecheck.
+  #
+  # `pnpm knip` is NOT `knip && echo ok`. Task 60 proved a grep sweep for exported-and-uncalled
+  # symbols cannot work (grep scores a MENTION as a CALL — a false comment made the dead function
+  # `canAttempt` look live, and the sweep missed the one case it was written for). knip answers the
+  # question semantically. But a semantic sweep's dominant failure here is going BLIND and reporting
+  # a confident zero — task 60 watched THIS config do it twice (`includeEntryExports` off; a broken
+  # entry glob). So `scripts/check-unused-exports.mjs` reads knip's OWN JSON (§2.1) and: (1) asserts
+  # the `knip-canary.ts` positive control is still reported — the denominator (T-14), it vanishes
+  # first whenever the sweep goes blind; (2) fails on NEW unused production exports vs the checked-in
+  # `knip-baseline.json` (a fresh `canAttempt`); (3) fails on MASS DISAPPEARANCE, which a bare
+  # additions check would pass green while knip silently scanned a fraction of the tree. Falsified
+  # (task 68): dropping `includeEntryExports` collapsed 115->11 findings and the gate went RED on the
+  # missing canary, where an additions-only check would have gone green.
+  unused-exports:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm knip
+
   # Stage 3 — typecheck (tsc -b + mobile --noEmit).
   typecheck:
     runs-on: ubuntu-latest
@@ -350,13 +379,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:appliers
 
-  # Stage 11 — chaos harness. MERGE-GATE PLACEHOLDER —
-  # wired by task 26 (ai-docs/tasks/26-chaos-harness.md); runs `pnpm chaos`.
+  # Stage 11 — chaos harness (testing-guide Part B, D4). The real `@bolusi/server` in-process on
+  # PGlite plus N virtual devices; seeds 1–10 per scenario at CI-scale volumes. PGlite is in-process
+  # WASM (§6.3 "no docker needed"), so — like dual-dialect-appliers — this stage needs no Postgres
+  # container and cannot collide with another worktree's database (T-14d). Every failure prints its
+  # reproducing seed (§3.7).
   chaos-harness:
     runs-on: ubuntu-latest
     needs: install
     steps:
-      - run: echo "merge-gate placeholder — chaos scenarios land with task 26 (pnpm chaos)"
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm chaos
 
   # Stage 12 — device lane (EAS dev-client build + on-device smoke). PLACEHOLDER —
   # wired by task 27 (ai-docs/tasks/27-device-gates.md); fingerprint-triggered on native change.

@@ -7,10 +7,12 @@
 //      CI adapter behind the shim dialect (testing-guide §2.3) that the driver-conformance
 //      suite and the core projection-engine tests both drive, and must never reach shipping
 //      source; @electric-sql/pglite → harness (ships legitimately as test tooling — a runtime
-//      dep there, held out of every SHIPPING_WORKSPACES bundle by shipping-deps.test.ts), plus
-//      core, db-server AND apps/server TEST/TOOLING files only — it is the in-process Postgres
-//      the applier-conformance suite runs, a test-only engine that must never reach shipping
-//      source any more than better-sqlite3 does)
+//      dep there, held out of every shipping bundle NOT by the SHIPPING_WORKSPACES driver sweep
+//      (which omits harness and so never inspects it) but by shipping-deps.test.ts's separate
+//      "@bolusi/harness is never a runtime dependency of shipping code" test — so its transitive
+//      pglite can never reach a device/server bundle), plus core, db-server AND apps/server
+//      TEST/TOOLING files only — it is the in-process Postgres the applier-conformance suite runs,
+//      a test-only engine that must never reach shipping source any more than better-sqlite3 does)
 //   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
 //   3. */screens subpaths importable only from apps/mobile
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
@@ -116,10 +118,13 @@ const DB_DRIVER_OWNERS = new Map([
   [
     '@electric-sql/pglite',
     [
-      // The harness ships pglite as a real runtime dependency (it is test tooling, held out of
-      // every shipping bundle by shipping-deps.test.ts's SHIPPING_WORKSPACES sweep), so it is an
-      // unrestricted owner — no `testOnly`. This is the positive control on the exemption: a
-      // pglite import in packages/harness stays CLEAN, so the fix is not a blanket ban.
+      // The harness ships pglite as a real runtime dependency (it is test tooling). It is held out
+      // of every shipping bundle NOT by the SHIPPING_WORKSPACES driver sweep — that list omits
+      // harness, so the sweep never inspects it — but by shipping-deps.test.ts's separate test that
+      // `@bolusi/harness` is never a runtime dependency of shipping code, so its transitive pglite
+      // never reaches a device/server bundle. So it is an unrestricted owner — no `testOnly`. This
+      // is the positive control on the exemption: a pglite import in packages/harness stays CLEAN,
+      // so the fix is not a blanket ban.
       { workspace: 'packages/harness' },
       // core's applier-conformance suite (task 11 — T-8) runs the projection engine against a real
       // Postgres via in-process PGlite; test/tooling files only, shipping core stays clean.
@@ -271,11 +276,16 @@ export default {
         context.report({ node, messageId: 'stylingLib', data: { source, reason: stylingReason } });
         return;
       }
-      // 2. DB-driver locks.
-      const driverKey = source.startsWith('@op-engineering/')
-        ? '@op-engineering/op-sqlite'
-        : source;
-      const owners = DB_DRIVER_OWNERS.get(driverKey);
+      // 2. DB-driver locks. Look up by the package ROOT, not the full specifier, so a driver
+      // reached through a SUBPATH is locked exactly as its bare specifier is. This is the ONE
+      // normalization for all four drivers (§2.8): `@electric-sql/pglite/worker` (which exports the
+      // SQL-running `PGliteWorker`) and `/live`, `better-sqlite3/*`, `pg/*`, and op-sqlite's
+      // `@op-engineering/op-sqlite/*` all resolve to the key in DB_DRIVER_OWNERS. Before task 95
+      // only op-sqlite was normalized (a per-driver special case), so a one-token subpath of any
+      // other driver walked straight through the testOnly lock — `@electric-sql/pglite/worker`
+      // reached shipping core/apps uncaught while bare pglite was blocked (task 42 review, rev-42).
+      // `packageRoot` subsumes the old special case: `@op-engineering/op-sqlite[/sub]` → its root.
+      const owners = DB_DRIVER_OWNERS.get(packageRoot(source));
       if (owners) {
         const owned = owners.find((entry) => entry.workspace === workspace);
         if (!owned) {

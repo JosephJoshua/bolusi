@@ -137,8 +137,8 @@ bolusi/
 
 | Workspace | Runtime | Contents (owning docs) |
 | --------- | ------- | ---------------------- |
-| `@bolusi/schemas` | Hermes + Node | Zod schemas: signed-core envelope (05 §2.1), sync DTOs (api/01-sync), auth DTOs, WS message schemas (hc's `$ws()` does NOT type socket payloads — these schemas do), and the error-envelope schema (api/00 §7). WS-message and error-envelope Zod schemas live HERE, never in `@bolusi/core` (api/00 §12.1/§14). Money fields `z.number().int()` always (05 §3). Depends on `zod` only. |
-| `@bolusi/i18n` | Hermes + Node | Label catalog `id`/`en` + generated key union type (mechanism owned by 07-i18n). No internal deps. |
+| `@bolusi/schemas` | Hermes + Node | Zod schemas: signed-core envelope (05 §2.1), sync DTOs (api/01-sync), auth DTOs, WS message schemas (hc's `$ws()` does NOT type socket payloads — these schemas do), and the error-envelope schema (api/00 §7). WS-message and error-envelope Zod schemas live HERE, never in `@bolusi/core` (api/00 §12.1/§14). Also owns the **shared locale vocabulary** (`Locale` / `LOCALES` / `SELECTABLE_LOCALES`, 07-i18n §1) — one home imported by both `@bolusi/core` (the setLocale enum) and `@bolusi/i18n` (the toggle), so they cannot drift (task 77). Money fields `z.number().int()` always (05 §3). Depends on `zod` only. |
+| `@bolusi/i18n` | Hermes + Node | Label catalog `id`/`en` + generated key union type (mechanism owned by 07-i18n); re-exports the locale vocabulary from `@bolusi/schemas` and adds the Intl-tag map + i18next wiring. Imports `@bolusi/schemas` only (task 77) — no other internal deps. |
 | `@bolusi/ui` | Hermes only | Design system: tokens (`tokens.ts`) + shared RN components (whitelisted `Icon`, PinPad, sync chips, …) — contents owned by the design-system doc. Depends on React Native, `expo-image`, `@expo/vector-icons`. **Contended shared package** (CLAUDE.md §4): changes serialize and land before dependents. |
 | `@bolusi/test-support` | Node + Hermes (test-only) | Golden vector files (Ed25519 / SHA-256 / RFC 8785 — one shared fixture set), the determinism kit (mulberry32 PRNG, FakeClock, IdSource, seeded keypairs, op script generator — testing-guide §3.3), shared fakes, and the driver-conformance suite (identical statement set run against better-sqlite3 in CI and op-sqlite on device; the driver handle is injected by the runner). Never imported by shipping source. |
 | `@bolusi/core` | Hermes + Node | Op append/verify (hash, chain, sign via crypto port), canonical ordering, projection engine (04 §4 head/re-fold/rebuild), command runtime (04 §5.1), sync client loop (api/01-sync §6), JCS wrapper over `canonicalize`, UUIDv7. **Platform-free**: all effects behind injected ports — `CryptoPort` (sha256, ed25519, argon2id, randomBytes), `ClockPort` (`now()` — no `Date.now()` outside the runtime stamp point), `TransportPort` (push/pull/media), `KeyStorePort`, `LocationPort` (`getBestFix(): { lat, lng, accuracyMeters } | null` — non-blocking: returns the best available fix or `null`, never waits on GPS; a cached fix up to **60 s** old is acceptable; feeds the envelope `location` stamp, 04 §5.1 / 05 §2.1), and a Kysely instance (`ProjectionDb`, 04 §2) handed in by db-client/db-server. |
@@ -156,7 +156,7 @@ An edge means "may import". Anything not listed is forbidden.
 | From ↓ | may import |
 | ------ | ---------- |
 | `schemas` | `zod` only |
-| `i18n` | (nothing internal) |
+| `i18n` | `schemas` (the shared locale vocabulary — 07-i18n §1; task 77), `zod` (transitively) |
 | `core` | `schemas` (+ `canonicalize`, `kysely` types) |
 | `ui` | `i18n` (key types only), React Native, `expo-image`, `@expo/vector-icons` |
 | `modules` (manifest) | `core`, `schemas`, `i18n` (key types only) |

@@ -49,7 +49,6 @@ export { PermissionEvaluator, type PermissionEvaluatorStats } from './memo.js';
 export {
   DenialEmitter,
   DENIAL_THROTTLE_WINDOW_MS,
-  isPermissionDeniedPayload,
   PERMISSION_DENIAL_ENTITY_TYPE,
   PERMISSION_DENIED_OP_TYPE,
   type DenialAttempt,
