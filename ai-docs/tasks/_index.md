@@ -46,7 +46,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
 | 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
 | 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
-| 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | todo | 35 |
+| 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | in-progress | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
 | 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | in-progress | 10 |
 | 41 | tenant-counter lock is taken AFTER the chain-head read it should protect (comment + 10-db §3 claim otherwise); latent, UNIQUE backstops it (from task 07 review) | done | 07 |
@@ -101,7 +101,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | todo | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | todo | 10 |
 | 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | todo | 43, 44, 45 |
-| 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | todo | 40 |
+| 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | in-progress | 40 |
+| 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | todo | 16 |
 
 | 79 | `api/03 §8`'s `MEDIA_IMMUTABLE` rule says compare own sha256 to **the server's** — no endpoint returns it (`status`/`init` carry no hash; the 409 has no `details`, and `media.ts:215` returns before the field check). Only §3.5's `ETag` exposes it. Shipped via conditional-GET `If-None-Match`, fails closed; spec text still unimplementable — 4th of the class (62/70/72) (from task 18) | done | — |
 | 80 | **HIGH — owner directive (D17)** iOS is a declared platform (`app.config.ts` says so) that **nothing verifies**: `keychainAccessible` was ruled inert as Android-first and is now load-bearing+untested; SEC-DEV-08's backup guard has no iOS leg; task 59's muting analysis is Android-shaped. Audit every platform-conditional claim | done | — |
