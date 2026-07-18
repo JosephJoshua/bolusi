@@ -1,6 +1,6 @@
 # TASK 97 — `CLIENT_MODULES` (apps/mobile) still omits `authModule`, so `auth.*` ops fold as `unregistered` ON DEVICE
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **MEDIUM** — the mirror of task 43's server fix, one layer over. Task 43 registered `authModule` in `SERVER_MODULES` so the server folds `auth.*`; the **device** side (`apps/mobile/src/bootstrap/modules.ts` `CLIENT_MODULES`) still = `[platformModule]`, so on-device the same ops fold via the projection engine's `unregistered` no-op — `auth_sessions` / `pin_lockout_events` / `auth_permission_denials` stay empty on the client. The on-device denial audit / session projection is write-only until this lands. Its own comment already names task 43 as the owner of this line.
 **Depends on:** 43
 **Blocks:** —
