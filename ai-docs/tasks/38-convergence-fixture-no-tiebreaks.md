@@ -1,5 +1,5 @@
 # TASK 38 — nothing in the repo tests canonical order's `seq` tie-break
-**Status:** todo
+**Status:** done
 **Priority:** LOW-MEDIUM (sized by review-03 — real vacuity, cheap fix, pre-existing, small blast radius; the value is regression protection)
 **Depends on:** 35
 
