@@ -10,10 +10,22 @@ import { useMemo } from 'react';
 
 import { Chip } from './Chip.js';
 
-/** `Operation.syncStatus` (03-state-machines §2 enum registry — client-local bookkeeping). */
-export type OperationSyncStatus = 'local' | 'synced' | 'rejected';
+/**
+ * `Operation.syncStatus` (03-state-machines §2 enum registry — client-local bookkeeping).
+ *
+ * BOUNDARY-FORCED MIRROR of the canonical `SYNC_STATUSES` (packages/schemas/src/bookkeeping.ts).
+ * `@bolusi/ui` may import `@bolusi/i18n` (key types only) + React Native + expo only (08 §3.3) —
+ * never `@bolusi/schemas` — so this presentation layer cannot derive the set from its owner and
+ * must re-declare it locally. Declared ONCE here (const array → type → runtime Set; CLAUDE.md §2.8,
+ * collapsing what were two independent literals) and kept EQUAL to the canonical by an
+ * out-of-package parity gate that reddens on divergence and asserts its own denominator
+ * (packages/test-support/src/enum-mirror-parity.test.ts, task 53). This is the §2.11 answer for a
+ * mirror the boundary requires: an UNGUARDED forced mirror is the defect; a gated one is legitimate.
+ */
+const OPERATION_SYNC_STATUSES = ['local', 'synced', 'rejected'] as const;
+export type OperationSyncStatus = (typeof OPERATION_SYNC_STATUSES)[number];
 
-const VALID: ReadonlySet<string> = new Set<OperationSyncStatus>(['local', 'synced', 'rejected']);
+const VALID: ReadonlySet<string> = new Set<OperationSyncStatus>(OPERATION_SYNC_STATUSES);
 
 /** What the §3.5 table resolves to; `null` = synced is the silent default (a checkmark on everything is noise). */
 export type SyncChipKind = 'pending' | 'rejected' | null;

@@ -2,10 +2,19 @@
 // (05-operation-log §2.3), never signed, never server-side. Encoded ONCE here as const
 // data; the transition layer that applies it lives in ../oplog/bookkeeping.ts, and the
 // parity test asserts this table equals 03 §3 (drift fails CI, 03 §1).
+import type { SyncStatus } from '@bolusi/schemas';
+
 import type { StateMachineDefinition } from './executor.js';
 
-/** The three status values (03 §3 / §2 enum registry). */
-export type OpSyncStatus = 'local' | 'synced' | 'rejected';
+/**
+ * The status value set (03 §3 / §2 enum registry). NOT re-declared here: `@bolusi/core`
+ * depends on `@bolusi/schemas` (08 §3.3), so the closed set lives ONCE in the canonical
+ * `SYNC_STATUSES`/`zSyncStatus` (packages/schemas/src/bookkeeping.ts) and this is an alias
+ * of it (CLAUDE.md §2.8, task 53). A member added to `SYNC_STATUSES` widens `OpSyncStatus`
+ * here too, so `OP_SYNC_STATUS_MACHINE`'s `transitions: Record<OpSyncStatus, …>` no longer
+ * type-checks until the new state is handled — drift is caught by construction, not by a copy.
+ */
+export type OpSyncStatus = SyncStatus;
 
 /**
  * Events driving the machine (03 §3 "Event / trigger" column). All are delivered by the
