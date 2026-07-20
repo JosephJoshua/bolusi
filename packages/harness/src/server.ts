@@ -14,6 +14,7 @@ import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
 import { migrateToLatest, type DB } from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
+import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
 
 import type { DeviceIdentity } from './device.js';
@@ -79,6 +80,14 @@ export class HarnessServer {
     readonly clock: FakeClock,
     readonly fetch: FetchLike,
     private readonly tokens: Map<string, DevicePrincipal>,
+    /**
+     * CHAOS-05 (task 103 seam): when the server was booted with `testAuthSeam`, this is the REAL
+     * `@bolusi/server/test-support` `InMemoryTokenStore` the production `createVerifyToken` reads.
+     * `seedDevice` registers each device token here with its `deviceStatus`, so a `revoked` device
+     * presenting its bearer gets the genuine `401 DEVICE_REVOKED` from the production `onError`
+     * path (05 §8, api/01 §2) — the harness forges no 401 (T-7). `undefined` on every other boot.
+     */
+    private readonly authStore: InMemoryTokenStore | undefined,
   ) {}
 
   /**
@@ -101,6 +110,16 @@ export class HarnessServer {
     readonly systemKeyStore?: HarnessSystemKeyStore;
     /** CHAOS-07: the post-commit hook the pipeline fires for SIGNIFICANT conflicts only (03 §7). */
     readonly onConflictSurfaced?: (conflict: HarnessSurfacedConflict) => Promise<void>;
+    /**
+     * CHAOS-05 (testing-guide §3.6 / task 103): boot with the PRODUCTION test-auth verifier
+     * (`createVerifyToken` over an `InMemoryTokenStore`, both from `@bolusi/server/test-support`)
+     * instead of the default harness token map. Its only difference is REAL revocation semantics:
+     * a device seeded `revoked` authenticates to the genuine `ApiError('DEVICE_REVOKED')` the real
+     * `onError` renders as `401` — the seam injects a verdict's INPUT (a `deviceStatus` record),
+     * never a bypass, so an active token still authenticates and an unknown token still
+     * `AUTH_TOKEN_INVALID`s. Every other scenario leaves this unset and keeps the map verifier.
+     */
+    readonly testAuthSeam?: boolean;
   }): Promise<HarnessServer> {
     const pglite = new PGlite();
     const db = new Kysely<DB>({
@@ -111,6 +130,9 @@ export class HarnessServer {
 
     const clock = new FakeClock(SERVER_CLOCK_BASE);
     const tokens = new Map<string, DevicePrincipal>();
+    // CHAOS-05: when the test-auth seam is on, the REAL production verifier reads this store; the
+    // token MAP below is left unused (harmless). Off by default → the map verifier serves everyone.
+    const authStore = options?.testAuthSeam === true ? new InMemoryTokenStore() : undefined;
     const accessLogs: string[] = [];
 
     // The RLS-scoped tenant transaction, exactly as production `dbForTenant` (helpers.ts shape):
@@ -123,7 +145,10 @@ export class HarnessServer {
         return fn(trx);
       });
 
-    const verifyToken = async (
+    // The map verifier (default): accepts any seeded token. NOT used when `testAuthSeam` is on —
+    // there the production `createVerifyToken` runs instead, so the exact revoked→401 / unknown→
+    // AUTH_TOKEN_INVALID verdicts come from the server, never from this closure.
+    const mapVerifyToken = async (
       token: string,
       c: { set: (k: 'device', v: DevicePrincipal) => void },
     ): Promise<void> => {
@@ -133,6 +158,10 @@ export class HarnessServer {
       }
       c.set('device', principal);
     };
+    const verifyToken =
+      authStore === undefined
+        ? mapVerifyToken
+        : createVerifyToken({ store: authStore, now: () => clock.now() });
 
     // The forTenant/verifyToken shapes are the production ones; the internal ServerDeps types are
     // not exported from @bolusi/server, so the whole overrides object crosses the boundary via one
@@ -157,6 +186,7 @@ export class HarnessServer {
       clock,
       (input, init) => Promise.resolve(app.request(input, init)),
       tokens,
+      authStore,
     );
     (server as { accessLogs: string[] }).accessLogs = accessLogs;
     return server;
@@ -188,6 +218,17 @@ export class HarnessServer {
       deviceId: identity.deviceId,
       tenantId: identity.tenantId,
       storeId: identity.storeId,
+    });
+    // CHAOS-05: register the SAME plaintext token in the production test-auth store (keyed at rest
+    // by its SHA-256), carrying the device's real `deviceStatus`. A `revoked` record makes
+    // `createVerifyToken` throw the genuine `DEVICE_REVOKED` (05 §8); an `active` one authenticates
+    // normally — so the seam can only inject a REAL verdict's input, never skip auth.
+    this.authStore?.add(token, {
+      kind: 'device',
+      deviceId: identity.deviceId,
+      tenantId: identity.tenantId,
+      storeId: identity.storeId,
+      deviceStatus: status,
     });
     return { identity, auth: `Bearer ${token}` };
   }

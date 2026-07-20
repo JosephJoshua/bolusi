@@ -1,6 +1,6 @@
 # TASK 110 — record the `SYSTEM_KEY_DIR` deployment convention (01 §3.6 defers system-key storage to a "deployment doc" that does not exist)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **LOW** — docs-only. Task 78 shipped + falsified the mechanism (`DirectorySystemKeyStore` + optional `SYSTEM_KEY_DIR`, default-off, byte-identical to `provision-tenant`'s key files) and documented it at the `main.ts` wiring site + `.env.example`. What's missing is the SPEC-level record: `01-domain-model.md §3.6` explicitly defers system-key storage to "the deployment doc", and no deployment doc exists — so the convention lives only in code comments.
 **Depends on:** 78
 **Blocks:** —
