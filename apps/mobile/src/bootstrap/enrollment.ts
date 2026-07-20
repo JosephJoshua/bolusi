@@ -34,6 +34,7 @@ import {
 import type { LoginResult } from '../screens/enrollment/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { persistEnrolledNames } from './device-info.js';
 import type { LoginTransportPort } from './enroll-transport.js';
 import { createAppRuntime } from './runtime.js';
 
@@ -134,6 +135,16 @@ export function createAppEnrollment(
           appVersion: platform.appVersion,
         },
       );
+      // Persist the human-readable identity to meta_kv (task 94), AFTER core wrote the ids and BEFORE
+      // `onEnrolled` fires — so Root's live re-derive and every later boot render the real device
+      // name / store / tenant on the Settings screen rather than the blanks index.ts used to hand in.
+      // The store/tenant names come from the enroll RESPONSE (the only place they arrive); deviceName
+      // is what the owner typed in the wizard.
+      await persistEnrolledNames(app, {
+        deviceName: req.deviceName,
+        storeName: result.response.store.name,
+        tenantName: result.response.tenant.name,
+      });
       onEnrolled(result.deviceId);
     },
   };

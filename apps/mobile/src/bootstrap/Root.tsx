@@ -57,7 +57,14 @@ const UNWIRED_ENROLLMENT: EnrollmentController = {
 export interface RootProps {
   /** §1.2's plain local storage. Injected so the root is drivable from Node. */
   readonly localeStore: LocaleStorePort;
-  readonly deviceInfo: DeviceInfo;
+  /**
+   * Derive the Settings device-info block from the booted app's persisted state (task 94) — injected
+   * (like `boot`) so the read lives at the one native-binding site (index.ts supplies `platform` +
+   * `appVersion`) and this component stays drivable from Node. Re-read after boot AND after enroll,
+   * so a device that enrolls live shows its real identity without a reboot. Replaces the hardcoded
+   * empty `deviceInfo` literal that rendered every field blank for an enrolled device.
+   */
+  readonly readDeviceInfo: (app: Bootstrapped) => Promise<DeviceInfo>;
   /**
    * The data layer, injected.
    *
@@ -94,13 +101,14 @@ export interface RootProps {
 
 export function Root({
   localeStore,
-  deviceInfo,
+  readDeviceInfo,
   boot,
   createSync,
   createEnrollment,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [enrollment, setEnrollment] = useState<AppEnrollment | null>(null);
   const [sync, setSync] = useState<SyncClient | null>(null);
   // A monotonic tick the live client bumps on every loop/connectivity change, so the shell re-reads
@@ -173,10 +181,20 @@ export function Root({
         createEnrollment?.(booting, (deviceId) => {
           const enrolled: Bootstrapped = { ...booting, deviceId };
           setApp(enrolled);
+          // Re-derive the Settings device-info NOW: enrollment.ts persisted the device/store/tenant
+          // names to meta_kv before firing this, so this read surfaces the real identity live, no
+          // reboot (task 94). Without it the just-enrolled device would keep the pre-enroll blanks.
+          void readDeviceInfo(enrolled).then((info) => {
+            if (!disposed) setDeviceInfo(info);
+          });
           void startSyncIfEnrolled(enrolled, enroll);
         }) ?? null;
       setEnrollment(enroll);
       setApp(booting);
+      // The device-info the Settings screen renders (task 94). On a fresh, never-enrolled device this
+      // is the honest empty block; on a device enrolled in a PRIOR run it is the real persisted
+      // identity — read here rather than handed in as a literal.
+      setDeviceInfo(await readDeviceInfo(booting));
 
       // The loop, IFF the device is ALREADY enrolled at boot. `startSyncIfEnrolled` is a no-op when
       // `deviceId` is null, so nothing starts on a device that cannot sync — no faked loop.
@@ -190,13 +208,14 @@ export function Root({
       syncRef.current?.stop();
       syncRef.current = null;
     };
-  }, [localeStore, boot, createSync, createEnrollment]);
+  }, [localeStore, boot, createSync, createEnrollment, readDeviceInfo]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning
   // (07-i18n §1.2) — and a frame of the shell over a database that is not open is the other thing
-  // worth never showing.
-  if (locale === null || app === null) return null;
+  // worth never showing. `deviceInfo` resolves in the same boot pass (from the same booted app), so
+  // gating on it here costs no extra wait and keeps the Settings screen from rendering blanks.
+  if (locale === null || app === null || deviceInfo === null) return null;
 
   const shell = resolveShellInputs(app, sync, systemClock.now());
 
