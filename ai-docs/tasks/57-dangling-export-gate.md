@@ -1,5 +1,5 @@
 # TASK 57 — no gate stops a package re-exporting a type it doesn't emit
-**Status:** todo
+**Status:** in-progress
 **Priority:** LOW (0 live instances — task 39 swept it clean) but the class shipped **the single worst instance this project has had**, and nothing prevents its return.
 **Depends on:** 39
 

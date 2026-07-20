@@ -1,5 +1,5 @@
 # TASK 53 — `SyncStatus` is declared three times and the seams are `string`; the compiler finds zero of them
-**Status:** todo
+**Status:** in-progress
 **Priority:** LOW–MED — nothing is broken today (a 3-member set unlikely to change). Filed because it is the exact class the inverse sweep exists to find, and because **one copy is avoidable and one is not** — they need different fixes.
 **Depends on:** 15
 
