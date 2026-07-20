@@ -68,5 +68,33 @@ export default defineConfig({
     // `.tsx` is included deliberately: the previous `test/**/*.test.ts` would have silently skipped
     // every screen test this task adds — a lane that runs nothing reports green (T-14c).
     include: ['src/**/*.test.{ts,tsx}', 'test/**/*.test.{ts,tsx}'],
+    // STARVATION MARGIN, not a work-time budget (task 93, inheriting task 67's class + method).
+    // `test/bootstrap.test.ts` and `src/bootstrap/{bundle,sync-client,enrollment,recovery,
+    // device-info,runtime}.test.ts` drive a REAL file-backed better-sqlite3 DB through the REAL
+    // CLIENT_MIGRATIONS (several open/migrate/close cycles per test) plus real ed25519 signing.
+    // Unlike db-client's sub-millisecond in-memory bodies, that work is legitimately ~100s of ms —
+    // which is why the default 5000ms was already the thinnest margin in the repo, not a roomy one.
+    //
+    // MEASURED on this 48-core runner (vitest json reporter, per-test `duration`), full lane:
+    //   idle (loadavg ~10):        max 1423ms  (bootstrap "opens, migrates, and PERSISTS"), median 1.4ms
+    //   4x CPU oversubscription:   max 2966ms  (192 spinners, loadavg 119->195), median 3.2ms
+    //     per-iteration maxima: 652 / 2170 / 944 / 2966ms — the TAIL tracks load, the median barely
+    //     moves, which is the signature of worker descheduling rather than slow code.
+    // At 2966ms the default budget was 59% consumed by scheduling alone. The sibling lane in this
+    // same class (packages/test-support secret-scan) crossed the line under the identical stress —
+    // "Test timed out in 5000ms", 4 of 6 runs — so this is a measured near-miss, not a hypothetical.
+    //
+    // 20000ms is derived, not guessed: ~7x the measured 4x-oversubscription ceiling (2966ms), ~14x
+    // the idle ceiling (1423ms), and it matches db-client/core so the repo carries ONE starvation
+    // margin rather than a per-package guess. A red now requires starvation ~7x worse than a
+    // deliberate 4x-oversubscription stress, while a genuinely hung bootstrap still fails in 20s.
+    // Falsified (§2.11), not assumed: with `bootstrap()`'s enrolled-device gate broken
+    // (`const deviceId = await readDeviceId(...)` -> `= null`), the guarded test reds on
+    // "AssertionError: expected null to be 'device-abc'" with the whole file at 1.70s of test time
+    // — a real, specific assertion, NOT the timeout. The bigger bound absorbs jitter only.
+    // hookTimeout matches: `beforeEach`/`afterEach` close the DB and mkdtemp/rm real directories —
+    // same engine, same wall-clock starvation exposure as the bodies.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });
