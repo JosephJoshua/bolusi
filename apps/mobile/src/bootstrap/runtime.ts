@@ -37,6 +37,7 @@ import {
 import { createClientOpStore } from '@bolusi/db-client';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { denialAuditDiagnostics } from '../ports/diagnostics.js';
 import { systemTimer } from '../ports/timer.js';
 
 /** The platform ports the command runtime needs, injected (08 §3.2). */
@@ -111,6 +112,19 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         // (runtime/enforce.ts); this only stops it waiting FOREVER. Proven by runtime.test.ts, which
         // wedges when this line is removed.
         denialAuditTimer: systemTimer,
+        // Task 99's surfacing, ACTIVATED here (task 112) — same shape as the line above, one task
+        // later. The denial-audit emit is best-effort by design (a decided denial is not un-decided
+        // because its record failed to append), so core SWALLOWS an append failure and throws
+        // PERMISSION_DENIED regardless. Correct for the decision — but the swallow is also SILENT
+        // unless a sink is wired, so a PERSISTENTLY failing append (full disk, corrupt DB, migration
+        // drift) makes the FR-1045 trail quietly incomplete with nothing able to notice. Absent =
+        // pre-task-99 behaviour byte-for-byte, which is exactly what the app shipped until now.
+        // `denialAuditDiagnostics` is the app's ONE client diagnostics channel (ports/diagnostics.ts),
+        // the same object `bootstrapI18n` binds as the `I18nLogger` (§2.8 — one channel, not two).
+        // It NEVER affects the denial: the record is surfaced and the deny is thrown either way, and
+        // core guards the sink call so even a throwing sink cannot change a decided denial.
+        // Proven by runtime.test.ts, which stops observing the loss when this line is removed.
+        denialAuditDiagnostics,
       }).commands;
     },
   };
