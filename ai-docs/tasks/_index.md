@@ -41,10 +41,10 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | done | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
-| 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
+| 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | in-progress | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
-| 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
+| 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | done | 26 |
 | 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | done | 09 |
 | 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | done | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
@@ -71,14 +71,14 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | done | — |
 | 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | done | 31 |
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | done | 55 |
-| 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | todo | — |
-| 64 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` not installed; the prebuild pipeline prints that fact every run and nobody reads prebuild stdout (from task 58 class sweep) | todo | — |
+| 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | in-progress | — |
+| 64 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` not installed; the prebuild pipeline prints that fact every run and nobody reads prebuild stdout (from task 58 class sweep) | in-progress | — |
 | 66 | three agents filed colliding task numbers in one session; the collision **auto-merges clean** (filenames differ) while only `_index.md` conflicts — nothing checks §2.6's source of truth against the filesystem; Status drift already live on 07/13/15/58 | done | — |
 | 67 | `db-client/dialect.test.ts` "rolls back on error" times out at 5000ms under parallel load; passes in isolation — a T-10 flake, load is a hidden variable in this repo's test outcomes (from task 55 merge verification) | done | — |
 | 65 | `PIN_MESSAGE_KEY`/`SWITCHER_KEY`/`REASSURANCE_KEY` label-key maps are decoys — 0 production callers, screens hardcode `t()`, only tests assert the map (same class as 60, from task 60 sweep) | done | — |
 | 68 | wire the semantic export-sweep (knip) as a pinned dep + gate — `knip.json` shipped but knip is not a declared dependency, so the config is a non-executable document (from task 60) | done | — |
 | 69 | **MEDIUM** no `apps/mobile` test mounts a screen — hardcoding `state="entry"` unlocks the PIN pad during every lockout with 16/16 green; the render lane EXISTS and is unused (from task 60) | done | — |
-| 70 | **HIGH — §6 owner decision** SEC-DEV-04's §218 ("offline-revocation caveat") contradicts api/02-auth §7.3's by-design wipe and asks for a per-op result the wire never produces (401 precedes it); 2 of 5 behaviours unbuildable, 3 shipped (from task 61, review-61 confirmed) | in-progress | — |
+| 70 | **HIGH — §6 owner decision** SEC-DEV-04's §218 ("offline-revocation caveat") contradicts api/02-auth §7.3's by-design wipe and asks for a per-op result the wire never produces (401 precedes it); 2 of 5 behaviours unbuildable, 3 shipped (from task 61, review-61 confirmed) | done | — |
 | 71 | ledger Status is written twice (index row + file `**Status:**`) and the merge procedure touches one — make the writeback single-action; task 66's gate is only the backstop (from task 66) | done | 66 |
 | 72 | `06 §3.2` says `mediaRefSchema` lives in `@bolusi/core` — which **may not import zod** (`08 §3.3`, and core's own `strict-schema.ts:6`); the violation would compile + lint green and break only at runtime. Ruled to `@bolusi/schemas`; spec text still wrong (from task 18) | done | — |
 | 73 | **HIGH — owner directive (D16)** L3 integration (378 tests) runs on PGlite, which measurably missed the int8 silent bug (14/14 green vs real `pg` 4 red) and makes RLS tests vacuous (owner bypasses RLS); move to real PG16 via testcontainers + Ryuk | done | — |
@@ -104,11 +104,11 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | done | 16 |
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | done | 95 |
-| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
+| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | in-progress | 20, 24 |
 | 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | done | 26 |
 | 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | done | 21, 24 |
 | 108 | `platform.acknowledgeConflict` dead in the real runtime: `ctx.query(listConflictsQuery)` read seam has no `name` → throws `VALIDATION_FAILED: query has no name`; only the stubbed unit test hid it. One-line fix (self-carry `name`, mirror notes' `getNoteQuery`) + an unstubbed test (from task 26 CHAOS-07) | done | 17 |
-| 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | todo | 94 |
+| 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | done | 94 |
 | 110 | record the SYSTEM_KEY_DIR deployment convention (01 §3.6 defers to a deployment doc that does not exist) + fix the graceful-off contract comment (from task 78) | done | 78 |
 | 111 | packages/modules is a THIRD load-flake lane (task 93 triage mis-classified it) — applier-conformance reds 3/3 at 2x load and blocks a green full pnpm test (from task 93) | done | 93 |
 | 112 | wire the denial-audit diagnostics sink in apps/* so task 99 surfacing is ACTIVE (built+falsified but inert; same shape as 40->102, 20->105) | done | 99 |

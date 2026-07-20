@@ -23,6 +23,8 @@ import {
   readTenantId,
   runEnrollment,
   STORE_ID_META_KEY,
+  STORE_NAME_META_KEY,
+  TENANT_NAME_META_KEY,
   type DeviceBundle,
   type DeviceIdentity,
   type EnrollmentDeps,
@@ -396,18 +398,26 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     expect(await readStoreId(restarted)).toBe(fx.params.storeId);
   });
 
-  it('after enrollment meta_kv holds EXACTLY {tenantId, deviceId, storeId} — the draft is spent (T-14)', async () => {
-    // A presence spot-check would pass on a row that also wrote six keys nobody declared; assert the
-    // whole set. tenantId is applyBundle's; deviceId/storeId are task 88's; the draft is deleted.
+  it('after enrollment meta_kv holds EXACTLY {storeName, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
+    // A presence spot-check would pass on a row that also wrote keys nobody declared; assert the whole
+    // set. deviceId/storeId are task 88's; tenantId AND the store/tenant DISPLAY NAMES are applyBundle's
+    // (task 109 moved the name persistence into bundle-apply, so a rename refreshes them); draft deleted.
+    // Keys arrive ORDER BY key: the two `auth.*` names sort before deviceId/storeId/tenantId.
     fx = await fixture(12);
     await runEnrollment(fx.deps, fx.params);
     expect(await metaKeys(fx.db)).toStrictEqual([
+      STORE_NAME_META_KEY,
+      TENANT_NAME_META_KEY,
       DEVICE_ID_META_KEY,
       STORE_ID_META_KEY,
       'tenantId',
     ]);
-    // The three keys the two producers own — no draft, no seventh key.
+    // The keys the two producers own — no draft, no undeclared key.
     expect([DEVICE_ID_META_KEY, STORE_ID_META_KEY]).toStrictEqual(['deviceId', 'storeId']);
+    expect([STORE_NAME_META_KEY, TENANT_NAME_META_KEY]).toStrictEqual([
+      'auth.storeName',
+      'auth.tenantName',
+    ]);
   });
 
   it('a crash on the draft delete leaves the identity DURABLE and the draft recoverable (ordering)', async () => {
@@ -420,9 +430,12 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     const restarted = freshHandle(fx.driver);
     expect(await readDeviceId(restarted)).toBe(deviceId);
     expect(await readStoreId(restarted)).toBe(fx.params.storeId);
-    // The draft is NOT gone (the delete never ran) — identity is recoverable from BOTH places.
+    // The draft is NOT gone (the delete never ran) — identity is recoverable from BOTH places. The
+    // store/tenant names persisted by applyBundle (task 109), which runs BEFORE the draft delete, survive.
     expect(await metaKeys(restarted)).toStrictEqual([
       'auth.enrollment_draft',
+      STORE_NAME_META_KEY,
+      TENANT_NAME_META_KEY,
       DEVICE_ID_META_KEY,
       STORE_ID_META_KEY,
       'tenantId',

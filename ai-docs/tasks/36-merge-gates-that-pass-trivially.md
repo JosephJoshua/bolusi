@@ -1,5 +1,5 @@
 # TASK 36 — three CI jobs are labelled *merge gate* while passing trivially
-**Status:** todo
+**Status:** done
 **Depends on:** 11, 26
 
 ## Goal
@@ -57,3 +57,29 @@ Note the asymmetry that makes this worth its own task: a placeholder that exits 
 ## Note
 
 Filed from task 32's report. Its premise ("nothing runs the server suite in CI") turned out to be **wrong in an instructive way**: the `unit` job's unfiltered `vitest run` was already sweeping all 22 server files, so coverage was never lost — only the *named gate* was missing. That distinction is why nobody noticed for so long, and it is the reason this sweep must ask a precise question of each job: not "is this subject covered somewhere?" but **"would this specific job go red if its named subject broke?"** Those have different answers, and only the second one is what a merge gate promises.
+
+## Findings — full-workflow sweep (2026-07-20)
+
+Every job in `.github/workflows/ci.yml`, the exact command it runs, and the precise question — **would this job go RED if its named subject broke?** (not "is the subject covered somewhere else?"). Enumerated against the committed workflow (15 jobs). No `continue-on-error` anywhere in `.github/` (grep: 0), and `passWithNoTests` is set nowhere (only a comment in `vitest.config.ts` forbidding it), so a lane that matched zero files exits non-zero rather than green.
+
+| §5.6 stage | job | command it runs | RED if its named subject breaks? |
+| ---------- | --- | --------------- | -------------------------------- |
+| 1 | `install` | `pnpm install --frozen-lockfile` + `check-single-zod` + `check-forbidden-packages` + `check-no-control-bytes` + `check-test-script-builds` | **YES** — each static check exits non-zero on its violation (lockfile drift, second zod, forbidden pkg, raw control byte, a test script that doesn't build its dist) |
+| 2 | `lint` | `pnpm lint` (`eslint .`) + `pnpm i18n:check` | **YES** — any lint error at `error`, or any of the eight i18n catalog gates |
+| — | `unused-exports` | `pnpm knip` (`check-unused-exports.mjs`; asserts the `knip-canary` denominator) | **YES** — a new unused production export, a vanished canary (blind sweep), or mass disappearance |
+| 3 | `typecheck` | `pnpm typecheck` (`tsc -b && pnpm -r typecheck`) | **YES** — any type error |
+| 4/5 | `unit` | gitleaks install (checksum-pinned) + `pnpm test` (`tsc -b && vitest run`, all projects incl. the Node JCS vectors + SEC-META-01 / SEC-SECRET-02) | **YES** — any unit/integration test, or the gitleaks fixture |
+| — | `db-client` | build `@bolusi/db-client` + `pnpm -F @bolusi/db-client test` + client codegen `git diff --exit-code` | **YES** — driver-conformance failure or client-codegen drift |
+| 6 | `jcs-vectors-hermes` | `pnpm test:jcs-hermes` | **YES** — any Node↔Hermes JCS byte divergence (negative control verified at task 03) |
+| 7 | `ed25519-interop` | `pnpm test:ed25519-interop` | **YES** — any noble↔fixture vector mismatch |
+| 8 | `server-integration` | `pnpm test:server` (real PG16 via testcontainers) | **YES** — falsified red-then-green by task 32 |
+| — | `gitleaks` | `gitleaks/gitleaks-action@v2` (full-history scan) | **YES** — any detected secret |
+| 9 | `rls-witness` | `check-tenant-context.mjs` + `pnpm test:rls` (real PG16 testcontainers, `SET LOCAL ROLE bolusi_app`) | **YES** — neutering the role turns cross-tenant probes green-for-the-wrong-reason and the suite catches it (measured on-branch) |
+| — | `codegen-diff` | `db:migrate` + `db:codegen:check` + `db:codegen` + `git diff --exit-code` (service `postgres:16`) | **YES** — generated-type drift or a hand-edited `db.ts` |
+| 10 | `dual-dialect-appliers` | `pnpm test:appliers` | **YES** — falsified by task 11 (reintroduced `created_at integer` overflow → red; it caught two live shipped bugs on its first real run) |
+| 11 | `chaos-harness` | `pnpm chaos` (`tsc -b && vitest run --project harness`) | **YES** — falsified by **this task**: broke one CHAOS-01 convergence assertion → the scenario went red, `vitest` EXIT=1; reverted → EXIT=0 (baseline 17 files / 129 tests green) |
+| 12 | `device-lane` | `node scripts/not-implemented.mjs device-lane 27-device-gates` | **N/A — FAIL-SAFE placeholder.** Exits 1 unconditionally until task 27 wires the real EAS + on-device lane. It can never be green-for-nothing: a red job is honest about an unbuilt lane, where the old `echo … ` (exit 0) laundered absence into a green stage label (§2.11) |
+
+**Result: 14 of 15 jobs run a real subject and go red on it; `device-lane` is the sole placeholder and it fails safe (exit 1).** Zero green-for-nothing jobs remain in the workflow — the property the task set out to establish. `device-lane` becomes real (and this stub is deleted) in task 27.
+
+**Actual risk at fix time — preventive, not urgent.** `gh api repos/:owner/:repo/branches/main/protection` returned **HTTP 404 "Branch not protected"**: there are no required checks today, so the old green `device-lane` echo was not yet a live required-check-that-proves-nothing — it was the pre-scheduled §2.11 landmine, armed to fire the moment branch protection is enabled with stages 10–12 required. Converting it to exit 1 now closes it before that switch, and because nothing requires the check yet, the red does not block merges.
