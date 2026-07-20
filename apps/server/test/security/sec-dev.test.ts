@@ -3,23 +3,27 @@
 //
 // SEC-DEV-01/02/03 are complete on this surface, so their titles carry the id verbatim.
 //
-// SEC-DEV-04 / SEC-DEV-05 / SEC-DEV-07 are NOT: each has a leg this file cannot reach, and each
-// title below used to embed the id anyway. SEC-META-01 counts an id as shipped when a title
-// contains it verbatim (`title.includes(id)`) — it cannot read this comment — so those three
-// titles were retiring their ids whole while proving one leg each, and with no allowlist row live
-// there was nothing to contradict them (task 31's stated residual; found by task 54's class sweep
-// and closed by task 61). Per security-guide §2.1.6 a contributing surface names the id in a
-// COMMENT, never a title. The outstanding legs are carried by allowlist rows instead:
+// SEC-DEV-04 / SEC-DEV-05 / SEC-DEV-07 each have a leg this file proves but do NOT complete here.
+// SEC-META-01 counts an id as shipped when a title contains it verbatim (`title.includes(id)`) — it
+// cannot read this comment — so embedding an id in a leg title below would retire the whole id while
+// proving only that leg (task 31's stated residual; found by task 54's class sweep, closed by task
+// 61). Per security-guide §2.1.6 a contributing surface names the id in a COMMENT, never a title.
+// Where each id is actually COMPLETED:
 //
-//   SEC-DEV-04 → ai-docs/tasks/62-*.md  §218's client legs. Two of its five behaviours contradict
-//                api/02-auth §7.3 and cannot be built as written; the three that are real ship in
-//                packages/core/test/sync/offline-revocation.test.ts. 62 resolves the spec conflict.
+//   SEC-DEV-04 → RETIRED (D18 §2, 2026-07-20): §218 was over-specified; the three real behaviours
+//                (1/3/5) ship titled `SEC-DEV-04` in packages/core/test/sync/offline-revocation.test.ts,
+//                and the id is off the allowlist. The revoked-device 401 test below is the server
+//                wire fact those client behaviours rest on — a contributing leg, so its title carries
+//                no id. (The former "allowlisted to task 62" note was doubly stale: SEC-DEV-04 is now
+//                retired, and the task renumbered 62 → 70.)
 //   SEC-DEV-05 → ai-docs/tasks/26-chaos-harness.md  §219 wants "sync bodies and logs contain no
 //                private-key material (harness intercepts ALL outbound requests during enroll +
 //                sync cycle)". Below is the enroll-payload leg only; interception is 26's surface.
-//   SEC-DEV-07 → ai-docs/tasks/62-*.md  §221 wants forge-with-extracted-key → CHAIN_BROKEN +
-//                anomaly row AND the surfacing. Below is the surfacing leg only; the generation
-//                leg is task 07's pipeline (sec-oplog.test.ts:241 covers it under SEC-OPLOG-03).
+//   SEC-DEV-07 → COMPLETED end-to-end in apps/server/test/security/sec-dev-07.test.ts (task 70): a
+//                real forge (correct signature, stale chain → CHAIN_BROKEN) writes a real anomaly row
+//                through the push pipeline, then GET /v1/devices surfaces the owner-visible count —
+//                the §221 mitigation firing forge → row → count. The surfacing test below (seeded
+//                rows only) is a contributing leg, so its title still carries no id.
 //
 // Do not "tidy" the ids back into these titles — that is the defect, not the fix. Same discipline
 // as apps/server/test/integration/sync/sec-sync.test.ts:66.
@@ -228,8 +232,10 @@ test('private key never reaches the server on enroll: EnrollReq is .strict() and
   expect(serialized).not.toContain(privB64);
 });
 
-// Surfacing leg of the id named in the header (§221). The forge-with-extracted-key → CHAIN_BROKEN
-// + anomaly-row generation leg is the oplog pipeline's, so the title carries no id.
+// Surfacing leg of the id named in the header (§221): the GET's aggregation over SEEDED anomaly
+// rows, with deterministic control of the counts. The end-to-end join — a REAL forge writing a real
+// anomaly row that this same GET then surfaces — is what COMPLETES SEC-DEV-07, and it lives in
+// sec-dev-07.test.ts (titled). This leg seeds its rows, so its title carries no id.
 test('key-compromise containment: GET /v1/devices surfaces device_anomalies counts and last-anomaly-at per device', async () => {
   const { p, storeId, control } = await setup();
   const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
