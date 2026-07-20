@@ -228,3 +228,95 @@ test('a HUNG denial-audit emit does not wedge the PRODUCTION runtime — execute
     'the hung append landed no audit op — the deny did not wait on it',
   ).toEqual([]);
 });
+
+// ── TASK 112: the same activation shape, one seam over ─────────────────────────────────────────
+// Task 99 built, tested and falsified the SURFACING of a lost denial audit (`DenialAuditDiagnosticsPort`)
+// in @bolusi/core, then deliberately did not touch apps/*. So — exactly like task 40's bound before
+// task 102 — the port was OPTIONAL and OFF: `createAppRuntime` passed no `denialAuditDiagnostics`,
+// core's `#surfaceLostAudit` found a null sink and returned, and a persistently failing FR-1045 audit
+// append stayed silent in the shipping app. This test drives the REAL `createAppRuntime` composition
+// down to the REAL production sink (`console.warn`, via ports/diagnostics.ts), so a green here means
+// the loss is actually observable on-device, not merely observable in a core fixture.
+//
+// FALSIFIED (§2.11): deleting the `denialAuditDiagnostics` line from `runtime.ts` leaves the deny
+// throwing PERMISSION_DENIED and the audit op still absent — everything the OTHER test checks stays
+// green — while the "the loss was reported" assertion fails cleanly (no diagnostics call). Restore
+// the line → green. That is the discriminating RED: it fails on the binding and on nothing else.
+// Reported in task 112.
+test('a FAILED denial-audit append is REPORTED to the app diagnostics sink — and the deny still throws (task 112 wiring)', async () => {
+  // Same attacker-reachable await as the test above, but REJECTING rather than hanging: the store
+  // answers "no" (disk full, corrupt DB, migration drift). Core swallows it — correctly, a decided
+  // denial is not un-decided by a lost record — and the ONLY trace it leaves is the diagnostics call.
+  let failArmed = false;
+  let failEntered = false;
+  const failingApp: Bootstrapped = {
+    ...app,
+    db: {
+      ...app.db,
+      driver: {
+        ...app.db.driver,
+        begin: () => {
+          if (failArmed) {
+            failEntered = true;
+            return Promise.reject(new Error('op-store begin rejected (disk full)'));
+          }
+          return app.db.driver.begin();
+        },
+      },
+    },
+  };
+
+  // Spy on the REAL console the production sink writes to (ports/diagnostics.ts) — NOT an injected
+  // fake. Anything short of this proves only that a test double can be called (task 102's lesson).
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    const appRuntime = createAppRuntime(failingApp, deps());
+    await appRuntime.evaluator.prime();
+    const runtime = appRuntime.runtimeFor(device);
+    const ctx = runtime.createContext(GRANTLESS_USER_ID);
+
+    failArmed = true;
+    const tracked = track(runtime.execute(deniedCommand, {}, ctx));
+    await drainMicrotasks();
+
+    // T-14b: a failure you never reached is not the failure. The emit genuinely hit the rejecting append.
+    expect(failEntered, 'the audit emit must actually reach the rejecting op-store begin()').toBe(
+      true,
+    );
+
+    // The deny is UNCONDITIONAL on the audit — surfacing the loss must not soften it (02 §7).
+    expect(tracked.settled, 'execute settles — a failed audit never wedges the deny').toBe(true);
+    expect(tracked.error).toBeInstanceOf(DomainError);
+    expect((tracked.error as DomainError).code).toBe('PERMISSION_DENIED');
+    expect(
+      await opsOfType('auth.permission_denied'),
+      'the rejected append landed no audit op — the record really is lost',
+    ).toEqual([]);
+
+    // ...and THAT LOSS WAS REPORTED. Matched on the record's own shape rather than on the message
+    // string, so rewording the diagnostic cannot silently turn this green-for-the-wrong-reason.
+    const reported = warn.mock.calls
+      .map((call) => call[1] as Record<string, unknown> | undefined)
+      .find((meta) => meta !== undefined && 'consecutiveFailures' in meta);
+    expect(
+      reported,
+      'the lost FR-1045 audit must reach the app diagnostics sink (the binding is live)',
+    ).toBeDefined();
+    expect(reported).toMatchObject({
+      // `failed` (the store rejected), not `timed_out` — an operator needs a broken store told apart
+      // from a wedged one, and only the outcome field carries that.
+      outcome: 'failed',
+      // The first loss of a run. A CLIMBING count is what distinguishes FR-1045's tolerated transient
+      // failure from an audit trail going incomplete, so the number must survive the whole binding.
+      consecutiveFailures: 1,
+      userId: GRANTLESS_USER_ID,
+      permissionId: deniedCommand.permission,
+      scopeStoreId: STORE_ID,
+    });
+    expect(reported?.error, 'the rejection itself is carried, for a structured log').toBeInstanceOf(
+      Error,
+    );
+  } finally {
+    warn.mockRestore();
+  }
+});
