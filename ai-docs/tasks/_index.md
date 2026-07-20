@@ -106,7 +106,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | done | 95 |
 | 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
 | 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | done | 26 |
-| 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | todo | 21, 24 |
+| 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | done | 21, 24 |
 | 108 | `platform.acknowledgeConflict` dead in the real runtime: `ctx.query(listConflictsQuery)` read seam has no `name` → throws `VALIDATION_FAILED: query has no name`; only the stubbed unit test hid it. One-line fix (self-carry `name`, mirror notes' `getNoteQuery`) + an unstubbed test (from task 26 CHAOS-07) | done | 17 |
 | 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | todo | 94 |
 | 110 | record the SYSTEM_KEY_DIR deployment convention (01 §3.6 defers to a deployment doc that does not exist) + fix the graceful-off contract comment (from task 78) | done | 78 |
