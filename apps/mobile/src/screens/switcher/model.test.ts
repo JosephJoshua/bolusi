@@ -4,11 +4,9 @@ import {
   initialsOf,
   sortByRecency,
   SWITCHER_COLUMNS,
-  SWITCHER_KEY,
   switcherState,
   tapTarget,
   toGridRows,
-  type SwitcherState,
   type SwitcherUser,
 } from './model.js';
 
@@ -65,17 +63,14 @@ describe('the four mandatory states (design-system §5) — all present, all dis
     expect(switcherState([SITI], 'UNEXPECTED').kind).toBe('error');
   });
 
-  test('empty and error are different states with different keys (FR-1036)', () => {
-    // The bug this guards: rendering `[]` as "nothing here" when the truth is "we could not ask".
+  test('empty and error are DIFFERENT states — `[]` never reads as "we could not ask" (FR-1036)', () => {
+    // The bug this guards: rendering `[]` as "nothing here" when the truth is a failed query. The
+    // distinction lives in the STATE `kind` — which is what `SwitcherScreen` renders its per-state
+    // headline from — not in a label map the screen never read (task 65 deleted that decoy). Asserted
+    // here, on the shipping path, so it goes red if `switcherState` ever collapses the two.
+    expect(switcherState([], null).kind).toBe('empty');
+    expect(switcherState(null, 'UNEXPECTED').kind).toBe('error');
     expect(switcherState([], null).kind).not.toBe(switcherState(null, 'UNEXPECTED').kind);
-    expect(SWITCHER_KEY.empty).not.toBe(SWITCHER_KEY.error);
-    expect(SWITCHER_KEY.empty).not.toBe(SWITCHER_KEY.unauthorized);
-  });
-
-  test('every state kind resolves a label key (T-14 denominator)', () => {
-    const kinds: SwitcherState['kind'][] = ['loading', 'empty', 'error', 'unauthorized', 'ready'];
-    for (const kind of kinds) expect(SWITCHER_KEY[kind]).toMatch(/^[a-z]+\./);
-    expect(Object.keys(SWITCHER_KEY).sort()).toEqual([...kinds].sort());
   });
 
   test('a ready list is sorted on the way out', () => {
