@@ -1,6 +1,6 @@
 # TASK 78 — no server loader for the tenant system-device signing key; conflict detection is wired but OFF until one exists
 
-**Status:** in-progress
+**Status:** done
 **Priority:** HIGH — conflict detection is fully built, tested, and wired into the production push route, but **disabled in production** until a `SystemKeyStore` is provided. Without this, the server accepts colliding edits and detects nothing — silently.
 **Depends on:** 17 (the seam), 13 (provisioning writes the key)
 **Filed by:** impl-17, 2026-07-16
