@@ -1,5 +1,5 @@
 # TASK 52 — 8 of 12 live invariants have no owner and no test, in a section titled "Invariants (testable, numbered)"
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — none is known-broken; all are **unverified universal claims** in a section that promises testability. Per D15b they are contracts, not provenance.
 **Depends on:** 31
 
