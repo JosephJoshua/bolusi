@@ -2,7 +2,7 @@
 // it resolves the acting user, then requires auth.device_read.
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
-import { PERM, PERMISSION_BY_ID, PERMISSIONS } from '../../src/identity/permission-registry.js';
+import { PERM, PERMISSION_BY_ID, PERMISSIONS } from '../../src/identity/permissions.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
   makeIdentityHarness,
@@ -104,19 +104,34 @@ test('permission ids used in the §4.5 checks are exactly 02-permissions §11 re
   expect(PERMISSION_BY_ID.size).toBe(19);
 });
 
-test('drift guard: the server permission registry matches the seeded DB permissions table exactly', async () => {
-  // migration 0008 seeds `permissions`; permission-registry.ts is the runtime mirror. They must
-  // agree (id, scope, isDangerous) or the FK-backed grants and the bundle snapshot diverge.
+test('drift guard: the canonical @bolusi/core permission registry matches the seeded DB permissions table exactly', async () => {
+  // THE BOUNDARY (task 33). `PERMISSIONS` is now the ONE registry assembled from the `@bolusi/core`
+  // module manifests (identity/permissions.ts); migration 0008 seeds the `permissions` table from a
+  // hand-authored SQL list. These are two INDEPENDENT encodings of 02-permissions §11 — the core
+  // vocabulary that the bundle snapshot + §4.5 checks read, and the FK-backing rows the grants point
+  // at. A permission present in one and not the other (or with a different scope / isDangerous /
+  // description) is a silent authz-or-audit divergence no single-package test can see. This guard
+  // fires the moment they disagree — id, scope, isDangerous, AND the canonical EN description (the
+  // bundle ships it as the client's label fallback, 07-i18n §3.1).
   const rows = await h.idb.db
     .selectFrom('permissions')
-    .select(['id', 'scope', 'isDangerous'])
+    .select(['id', 'scope', 'isDangerous', 'description'])
     .execute();
   expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(19);
-  const dbById = new Map(rows.map((r) => [r.id, { scope: r.scope, isDangerous: r.isDangerous }]));
+  const dbById = new Map(
+    rows.map((r) => [
+      r.id,
+      { scope: r.scope, isDangerous: r.isDangerous, description: r.description },
+    ]),
+  );
+  // Both directions: every core-registry entry is in the seed (loop below) AND the seed has no id the
+  // core registry lacks (equal counts, both asserted 19 — T-14 denominator).
+  expect(PERMISSIONS).toHaveLength(rows.length);
   for (const p of PERMISSIONS) {
     const db = dbById.get(p.id);
     expect(db, `${p.id} missing from the DB seed`).toBeDefined();
-    expect(db?.scope).toBe(p.scope);
-    expect(db?.isDangerous).toBe(p.isDangerous);
+    expect(db?.scope, `${p.id} scope`).toBe(p.scope);
+    expect(db?.isDangerous, `${p.id} isDangerous`).toBe(p.isDangerous);
+    expect(db?.description, `${p.id} description`).toBe(p.description);
   }
 });

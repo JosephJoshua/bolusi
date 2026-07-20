@@ -19,7 +19,7 @@ import {
   type DeviceBundle,
   type PinVerifier,
 } from './schemas.js';
-import { PERMISSIONS } from './permission-registry.js';
+import { PERMISSIONS } from './permissions.js';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 

@@ -4,8 +4,10 @@
 // provisioning/superuser role) is the correct place. Without these rows the role_permissions FK
 // makes tenant provisioning and every grant impossible.
 //
-// The rows mirror 02-permissions §11 verbatim; @bolusi/server's permission-registry.ts is the
-// runtime mirror of the same source, and a drift-guard test asserts the two agree.
+// The rows mirror 02-permissions §11 verbatim. The runtime registry is the ONE assembled from the
+// `@bolusi/core` module manifests (the server reads it via identity/permissions.ts); a drift-guard
+// test (apps/server acting-user.test.ts) asserts that core registry and this seed agree on every
+// id, scope, isDangerous, and description.
 import { sql, type Kysely } from 'kysely';
 
 interface PermRow {

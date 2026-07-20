@@ -14,7 +14,7 @@ import { appendAudit } from '../identity/audit.js';
 import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { buildBundle, bundleEtag } from '../identity/bundle.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
-import { PERM } from '../identity/permission-registry.js';
+import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { purgeExpiredIdempotency, runIdempotent } from '../identity/idempotency.js';
 import { revokeDevice } from '../identity/revocation.js';
