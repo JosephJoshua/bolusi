@@ -1,6 +1,6 @@
 # TASK 104 — the same exact-match-vs-subpath class survives in the platform-free prong: `ws/<subpath>` escapes `PLATFORM_FORBIDDEN`
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **LOW** — the identical latent inconsistency task 95 closed for DB drivers, one prong over, but low materiality: `ws` is not a DB driver and platform-free code (`core`/`schemas`/`i18n`/`modules`) has no reason to import a `ws` subpath. No live escape. Filed so the class is closed everywhere, not left as a surprise for the next reader (the project's "close the class, not the instance" discipline — T-12).
 **Depends on:** 95
 **Blocks:** —

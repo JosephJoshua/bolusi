@@ -149,8 +149,15 @@ export async function listConflictsHandler(
  * handler}` and a manifest query declaration already is one. A separate hand-written handle for the
  * command's read would be a second statement of "which permission gates this read" — free to drift
  * from the one the query layer actually enforces (CLAUDE.md §2.8).
+ *
+ * Carries its own `name` so `acknowledgeConflict` can read through it via `ctx.query` — the query
+ * runtime rejects a nameless handle with `VALIDATION_FAILED` (query/execute.ts; a denial op needs it
+ * for `target`, 02 §7), so without this the command is DEAD on every real invocation. `defineModule`
+ * re-attaches the SAME name from the manifest key (`listConflicts`), so the two agree by
+ * construction. Same pattern as notes' `getNoteQuery`.
  */
 export const listConflictsQuery = {
+  name: 'listConflicts',
   permission: PLATFORM_PERMISSION.conflictView,
   input: listConflictsInput,
   handler: listConflictsHandler,

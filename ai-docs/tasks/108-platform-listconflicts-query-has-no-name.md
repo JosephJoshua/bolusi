@@ -1,6 +1,6 @@
 # TASK 108 — `platform.acknowledgeConflict` is dead in the real runtime: its `ctx.query(listConflictsQuery)` read seam has no `name`, so the command throws `VALIDATION_FAILED: query has no name`
 
-**Status:** todo
+**Status:** done
 **Priority:** **HIGH** — the `acknowledgeConflict` command (the ONLY production write path for the `surfaced → acknowledged` Conflict transition, 03 §7) throws on every real invocation. No LIVE user impact yet only because no UI wires the command; it bites the moment the conflicts screen ships. The bug is invisible to the existing test because that test STUBS the query (T-11/T-15: the oracle was interrogated, not the mechanism).
 **Depends on:** 17
 **Blocks:** — (must be resolved before the conflicts/acknowledge UI goes live)

@@ -14,6 +14,7 @@ import {
   type AppEnrollment,
   type EnrollmentPlatform,
 } from './src/bootstrap/enrollment.js';
+import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { Root } from './src/bootstrap/Root.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
 import { appStatePort } from './src/ports/app-state.js';
@@ -33,13 +34,15 @@ import { netInfoPort } from './src/ports/netinfo.js';
  * NOT registered directly any more: it takes every input as a prop so it stays drivable from fakes,
  * which means something has to supply them, and that something is `Root`.
  *
- * DEVICE INFO IS EMPTY UNTIL ENROLLMENT, and that is honest rather than lazy. Every field except
- * `platform` is a fact the SERVER establishes: `api/02-auth` §4.3's enroll response carries the
- * deviceId, tenant and store, and §4.1 step 5 persists them. Reading a device name out of
- * `expo-constants` would put a plausible-looking value on the Settings screen that has nothing to do
- * with the device row an owner is about to revoke — and `expo-constants` is not pinned in 08 §2.2, so
- * adding it is a spec-table change requiring a stop-and-ask (CLAUDE.md §4/§6) for no gain. The
- * bootstrap (task 24 item 2) hands the persisted values in.
+ * DEVICE INFO IS DERIVED FROM PERSISTED STATE (task 94), not a literal. Every field except
+ * `platform`/`appVersion` is a fact the SERVER establishes: `api/02-auth` §4.3's enroll response
+ * carries the deviceId, tenant and store; enrollment persists the ids to meta_kv (task 88) and the
+ * NAMES alongside them (bootstrap/device-info.ts). So `readDeviceInfo` reads the real identity of an
+ * enrolled device here, and returns the honest empty block for a device that has not enrolled yet —
+ * never a plausible-looking placeholder that has nothing to do with the device row an owner is about
+ * to revoke. `appVersion` stays `''`: `expo-constants` is not pinned in 08 §2.2, and pinning it is a
+ * spec-table change that needs a stop-and-ask (CLAUDE.md §4/§6) — deferred, see
+ * `decisions/2026-07-20-appversion-source.md`, and left empty rather than faked (T-19).
  */
 /**
  * THE ONE op-sqlite BINDING SITE in the app (08 §3.2; testing-guide §2.3).
@@ -52,6 +55,16 @@ import { netInfoPort } from './src/ports/netinfo.js';
  * The op-sqlite CONFIG (`sqlcipher: true`, `performanceMode: true`) is not here and cannot be: 08
  * §2.2 says it goes in `package.json`'s `op-sqlite` block, read at native build time. It is there.
  */
+/**
+ * The app version string reported to the server on enroll AND shown on the Settings device block —
+ * ONE source, so the two never disagree. Empty in v0: `expo-constants` is not pinned in 08 §2.2 and
+ * pinning it (to read `Constants.expoConfig?.version`) is a spec-table change needing a stop-and-ask
+ * (CLAUDE.md §4/§6). Deferred in `decisions/2026-07-20-appversion-source.md`; `''` is VALID per the
+ * server's `EnrollReq` (`z.string().max(32)`) and honest — a plausible-but-wrong version is the T-19
+ * lie this abstains from.
+ */
+const APP_VERSION = '';
+
 function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // ONE key store serves BOTH the boot (mint/read the SQLCipher key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
@@ -153,10 +166,9 @@ function createEnrollment(
     // starts it on success) pushes it. Task 25's command runtime binds the real append trigger.
     syncScheduler: { schedule: () => undefined },
     platform: Platform.OS === 'ios' ? 'ios' : 'android',
-    // appVersion is left empty: expo-constants is not pinned (08 §2.2), and adding it is a spec-table
-    // change (§4/§6). Empty is valid per the server's EnrollReq (`z.string().max(32)`) — filed as a
-    // follow-up rather than faked with a plausible-but-wrong version (T-19).
-    appVersion: '',
+    // Same `APP_VERSION` the Settings block shows — empty in v0 (expo-constants unpinned, decision
+    // deferred). Valid per the server's EnrollReq (`z.string().max(32)`); not faked (T-19).
+    appVersion: APP_VERSION,
   };
   return createAppEnrollment(app, platform, onEnrolled);
 }
@@ -167,14 +179,14 @@ function Bootstrapped(): React.JSX.Element | null {
     createSync,
     createEnrollment,
     localeStore: fileLocaleStore,
-    deviceInfo: {
-      deviceId: '',
-      deviceName: '',
-      storeName: '',
-      tenantName: '',
-      platform: Platform.OS === 'ios' ? 'ios' : 'android',
-      appVersion: '',
-    },
+    // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
+    // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
+    // facts, not DB values); the deviceId + names come from meta_kv.
+    readDeviceInfo: (app) =>
+      readDeviceInfo(app, {
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        appVersion: APP_VERSION,
+      }),
   });
 }
 
