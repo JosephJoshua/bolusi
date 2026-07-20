@@ -13,6 +13,7 @@ import { requestId } from 'hono/request-id';
 import { resolveDeps, type ServerDeps } from './deps.js';
 import type { AppEnv } from './env.js';
 import { ApiError, respondError } from './errors.js';
+import { PermissionDeniedError, recordPermissionDenial } from './identity/denial-audit.js';
 import { accessLog } from './middleware/access-log.js';
 import { bearerAuth } from './middleware/auth.js';
 import { gzipDecompress } from './middleware/gzip-decompress.js';
@@ -55,7 +56,33 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
 
   // Error envelope (§6/§7). A thrown ApiError maps to its registry code; anything else is an
   // unhandled server error → 500 INTERNAL with the request id (§7).
-  app.onError((err, c) => {
+  app.onError(async (err, c) => {
+    // The single FR-1045 server-denial emission point (02-permissions §7 declare/emit split): a
+    // handler DECLARES the denial by throwing PermissionDeniedError; this writes the one
+    // `identity_audit` row, in its OWN forTenant tx (the request's tx has already rolled back), and
+    // is never permission-checked (non-recursion). Best-effort so a denial's audit-write fault
+    // never converts a 403 into a 500 — the deny is the security decision, the audit is evidence
+    // (the same fail-safe as the client arm; surfacing a persistent audit-write fault is task 99).
+    if (err instanceof PermissionDeniedError) {
+      const device = c.get('device');
+      const tenantId = device?.tenantId ?? c.get('controlSession')?.tenantId;
+      if (tenantId !== undefined) {
+        try {
+          await recordPermissionDenial(deps.forTenant, {
+            tenantId,
+            target: `${c.req.method} ${c.req.path}`,
+            deviceId: device?.deviceId ?? null,
+            denial: err.denial,
+            at: deps.now(),
+          });
+        } catch {
+          // Best-effort: deny is the security decision, the audit row is evidence. A failed append
+          // must never turn a 403 into a 500 (task-10 fail-safe, mirrored on the client arm).
+          // Surfacing a *persistent* audit-write fault is task 99's cross-cutting item, not here.
+        }
+      }
+      return respondError(c, err.code, err.details);
+    }
     if (err instanceof ApiError) {
       return respondError(c, err.code, err.details);
     }

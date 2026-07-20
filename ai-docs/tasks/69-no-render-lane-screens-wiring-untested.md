@@ -1,6 +1,6 @@
 # TASK 69 — nothing renders any mobile screen: the model→component wiring is asserted by nothing, which is task 60's decoy one level up
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM — **no live bug found**; every screen wires its model correctly today. This is the honest boundary of task 60's fix: 60 moved the lockout coverage onto the code that decides, and **the code that *applies* the decision is still uncovered**.
 **Depends on:** —
 **Blocks:** the guard in 63

@@ -1,8 +1,19 @@
 // Diagnostics sink for missing-key and unknown-code events (07-i18n §6, §4.2).
 //
 // The default is a no-op rather than `console.warn`: this package is platform-free (08 §3.4,
-// `types: []`, `lib: ES2022`), so `console` is not even in scope here. The app wires the real
-// client diagnostics log at init; tests inject a spy.
+// `types: []`, `lib: ES2022`), so `console` is not even in scope here. Tests inject a spy.
+//
+// WHO BINDS THIS IN PRODUCTION, precisely (T-15 — no aspirational comment stated as fact; this one
+// previously claimed "the app wires the real client diagnostics log at init" while NO app passed a
+// `logger`, so every §6 warning went to the no-op below and was unobservable on-device):
+//
+//   apps/mobile — `bootstrapI18n` (src/i18n.ts) passes `consoleDiagnostics` (src/ports/diagnostics.ts),
+//     the app's one client diagnostics channel, shared with the command runtime's denial-audit sink
+//     (§2.8). v0's "client diagnostics log" is a structured `console.warn` and nothing more: it is
+//     visible in `adb logcat` / the dev client, and it is NOT persisted, buffered, or sent anywhere.
+//     Do not cite it as remote or retained observability.
+//   apps/server — `ensureI18n` (src/push/payload.ts) calls `initI18n()` with NO logger, so on the
+//     server this sink is still the no-op. Server-side push-copy fallbacks are unobserved today.
 
 export interface I18nLogger {
   warn(message: string, meta?: Record<string, unknown>): void;

@@ -11,6 +11,7 @@ import type { ServerDeps } from '../deps.js';
 import type { AppEnv, DevicePrincipal } from '../env.js';
 import { ApiError } from '../errors.js';
 import { appendAudit } from '../identity/audit.js';
+import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { buildBundle, bundleEtag } from '../identity/bundle.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permission-registry.js';
@@ -76,7 +77,15 @@ export function createDevicesRouter(deps: ServerDeps) {
             const readableStores = grants
               .map((g) => g.storeId)
               .filter((s): s is string => s !== null);
-            if (!tenantWide && readableStores.length === 0) throw new ApiError('PERMISSION_DENIED');
+            // No auth.device_read grant in any store — a list-scope denial (security-guide §2.2).
+            // Declared for the FR-1045 trail (§7); scope is null (the list spans the tenant).
+            if (!tenantWide && readableStores.length === 0)
+              throw new PermissionDeniedError({
+                actorUserId: acting.userId,
+                permissionId: PERM.deviceRead,
+                scopeStoreId: null,
+                reason: 'not_granted',
+              });
 
             let query = db
               .selectFrom('devices')

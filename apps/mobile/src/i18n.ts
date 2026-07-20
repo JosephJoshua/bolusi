@@ -33,6 +33,8 @@ import {
   type Locale,
 } from '@bolusi/i18n';
 
+import { consoleDiagnostics } from './ports/diagnostics.js';
+
 /** The storage key for the device locale. */
 export const DEVICE_LOCALE_KEY = 'bolusi.device_locale';
 
@@ -90,6 +92,10 @@ function isSelectable(locale: Locale): boolean {
  */
 export async function bootstrapI18n(store: LocaleStorePort): Promise<Locale> {
   const locale = await readDeviceLocale(store);
-  initI18n({ locale });
+  // The `logger` is what `I18nLogger`'s "the app wires the real client diagnostics log at init" was
+  // describing — and until task 112 no app passed one, so §6's missing-key/unknown-code warnings went
+  // to the no-op default and were unobservable on-device. Same object the command runtime binds as its
+  // denial-audit diagnostics sink (ports/diagnostics.ts): ONE client diagnostics channel (§2.8).
+  initI18n({ locale, logger: consoleDiagnostics });
   return locale;
 }

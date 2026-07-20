@@ -1,5 +1,5 @@
 # TASK 56 — `readVerifier` asserts client shapes over server types: the PIN-verifier "newest" decision can invert silently
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM (latent — `apps/server` doesn't call it yet) but it is an **auth surface**, so §2.5 applies: adversarial tests ship before review.
 **Depends on:** 48
 

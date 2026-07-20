@@ -4,7 +4,7 @@
 // variants) — resolved through PERMISSION_BY_ID so a typo is a miss, not a silent allow.
 import type { TenantDb } from '@bolusi/db-server';
 
-import { ApiError } from '../errors.js';
+import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { PERMISSION_BY_ID, TENANT_ADMIN_PERMISSION } from '../identity/permission-registry.js';
 
 /**
@@ -48,13 +48,24 @@ export async function hasPermission(
   return false;
 }
 
-/** Throw `403 PERMISSION_DENIED` unless `userId` holds `permissionId` in scope `storeId`. */
+/**
+ * Throw `403 PERMISSION_DENIED` unless `userId` holds `permissionId` in scope `storeId`. This is
+ * the server's single §4.5 permission-enforcement point (02-permissions §4) — so it *declares* the
+ * FR-1045 denial (reason `not_granted`, the §7 umbrella for an evaluator miss) by throwing a
+ * `PermissionDeniedError` carrying the audit context; app.ts `onError` is the single point that
+ * writes the `identity_audit` row (mirror of task 44's client single-emitter split).
+ */
 export async function requirePermission(
   db: TenantDb,
   params: { userId: string; tenantId: string; storeId: string | null; permissionId: string },
 ): Promise<void> {
   if (!(await hasPermission(db, params))) {
-    throw new ApiError('PERMISSION_DENIED');
+    throw new PermissionDeniedError({
+      actorUserId: params.userId,
+      permissionId: params.permissionId,
+      scopeStoreId: params.storeId,
+      reason: 'not_granted',
+    });
   }
 }
 

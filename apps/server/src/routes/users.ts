@@ -6,10 +6,12 @@ import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
 import { countActiveTenantAdmins, isTenantAdmin, requirePermission } from '../auth/permissions.js';
+import { TENANT_ADMIN_PERMISSION } from '../identity/permission-registry.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
 import { appendAudit } from '../identity/audit.js';
+import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permission-registry.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
@@ -99,7 +101,15 @@ export function createUsersRouter(deps: ServerDeps) {
             if (roles.length !== body.roleIds.length) throw new ApiError('PERMISSION_DENIED');
             const grantsTenantWide = roles.some((r) => r.scopeType === 'tenant');
             if (grantsTenantWide && !(await isTenantAdmin(db, acting.userId))) {
-              throw new ApiError('PERMISSION_DENIED');
+              // §5.4.2 tenant-grant rule — a handler-declared restriction (not a plain
+              // requirePermission miss): only a tenant admin may mint a tenant-wide role, so a
+              // store_owner cannot create a main_owner. Declared for the FR-1045 trail (§7).
+              throw new PermissionDeniedError({
+                actorUserId: acting.userId,
+                permissionId: TENANT_ADMIN_PERMISSION,
+                scopeStoreId: null,
+                reason: 'restriction_violated',
+              });
             }
 
             const newUserId = uuidv7(t);
@@ -380,7 +390,15 @@ export function createUsersRouter(deps: ServerDeps) {
               });
               if (await holdsMainOwner(db, targetUserId)) {
                 if (!(await holdsMainOwner(db, acting.userId)))
-                  throw new ApiError('PERMISSION_DENIED');
+                  // Privileged-target restriction (§6.6) — the online endpoint mirror of the
+                  // op-push rule task 07 owns (that path audits via device_anomalies). Declared
+                  // here so the endpoint denial also lands in the FR-1045 trail (§7).
+                  throw new PermissionDeniedError({
+                    actorUserId: acting.userId,
+                    permissionId: PERM.userResetPin,
+                    scopeStoreId: acting.deviceStoreId,
+                    reason: 'restriction_violated',
+                  });
               }
             }
 
