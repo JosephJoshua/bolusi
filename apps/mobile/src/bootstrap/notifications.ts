@@ -1,11 +1,15 @@
 /**
  * Per-category Android notification channels (api/04-push §3/§5).
  *
- * §5's muting model is channel importance, not server-side suppression — which is why a channel must
- * exist per VISIBLE category before the first notification arrives: on Android a channel's importance
- * is fixed at creation and can afterwards only be changed by the USER in system settings. Create one
- * channel for everything and the shop's only choice is all-or-nothing; create them late and the first
- * notification lands on a default channel the mute toggle does not control.
+ * A channel must exist per VISIBLE category before the first notification arrives, because on Android
+ * a channel's importance is fixed at creation and can afterwards be changed only by the USER in system
+ * settings. That constraint IS §5's v0 muting model: the in-app row deep-links to the OS notification
+ * settings (`src/push/notification-settings.ts`) — the app does NOT set importance, because Android
+ * ignores a post-creation change (importance belongs to the user, by design; D18 §1). Creating one
+ * channel per visible category at boot is what makes the OS settings screen offer PER-CATEGORY
+ * controls; create one channel for everything and the shop's only choice is all-or-nothing, and create
+ * them late and the first notification lands on a default channel the OS screen does not associate
+ * with a category.
  *
  * `sync` gets NO channel, deliberately (§3: its "Visible notification" column is "No"). It is a
  * data-only wake; a channel for it would appear in Android's per-app settings as a switch that
@@ -55,15 +59,4 @@ export async function createNotificationChannels(muted: PushMuteState): Promise<
     created.push(id);
   }
   return created;
-}
-
-/** Apply a mute toggle (api/04-push §5) — the Settings screen's `setChannelImportance` binding. */
-export async function applyChannelImportance(
-  category: MutablePushCategory,
-  muted: boolean,
-): Promise<void> {
-  await Notifications.setNotificationChannelAsync(channelId(category), {
-    name: t(categoryNameKey(category) as 'push.device.title'),
-    importance: androidImportance(muted),
-  });
 }
