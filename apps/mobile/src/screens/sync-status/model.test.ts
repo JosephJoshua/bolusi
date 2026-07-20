@@ -235,6 +235,35 @@ describe('the counters are DERIVED — no stored count column exists to read (01
   });
 });
 
+describe('the reassurance line reads REASSURANCE_KEY — the map the screen renders (task 65, §2.8)', () => {
+  // `SyncStatusScreen`'s tier-1 sentence renders `t(REASSURANCE_KEY[reassurance(input).kind])`, so
+  // the map is on the shipping path: break a slot and both the screen AND these assertions change.
+  // Each case DRIVES the state through `reassurance()` (never a static restatement of the map) and
+  // asserts the resulting KEY — the stable identifier, never the localized copy.
+  test.each([
+    ['allSent', input(), 'sync.status.upToDate'],
+    ['savedHere', input({ pendingOperationCount: 3 }), 'sync.status.pending'],
+    ['syncing', input({ loopState: 'pushing' }), 'sync.status.syncing'],
+    ['syncing', input({ loopState: 'pulling' }), 'sync.status.syncing'],
+    ['attention', input({ rejected: [rejectedRow('BAD_SIGNATURE')] }), 'sync.rejected.banner'],
+  ] as const)('%s renders %s', (kind, given, key) => {
+    const answer = reassurance(given);
+    expect(answer.kind).toBe(kind);
+    expect(REASSURANCE_KEY[answer.kind]).toBe(key);
+  });
+
+  test('the map covers every reassurance kind and no more (T-14 denominator)', () => {
+    // If a `Reassurance` arm were added and the map not extended, `satisfies Record<…>` would fail to
+    // compile; this pins the runtime shape so a silently-narrowed map cannot pass vacuously.
+    expect(Object.keys(REASSURANCE_KEY).sort()).toEqual([
+      'allSent',
+      'attention',
+      'savedHere',
+      'syncing',
+    ]);
+  });
+});
+
 describe('the header chip maps all five states from the same fixtures (§8.1)', () => {
   test.each([
     ['synced', input()],

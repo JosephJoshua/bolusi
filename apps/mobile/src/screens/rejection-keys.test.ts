@@ -17,7 +17,7 @@ import { describe, expect, test } from 'vitest';
 import { failureKey } from './enrollment/model.js';
 import { PIN_MESSAGE_KEY } from './pin/model.js';
 import { categoryNameKey, localeNameKey, MUTABLE_PUSH_CATEGORIES } from './settings/model.js';
-import { SWITCHER_EMPTY_CTA_KEY, SWITCHER_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
+import { SWITCHER_EMPTY_CTA_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
 import { MEDIA_STATUS_KEY, REASSURANCE_KEY } from './sync-status/model.js';
 
 /**
@@ -132,11 +132,20 @@ describe('screen key maps', () => {
     expect(checked).toBe(3);
   });
 
-  test('every switcher state key exists, plus the CTA and the lock explanation', () => {
-    for (const key of Object.values(SWITCHER_KEY)) expectInEveryCatalog(key);
+  test('every switcher state headline key exists, plus the CTA and the lock explanation', () => {
+    // task 65 deleted the `SWITCHER_KEY` decoy map (the screen never read it — §2.8). These are the
+    // headline keys `SwitcherScreen` ACTUALLY renders: the empty/error/unauthorized `ListState`
+    // titles, and the always-present screen title. `loading` is omitted deliberately — it is a
+    // spinner with no headline, which is exactly the misfit the decoy map hid.
+    const switcherHeadlineKeys = [
+      'core.status.empty',
+      'core.errors.UNEXPECTED',
+      'core.errors.PERMISSION_DENIED',
+      'auth.switcher.title',
+    ] as const;
+    for (const key of switcherHeadlineKeys) expectInEveryCatalog(key);
     expectInEveryCatalog(SWITCHER_EMPTY_CTA_KEY);
     expectInEveryCatalog(SWITCHER_LOCK_KEY);
-    expect(Object.values(SWITCHER_KEY)).toHaveLength(5);
   });
 
   test('every sync-status reassurance and media-status key exists', () => {

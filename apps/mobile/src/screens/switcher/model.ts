@@ -180,14 +180,14 @@ export function tapTarget(user: SwitcherUser): SwitcherTap {
     : { kind: 'pin', userId: user.id };
 }
 
-/** The label key for each state's headline. Keys only (07-i18n). */
-export const SWITCHER_KEY = {
-  loading: 'core.status.loading',
-  empty: 'core.status.empty',
-  error: 'core.errors.UNEXPECTED',
-  unauthorized: 'core.errors.PERMISSION_DENIED',
-  ready: 'auth.switcher.title',
-} as const satisfies Record<SwitcherState['kind'], string>;
+// NO per-state headline label map here (task 65). A `SWITCHER_KEY` mirror once existed and was a
+// decoy: `SwitcherScreen` renders each state's headline at its own site — `ListState.empty.title`,
+// `.error.title`, `.unauthorized.title`, and the always-present AppShell title — never from a map,
+// so the map shipped nowhere while its tests asserted it (the `canAttempt` shape, task 60). It also
+// fit the UI badly: `loading` has no headline (a spinner) and `ready`'s "headline" is the screen
+// title shown in every state. The one property worth guarding — empty ≠ error, so `[]` never reads
+// as "we could not ask" (FR-1036) — lives in `switcherState`'s `kind` (its test), which is the
+// shipping path the screen renders from; that is where the guard belongs (§2.8).
 
 /** §8.2: the empty state's CTA goes to Device Enrollment. */
 export const SWITCHER_EMPTY_CTA_KEY = 'auth.switcher.addUser';
