@@ -31,13 +31,35 @@ import { setLocaleInput } from '../../src/platform/commands.js';
 import { platformModule } from '../../src/platform/index.js';
 import { userLocaleChangedPayload } from '../../src/platform/operations.js';
 import { QueryRuntime } from '../../src/query/execute.js';
-import { LOCALES, SELECTABLE_LOCALES, type Locale, type SignedOperation } from '@bolusi/schemas';
-import type { Kysely } from 'kysely';
+import {
+  createModuleRuntime,
+  createUuidV7Generator,
+  PermissionEvaluator,
+  type CommandRuntime,
+  type DirectoryGrant,
+  type DirectoryRole,
+  type DirectorySnapshot,
+  type IdSource,
+  type OpAppendStore,
+} from '../../src/index.js';
+import { listConflictsQuery } from '../../src/platform/queries.js';
+import type { PlatformDatabase } from '../../src/platform/schema.js';
+import {
+  LOCALES,
+  SELECTABLE_LOCALES,
+  type Locale,
+  type Location,
+  type SignedOperation,
+} from '@bolusi/schemas';
+import { createClientDialect } from '@bolusi/db-client';
+import { noblePort, mulberry32, randomBytes as prngBytes } from '@bolusi/test-support';
+import { CamelCasePlugin, Kysely } from 'kysely';
 
 import type { AppendedOp } from '../../src/oplog/append.js';
 import { beforeEach, describe, expect, test } from 'vitest';
 
-import { makeRuntimeFixture, type RuntimeFixture } from '../runtime/_fixtures.js';
+import { InMemoryOpStore, makeRuntimeFixture, type RuntimeFixture } from '../runtime/_fixtures.js';
+import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
 
 /**
  * The REAL platform registry — `registerModules` over the shipped manifest.
@@ -403,5 +425,243 @@ describe('setLocale / user_locale_changed accept EXACTLY SELECTABLE_LOCALES (tas
   test('an unknown language code is rejected — the enum is closed', () => {
     expect(setLocaleInput.safeParse({ locale: 'fr' }).success).toBe(false);
     expect(userLocaleChangedPayload.safeParse({ locale: 'fr' }).success).toBe(false);
+  });
+});
+
+// ── Task 108: acknowledgeConflict through the REAL query runtime (the stub blind-spot) ────────────
+//
+// WHY THIS TEST EXISTS. Every acknowledgeConflict test above STUBS the read
+// (`fixture.queries.stub('platform.conflict_view', …)`), so `ctx.query(listConflictsQuery)` never
+// reaches `QueryRuntime.execute` — and its name check (query/execute.ts) is exactly where a nameless
+// query handle throws `VALIDATION_FAILED: query has no name`. `listConflictsQuery` shipped WITHOUT a
+// `name`; `defineModule`'s `withNames` copies a name onto `platformModule.queries.listConflicts` but
+// NOT onto the raw const the handler imports, so `acknowledgeConflict` was DEAD on every real
+// invocation — and the stub hid it (CLAUDE.md §2.11 / testing-guide T-11/T-15: the oracle was
+// interrogated, not the mechanism). CHAOS-07 reproduced it end-to-end; this is the same reproduction
+// as a core unit test.
+//
+// It wires the REAL command + query runtimes (`createModuleRuntime`, the production knot) over a REAL
+// SQLite `conflicts` projection, seeds a SURFACED conflict, and drives `acknowledgeConflict` end to
+// end — so `ctx.query` routes through `QueryRuntime.execute` and its name check, unstubbed.
+//
+// FALSIFY (§2.11): delete `name: 'listConflicts'` from `listConflictsQuery` and this goes RED with
+// `VALIDATION_FAILED: query has no name` (the dead-command bug); restore → green.
+describe('acknowledgeConflict end-to-end through the REAL query runtime (task 108)', () => {
+  const OWNER_ROLE = 'role-conflict-owner';
+
+  interface AckHarness {
+    readonly commands: CommandRuntime;
+    readonly db: Kysely<PlatformDatabase>;
+    readonly appended: SignedOperation[];
+    readonly tenantId: string;
+    readonly storeId: string;
+    readonly ownerId: string;
+    readonly deviceId: string;
+    readonly newId: IdSource;
+    seedConflict(
+      conflictId: string,
+      overrides?: Partial<PlatformDatabase['conflicts']>,
+    ): Promise<void>;
+    close(): Promise<void>;
+  }
+
+  /**
+   * The REAL runtimes over a REAL SQLite `conflicts` table (T-7 — everything real except the I/O).
+   *
+   * The op-append store is the in-memory model (`InMemoryOpStore`); the `db` is a real SQLite handle
+   * holding ONLY the `conflicts` projection the query reads — the two are different concerns
+   * (`createModuleRuntime` wires the QueryRuntime over `db`, the CommandRuntime over the op store).
+   */
+  async function openAckHarness(seed: number): Promise<AckHarness> {
+    const startMs = 1_726_000_000_000;
+    const prng = mulberry32(seed);
+
+    const driver = openMemoryDriver();
+    const db = new Kysely<PlatformDatabase>({
+      dialect: createClientDialect(driver),
+      // `{ underscoreBetweenUppercaseLetters: true }` is MANDATORY: `opAId`/`opBId` map to
+      // `op_a_id`/`op_b_id` only with it (10-db §11's live CamelCasePlugin trap), exactly as
+      // production constructs it.
+      plugins: [new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })],
+    });
+
+    // `conflicts` (10-db §8 / §9.6), snake_case columns — the query reads this via the CamelCasePlugin.
+    await db.schema
+      .createTable('conflicts')
+      .addColumn('id', 'text', (c) => c.primaryKey())
+      .addColumn('tenant_id', 'text', (c) => c.notNull())
+      .addColumn('store_id', 'text')
+      .addColumn('entity_type', 'text', (c) => c.notNull())
+      .addColumn('entity_id', 'text', (c) => c.notNull())
+      .addColumn('conflict_key', 'text', (c) => c.notNull())
+      .addColumn('severity', 'text', (c) => c.notNull())
+      .addColumn('status', 'text', (c) => c.notNull())
+      .addColumn('op_a_id', 'text', (c) => c.notNull())
+      .addColumn('op_b_id', 'text', (c) => c.notNull())
+      .addColumn('detected_at', 'bigint', (c) => c.notNull())
+      .addColumn('acknowledged_by', 'text')
+      .addColumn('acknowledged_at', 'bigint')
+      .addColumn('acknowledgement_op_id', 'text')
+      .execute();
+
+    // Stable identities, minted before the clock moves (UUIDs — `zSignedCore` types them so).
+    const identityGen = createUuidV7Generator({
+      now: () => startMs,
+      randomBytes: (n) => prngBytes(prng, n),
+    });
+    const tenantId = identityGen();
+    const storeId = identityGen();
+    const ownerId = identityGen();
+    const deviceId = identityGen();
+
+    const keypair = noblePort.ed25519Keygen(prngBytes(prng, 32));
+    const newId: IdSource = createUuidV7Generator({
+      now: () => startMs,
+      randomBytes: (n) => prngBytes(prng, n),
+    });
+
+    // The REAL platform registry drives operations AND the query-name resolution.
+    const registry = registerModules<PlatformDatabase>([
+      platformModule as unknown as AnyModuleDefinition<PlatformDatabase>,
+    ]);
+
+    // The owner holds BOTH platform.conflict_view (the internal read) and platform.conflict_acknowledge
+    // (the command) — 02 §12's arithmetic (every role with acknowledge also has view).
+    const snapshot: DirectorySnapshot = {
+      tenantId,
+      users: new Map<string, { status: string }>([[ownerId, { status: 'active' }]]),
+      roles: new Map<string, DirectoryRole>([
+        [
+          OWNER_ROLE,
+          {
+            scopeType: 'tenant',
+            permissionIdsJson: JSON.stringify([
+              'platform.conflict_view',
+              'platform.conflict_acknowledge',
+            ]),
+          },
+        ],
+      ]),
+      grantsByUser: new Map<string, readonly DirectoryGrant[]>([
+        [ownerId, [{ roleId: OWNER_ROLE, storeId: null }]],
+      ]),
+    };
+
+    const evaluator = new PermissionEvaluator(registry.permissions, {
+      load: () => Promise.resolve(snapshot),
+    });
+    await evaluator.prime();
+
+    const store: OpAppendStore = new InMemoryOpStore();
+    const appended: SignedOperation[] = [];
+
+    const runtime = createModuleRuntime<PlatformDatabase>(registry, db, {
+      device: { tenantId, storeId, deviceId },
+      evaluator,
+      store,
+      crypto: noblePort,
+      clock: { now: () => startMs },
+      idSource: newId,
+      location: { getBestFix: (): Location | null => null },
+      signingKey: { getSigningKey: () => keypair.secretKey },
+      applyProjection: (op: SignedOperation) => {
+        appended.push(op);
+      },
+      syncScheduler: { schedule: () => undefined },
+    });
+
+    // 05 §9.5: the device's first op must be the genesis enrolment. Cleared so each assertion counts
+    // ITS ops, not the enrolment.
+    await runtime.commands.emitRuntimeOp({
+      type: 'auth.device_enrolled',
+      entityType: 'device',
+      entityId: deviceId,
+      payload: { enrolledDeviceId: deviceId },
+      userId: ownerId,
+    });
+    appended.length = 0;
+
+    return {
+      commands: runtime.commands,
+      db,
+      appended,
+      tenantId,
+      storeId,
+      ownerId,
+      deviceId,
+      newId,
+      async seedConflict(conflictId, overrides = {}) {
+        await db
+          .insertInto('conflicts')
+          .values({
+            id: conflictId,
+            tenantId,
+            // The conflicted entity's store — matches the device's store so the §6 scope filter
+            // (`storeId = qctx.storeId OR storeId IS NULL`) returns it.
+            storeId,
+            entityType: 'note',
+            entityId: 'note-1',
+            conflictKey: 'note.archived',
+            severity: 'significant',
+            status: 'surfaced',
+            opAId: 'op-a',
+            opBId: 'op-b',
+            detectedAt: startMs,
+            acknowledgedBy: null,
+            acknowledgedAt: null,
+            acknowledgementOpId: null,
+            ...overrides,
+          })
+          .execute();
+      },
+      async close() {
+        await db.destroy();
+        await driver.close();
+      },
+    };
+  }
+
+  test('a surfaced conflict is acknowledged — the read runs through QueryRuntime, unstubbed', async () => {
+    const h = await openAckHarness(2108);
+    try {
+      // A REAL UUIDv7: `acknowledgeConflict` re-emits an op with `entityId = conflictId`, validated
+      // as `zUuidV7` in the hash path — a readable id would fail envelope parse, not the name check.
+      const conflictId = h.newId();
+      await h.seedConflict(conflictId);
+
+      // The whole point: this call routes `ctx.query(listConflictsQuery)` through the REAL
+      // `QueryRuntime.execute`, whose name check rejects a nameless handle BEFORE the read. With the
+      // name absent it throws `VALIDATION_FAILED: query has no name` here and the command is dead;
+      // the stubbed tests above could never see that.
+      const outcome = await h.commands.execute(
+        platformModule.commands.acknowledgeConflict,
+        { conflictId, note: 'seen' },
+        h.commands.createContext(h.ownerId),
+      );
+
+      expect(outcome.result).toEqual({ conflictId });
+      // Exactly one op, and it is the acknowledgment of THIS conflict — proof the handler actually
+      // read the surfaced row through the runtime (a nameless query would have thrown before this).
+      expect(h.appended).toHaveLength(1);
+      const op = h.appended[0];
+      expect(op?.type).toBe('platform.conflict_acknowledged');
+      expect(op?.entityType).toBe('conflict');
+      expect(op?.entityId).toBe(conflictId);
+      expect(op?.payload).toEqual({ note: 'seen' });
+      // Store-scoped op (01 §6 default) records the device's store — NOT null.
+      expect(op?.storeId).toBe(h.storeId);
+    } finally {
+      await h.close();
+    }
+  });
+
+  test('the listConflicts handle handed to ctx.query self-carries its name (the fix, T-16)', () => {
+    // A mention is not a producer (T-16): assert the actual object the command reads through, not a
+    // grep for the string. This is the raw const `acknowledgeConflict` imports — NOT the
+    // `withNames`-copied `platformModule.queries.listConflicts` — so it pins the SELF-carried name
+    // whose absence made the command dead.
+    expect(listConflictsQuery.name).toBe('listConflicts');
+    // And `defineModule` re-derives the SAME name from the manifest key, so the two agree.
+    expect(platformModule.queries.listConflicts.name).toBe('listConflicts');
   });
 });
