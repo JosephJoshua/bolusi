@@ -8,6 +8,13 @@ const config: ExpoConfig = {
   slug: 'bolusi',
   version: '0.0.0',
   orientation: 'portrait',
+  // Forced light appearance is a deliberate product decision, not a default: design-system §0/§1.1
+  // ships v0 LIGHT-ONLY (dark mode explicitly deferred) because the fleet is dim, low-cost LCDs used
+  // in bright equatorial shops, tuned for a high-contrast light palette. This option ONLY takes
+  // effect on Android when `expo-system-ui` is installed (registered in `plugins` below); without it
+  // the field typechecks against ExpoConfig yet is DROPPED at prebuild — the pipeline warns
+  // "userInterfaceStyle: Install expo-system-ui …" and the app silently follows the OS dark/light
+  // setting. The plugin is what makes this line true instead of a well-typed no-op.
   userInterfaceStyle: 'light',
   platforms: ['android', 'ios'],
   android: {
@@ -59,6 +66,11 @@ const config: ExpoConfig = {
     'expo-image',
     'expo-background-task',
     'expo-status-bar',
+    // Enables `userInterfaceStyle: 'light'` (top of file) on Android — without this package that
+    // option is a typed no-op the prebuild pipeline drops with a warning. Registered explicitly
+    // (autolinking would also apply it once installed) so the enabling mechanism is visible beside
+    // the option it enables, not an autolinking side-effect nobody chose.
+    'expo-system-ui',
     'expo-dev-client',
     // quick-crypto ships its own config plugin (peer: expo-build-properties) — 08 §2.2.
     'react-native-quick-crypto',
