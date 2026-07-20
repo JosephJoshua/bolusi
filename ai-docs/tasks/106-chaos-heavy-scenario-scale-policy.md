@@ -1,6 +1,6 @@
 # TASK 106 — decide + wire the scale policy for the heavy CHAOS scenarios (CHAOS-03, and CHAOS-08 at nightly ×4), then ship CHAOS-03
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **MEDIUM** — a testing-strategy decision that BLOCKS shipping CHAOS-03 (days-offline bulk merge) and de-risks the nightly. impl-26c correctly REMOVED CHAOS-03 rather than ship it unverified-at-scale or silently cut its volume — the decision is above an impl agent's remit (it's a CI/spec policy in testing-guide §3.7).
 **Depends on:** 26
 **Blocks:** 26 (the CHAOS-03 leg)

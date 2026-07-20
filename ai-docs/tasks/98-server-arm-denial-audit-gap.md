@@ -1,6 +1,6 @@
 # TASK 98 — the SERVER arm may deny without an FR-1045 audit op — the mirror of task 44, one arm over (CONFIRM by producer-trace before fixing)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **MEDIUM** — a plausible FR-1045 (denial-audit completeness) gap on the server, surfaced + independently confirmed-as-real-but-out-of-scope by task 44's implement + review. Unlike task 44 (which had a clean producer-trace), this one is **not yet traced to a confirmed producer** — the FIRST deliverable is the trace (T-16); do not write a fix on the strength of this description.
 **Depends on:** 13
 **Blocks:** 28
