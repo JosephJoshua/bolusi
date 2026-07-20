@@ -992,7 +992,7 @@ CREATE TABLE user_prefs (
 | Device Ed25519 private key | `expo-secure-store` (per-device; < 2 KB; extractable-by-app-code caveat applies) |
 | Device bearer token | `expo-secure-store`; server stores only `devices.token_hash` (api/02-auth) |
 | SQLCipher database key | `expo-secure-store`, random 32 bytes hex, generated at first launch |
-| System-device private keys | server secret store (deployment doc), never in Postgres — used only to sign `platform.conflict_detected` ops inside the push transaction (§3) |
+| System-device private keys | server secret store — v0: a `SYSTEM_KEY_DIR` directory of `system-device-<tenantId>.key` files (**08-stack-and-repo §8.1**), never in Postgres — used only to sign `platform.conflict_detected` ops inside the push transaction (§3) |
 | PIN verifier material inside op payloads | nowhere — FORBIDDEN (api/02-auth §6): verifiers travel only over TLS control-plane calls and land in `user_pin_verifiers` (server §7; client §9.5, own store only) |
 | Media bytes | client: document directory files; server: in-flight chunks in `media_chunks.bytes`, assembled object storage under `media.storage_key` |
 | Derived counters (pending ops/media, effective permissions) | computed queries — never persisted |

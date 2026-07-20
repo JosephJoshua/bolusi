@@ -1,6 +1,6 @@
 # TASK 93 — the db-client load-flake class (task 67) also lives in apps/mobile bootstrap tests and secret-scan, still on the default 5000ms
 
-**Status:** todo
+**Status:** done
 **Priority:** LOW — no observed failure yet, but it is the **same measured nondeterminism** task 67 fixed, one lane over (T-10: a flaky test is a P1 bug; this is pre-emptive). It will surface as a red CI job under load, indistinguishable from a real failure.
 **Depends on:** 67
 **Blocks:** —

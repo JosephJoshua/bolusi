@@ -368,3 +368,38 @@ The repo-init task must, in order: pin the *bootstrap-pin* rows (§2) into the c
     - **No postgres service container, by design.** Every DB-backed server test boots its own in-process PGlite (`new PGlite()` via `PGliteDialect`); the suite opens no TCP connection and reads no `DATABASE_URL` — verified by running it with `DATABASE_URL` pointed at a dead host (`postgres://…@127.0.0.1:1/blackhole`): 22/22 still passed. A service container here would idle and imply a real-PG witness this lane does not provide. Real Postgres 16 remains stage 9's job (§2.5: WASM must not be the only RLS witness).
     - **`test:server` was missing the §5.6 `tsc -b &&` prefix** and was repaired in the same task. On a cold runner (install only, no `dist/`) the bare `vitest run --project server` died with `Failed to resolve entry for package "@bolusi/schemas"` — 19 of 22 files failing. Stage 8 had never run, so nothing had ever exercised the script on a cold runner; wiring the job as originally specified ("`tsc -b` is inside the script, so the job needs only install") would have shipped a red gate for a broken *script*, not a broken suite.
 10. **Sanctioned deviation from §4.1 "all workspaces are `type: module`"**: `apps/mobile/package.json` intentionally omits `"type": "module"` — Metro/Expo resolve the app's own files by extension (`metro.config.cjs` is CJS; app source goes through Metro, not Node's ESM loader), and forcing ESM semantics on the app package breaks tooling expectations. The rule stands for every emitting workspace (`packages/*`, `apps/server`) and the root.
+
+## 8. Deployment configuration (server env)
+
+Server config is read **once at boot** through the Zod module `apps/server/src/config.ts` (security-guide §10). `apps/server/.env.example` is the **authoritative name list** — it is committed; values live only in the gitignored `.env`. Do not restate the full var list here; a duplicated list rots (T-14e). Two vars are read outside `config.ts` for stated reasons: `MEDIA_STORAGE_DIR` (`apps/server/src/media/config.ts`, read at media-router construction) and the mobile-side `EXPO_PUBLIC_API_URL` (§6.1).
+
+### 8.1 `SYSTEM_KEY_DIR` — the system-device key store (01 §3.6, 10-db §12)
+
+This is the "server secret store / deployment doc owns storage" that 01 §3.6 and 10-db §12 defer to. **It is this section.**
+
+Conflict detection (01 §8.2) must sign `platform.conflict_detected` with the tenant's **system-device Ed25519 private key**. That key is deployment-owned: it never enters Postgres — only the public half lives in `devices.signing_key_public` (10-db §12). v0's store is the lowest-surprise mechanism that a multi-tenant server can key per tenant: **a directory of per-tenant key files**.
+
+**The convention, end to end:**
+
+1. **Provision each tenant.** `provision-tenant` (api/02-auth §2) generates the tenant's system-device keypair and, on its default path, writes the private key to a **`0600` file named exactly `system-device-<tenantId>.key`**, printing only the path (never the key). The contents are the **base64 raw Ed25519 secret key**, one line. The file is created with `wx`, so it will not overwrite an existing key — a second provisioning run cannot clobber a live tenant's key. `--key-file` chooses the path; `--print-key` sends the key to stdout **instead of** writing a file (deliberate opt-in, greppable in shell history).
+2. **Collect the key files into one directory.** The default path is relative to the CWD, and the tenant id is only known *after* provisioning, so the operator moves each file into the key directory. **Do not rename them** — the store looks up exactly `system-device-<tenantId>.key`.
+3. **Point `SYSTEM_KEY_DIR` at that directory.** This is the **one production injection point** (`apps/server/src/main.ts`): set ⇒ `systemKeyStoreFromConfig` builds a `DirectorySystemKeyStore`, `resolveDeps` wires `detectConflicts` over it, and **conflict detection is ACTIVE**. **Unset ⇒ no store ⇒ `detectConflicts` stays undefined and the push pipeline skips detection** — detection OFF. That is today's default and it is deliberate: pushes still succeed, nothing is detected, and the no-op is visible rather than silent.
+
+**Enabling is server-wide, not per tenant.** `SYSTEM_KEY_DIR` is a single boolean-ish switch: once it is set, detection is wired for **every** tenant this server serves. There is no per-tenant opt-in, and a missing key file is **not** a graceful per-tenant "detection off" — see the fail-loud table below.
+
+**Fail-loud semantics — opted-in-but-broken never silently degrades:**
+
+| Situation | Behaviour |
+| --------- | --------- |
+| `SYSTEM_KEY_DIR` unset | Detection off for the whole server. Pushes succeed. The honest v0 default. |
+| Key file **malformed / wrong length / not base64** | **Throws at load**, on first lookup for that tenant (the key is decoded *and* validated by deriving its public key, so a truncated secret cannot pass as "no detection"). The error names the tenant and the failure shape, **never key bytes**. |
+| Key file **missing** for a tenant, dir set | The store returns `undefined`; `buildConflictDetection`'s `systemIdentity` then **throws at emission**, inside the push transaction, so the **whole push rolls back**. The pushing device sees a 500 on its first real collision. This is loud by design — a conflict that cannot be signed must not be half-recorded (10-db §3) — but it means **a tenant with no key file is broken, not degraded**. Provision a key file for every tenant before setting the var. |
+| **Wrong tenant's** key in a file | Caught downstream: `appendSystemOp` self-verifies every emitted op against the tenant's system-device **public** key, so a mis-provisioned key fails at emission (rolling the push back) rather than shipping an unverifiable op to clients. |
+| Directory unreadable (`EACCES`/`EISDIR`/…) | Rethrown. Only `ENOENT` means "no configured key"; every other IO error is a real misconfiguration. |
+| Tenant id is not a plain UUID | No file is read (`undefined`). The traversal guard runs **before** any path is built, so no `..` or separator can escape `SYSTEM_KEY_DIR`. |
+
+**Operational notes.** Signers are cached per tenant for the process lifetime — the system-device key is immutable (rotation = revoke + re-enroll as a new device, 01 §3.6), so **adding or changing a key file requires a server restart**. The loaded private key stays in memory inside a signer closure and is never logged.
+
+**KMS is a future swap, not a rewrite.** The seam is the `SystemKeyStore` port (`apps/server/src/sync/conflict-wiring.ts`) — one method, `getSystemSigner(tenantId)`. Replacing the directory store with a KMS-backed one touches **only** `main.ts`; the detection pipeline never learns where keys come from. A KMS is heavier than v0 warrants; the port is what keeps that decision reversible.
+
+*Implementation:* `apps/server/src/sync/system-key-store.ts` (`DirectorySystemKeyStore`, `systemKeyStoreFromConfig`), wired in `apps/server/src/main.ts`, injected via `apps/server/src/deps.ts`. Landed by task 78; recorded here by task 110.

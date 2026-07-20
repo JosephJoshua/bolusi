@@ -21,9 +21,13 @@
 //
 // ── ABSENCE vs ERROR (conflict-wiring.ts contract) ─────────────────────────────────────────────
 //
-//   * NO file for a tenant ⇒ `undefined` (NOT an error): "this tenant has no configured key". The
-//     wiring reads that as "detection off for this tenant". A store must never THROW for a missing
-//     key — that would be indistinguishable from a real failure and could wedge a push.
+//   * NO file for a tenant ⇒ `undefined` (NOT an error): "this tenant has no configured key". A
+//     store must never THROW for a missing key — that would be indistinguishable from a real
+//     failure. NOTE what this does NOT buy: it is not a graceful per-tenant "detection off".
+//     Detection is enabled server-wide on whether a store was injected at all (deps.ts), so with
+//     `SYSTEM_KEY_DIR` set, a tenant missing its file THROWS at emission in `systemIdentity`
+//     (conflict-wiring.ts) and rolls that push back. Missing file = BROKEN, not off. Only an unset
+//     `SYSTEM_KEY_DIR` is the graceful default (08-stack-and-repo §8.1).
 //   * A file that exists but does not decode to a valid Ed25519 secret key ⇒ THROW. The store HAS a
 //     key and cannot produce a signer: a real, loud error. A truncated/corrupt secret must not be
 //     silently treated as "no detection" — that is the §2.11 silent-no-op class.
@@ -104,7 +108,9 @@ export class DirectorySystemKeyStore implements SystemKeyStore {
     if (!TENANT_ID_RE.test(tenantId)) return undefined;
 
     const contents = this.#readKeyFile(join(this.#dir, keyFileName(tenantId)));
-    if (contents === undefined) return undefined; // no file ⇒ no configured key (detection off).
+    // No file ⇒ no configured key. NOT a per-tenant "detection off": with the dir set, this makes
+    // `systemIdentity` throw at emission (see the ABSENCE vs ERROR block in the header).
+    if (contents === undefined) return undefined;
 
     const secretKey = this.#decodeSecretKey(contents.trim(), tenantId);
     const signer: SystemSigner = (hash) => this.#crypto.sign(hash, secretKey);
