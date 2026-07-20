@@ -1,5 +1,5 @@
 # TASK 21 — push-notifications (token registration, Expo/FCM sender, categories, locale composition)
-**Status:** in-progress
+**Status:** done
 **Depends on:** 12, 13
 
 ## Goal

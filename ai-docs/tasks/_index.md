@@ -28,7 +28,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 18 | media-client (capture, compress, metadata, queue, chunked upload drain) | done | 03, 04, 22 |
 | 19 | media-server (init/chunks/status/complete/download, assembly, magic bytes) | done | 05, 12 |
 | 20 | realtime (WS + SSE server, client poke→pull, polling fallback) | done | 12, 15 |
-| 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | in-progress | 12, 13, 49 |
+| 21 | push-notifications (token registration, Expo/FCM sender, categories, locale composition) | done | 12, 13, 49 |
 | 22 | i18n package (catalog, lint rule, ui-labels seed, Intl formatting) | done | 01 |
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | done | 14, 22, 23 |
