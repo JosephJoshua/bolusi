@@ -18,6 +18,7 @@
 import * as Notifications from 'expo-notifications';
 
 import { t } from '@bolusi/i18n';
+import { pushChannelId } from '@bolusi/schemas';
 
 import {
   categoryNameKey,
@@ -27,9 +28,13 @@ import {
   type PushMuteState,
 } from '../screens/settings/model.js';
 
-/** The Android channel id for a category. Stable — a changed id is a NEW channel, defaults restored. */
+/**
+ * The Android channel id for a category — the shared `pushChannelId` scheme (`@bolusi/schemas`), the
+ * SAME source the SERVER derives a push's `channelId` from, so the two never drift (CLAUDE.md §2.8;
+ * task 107). Stable — a changed id is a NEW channel, defaults restored.
+ */
 export function channelId(category: MutablePushCategory): string {
-  return `bolusi.${category}`;
+  return pushChannelId(category);
 }
 
 /** Map our two-state importance onto Expo's enum. */
