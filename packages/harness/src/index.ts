@@ -40,3 +40,11 @@ export {
   type ScheduledFault,
 } from './fault-fetch.js';
 export { leakedEncodings, privateKeyEncodings } from './key-leak-scan.js';
+export {
+  CaptureSurface,
+  HttpTransport,
+  pullDevice,
+  pushDevice,
+  ScriptedTransport,
+  SILENT_SURFACE,
+} from './transport.js';

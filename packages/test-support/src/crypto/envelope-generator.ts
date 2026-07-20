@@ -85,6 +85,12 @@ const OP_TYPES = [
   'platform.user_locale_changed',
 ] as const;
 
+// BOUNDARY-FORCED MIRROR of the canonical `OP_SOURCES` (packages/schemas/src/envelope.ts).
+// This module is bundled INTO the Hermes JCS-vector runner (scripts/hermes-vectors/runner.ts),
+// whose bundle forbids zod (08 §5.6) — and `OP_SOURCES` lives in `envelope.ts`, whose top-level
+// `z.*` calls make ANY import of it pull zod into that bundle. So this cannot be import-deduped
+// and re-declares the set locally; kept EQUAL to the canonical by the parity gate that reddens on
+// divergence (./enum-mirror-parity.test.ts, task 53 — a gated forced mirror is legitimate, §2.11).
 const SOURCES = ['ui', 'agent', 'api', 'system'] as const;
 
 /** A payload whose shape (nesting, key order, value types) varies with the seed. */

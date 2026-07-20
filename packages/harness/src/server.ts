@@ -46,8 +46,17 @@ export class HarnessServer {
     private readonly tokens: Map<string, DevicePrincipal>,
   ) {}
 
-  /** Boot the server: fresh PGlite, run the real migrations, wire `createApp`. */
-  static async boot(): Promise<HarnessServer> {
+  /**
+   * Boot the server: fresh PGlite, run the real migrations, wire `createApp`.
+   *
+   * `gzipOnProgress` is the production decompression-witness seam (deps.ts `gzipOnProgress`,
+   * gzip-decompress.ts `onProgress`): CHAOS-10 passes it to read the cumulative decompressed-byte
+   * count and prove the gzip-bomb defense aborts at the cap (bounded memory — the stream is never
+   * fully expanded) and that a wire-cap rejection never invokes decompression at all.
+   */
+  static async boot(options?: {
+    readonly gzipOnProgress?: (decompressedBytesSoFar: number) => void;
+  }): Promise<HarnessServer> {
     const pglite = new PGlite();
     const db = new Kysely<DB>({
       dialect: new PGliteDialect({ pglite }),
@@ -88,6 +97,7 @@ export class HarnessServer {
       forTenant,
       verifyToken,
       accessLogSink: (record: unknown) => accessLogs.push(JSON.stringify(record)),
+      ...(options?.gzipOnProgress === undefined ? {} : { gzipOnProgress: options.gzipOnProgress }),
     } as unknown as NonNullable<Parameters<typeof createApp>[0]>);
 
     const server = new HarnessServer(
