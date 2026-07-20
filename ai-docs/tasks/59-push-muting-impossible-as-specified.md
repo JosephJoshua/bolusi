@@ -1,6 +1,6 @@
 # TASK 59 — `api/04-push §5`'s muting model **cannot work on Android**: channel importance is immutable to the app after creation, and the function that would change it has zero callers
 
-**Status:** todo
+**Status:** in-progress
 
 > **OWNER RULING (2026-07-17):** Push muting RULED: deep-link to the OS per-channel/notification settings (both platforms). See D18. api/04-push §5 rewrite + delete applyChannelImportance. Buildable; depends on 21.
 
