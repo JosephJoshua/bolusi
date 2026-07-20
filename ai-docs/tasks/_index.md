@@ -33,7 +33,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 23 | ui-kit (@bolusi/ui tokens + mandatory-state components) | done | 01, 22 |
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | done | 14, 22, 23 |
 | 25 | notes-reference-module DATA LAYER (ops v1+v2, applier, commands, queries, conflict-checks, SERVER_MODULES registration, i18n catalogs) — screens carved to 96 (D17) | done | 11, 18, 24, 49, 50 |
-| 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | in-progress | 06, 07, 08, 15, 16 |
+| 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | done | 06, 07, 08, 15, 16 |
 | 27a | device-gates, EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number | todo | 24, 25, 26, 50 |
 | 27b | device-gates, PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13) | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
@@ -45,7 +45,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
 | 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
-| 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
+| 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | in-progress | 09 |
 | 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | done | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
 | 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | done | 10 |
@@ -64,7 +64,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 53 | `SyncStatus` declared 3× (core's is avoidable, ui's is boundary-forced); seams are `string` so the compiler finds zero (from inverse enum sweep) | done | 15 |
 | 54 | ~~SEC-AUTH-06/11 server push-rejection legs are unclaimed~~ — **premise refuted: both legs ship in task 07 (`scope.ts:107`), falsified load-bearing. No code owed.** Needs an owner decision on who *titles* the ids (§2.1.6); sweep filed 61 (from task 31) | done | 31 |
 | 55 | **HIGH — precondition for 46/48's refusals meaning anything** `test:rls` doesn't build — the only real-`pg` lane can't resolve @bolusi/core in CI and reads stale dist locally; 3rd §5.6 violation (from task 48) | done | 46 |
-| 56 | `readVerifier` asserts client shapes over server types — the PIN-verifier "newest" decision can invert silently; 4th instance of the class (from task 48) | in-progress | 48 |
+| 56 | `readVerifier` asserts client shapes over server types — the PIN-verifier "newest" decision can invert silently; 4th instance of the class (from task 48) | done | 48 |
 | 57 | no gate stops a package re-exporting a type it doesn't emit — 0 live instances, but the class shipped `DB`-is-`any` across apps/server (from task 39 review) | done | 39 |
 | 58 | **HIGH** keystore's `THIS_DEVICE_ONLY` is an **iOS-only option** on an Android-first product; `security-guide §6.2:194` (android auto-backup exclusion) is an unchecked box **no task owns**; keystore.ts has 0 tests (from review-05 coverage sweep) | done | — |
 | 59 | **HIGH — needs owner decision** `api/04-push §5`'s muting model is **impossible on Android** (channel importance immutable post-creation); `applyChannelImportance` has 0 callers and would be a no-op anyway (from review-05) | done | 21 |
@@ -105,7 +105,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | done | 16 |
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | done | 95 |
 | 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
-| 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | in-progress | 26 |
+| 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | done | 26 |
 | 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | todo | 21, 24 |
 | 108 | `platform.acknowledgeConflict` dead in the real runtime: `ctx.query(listConflictsQuery)` read seam has no `name` → throws `VALIDATION_FAILED: query has no name`; only the stubbed unit test hid it. One-line fix (self-carry `name`, mirror notes' `getNoteQuery`) + an unstubbed test (from task 26 CHAOS-07) | done | 17 |
 | 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | todo | 94 |
@@ -119,8 +119,9 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 83 | **HIGH — LIVE artifact defect** `app.config.ts` has no `ios` block, so the real prebuild pipeline silently synthesizes `com.placeholder.appid` as the iOS bundle identifier (`getPrebuildConfig.js:60`'s `??` fallback — T-19's shape upstream); `ios.entitlements`/`ios.infoPlist` are both null, so no iOS security control exists. Needs an owner call on the bundle id (App Store identity, unchangeable after release) (from task 80) | done | — |
 | 84 | **HIGH** `security-guide §6` has no iOS row/column and never says it is Android-only; iOS's `§7.4` legs don't exist — the SQLCipher DB restores from an iCloud backup while its `THIS_DEVICE_ONLY` key does not (undecryptable DB, the mess 58 removed on Android). **Ruled: SEC-DEV-08 stays Android-scoped — its row already says "Android"; extending it would undo 58's care** (from task 80) | done | 83, 85 |
 | 85 | **HIGH — owner decision** no iOS build or verification lane exists: `08 §5.5` specifies **Android APK** for all four profiles (so `eas.json` is spec-correct), all 10 CI jobs are `ubuntu-latest`, host has no Xcode. Building iOS needs cloud macOS (paid, outward-facing — §6, D12's deferred device-farm precedent) or a v0-is-Android-only ruling (from task 80) | todo | — |
-| 86 | **MEDIUM — the leverage point** D17 reversed the "Android-first" premise but its `Amends:` list omits `00-product-overview.md:41`, which still states it as fact — and §3 routes every agent there first, so the next one re-derives 58's ruling. Plus: every "unverified on-device" sentence names one device, and the gaps aren't symmetric (from task 80) | todo | 85 |
+| 86 | **MEDIUM — the leverage point** D17 reversed the "Android-first" premise but its `Amends:` list omits `00-product-overview.md:41`, which still states it as fact — and §3 routes every agent there first, so the next one re-derives 58's ruling. Plus: every "unverified on-device" sentence names one device, and the gaps aren't symmetric (from task 80) | in-progress | 85 |
 | 87 | **HIGH** `expo-location` is a dependency but NOT in `app.config.ts` plugins, so its config plugin never runs: Android's generated manifest gets `ACCESS_FINE/COARSE_LOCATION` anyway via **library-manifest merging**, iOS's `infoPlist` is `null` with no `NSLocationWhenInUseUsageDescription` — and `Root.tsx:89` requests location at every boot. Apple documents termination (unverified — no iOS target exists). `expo-camera` has the identical shape for task 82 (from task 80) | done | 83, 85 |
+| 113 | the nightly chaos lane's `CHAOS_SCALE=4 × 100 seeds` is unrunnable for CHAOS-03 (56k ops/seed) / CHAOS-08 (80k) — add a documented, asserted per-scenario ×4 nightly seed cap (from task 106) | todo | 26 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
