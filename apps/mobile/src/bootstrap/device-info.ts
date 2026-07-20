@@ -7,33 +7,36 @@
 //
 // ── WHERE EACH FIELD LIVES AFTER ENROLLMENT ─────────────────────────────────────────────────────
 //   deviceId:  meta_kv (task 88 / core's DEVICE_ID_META_KEY), written by `runEnrollment`.
-//   deviceName / storeName / tenantName: NOT in any directory table. The directory mirrors carry
-//     user + role names only (10-db §9.5), and the store/tenant NAMES arrive only in the transient
-//     enroll RESPONSE (api/02-auth §4.3) — gone by the next boot. So the enrollment caller
-//     (enrollment.ts) persists them to meta_kv at enroll time (`persistEnrolledNames`), and this reads
-//     them back on every boot. deviceName is what the owner typed in the wizard; the store/tenant names
-//     are the response's.
+//   storeName / tenantName: NOT in any directory table (the mirrors carry user + role names only,
+//     10-db §9.5). They ride EVERY bundle (`bundle.store.name`/`bundle.tenant.name`, api/02-auth §5.2),
+//     and core's `applyBundle` is their SOLE writer — persisting them to meta_kv on enroll AND on every
+//     pull refresh (task 109), so a store/tenant RENAME reaches the device without re-enrollment. This
+//     file only READS them back (via core's STORE_NAME_META_KEY/TENANT_NAME_META_KEY).
+//   deviceName: what the owner typed in the wizard — the owner-typed genesis value, NOT on the bundle.
+//     The enrollment caller (enrollment.ts) persists it to meta_kv at enroll (`persistEnrolledNames`);
+//     this reads it back. ONE writer for deviceName (here), one for the two names (core) — never two
+//     writers of one key that could disagree (§2.8).
 //   platform / appVersion: process facts, not DB values — supplied by the one native-binding site
 //     (index.ts). appVersion is `''` in v0 (expo-constants unpinned — decisions/2026-07-20-appversion-source).
-//
-// ── KNOWN LIMITATION (out of this task's apps/mobile-only scope) ─────────────────────────────────
-// The store/tenant NAMES ideally belong in core's `applyBundle` (it already holds `bundle.store.name`
-// / `bundle.tenant.name`), so a bundle refresh keeps them fresh. Persisting them from mobile means a
-// tenant/store RENAME without re-enrollment leaves these two names stale (the ids and deviceName do
-// not drift). The deviceId — the stable revocation key — is always exact. Filed as a follow-up note.
-import { readDeviceId, readMeta, writeMeta } from '@bolusi/core';
+import {
+  readDeviceId,
+  readMeta,
+  STORE_NAME_META_KEY,
+  TENANT_NAME_META_KEY,
+  writeMeta,
+} from '@bolusi/core';
 
 import type { DeviceInfo } from '../screens/settings/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 
 /**
- * meta_kv keys holding the human-readable identity the enroll response establishes (task 94). Named
- * under `auth.` like the enrollment draft key, distinct from core's id keys (`deviceId`/`storeId`).
+ * meta_kv key holding the owner-typed device name (task 94). Named under `auth.` like the enrollment
+ * draft key, distinct from core's id keys (`deviceId`/`storeId`). The store/tenant name keys live in
+ * `@bolusi/core` (STORE_NAME_META_KEY/TENANT_NAME_META_KEY, imported above) because core's
+ * `applyBundle` is their single writer (task 109) — one definition of each key string, no drift (§2.8).
  */
 export const DEVICE_NAME_META_KEY = 'auth.deviceName';
-export const STORE_NAME_META_KEY = 'auth.storeName';
-export const TENANT_NAME_META_KEY = 'auth.tenantName';
 
 /** The process facts index.ts binds — the RN platform and the app version string (not DB values). */
 export interface DeviceInfoContext {
@@ -41,22 +44,21 @@ export interface DeviceInfoContext {
   readonly appVersion: string;
 }
 
-/** The names the enroll response establishes, persisted at enroll so a later boot can render them. */
+/** The owner-typed device name, persisted at enroll so a later boot can render it (task 94). The
+ *  store/tenant names are NOT here — core's `applyBundle` owns them on every bundle (task 109). */
 export interface EnrolledNames {
   readonly deviceName: string;
-  readonly storeName: string;
-  readonly tenantName: string;
 }
 
 /**
- * Persist the enrolled device's human-readable identity to meta_kv (task 94). The enrollment caller
- * calls this AFTER `runEnrollment` (which persisted the ids) and BEFORE it signals `onEnrolled`, so
- * both the live re-derive and every later boot read the same values.
+ * Persist the owner-typed device name to meta_kv (task 94). The enrollment caller calls this AFTER
+ * `runEnrollment` — which persisted the ids AND ran `applyBundle`, so the store/tenant names are
+ * already fresh in meta_kv (task 109) — and BEFORE it signals `onEnrolled`, so the live re-derive and
+ * every later boot read a full identity. Only `deviceName` is written here: it is the sole key this
+ * file owns; the store/tenant names have exactly one writer (core), never two that could disagree (§2.8).
  */
 export async function persistEnrolledNames(app: Bootstrapped, names: EnrolledNames): Promise<void> {
   await writeMeta(app.db.db, DEVICE_NAME_META_KEY, names.deviceName);
-  await writeMeta(app.db.db, STORE_NAME_META_KEY, names.storeName);
-  await writeMeta(app.db.db, TENANT_NAME_META_KEY, names.tenantName);
 }
 
 /**

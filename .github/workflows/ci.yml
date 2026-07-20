@@ -1,5 +1,6 @@
-# CI pipeline skeleton (08-stack-and-repo §5.6). Stages 1–4 gate every PR now;
-# stages 6–12 are named placeholders wired by their owning tasks (linked per job).
+# CI pipeline (08-stack-and-repo §5.6). Stages 1–11 run real suites and gate as §5.6 labels them;
+# stage 12 (device-lane) is the sole remaining placeholder — a FAIL-SAFE stub that exits non-zero
+# until task 27 wires the EAS + on-device lane, never a green-for-nothing echo (CLAUDE.md §2.11).
 name: ci
 
 on:
@@ -397,9 +398,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm chaos
 
-  # Stage 12 — device lane (EAS dev-client build + on-device smoke). PLACEHOLDER —
-  # wired by task 27 (ai-docs/tasks/27-device-gates.md); fingerprint-triggered on native change.
+  # Stage 12 — device lane (EAS dev-client build + on-device smoke; 08 §5.6 stage 12,
+  # "native change / scheduled"). PLACEHOLDER, but FAIL-SAFE. Task 27
+  # (ai-docs/tasks/27-device-gates.md) wires the real lane — EAS dev-client build fingerprint-
+  # triggered on native change, plus on-device smoke: quick-crypto side of the interop vectors,
+  # argon2id timing, real-SQLCipher open. None of that can run here (no Expo/EAS/device).
+  #
+  # WHY THIS EXITS NON-ZERO (CLAUDE.md §2.11 / §2.1): the old step was `echo "placeholder …"` with
+  # no `exit`, so it exited 0 — a green-for-nothing job. An echo-and-exit-0 placeholder fails OPEN:
+  # it wears the stage-12 label while proving nothing, and the moment branch protection requires it
+  # the *absence* of the device lane is laundered into a green required check (an exit code
+  # describes the process it came from — an echo's 0 says only that echo ran, §2.1). A placeholder
+  # that exits 1 — like the sibling `not-implemented.mjs` stubs `pnpm simulate` / `pnpm db:seed`
+  # (task 01) — fails SAFE: nobody mistakes a red job for coverage. The difference is one line and
+  # it is the whole point of task 36. `scripts/not-implemented.mjs` is the repo's single
+  # "not implemented ⇒ exit 1" stub (§2.8) — reused here rather than hand-rolling an `exit 1`, so
+  # this reads identically to those scripts. `node` is preinstalled on ubuntu-latest; the checkout
+  # supplies the script file. Delete this job's stub and wire the real lane in task 27.
   device-lane:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "placeholder — device lane lands with task 27 (EAS build + on-device smoke)"
+      - uses: actions/checkout@v4
+      - name: device lane not yet implemented — fail safe until task 27 (§2.11)
+        run: node scripts/not-implemented.mjs device-lane 27-device-gates

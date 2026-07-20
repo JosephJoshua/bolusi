@@ -284,10 +284,11 @@ test('enroll appends a signed genesis at seq 1, persists the device identity, an
 });
 
 test('enroll persists the device/store/tenant NAMES → readDeviceInfo surfaces the real identity (task 94)', async () => {
-  // The production wire the Settings screen depends on: enrollment.ts persists the names the enroll
-  // RESPONSE carries (store/tenant) plus the owner-typed deviceName, so a later boot (and the live
-  // re-derive) reads a real identity, not the blank index.ts used to hand in. Reverting enrollment.ts's
-  // `persistEnrolledNames` call turns every name below blank while the ids stay set — RED here.
+  // The production wire the Settings screen depends on: core's `applyBundle` (run by `runEnrollment`)
+  // persists the store/tenant names from the enroll bundle (task 109), and enrollment.ts persists the
+  // owner-typed deviceName — so a later boot (and the live re-derive) reads a real identity, not the
+  // blank index.ts used to hand in. Reverting enrollment.ts's `persistEnrolledNames` call turns
+  // deviceName blank; breaking `applyBundle`'s name write turns store/tenant blank — either is RED here.
   const { platform } = platformFor();
   const { controller } = createAppEnrollment(app, platform, () => undefined);
 
@@ -296,9 +297,9 @@ test('enroll persists the device/store/tenant NAMES → readDeviceInfo surfaces 
   const info = await readDeviceInfo(app, { platform: 'android', appVersion: '' });
   const deviceId = await readDeviceId(app.db.db);
   expect(info.deviceId).toBe(deviceId); // the same id the genesis + POST + meta_kv carry
-  expect(info.deviceName).toBe('Kasir 1'); // what the owner typed in the wizard
-  expect(info.storeName).toBe('Toko Jayapura'); // from the enroll response (bundle store name)
-  expect(info.tenantName).toBe('Bolusi Papua'); // from the enroll response tenant name
+  expect(info.deviceName).toBe('Kasir 1'); // what the owner typed in the wizard (persistEnrolledNames)
+  expect(info.storeName).toBe('Toko Jayapura'); // from the enroll bundle via core's applyBundle (task 109)
+  expect(info.tenantName).toBe('Bolusi Papua'); // from the enroll bundle via core's applyBundle (task 109)
   expect([info.deviceId, info.deviceName, info.storeName, info.tenantName]).not.toContain('');
 });
 

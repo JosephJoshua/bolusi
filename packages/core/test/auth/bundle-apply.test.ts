@@ -16,6 +16,7 @@ import {
   applyBundle,
   buildPinVerifier,
   FLOOR_KDF_PARAMS,
+  readMeta,
   readVerifier,
   VerifierBoundsError,
   writeVerifier,
@@ -123,6 +124,34 @@ describe('applyBundle — the four directory tables (api/02-auth §5.2)', () => 
     }>`SELECT value FROM meta_kv WHERE key = 'tenantId'`.execute(k);
     expect(tenant.rows[0]?.value).toBe('tenant-1');
     expect(await readVerifier(k, 'u-owner')).not.toBeNull();
+  });
+
+  it('persists the store/tenant display names into meta_kv, refreshing them on a rename (task 109)', async () => {
+    const k = await open();
+    // First bundle: the store + tenant names as enrolled. The wire keys are asserted LITERALLY
+    // ('auth.storeName'/'auth.tenantName') so a write to a WRONG key can't hide behind the same
+    // constant the production write uses — this pins the exact key the mobile reader reads (T-15).
+    await applyBundle(
+      k,
+      bundle([], {
+        store: { id: 'store-1', name: 'Toko Lama' },
+        tenant: { id: 'tenant-1', name: 'PT Lama' },
+      }),
+    );
+    expect(await readMeta(k, 'auth.storeName')).toBe('Toko Lama');
+    expect(await readMeta(k, 'auth.tenantName')).toBe('PT Lama');
+
+    // The store + tenant are RENAMED server-side (same ids); the next pull bundle carries the NEW
+    // names. Persisting them in applyBundle is what keeps the on-device names fresh across a rename.
+    await applyBundle(
+      k,
+      bundle([], {
+        store: { id: 'store-1', name: 'Toko Baru' },
+        tenant: { id: 'tenant-1', name: 'PT Baru' },
+      }),
+    );
+    expect(await readMeta(k, 'auth.storeName')).toBe('Toko Baru');
+    expect(await readMeta(k, 'auth.tenantName')).toBe('PT Baru');
   });
 
   it('re-applying is idempotent — the tables do not accumulate', async () => {
