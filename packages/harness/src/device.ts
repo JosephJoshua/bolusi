@@ -17,6 +17,7 @@ import {
   type CommandContext,
   type CommandDefinition,
   type LocationPort,
+  type ModulePermissionManifest,
   type ModuleRuntime,
   type ProjectionEngine,
   type RebuildOutcome,
@@ -49,6 +50,18 @@ export interface DeviceIdentity {
 
 const GENESIS_OP_TYPE = 'auth.device_enrolled';
 
+/**
+ * A module to register on a device BEYOND `notes` (which is always registered), paired with its
+ * permission manifest for the grant-all evaluator. CHAOS-07 adds `platform` so a device can fold the
+ * server-minted `platform.conflict_detected` op into its `conflicts` projection and author
+ * `platform.conflict_acknowledged` through the real `acknowledgeConflict` command (04 §5.1 — the
+ * only production write path). Every other scenario is notes-only, so this defaults to empty.
+ */
+export interface ExtraModule {
+  readonly module: AnyModuleDefinition<ClientDatabase>;
+  readonly permissionManifest: ModulePermissionManifest;
+}
+
 export class VirtualDevice {
   #serverSeqSeen = 0;
 
@@ -75,12 +88,16 @@ export class VirtualDevice {
     readonly identity: DeviceIdentity;
     readonly clock: FakeClock;
     readonly prng: Prng;
+    /** Modules to register beyond `notes` (CHAOS-07 adds `platform`). Default: none. */
+    readonly extraModules?: readonly ExtraModule[];
   }): Promise<VirtualDevice> {
     const { identity, clock, prng } = options;
+    const extraModules = options.extraModules ?? [];
     const handle = await openClientDb();
 
     const registry = registerModules<ClientDatabase>([
       notesModule as unknown as AnyModuleDefinition<ClientDatabase>,
+      ...extraModules.map((m) => m.module),
     ]);
     const stats = new ProjectionStats();
     const engine = createProjectionEngine(handle.db, registry.projections, { stats });
@@ -88,7 +105,7 @@ export class VirtualDevice {
     const evaluator = await buildGrantAllEvaluator({
       tenantId: identity.tenantId,
       userId: identity.userId,
-      manifests: [notesModuleManifest],
+      manifests: [notesModuleManifest, ...extraModules.map((m) => m.permissionManifest)],
     });
 
     const clockPort: ClockPort = { now: () => clock.now() };

@@ -29,6 +29,41 @@ export interface SeededServerDevice {
   readonly auth: string;
 }
 
+/**
+ * A signer over a tenant's system-device Ed25519 key — mirrors the server's `SystemSigner`
+ * (oplog/system-op.ts). Mirrored (not imported) because `@bolusi/server` does not export its
+ * internal signer/key-store types; the whole overrides object crosses the boundary structurally.
+ */
+export type HarnessSystemSigner = (hash: Uint8Array) => Uint8Array;
+
+/**
+ * The deployment-owned system-key source `createApp` reads STRUCTURALLY (01 §3.6; conflict-wiring.ts
+ * `SystemKeyStore`). Its PRESENCE is what enables the REAL conflict-detection pipeline: `resolveDeps`
+ * builds `detectConflicts` from `SERVER_MODULES` over this store (deps.ts). The harness forks NO
+ * detection (T-7) — it hands the production composition root a key source and lets it wire the rest.
+ */
+export interface HarnessSystemKeyStore {
+  getSystemSigner(
+    tenantId: string,
+  ): HarnessSystemSigner | undefined | Promise<HarnessSystemSigner | undefined>;
+}
+
+/** The post-commit surfaced-conflict record the pipeline fires (03 §7; conflict-detection.ts). */
+export interface HarnessSurfacedConflict {
+  readonly conflictId: string;
+  readonly tenantId: string;
+  readonly storeId: string | null;
+  readonly category: 'conflict';
+}
+
+/** A tenant's system actor + device (01 §3.6): the actor for `platform.conflict_detected` only. */
+export interface SystemDeviceSeed {
+  readonly tenantId: string;
+  readonly userId: string;
+  readonly deviceId: string;
+  readonly publicKeyBase64: string;
+}
+
 interface DevicePrincipal {
   readonly deviceId: string;
   readonly tenantId: string;
@@ -56,6 +91,16 @@ export class HarnessServer {
    */
   static async boot(options?: {
     readonly gzipOnProgress?: (decompressedBytesSoFar: number) => void;
+    /**
+     * CHAOS-07 (testing-guide §3.6): enables the REAL server conflict-detection pipeline. When
+     * present, production `resolveDeps` builds `detectConflicts` from `SERVER_MODULES` over this
+     * store and threads it through the push route (deps.ts) — the harness detects nothing itself.
+     * Requires the tenant's system device seeded (`seedSystemDevice`) so the signer's pubkey matches
+     * `devices.signing_key_public` (appendSystemOp self-verifies, 05 §2.2).
+     */
+    readonly systemKeyStore?: HarnessSystemKeyStore;
+    /** CHAOS-07: the post-commit hook the pipeline fires for SIGNIFICANT conflicts only (03 §7). */
+    readonly onConflictSurfaced?: (conflict: HarnessSurfacedConflict) => Promise<void>;
   }): Promise<HarnessServer> {
     const pglite = new PGlite();
     const db = new Kysely<DB>({
@@ -98,6 +143,13 @@ export class HarnessServer {
       verifyToken,
       accessLogSink: (record: unknown) => accessLogs.push(JSON.stringify(record)),
       ...(options?.gzipOnProgress === undefined ? {} : { gzipOnProgress: options.gzipOnProgress }),
+      // CHAOS-07: forwarded structurally to production `resolveDeps` (deps.ts). `systemKeyStore`
+      // is the enable-switch — with it, `detectConflicts` is built from SERVER_MODULES; without it,
+      // detection stays undefined and pushes proceed unchecked (the honest v0 default).
+      ...(options?.systemKeyStore === undefined ? {} : { systemKeyStore: options.systemKeyStore }),
+      ...(options?.onConflictSurfaced === undefined
+        ? {}
+        : { onConflictSurfaced: options.onConflictSurfaced }),
     } as unknown as NonNullable<Parameters<typeof createApp>[0]>);
 
     const server = new HarnessServer(
@@ -138,6 +190,35 @@ export class HarnessServer {
       storeId: identity.storeId,
     });
     return { identity, auth: `Bearer ${token}` };
+  }
+
+  /**
+   * Seed the tenant's system actor + device + chain state (01 §3.6, 10-db §12) — the identity the
+   * conflict-detection pipeline emits `platform.conflict_detected` through. Exactly one per tenant:
+   * a `users` row flagged `is_system` (loadSystemDirectory reads it by that flag), a `devices` row
+   * `kind='system'` with a NULL store, and the genesis `system_device_chain_state` row (last_seq 0,
+   * last_hash NULL). `publicKeyBase64` MUST match the key the boot `systemKeyStore` signs with, or
+   * `appendSystemOp`'s self-verify (05 §2.2) fails the first detected conflict loudly.
+   *
+   * No bearer token: the system device never pushes over HTTP — its ops are built server-side inside
+   * the push transaction. The tenant/counter are seeded idempotently so ordering vs `seedDevice` is
+   * free.
+   */
+  async seedSystemDevice(seed: SystemDeviceSeed): Promise<void> {
+    await sql`INSERT INTO tenants (id, name, created_at) VALUES (${seed.tenantId}, ${'harness'}, ${CREATED_AT})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO tenant_op_counters (tenant_id, next_server_seq) VALUES (${seed.tenantId}, ${1n})
+              ON CONFLICT (tenant_id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO users (id, tenant_id, name, created_at, is_system)
+              VALUES (${seed.userId}, ${seed.tenantId}, ${'system'}, ${CREATED_AT}, ${true})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO devices (id, tenant_id, store_id, kind, signing_key_public, status, revoked_at, enrolled_at, last_seq, last_hash, last_sync_at)
+              VALUES (${seed.deviceId}, ${seed.tenantId}, ${null}, ${'system'}, ${seed.publicKeyBase64}, ${'active'},
+                      ${null}, ${CREATED_AT}, ${0n}, ${null}, ${null})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO system_device_chain_state (tenant_id, device_id, last_seq, last_hash)
+              VALUES (${seed.tenantId}, ${seed.deviceId}, ${0n}, ${null})
+              ON CONFLICT (tenant_id) DO NOTHING`.execute(this.db);
   }
 
   async close(): Promise<void> {

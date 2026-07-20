@@ -6,7 +6,7 @@
 export const PACKAGE_NAME = '@bolusi/harness' as const;
 
 export { openMemoryDriver } from './driver.js';
-export { VirtualDevice, type DeviceIdentity } from './device.js';
+export { VirtualDevice, type DeviceIdentity, type ExtraModule } from './device.js';
 export { mintIdentities, type RunIdentities } from './identities.js';
 export { buildGrantAllEvaluator } from './permissions.js';
 export { openClientDb, insertPulledOp, readWireOps, type ClientDbHandle } from './client-db.js';
@@ -30,7 +30,14 @@ export {
 export { CI_VOLUMES, activeVolumes, scaled, type Volumes } from './volumes.js';
 export { runConvergence, type ConvergenceOptions, type ConvergenceResult } from './convergence.js';
 export { toProjectionManifest, notesProjectionManifest } from './manifest.js';
-export { HarnessServer, type SeededServerDevice } from './server.js';
+export {
+  HarnessServer,
+  type HarnessSurfacedConflict,
+  type HarnessSystemKeyStore,
+  type HarnessSystemSigner,
+  type SeededServerDevice,
+  type SystemDeviceSeed,
+} from './server.js';
 export {
   FaultFetch,
   NetworkDroppedError,
