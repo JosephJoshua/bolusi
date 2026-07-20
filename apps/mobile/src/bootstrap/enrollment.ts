@@ -135,16 +135,13 @@ export function createAppEnrollment(
           appVersion: platform.appVersion,
         },
       );
-      // Persist the human-readable identity to meta_kv (task 94), AFTER core wrote the ids and BEFORE
-      // `onEnrolled` fires — so Root's live re-derive and every later boot render the real device
-      // name / store / tenant on the Settings screen rather than the blanks index.ts used to hand in.
-      // The store/tenant names come from the enroll RESPONSE (the only place they arrive); deviceName
-      // is what the owner typed in the wizard.
-      await persistEnrolledNames(app, {
-        deviceName: req.deviceName,
-        storeName: result.response.store.name,
-        tenantName: result.response.tenant.name,
-      });
+      // Persist the owner-typed device name to meta_kv (task 94), AFTER core wrote the ids AND ran
+      // `applyBundle` (which now persists the store/tenant names from the enroll bundle, task 109) and
+      // BEFORE `onEnrolled` fires — so Root's live re-derive and every later boot render the real
+      // device name / store / tenant on the Settings screen rather than the blanks index.ts used to
+      // hand in. Only `deviceName` is written here (it is not on the bundle); the store/tenant names
+      // are core's single-writer keys, refreshed on every bundle (§2.8 — no second writer).
+      await persistEnrolledNames(app, { deviceName: req.deviceName });
       onEnrolled(result.deviceId);
     },
   };

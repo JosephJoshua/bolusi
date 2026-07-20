@@ -1,6 +1,6 @@
 # TASK 109 — store/tenant NAME freshness: move the name persistence into core's bundle-apply so a rename refreshes it (task 94's mobile workaround goes stale)
 
-**Status:** todo
+**Status:** done
 **Priority:** **LOW-MEDIUM** — no live incident: task 94 correctly persists `deviceName`/`storeName`/`tenantName` and Settings renders them. The gap is FRESHNESS — task 94 could only persist them **mobile-side from the transient enroll response** (`@bolusi/core` was off-limits for that task), so a tenant/store **rename without re-enrollment** leaves those two NAMES stale on the device. The stable identifiers (`deviceId` — the revocation key — and `deviceName`) never drift; only the display names of store/tenant can.
 **Depends on:** 94
 **Blocks:** —

@@ -6,9 +6,17 @@
 // THE BUG THIS GUARDS: index.ts used to hand Root a hardcoded EMPTY deviceInfo, so an enrolled device
 // (task 92) rendered every identity field blank. FALSIFIED (§2.11): reverting `readDeviceInfo`'s
 // enrolled branch to that empty object turns "an enrolled device shows its real identity" RED; and
-// because the enrolled assertion reads back what `persistEnrolledNames` wrote, a persist that used a
-// DIFFERENT key than the read (silent drift, T-15) fails here too — the two are asserted to agree.
-import { DEVICE_ID_META_KEY, writeMeta } from '@bolusi/core';
+// because the enrolled assertion reads back the deviceName `persistEnrolledNames` wrote, a persist that
+// used a DIFFERENT key than the read (silent drift, T-15) fails here too. The store/tenant names are
+// core-owned (task 109): `applyBundle` writes them, this reads them via core's key constants — seeded
+// here with `writeMeta`; the writer/reader key-agreement for those two is guarded in packages/core
+// bundle-apply.test.ts.
+import {
+  DEVICE_ID_META_KEY,
+  STORE_NAME_META_KEY,
+  TENANT_NAME_META_KEY,
+  writeMeta,
+} from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -67,11 +75,11 @@ describe('an UNENROLLED device shows the honest empty block, never a fake (task 
 describe('an ENROLLED device renders its REAL identity from meta_kv (task 94)', () => {
   test('deviceId + the persisted names surface — not one blank among the four an owner revokes by', async () => {
     await writeMeta(db.db, DEVICE_ID_META_KEY, 'device-abc');
-    await persistEnrolledNames(app, {
-      deviceName: 'Kasir 1',
-      storeName: 'Toko Jayapura',
-      tenantName: 'Bolusi Papua',
-    });
+    await persistEnrolledNames(app, { deviceName: 'Kasir 1' });
+    // The store/tenant names are core-owned (task 109): applyBundle persists them on every bundle.
+    // Seeded here on the same keys readDeviceInfo reads, so the four-field identity is complete.
+    await writeMeta(db.db, STORE_NAME_META_KEY, 'Toko Jayapura');
+    await writeMeta(db.db, TENANT_NAME_META_KEY, 'Bolusi Papua');
 
     const info = await readDeviceInfo(app, CTX);
     expect(info.deviceId).toBe('device-abc');
@@ -82,18 +90,17 @@ describe('an ENROLLED device renders its REAL identity from meta_kv (task 94)', 
     expect([info.deviceId, info.deviceName, info.storeName, info.tenantName]).not.toContain('');
   });
 
-  test('a fresh persist OVERWRITES the prior names (re-enroll to a different store surfaces the new one)', async () => {
+  test('a later refresh OVERWRITES the prior names (a re-enroll or a store/tenant rename surfaces the new one)', async () => {
     await writeMeta(db.db, DEVICE_ID_META_KEY, 'device-abc');
-    await persistEnrolledNames(app, {
-      deviceName: 'Old',
-      storeName: 'Store A',
-      tenantName: 'Tenant A',
-    });
-    await persistEnrolledNames(app, {
-      deviceName: 'New',
-      storeName: 'Store B',
-      tenantName: 'Tenant B',
-    });
+    await persistEnrolledNames(app, { deviceName: 'Old' });
+    await writeMeta(db.db, STORE_NAME_META_KEY, 'Store A');
+    await writeMeta(db.db, TENANT_NAME_META_KEY, 'Tenant A');
+    // A later refresh overwrites both the device name (persistEnrolledNames) and the store/tenant
+    // names (core's applyBundle on the next pull — simulated here on the same keys). This is the
+    // task-109 freshness: a rename delivered on a later bundle surfaces without re-enrollment.
+    await persistEnrolledNames(app, { deviceName: 'New' });
+    await writeMeta(db.db, STORE_NAME_META_KEY, 'Store B');
+    await writeMeta(db.db, TENANT_NAME_META_KEY, 'Tenant B');
 
     const info = await readDeviceInfo(app, CTX);
     expect(info.deviceName).toBe('New');
