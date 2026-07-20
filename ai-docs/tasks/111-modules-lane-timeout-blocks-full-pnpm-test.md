@@ -1,6 +1,6 @@
 # TASK 111 — `packages/modules` is a THIRD load-flake lane (task 93's triage mis-classified it), and it currently blocks a green full `pnpm test`
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **MEDIUM** — this is the one lane in the class that is failing TODAY, not pre-emptively: `packages/modules/test/applier-conformance.test.ts` reds `Test timed out in 5000ms` **3/3 at only 2× oversubscription** (96 spinners, loadavg 34–73), and failed at 6321ms inside a real full-suite run. Because of it, **`pnpm test` (full monorepo) cannot currently go green under load** — pre-existing, NOT caused by task 93 (verified by stashing task 93's change and reproducing the identical red).
 **Depends on:** 93
 **Blocks:** — (but it blocks any acceptance line that says "full `pnpm test` green")
