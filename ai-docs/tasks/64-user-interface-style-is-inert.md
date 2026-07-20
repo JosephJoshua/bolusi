@@ -1,6 +1,6 @@
 # TASK 64 — `userInterfaceStyle: 'light'` is a well-typed no-op: the prebuild pipeline says so out loud and nothing reads it
 
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW — cosmetic, not a security surface. Filed for the **class**, not the blast radius.
 **Depends on:** —
 **Blocks:** —
