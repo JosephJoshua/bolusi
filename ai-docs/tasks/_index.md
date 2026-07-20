@@ -44,7 +44,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
-| 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
+| 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | in-progress | 26 |
 | 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | done | 09 |
 | 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | done | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
@@ -104,11 +104,11 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | done | 16 |
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | done | 95 |
-| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
+| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | in-progress | 20, 24 |
 | 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | done | 26 |
 | 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | done | 21, 24 |
 | 108 | `platform.acknowledgeConflict` dead in the real runtime: `ctx.query(listConflictsQuery)` read seam has no `name` → throws `VALIDATION_FAILED: query has no name`; only the stubbed unit test hid it. One-line fix (self-carry `name`, mirror notes' `getNoteQuery`) + an unstubbed test (from task 26 CHAOS-07) | done | 17 |
-| 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | todo | 94 |
+| 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | in-progress | 94 |
 | 110 | record the SYSTEM_KEY_DIR deployment convention (01 §3.6 defers to a deployment doc that does not exist) + fix the graceful-off contract comment (from task 78) | done | 78 |
 | 111 | packages/modules is a THIRD load-flake lane (task 93 triage mis-classified it) — applier-conformance reds 3/3 at 2x load and blocks a green full pnpm test (from task 93) | done | 93 |
 | 112 | wire the denial-audit diagnostics sink in apps/* so task 99 surfacing is ACTIVE (built+falsified but inert; same shape as 40->102, 20->105) | done | 99 |
