@@ -47,6 +47,7 @@ import {
   mediaQueue,
   MEDIA_STATUS_KEY,
   reassurance,
+  REASSURANCE_KEY,
   showsRejectedSection,
   staleness,
   syncChipState,
@@ -243,22 +244,29 @@ function relativeLabel(input: SyncStatusInput): string {
   return formatRelative(input.now - input.state.lastSuccessfulSyncAt);
 }
 
-/** Tier 1's sentence — the answer to "is my work safe?". */
+/**
+ * Tier 1's sentence — the answer to "is my work safe?".
+ *
+ * The key per `Reassurance` kind is read from `REASSURANCE_KEY` (model.ts), the ONE view→key mapping
+ * (§2.8); this function supplies only the per-arm params. That makes `model.test.ts`'s
+ * `REASSURANCE_KEY` assertions load-bearing rather than a decoy (task 65) — break a slot and both
+ * this line AND those tests change. `offline-but-healthy` is handled BEFORE the map because it is not
+ * a `Reassurance` kind at all: offline is an input, never a problem (model.ts's thesis), so it has
+ * its own one-sentence copy.
+ */
 function reassuranceText(input: SyncStatusInput): string {
-  // Offline-but-healthy gets its own sentence, and it is the one that says both things at once:
-  // no connection AND your changes are saved on this device.
   if (isOfflineButHealthy(input)) return t('sync.status.offline');
 
   const answer = reassurance(input);
   switch (answer.kind) {
     case 'allSent':
-      return t('sync.status.upToDate');
+      return t(REASSURANCE_KEY[answer.kind]);
     case 'savedHere':
-      return t('sync.status.pending', { count: answer.pendingOperationCount });
+      return t(REASSURANCE_KEY[answer.kind], { count: answer.pendingOperationCount });
     case 'syncing':
-      return t('sync.status.syncing');
+      return t(REASSURANCE_KEY[answer.kind]);
     case 'attention':
-      return t('sync.rejected.banner', { count: input.rejected.length });
+      return t(REASSURANCE_KEY[answer.kind], { count: input.rejected.length });
   }
 }
 

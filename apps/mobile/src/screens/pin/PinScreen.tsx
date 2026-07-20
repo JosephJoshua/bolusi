@@ -33,6 +33,7 @@ import { initialsOf } from '../switcher/model.js';
 
 import {
   attemptsLeft,
+  PIN_MESSAGE_KEY,
   pinPadState,
   pinView,
   showsForgotAffordance,
@@ -132,6 +133,14 @@ export function PinScreen({
  * The already-localized message for the pad's message slot. `PinPad` never formats time (its own
  * contract), so the countdown is formatted here — through `@bolusi/i18n`'s `formatDuration`, which
  * is the single formatting authority (07-i18n §5).
+ *
+ * THE MESSAGE KEY IS READ FROM `PIN_MESSAGE_KEY` (model.ts), NOT RESTATED HERE. There is ONE
+ * view→key mapping (§2.8); this function only supplies each arm's PARAMS, which genuinely differ.
+ * That is what makes `model.test.ts`'s `PIN_MESSAGE_KEY` assertions load-bearing rather than a decoy
+ * (task 65): break the map's `delayed`/`lockedOut` slot and both this screen AND those tests change.
+ * Two arms are not a plain lookup and stay explicit: `wrong` appends a SECOND key
+ * (`auth.pin.attemptsLeft`) the one-slot-per-state map has no room for, and `entry`'s `null` slot
+ * renders no message at all.
  */
 function messageFor(view: PinView): string | undefined {
   switch (view.kind) {
@@ -141,11 +150,11 @@ function messageFor(view: PinView): string | undefined {
       // Two sentences, deliberately: what happened, then what it costs. `attemptsLeft` is what turns
       // "wrong PIN" from a nag into information — it is the only warning a user gets before a lock
       // that only the owner can undo.
-      return `${t('auth.pin.wrong')} ${t('auth.pin.attemptsLeft', { count: view.attemptsLeft })}`;
+      return `${t(PIN_MESSAGE_KEY[view.kind])} ${t('auth.pin.attemptsLeft', { count: view.attemptsLeft })}`;
     case 'delayed':
-      return t('auth.pin.wait', { duration: formatDuration(view.remainingMs) });
+      return t(PIN_MESSAGE_KEY[view.kind], { duration: formatDuration(view.remainingMs) });
     case 'lockedOut':
-      return t('auth.pin.lockedOut');
+      return t(PIN_MESSAGE_KEY[view.kind]);
   }
 }
 

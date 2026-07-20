@@ -75,7 +75,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 64 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` not installed; the prebuild pipeline prints that fact every run and nobody reads prebuild stdout (from task 58 class sweep) | todo | — |
 | 66 | three agents filed colliding task numbers in one session; the collision **auto-merges clean** (filenames differ) while only `_index.md` conflicts — nothing checks §2.6's source of truth against the filesystem; Status drift already live on 07/13/15/58 | done | — |
 | 67 | `db-client/dialect.test.ts` "rolls back on error" times out at 5000ms under parallel load; passes in isolation — a T-10 flake, load is a hidden variable in this repo's test outcomes (from task 55 merge verification) | done | — |
-| 65 | `PIN_MESSAGE_KEY`/`SWITCHER_KEY`/`REASSURANCE_KEY` label-key maps are decoys — 0 production callers, screens hardcode `t()`, only tests assert the map (same class as 60, from task 60 sweep) | todo | — |
+| 65 | `PIN_MESSAGE_KEY`/`SWITCHER_KEY`/`REASSURANCE_KEY` label-key maps are decoys — 0 production callers, screens hardcode `t()`, only tests assert the map (same class as 60, from task 60 sweep) | done | — |
 | 68 | wire the semantic export-sweep (knip) as a pinned dep + gate — `knip.json` shipped but knip is not a declared dependency, so the config is a non-executable document (from task 60) | done | — |
 | 69 | **MEDIUM** no `apps/mobile` test mounts a screen — hardcoding `state="entry"` unlocks the PIN pad during every lockout with 16/16 green; the render lane EXISTS and is unused (from task 60) | todo | — |
 | 70 | **HIGH — §6 owner decision** SEC-DEV-04's §218 ("offline-revocation caveat") contradicts api/02-auth §7.3's by-design wipe and asks for a per-op result the wire never produces (401 precedes it); 2 of 5 behaviours unbuildable, 3 shipped (from task 61, review-61 confirmed) | in-progress | — |
@@ -102,7 +102,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | todo | 10 |
 | 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | done | 43, 44, 45 |
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
-| 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | todo | 16 |
+| 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | done | 16 |
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | todo | 95 |
 | 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
 | 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | todo | 26 |

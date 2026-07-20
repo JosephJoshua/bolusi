@@ -1,6 +1,6 @@
 # TASK 103 — `@bolusi/server` exports no test-auth seam, so the chaos harness cannot assert the HTTP-401 `DEVICE_REVOKED` path (blocks CHAOS-05 T7)
 
-**Status:** todo
+**Status:** done
 **Priority:** **MEDIUM** — a producer-traced capability gap the chaos harness needs; not a production bug. The harness can drive the happy path (its `verifyToken` override accepts) but cannot make the real server EMIT a `401 DEVICE_REVOKED`, so CHAOS-05's revoked-device leg and any 401-code assertion are unbuildable until the server exposes a test-auth seam.
 **Depends on:** 16
 **Blocks:** 26 (the CHAOS-05 revoked-device leg)
