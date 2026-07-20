@@ -1,6 +1,6 @@
 # TASK 94 — an enrolled device shows blank metadata (Settings + the enroll `appVersion`)
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — cosmetic-to-operational, but newly VISIBLE now that task 92 made enrollment work: a real enrolled device reaches the Settings screen with every device field blank.
 **Depends on:** 24, 92
 **Blocks:** —
