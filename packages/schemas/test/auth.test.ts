@@ -4,15 +4,29 @@
 // platform-free (no Buffer) in the move, so this suite pins the accept/reject decision at the edges
 // (security-guide §5; CLAUDE.md §2.5 — adversarial tests before review).
 //
-// The TEST may use Buffer to synthesise exact-length base64 (it runs on Node, is never shipped to
-// Hermes); the SCHEMA under test uses no Buffer.
+// The FIXTURES are built platform-free too (no Buffer, no node globals): @bolusi/schemas is
+// platform-free (08 §3.3) and its typecheck has no `node` types, so this test file must not name
+// Buffer. `b64OfBytes` synthesises a valid padded base64 string that decodes to exactly `bytes`
+// bytes — which is all the schema's byte-length DoS check keys on (the string length + padding).
 import { describe, expect, test } from 'vitest';
 
 import { CreateUserReq, EnrollReq, PinVerifierSchema } from '../src/index.js';
 
-const salt16 = Buffer.alloc(16, 1).toString('base64'); // 24 chars "…=="
-const hash32 = Buffer.alloc(32, 2).toString('base64'); // 44 chars "…="
-const key32 = Buffer.alloc(32, 3).toString('base64');
+/**
+ * A standard padded base64 string (RFC 4648 §4) decoding to exactly `bytes` bytes, built without
+ * Buffer. Body char is 'A' (base64 zero); only the LENGTH matters to the schema's `b64ByteLength`
+ * check. Matches the arithmetic `auth.ts` uses: `(len / 4) * 3 - pad`.
+ */
+function b64OfBytes(bytes: number): string {
+  const rem = bytes % 3; // 0 → no pad, 1 → "==", 2 → "="
+  const pad = rem === 0 ? '' : rem === 1 ? '==' : '=';
+  const groups = Math.ceil(bytes / 3);
+  return 'A'.repeat(groups * 4 - pad.length) + pad;
+}
+
+const salt16 = b64OfBytes(16); // 24 chars "…=="
+const hash32 = b64OfBytes(32); // 44 chars "…="
+const key32 = b64OfBytes(32);
 const NIL = '00000000-0000-0000-0000-000000000000';
 
 const VALID_VERIFIER = {
@@ -48,10 +62,10 @@ describe('PinVerifierSchema — SEC-AUTH-01 server-leg DoS guard', () => {
   });
 
   test('the platform-free byte-length check rejects wrong-sized salt/hash (16 / 32 bytes exactly)', () => {
-    const salt15 = Buffer.alloc(15, 1).toString('base64');
-    const salt17 = Buffer.alloc(17, 1).toString('base64');
-    const hash31 = Buffer.alloc(31, 2).toString('base64');
-    const hash33 = Buffer.alloc(33, 2).toString('base64');
+    const salt15 = b64OfBytes(15);
+    const salt17 = b64OfBytes(17);
+    const hash31 = b64OfBytes(31);
+    const hash33 = b64OfBytes(33);
     expect(PinVerifierSchema.safeParse({ ...VALID_VERIFIER, saltB64: salt15 }).success).toBe(false);
     expect(PinVerifierSchema.safeParse({ ...VALID_VERIFIER, saltB64: salt17 }).success).toBe(false);
     expect(PinVerifierSchema.safeParse({ ...VALID_VERIFIER, hashB64: hash31 }).success).toBe(false);
@@ -85,10 +99,9 @@ describe('EnrollReq — 32-byte public key + non-nil ids', () => {
   };
   test('a valid request passes; a 31-byte key and the nil deviceId are rejected', () => {
     expect(EnrollReq.safeParse(base).success).toBe(true);
-    expect(
-      EnrollReq.safeParse({ ...base, devicePublicKeyB64: Buffer.alloc(31).toString('base64') })
-        .success,
-    ).toBe(false);
+    expect(EnrollReq.safeParse({ ...base, devicePublicKeyB64: b64OfBytes(31) }).success).toBe(
+      false,
+    );
     expect(EnrollReq.safeParse({ ...base, deviceId: NIL }).success).toBe(false);
   });
 });
