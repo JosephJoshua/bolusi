@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-16
 **Status:** Accepted — **owner directive**
-**Amends:** D12/D13 (the no-device posture), `08-stack-and-repo.md` §2.2, `security-guide.md` §6, `api/04-push.md` §5
+**Amends:** D12/D13 (the no-device posture), `00-product-overview.md` (the "Android-first" client line §Stack + the "2GB Android" v0-exit criterion — the doc-router's first row, where every agent orients; task 86), `08-stack-and-repo.md` §2.2, `security-guide.md` §6, `api/04-push.md` §5
 **Frontend work is deferred** ("frontend is later though") — but this decision is recorded NOW because it changes what "done" means for tasks **already merged**.
 
 ## The directive

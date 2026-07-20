@@ -20,7 +20,7 @@ Why: unreliable 3G + days-long power outages make offline-first mandatory; the f
 
 | Phase | Contents | Status |
 | ----- | -------- | ------ |
-| **v0 — Foundation proof** | Platform Core + Auth: op log, projections, sync, offline PIN auth, device enrollment, tenant isolation, conflict+staleness, media pipeline, i18n scaffold, push+realtime. Exit: chaos harness + reference module on real 2GB Android. | **current** |
+| **v0 — Foundation proof** | Platform Core + Auth: op log, projections, sync, offline PIN auth, device enrollment, tenant isolation, conflict+staleness, media pipeline, i18n scaffold, push+realtime. Exit: chaos harness + reference module on a real 2GB Android — the on-device **runtime-verification target** (D12), not the whole platform story: iOS is a first-class target (D17/D18) but is config/prebuild-verified only here (no iOS runtime — D18 §5). | **current** |
 | v1 — Money loop | Inventory, POS, Finance, Repair vertical, minimal owner dashboard | next brainstorm |
 | v1.x | Delivery, HR attendance, GPS service, full reporting, chat | sequencing TBD |
 | V2 | Agent mode (PRD-004) — V1 keeps the door open via pure commands, granular permissions, audit fields (ARCH-001 §9) | deferred |
@@ -38,7 +38,7 @@ Why: unreliable 3G + days-long power outages make offline-first mandatory; the f
 
 ## Stack (decided 2026-07-14)
 
-- **Client:** Expo React Native, Android-first. Shared TS core packages (op log, sync, commands, projections). Desktop deferred (likely Tauri; open question).
+- **Client:** Expo React Native, targeting **Android and iOS**. **iOS is a first-class target** — an owner ruling (**D17**, 2026-07-16), with full parity required for all new work (**D18** §3, 2026-07-17); it reverses the earlier Android-first exclusivity, so do not re-derive "Android-first" from this doc. This environment has **no iOS runtime** (Linux host, no Xcode, CI `ubuntu-latest`, no Simulator), so iOS is verified at the **config/prebuild-artifact level only** here (D18 §5); **Android is where on-device runtime verification happens** (emulator today; a physical 2GB unit is still owed — D12). Shared TS core packages (op log, sync, commands, projections). Desktop deferred (likely Tauri; open question).
 - **Server:** Node LTS + Hono + PostgreSQL + **Kysely**. Zod schemas shared client↔server. pnpm workspaces monorepo.
 - Verify current library docs before speccing/using any API — recommendations drift.
 
