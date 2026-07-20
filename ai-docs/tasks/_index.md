@@ -98,7 +98,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 95 | the DB-driver testOnly lock is bypassed by SUBPATH imports (`@electric-sql/pglite/worker` = real DB surface) — same gap for better-sqlite3/pg; normalize to package root (from task 42 review) | done | 42 |
 | 96 | notes module SCREENS (NotesList/NoteEditor/NoteDetail) — 4 states, ConfirmSheet, optimistic save, thumbnail, i18n live-switch; carved from 25, frontend-phase (D17) | todo | 25, 24, 18 |
 | 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | done | 43 |
-| 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | in-progress | 13 |
+| 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | done | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | done | 10 |
 | 100 | delete hand-rolled isPermissionDeniedPayload, repoint to Zod validator — a real STRENGTHENING (rejects empty permissionId + non-enum reason) + a T-15 false-comment fix (from task 45) | done | 43, 44, 45 |
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
