@@ -1,6 +1,6 @@
 # TASK 63 — `export-surface.test.ts` claims to check "exactly the documented set (08 §3.2)"; §3.2 documents no set, so the test is its own oracle
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **LOW** — no live defect (verified). The test's list is currently correct and its sibling assertions are real. The defect is that the test cites a spec authority that does not exist, so the way to legalize an export is to edit the oracle.
 **Depends on:** —
 **Blocks:** —

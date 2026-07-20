@@ -71,7 +71,7 @@ function extractConstStringArray(source: string, name: string): string[] {
 describe('server ↔ mobile push channel-id parity (task 107; §2.8/§2.11)', () => {
   test('every VISIBLE category the server can send has a matching created channel id on mobile', async () => {
     const serverCategories = extractConstStringArray(
-      readFileSync(fileURLToPath(SERVER_PAYLOAD), 'utf8'),
+      readFileSync(fileURLToPath(SERVER_PAYLOAD.href), 'utf8'),
       'PUSH_CATEGORIES',
     );
 
