@@ -48,6 +48,7 @@ export {
 } from './fault-fetch.js';
 export { leakedEncodings, privateKeyEncodings } from './key-leak-scan.js';
 export { rawPush, type RawPushResult } from './raw-wire.js';
+export { HarnessMediaTransport } from './media-transport.js';
 export {
   CaptureSurface,
   HttpTransport,

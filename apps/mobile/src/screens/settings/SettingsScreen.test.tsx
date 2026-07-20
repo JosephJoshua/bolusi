@@ -1,4 +1,5 @@
-// The Settings DEVICE-INFO block renders its data, not blanks (design-system §8.x; task 94).
+// The Settings DEVICE-INFO block renders its data, not blanks (design-system §8.x; task 94), and the
+// NOTIFICATION rows hand off to the OS notification settings (api/04-push §5; D18 §1; task 59).
 //
 // ── WHY THIS FILE EXISTS ────────────────────────────────────────────────────────────────────────
 // The device block is what a shop reads to an owner over the phone during a revocation (model.ts §3):
@@ -10,16 +11,17 @@
 // FALSIFIED (§2.11): hardcoding any device row's `primaryText`/`secondaryText` back to a literal (or
 // blank) turns the "renders the identity" test RED; the blank control below is the positive control
 // (T-14b) that keeps the first test honest — it proves the green comes from the DATA, not from a
-// screen that happens to print "Kasir 1" unconditionally.
+// screen that happens to print "Kasir 1" unconditionally. The notification-row test is falsified the
+// same way: point the row's onPress at a no-op and the "hands off to the deep-link" test reds.
 //
 // The values asserted are runtime DATA (a device id, an owner-typed name, server-supplied store /
 // tenant names), NOT translatable copy — so reading them back is the never-blank check itself, not
 // the label-echo assertion testing-guide T-4 forbids.
-import { render, textsIn } from '../../../../../packages/ui/test/render.js';
+import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
 import { describe, expect, test, vi } from 'vitest';
 
 import { SettingsScreen } from './SettingsScreen.js';
-import { defaultMuteState, type DeviceInfo } from './model.js';
+import { MUTABLE_PUSH_CATEGORIES, type DeviceInfo, type MutablePushCategory } from './model.js';
 
 const ENROLLED: DeviceInfo = {
   deviceId: 'device-abc-123',
@@ -39,13 +41,15 @@ const BLANK: DeviceInfo = {
   appVersion: '',
 };
 
-function renderSettings(device: DeviceInfo) {
+function renderSettings(
+  device: DeviceInfo,
+  onOpenNotificationSettings: (category: MutablePushCategory) => void = vi.fn(),
+) {
   return render(
     <SettingsScreen
       locale="id"
       onSelectLocale={vi.fn()}
-      muted={defaultMuteState()}
-      onToggleMute={vi.fn()}
+      onOpenNotificationSettings={onOpenNotificationSettings}
       device={device}
       currentUser={{ id: 'user-1', initials: 'PO' }}
       onBack={vi.fn()}
@@ -84,5 +88,32 @@ describe('POSITIVE CONTROL: blank in ⇒ blank out (T-14b)', () => {
     expect(lineText(screen, 'settings-device-id.secondary')).toBe('');
     expect(lineText(screen, 'settings-device-store.primary')).toBe('');
     expect(lineText(screen, 'settings-device-store.secondary')).toBe('');
+  });
+});
+
+describe('the notification rows open the OS notification settings (api/04-push §5; D18 §1; task 59)', () => {
+  test('pressing a category row hands off to the deep-link for THAT category', () => {
+    // v0 muting is the OS's: the row does not toggle a mute flag (Android forbids it, iOS has no
+    // channels — D18 §1), it deep-links to the platform screen the user owns. The screen's whole job
+    // here is to route the press to `onOpenNotificationSettings(category)`.
+    const onOpenNotificationSettings = vi.fn();
+    const screen = renderSettings(ENROLLED, onOpenNotificationSettings);
+
+    fire(screen.get('settings-notifications-conflict'), 'onPress');
+    expect(onOpenNotificationSettings).toHaveBeenCalledTimes(1);
+    expect(onOpenNotificationSettings).toHaveBeenLastCalledWith('conflict');
+
+    fire(screen.get('settings-notifications-device'), 'onPress');
+    expect(onOpenNotificationSettings).toHaveBeenCalledTimes(2);
+    expect(onOpenNotificationSettings).toHaveBeenLastCalledWith('device');
+  });
+
+  test('one row per VISIBLE category, and none for `sync` (§3: data-only, no channel)', () => {
+    const screen = renderSettings(ENROLLED);
+
+    for (const category of MUTABLE_PUSH_CATEGORIES) {
+      expect(screen.query(`settings-notifications-${category}`)).not.toBeNull();
+    }
+    expect(screen.query('settings-notifications-sync')).toBeNull();
   });
 });

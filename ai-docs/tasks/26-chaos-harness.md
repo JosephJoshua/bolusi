@@ -1,6 +1,6 @@
 # TASK 26 — chaos-harness (@bolusi/harness + test-support determinism kit, multi-device sim, full CHAOS catalog, oracle wiring)
 
-**Status:** in-progress
+**Status:** done
 **Depends on:** 06, 07, 08, 15, 16
 
 ## Progress (2026-07-17 — §3.3 determinism kit SHIPPED + merged; harness deferred, blocked on task 25)
