@@ -200,6 +200,17 @@ const PLATFORM_FREE = new Set([
  * import, which is why it never has one.
  */
 const NODE_LANE_ONLY = /\/scripts\/|\/test\/.*\.test\.[tj]sx?$/;
+// Matched against the import's PACKAGE ROOT (`packageRoot(source)`), not the raw specifier — the
+// same ONE normalization the DB-driver lock uses (§2.8, task 95), now applied to this list too
+// (task 104). Without it the anchored entries below (`/^pg$/`, `/^ws$/`) matched only the BARE
+// specifier, so `ws/lib/websocket.js` from a platform-free package walked straight through while
+// bare `ws` was blocked — the identical exact-match-vs-subpath class task 95 closed one prong over.
+// Normalizing here (rather than loosening each regex to `($|\/)`) closes the class for every
+// present and FUTURE entry, and cannot over-match: a package literally named `ws-something` has
+// package root `ws-something`, which `/^ws$/` does not match. `node:` specifiers survive the split
+// unchanged in the part that matters (`node:fs/promises` → `node:fs`, still `/^node:/`), and every
+// scoped entry (`@expo/`, `@hono/`, `@op-engineering/`, `@noble/`) keeps its scope slash because
+// packageRoot preserves `@scope/pkg`.
 const PLATFORM_FORBIDDEN = [
   /^node:/,
   /^react-native($|\/|-)/,
@@ -353,7 +364,7 @@ export default {
         PLATFORM_FREE.has(workspace) &&
         !(workspace === 'packages/modules' && /\/screens\//.test(filename)) &&
         !NODE_LANE_ONLY.test(filename) &&
-        PLATFORM_FORBIDDEN.some((re) => re.test(source))
+        PLATFORM_FORBIDDEN.some((re) => re.test(packageRoot(source)))
       ) {
         context.report({ node, messageId: 'platformFree', data: { source, workspace } });
         return;
