@@ -8,6 +8,8 @@
 import { sql, type Kysely } from 'kysely';
 
 import { TENANT_ID_META_KEY } from '../authz/directory.js';
+import { jsonColumnToObject, type JsonColumnValue } from '../projection/columns.js';
+import { int8ToNumber, type Int8Value } from '../projection/int8.js';
 import type { CanonicalRef, PinVerifier } from './verifier.js';
 
 /** A `pin_attempt_state` row (10-db §9.5; api/02-auth §6.5). Absent ⇒ a clean slate (no failures). */
@@ -178,14 +180,23 @@ export async function readVerifier<DB>(
   db: Kysely<DB>,
   userId: string,
 ): Promise<PinVerifier | null> {
+  // THE RESULT TYPES ARE THE DRIVERS' TRUTH, NOT THE CLIENT'S (task 56; the fourth instance of the
+  // class task 46/48 abolished). `user_pin_verifiers.params` is `jsonb` and `as_of_*` are `bigint`
+  // server-side (10-db §9.5), so on the real `pg` driver `params` arrives PARSED and the int8
+  // columns arrive as STRINGS — while the client SQLite mirror hands back TEXT and numbers. A raw
+  // `sql<>` annotation is an ASSERTION the compiler simply believes: this used to claim the CLIENT
+  // shapes (`params: string`, `asOf*: number`), so `JSON.parse(<object>)` threw and `"10" < "9"`
+  // inverted the greatest-`asOf` merge (§5.3) — an AUTHENTICATION decision — silently past seq 9.
+  // Each field is the UNION the drivers actually produce, so the compiler forces the normalisation
+  // through the shared per-column-class seams below rather than take a hand-written word for it.
   const rows = await sql<{
     algo: string;
     salt: string;
-    params: string;
+    params: JsonColumnValue;
     hash: string;
-    asOfTimestamp: number;
+    asOfTimestamp: Int8Value;
     asOfDeviceId: string;
-    asOfSeq: number;
+    asOfSeq: Int8Value;
   }>`
     SELECT algo, salt, params, hash,
            as_of_timestamp AS "asOfTimestamp",
@@ -195,7 +206,11 @@ export async function readVerifier<DB>(
   `.execute(db);
   const row = rows.rows[0];
   if (row === undefined) return null;
-  const params = JSON.parse(row.params) as StoredParams;
+  // `jsonColumnToObject` accepts the parsed jsonb object AND the client's TEXT JSON string, and
+  // returns the stored object VERBATIM — so a tampered `p` stays visible to the caller's bounds
+  // check (SEC-AUTH-01, T-13) rather than being narrowed away, and a params that is NOT an object
+  // is REFUSED (fail-closed) rather than silently yielding undefined KDF params.
+  const params = jsonColumnToObject(row.params, 'user_pin_verifiers.params') as StoredParams;
   // Reconstruct from the stored bytes VERBATIM — `algo` and `p` are read back as-is (not hardcoded to
   // `'argon2id'`/`1`), so a tampered local row is VISIBLE to the caller's bounds check rather than
   // normalized away before it can be seen (SEC-AUTH-01, T-13). readVerifier does not itself gate: the
@@ -209,9 +224,13 @@ export async function readVerifier<DB>(
     p: params.p as PinVerifier['p'],
     hashB64: row.hash,
     asOf: {
-      timestamp: Number(row.asOfTimestamp),
+      // Narrowed through the int8 seam, NOT `Number()`: `int8ToNumber` throws past ±(2^53 − 1)
+      // rather than round (int8.ts) — a rounded `asOf` is a wrong canonical position returned with
+      // no error, and a tampered out-of-range `as_of_seq` must fail closed, not silently win the
+      // §5.3 merge. `compareCanonicalOrder` now sees real numbers, so ordering cannot invert.
+      timestamp: int8ToNumber(row.asOfTimestamp, 'user_pin_verifiers.as_of_timestamp'),
       deviceId: row.asOfDeviceId,
-      seq: Number(row.asOfSeq),
+      seq: int8ToNumber(row.asOfSeq, 'user_pin_verifiers.as_of_seq'),
     },
   };
 }

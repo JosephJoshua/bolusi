@@ -11,6 +11,12 @@
 // re-implemented (T-7). `stopAfterBatches` models a process kill at a batch boundary; the durable
 // `rebuild_cursor` (meta_kv) is what a fresh call resumes from.
 //
+// SCALE (heavy scenario — testing-guide §3.7 D-CHAOS-SCALE): FULL 20,000 + 500 volume in the merge
+// gate, but the SEED SWEEP is bounded to the first CI seed (`chaos08Seeds`); the nightly and any
+// explicit `CHAOS_SEEDS=` run every seed. The volume is NEVER cut — the seed sweep is the knob. A
+// 20,000-op rebuild is ~54 s and vitest runs a file's tests SERIALLY, so the old seeds-1–10 sweep
+// serialized this one file to ~9 min and was the gate's long pole.
+//
 // Falsification (§2.11): the watermark guard is load-bearing precisely because a rebuild that DID
 // re-apply below the checkpoint would double-count `edit_count` and inflate `rebuildApplies` past the
 // history size. The control below watches that go RED — forcing a fresh restart on resume (clearing the
@@ -25,6 +31,21 @@ import { VirtualDevice, type DeviceIdentity } from '../src/device.js';
 import { mintIdentities } from '../src/identities.js';
 import { canonicalFold, assertConvergence, notesRows } from '../src/oracle.js';
 import { activeVolumes, insertPulledOp, resolveSeeds, withSeed } from '../src/index.js';
+
+/**
+ * The seeds this heavy scenario sweeps — DELIBERATELY bounded to the first CI seed (testing-guide
+ * §3.7 D-CHAOS-SCALE), and flagged here rather than silently chosen. Mirrors CHAOS-02/03: the VOLUME
+ * is never reduced (every run rebuilds the full 20,000-op history), only the SEED SWEEP is. A
+ * 20,000-op rebuild is ~54 s and vitest runs a file's tests SERIALLY, so seeds 1–10 would serialize
+ * this one file to ~9 min and become the merge gate's long pole. `CHAOS_SEEDS=…` (a reproduction) or
+ * `CHAOS_NIGHTLY=1` runs every resolved seed, so the nightly still sweeps the full set.
+ */
+function chaos08Seeds(env: NodeJS.ProcessEnv = process.env): number[] {
+  const seeds = resolveSeeds(env);
+  const explicit = env.CHAOS_SEEDS !== undefined && env.CHAOS_SEEDS !== '';
+  if (explicit || env.CHAOS_NIGHTLY === '1') return seeds;
+  return seeds.slice(0, 1);
+}
 
 const CLOCK_BASE = 1_726_100_000_000;
 const HISTORY = activeVolumes().rebuildHistory; // 20,000 at CI scale (§3.6) — the meta-test pins it.
@@ -67,7 +88,7 @@ function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
 }
 
 describe('CHAOS-08 projection rebuild mid-stream', () => {
-  for (const seed of resolveSeeds()) {
+  for (const seed of chaos08Seeds()) {
     test(`CHAOS-08 kill+resume at 25/50/75% then mid-stream ops: rebuilt == control == canonical fold [seed ${seed}]`, async () => {
       await withSeed(
         seed,
