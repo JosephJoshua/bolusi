@@ -1,6 +1,6 @@
 # TASK 86 — D17 reversed the "Android-first" premise but never amended the line that states it, and every "unverified on-device" sentence still names one device
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **MEDIUM — cheap, and it is the leverage point.** `00-product-overview:41` is the doc-router's **first** row ("Anything — orientation, scope"), so every future agent reads "Android-first" before it reads anything else, and will correctly re-derive the ruling D17 just overturned.
 **Depends on:** 85 (if the owner rules v0 Android-only, the wording lands differently — but §2's device-gap half is unblocked and can go first)
 **SEC ids owned by THIS task:** none.
