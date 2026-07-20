@@ -19,6 +19,8 @@ import {
   replaceRolesDirectory,
   replaceUserRolesDirectory,
   replaceUsersDirectory,
+  STORE_NAME_META_KEY,
+  TENANT_NAME_META_KEY,
   verifierUserIds,
   writeMeta,
   writeVerifier,
@@ -33,6 +35,14 @@ import { assertVerifierInBounds, chooseEffectiveVerifier } from './verifier.js';
  */
 export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Promise<void> {
   await writeMeta(db, TENANT_ID_META_KEY, bundle.tenant.id);
+
+  // The store/tenant DISPLAY NAMES ride every bundle (api/02-auth §5.2). Persist them HERE — the one
+  // place that sees them on every refresh — so a rename delivered on the next pull refreshes the
+  // on-device names (task 109); this is the SINGLE writer of these two keys. `deviceName` is NOT on
+  // the bundle (it is the owner-typed genesis value) and stays enrollment-owned (apps/mobile). Unlike
+  // `storeId` (never rewritten — the §7.4 store binding is irreversible), only the display names refresh.
+  await writeMeta(db, STORE_NAME_META_KEY, bundle.store.name);
+  await writeMeta(db, TENANT_NAME_META_KEY, bundle.tenant.name);
 
   await replaceUsersDirectory(
     db,

@@ -62,6 +62,23 @@ export const DEVICE_ID_META_KEY = 'deviceId';
  */
 export const STORE_ID_META_KEY = 'storeId';
 
+/**
+ * `meta_kv` key holding the store's DISPLAY NAME (10-db §9.1). Written by `applyBundle` from
+ * `bundle.store.name` on EVERY bundle (enroll + every refresh), so a store rename delivered on the
+ * next pull refreshes the on-device name (task 109). Distinct from `storeId`: the id is the
+ * irreversible §7.4 binding and is never rewritten; only the display name refreshes. This is the ONE
+ * definition of the key string — the mobile Settings reader (apps/mobile device-info.ts) imports it,
+ * so the writer and the reader cannot drift onto different keys (§2.8).
+ */
+export const STORE_NAME_META_KEY = 'auth.storeName';
+
+/**
+ * `meta_kv` key holding the tenant's DISPLAY NAME (10-db §9.1). Written by `applyBundle` from
+ * `bundle.tenant.name` on EVERY bundle, so a tenant rename refreshes the on-device name (task 109).
+ * ONE definition of the key string, shared with the mobile reader (§2.8).
+ */
+export const TENANT_NAME_META_KEY = 'auth.tenantName';
+
 /** Read the device's tenant id from `meta_kv` (10-db §9.1), or null when unbootstrapped. */
 export async function readTenantId<DB>(db: Kysely<DB>): Promise<string | null> {
   const rows = await sql<{ value: string }>`
