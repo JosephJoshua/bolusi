@@ -1,6 +1,6 @@
 # TASK 65 — every mobile screen exports a `*_KEY` label map its tests assert and its screen ignores: the same decoy as `canAttempt`, four more times
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — **no live bug found** (the hardcoded `t()` calls and the maps agree today). The defect is the same as task 60's: the label-key coverage sits on a map nothing renders, and the mapping that ships has none of it. §2.8 (one implementation) — there are two copies of every screen's view→label-key mapping.
 **Depends on:** —
 **Blocks:** —
