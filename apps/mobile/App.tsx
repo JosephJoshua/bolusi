@@ -49,12 +49,9 @@ import {
 } from './src/screens/switcher/model.js';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
 import { syncChipState, type SyncStatusInput } from './src/screens/sync-status/model.js';
-import type {
-  DeviceInfo,
-  MutablePushCategory,
-  PushMuteState,
-} from './src/screens/settings/model.js';
-import { defaultMuteState } from './src/screens/settings/model.js';
+import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
+import { channelId } from './src/bootstrap/notifications.js';
+import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PinAttemptRow } from '@bolusi/core';
 import type { Locale } from '@bolusi/i18n';
 
@@ -94,7 +91,6 @@ export default function App(props: AppProps): React.JSX.Element {
     initialEnrollmentState(props.device === 'revoked'),
   );
   const [discardPrompt, setDiscardPrompt] = useState(false);
-  const [muted, setMuted] = useState<PushMuteState>(defaultMuteState);
 
   const zone = resolveZone({
     device: props.device,
@@ -239,9 +235,8 @@ export default function App(props: AppProps): React.JSX.Element {
               <SettingsScreen
                 locale={props.locale}
                 onSelectLocale={props.onSelectLocale}
-                muted={muted}
-                onToggleMute={(category: MutablePushCategory, value: boolean) =>
-                  setMuted((previous) => ({ ...previous, [category]: value }))
+                onOpenNotificationSettings={(category: MutablePushCategory) =>
+                  openNotificationSettings(channelId(category))
                 }
                 device={props.deviceInfo}
                 currentUser={currentUser}
