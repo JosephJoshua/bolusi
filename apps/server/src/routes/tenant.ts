@@ -10,7 +10,7 @@ import type { AppEnv } from '../env.js';
 import { appendAudit } from '../identity/audit.js';
 import { withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permissions.js';
-import { clampIdleLock, IDLE_LOCK_DEFAULT, TenantSettingsReq } from '../identity/schemas.js';
+import { clampIdleLock, IDLE_LOCK_DEFAULT, TenantSettingsReq } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 

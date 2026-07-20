@@ -18,7 +18,7 @@ import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { purgeExpiredIdempotency, runIdempotent } from '../identity/idempotency.js';
 import { revokeDevice } from '../identity/revocation.js';
-import { EnrollReq, type EnrollRes } from '../identity/schemas.js';
+import { EnrollReq, type EnrollRes } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant } from '../tenant.js';
 import { tenantIdFromContext } from '../tenant.js';

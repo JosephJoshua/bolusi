@@ -20,7 +20,7 @@ import {
   PutPinVerifierReq,
   UpdateUserReq,
   type CanonicalRef,
-} from '../identity/schemas.js';
+} from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 import { uuidv7 } from '../uuidv7.js';

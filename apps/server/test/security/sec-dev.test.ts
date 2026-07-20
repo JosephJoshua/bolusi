@@ -30,8 +30,9 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
+import { EnrollReq } from '@bolusi/schemas';
+
 import { sha256Hex } from '../../src/crypto/index.js';
-import { EnrollReq } from '../../src/identity/schemas.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
   enroll,
