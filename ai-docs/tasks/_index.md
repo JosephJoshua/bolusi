@@ -41,7 +41,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | done | 03 |
 | 32 | point CI `server-integration` job at `pnpm test:server` (from task 12) | done | 12 |
-| 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | todo | 09, 13 |
+| 33 | reconcile task 13's server-local stopgaps to the shared packages (duplicate permission registry = §2.8 violation; auth DTOs; unregistered error codes) (from task 13) | in-progress | 09, 13 |
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
 | 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | done | 26 |
@@ -71,8 +71,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 60 | `canAttempt`: 11 tests, 0 callers, and `PinScreen.tsx:52` points at it — the lockout's coverage protects a decoy. No live bug (pinPadState gates correctly); the tests are the defect (from review-05) | done | — |
 | 61 | **HIGH — live holes, green light** SEC-DEV-04/05 client legs (offline-continue + queued-ops; outbound interception) retired by a `(server leg)` title; disclaimed in prose by `13:60-61`, **no allowlist row, no marker declares any SEC-DEV id** — 15th/16th instance of the class (from task 54's sweep) | done | 31 |
 | 62 | `08 §5.6`'s normative build rule gives as its worked example the exact bare-`tsc -b` no-op that has now silently failed **4 times** (24, orchestrator, 55, 55's sweep) — spec normativises the mechanism, omits the invariant (from task 55) | done | 55 |
-| 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | todo | — |
-| 64 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` not installed; the prebuild pipeline prints that fact every run and nobody reads prebuild stdout (from task 58 class sweep) | todo | — |
+| 63 | `export-surface.test.ts` cites "exactly the documented set (08 §3.2)" — §3.2 documents no set, so the test is its own oracle; LOW, siblings carry the real property (from review-47) | done | — |
+| 64 | `userInterfaceStyle: 'light'` is inert — `expo-system-ui` not installed; the prebuild pipeline prints that fact every run and nobody reads prebuild stdout (from task 58 class sweep) | in-progress | — |
 | 66 | three agents filed colliding task numbers in one session; the collision **auto-merges clean** (filenames differ) while only `_index.md` conflicts — nothing checks §2.6's source of truth against the filesystem; Status drift already live on 07/13/15/58 | done | — |
 | 67 | `db-client/dialect.test.ts` "rolls back on error" times out at 5000ms under parallel load; passes in isolation — a T-10 flake, load is a hidden variable in this repo's test outcomes (from task 55 merge verification) | done | — |
 | 65 | `PIN_MESSAGE_KEY`/`SWITCHER_KEY`/`REASSURANCE_KEY` label-key maps are decoys — 0 production callers, screens hardcode `t()`, only tests assert the map (same class as 60, from task 60 sweep) | done | — |
@@ -104,7 +104,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 102 | wire denialAuditTimer (systemTimer) into apps/mobile runtime so task 40 liveness bound is ACTIVE in production — currently INERT (from task 40) | done | 40 |
 | 103 | @bolusi/server exports no test-auth seam so the chaos harness cannot assert HTTP-401 DEVICE_REVOKED — blocks CHAOS-05 T7 (from task 26) | done | 16 |
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | done | 95 |
-| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | in-progress | 20, 24 |
+| 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | done | 20, 24 |
 | 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | done | 26 |
 | 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | done | 21, 24 |
 | 108 | `platform.acknowledgeConflict` dead in the real runtime: `ctx.query(listConflictsQuery)` read seam has no `name` → throws `VALIDATION_FAILED: query has no name`; only the stubbed unit test hid it. One-line fix (self-carry `name`, mirror notes' `getNoteQuery`) + an unstubbed test (from task 26 CHAOS-07) | done | 17 |
