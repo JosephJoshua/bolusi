@@ -8,6 +8,7 @@
 // settings the in-app row deep-links to (`src/push/notification-settings.ts`); the resolving-no-op
 // `applyChannelImportance` was DELETED. The channels are still created at boot — that is what makes the
 // OS settings screen offer per-category controls — which is exactly what this file pins.
+import { pushChannelId } from '@bolusi/schemas';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ setNotificationChannelAsync: vi.fn() }));
@@ -29,10 +30,14 @@ describe('createNotificationChannels (api/04-push §3/§5)', () => {
     const created = await createNotificationChannels(defaultMuteState());
     const idsTouched = mocks.setNotificationChannelAsync.mock.calls.map((c) => c[0]);
 
-    expect(idsTouched.sort()).toEqual([channelId('conflict'), channelId('device')].sort());
-    expect([...created].sort()).toEqual([channelId('conflict'), channelId('device')].sort());
+    // Pinned to the SHARED `pushChannelId` scheme (`@bolusi/schemas`), not to mobile's own
+    // `channelId` (which would be circular): a mobile-side re-hardcode of the scheme reddens here.
+    const expected = [pushChannelId('conflict'), pushChannelId('device')].sort();
+    expect(idsTouched.sort()).toEqual(expected);
+    expect([...created].sort()).toEqual(expected);
+    expect(channelId('conflict')).toBe(pushChannelId('conflict'));
     // sync is data-only (§3: no visible notification) → no channel, ever.
-    expect(idsTouched).not.toContain('bolusi.sync');
+    expect(idsTouched).not.toContain(pushChannelId('sync'));
     expect(MUTABLE_PUSH_CATEGORIES).not.toContain('sync');
   });
 });

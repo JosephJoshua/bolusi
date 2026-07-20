@@ -13,7 +13,7 @@
 // might catch and mistake for something recoverable.
 //
 // Platform-free: imports only sibling authz types (08 §3.3).
-import type { DirectorySnapshot } from './directory.js';
+import type { DirectoryGrant, DirectoryRole, DirectorySnapshot } from './directory.js';
 import type { PermissionRegistry } from './registry.js';
 
 /**
@@ -96,8 +96,48 @@ export function parsePermissionIds(json: string): readonly string[] {
 }
 
 /**
- * §5.2 steps 4–6: collect the user's scope-matching grants, drop the malformed ones, union the
- * survivors' `permissionIds`.
+ * A grant's scope, RESOLVED from its role exactly once (§5.2 steps 4–5). The union has exactly two
+ * inhabitants — a tenant-wide grant and a store-specific one — and, by construction, NO inhabitant
+ * for a store-scoped role carrying a null `storeId`. That combination is the store→tenant
+ * escalation (task 37): read as tenant-wide it widens a store role into every store AND lifts it
+ * into tenant scope. `classifyGrant` is the ONLY producer, and it maps that combination to `null`
+ * (dropped) — so it cannot exist here, and the scope match below never reads `scopeType` or
+ * `storeId === null` to decide tenant-vs-store. The guarantee is the type, not a statement's
+ * position: moving or deleting a line in `computeEffectiveSet` can no longer reintroduce it,
+ * because there is no malformed value for a reordered line to mishandle. A `store` grant's
+ * `storeId` is `string` (never `null`) — asking for a null one is a compile error.
+ */
+type ScopedGrant =
+  | { readonly scope: 'tenant'; readonly permissionIdsJson: string }
+  | { readonly scope: 'store'; readonly storeId: string; readonly permissionIdsJson: string };
+
+/**
+ * Parse (don't validate) one raw `DirectoryGrant` against its role into a `ScopedGrant`, or `null`
+ * when the grant is malformed/unresolvable and so contributes nothing (§5.2 step 5).
+ *
+ * A `null` storeId is the tenant-wide marker — valid ONLY for a role that is not store-scoped
+ * (§5.1). A store-scoped role carrying one is dropped HERE, at the parse boundary, before any
+ * `ScopedGrant` value exists; this is the sole gate that decides tenant-vs-store, so the escalation
+ * cannot be reintroduced downstream by statement order (task 37, §2.11). A dangling/unknown role is
+ * likewise dropped (PRD-011 §7's dangling-role hazard resolves to NO access, never unchecked
+ * access).
+ *
+ * Does NOT parse `permissionIdsJson`: a corrupt list must poison only the evaluations that read it,
+ * so the parse stays lazy in `computeEffectiveSet` and a corrupt row denies `evaluation_error`
+ * (§5.2 step 7) rather than blanking the whole snapshot load.
+ */
+function classifyGrant(role: DirectoryRole | undefined, grant: DirectoryGrant): ScopedGrant | null {
+  if (role === undefined) return null;
+  if (grant.storeId === null) {
+    if (role.scopeType === 'store') return null;
+    return { scope: 'tenant', permissionIdsJson: role.permissionIdsJson };
+  }
+  return { scope: 'store', storeId: grant.storeId, permissionIdsJson: role.permissionIdsJson };
+}
+
+/**
+ * §5.2 steps 4–6: classify each grant against its role (`classifyGrant` — the malformed ones become
+ * `null` and drop out), then union the survivors' `permissionIds` into the two scope sets.
  *
  * May THROW (a corrupt `permission_ids` row) — `evaluatePermission` catches it into
  * `evaluation_error`. Ids are unioned VERBATIM: an id unknown to this build lands in the set and
@@ -113,32 +153,26 @@ export function computeEffectiveSet(
   const storeScope = new Set<string>();
 
   for (const grant of snapshot.grantsByUser.get(userId) ?? []) {
-    const role = snapshot.roles.get(grant.roleId);
-    // Step 5: grant references a deleted/unknown role → contributes nothing. PRD-011 §7's
-    // dangling-role hazard resolves to NO access here, never to unchecked access.
-    if (role === undefined) continue;
-    // Step 5: malformed — a store-scoped role REQUIRES a non-null grant.storeId (§5.1). Dropped
-    // BEFORE the scope match on purpose: a null storeId is the tenant-wide marker, so a
-    // store-scoped role carrying one would otherwise read as "valid in every store" — a malformed
-    // row silently widening a grant is precisely the escalation this drop exists to prevent.
-    if (role.scopeType === 'store' && grant.storeId === null) continue;
+    const scoped = classifyGrant(snapshot.roles.get(grant.roleId), grant);
+    // Step 5: a malformed/unresolvable grant has no `ScopedGrant` representation — it never reaches
+    // the scope match. (Dangling role, or a store-scoped role with a null storeId.)
+    if (scoped === null) continue;
 
-    if (grant.storeId === null) {
-      // Tenant-wide grant (on a tenant-scoped role, per the drop above). Step 4: it counts in
-      // tenant scope, AND in every store of the tenant (FR-1037: the main owner sees all stores —
-      // only their own tenant's).
-      for (const id of parsePermissionIds(role.permissionIdsJson)) {
+    if (scoped.scope === 'tenant') {
+      // Step 4: a tenant-wide grant counts in tenant scope, AND in every store of the tenant
+      // (FR-1037: the main owner sees all stores — only their own tenant's).
+      for (const id of parsePermissionIds(scoped.permissionIdsJson)) {
         tenantScope.add(id);
         storeScope.add(id);
       }
-    } else if (storeId !== null && grant.storeId === storeId) {
-      // Store-scoped grant matching the evaluation store. Step 4: it counts in store scope ONLY —
+    } else if (storeId !== null && scoped.storeId === storeId) {
+      // Step 4: a store-specific grant matching the evaluation store counts in store scope ONLY —
       // never in tenant scope, whatever its role's grant list contains.
-      for (const id of parsePermissionIds(role.permissionIdsJson)) {
+      for (const id of parsePermissionIds(scoped.permissionIdsJson)) {
         storeScope.add(id);
       }
     }
-    // A grant for a DIFFERENT store contributes nothing to either scope.
+    // A store-specific grant for a DIFFERENT store contributes nothing to either scope.
   }
 
   return { tenantScope, storeScope };

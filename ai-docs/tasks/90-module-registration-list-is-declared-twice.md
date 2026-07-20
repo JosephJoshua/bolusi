@@ -1,6 +1,6 @@
 # TASK 90 — the module registration list is two literals with nothing checking they agree
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM — nothing is broken today (both lists hold one module and it is the same one). Filed because task 25 must edit **both** and the compiler finds neither, and because §2.8 is explicit that this is the shape to prevent.
 **Depends on:** 49, 50
 

@@ -1,6 +1,6 @@
 # TASK 107 — the push `channelId` the SERVER sends (`conflict`/`device`) does not match the Android channels the MOBILE app creates (`bolusi.conflict`/`bolusi.device`) — per-category muting is silently defeated
 
-**Status:** todo
+**Status:** done
 **Priority:** **MEDIUM** — a real per-category muting/routing bug on Android, but no LIVE impact in v0 (task 21's send triggers are un-wired seams; the registration endpoint is live but nothing sends yet). It bites the moment push goes live (tasks 16/17/20 wire the triggers). Needs a **spec decision** (one id scheme), not just a code edit. Overlaps task 59 (push muting → OS-settings deep-link).
 **Depends on:** 21, 24
 **Blocks:** — (must be resolved before push send goes live)

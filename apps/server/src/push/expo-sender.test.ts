@@ -78,7 +78,7 @@ describe('batching (api/04-push §7: ≤ 100 per request)', () => {
     await new ExpoPushSender({ transport }).send([conflict]);
     const sent = (calls[0]!.body as Record<string, unknown>[])[0]!;
     expect(sent).toHaveProperty('to', 'ExponentPushToken[c]');
-    expect(sent).toHaveProperty('channelId', 'conflict');
+    expect(sent).toHaveProperty('channelId', 'bolusi.conflict');
     expect(sent).not.toHaveProperty('deviceId');
   });
 });

@@ -347,17 +347,39 @@ describe('scope evaluation (02-permissions §5.2 step 4)', () => {
     );
   });
 
-  test('a store-scoped role granted with a null storeId is dropped as malformed (§5.2 step 5)', () => {
-    // Control: the SAME store-scoped role, granted correctly at STORE_A, allows.
+  test('a store-scoped role granted with a null storeId is dropped as malformed — the store→tenant escalation guard (§5.2 step 5)', () => {
+    // Control (T-14b): the SAME store-scoped role, granted correctly at STORE_A, allows — so the
+    // three denials below are caused by the malformed grant, not by a dead fixture.
     expect(evaluate(v0Snapshot(), staffQuery())).toEqual(ALLOWED);
 
-    // The malformed grant must be dropped — NOT read as a tenant-wide grant. If it were, a
-    // malformed row would silently widen a store role into every store of the tenant.
+    // A store-scoped role that ALSO lists a tenant-scoped id (`auth.role_manage`), granted with a
+    // null storeId. A null storeId is the tenant-wide marker — but ONLY for a tenant-scoped role
+    // (§5.1). Read as tenant-wide, this one malformed row would silently (a) allow a store
+    // permission in its own store, (b) widen into every OTHER store, and (c) escalate store→tenant.
+    // review-02 reproduced exactly those three ALLOWs when the drop was removed; a structural
+    // replacement for the drop must keep all three denied. These three asserts are the falsifier:
+    // they go red the instant the malformed grant can reach scope matching.
     const snap = v0Snapshot({
+      roles: {
+        [ROLE_MAIN_OWNER]: role('tenant', MAIN_OWNER_IDS),
+        [ROLE_STORE_OWNER]: role('store', STORE_OWNER_IDS),
+        [ROLE_STAFF]: role('store', [...STAFF_IDS, 'auth.role_manage']),
+      },
       grants: { [USER_STAFF]: [{ roleId: ROLE_STAFF, storeId: null }] },
     });
+    // Probe 1 — malformed grant @ STORE_A: a store permission it lists must NOT allow.
     expect(evaluate(snap, staffQuery())).toEqual(denied('not_granted'));
+    // Probe 2 — @ STORE_B: must NOT be widened into a store it was never granted.
     expect(evaluate(snap, staffQuery({ storeId: STORE_B }))).toEqual(denied('not_granted'));
+    // Probe 3 — the tenant-scoped id the role lists must NOT be escalated store→tenant.
+    expect(
+      evaluate(snap, {
+        userId: USER_STAFF,
+        tenantId: TENANT,
+        storeId: STORE_A,
+        permissionId: 'auth.role_manage',
+      }),
+    ).toEqual(denied('not_granted'));
   });
 
   test("scope: 'tenant' ignores the passed storeId entirely (§5.2 step 3)", () => {
