@@ -47,11 +47,14 @@ Every message carries `data: { "category": "...", "route": "...", "params": { �
 - **Deep-link route registry (v0):** `conflict` → `route: "conflicts"`, `params: { "conflictId": "<uuid>" }`; `device` → `route: "devices"`, `params: { "deviceId": "<uuid>" }`. Tapping the notification navigates to the route; the screen loads data from local projections — the push carried none.
 - `channelId` is set to the category name (§5).
 
-## 5. Muting (v0: per-category, per-device, client-side)
+## 5. Muting (v0: the in-app row opens the OS notification settings)
 
-- Each category maps 1:1 to an Android notification channel, created via `setNotificationChannelAsync` at app start (08-stack-and-repo §2.2). The in-app settings screen exposes a **boolean mute toggle per category**, implemented as the channel's importance — muting works even for killed-app delivery because the OS suppresses the channel, not the app.
-- Muting is client-side state only: the server keeps sending in v0 (it holds no preference state). `sync` muting never arises — it is data-only and shows nothing.
-- This satisfies FR-1150 at device granularity; per-user preferences (FR-1149) are v1 (roadmap).
+- Muting belongs to the **operating system**; the in-app control is **a row that opens the OS notification settings**, not a switch the app sets. This corrects an earlier model that set the channel's *importance* from the app (D18 §1; decisions/2026-07-17): **Android forbids an app changing a notification channel's importance after the channel is created** — importance belongs to the user, by design, so an app cannot un-mute itself — and **iOS has no per-category notification channels at all**. An app-set mute toggle is therefore either silently ignored (Android, post-creation) or has nothing to act on (iOS); the honest control hands the user to the OS screen that actually owns the setting.
+- **The channels still exist, and that is the point.** One channel per VISIBLE category is created at app start (§3; 08-stack-and-repo §2.2) so the OS notification-settings screen shows **per-category** controls the user can mute — `conflict` and `device` appear there as separate, individually-mutable channels. `sync` gets **no** channel (§3: data-only, no visible notification); a channel for it would surface a switch that silences nothing.
+- **Android:** the row deep-links to the app's notification settings via the OS intent — `android.settings.CHANNEL_NOTIFICATION_SETTINGS` (a specific category channel, addressed by `EXTRA_APP_PACKAGE` + `EXTRA_CHANNEL_ID`), or the per-app notification screen. Per-category muting is **real** here, because the boot-created channels are what that screen lists.
+- **iOS:** the row deep-links to the app's notification settings (`UIApplication.openNotificationSettingsURLString`, iOS 16+, or the app Settings page). iOS notification controls are **app-wide, not per-category** — there are no channels — so **v0 does not claim per-category muting on iOS**: the row opens the single app-level notification setting set, and that is the stated limit.
+- The **server holds no mute state** and keeps sending in v0 (it has no preference store); suppression is entirely the OS's, applied to what the user set in the screen this row opens — and it still holds for **killed-app** delivery, because the OS, not the app, does the suppressing. `sync` muting never arises: it is data-only and shows nothing.
+- This satisfies FR-1150 at device granularity — per-category on Android, app-wide on iOS; per-user preferences (FR-1149) remain v1 (roadmap).
 
 ## 6. Delivery expectations
 

@@ -29,14 +29,16 @@ import {
   MUTABLE_PUSH_CATEGORIES,
   type DeviceInfo,
   type MutablePushCategory,
-  type PushMuteState,
 } from './model.js';
 
 export interface SettingsScreenProps {
   readonly locale: Locale;
   readonly onSelectLocale: (locale: Locale) => void;
-  readonly muted: PushMuteState;
-  readonly onToggleMute: (category: MutablePushCategory, muted: boolean) => void;
+  /**
+   * Open the OS notification settings for a category (api/04-push §5; D18 §1). v0 muting is the OS's,
+   * not the app's — the row deep-links, it does not toggle a mute flag.
+   */
+  readonly onOpenNotificationSettings: (category: MutablePushCategory) => void;
   readonly device: DeviceInfo;
   readonly currentUser: { readonly id: string; readonly initials: string };
   readonly onBack: () => void;
@@ -48,8 +50,7 @@ export interface SettingsScreenProps {
 export function SettingsScreen({
   locale,
   onSelectLocale,
-  muted,
-  onToggleMute,
+  onOpenNotificationSettings,
   device,
   currentUser,
   onBack,
@@ -104,19 +105,16 @@ export function SettingsScreen({
 
       <Text style={styles.section}>{t('push.device.title')}</Text>
       {MUTABLE_PUSH_CATEGORIES.map((category) => (
+        // A row that OPENS the OS notification settings, not a mute switch (api/04-push §5; D18 §1):
+        // Android forbids the app changing a channel's importance after creation and iOS has no
+        // channels, so muting is the user's, in the OS screen. The chevron marks it as navigating
+        // out (§3.4); there is no in-app mute state to render a Yes/No chip from.
         <ListRow
           key={category}
           primaryText={t(categoryNameKey(category) as 'push.device.title')}
-          onPress={() => onToggleMute(category, !muted[category])}
-          testID={`settings-mute-${category}`}
-          trailing={
-            <Chip
-              label={muted[category] ? t('core.action.no') : t('core.action.yes')}
-              icon={muted[category] ? 'pending' : 'success'}
-              tone={muted[category] ? 'neutral' : 'success'}
-              testID={`settings-mute-state-${category}`}
-            />
-          }
+          onPress={() => onOpenNotificationSettings(category)}
+          showChevron
+          testID={`settings-notifications-${category}`}
         />
       ))}
 

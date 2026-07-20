@@ -8,7 +8,7 @@
 **Priority:** **HIGH** — a REQUIRED adversarial test whose spec is self-contradictory. Until this is resolved, SEC-DEV-04 cannot be honestly retired by anyone.
 **Depends on:** —
 **Blocks:** 28 (its roll-up requires the allowlist EMPTY, which requires these two ids resolved)
-**SEC ids owned by THIS task:** SEC-DEV-04, SEC-DEV-07
+**SEC ids owned by THIS task:** SEC-DEV-07
 
 ## Where this came from
 
@@ -58,6 +58,29 @@ Its title no longer carries the id (task 61), so the id is allowlisted here. **D
 - The **surfacing** leg ships at `apps/server/test/security/sec-dev.test.ts` (anomaly counts + last-anomaly-at).
 
 So the id may already be whole across two tests, with no single test completing it — a §2.1.6 question, not a coverage hole. **Do not assume; read both, and decide whether §221's "simulate extracted signing key" framing needs its own scenario or is satisfied by SEC-OPLOG-03's.** If satisfied, title SEC-DEV-07 on the completing test and drop the row. If not, ship the missing scenario.
+
+## Resolution applied (D18 §2, 2026-07-20)
+
+**Decision taken: (a) §218 is over-specified — per the owner's D18 §2 ruling.** The work is done as follows.
+
+### SEC-DEV-04 — RETIRED honestly
+
+1. **Doc (already committed, c7bc21b on `main`):** `security-guide §218` was rewritten to the wiped-not-leaked guarantee — the 401→`DEVICE_REVOKED` wire path (api/02-auth §8/§10) with §7.3's confirm-then-wipe as the terminal step; the "queued ops → `DEVICE_REVOKED`, kept + surfaced as `rejected`" over-specification is dropped, with the reason recorded inline. Verified §7.3 (`:449`, "destroyed with the rest — by design") and the 401 mapping (`:496`) back the new wording.
+2. **Test titles it:** `packages/core/test/sync/offline-revocation.test.ts`'s `describe` now carries `SEC-DEV-04` verbatim (no partial-leg qualifier), backed by the three real assertions (behaviours 1/3/5 + a positive control). The stale "id deliberately absent" header comment was rewritten to record the D18 resolution.
+3. **De-allowlisted:** `SEC-DEV-04` removed from `packages/test-support/src/sec-pending-allowlist.json`.
+4. **Gate falsified (§2.11), not assumed:**
+   - Broke behaviour-5's assertion (`toBe('local')` → `toBe('synced')`) → the `SEC-DEV-04`-titled owning test went **red** (`AssertionError: expected 'local' to be 'synced'`, `offline-revocation.test.ts:185`) → reverted → green. The title sits on a real, evaluated assertion.
+   - Removed `SEC-DEV-04` from the `describe` title (already de-allowlisted) → the sec-meta gate went **red** (`SEC ids with neither a test title nor an allowlist entry: [ 'SEC-DEV-04' ]`) → reverted → green. The gate keys on the verbatim title, not a comment/mention/content.
+   - Intermediate contradiction also observed live: title present + row still allowlisted → **red** (`titledButPending: SEC-DEV-04 → …70… (a test titles the id, but the row still says it is owed)`).
+
+### SEC-DEV-07 — NOT retired; stays allowlisted → task 70 (reported, not forced)
+
+D18 rules **only** on SEC-DEV-04/§218; it says nothing about SEC-DEV-07. Traced to producers (T-16), §221's requirement is genuinely built but **split across two tests with no single completing test**, so it cannot be retired "the same honest way":
+
+- **Generation leg** — `apps/server/test/integration/oplog/sec-oplog.test.ts:241` (`SEC-OPLOG-03 CHAIN_BROKEN raises a tamper alarm …`): `breakPreviousHash(op2, …, world.secretKey, …)` re-signs with the device's REAL key + stale chain → `CHAIN_BROKEN` anomaly row. This is exactly §221's "correct signature, stale chain state", but titled `SEC-OPLOG-03`.
+- **Surfacing leg** — `apps/server/test/security/sec-dev.test.ts:233` (untitled): `GET /v1/devices` surfaces `device_anomalies` counts + last-anomaly-at — but from **seeded** anomaly rows, not from a forge.
+
+Neither test completes the id: the generation test never touches `GET /v1/devices`, and the surfacing test never forges. §221 promises "the documented §6.2 mitigation **actually fires**" end-to-end (forge → anomaly row → owner-visible count), and **no assertion links the two halves**. Retiring it honestly requires shipping that one end-to-end scenario in `apps/server/test` (a new test, outside this task's declared footprint and not covered by any ruling) — not titling either partial test (which would be the SEC-META-01 defect, and would trip `partialLegTitles`/`titledButPending`). Per the D18 scope and CLAUDE.md §2.11, it is left allowlisted rather than forced green. **Consequence:** task 70 still owns an unshipped SEC-DEV-07, so it cannot be marked `done` as-is — the orchestrator should either keep 70 open on SEC-DEV-07 or split it into its own task.
 
 ## Acceptance
 
