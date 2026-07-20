@@ -12,22 +12,37 @@ import {
 } from '../src/index.js';
 
 describe('HTTP error-code registry (api/00 §7)', () => {
-  test('the code set is exactly the thirteen registry codes', () => {
-    expect([...HTTP_ERROR_CODES].sort()).toEqual([
-      'AUTH_TOKEN_INVALID',
-      'AUTH_TOKEN_MISSING',
-      'BODY_TOO_LARGE',
-      'DECOMPRESSED_TOO_LARGE',
-      'DEVICE_REVOKED',
-      'IDEMPOTENCY_CONFLICT',
-      'INTERNAL',
-      'MALFORMED_REQUEST',
-      'NOT_FOUND',
-      'PERMISSION_DENIED',
-      'RATE_LIMITED',
-      'UNSUPPORTED_ENCODING',
-      'VALIDATION_FAILED',
-    ]);
+  test('the code set is exactly the registry union — api/00 §7 transport + api/02-auth §10 identity surface', () => {
+    expect([...HTTP_ERROR_CODES].sort()).toEqual(
+      [
+        // api/00 §7 transport
+        'AUTH_TOKEN_INVALID',
+        'AUTH_TOKEN_MISSING',
+        'BODY_TOO_LARGE',
+        'DECOMPRESSED_TOO_LARGE',
+        'DEVICE_REVOKED',
+        'IDEMPOTENCY_CONFLICT',
+        'INTERNAL',
+        'MALFORMED_REQUEST',
+        'NOT_FOUND',
+        'PERMISSION_DENIED',
+        'RATE_LIMITED',
+        'UNSUPPORTED_ENCODING',
+        'VALIDATION_FAILED',
+        // api/02-auth §10 identity surface (task 33). No SESSION_EXPIRED — maps to AUTH_TOKEN_INVALID.
+        'ACTING_USER_INVALID',
+        'AUTH_INVALID_CREDENTIALS',
+        'ENROLL_DEVICE_ID_TAKEN',
+        'ENROLL_KEY_REUSED',
+        'LAST_ADMIN_PROTECTED',
+        'LOGIN_IDENTIFIER_TAKEN',
+      ].sort(),
+    );
+  });
+
+  test('SESSION_EXPIRED is not a registry code (maps to AUTH_TOKEN_INVALID — api/02-auth §10)', () => {
+    expect(zHttpErrorCode.safeParse('SESSION_EXPIRED').success).toBe(false);
+    expect([...HTTP_ERROR_CODES]).not.toContain('SESSION_EXPIRED');
   });
 
   test('the known-code enum excludes codes outside the registry', () => {

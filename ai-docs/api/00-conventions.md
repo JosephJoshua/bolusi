@@ -146,6 +146,8 @@ Exceeding the wire cap → `413 BODY_TOO_LARGE`. Exceeding the decompressed cap 
 
 Only 429 and 500 are retryable-as-is. 4xx (except 429) means the same request will fail again — clients shall not retry-loop them.
 
+The table above is the **transport** layer. Surface endpoints add codes documented on their own pages — the identity surface's `AUTH_INVALID_CREDENTIALS`, `ACTING_USER_INVALID`, `ENROLL_DEVICE_ID_TAKEN`, `ENROLL_KEY_REUSED`, `LAST_ADMIN_PROTECTED`, `LOGIN_IDENTIFIER_TAKEN` (api/02-auth §10). The **machine registry** `@bolusi/schemas` `HTTP_ERROR_CODES` is the single union of all of them, so every emitted code — transport or surface — is a known code on one path (`error.code` stays an OPEN string on the wire, §4/§6, so an older client still parses a newer code).
+
 ### 7.1 Validation errors (422)
 
 `zValidator`'s **default** failure response is a 400 with a raw Zod error — never ship that. Every `zValidator('json', schema, hook)` uses one shared hook that emits the §6 envelope with status `422` and:

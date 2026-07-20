@@ -28,6 +28,13 @@ const CODE_STATUS: Record<HttpErrorCode, ContentfulStatusCode> = {
   VALIDATION_FAILED: 422,
   RATE_LIMITED: 429,
   INTERNAL: 500,
+  // api/02-auth §10 — identity surface (folded onto this one code→status map, task 33).
+  AUTH_INVALID_CREDENTIALS: 401,
+  ACTING_USER_INVALID: 403,
+  ENROLL_DEVICE_ID_TAKEN: 409,
+  ENROLL_KEY_REUSED: 409,
+  LAST_ADMIN_PROTECTED: 409,
+  LOGIN_IDENTIFIER_TAKEN: 409,
 };
 
 /** Static English developer messages (api/00 §6). Not localized, not user-facing. */
@@ -45,6 +52,13 @@ const CODE_MESSAGE: Record<HttpErrorCode, string> = {
   VALIDATION_FAILED: 'Validation failed',
   RATE_LIMITED: 'Too many requests',
   INTERNAL: 'Internal server error',
+  // api/02-auth §10 — identity surface (task 33).
+  AUTH_INVALID_CREDENTIALS: 'Invalid credentials',
+  ACTING_USER_INVALID: 'Acting user missing, unknown, or not usable on this device',
+  ENROLL_DEVICE_ID_TAKEN: 'Device id already registered',
+  ENROLL_KEY_REUSED: 'Public key already registered',
+  LAST_ADMIN_PROTECTED: 'Would leave the tenant with no active administrator',
+  LOGIN_IDENTIFIER_TAKEN: 'Login identifier already in use',
 };
 
 export type ErrorDetails = Record<string, unknown>;
