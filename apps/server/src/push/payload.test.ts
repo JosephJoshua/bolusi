@@ -3,6 +3,7 @@
 // selection is proven by comparing the composer's output to the SAME i18n instance rendered in the
 // target locale, and by proving `id` and `en` differ — never by pinning a Bahasa/English sentence.
 import { getI18nInstance, initI18n } from '@bolusi/i18n';
+import { pushChannelId } from '@bolusi/schemas';
 import { beforeAll, describe, expect, test } from 'vitest';
 
 import {
@@ -47,12 +48,12 @@ describe('payload shapes (api/04-push §4)', () => {
       route: 'conflicts',
       params: { conflictId: CONFLICT_ID },
     });
-    expect(push.channelId).toBe('conflict');
+    expect(push.channelId).toBe('bolusi.conflict');
     expect(typeof push.title).toBe('string');
     expect(typeof push.body).toBe('string');
   });
 
-  test('device carries exactly route "devices", params {deviceId}, channelId "device"', () => {
+  test('device carries exactly route "devices", params {deviceId}, channelId "bolusi.device"', () => {
     const push = composeDevice(DEVICE_ID, 'id');
     if (!('title' in push)) throw new Error('expected a visible push');
     expect(push.data).toEqual({
@@ -60,14 +61,20 @@ describe('payload shapes (api/04-push §4)', () => {
       route: 'devices',
       params: { deviceId: DEVICE_ID },
     });
-    expect(push.channelId).toBe('device');
+    expect(push.channelId).toBe('bolusi.device');
   });
 
-  test('channelId == category on every visible message', () => {
+  test('channelId is the shared pushChannelId(category) — the ONE scheme the mobile app also uses (task 107)', () => {
+    // The value must equal what mobile creates the channel under, byte for byte, or Android drops the
+    // notification onto a default channel and silently defeats the per-category mute (api/04-push §5).
+    // The server DERIVES it from `@bolusi/schemas`' `pushChannelId`; asserting against that same
+    // function proves the server side never re-hardcodes a bare category (the original task-107 bug).
     expect((composeConflict(CONFLICT_ID, 'id') as { channelId: string }).channelId).toBe(
-      'conflict',
+      pushChannelId('conflict'),
     );
-    expect((composeDevice(DEVICE_ID, 'id') as { channelId: string }).channelId).toBe('device');
+    expect((composeDevice(DEVICE_ID, 'id') as { channelId: string }).channelId).toBe(
+      pushChannelId('device'),
+    );
   });
 });
 
@@ -124,7 +131,7 @@ describe('SEC-RT-03 (push leg): payload audit (api/04-push §4; security-guide �
       },
       title: 't',
       body: 'b',
-      channelId: 'conflict',
+      channelId: 'bolusi.conflict',
     } as unknown as ComposedPush);
     expect(zComposedPush.safeParse(smuggleInParams).success).toBe(false);
 

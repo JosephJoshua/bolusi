@@ -45,7 +45,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 34 | isolate the dev Postgres per worktree (fixed 5432 = parallel worktrees silently share/corrupt one DB; unattributable greens) (from task 13 review) | done | 05 |
 | 35 | convergence property test is a P1 flake: 6.6s work vs 5s default timeout (from task 13 integration) | done | 08 |
 | 36 | 2 remaining CI jobs labelled *merge gate* pass trivially (stage 10 CLOSED by task 11, which caught 2 live bugs on its first real run); full workflow sweep (from task 32) | todo | 26 |
-| 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | todo | 09 |
+| 37 | make the store→tenant escalation guard structural, not statement order (from task 09 review) | in-progress | 09 |
 | 38 | nothing tests canonical order's `seq` tie-break (deviceId IS covered by CHAOS-07ii); spec CHAOS-07 shares the blind spot (from task 35 review) | done | 35 |
 | 39 | `DB` is `any` for every consumer of @bolusi/db-server — all of apps/server untyped against the schema (from task 07) | done | 05 |
 | 40 | a hanging denial-audit emit wedges execute() forever — liveness, fails closed, not a bypass (from task 10 review) | done | 10 |
@@ -90,7 +90,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 82 | media pipeline's MOBILE half — capture (expo-camera), signature pad, compress passes, cache→document wiring, drain triggers, background-task registration, pruning actor, remote cache. Task 18 shipped the engine and deliberately not this (the split) | todo | 18, 50 |
 | 88 | `deviceId`/`storeId` are never written to `meta_kv` (10-db §9 names them; only `tenantId` has a producer) — no device is knowable as enrolled at boot (from task 50) | done | 14 |
 | 89 | **HIGH** the sync loop can never start: `BundleRefreshPort` has no producer, enrollment has no caller, NetInfo unpinned — task 15's loop is correct and unconstructable (from task 50) | done | 14, 15, 50, 88 |
-| 90 | the module registration list is declared twice (`SERVER_MODULES` + `CLIENT_MODULES`) with nothing checking they agree; task 25 must edit both and the compiler finds neither (from task 50) | todo | 49, 50 |
+| 90 | the module registration list is declared twice (`SERVER_MODULES` + `CLIENT_MODULES`) with nothing checking they agree; task 25 must edit both and the compiler finds neither (from task 50) | done | 49, 50 |
 | 91 | **HIGH** iOS restore-to-new-hardware permanently BRICKS the app: restored DB + non-restored THIS_DEVICE_ONLY key → wrong-key open → `boot()` renders nothing forever, no recovery. iOS-triggered (backup asymmetry, task 84), platform-neutral fix (catch not_a_database→wipe+re-enrol). Median device event for a repair franchise (from impl-ios) | done | — |
 | 92 | **HIGH** a production device cannot ENROLL: `runEnrollment`'s genesis append needs a composed `CommandRuntime` → an `OpAppendStore` with NO production producer (only test fixtures); nothing composes the runtime in `apps/mobile`. Plus the enrollment caller (`onLogin`/`onEnroll` noop; `LoginRes` lacks the `tenantName` the wizard needs). Blocks 89's production-enrollment path (from task 89) | done | 14, 50, 88, 89 |
 | 93 | the db-client load-flake class (task 67) also in apps/mobile bootstrap tests + secret-scan, still on default 5000ms — same measured nondeterminism, pre-emptive (from task 67 sweep) | done | 67 |
@@ -106,7 +106,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 104 | ws/<subpath> escapes the platform-free PLATFORM_FORBIDDEN prong (/^ws$/ matches only bare ws) — same class as task 95, one prong over (from task 95) | done | 95 |
 | 105 | wire realtime RN adapters in apps/mobile so RealtimeController runs — built-ahead + INERT today (task 24 predated 20); the 40->102 pattern (from task 20) | todo | 20, 24 |
 | 106 | decide+wire the scale policy for heavy CHAOS scenarios (CHAOS-03 ~14k merge >120s/seed; CHAOS-08 nightly x4) then ship CHAOS-03 (from task 26) | done | 26 |
-| 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | todo | 21, 24 |
+| 107 | push channelId the server sends (conflict/device) != mobile channels (bolusi.conflict/bolusi.device) — per-category muting silently defeated; needs one id scheme + parity test (from task 21) | done | 21, 24 |
 | 108 | `platform.acknowledgeConflict` dead in the real runtime: `ctx.query(listConflictsQuery)` read seam has no `name` → throws `VALIDATION_FAILED: query has no name`; only the stubbed unit test hid it. One-line fix (self-carry `name`, mirror notes' `getNoteQuery`) + an unstubbed test (from task 26 CHAOS-07) | done | 17 |
 | 109 | store/tenant NAME freshness — move name persistence into core bundle-apply so a rename refreshes it (task 94 mobile workaround goes stale) | todo | 94 |
 | 110 | record the SYSTEM_KEY_DIR deployment convention (01 §3.6 defers to a deployment doc that does not exist) + fix the graceful-off contract comment (from task 78) | done | 78 |

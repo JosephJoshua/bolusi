@@ -4,8 +4,6 @@
 // real implementations without reshaping the skeleton.
 import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
 import {
-  authModule,
-  platformModule,
   registerModules,
   type AnyModuleDefinition,
   type CryptoPort,
@@ -13,7 +11,7 @@ import {
   type OperationDeclaration,
   type ProjectionRegistry,
 } from '@bolusi/core';
-import { notesModule } from '@bolusi/modules/notes';
+import { ALL_MODULES } from '@bolusi/modules';
 import type { Context } from 'hono';
 
 import { dbAuthDirectory, type AuthDirectory } from './auth/directory.js';
@@ -71,40 +69,37 @@ export const DEFAULT_DEVICE_RATE_LIMITS: DeviceRateLimits = {
 export const DEFAULT_LOGIN_IP_PER_MINUTE = 30;
 
 /**
- * The server's module list — the ONE list tasks 17 (platform), 25 (notes), 43 (auth) append their
- * `defineModule` result to. `registerModules` turns it into BOTH the op-payload validators the push
- * pipeline's schema step consumes AND the projection appliers its apply step runs (10-db §3 step 6),
- * so validation and folding can never name different module sets (CLAUDE.md §2.8). This is the ring
- * task 49 closed: 08 punted server embedding to "07/16", 16 to "17", 25 assumed "the registration
- * list nobody creates" — all pointing at a list that did not exist. It exists here now.
+ * The server's module list — `@bolusi/modules`' single `ALL_MODULES`, re-cast to the server's
+ * generated `DB`. Before task 90 this was a SECOND hand-maintained literal alongside the client's
+ * `CLIENT_MODULES`, with nothing checking the two agreed (task 49 closed the same ring one level
+ * down: 08 punted server embedding to "07/16", 16 to "17", 25 assumed "the registration list nobody
+ * creates"). Task 90 unified them: both apps now register from ONE list, so a module is added — or
+ * dropped — in exactly one place, and both apps' registration suites notice off the same edit
+ * (CLAUDE.md §2.8).
  *
- * Registered today: `platform` (task 17) — `conflicts` + `user_prefs`; `auth` (task 43) —
- * `auth_sessions` + `pin_lockout_events` + `auth_permission_denials`; `notes` (task 25) — the
- * `notes` projection (registered in the list below; `notes-registration.test.ts` falsifies that
- * removing it makes its ops `UNKNOWN_TYPE` and its table stay empty). That is all 6 of 6 server
- * projection tables folded — stated because a registration list's failure mode is a silent
- * omission, and the honest count belongs next to the list rather than in a report nobody re-reads.
+ * `registerModules(SERVER_MODULES)` turns it into BOTH the op-payload validators the push pipeline's
+ * schema step consumes AND the projection appliers its apply step runs (10-db §3 step 6), so
+ * validation and folding can never name different module sets. It carries `platform` (task 17) —
+ * `conflicts` + `user_prefs`; `auth` (task 43) — `auth_sessions` + `pin_lockout_events` +
+ * `auth_permission_denials`; `notes` (task 25) — the `notes` projection. That is all 6 of 6 server
+ * projection tables folded; `platform`/`notes`/`auth-registration.test.ts` falsify each against the
+ * real push path (removing a module from `ALL_MODULES` makes its ops `UNKNOWN_TYPE` and its tables
+ * stay empty, §2.11).
  *
- * ON THE CAST. The appliers are typed against a dialect-neutral `PlatformDatabase` (04 §2) — the
- * one shape that can run on BOTH Postgres and SQLite, which is what makes them one applier instead
- * of two copies (§2.8). `DB` (db-server's generated schema) is a different type: same columns, but
- * `bigint` arrives as `Int8 = ColumnType<string, …>` and it carries 30-odd tables the module never
- * names. Neither is assignable to the other, and `apply(db: Kysely<DB>, …)` puts `DB` in a
- * contravariant position, so no variance annotation rescues it. The cast is where "one applier,
- * two engines" is paid for, and it is sound in exactly the way the T-8 conformance suite proves:
- * the appliers touch only the declared columns, through Kysely's dialect-neutral builder, and the
- * suite folds them against a real Postgres and a real SQLite and asserts byte-identical oracle
- * digests. Tasks 25/43 will cast here identically.
+ * ON THE CAST. The appliers are typed against dialect-neutral `PlatformDatabase`/`AuthDatabase`/
+ * `NotesDatabase` shapes (04 §2) — the one shape that runs on BOTH Postgres and SQLite, which is
+ * what makes each one applier instead of two copies (§2.8). `DB` (db-server's generated schema) is
+ * a different type: same columns, but `bigint` arrives as `Int8 = ColumnType<string, …>` and it
+ * carries 30-odd tables the modules never name. Neither is assignable to the other, and
+ * `apply(db: Kysely<DB>, …)` puts `DB` in a contravariant position, so no variance annotation
+ * rescues it. `ALL_MODULES` already erased its element type to `AnyModuleDefinition<never>`; this
+ * re-casts the whole list to the server's `DB`. The cast is where "one applier, two engines" is
+ * paid for, and it is sound in exactly the way the T-8 conformance suite proves: the appliers touch
+ * only the declared columns, through Kysely's dialect-neutral builder, and the suite folds them
+ * against a real Postgres and a real SQLite and asserts byte-identical oracle digests.
  */
-export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] = [
-  platformModule as unknown as AnyModuleDefinition<DB>,
-  authModule as unknown as AnyModuleDefinition<DB>,
-  // task 25 (notes): its op validators + `notes` projection appliers. Cast per the header — the
-  // appliers are typed against the dialect-neutral `NotesDatabase` (04 §2); the T-8 conformance
-  // suite proves they fold byte-identically on both engines, and notes-registration.test.ts
-  // falsifies THIS line against the real push path (§2.11).
-  notesModule as unknown as AnyModuleDefinition<DB>,
-];
+export const SERVER_MODULES: readonly AnyModuleDefinition<DB>[] =
+  ALL_MODULES as unknown as readonly AnyModuleDefinition<DB>[];
 
 const serverModuleRegistry: ModuleRegistry<DB> = registerModules(SERVER_MODULES);
 

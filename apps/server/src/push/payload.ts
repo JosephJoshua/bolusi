@@ -21,6 +21,7 @@ import {
   type Locale,
   type TranslationKey,
 } from '@bolusi/i18n';
+import { pushChannelId } from '@bolusi/schemas';
 import { z } from 'zod';
 
 /** v0 category set (api/04-push §3). Closed — new categories are additive `/v1` changes. */
@@ -49,7 +50,9 @@ export type DevicePushData = {
 /**
  * A composed push MINUS the recipient token (`to`), which the fanout attaches per device. `sync` is
  * data-only — no `title`, `body`, or `channelId`; the visible categories carry all three, and
- * `channelId` equals the category name (api/04-push §4/§5).
+ * `channelId` is `bolusi.<category>` — the shared `pushChannelId` scheme (`@bolusi/schemas`) the
+ * mobile app also creates its Android channels under, so a delivered notification always routes to
+ * the channel the user can mute (api/04-push §4/§5; task 107).
  */
 export type ComposedPush =
   | { readonly data: SyncPushData }
@@ -57,13 +60,13 @@ export type ComposedPush =
       readonly data: ConflictPushData;
       readonly title: string;
       readonly body: string;
-      readonly channelId: 'conflict';
+      readonly channelId: 'bolusi.conflict';
     }
   | {
       readonly data: DevicePushData;
       readonly title: string;
       readonly body: string;
-      readonly channelId: 'device';
+      readonly channelId: 'bolusi.device';
     };
 
 /** A composed push addressed to a device — what the `PushPort` sends. Carries `deviceId` so tickets
@@ -98,14 +101,14 @@ export const zComposedPush = z.discriminatedUnion('__kind', [
     data: zConflictData,
     title: z.string().min(1),
     body: z.string().min(1),
-    channelId: z.literal('conflict'),
+    channelId: z.literal('bolusi.conflict'),
   }),
   z.strictObject({
     __kind: z.literal('device'),
     data: zDeviceData,
     title: z.string().min(1),
     body: z.string().min(1),
-    channelId: z.literal('device'),
+    channelId: z.literal('bolusi.device'),
   }),
 ]);
 
@@ -161,22 +164,24 @@ export function composeSync(): ComposedPush {
   return { data: { category: 'sync' } };
 }
 
-/** `conflict` — visible; title/body from `push.conflict.*`, deep link to the conflict (api/04 §4). */
+/** `conflict` — visible; title/body from `push.conflict.*`, deep link to the conflict (api/04 §4).
+ *  `channelId` derives from the shared `pushChannelId` scheme so it matches the mobile channel (107). */
 export function composeConflict(conflictId: string, locale: Locale): ComposedPush {
   return {
     data: { category: 'conflict', route: 'conflicts', params: { conflictId } },
     title: pushString(locale, 'push.conflict.title'),
     body: pushString(locale, 'push.conflict.body'),
-    channelId: 'conflict',
+    channelId: pushChannelId('conflict'),
   };
 }
 
-/** `device` — visible; title/body from `push.device.*`, deep link to the device (api/04 §4). */
+/** `device` — visible; title/body from `push.device.*`, deep link to the device (api/04 §4).
+ *  `channelId` derives from the shared `pushChannelId` scheme so it matches the mobile channel (107). */
 export function composeDevice(deviceId: string, locale: Locale): ComposedPush {
   return {
     data: { category: 'device', route: 'devices', params: { deviceId } },
     title: pushString(locale, 'push.device.title'),
     body: pushString(locale, 'push.device.body'),
-    channelId: 'device',
+    channelId: pushChannelId('device'),
   };
 }

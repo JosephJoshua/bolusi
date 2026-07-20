@@ -181,7 +181,7 @@ test('conflict targets every active device of the conflict store; carries channe
   expect(sentTokens()).toEqual([t1, t2].sort());
   const forD1 = port.allSent.find((m) => m.to === t1)!;
   if (!('channelId' in forD1.push)) throw new Error('expected a visible push');
-  expect(forD1.push.channelId).toBe('conflict');
+  expect(forD1.push.channelId).toBe('bolusi.conflict');
   expect(forD1.push.data).toEqual({
     category: 'conflict',
     route: 'conflicts',
@@ -232,7 +232,7 @@ test('device targets only registered users holding auth.device_read; a null-user
   expect(sentTokens()).toEqual([tOwner]); // only the device_read holder
   const sent = port.allSent[0]!;
   if (!('channelId' in sent.push)) throw new Error('expected a visible push');
-  expect(sent.push.channelId).toBe('device');
+  expect(sent.push.channelId).toBe('bolusi.device');
   expect(sent.push.data).toEqual({
     category: 'device',
     route: 'devices',
