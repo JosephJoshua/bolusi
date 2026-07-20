@@ -38,7 +38,6 @@
 import {
   MEDIA_UPLOAD_STATUS_MACHINE,
   MediaDrainLoop,
-  MediaTransportError,
   findMediaItem,
   recoverInterruptedUploads,
   type ClockPort,
