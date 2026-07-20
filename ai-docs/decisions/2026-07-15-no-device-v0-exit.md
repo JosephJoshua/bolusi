@@ -2,6 +2,8 @@
 
 > Trigger: the owner confirmed no physical 2GB-class Android is available. D4 (`decisions/2026-07-14-v0-foundation.md`) makes "the reference module running on a physical 2GB Android" half of the v0 exit criterion. That half is now unmeetable. Recording it rather than letting an emulator launder a guess into a number.
 
+> **Forward note (2026-07-17, added by task 86):** this doc is **Android-scoped and dated** — on 2026-07-15 the only device gap was a physical Android. **D17** (2026-07-16) and **D18** §3/§5 (2026-07-17) make iOS a first-class target and *double* this gap, but **not symmetrically**: Android has an emulator running the shipping APK's own Hermes 0.17 (D13), so a real subset of claims is answerable today (task 27a); iOS has **no runnable target of any kind here** — Linux host, no Xcode, CI `ubuntu-latest`, no Simulator (task 80 §4) — and even a Simulator would not close it (D18 §5). Every "no physical Android (D12/D13)" residual-risk sentence names the **Android** leg; the iOS leg is a separate, larger gap the owner must close (task 85).
+
 ## D12 — Task 27 splits: emulator lane runs now, device lane blocks; three claims stay explicitly unproven
 
 **What:**

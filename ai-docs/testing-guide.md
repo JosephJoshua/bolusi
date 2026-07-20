@@ -100,7 +100,7 @@ For every module: take a fixed seeded op script (§3.3), fold it through the pro
 - The screen runs: driver conformance (§2.3), the L2 integration set, crypto interop (§2.2), L7 vectors, chaos scenarios CHAOS-01/03/06/07 with reduced volumes, and all Part C performance gates. Results emit as one JSON document to logcat (`BOLUSI_HARNESS_RESULT` tag) and on-screen; a repo script (`pnpm harness:device`) drives it via `adb` and fails non-zero on any red.
 - On-device protocol/chaos scenarios point at a harness server (laptop, same Wi-Fi) via config; performance gates that are network-bound state their network assumption (§4).
 - **Performance gates run on a release-variant build** (Hermes bytecode, JS dev mode off) of the `test` profile — dev-mode numbers are meaningless.
-- The reference device is a designated physical 2GB-RAM / 32GB-storage Android unit (documented in the repo README when purchased); gates are defined against that exact device. Emulators satisfy nothing in Part C.
+- The reference device is a designated physical 2GB-RAM / 32GB-storage **Android** unit (documented in the repo README when purchased); gates are defined against that exact device. Emulators satisfy nothing in Part C. **iOS is a first-class target (D17/D18) but has no runnable target of any kind here** — no iPhone, no macOS, no Simulator (task 80 §4) — so iOS on-device gates are a *separate* lane, recorded (deferred on owner provisioning) as **task 85**, not folded into Part C. The Android device gap (an emulator answers a real subset today — task 27a) and the iOS one (no target at all) are not the same size.
 
 ---
 

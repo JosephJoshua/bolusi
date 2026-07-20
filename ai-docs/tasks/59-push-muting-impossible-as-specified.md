@@ -122,7 +122,7 @@ There is no `Channel` source file anywhere in the package's `ios/` directory. So
 
 - `superpowers:test-driven-development`, `superpowers:verification-before-completion`.
 - Worktree isolation per CLAUDE.md §2.3 — first step: `git branch --show-current`; STOP if on `main`.
-- **No physical Android** (D12/D13). You **cannot** verify on-device that a mute suppresses a real FCM push. Say so; see the honesty clause.
+- **No physical Android** (D12/D13). You **cannot** verify on-device that a mute suppresses a real **FCM** push — that is the **Android** leg. iOS is a separate target (D18 §1: it deep-links to app-level notification settings; no per-category channels) with **no runnable target of any kind here** (task 80 §4) — a larger gap, not the same one. Say so; see the honesty clause.
 
 ## Acceptance
 
@@ -135,7 +135,7 @@ There is no `Channel` source file anywhere in the package's `ios/` directory. So
 - **Test `createNotificationChannels` while you are here** (review-05: the file has **0 tests**). `vi.mock('expo-notifications')` — no device needed. The highest-consequence assertion, in review-05's words *"Android keeps whatever name it is first given"* → **permanent for that install**: a channel created before `bootstrapI18n` resolves is named in the wrong language **forever**, in Android's own settings screen, where no in-app re-render can ever reach it. Assert: **(1)** `sync` gets no channel (§3 — the reasoning at `notifications.ts:10-12` is deliberate and worth pinning); **(2)** one channel per `MUTABLE_PUSH_CATEGORIES` entry, ids stable; **(3)** `name` is a resolved catalog string, not a key — a channel named `push.device.title` is permanent and user-visible.
 - **Check the boot ORDER, and treat it as this task's second finding if it is wrong.** `createNotificationChannels` calls `t(...)` at line 52. If it can run before `bootstrapI18n` (`i18n.ts` — also **0 tests**, review-05), the channel name is permanently the fallback locale. **`t()` at module-init time is the bug; the channel name is just where it becomes irreversible.** Report the ordering you find, with the file:line that establishes it.
 - **Sweep the class** (T-12): what other **Android-side write** in `apps/mobile` resolves successfully while the OS ignores it? This is task 58's class from the other end — 58 is a *config* the OS never reads, this is an *API call* the OS partly ignores. Report; don't fix here.
-- **Honesty clause** (D12/D13): you cannot demo a muted push not arriving. The residual risk — *"the mechanism is doc-verified and emulator-verified at most; suppression of a real FCM push on a real device is unverified"* — goes in the Outcome **in those words**.
+- **Honesty clause** (D12/D13, doubled by D17/D18): you cannot demo a muted push not arriving. The residual risk — *"the mechanism is doc-verified and emulator-verified at most; suppression of a real FCM push on a real device is unverified"* — goes in the Outcome **in those words** (that is the **Android/FCM** leg); the iOS/APNs muting leg is separately unverified and has no runnable target of any kind here (task 80 §4) — the two gaps are not the same size.
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` green. **Read the output, not the exit code** (§2.1).
 
 ## Note
