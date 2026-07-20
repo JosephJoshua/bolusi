@@ -4,7 +4,6 @@
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "denominator": 114,
   "exports": [
-    "apps/mobile/src/bootstrap/notifications.ts#applyChannelImportance",
     "apps/mobile/src/i18n.ts#writeDeviceLocale",
     "apps/mobile/src/ports/location.ts#stopLocationWatcher",
     "apps/mobile/src/screens/settings/model.ts#changeLocale",
@@ -76,6 +75,7 @@
     "packages/i18n/src/instance.ts#setLocale",
     "packages/i18n/src/logger.ts#getI18nLogger",
     "packages/i18n/src/logger.ts#resetWarnOnceState",
+    "packages/modules/src/index.ts#ALL_MODULES",
     "packages/modules/src/index.ts#PACKAGE_NAME",
     "packages/schemas/src/envelope.ts#GENESIS_PREVIOUS_HASH",
     "packages/schemas/src/errors.ts#zBodyTooLargeDetails",
