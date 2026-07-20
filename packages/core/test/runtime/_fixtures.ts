@@ -25,6 +25,8 @@ import {
   type DirectoryRole,
   type DirectorySnapshot,
   type DirectorySource,
+  type DenialAuditDiagnosticsPort,
+  type DenialAuditFailure,
   type IdSource,
   type LocationPort,
   type OpAppendStore,
@@ -334,6 +336,32 @@ export interface FixtureOptions {
   readonly denialAuditTimer?: RuntimeTimerPort;
   /** Override the task-40 bound in ms (default `DENIAL_AUDIT_EMIT_TIMEOUT_MS`). */
   readonly denialAuditTimeoutMs?: number;
+  /** Task 99: the sink a LOST denial audit is surfaced to. Absent = the pre-task-99 silence. */
+  readonly denialAuditDiagnostics?: DenialAuditDiagnosticsPort;
+}
+
+/**
+ * Records every lost denial audit the enforcement point surfaces (task 99).
+ *
+ * A spy, not an assertion helper: the suite asserts the WHOLE recorded array, because "at least one
+ * failure was reported" is also what an over-reporting surface looks like (T-14).
+ */
+export class RecordingAuditDiagnostics implements DenialAuditDiagnosticsPort {
+  readonly failures: DenialAuditFailure[] = [];
+
+  auditAppendFailed(failure: DenialAuditFailure): void {
+    this.failures.push(failure);
+  }
+}
+
+/** A sink that throws — the deny must survive its own diagnostics being broken (task 99). */
+export class ThrowingAuditDiagnostics implements DenialAuditDiagnosticsPort {
+  calls = 0;
+
+  auditAppendFailed(): void {
+    this.calls += 1;
+    throw new Error('diagnostics sink exploded');
+  }
 }
 
 /** Build a fully-seeded runtime. Two calls with the same seed reproduce bit-for-bit (T-6). */
@@ -428,6 +456,9 @@ export function makeRuntimeFixture(seed: number, options: FixtureOptions = {}): 
       : {}),
     ...(options.denialAuditTimeoutMs !== undefined
       ? { denialAuditTimeoutMs: options.denialAuditTimeoutMs }
+      : {}),
+    ...(options.denialAuditDiagnostics !== undefined
+      ? { denialAuditDiagnostics: options.denialAuditDiagnostics }
       : {}),
   });
 

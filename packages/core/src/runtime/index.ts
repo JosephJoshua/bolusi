@@ -48,6 +48,8 @@ export {
 
 export type {
   ClockPort,
+  DenialAuditDiagnosticsPort,
+  DenialAuditFailure,
   IdSource,
   LocationPort,
   RuntimeTimerPort,

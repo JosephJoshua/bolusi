@@ -13,6 +13,9 @@
 // stamp point is a single place and the tests own time.
 import type { Location } from '@bolusi/schemas';
 
+import type { DenialSurface } from '../authz/denials.js';
+import type { DenialReason } from '../authz/evaluate.js';
+
 /**
  * ms-epoch clock (08 §3.2 `ClockPort`). Production binds the system clock; tests bind a FakeClock
  * (testing-guide §3.3). The ONLY clock the command runtime may read — 04 §5.2's "no `Date.now()`
@@ -72,6 +75,61 @@ export interface RuntimeTimerPort {
    * happy path — the emit resolved first — cancels the pending timeout and leaks nothing).
    */
   schedule(delayMs: number, fn: () => void): () => void;
+}
+
+/**
+ * What the enforcement point could not audit (task 99). One record per LOST `auth.permission_denied`
+ * op — the denial itself always happened, and is always thrown.
+ */
+export interface DenialAuditFailure {
+  /**
+   * `failed` — the append REJECTED (disk full, corrupt store, locked DB).
+   * `timed_out` — the append never settled inside the task-40 bound and was abandoned.
+   *
+   * Both mean the same thing to FR-1045: a denial happened and no op records it. They are
+   * distinguished because they need different operator responses (a broken store vs a wedged one).
+   */
+  readonly outcome: 'failed' | 'timed_out';
+  /**
+   * Audit appends lost in an unbroken run, INCLUDING this one — `1` on the first. This is the
+   * number that separates the accepted case from the reported one: a single transient failure is
+   * FR-1045's stated tolerance, a climbing count is the incomplete audit trail task 99 exists to
+   * make visible. Reset to 0 by the next append that succeeds (or is throttled).
+   */
+  readonly consecutiveFailures: number;
+  /** The denied attempt, so the surfaced record carries what the lost op would have. */
+  readonly userId: string;
+  readonly permissionId: string;
+  readonly target: string;
+  readonly surface: DenialSurface;
+  readonly reason: DenialReason;
+  readonly scopeStoreId: string | null;
+  /** The rejection, for a structured log. Always `undefined` when `outcome` is `timed_out`. */
+  readonly error?: unknown;
+}
+
+/**
+ * Where a LOST denial audit goes (task 99; 02 §7, FR-1045).
+ *
+ * WHY THIS EXISTS. The denial-audit emit is best-effort by design: a denial that was already
+ * DECIDED is not un-decided because its record failed to append (task 10), so the enforcement point
+ * swallows the failure and throws `PERMISSION_DENIED` regardless. Correct for the DECISION — but
+ * for four tasks the swallow was also SILENT, so a PERSISTENTLY failing append (full disk, corrupt
+ * DB, migration drift) made the FR-1045 trail quietly incomplete and nothing anywhere could notice.
+ * A completeness guarantee whose failure mode is invisible is the CLAUDE.md §2.11 class exactly.
+ * This port is the noticing.
+ *
+ * NOT A SECOND DENIAL CHANNEL (02 §7 rejects one). It carries no op, does not sync, and is not an
+ * audit record: it is a diagnostic saying *an audit record was lost*, in the shape of the client
+ * diagnostics sink this repo already uses for exactly that (`I18nLogger`, packages/i18n) — a
+ * platform-free interface with a no-op default that the app binds to its real log at init.
+ *
+ * **MUST NOT THROW, and structurally cannot break the deny even if it does** — the enforcement
+ * point guards the call. A diagnostics sink that could fail a denial would be a worse bug than the
+ * silence it reports.
+ */
+export interface DenialAuditDiagnosticsPort {
+  auditAppendFailed(failure: DenialAuditFailure): void;
 }
 
 /**

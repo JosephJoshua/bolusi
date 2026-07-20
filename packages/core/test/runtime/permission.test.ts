@@ -20,6 +20,9 @@ import {
   expectDomainError,
   makeCommandSpy,
   makeRuntimeFixture,
+  RecordingAuditDiagnostics,
+  ThrowingAuditDiagnostics,
+  type CommandSpy,
   type RuntimeFixture,
 } from './_fixtures.js';
 
@@ -808,5 +811,240 @@ describe('a HUNG denial-audit emit must not wedge execute (task 40 — liveness)
       1,
     );
     expect(timer.scheduled, 'the resolved emit cancels its bound (no dangling timer)').toBe(0);
+  });
+});
+
+describe('a LOST denial audit is SURFACED, not swallowed silently (task 99 — FR-1045 completeness)', () => {
+  // THE BUG THIS CLOSES. The denial-audit emit is best-effort: task 10 (evaluator denials) and task
+  // 44 (restriction denials) both swallow a failed append so the DECISION survives it. Correct — and
+  // for four tasks also SILENT, so a PERSISTENTLY failing append (full disk, corrupt DB) made the
+  // FR-1045 trail quietly incomplete with nothing anywhere able to notice. The tests above prove the
+  // deny survives; these prove the LOSS is now visible, on both paths, through one surfacing point.
+  //
+  // WHAT MAKES THESE LOAD-BEARING RATHER THAN DECORATIVE (§2.11, T-14b). Every fault case below
+  // asserts BOTH halves in the same test — the signal fired AND the deny still threw — because a
+  // surfacing test passes just as happily against a runtime that reports failures and forgot to
+  // deny. And every one is paired against the no-fault positive control: "a failure was reported"
+  // is also exactly what a sink that fires on EVERY denial looks like.
+  //
+  // Distinct command NAMES per denial throughout: the §7 throttle keys on
+  // `(userId, permissionId, target)` and a suppressed repeat never reaches the store at all, so
+  // re-denying one tuple would test the throttle, not the append.
+  const deniedCommand = (fixture: RuntimeFixture, name: string) =>
+    // `auth.role_manage` is main_owner-only (§12) — staff is denied at will, no fixture surgery.
+    makeCommandSpy(fixture.log, { name, permission: 'auth.role_manage' });
+
+  const denyAs = async (fixture: RuntimeFixture, userId: string, command: CommandSpy) =>
+    fixture.runtime
+      .execute(command, { title: 't', body: 'b' }, fixture.runtime.createContext(userId))
+      .catch((e: unknown) => e);
+
+  it('POSITIVE CONTROL — a healthy denial surfaces NOTHING (the sink is not fired per-denial, T-14b)', async () => {
+    const diagnostics = new RecordingAuditDiagnostics();
+    const fixture = await ready(90, { denialAuditDiagnostics: diagnostics });
+
+    const error = await denyAs(fixture, fixture.staffId, deniedCommand(fixture, 'manageRoles'));
+
+    expectDomainError(error, 'PERMISSION_DENIED');
+    expect(denials(fixture), 'the audit landed — nothing was lost').toHaveLength(1);
+    expect(
+      diagnostics.failures,
+      'a recorded audit is not a lost one; the WHOLE set must be empty',
+    ).toEqual([]);
+  });
+
+  it('a PERSISTENTLY failing append surfaces every lost audit with a CLIMBING count — and denies every time', async () => {
+    // The task-99 scenario itself: the store is broken and stays broken. Pre-fix, this ran to
+    // completion with three denials, zero audit ops, and zero trace of the three lost records.
+    const diagnostics = new RecordingAuditDiagnostics();
+    let broken = false;
+    const fixture = await ready(91, {
+      insertFault: () => (broken ? new Error('disk full') : null),
+      denialAuditDiagnostics: diagnostics,
+    });
+    broken = true; // arm only AFTER enrollment's genesis append
+
+    for (const name of ['manageRolesA', 'manageRolesB', 'manageRolesC']) {
+      const error = await denyAs(fixture, fixture.staffId, deniedCommand(fixture, name));
+      // HALF ONE, asserted inside the loop: the deny is unconditional under a dead audit.
+      expectDomainError(error, 'PERMISSION_DENIED');
+    }
+
+    // HALF TWO: the loss is visible, and the RUN of losses is what distinguishes a persistent
+    // fault from an accepted transient one. Asserted as the whole array (T-14) — an over-firing
+    // sink fails here just as loudly as a silent one.
+    expect(diagnostics.failures.map((f) => f.consecutiveFailures)).toEqual([1, 2, 3]);
+    expect(diagnostics.failures.map((f) => f.outcome)).toEqual(['failed', 'failed', 'failed']);
+    expect(diagnostics.failures.map((f) => f.target)).toEqual([
+      'manageRolesA',
+      'manageRolesB',
+      'manageRolesC',
+    ]);
+    expect(diagnostics.failures[0]).toMatchObject({
+      userId: fixture.staffId,
+      permissionId: 'auth.role_manage',
+      surface: 'command',
+      reason: 'not_granted',
+    });
+    expect(
+      (diagnostics.failures[0]?.error as Error | undefined)?.message,
+      'the structured record carries the rejection an operator has to diagnose',
+    ).toBe('disk full');
+    // The audit trail really is incomplete — which is the whole reason the signal must exist.
+    expect(denials(fixture), 'nothing was appended; every denial happened anyway').toEqual([]);
+    expect(businessOps(fixture), 'no denied command reached a handler').toEqual([]);
+  });
+
+  it('the RESTRICTION path (task 44) surfaces through the SAME point — not a mirrored second one (§2.8)', async () => {
+    // Both denial classes route through `#recordBounded`. If they ever stop, this goes red while
+    // the evaluator test above stays green — which is the drift §2.8 exists to catch.
+    const diagnostics = new RecordingAuditDiagnostics();
+    let broken = false;
+    const fixture = await ready(92, {
+      insertFault: () => (broken ? new Error('disk full') : null),
+      denialAuditDiagnostics: diagnostics,
+    });
+    const command = makeCommandSpy(fixture.log, {
+      onHandler: () => {
+        throw new DomainError(
+          'PERMISSION_DENIED',
+          { target: 'createNote', reason: 'restriction_violated' },
+          'handler-declared §5.4 restriction',
+        );
+      },
+    });
+    broken = true;
+
+    const error = await denyAs(fixture, fixture.ownerId, command);
+
+    expectDomainError(error, 'PERMISSION_DENIED');
+    expect(diagnostics.failures).toHaveLength(1);
+    expect(diagnostics.failures[0]).toMatchObject({
+      outcome: 'failed',
+      consecutiveFailures: 1,
+      reason: 'restriction_violated',
+      target: 'createNote',
+      userId: fixture.ownerId,
+    });
+    expect(denials(fixture), 'the restriction audit was lost too').toEqual([]);
+  });
+
+  it('a TRANSIENT failure neither blocks a deny nor latches — the next append records and the count resets', async () => {
+    // The fail-safe must not be traded for the signal: one bad append is FR-1045's accepted
+    // tolerance, and a counter that never resets would report a healthy store as persistently
+    // broken forever — a false alarm is how a real one stops being read.
+    const diagnostics = new RecordingAuditDiagnostics();
+    let broken = false;
+    const fixture = await ready(93, {
+      insertFault: () => (broken ? new Error('transient lock') : null),
+      denialAuditDiagnostics: diagnostics,
+    });
+
+    broken = true;
+    expectDomainError(
+      await denyAs(fixture, fixture.staffId, deniedCommand(fixture, 'manageRolesA')),
+      'PERMISSION_DENIED',
+    );
+
+    broken = false; // the store recovers
+    expectDomainError(
+      await denyAs(fixture, fixture.staffId, deniedCommand(fixture, 'manageRolesB')),
+      'PERMISSION_DENIED',
+    );
+    expect(denials(fixture), 'the recovered append records again').toHaveLength(1);
+
+    broken = true; // and fails once more, much later
+    expectDomainError(
+      await denyAs(fixture, fixture.staffId, deniedCommand(fixture, 'manageRolesC')),
+      'PERMISSION_DENIED',
+    );
+
+    expect(
+      diagnostics.failures.map((f) => f.consecutiveFailures),
+      'two isolated losses, each reported as a run of ONE — not an escalating false alarm',
+    ).toEqual([1, 1]);
+  });
+
+  it('a HUNG append that the task-40 bound abandons is surfaced as `timed_out` — a wedged store loses the record too', async () => {
+    // Task 40 makes the timeout RESOLVE so the deny proceeds. That kept `execute` live and left the
+    // abandoned record as invisible as a rejected one: to everything outside the enforcement point,
+    // an audit that timed out looked exactly like an audit that succeeded.
+    const diagnostics = new RecordingAuditDiagnostics();
+    const timer = new ControllableTimer();
+    let hang!: ArmableHangStore;
+    const fixture = await ready(94, {
+      denialAuditTimer: timer,
+      denialAuditDiagnostics: diagnostics,
+      wrapStore: (inner) => {
+        hang = new ArmableHangStore(inner);
+        return hang;
+      },
+    });
+    hang.armed = true;
+
+    const tracked = track(
+      fixture.runtime.execute(
+        deniedCommand(fixture, 'manageRoles'),
+        { title: 't', body: 'b' },
+        fixture.runtime.createContext(fixture.staffId),
+      ),
+    );
+    expect(hang.entered, 'the emit must actually reach the hanging append (T-14b)').toBe(true);
+    await flush();
+    expect(diagnostics.failures, 'nothing is lost YET — the bound has not elapsed').toEqual([]);
+
+    timer.fireAll();
+    await flush();
+
+    expect(tracked.settled, 'the bound still frees execute (task 40 unchanged)').toBe(true);
+    expectDomainError(tracked.error, 'PERMISSION_DENIED');
+    expect(diagnostics.failures).toHaveLength(1);
+    expect(diagnostics.failures[0]).toMatchObject({
+      outcome: 'timed_out',
+      consecutiveFailures: 1,
+      target: 'manageRoles',
+    });
+    expect(
+      diagnostics.failures[0]?.error,
+      'nothing rejected — a timeout has no error to report',
+    ).toBeUndefined();
+    expect(denials(fixture), 'the hung append landed no op').toEqual([]);
+  });
+
+  it('a diagnostics sink that THROWS cannot break the deny — the reporter is not a new way to fail closed', async () => {
+    // The one regression a new surface on this path could introduce, and the reason the sink call
+    // is guarded: a denial must not become a generic error because the log the app wired is broken.
+    const diagnostics = new ThrowingAuditDiagnostics();
+    let broken = false;
+    const fixture = await ready(95, {
+      insertFault: () => (broken ? new Error('disk full') : null),
+      denialAuditDiagnostics: diagnostics,
+    });
+    broken = true;
+
+    const error = await denyAs(fixture, fixture.staffId, deniedCommand(fixture, 'manageRoles'));
+
+    expect(
+      diagnostics.calls,
+      'the sink really was reached (T-14b — a sink never called cannot throw)',
+    ).toBe(1);
+    expectDomainError(error, 'PERMISSION_DENIED');
+    expect(businessOps(fixture), 'and the handler still never ran').toEqual([]);
+  });
+
+  it('WITHOUT a sink wired the deny is byte-for-byte the old behaviour — still denied, still silent', async () => {
+    // The pre-task-99 composition root must be unaffected: the port is optional, and its absence
+    // may not turn a swallowed audit failure into a thrown one.
+    let broken = false;
+    const fixture = await ready(96, {
+      insertFault: () => (broken ? new Error('disk full') : null),
+    });
+    broken = true;
+
+    const error = await denyAs(fixture, fixture.staffId, deniedCommand(fixture, 'manageRoles'));
+
+    expectDomainError(error, 'PERMISSION_DENIED');
+    expect(denials(fixture)).toEqual([]);
+    expect(businessOps(fixture)).toEqual([]);
   });
 });

@@ -19,7 +19,7 @@ import type { DenialAttempt, DenialEmitter, DenialSurface } from '../authz/denia
 import type { PermissionEvaluator } from '../authz/memo.js';
 import { DomainError } from '../errors/domain-error.js';
 import type { CommandIdentity, InvocationMeta } from './ctx.js';
-import type { RuntimeTimerPort } from './ports.js';
+import type { DenialAuditDiagnosticsPort, DenialAuditFailure, RuntimeTimerPort } from './ports.js';
 
 /**
  * Default bound on the denial-audit emit (task 40, liveness). A denied command's `auth.permission_denied`
@@ -53,15 +53,29 @@ export class PermissionEnforcementPoint {
    * wedge neither.
    */
   readonly #auditBound: DenialAuditBound | null;
+  /**
+   * Where a LOST denial audit is SURFACED (task 99), or `null` for the pre-task-99 silence. Read in
+   * exactly one place — `#recordBounded`'s catch — because that is the one place an audit can be
+   * lost, for both denial classes.
+   */
+  readonly #auditDiagnostics: DenialAuditDiagnosticsPort | null;
+  /**
+   * Denial audits lost in an unbroken run. A single transient failure is FR-1045's accepted
+   * tolerance; a CLIMBING count is the incomplete audit trail. Reset by the next append that does
+   * not fail — which includes a throttled one, since a suppressed repeat proves the store answered.
+   */
+  #consecutiveAuditFailures = 0;
 
   constructor(
     evaluator: PermissionEvaluator,
     denialEmitter: DenialEmitter,
     auditBound: DenialAuditBound | null = null,
+    auditDiagnostics: DenialAuditDiagnosticsPort | null = null,
   ) {
     this.#evaluator = evaluator;
     this.#denialEmitter = denialEmitter;
     this.#auditBound = auditBound;
+    this.#auditDiagnostics = auditDiagnostics;
   }
 
   /**
@@ -113,30 +127,27 @@ export class PermissionEnforcementPoint {
 
     if (decision.allowed) return;
 
-    try {
-      await this.#recordBounded({
-        userId: identity.userId,
-        permissionId,
-        surface,
-        target,
-        reason: decision.reason,
-        // The EVALUATION scope (§7) — distinct from the envelope's storeId, which the emission
-        // channel stamps from the device.
-        scopeStoreId: identity.storeId,
-        source: invocation.source,
-        agentInitiated: invocation.agentInitiated,
-        agentConversationId: invocation.agentConversationId,
-      });
-    } catch {
-      // A denial that was already DECIDED is not up for reconsideration because its audit record
-      // failed to append (task 09's `record` says this explicitly). Swallowing here is what makes
-      // the throw below unconditional: if the emission's failure propagated, a full disk or a
-      // locked store would turn a denial into a generic error — and a caller distinguishing
-      // "denied" from "log broke" is a caller that can be made to stop denying. A HUNG emit does
-      // not reach this catch — `#recordBounded` (task 40) bounds it and RESOLVES on timeout, so a
-      // timed-out audit falls straight through the try to the same unconditional throw below.
-      // Failed or hung, the deny is thrown; neither can wedge us forever.
-    }
+    // NO `try` HERE, AND THAT IS THE POINT (task 99). `#recordBounded` is TOTAL — it never rejects
+    // and never hangs — so the throw below is unconditional by CONSTRUCTION rather than by a caller
+    // remembering to wrap it. A denial that was already DECIDED is not up for reconsideration
+    // because its audit record failed to append (task 09's `record` says this explicitly): if the
+    // emission's failure propagated, a full disk or a locked store would turn a denial into a
+    // generic error, and a caller distinguishing "denied" from "log broke" is a caller that can be
+    // made to stop denying. Failed, hung, or lost — the deny is thrown, and the loss is SURFACED
+    // inside `#recordBounded` instead of vanishing.
+    await this.#recordBounded({
+      userId: identity.userId,
+      permissionId,
+      surface,
+      target,
+      reason: decision.reason,
+      // The EVALUATION scope (§7) — distinct from the envelope's storeId, which the emission
+      // channel stamps from the device.
+      scopeStoreId: identity.storeId,
+      source: invocation.source,
+      agentInitiated: invocation.agentInitiated,
+      agentConversationId: invocation.agentConversationId,
+    });
 
     throw new DomainError(
       'PERMISSION_DENIED',
@@ -171,24 +182,23 @@ export class PermissionEnforcementPoint {
     invocation: InvocationMeta,
     detail: string,
   ): Promise<never> {
-    try {
-      await this.#recordBounded({
-        userId: identity.userId,
-        permissionId,
-        surface,
-        target,
-        reason: 'restriction_violated',
-        // The EVALUATION scope (§7) — distinct from the envelope's storeId, mirrored from an
-        // evaluator denial so the two denial classes project identically.
-        scopeStoreId: identity.storeId,
-        source: invocation.source,
-        agentInitiated: invocation.agentInitiated,
-        agentConversationId: invocation.agentConversationId,
-      });
-    } catch {
-      // Swallow — see the method doc: the deny is not conditional on the audit (task 10), and a
-      // hung audit is bounded and treated identically (task 40).
-    }
+    // Same shape as `requirePermission`, and now the SAME CODE: `#recordBounded` is total, so the
+    // two denial classes share one swallow AND one surfacing point rather than mirroring a `catch`
+    // each (CLAUDE.md §2.8 — the mirrored pair is exactly how task 99's silence came to exist on
+    // both paths at once, and how a fix to one would have been a fix to half the surface).
+    await this.#recordBounded({
+      userId: identity.userId,
+      permissionId,
+      surface,
+      target,
+      reason: 'restriction_violated',
+      // The EVALUATION scope (§7) — distinct from the envelope's storeId, mirrored from an
+      // evaluator denial so the two denial classes project identically.
+      scopeStoreId: identity.storeId,
+      source: invocation.source,
+      agentInitiated: invocation.agentInitiated,
+      agentConversationId: invocation.agentConversationId,
+    });
 
     throw new DomainError(
       'PERMISSION_DENIED',
@@ -198,30 +208,93 @@ export class PermissionEnforcementPoint {
   }
 
   /**
-   * Emit the denial audit op, BOUNDED so a never-settling append cannot wedge the caller (task 40).
+   * Emit the denial audit op — BOUNDED (task 40) and TOTAL (task 99). **This method never rejects
+   * and never hangs**, which is what lets both denial paths above throw without a `try`.
    *
    * This is on the ONE path an attacker can provoke at will: every denial emits `auth.permission_denied`
    * (02 §7), and a denial is the one thing a denied actor can trigger freely. A wedged client write on
    * it (a stuck op-sqlite WAL lock) would otherwise freeze `execute()` forever — there is no timeout or
    * abort anywhere on the chain (execute → requirePermission → DenialEmitter.record → port.emit →
    * appendLocalOps → store.transaction). With a `RuntimeTimerPort` wired, a hung emit is abandoned after
-   * the budget — the race RESOLVES on timeout, so `#recordBounded` falls straight through the try to the
-   * unconditional throw below (a genuinely FAILED emit instead REJECTS into the swallowing `catch` and
-   * reaches that same throw). Either way the denial is thrown unconditionally — as it is for a FAILED
-   * emit (task 10). The bound never makes the deny wait on the audit SUCCEEDING; it only stops the deny
-   * waiting FOREVER.
+   * the budget; a genuinely FAILED emit REJECTS. The bound never makes the deny wait on the audit
+   * SUCCEEDING; it only stops the deny waiting FOREVER.
+   *
+   * THREE OUTCOMES, and the middle one is task 99's whole point:
+   *
+   *   settled   → the op is recorded (or throttled — §7 suppressed it deliberately). Nothing lost.
+   *   failed    → the append rejected. The record is LOST → surfaced.
+   *   timed_out → the append was abandoned at the bound. The record is EQUALLY LOST → surfaced.
+   *
+   * Before task 99 the last two were indistinguishable from the first to everything outside this
+   * class, so a persistent fault made the FR-1045 trail incomplete with no observable trace.
    *
    * With no timer wired (`#auditBound === null`) it awaits the emit as before — unchanged for callers
-   * that predate the bound.
+   * that predate the bound, and a failure there is surfaced identically.
    */
   async #recordBounded(attempt: DenialAttempt): Promise<void> {
-    const emit = this.#denialEmitter.record(attempt);
-    const bound = this.#auditBound;
-    if (bound === null) {
-      await emit;
+    let outcome: 'settled' | 'timed_out';
+    try {
+      // EVERYTHING that can throw is inside this try, including `record()` itself — a synchronous
+      // throw from the emitter must reach the surfacing, not the caller.
+      const emit = this.#denialEmitter.record(attempt);
+      const bound = this.#auditBound;
+      if (bound === null) {
+        await emit;
+        outcome = 'settled';
+      } else {
+        outcome = await boundEmit(emit, bound);
+      }
+    } catch (error) {
+      this.#surfaceLostAudit(attempt, 'failed', error);
       return;
     }
-    await boundEmit(emit, bound);
+
+    if (outcome === 'timed_out') {
+      // Task 40 abandons a hung emit and the deny proceeds — unchanged. What changes here is that
+      // the ABANDONMENT is no longer silent: a wedged store loses the FR-1045 record just as
+      // completely as a broken one does, and an operator needs to see both.
+      this.#surfaceLostAudit(attempt, 'timed_out', undefined);
+      return;
+    }
+
+    // Reached only when the append settled: the store answered, so any run of losses has ended.
+    this.#consecutiveAuditFailures = 0;
+  }
+
+  /**
+   * Report ONE lost denial audit (task 99). The only writer of `#consecutiveAuditFailures` upward,
+   * and the only caller of the diagnostics port.
+   *
+   * **Cannot break the deny.** The count is advanced BEFORE the sink is called, and the call is
+   * wrapped: a sink that throws is discarded here rather than propagating into `#recordBounded`'s
+   * caller, where it would do precisely what task 10 forbade — let a broken log change a decided
+   * denial into something else. This is the one place a silent catch is still right, because there
+   * is nowhere left to report to.
+   */
+  #surfaceLostAudit(
+    attempt: DenialAttempt,
+    outcome: DenialAuditFailure['outcome'],
+    error: unknown,
+  ): void {
+    this.#consecutiveAuditFailures += 1;
+    const sink = this.#auditDiagnostics;
+    if (sink === null) return;
+
+    try {
+      sink.auditAppendFailed({
+        outcome,
+        consecutiveFailures: this.#consecutiveAuditFailures,
+        userId: attempt.userId,
+        permissionId: attempt.permissionId,
+        target: attempt.target,
+        surface: attempt.surface,
+        reason: attempt.reason,
+        scopeStoreId: attempt.scopeStoreId,
+        ...(outcome === 'failed' ? { error } : {}),
+      });
+    } catch {
+      // See above: the reporter of a broken audit must not become a second way to break a denial.
+    }
   }
 }
 
@@ -235,14 +308,20 @@ export class PermissionEnforcementPoint {
  * and cannot be — cancelled from here: a hung client transaction is the store's to resolve; this only
  * frees `execute()`. The happy path cancels the pending timeout, so nothing leaks.
  */
-function boundEmit(emit: Promise<unknown>, bound: DenialAuditBound): Promise<unknown> {
+function boundEmit(
+  emit: Promise<unknown>,
+  bound: DenialAuditBound,
+): Promise<'settled' | 'timed_out'> {
   let cancel: () => void = () => {};
-  const timeout = new Promise<void>((resolve) => {
+  const timeout = new Promise<'timed_out'>((resolve) => {
     cancel = bound.timer.schedule(bound.timeoutMs, () => {
-      resolve();
+      resolve('timed_out');
     });
   });
-  return Promise.race([emit, timeout]).finally(() => {
+  // WHICH ARM WON is returned, not discarded (task 99): both arms resolve, so a caller that only
+  // sees "resolved" cannot tell a recorded audit from an abandoned one — which is how a wedged
+  // store stayed as invisible as a broken one.
+  return Promise.race([emit.then(() => 'settled' as const), timeout]).finally(() => {
     cancel();
   });
 }

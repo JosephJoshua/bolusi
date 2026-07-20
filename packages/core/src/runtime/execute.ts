@@ -67,6 +67,7 @@ import {
 } from './ctx.js';
 import type {
   ClockPort,
+  DenialAuditDiagnosticsPort,
   IdSource,
   LocationPort,
   RuntimeTimerPort,
@@ -211,6 +212,16 @@ export interface CommandRuntimeOptions {
    * `denialAuditTimer` is set.
    */
   readonly denialAuditTimeoutMs?: number;
+  /**
+   * Where a LOST denial audit is reported (task 99; 02 §7, FR-1045). The app binds its client
+   * diagnostics log; a monitor reads the run of `consecutiveFailures`.
+   *
+   * OPTIONAL and silent when absent — absent restores the pre-task-99 behaviour exactly, so no
+   * composition root is forced to change. Wiring it is what turns "the denial audit trail is
+   * quietly incomplete" into something an operator can see. It NEVER affects the denial: a denial
+   * is thrown whether this is wired, unwired, or throws (runtime/enforce.ts).
+   */
+  readonly denialAuditDiagnostics?: DenialAuditDiagnosticsPort;
 }
 
 /**
@@ -300,6 +311,12 @@ export class CommandRuntime {
       this.#evaluator,
       this.#denialEmitter,
       denialAuditBound,
+      // Task 99: where a lost denial audit surfaces, or null for the pre-task-99 silence. Unlike
+      // the emitter above this IS injectable, and safely so — it is a write-only diagnostics sink
+      // with no authority over the emission: a caller supplying a hostile one can make itself
+      // deaf to lost audits, which is exactly the state every caller is in without it, and can
+      // neither suppress an op nor influence a denial.
+      options.denialAuditDiagnostics ?? null,
     );
   }
 
