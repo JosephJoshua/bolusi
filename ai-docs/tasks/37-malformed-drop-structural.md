@@ -1,5 +1,5 @@
 # TASK 37 — the store→tenant escalation guard is statement order, not structure
-**Status:** in-progress
+**Status:** done
 **Depends on:** 09
 
 ## Goal
