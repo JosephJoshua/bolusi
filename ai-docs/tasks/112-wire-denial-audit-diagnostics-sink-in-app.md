@@ -1,6 +1,6 @@
 # TASK 112 — wire the denial-audit diagnostics sink in `apps/*` so task 99's surfacing is ACTIVE (it is built + falsified but INERT)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **LOW-MEDIUM** — task 99 built, falsified, and merged the surfacing (`DenialAuditDiagnosticsPort.auditAppendFailed`, wired as optional `CommandRuntimeOptions.denialAuditDiagnostics`), but **nothing in `apps/*` binds it**, so a lost FR-1045 denial-audit append is still unobserved in the shipping app. Exactly the shape of task 40 → [[102-wire-denial-audit-timer-in-production]] (mechanism merged, activation a separate one-line app change).
 **Depends on:** 99
 **Blocks:** — (activates task 99)
