@@ -1,17 +1,33 @@
-// Task 05 acceptance (d): the package's public export surface is exactly the documented set
-// (08-stack-and-repo §3.2, D7/FR-1039).
+// Task 05 acceptance (d): the package's public export surface is a CURATED ALLOWLIST — a
+// deliberate contract, reviewed as such, not a set any spec enumerates. Its authority is
+// `../src/index.js`: that file is the single place the surface is defined, and its own header
+// states that adding an export must fail this test on purpose — so growing the surface is a
+// decision, never an accident. The array below is that file's hand-kept mirror; keeping the two
+// in sync IS the contract, and each name's real justification lives at its call site (the
+// per-entry notes below, matching the headers in src/index.ts).
 //
-// This is the API half of the tenant-isolation guarantee: RLS makes an unscoped query fail
-// closed, and THIS makes it inexpressible. If the raw pool/db handle ever appears here, the
-// wrapper stops being "the only exported way to query tenant tables" and the guarantee is
-// reduced to a convention.
+// (This comment once cited "08-stack-and-repo §3.2's documented set" as the oracle. §3.2
+// enumerates nothing — its db-server row is prose about a PROPERTY — so that citation made this
+// list its own oracle: the way to legalise a new export was to edit the very list it was checked
+// against. Task 63 removed the false citation and named the real authority.)
+//
+// What §3.2 / D7 / FR-1039 DO state — and what the sibling assertions below actually enforce — is
+// the tenant-isolation PROPERTY: forTenant is the only exported way to reach a tenant table, and
+// no raw pool/db handle is exported (migration runner excepted). That is the API half of the
+// guarantee: RLS makes an unscoped query fail closed, and THIS makes it inexpressible. If the raw
+// pool/db handle ever appears here, the wrapper stops being "the only exported way to query
+// tenant tables" and the guarantee is reduced to a convention. The `queryish` and named-forbidden
+// checks below are the load-bearing oracle for that property — their oracle is the SHAPE of the
+// thing, not this list.
 import { expect, test } from 'vitest';
 
 import * as dbServer from '../src/index.js';
 
 /**
- * The documented surface: forTenant, the generated types (type-only, so invisible at runtime),
- * and a migration-runner entry (08 §3.2's explicit exception).
+ * The curated surface, mirroring `../src/index.js`: forTenant, the generated types (type-only, so
+ * invisible at runtime), and the migration-runner entries — which 08 §3.2's prose explicitly
+ * excepts from "the raw pool/db handle is not exported". Every other name is a deliberate addition
+ * weighed against D7/FR-1039 at its own call site (the per-entry notes below).
  */
 const EXPECTED_EXPORTS = [
   'InvalidTenantIdError',
@@ -46,7 +62,7 @@ const EXPECTED_EXPORTS = [
   'existsPrecedingOp',
 ].sort();
 
-test('the package exports exactly the documented surface', () => {
+test('the package exports exactly the curated surface', () => {
   expect(Object.keys(dbServer).sort()).toEqual(EXPECTED_EXPORTS);
 });
 

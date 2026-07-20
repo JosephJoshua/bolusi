@@ -1,6 +1,6 @@
 # TASK 105 — wire the realtime RN adapters in apps/mobile so `RealtimeController` actually runs (it is built-ahead + INERT in the app today)
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **MEDIUM** — task 20 shipped + falsified the platform-free `RealtimeController` (`@bolusi/core/realtime`) + the server WS/SSE poke hub, but explicitly scoped OUT the RN socket/fetch adapters ("Out of scope: … RN socket/fetch adapters (24)"). Task 24 (app-shell) is `done` but predated task 20, so it never wired them. So `apps/mobile` has ZERO realtime references and the controller is never instantiated — the app gets **no pokes**; it falls back to the 60 s periodic sync trigger only. Correctness is fine (FR-1146 — realtime is purely additive), but the low-latency realtime path is inert until this lands. Same "typed and compiling ≠ running on the target" shape as task 40 → [[102-wire-denial-audit-timer-in-production]].
 **Depends on:** 20, 24
 **Blocks:** — (activates task 20's client half)

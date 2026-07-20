@@ -42,6 +42,11 @@ import type { SignedOperation } from '@bolusi/schemas';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
+import {
+  createRealtimeController,
+  type RealtimeHandle,
+  type RealtimeSocketCtor,
+} from './realtime-client.js';
 import { createFetchSyncTransport } from './transport.js';
 import {
   createSyncTriggers,
@@ -75,6 +80,14 @@ export interface SyncClientDeps {
   readonly surface?: SyncSurfacePort;
   readonly pushBatchSize?: number;
   readonly pullLimit?: number;
+  /**
+   * Task 105: given the loop's trigger, build the realtime controller (task 20). Its `start`/`stop`
+   * RIDE the loop's — started after `hydrate()` (a trigger before hydrate throws), stopped on teardown —
+   * so realtime is live for exactly an enrolled, running loop and torn down on logout/revocation. The
+   * channel is ADDITIVE (FR-1146) and owns no pull cadence: it calls `trigger` on a `sync.poke` and a
+   * (re)connect only. Absent in loop-only tests (no realtime), which is the honest "no channel" state.
+   */
+  readonly createRealtime?: (trigger: () => void) => RealtimeHandle;
 }
 
 /** The live sync client. Owns the loop + triggers and a small reactive view Root renders from. */
@@ -102,6 +115,7 @@ export interface SyncClient {
 class SyncClientImpl implements SyncClient {
   private readonly loop: SyncLoop<ClientDatabase>;
   private readonly triggers: SyncTriggers;
+  private readonly realtime: RealtimeHandle | null;
   private readonly listeners = new Set<() => void>();
   private readonly surfaceBuffer: SyncSurfacing[] = [];
   private connected = false;
@@ -145,6 +159,11 @@ class SyncClientImpl implements SyncClient {
       appState: deps.appState,
       netInfo: deps.netInfo,
     });
+
+    // The realtime controller (task 20), if the app wired one. Constructing it here (not started) closes
+    // its ONLY edge into sync — `trigger` — over this loop; `start()` opens the socket, `stop()` tears it
+    // down. Built in the constructor so the lifecycle is unconditionally coupled to this client's.
+    this.realtime = deps.createRealtime?.(() => this.triggerFromRealtime()) ?? null;
   }
 
   async start(): Promise<void> {
@@ -159,6 +178,10 @@ class SyncClientImpl implements SyncClient {
       this.notify();
     });
     this.triggers.start();
+    // Realtime rides the loop and can only trigger AFTER hydrate() (requestSync throws un-hydrated), so
+    // it is started LAST — a poke now has a hydrated loop to drive. Purely additive (FR-1146): if the
+    // channel never connects, the §5 triggers above keep sync converging with no dependency on it.
+    this.realtime?.start();
   }
 
   requestManual(): void {
@@ -166,6 +189,7 @@ class SyncClientImpl implements SyncClient {
   }
 
   stop(): void {
+    this.realtime?.stop();
     this.triggers.stop();
     this.uiNetUnsub?.();
     this.uiNetUnsub = null;
@@ -207,6 +231,28 @@ class SyncClientImpl implements SyncClient {
     void this.afterCycle();
   }
 
+  /**
+   * The realtime channel's ONLY edge into sync (task 20's `RealtimeControllerDeps.trigger`, wired by
+   * task 105): run a cycle on a `sync.poke` or a (re)connect backfill.
+   *
+   * Mapped to the `'connectivity'` reason DELIBERATELY. The controller fires this on exactly the two
+   * NEW-INFORMATION events that 03 §10's early-exit class exists for: a poke is the server's own
+   * confirmation that (a) it is reachable and (b) there are ops in this device's pull scope, and a
+   * (re)connect is "a channel just came up — backfill what was missed". Both mean "the reason for any
+   * sync backoff may be gone", so the cycle should run NOW rather than wait out the 5-min timer — which
+   * is the whole latency point of realtime. Of the five §5 reasons, only `manual` and `connectivity`
+   * break a running backoff (EARLY_EXIT_REASONS), and `manual` means a human pressed refresh; a
+   * server-driven realtime event is the automatic analogue of connectivity, so it reuses that reason.
+   *
+   * It stays ADDITIVE and single-flight: `requestSync` coalesces concurrent triggers into the one
+   * in-flight cycle (a rerun flag, not a counter — never a parallel loop), and NOTHING here gates sync,
+   * so a dead channel changes nothing (FR-1146). The reason is used ONLY for the backoff early-exit
+   * decision (loop.ts) — it is not persisted, surfaced, or logged.
+   */
+  private triggerFromRealtime(): void {
+    this.request('connectivity');
+  }
+
   private notify(): void {
     for (const listener of this.listeners) listener();
   }
@@ -239,8 +285,10 @@ export interface SyncClientForAppConfig {
   readonly netInfo: NetInfoPort;
   /** Defaults to `systemTimer`. Tests inject a FakeTimer bound to a FakeClock (T-6). */
   readonly timer?: TimerPort;
-  /** Injected for tests; defaults to the global `fetch`. */
+  /** Injected for tests; defaults to the global `fetch` (used by the sync legs AND the SSE reader). */
   readonly fetchImpl?: typeof fetch;
+  /** Injected for the composed realtime test; defaults to the RN/global `WebSocket` (task 105). */
+  readonly webSocketImpl?: RealtimeSocketCtor;
   /**
    * Invoked AFTER a `'refreshed'` bundle commit so the permission evaluator can invalidate its memo
    * (02-permissions §6 (a): "a bundle refresh wrote a directory table"). Supplied by the composition
@@ -285,5 +333,19 @@ export function createSyncClientForApp(
     appState: config.appState,
     netInfo: config.netInfo,
     initialSyncState: app.syncState,
+    // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
+    // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT
+    // from the same SecureStore reader the sync legs use — never cached. `WebSocket`/`fetch` default to
+    // the RN/Node globals (no native-binding-site injection needed), and are injectable only for tests.
+    createRealtime: (trigger) =>
+      createRealtimeController({
+        baseUrl: config.baseUrl,
+        loadDeviceToken: config.loadDeviceToken,
+        trigger,
+        clock: config.clock,
+        timer: config.timer ?? systemTimer,
+        ...(config.webSocketImpl === undefined ? {} : { webSocketImpl: config.webSocketImpl }),
+        ...(config.fetchImpl === undefined ? {} : { sseFetchImpl: config.fetchImpl }),
+      }),
   });
 }
