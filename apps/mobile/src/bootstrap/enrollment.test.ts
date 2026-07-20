@@ -57,6 +57,7 @@ vi.mock('expo-secure-store', () => {
 import * as SecureStore from 'expo-secure-store';
 
 import { bootstrap, type Bootstrapped } from './bootstrap.js';
+import { readDeviceInfo } from './device-info.js';
 import { createAppEnrollment, type EnrollmentPlatform } from './enrollment.js';
 import { SecureStoreKeyStore } from '../ports/keystore.js';
 import { SecureStoreDbKeyStore } from '../ports/db-keystore.js';
@@ -280,6 +281,25 @@ test('enroll appends a signed genesis at seq 1, persists the device identity, an
   // The directory was written BEFORE the genesis (§4.1 step 4) — the owner is switcher-visible.
   const users = await app.db.db.selectFrom('usersDirectory').select(['id', 'name']).execute();
   expect(users).toEqual([{ id: OWNER_ID, name: 'Ocep' }]);
+});
+
+test('enroll persists the device/store/tenant NAMES → readDeviceInfo surfaces the real identity (task 94)', async () => {
+  // The production wire the Settings screen depends on: enrollment.ts persists the names the enroll
+  // RESPONSE carries (store/tenant) plus the owner-typed deviceName, so a later boot (and the live
+  // re-derive) reads a real identity, not the blank index.ts used to hand in. Reverting enrollment.ts's
+  // `persistEnrolledNames` call turns every name below blank while the ids stay set — RED here.
+  const { platform } = platformFor();
+  const { controller } = createAppEnrollment(app, platform, () => undefined);
+
+  await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
+
+  const info = await readDeviceInfo(app, { platform: 'android', appVersion: '' });
+  const deviceId = await readDeviceId(app.db.db);
+  expect(info.deviceId).toBe(deviceId); // the same id the genesis + POST + meta_kv carry
+  expect(info.deviceName).toBe('Kasir 1'); // what the owner typed in the wizard
+  expect(info.storeName).toBe('Toko Jayapura'); // from the enroll response (bundle store name)
+  expect(info.tenantName).toBe('Bolusi Papua'); // from the enroll response tenant name
+  expect([info.deviceId, info.deviceName, info.storeName, info.tenantName]).not.toContain('');
 });
 
 test('the enroll POST carries the client-generated identity, not the server-echoed one', async () => {
