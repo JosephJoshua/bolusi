@@ -192,6 +192,34 @@ tester.run('boundaries', rule, {
       code: `import { open } from '@op-engineering/op-sqlite/sync';`,
       filename: '/repo/packages/db-client/src/connection.ts',
     },
+    // ── task 104: the platform-free prong now matches on the package root too. These are the
+    // controls proving that did not turn into a blanket ban.
+    //
+    // (a) POSITIVE CONTROL — `ws` is forbidden only in PLATFORM-FREE packages. apps/server is
+    // platform-bound and legitimately speaks WebSocket (08 §3.2 — the Hono app's `upgradeWebSocket`
+    // lane), so both the bare specifier and a subpath stay CLEAN there. If these ever go red the
+    // fix has over-reached into a blanket ban.
+    {
+      code: `import WebSocket from 'ws';`,
+      filename: '/repo/apps/server/src/realtime/socket.ts',
+    },
+    {
+      code: `import WebSocket from 'ws/lib/websocket.js';`,
+      filename: '/repo/apps/server/src/realtime/socket.ts',
+    },
+    // (b) OVER-MATCH CONTROL — a DIFFERENT package whose name merely starts with a forbidden one.
+    // `packageRoot('ws-utils/lib/parse.js')` is `ws-utils`, which `/^ws$/` does not match, and
+    // `packageRoot('pg-format/lib/index.js')` is `pg-format`, which `/^pg$/` does not match and
+    // which is not a DB_DRIVER_OWNERS key. Both stay clean IN A PLATFORM-FREE PACKAGE — the
+    // strictest place — so an anchored entry cannot grow a prefix match by accident.
+    {
+      code: `import { parse } from 'ws-utils/lib/parse.js';`,
+      filename: '/repo/packages/core/src/sync/transport.ts',
+    },
+    {
+      code: `import format from 'pg-format/lib/index.js';`,
+      filename: '/repo/packages/core/src/sync/transport.ts',
+    },
     // db-client test/tooling files may use Node builtins; only its shipping source may not
     {
       code: `import { mkdtempSync } from 'node:fs';`,
@@ -341,6 +369,47 @@ tester.run('boundaries', rule, {
     {
       code: `import { sha256 } from '@noble/hashes/sha2.js';`,
       filename: '/repo/packages/modules/src/notes/ops.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // ── task 104: the platform-free prong matches the import's PACKAGE ROOT, so a SUBPATH of a
+    // forbidden package is caught exactly as its bare specifier is. `ws` was the last exact-match
+    // holdout (`/^ws$/`): before this, `ws/lib/websocket.js` from a platform-free package escaped
+    // the prong entirely while bare `ws` was blocked. Both rows are pinned — the bare one so the
+    // normalization cannot silently stop matching, the subpath one so the hole cannot reopen.
+    // (Denominator for the ws leg: {bare, subpath} × {platform-free importer, platform-BOUND
+    // importer} = 4 rows — these 2 invalid, the 2 valid controls in the valid[] block above.)
+    {
+      code: `import WebSocket from 'ws';`,
+      filename: '/repo/packages/core/src/sync/transport.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import WebSocket from 'ws/lib/websocket.js';`,
+      filename: '/repo/packages/core/src/sync/transport.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    // ...and the same normalization for the OTHER entries in the list, so the fix is tested as a
+    // class and not as the one instance that prompted it (T-12). hono/expo/react-native already
+    // matched subpaths via their own `($|\/|-)` alternations; these rows pin that the packageRoot
+    // switch did not regress them.
+    {
+      code: `import { cors } from 'hono/cors';`,
+      filename: '/repo/packages/schemas/src/envelope.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { Platform } from 'react-native/Libraries/Utilities/Platform.js';`,
+      filename: '/repo/packages/i18n/src/format.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { getInfoAsync } from 'expo-file-system/next';`,
+      filename: '/repo/packages/modules/src/notes/queries.ts',
+      errors: [{ messageId: 'platformFree' }],
+    },
+    {
+      code: `import { readFileSync } from 'node:fs/promises';`,
+      filename: '/repo/packages/core/src/oplog/append.ts',
       errors: [{ messageId: 'platformFree' }],
     },
     // pg outside db-server → driver lock

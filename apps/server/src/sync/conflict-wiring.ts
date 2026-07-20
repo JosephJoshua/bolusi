@@ -6,10 +6,11 @@
 //
 // `detectConflicts` needs three things: the conflict registry (from `SERVER_MODULES`), the Rule-2
 // checks (a constant), and — the hard one — the tenant's system-device Ed25519 PRIVATE KEY, to sign
-// `platform.conflict_detected`. 01 §3.6 is explicit that this key lives in "the server secret store
-// (deployment doc owns storage)", and there is NO secret-store loader anywhere in this server today
-// (`config.ts` reads only the DB URL and port). So the KEY SOURCE is a deployment decision this file
-// must not make — env var format, per-tenant file, KMS: all outward-facing (CLAUDE.md §6).
+// `platform.conflict_detected`. 01 §3.6 is explicit that this key lives in "the server secret
+// store", whose storage is a DEPLOYMENT decision — env var format, per-tenant file, KMS: all
+// outward-facing (CLAUDE.md §6). So this file does not make it; it takes an injected `SystemKeyStore`
+// and leaves the choice to the composition root. (Task 78 made that choice: a directory of per-tenant
+// key files keyed on `SYSTEM_KEY_DIR` — see system-key-store.ts and 08-stack-and-repo §8.1.)
 //
 // So this file builds everything EXCEPT the key source, behind an injected `SystemKeyStore` port,
 // and makes the v0 default HONEST rather than broken:
@@ -27,8 +28,9 @@
 // "Detect and fail" is worse than "do not detect yet". So the wiring is CONDITIONAL on a key store
 // being present, exactly as projection folding is conditional on a module being in `SERVER_MODULES`
 // (task 49): the seam is fully built and one injection away from live, and its absence is a visible,
-// deliberate no-op, not a silent gap. The remaining work — provide a real `SystemKeyStore` — is a
-// filed deployment task.
+// deliberate no-op, not a silent gap. That injection now EXISTS (task 78's `DirectorySystemKeyStore`,
+// wired in main.ts from `SYSTEM_KEY_DIR`); what remains deployment-side is setting the var and
+// provisioning a key file per tenant — 08-stack-and-repo §8.1.
 import type { AnyModuleDefinition } from '@bolusi/core';
 import type { DB, TenantDb } from '@bolusi/db-server';
 
@@ -56,9 +58,16 @@ export type DetectConflictsFn = (
  * The deployment-owned source of a tenant's system-device signing key (01 §3.6, 10-db §12).
  *
  * ONE method, returning `undefined` when the tenant has no configured key. `undefined` is not an
- * error here — a v0 store may know about no keys at all, which is the "detection off" default. A
- * store that HAS a tenant's key but cannot produce a signer for it is the error case, and that is
- * the store's to throw.
+ * error AT THE STORE — a v0 store may know about no keys at all. A store that HAS a tenant's key but
+ * cannot produce a signer for it is the error case, and that is the store's to throw.
+ *
+ * BUT `undefined` IS NOT A PER-TENANT "DETECTION OFF" — read this before assuming it degrades
+ * gracefully. Detection is enabled ONCE, server-wide, on whether a store was INJECTED at all
+ * (`resolveDeps`, deps.ts); it is never re-decided per tenant. So once a store exists, a tenant for
+ * which it returns `undefined` does NOT quietly skip detection — `systemIdentity` below THROWS at
+ * emission, inside the push transaction, rolling that push back. "No key file for tenant X" is
+ * therefore BROKEN, not off: loud by design (an unsignable conflict must not be half-recorded), but
+ * only the UNSET-`SYSTEM_KEY_DIR` case is the graceful default. See 08-stack-and-repo §8.1.
  */
 export interface SystemKeyStore {
   /** A signer over the tenant's system-device Ed25519 key, or `undefined` if none is configured. */

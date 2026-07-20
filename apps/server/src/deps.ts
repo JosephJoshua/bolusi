@@ -223,10 +223,13 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   const authDirectory = overrides.authDirectory ?? dbAuthDirectory;
 
   // Conflict detection is ENABLED IFF a system key store is present (conflict-wiring.ts header):
-  // detection must sign `platform.conflict_detected` with the tenant system-device key, whose
-  // deployment-owned secret store does not exist in v0 (no loader — filed as a task). With no
-  // store, `detectConflicts` stays undefined and the push pipeline skips detection — the honest
-  // no-op, exactly like an empty SERVER_MODULES folds nothing. An explicit override wins for tests.
+  // detection must sign `platform.conflict_detected` with the tenant system-device key, which comes
+  // from the deployment-owned secret store — in production, main.ts builds one from `SYSTEM_KEY_DIR`
+  // (task 78; 08-stack-and-repo §8.1). With no store, `detectConflicts` stays undefined and the push
+  // pipeline skips detection — the honest no-op, exactly like an empty SERVER_MODULES folds nothing.
+  // This decision is made ONCE, server-wide: it is NOT re-evaluated per tenant, so with a store
+  // present a tenant lacking a key fails loudly at emission rather than skipping detection.
+  // An explicit override wins for tests.
   const newOpLogId = overrides.newOpLogId ?? (() => uuidv7(now()));
   const serverCrypto = overrides.serverCrypto ?? serverCryptoPort;
   const realtimeScheduler = overrides.realtimeScheduler ?? nodeHubScheduler;

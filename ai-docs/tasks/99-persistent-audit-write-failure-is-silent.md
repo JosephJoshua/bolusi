@@ -1,6 +1,6 @@
 # TASK 99 — a persistently-failing denial-audit append is SILENT (the shared task-10 `catch {}` swallows it on every denial path)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **LOW** — a cross-cutting FR-1045 reliability gap, accepted at v0 by design (deny must survive a failed audit — task 10), but worth closing before scale. No live incident; the risk is a broken audit trail that nobody notices.
 **Depends on:** 10
 **Blocks:** —
