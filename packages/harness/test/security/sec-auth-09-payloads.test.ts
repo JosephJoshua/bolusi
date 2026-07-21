@@ -14,6 +14,13 @@
 //     its row in `sec-pending-allowlist.json`. Titling it here would retire an id whose first leg
 //     nobody has run — the exact false assurance CLAUDE.md §2.11 exists to stop.
 //
+// FALSIFICATION (CLAUDE.md §2.11): the final verifier's `hashB64` was spliced into the scanned
+// wire-byte set → "verifier material reached the wire/op log: {"payload":{"verifierRef":"x",
+// "hash":"EmF4pJuw9gStEN+Mh2SjdlSg4HIJAo91oDdGUMP9PBA="}}…: expected [ Array(1) ] to deeply equal
+// []" (1 failed / 1 passed); the splice was reverted and the suite went green. The second test is
+// the standing positive control: every encoding is planted and required to be caught, and the
+// legitimate `verifierRef` + params payload is required NOT to be caught.
+//
 // EVERYTHING REAL EXCEPT THE KDF: the harness pin fixture wires the production `CommandRuntime`,
 // the production `setFirstPin`/`changePin`/`resetPin` orchestrators, the production client op store
 // (JCS + SHA-256 + Ed25519 append), and — for the wire bytes — the production `runPushPhase`, so

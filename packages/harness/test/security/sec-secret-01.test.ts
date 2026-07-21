@@ -7,9 +7,12 @@
 // access-log sink — the production `accessLog` middleware writing production records — plus every
 // outbound request body, captured by `FaultFetch` (the one surface that sees them all).
 //
-// FALSIFICATION (§2.11 / T-17), watched during development: the scan is only worth its green if it
-// can go red, so the second test plants each secret into a log-shaped line and requires a hit, and
-// the first test asserts the log is NON-EMPTY and DOES contain the non-secret fields (path, status,
+// FALSIFICATION (§2.11 / T-17): a line carrying the fixture's real bearer header was spliced into
+// the scanned set → "a bearer token value reached a log line or request body: expected
+// '{\"msg\":\"access\",\"authorization\":\"Bear…' not to contain 'bdt_harness_00000001'"
+// (1 failed / 1 passed); the splice was reverted and the suite went green. Two standing controls
+// keep it honest: the second test plants each secret into a log-shaped line and requires a hit,
+// and the first asserts the log is NON-EMPTY and DOES contain the non-secret fields (path, status,
 // deviceId) — otherwise "found no token in the logs" would be satisfied by having no logs.
 import { describe, expect, test } from 'vitest';
 

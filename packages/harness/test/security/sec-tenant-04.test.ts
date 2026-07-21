@@ -6,14 +6,21 @@
 // != skipped). The oracle is security-guide §2.2's rule table plus api/00 §7's code registry —
 // never a transcript of current behaviour — so a route that drifts off the table goes red here.
 //
-// FALSIFICATION (CLAUDE.md §2.11), all watched during development:
-//   * denominator — the suite asserts the endpoint count, the middleware-mount multiset, and the
-//     per-leg census. Deleting a registry row made `unmappedEndpoints` name it; deleting a route
-//     from the app made `staleProbeKeys` name it; declaring a verdict without a request builder
-//     made `probesWithoutRequests` name it. A walk over zero routes cannot report green.
-//   * the oracle — flipping one expectation to the status the server actually returns is what
-//     found the `POST /v1/media/:id/init` leak below, and flipping a 404 expectation to 200 makes
-//     `judgeProbe` report `LEAK:` rather than a bland status mismatch.
+// FALSIFICATION (CLAUDE.md §2.11) — each of these was BROKEN, the named red was READ, and the
+// break was reverted:
+//   * deleted the `GET /v1/devices` registry row →
+//     "an endpoint with no probe mapping FAILS the sweep: expected [ 'GET /v1/devices' ] to
+//     deeply equal []" (`unmappedEndpoints`);
+//   * added a `GET /v1/ghost` registry row for an endpoint the app does not serve →
+//     "the registry holds rows for endpoints the app no longer serves: expected
+//     [ 'GET /v1/ghost' ] to deeply equal []" (`staleProbeKeys`);
+//   * removed `/v1/auth/login` from `EXPECTED_MIDDLEWARE_MOUNTS` → the multiset assertion went red
+//     naming the extra mount, so a new middleware (or an `app.all()` endpoint hiding behind the
+//     `ALL` filter) cannot land unclassified;
+//   * pointed the `POST /v1/push/tokens` cross-tenant probe at the caller's OWN device id so the
+//     server legitimately answered 200 → "LEAK: 200 on out-of-scope access …", proving the 2xx
+//     branch fires as a LEAK rather than as a bland status mismatch.
+// The oracle's other proof is the live one: it found the `POST /v1/media/:id/init` defect below.
 //
 // KNOWN RED (a real defect, filed as its own task per CLAUDE.md §2.6/§2.7 — NOT patched here):
 // `POST /v1/media/:id/init` answers `500 INTERNAL` for a cross-tenant media id and
