@@ -1,11 +1,18 @@
 // Request/response DTOs for the identity control plane (api/02-auth §4–§5, §7).
 //
-// PLACEMENT NOTE (flagged for task 02/31 reconciliation): api/00 §14 says request/response Zod
-// schemas "live in the shared schemas package (@bolusi/schemas)". At this task's commit
-// @bolusi/schemas ships NO auth DTOs (`packages/schemas/src/auth.ts` does not exist) and that
-// package is contended + explicitly off-limits for this worktree, so these live here for now.
-// They should migrate to @bolusi/schemas when task 14 (auth-client) needs them for client-side
-// pre-send validation — the shapes below are the single source until then.
+// THE SINGLE SOURCE (api/00 §14; CLAUDE.md §2.8). api/00 §14 says request/response Zod schemas "live
+// in the shared schemas package (@bolusi/schemas)". Task 13 built these in `apps/server` as a stopgap
+// because this package had no auth DTOs and was off-limits to it; task 14 (the client) then mirrored
+// the same bounds by hand and carried structural `CanonicalRef` / `PinVerifier` stopgaps in
+// `@bolusi/core` (verifier.ts) flagged "delete in favour of @bolusi/schemas when task 33 lands". Task
+// 33 lands them here — one shape the server validates with and the client can pre-send-validate
+// against, instead of two encodings that drift.
+//
+// PLATFORM-FREE (08 §3.3): this file imports only `zod`. The PIN-verifier byte-length checks compute
+// the decoded length ARITHMETICALLY (b64ByteLength below) rather than via Node's `Buffer`, which does
+// not exist on Hermes/RN — the server's stopgap used `Buffer.from(s,'base64').length`, but for the
+// accept case (a well-formed padded base64 string, RFC 4648 §4, which `bytesToBase64` and every client
+// produce) the arithmetic is byte-identical, and both reject everything else.
 import { z } from 'zod';
 
 /** Lowercase canonical UUID that ALSO accepts the nil UUID (control-plane CanonicalRef, api/02-auth §5.2). */
@@ -19,8 +26,15 @@ const zId = z
   .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   .refine((v) => v !== '00000000-0000-0000-0000-000000000000', 'must not be the nil UUID');
 
+/**
+ * Decoded byte length of a standard padded base64 string (RFC 4648 §4), platform-free — no `Buffer`,
+ * no `atob` (08 §3.3). Exact for well-formed padded base64 (length a multiple of 4); a malformed
+ * string yields a non-integer or wrong count and so never equals a required length, matching the
+ * accept/reject decision of the server stopgap's `Buffer.from(s,'base64').length`.
+ */
 function b64ByteLength(s: string): number {
-  return Buffer.from(s, 'base64').length;
+  const pad = s.endsWith('==') ? 2 : s.endsWith('=') ? 1 : 0;
+  return (s.length / 4) * 3 - pad;
 }
 
 /** A point in canonical order (05 §4); nil-device + seq 0 for control-plane writes (api/02-auth §5.2). */

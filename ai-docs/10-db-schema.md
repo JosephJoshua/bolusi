@@ -593,10 +593,15 @@ CREATE INDEX idx_auth_permission_denials_tenant
   ON auth_permission_denials (tenant_id, timestamp_ms);  -- listPermissionDenials (auth.audit_view)
 
 -- ============ user_prefs (projection of platform.user_locale_changed — 07-i18n §1.1) ============
+-- `locale` holds a Locale — 'id' | 'en' (07-i18n §1.1's z.enum(['id','en']) payload, written verbatim
+-- by the applier), NOT an Intl formatting tag such as 'id-ID' (that is INTL_LOCALE_TAG.id, a region
+-- tag 07-i18n §5 keeps separate from the locale). NO column default: the applier always supplies
+-- `locale`, so a default is unreachable; the read-side "default 'id' when the row is absent" fallback
+-- belongs to the reader (07-i18n §1.1), which a column default cannot express (no row → no default).
 CREATE TABLE user_prefs (
   user_id    uuid PRIMARY KEY,
   tenant_id  uuid NOT NULL REFERENCES tenants(id),
-  locale     text NOT NULL DEFAULT 'id-ID',
+  locale     text NOT NULL,
   updated_at bigint NOT NULL
 );
 
@@ -939,11 +944,12 @@ CREATE TABLE auth_permission_denials (
   suppressed_repeats INTEGER NOT NULL DEFAULT 0
 );
 
--- Projection of platform.user_locale_changed ops (07-i18n §1.1); same fold as server §8
+-- Projection of platform.user_locale_changed ops (07-i18n §1.1); same fold as server §8.
+-- `locale` holds a Locale ('id' | 'en'), not an Intl tag; NO column default — see the §8 note.
 CREATE TABLE user_prefs (
   user_id    TEXT PRIMARY KEY,
   tenant_id  TEXT NOT NULL,
-  locale     TEXT NOT NULL DEFAULT 'id-ID',
+  locale     TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
 ```

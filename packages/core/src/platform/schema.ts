@@ -61,19 +61,21 @@ export interface ConflictsTable {
 /**
  * A `user_prefs` row (07-i18n §1.1; DDL 10-db §8 / §9.6).
  *
- * NOTE ON `locale`'s DDL DEFAULT. Both engines declare `locale text NOT NULL DEFAULT 'id-ID'`, but
- * `'id-ID'` is an **Intl tag** (`INTL_LOCALE_TAG.id`), not a `Locale` — the values this column
- * actually holds are `'id' | 'en'`, because 07-i18n §1.1 pins the payload to `z.enum(['id','en'])`
- * and the applier writes exactly what the payload carries. The default is unreachable through the
- * fold (the applier always supplies `locale`), so it is inert rather than wrong-in-production — but
- * it is a decoy: a reader who trusts it would conclude this column holds Intl tags. Filed as a
- * finding; the DDL is 10-db's to fix (CLAUDE.md §4 — spec/DDL changes are their own task).
+ * `locale` holds a `Locale` — `'id' | 'en'` in v0 — because 07-i18n §1.1 pins the payload to
+ * `z.enum(['id','en'])` and the applier writes exactly what the payload carries. It is NOT an Intl
+ * formatting tag: `'id-ID'` is `INTL_LOCALE_TAG.id`, a region tag 07-i18n §5 keeps separate from the
+ * locale. Both engines once declared `locale text NOT NULL DEFAULT 'id-ID'`; task 76 dropped that
+ * default (server migration 0009; client `001-initial-schema`; 10-db §8/§9.6). It was unreachable
+ * through the fold — the applier always supplies `locale` — so a column default was inert AND a
+ * decoy pointing at the wrong vocabulary. The read-side fallback ("default `id` when the row is
+ * absent") belongs to the reader (`resolveLocale`), which a column default cannot express. The
+ * column stays NOT NULL because every insert (the applier) supplies the value.
  */
 export interface UserPrefsTable {
   /** = the op's `entityId` = the acting user (07-i18n §1.1). */
   userId: string;
   tenantId: string;
-  /** A `Locale` — `'id' | 'en'` in v0. See the note above about the DDL default. */
+  /** A `Locale` — `'id' | 'en'` in v0. See the note above. */
   locale: string;
   /** ms epoch (`bigint`/`INTEGER`). */
   updatedAt: number;

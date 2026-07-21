@@ -1,6 +1,6 @@
 # TASK 76 — `user_prefs.locale DEFAULT 'id-ID'` is an **Intl tag**, not a `Locale`; the column holds `'id' | 'en'`
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM — inert today, but it is a decoy pointed directly at task 21, which is unstarted and will read this column.
 **Depends on:** —
 **Filed by:** impl-17, 2026-07-16

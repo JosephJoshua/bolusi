@@ -6,21 +6,21 @@ import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
 import { countActiveTenantAdmins, isTenantAdmin, requirePermission } from '../auth/permissions.js';
-import { TENANT_ADMIN_PERMISSION } from '../identity/permission-registry.js';
+import { TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
 import { appendAudit } from '../identity/audit.js';
 import { PermissionDeniedError } from '../identity/denial-audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
-import { PERM } from '../identity/permission-registry.js';
+import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import {
   CreateUserReq,
   PutPinVerifierReq,
   UpdateUserReq,
   type CanonicalRef,
-} from '../identity/schemas.js';
+} from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 import { uuidv7 } from '../uuidv7.js';

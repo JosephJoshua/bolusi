@@ -245,10 +245,15 @@ const PROJECTIONS = [
   reason             TEXT NOT NULL,
   suppressed_repeats INTEGER NOT NULL DEFAULT 0
 )`,
+  // locale holds a Locale ('id' | 'en'), the z.enum(['id','en']) payload the platform applier writes
+  // verbatim — NOT an Intl tag. No column default (task 76): the applier always supplies locale, and
+  // the read-side "default id when the row is absent" fallback belongs to the reader (resolveLocale),
+  // which a column default cannot express. Edited in place — SQLite has no ALTER COLUMN DROP DEFAULT
+  // and this is the initial schema (pre-v0, no deployed client DB).
   `CREATE TABLE user_prefs (
   user_id    TEXT PRIMARY KEY,
   tenant_id  TEXT NOT NULL,
-  locale     TEXT NOT NULL DEFAULT 'id-ID',
+  locale     TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 )`,
 ];

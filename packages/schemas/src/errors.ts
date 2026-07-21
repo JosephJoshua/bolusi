@@ -5,8 +5,17 @@ import { z } from 'zod';
 
 import { zUuidV7 } from './primitives.js';
 
-/** The full §7 registry — all thirteen codes. Additions are spec changes to api/00 first. */
+/**
+ * The full HTTP error-code registry — the single union of the api/00 §7 TRANSPORT codes and the
+ * api/02-auth §10 identity-SURFACE codes. Additions are spec changes to the owning page first
+ * (§7 for transport, api/02-auth §10 for the identity surface). `error.code` stays an OPEN string on
+ * the wire (§4/§6), so this list is the KNOWN set, not a closed one — an older client still parses a
+ * newer code. Before task 33 the identity-surface codes lived only in a per-handler wrapper
+ * (`apps/server/src/identity/errors.ts`), off the registry; folding them here makes every emitted
+ * code a registry member (CLAUDE.md §2.8).
+ */
 export const HTTP_ERROR_CODES = [
+  // api/00 §7 — transport.
   'MALFORMED_REQUEST',
   'AUTH_TOKEN_MISSING',
   'AUTH_TOKEN_INVALID',
@@ -20,6 +29,14 @@ export const HTTP_ERROR_CODES = [
   'VALIDATION_FAILED',
   'RATE_LIMITED',
   'INTERNAL',
+  // api/02-auth §10 — identity surface. (No `SESSION_EXPIRED`: an elapsed control session maps to
+  // AUTH_TOKEN_INVALID — one vocabulary, and a distinct expired-vs-invalid code is an attacker oracle.)
+  'AUTH_INVALID_CREDENTIALS',
+  'ACTING_USER_INVALID',
+  'ENROLL_DEVICE_ID_TAKEN',
+  'ENROLL_KEY_REUSED',
+  'LAST_ADMIN_PROTECTED',
+  'LOGIN_IDENTIFIER_TAKEN',
 ] as const;
 
 export const zHttpErrorCode = z.enum(HTTP_ERROR_CODES);

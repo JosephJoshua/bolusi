@@ -18,8 +18,8 @@ import {
   IDLE_LOCK_DEFAULT,
   type DeviceBundle,
   type PinVerifier,
-} from './schemas.js';
-import { PERMISSIONS } from './permission-registry.js';
+} from '@bolusi/schemas';
+import { PERMISSIONS } from './permissions.js';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 

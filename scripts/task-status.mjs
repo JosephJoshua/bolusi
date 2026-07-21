@@ -37,6 +37,10 @@ export const INDEX_BASENAME = '_index.md';
  *  preserves the padding. NOT part of the shared ledger grammar — a formatting-preserving helper. */
 const STATUS_CELL = /^(\s*)(\S+)(\s*)$/;
 
+/** Table cells are delimited by pipes that are NOT backslash-escaped; `\|` is legal inside a title
+ *  (GitHub table spec). Mirrors ledger.ts `SPLIT_ON_UNESCAPED_PIPE` — both parsers read one grammar. */
+const SPLIT_ON_UNESCAPED_PIPE = new RegExp(String.raw`(?<!\\)\|`);
+
 /**
  * Compute the new `_index.md` text and the new task-file text for one `<id> <status>` change,
  * WITHOUT writing anything. Pure and disk-free so it is exhaustively unit-testable. Returns
@@ -73,7 +77,12 @@ export function applyStatusChange({ indexText, taskFiles, id, status }) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.startsWith('|')) continue;
-    const parts = line.split('|'); // ['', ' id ', ' title ', ' status ', ' deps ', '']
+    // Split on UNESCAPED pipes only. A title MAY contain a pipe escaped as `\|` per GitHub's table
+    // spec (row 76 does: "the column holds `'id'\|'en'`"); a bare `.split('|')` shifts every later
+    // cell so `status` parses as title text and this tool refuses a legal row. `ledger.ts` already
+    // fixed this exact bug (SPLIT_ON_UNESCAPED_PIPE) — the two parsers must agree (§2.8). The
+    // escaped pipe stays inside its cell, so the `join('|')` rebuild below round-trips exactly.
+    const parts = line.split(SPLIT_ON_UNESCAPED_PIPE); // ['', ' id ', ' title ', ' status ', ' deps ', '']
     if (parts.length < 5) continue; // not a 4-column task row
     if (parts[1].trim() !== id) continue;
     matchedRows.push({ lineIndex: i, parts });

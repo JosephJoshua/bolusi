@@ -64,6 +64,7 @@ export type AssertRejectionCodeUnion = Expect<
 export type AssertHttpErrorCodeUnion = Expect<
   Equal<
     HttpErrorCode,
+    // api/00 §7 transport
     | 'MALFORMED_REQUEST'
     | 'AUTH_TOKEN_MISSING'
     | 'AUTH_TOKEN_INVALID'
@@ -77,6 +78,13 @@ export type AssertHttpErrorCodeUnion = Expect<
     | 'VALIDATION_FAILED'
     | 'RATE_LIMITED'
     | 'INTERNAL'
+    // api/02-auth §10 identity surface (task 33). No SESSION_EXPIRED — maps to AUTH_TOKEN_INVALID.
+    | 'AUTH_INVALID_CREDENTIALS'
+    | 'ACTING_USER_INVALID'
+    | 'ENROLL_DEVICE_ID_TAKEN'
+    | 'ENROLL_KEY_REUSED'
+    | 'LAST_ADMIN_PROTECTED'
+    | 'LOGIN_IDENTIFIER_TAKEN'
   >
 >;
 export type AssertSyncStatusUnion = Expect<Equal<SyncStatus, 'local' | 'synced' | 'rejected'>>;

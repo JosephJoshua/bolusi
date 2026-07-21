@@ -3,6 +3,7 @@
 // constraints that exist but do not bite are the usual failure.
 //
 // Runs as the owner (RLS bypassed): the subject here is the constraint, not the policy.
+import { sql } from 'kysely';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 import { seedTenant, timestampMs, uuid, type TenantFixture } from './helpers/fixtures.js';
@@ -227,6 +228,21 @@ test('conflicts rejects an unknown severity', async () => {
       })
       .execute(),
   ).rejects.toThrow(/violates check constraint/i);
+});
+
+test('user_prefs.locale is NOT NULL with NO column default (task 76)', async () => {
+  // The column holds a `Locale` (`id` | `en`) — the `z.enum(['id','en'])` payload the platform
+  // applier writes verbatim — NOT an Intl formatting tag. It once declared `DEFAULT 'id-ID'`
+  // (`INTL_LOCALE_TAG.id`, not a `Locale`): a decoy no fold could reach, since the applier always
+  // supplies `locale`. The read fallback ("default `id` when the row is absent") belongs to the
+  // reader (`resolveLocale`), which a column default cannot express. So migration 0009 dropped it;
+  // NOT NULL stays because every insert (the applier) supplies the value.
+  const { rows } = await sql<{ isNullable: string; columnDefault: string | null }>`
+    SELECT is_nullable AS "isNullable", column_default AS "columnDefault"
+      FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'user_prefs' AND column_name = 'locale'
+  `.execute(testDb.db);
+  expect(rows).toEqual([{ isNullable: 'NO', columnDefault: null }]);
 });
 
 /** Inserts a structurally valid operation row, overridden per case. */
