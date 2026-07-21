@@ -1,6 +1,6 @@
 # TASK 120 — a REMOTE note's photo thumbnail cannot be download-verified: the note_created payload carries only mediaId, not the signed sha256/mime that 06 §6 requires to verify a pulled note's media
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — self-captured/local notes resolve their thumbnail via local_path (no sha256 needed), so this is not a live break today; but a note pulled from ANOTHER device carries only mediaId, and 06 §6's download-verify needs the sha256 from the SIGNED payload. So remote thumbnails cannot be integrity-verified as specified.
 **Depends on:** 25 (notes op payloads), 82 (media pipeline), 18
 **Blocks:** NoteDetail thumbnail download-verify for remote notes (task 96 handles local; remote falls back to unverified/unavailable)
