@@ -63,7 +63,7 @@ export interface ExtraModule {
 }
 
 export class VirtualDevice {
-  #serverSeqSeen = 0;
+  #arrivalSeqSeen = 0;
 
   private constructor(
     readonly identity: DeviceIdentity,
@@ -197,11 +197,11 @@ export class VirtualDevice {
   /**
    * Apply a foreign op through the REAL pull path: insert it (synced) then fold it via the engine's
    * `applyPulledOp`, whose head/re-fold dispatch (04 §4.2) is exactly what CHAOS-01 measures. The
-   * assigned `serverSeq` is monotonic per delivery order into THIS device.
+   * assigned `arrival_seq` is monotonic per delivery order into THIS device (10-db §9.2, D20 §4).
    */
   async applyForeign(op: SignedOperation): Promise<ApplyMode> {
-    this.#serverSeqSeen += 1;
-    await insertPulledOp(this.handle.db, op, this.#serverSeqSeen, this.clock.now());
+    this.#arrivalSeqSeen += 1;
+    await insertPulledOp(this.handle.db, op, this.#arrivalSeqSeen, this.clock.now());
     const outcome = await this.engine.applyPulledOp(op);
     return outcome.mode;
   }

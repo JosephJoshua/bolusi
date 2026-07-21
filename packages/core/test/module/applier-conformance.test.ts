@@ -80,7 +80,7 @@ async function createOpLogTables(db: Kysely<never>): Promise<void> {
     .addColumn('signature', 'text', (c) => c.notNull())
     .addColumn('signed_core_jcs', 'text', (c) => c.notNull())
     .addColumn('sync_status', 'text', (c) => c.notNull())
-    .addColumn('server_seq', 'bigint')
+    .addColumn('arrival_seq', 'bigint')
     .addColumn('synced_at', 'bigint')
     .execute();
 
@@ -152,7 +152,7 @@ async function insertOp(db: Kysely<never>, op: SignedOperation): Promise<void> {
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, payload, timestamp_ms, location, source, agent_initiated,
       agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      server_seq, synced_at
+      arrival_seq, synced_at
     ) VALUES (
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},

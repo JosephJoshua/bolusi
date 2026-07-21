@@ -12,8 +12,9 @@
 //                                                    node-postgres refuses to narrow it silently)
 //   kysely/driver variants           int8 → bigint  (some configurations)
 //
-// Task 46 is what happens without a single seam for that: `highestContiguousServerSeq` asserted
-// `sql<{ serverSeq: number }>` over `operations.server_seq` and compared `row.serverSeq ===
+// Task 46 is what happens without a single seam for that: the contiguity walk (now
+// `highestContiguousSeq`) asserted `sql<{ serverSeq: number }>` over the SERVER's
+// `operations.server_seq` and compared `row.serverSeq ===
 // watermark + 1`. On real Postgres that is `"1" === 1` → false, forever. The walk returned `from`
 // unchanged and `applied_server_seq` never advanced in production. It threw nothing and failed no
 // test, because every lane that existed ran a driver that hands back numbers (testing-guide T-8,
@@ -34,7 +35,7 @@
 // columns were deliberately typed `bigint` (10-db §5); it is not this function's place to quietly
 // decide that the top of that range does not exist.
 //
-// So it refuses. That turns "server_seq realistically stays under 2^53" from an assumption nobody
+// So it refuses. That turns "the sequence column realistically stays under 2^53" from an assumption nobody
 // can see into a CLAIM A TEST CAN CHECK — and one that is checked, on the real driver, by
 // db-server/test/projection-int8-marshalling.test.ts. If the op log ever genuinely approaches
 // 2^53, this throws loudly at the boundary instead of corrupting a watermark, and the fix is a

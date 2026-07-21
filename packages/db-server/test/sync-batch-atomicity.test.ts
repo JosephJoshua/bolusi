@@ -34,14 +34,14 @@
 // ── AND WHY THE WATERMARK IS NO LONGER ADVANCED BY HAND ────────────────────────────────────────
 //
 // The old file also called `advanceServerSeq(MODULE_ID, 3)` with a literal 3, because on real
-// Postgres `highestContiguousServerSeq` compared an int8 STRING to a number and never advanced
+// Postgres `highestContiguousSeq` compared an int8 STRING to a number and never advanced
 // (the bug this lane found, now fixed as task 46's int8 seam). A hardcoded 3 cannot detect a
 // watermark computed wrongly: it asserts that the number the test just wrote is the number the
 // test just wrote. With 46 landed, the ENGINE computes the value on this driver, so every case
 // below drives `applyPulledOp` and lets the real path produce the watermark. The 3s asserted here
 // are now OUTPUTS of production code, not inputs to it.
 //
-// This lane is also the only thing that executes `highestContiguousServerSeq` on ANY engine:
+// This lane is also the only thing that executes `highestContiguousSeq` on ANY engine:
 // applier-conformance (T-8) calls only `applyAppendedOp`, and the contiguity walk is reachable
 // solely from the PULL branch (engine.ts:154). See task 47's T-8 scope note.
 import { sql, type Kysely, type Transaction } from 'kysely';
@@ -324,7 +324,7 @@ describe('LOAD-BEARING: insert + apply + watermark commit in ONE transaction (ta
         for (const [i, op] of ops.entries()) await insertOp(trx, op, i + 1);
         // ONE apply. The ENGINE computes the watermark from log presence and drives the store —
         // no hand-written value. On this driver that exercises production read() +
-        // highestContiguousServerSeq (task 46) + production advanceServerSeq().
+        // highestContiguousSeq (task 46) + production advanceServerSeq().
         await makeEngine(trx).applyPulledOp(ops[0] as SignedOperation);
 
         // In-transaction the watermark has ALREADY jumped to the TOP OF THE BATCH (3) — computed,

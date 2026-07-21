@@ -295,8 +295,8 @@ describe('live-query invalidation (§7)', () => {
       payload: { body: 'b1' },
     });
     await deliverPulled(harness, [
-      { op: create, serverSeq: null },
-      { op: edit1, serverSeq: null },
+      { op: create, arrivalSeq: null },
+      { op: edit1, arrivalSeq: null },
     ]);
     expect(notesFires).toBe(2);
     expect(untouchedFires).toBe(0);

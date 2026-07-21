@@ -1,7 +1,14 @@
 // Projection watermarks (04-module-contract §4.3).
 //
-//   applied_server_seq = highest CONTIGUOUS serverSeq applied from pull.
+//   applied_server_seq = highest CONTIGUOUS op-log sequence applied from pull.
 //   applied_local_seq  = highest local seq applied at append (own-device ops).
+//
+// THE COLUMN THE FIRST LINE COUNTS IS NOT THE SAME ON BOTH SIDES (10-db §9.2's table; D20 §4).
+// Server-side it is `operations.server_seq`, the per-tenant acceptance counter. CLIENT-side it is
+// `operations.arrival_seq`, a LOCAL arrival counter — the client cannot hold real serverSeqs, whose
+// gaps would pin this watermark below the first other-store op forever. The scalar's own name is
+// left alone deliberately: it is one shared port satisfied by both sides, and the engine's
+// `seqColumn` (engine.ts) is where the difference is named, once.
 //
 // Both are STRICTLY MONOTONIC and never decrease — not by pull, not by append, not by the
 // entity-local re-fold (§4.2, which re-applies already-counted ops and so moves NEITHER), and
@@ -11,15 +18,22 @@
 // table (10-db §9.1, both columns). The port is the shape BOTH sides satisfy: the client here,
 // and the server table (10-db §8, applied_server_seq only) when tasks 07/16 embed it — only the
 // client shape is exercised now. The engine computes the advancement (contiguity via the op
-// log — oplog-source `highestContiguousServerSeq`); the store only reads/persists the scalars.
+// log — oplog-source `highestContiguousSeq`); the store only reads/persists the scalars.
 //
-// JUDGMENT CALL (04 §4.3 is terse): contiguity is evaluated over the GLOBAL serverSeq stream in
-// the device's single-tenant op log (10-db §3: gapless per tenant), NOT the module-filtered
-// subset — the engine reads `operations.server_seq` for presence, so a serverSeq belonging to
-// another module still counts toward the contiguous prefix and never creates a phantom gap. A
-// module's watermark is re-evaluated only when one of ITS ops is applied, so a module can lag
-// the frontier until its next op; the sync loop (task 15) may additionally raise it. Recorded
-// so nobody "fixes" the lag ad hoc.
+// JUDGMENT CALL (04 §4.3 is terse): contiguity is evaluated over the WHOLE sequence stream in the
+// device's single-tenant op log, NOT the module-filtered subset — the engine reads the sequence
+// column for presence, so a value belonging to another module still counts toward the contiguous
+// prefix and never creates a phantom gap. A module's watermark is re-evaluated only when one of
+// ITS ops is applied, so a module can lag the frontier until its next op; the sync loop (task 15)
+// may additionally raise it. Recorded so nobody "fixes" the lag ad hoc.
+//
+// AND THE STREAM IS GAPLESS FOR DIFFERENT REASONS ON THE TWO SIDES — do not collapse them. Server-
+// side it is 10-db §3: the `tenant_op_counters` row lock makes `server_seq` gapless per tenant.
+// CLIENT-side 10-db §3 says NOTHING about what this device holds — its stream is scope-FILTERED
+// (api/01 §4.3), so the server's real serverSeqs would be legitimately gappy here. This file used
+// to cite "10-db §3: gapless per tenant" for both. The client stream is gapless ONLY because
+// `nextArrivalSeq` (sync/pull.ts) numbers arrivals itself, which makes that counter load-bearing
+// for this whole file — asserted in core/test/sync/arrival-seq.test.ts, not assumed here (§2.11).
 import { sql, type Kysely } from 'kysely';
 
 import { int8ToNumber } from './int8.js';
