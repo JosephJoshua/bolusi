@@ -512,3 +512,106 @@ jobs:
           arch: x86_64
           profile: pixel_6
           script: pnpm harness:device --apk apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+
+  # Stage 14 — iOS Simulator BUILD lane (task 85; D18 §5, D20 §2). UNSIGNED, macos-latest,
+  # scheduled / on-demand — NOT per-PR (macOS runners bill ~10× Linux; owner confirms public-vs-private
+  # minutes, D18 §5). It is a NEW job beside the Android emulator lane (stage 12), self-contained, and
+  # touches nothing there.
+  #
+  # WHAT THIS PROVES (Simulator-answerable, D20 §2): the real `expo prebuild --platform ios` generates a
+  # full Xcode project from `app.config.ts`, `xcodebuild` COMPILES AND LINKS it for the Simulator, the
+  # COMPILED app carries tasks 83/87's bundle identity + deliberate usage strings (asserted below on the
+  # built `.app`'s Info.plist — the real prebuilt artifact, stronger than ios-config.test.ts's Linux
+  # introspection), and the app BOOTS on a Simulator without crashing on launch. This closes the exact
+  # gap ios-config.test.ts names ("no macOS host, no Xcode, no Simulator ... task 85 is the infra gap").
+  #
+  # WHAT IT DOES NOT PROVE (D18 §5 / D20 §2, the honest ceiling): NOTHING that needs a SIGNED build or a
+  # physical iPhone — the EAS signed lane, Apple Developer enrollment, TestFlight, and real-device
+  # Keychain / backup-exclusion semantics (security-guide §7.4 "never resurrected") stay owner-DEFERRED
+  # and device-UNVERIFIED. Simulator Keychain/backup differ from a device; no green here is a device test.
+  #
+  # HONESTY (CLAUDE.md §2.1): this job RUNS IN CI, on a macOS runner. It was NOT and CANNOT be run on the
+  # Linux dev host (no Xcode / no Simulator). The prebuild + pod install + xcodebuild + boot below is the
+  # part a first real CI run must shake out (same posture as the Android lane's assemble step); because
+  # this job is scheduled/dispatch, a first-run failure is a red scheduled job, never a false green on a PR.
+  #
+  # FAIL-SAFE (CLAUDE.md §2.11): every step propagates its non-zero exit — there is no `continue-on-error`
+  # anywhere, and no `|| true` on build / install / launch. A compile/link failure, an absent Info.plist
+  # key, a bundle-id drift, or a crash-on-launch each fail the job red.
+  ios-simulator:
+    runs-on: macos-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      # Present so `app.config.ts`'s `extra.apiUrl` is not null at build/launch. This lane only builds
+      # and boots — it does NOT sync — so the value is an inert placeholder (localhost is the Simulator's
+      # own host); the app never reaches the network in this job.
+      EXPO_PUBLIC_API_URL: 'http://localhost:3000'
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Generate the native iOS project. `--no-install` keeps JS deps under pnpm's frozen lockfile
+      # (mirrors the Android lane's `--no-install`); CocoaPods is installed explicitly next, since
+      # `--no-install` skips the pod install prebuild would otherwise run.
+      - name: expo prebuild (iOS native project)
+        run: pnpm --filter @bolusi/mobile exec expo prebuild --platform ios --no-install
+      # CocoaPods generates the .xcworkspace that xcodebuild builds from; preinstalled on macos-latest.
+      - name: pod install
+        working-directory: apps/mobile/ios
+        run: pod install
+      # UNSIGNED Release build for the Simulator. Release EMBEDS the JS bundle, so the app launches with
+      # NO Metro server running (a Debug build would red-screen headlessly) — the same reason the Android
+      # lane assembles Release. `CODE_SIGNING_ALLOWED=NO` etc.: Simulator builds need no Apple signing
+      # (D20 §2), which is what lets this lane run with NO Apple account. Workspace/scheme are discovered
+      # (Expo names them after the app) rather than hardcoded, so a rename cannot silently mis-target.
+      - name: xcodebuild — unsigned iOS Simulator build (Release)
+        working-directory: apps/mobile/ios
+        run: |
+          set -eu
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          test -n "$WORKSPACE"
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ios-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+      # Assert the COMPILED artifact carries tasks 83/87's identity and deliberate copy. PlistBuddy exits
+      # non-zero if a key is absent; `grep -qF` fails the job if the value drifted from the Indonesian
+      # string. This is the "does the generated Info.plist match 83/87" check on the real build output.
+      - name: verify built Info.plist matches tasks 83/87
+        run: |
+          set -eu
+          APP=$(find "$RUNNER_TEMP/ios-build/Build/Products" -maxdepth 3 -name '*.app' | head -1)
+          test -n "$APP"
+          PLIST="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = 'com.bolusi.app'
+          /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$PLIST" \
+            | grep -qF 'Izinkan aplikasi memakai kamera untuk ambil foto.'
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$PLIST" \
+            | grep -qF 'Izinkan aplikasi memakai lokasi'
+      # Boot a Simulator, install and launch — the does-it-launch gate. A native crash-on-launch (bad
+      # link, missing dylib, a plist iOS rejects) fails install/launch non-zero. The liveness poll is the
+      # real does-it-STAY-up signal: `simctl launch` returns a PID even for an app that crashes instantly.
+      - name: boot Simulator, install + launch the app
+        run: |
+          set -eu
+          APP=$(find "$RUNNER_TEMP/ios-build/Build/Products" -maxdepth 3 -name '*.app' | head -1)
+          test -n "$APP"
+          DEVICE=$(xcrun simctl list devices available --json \
+            | jq -r '.devices | to_entries[] | .value[] | select(.name | startswith("iPhone")) | .udid' \
+            | head -1)
+          test -n "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" com.bolusi.app
+          sleep 8
+          xcrun simctl spawn "$DEVICE" launchctl list | grep -q com.bolusi.app
