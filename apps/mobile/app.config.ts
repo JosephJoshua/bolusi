@@ -16,7 +16,7 @@ const config: ExpoConfig = {
   // "userInterfaceStyle: Install expo-system-ui …" and the app silently follows the OS dark/light
   // setting. The plugin is what makes this line true instead of a well-typed no-op.
   userInterfaceStyle: 'light',
-  platforms: ['android', 'ios'],
+  platforms: ['android', 'ios', 'web'],
   android: {
     package: 'com.bolusi.app',
     // Auto-backup carries nothing off this device (security-guide §6.2:194; api/02-auth §7.4).
