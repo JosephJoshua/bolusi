@@ -36,7 +36,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | done | 06, 07, 08, 15, 16 |
 | 27a | device-gates, **Android** EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number; the iOS verification lane is separate and deferred (task 85, D17/D18 §5), not folded in here | todo | 24, 25, 26, 50 |
 | 27b | device-gates, **Android** PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13); the iOS on-device leg is a separate, larger gap with no runnable target here (task 80 §4), recorded (deferred, not omitted) as task 85 | blocked | 27a |
-| 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | todo | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
+| 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | in-progress | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | done | 02 |
 | 30 | resolve 3 ui-labels keys violating the 07-i18n key grammar (from task 22) | done | 22 |
 | 31 | SEC-META-01 ownership gate: mention != ownership; 3 armed rows (from task 03) | done | 03 |
@@ -121,7 +121,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 85 | **HIGH — owner decision** no iOS build or verification lane exists: `08 §5.5` specifies **Android APK** for all four profiles (so `eas.json` is spec-correct), all 10 CI jobs are `ubuntu-latest`, host has no Xcode. Building iOS needs cloud macOS (paid, outward-facing — §6, D12's deferred device-farm precedent) or a v0-is-Android-only ruling (from task 80) | todo | — |
 | 86 | **MEDIUM — the leverage point** D17 reversed the "Android-first" premise but its `Amends:` list omits `00-product-overview.md:41`, which still states it as fact — and §3 routes every agent there first, so the next one re-derives 58's ruling. Plus: every "unverified on-device" sentence names one device, and the gaps aren't symmetric (from task 80) | done | 85 |
 | 87 | **HIGH** `expo-location` is a dependency but NOT in `app.config.ts` plugins, so its config plugin never runs: Android's generated manifest gets `ACCESS_FINE/COARSE_LOCATION` anyway via **library-manifest merging**, iOS's `infoPlist` is `null` with no `NSLocationWhenInUseUsageDescription` — and `Root.tsx:89` requests location at every boot. Apple documents termination (unverified — no iOS target exists). `expo-camera` has the identical shape for task 82 (from task 80) | done | 83, 85 |
-| 113 | the nightly chaos lane's `CHAOS_SCALE=4 × 100 seeds` is unrunnable for CHAOS-03 (56k ops/seed) / CHAOS-08 (80k) — add a documented, asserted per-scenario ×4 nightly seed cap (from task 106) | todo | 26 |
+| 113 | the nightly chaos lane's `CHAOS_SCALE=4 × 100 seeds` is unrunnable for CHAOS-03 (56k ops/seed) / CHAOS-08 (80k) — add a documented, asserted per-scenario ×4 nightly seed cap (from task 106) | in-progress | 26 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
