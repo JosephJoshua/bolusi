@@ -7,6 +7,7 @@ import type { Context } from 'hono';
 import { resolveActingUser } from '../auth/acting-user.js';
 import { requirePermission } from '../auth/permissions.js';
 import { mintToken, sha256Hex } from '../crypto/index.js';
+import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv, DevicePrincipal } from '../env.js';
 import { ApiError } from '../errors.js';
@@ -223,21 +224,33 @@ export function createDevicesRouter(deps: ServerDeps) {
 
                 // Register + mint.
                 const deviceToken = mintToken('bdt_');
-                await db
-                  .insertInto('devices')
-                  .values({
-                    id: body.deviceId,
-                    tenantId,
-                    storeId: body.storeId,
-                    kind: 'member',
-                    name: body.deviceName,
-                    signingKeyPublic: body.devicePublicKeyB64,
-                    tokenHash: sha256Hex(deviceToken),
-                    enrolledAt: BigInt(t),
-                    enrolledBy: control.userId,
-                    status: 'active',
-                  })
-                  .execute();
+                try {
+                  await db
+                    .insertInto('devices')
+                    .values({
+                      id: body.deviceId,
+                      tenantId,
+                      storeId: body.storeId,
+                      kind: 'member',
+                      name: body.deviceName,
+                      signingKeyPublic: body.devicePublicKeyB64,
+                      tokenHash: sha256Hex(deviceToken),
+                      enrolledAt: BigInt(t),
+                      enrolledBy: control.userId,
+                      status: 'active',
+                    })
+                    .execute();
+                } catch (err) {
+                  // `devices.id` is a GLOBAL uuid PK. The `dupId` SELECT above is RLS-scoped, so a
+                  // device id an RLS-hidden row in ANOTHER tenant already holds reads as absent and
+                  // we reach this INSERT — which trips the global PK (RLS filters SELECTs, not
+                  // unique-index conflicts, 10-db §6). Map it to the SAME 409 ENROLL_DEVICE_ID_TAKEN
+                  // a same-tenant duplicate gets (the `dupId` branch above), so cross-tenant and
+                  // same-tenant existence are indistinguishable — never a 500 that singles out
+                  // cross-tenant existence (security-guide §2.2; task 114). Fails closed.
+                  if (isUniqueViolation(err)) throw new IdentityError('ENROLL_DEVICE_ID_TAKEN');
+                  throw err;
+                }
 
                 await appendAudit(db, tenantId, {
                   actorUserId: control.userId,

@@ -15,6 +15,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { forTenant as dbForTenant, type ForTenant, type TenantDb } from '@bolusi/db-server';
 
 import { createPasswordVerifier, randomBase58 } from '../crypto/index.js';
+import { isUniqueViolation } from '../db-errors.js';
 import { appendAudit } from '../identity/audit.js';
 import { DEFAULT_ROLES } from '../identity/permissions.js';
 import { uuidv7 } from '../uuidv7.js';
@@ -51,10 +52,6 @@ export class OwnerLoginExistsError extends Error {
     super(`--owner-login "${login}" already exists (globally unique); refusing to provision`);
     this.name = 'OwnerLoginExistsError';
   }
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }
 
 /** The default production deps (real crypto + db-server forTenant). */
