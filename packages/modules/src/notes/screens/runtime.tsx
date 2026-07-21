@@ -18,9 +18,11 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { DomainError, type QueryPage } from '@bolusi/core';
+import type { MediaRef } from '@bolusi/schemas';
 import type { OperationSyncStatus } from '@bolusi/ui';
 
 import type { CreateNoteInput, EditNoteBodyInput, ArchiveNoteInput } from '../commands.js';
+import type { ThumbnailRef } from '../media-ref.js';
 import type { GetNoteInput, ListNotesInput, NoteRow } from '../queries.js';
 
 /** The `Operation.syncStatus` of every op backing a note, keyed by note id (design-system §3.5). */
@@ -35,9 +37,15 @@ export type ThumbnailState =
   /** 06 §6: two fetches disagreed with the signed hash — never shown, always a distinct state. */
   | { readonly kind: 'mismatch' };
 
-/** What the in-app capture flow (06 §2.1; task 82) hands back — the id the note op will carry. */
+/**
+ * What the in-app capture flow (06 §2.1; task 82) hands back — the whole `mediaRef` the note op will
+ * carry, not just the id. The capture pipeline already computes the SHA-256 over the final bytes
+ * (06 §2.2 step 6), and the note's signed payload is the only tamper-evident place that hash can
+ * live (05 §2), so dropping everything but the id here would make every note this device creates
+ * unverifiable on every OTHER device (06 §6).
+ */
 export interface CapturedMedia {
-  readonly mediaId: string;
+  readonly mediaRef: MediaRef;
 }
 
 /**
@@ -69,8 +77,16 @@ export interface NotesRuntime {
   hasPermission(permissionId: string): boolean;
   /** Open the in-app capture flow (task 82) and resolve the attached media, or null if cancelled. */
   capturePhoto(): Promise<CapturedMedia | null>;
-  /** Resolve a note's `mediaId` to a displayable, hash-verified thumbnail (06 §6, media client). */
-  loadThumbnail(mediaId: string): Promise<ThumbnailState>;
+  /**
+   * Resolve a note's attachment to a displayable thumbnail (06 §6, media client).
+   *
+   * Takes the whole {@link ThumbnailRef}, not a bare id: a `signed` ref may be fetched and MUST be
+   * verified against its `sha256` before display, while a `legacy` ref may only be resolved from a
+   * local file. An id alone would leave the implementation with no hash to verify against and no way
+   * to tell the two cases apart — which is exactly why a pulled note's photo used to be
+   * unverifiable.
+   */
+  loadThumbnail(ref: ThumbnailRef): Promise<ThumbnailState>;
 }
 
 const NotesRuntimeContext = createContext<NotesRuntime | null>(null);
@@ -176,23 +192,39 @@ export function useCommand<TInput, TOutput>(
 
 /**
  * Resolve a note's attachment to a displayable, hash-verified thumbnail (06 §6 via the media client).
- * `null` mediaId ⇒ the note has no attachment and nothing loads. A resolver throw degrades to
+ * `null` ref ⇒ the note has no attachment and nothing loads. A resolver throw degrades to
  * `unavailable` (api/03 §8: a missing photo is transient, never an error the whole screen dies on).
+ *
+ * A throw must NEVER degrade to `ready`, and a `mismatch` must never be softened into `unavailable`:
+ * both would render bytes, or the absence of a complaint, where 06 §6 requires a distinct and
+ * visible failure.
  */
-export function useThumbnail(mediaId: string | null): ThumbnailState {
+export function useThumbnail(ref: ThumbnailRef | null): ThumbnailState {
   const runtime = useNotesRuntime();
   const [state, setState] = useState<ThumbnailState>(
-    mediaId === null ? { kind: 'unavailable' } : { kind: 'loading' },
+    ref === null ? { kind: 'unavailable' } : { kind: 'loading' },
   );
 
+  // The identity the effect depends on. An object literal rebuilt each render would re-run the
+  // effect (and re-fetch) on every parent re-render; the fields ARE the identity.
+  const refKey =
+    ref === null
+      ? null
+      : ref.kind === 'signed'
+        ? `s:${ref.mediaId}:${ref.sha256}`
+        : `l:${ref.mediaId}`;
+  const refRef = useRef(ref);
+  refRef.current = ref;
+
   useEffect(() => {
-    if (mediaId === null) {
+    const current = refRef.current;
+    if (current === null) {
       setState({ kind: 'unavailable' });
       return;
     }
     let active = true;
     setState({ kind: 'loading' });
-    runtime.loadThumbnail(mediaId).then(
+    runtime.loadThumbnail(current).then(
       (resolved) => {
         if (active) setState(resolved);
       },
@@ -203,7 +235,7 @@ export function useThumbnail(mediaId: string | null): ThumbnailState {
     return () => {
       active = false;
     };
-  }, [runtime, mediaId]);
+  }, [runtime, refKey]);
 
   return state;
 }

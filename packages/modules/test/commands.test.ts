@@ -24,6 +24,19 @@ const CREATE = notesModule.commands.createNote;
 const EDIT = notesModule.commands.editNoteBody;
 const ARCHIVE = notesModule.commands.archiveNote;
 
+/** A complete `mediaRef` (06 §3.2) — what the capture pipeline hands `createNote` at v3. */
+const MEDIA_REF = {
+  mediaId: '01920000-0000-7000-8000-0000000f000a',
+  sha256: 'b'.repeat(64),
+  mime: 'image/jpeg',
+  type: 'image',
+  sizeBytes: 231_044,
+  capturedAt: 1_726_000_000_000,
+  location: null,
+  userId: '01920000-0000-7000-8000-0000000e000a',
+  deviceId: '01920000-0000-7000-8000-0000000d000a',
+} as const;
+
 async function expectDomainError(p: Promise<unknown>, code: string): Promise<DomainError> {
   const err = await p.then(
     () => {
@@ -55,7 +68,7 @@ async function notesRows(harness: Harness): Promise<Record<string, unknown>[]> {
 }
 
 describe('notes command units (04 §5 / §8)', () => {
-  test('createNote → v2 note_created with a runtime-completed envelope + a query-visible row', async () => {
+  test('createNote → v3 note_created with a runtime-completed envelope + a query-visible row', async () => {
     h = await openHarness(1);
     const outcome = await h.runtime.commands.execute(
       CREATE,
@@ -65,12 +78,12 @@ describe('notes command units (04 §5 / §8)', () => {
 
     const ops = await opsOfType(h, 'notes.note_created');
     expect(ops).toHaveLength(1);
-    // schemaVersion resolved to 2 from the registry (a handler cannot state its own version).
-    expect(ops[0]!.schemaVersion).toBe(2);
+    // schemaVersion resolved to 3 from the registry (a handler cannot state its own version).
+    expect(ops[0]!.schemaVersion).toBe(3);
     expect(JSON.parse(ops[0]!.payload as string)).toStrictEqual({
       title: 'Stok kopi',
       body: 'Sisa 4 karung',
-      mediaId: null, // present-and-null (05 §3), even with no photo
+      mediaRef: null, // present-and-null (05 §3), even with no photo
     });
     // The runtime stamped the envelope: store from the device (01 §9), user = the actor.
     expect(ops[0]!.storeId).toBe(h.storeId);
@@ -85,18 +98,19 @@ describe('notes command units (04 §5 / §8)', () => {
     expect(rows[0]!.editCount).toBe(0);
   });
 
-  test('media attach — createNote with a mediaId emits a v2 op carrying it; media_id is set (04 §8 box 8)', async () => {
+  test('media attach — createNote with a mediaRef emits a v3 op carrying the SIGNED hash (04 §8 box 8)', async () => {
     h = await openHarness(2);
     await h.runtime.commands.execute(
       CREATE,
-      { title: 'Nota', body: 'lihat foto', mediaId: '01920000-0000-7000-8000-0000000f000a' },
+      { title: 'Nota', body: 'lihat foto', mediaRef: MEDIA_REF },
       h.runtime.commands.createContext(h.notesUserId),
     );
     const ops = await opsOfType(h, 'notes.note_created');
-    // The op's payload carries the media id — it syncs/applies independently of upload (FR-1138).
-    expect(JSON.parse(ops[0]!.payload as string).mediaId).toBe(
-      '01920000-0000-7000-8000-0000000f000a',
-    );
+    // The payload carries the whole ref — it syncs/applies independently of upload (FR-1138), and
+    // the sha256 is what a DIFFERENT device will verify the downloaded bytes against (06 §6).
+    const payload = JSON.parse(ops[0]!.payload as string) as { mediaRef: Record<string, unknown> };
+    expect(payload.mediaRef['mediaId']).toBe('01920000-0000-7000-8000-0000000f000a');
+    expect(payload.mediaRef['sha256']).toBe(MEDIA_REF.sha256);
     const rows = await notesRows(h);
     expect(rows[0]!.mediaId).toBe('01920000-0000-7000-8000-0000000f000a');
   });

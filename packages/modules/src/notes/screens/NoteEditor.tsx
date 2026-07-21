@@ -9,9 +9,10 @@
  * Title is set once at creation (01 §9 — v0 has no title edit), so edit mode shows it read-only and
  * edits only the body. Edit mode LOADS its note through `useQuery` (04 §7) and therefore ships all
  * four §5 states; create mode has nothing to load and is the form directly. Media attach is a
- * create-only affordance (the v2 `note_created` payload carries the `mediaId`) and reuses the
+ * create-only affordance (the v3 `note_created` payload carries the whole `mediaRef`) and reuses the
  * task-82 capture flow through the runtime seam.
  */
+import type { MediaRef } from '@bolusi/schemas';
 import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
@@ -179,18 +180,21 @@ function EditorForm({
 
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
-  const [mediaId, setMediaId] = useState<string | null>(null);
+  // The WHOLE signed ref, not just the id: the v3 `note_created` payload carries it so that a
+  // device pulling this note can download-verify the photo against a hash our signature covers
+  // (06 §6 / 05 §2). Keeping only the id here is what made remote thumbnails unverifiable.
+  const [mediaRef, setMediaRef] = useState<MediaRef | null>(null);
   const [titleMissing, setTitleMissing] = useState(false);
   const [discardPrompt, setDiscardPrompt] = useState(false);
 
   const dirty =
     mode === 'create'
-      ? title.trim() !== '' || body !== '' || mediaId !== null
+      ? title.trim() !== '' || body !== '' || mediaRef !== null
       : body !== initialBody;
 
   const attach = (): void => {
     void runtime.capturePhoto().then((captured) => {
-      if (captured !== null) setMediaId(captured.mediaId);
+      if (captured !== null) setMediaRef(captured.mediaRef);
     });
   };
 
@@ -205,7 +209,7 @@ function EditorForm({
       }
       // OPTIMISTIC: fire and return. NOT awaited — see the file header. Breaking this to `await`
       // is the falsified defect the mounted test reds on.
-      void createNote({ title: trimmed, body, mediaId });
+      void createNote({ title: trimmed, body, mediaRef });
       onDone();
       return;
     }
@@ -268,7 +272,7 @@ function EditorForm({
             onPress={attach}
             testID={`${testID}.attach`}
           />
-          {mediaId === null ? null : (
+          {mediaRef === null ? null : (
             <View style={styles.attached} testID={`${testID}.attached`}>
               <Icon name="attachment" size={size.iconInline} color={color.success} />
               <Text style={styles.attachedText}>{tn('notes.action.attachPhoto')}</Text>

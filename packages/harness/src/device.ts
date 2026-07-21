@@ -28,7 +28,7 @@ import {
 import type { ClientDatabase } from '@bolusi/db-client';
 import { createClientOpStore } from '@bolusi/db-client';
 import { notesModule, notesModuleManifest } from '@bolusi/modules/notes';
-import type { SignedOperation } from '@bolusi/schemas';
+import type { MediaRef, SignedOperation } from '@bolusi/schemas';
 import type { FakeClock } from '@bolusi/test-support';
 import { makeIdSource, noblePort, type Prng } from '@bolusi/test-support';
 
@@ -168,7 +168,9 @@ export class VirtualDevice {
   async createNote(input: {
     title: string;
     body: string;
-    mediaId?: string | null;
+    /** The whole signed `mediaRef` at schemaVersion 3 — a bare id can no longer be attached, because
+     *  a note pulled by another device would have no hash to verify its photo against (06 §6). */
+    mediaRef?: MediaRef | null;
   }): Promise<string> {
     const outcome = await this.runtime.commands.execute(
       this.#command('notes.createNote'),

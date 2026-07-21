@@ -9,12 +9,7 @@
  * parameters is what lets a test drive the SAME screens over a real runtime with fake media.
  */
 import { NOTE_ENTITY, NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
-import type {
-  CapturedMedia,
-  NoteSyncStatuses,
-  NotesRuntime,
-  ThumbnailState,
-} from '@bolusi/modules/notes/screens';
+import type { CapturedMedia, NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { CommandIdentity, CommandOutcome, InvalidationBus, ModuleRuntime } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import type { OperationSyncStatus } from '@bolusi/ui';
@@ -28,8 +23,14 @@ export interface NotesRuntimeDeps {
   readonly noteSyncStatuses: (noteIds: readonly string[]) => Promise<NoteSyncStatuses>;
   /** Task-82 capture flow, resolved to the attached media id (or null on cancel). */
   readonly capturePhoto: () => Promise<CapturedMedia | null>;
-  /** Media client's verified thumbnail (06 §6). */
-  readonly loadThumbnail: (mediaId: string) => Promise<ThumbnailState>;
+  /**
+   * Media client's verified thumbnail (06 §6).
+   *
+   * DERIVED FROM THE PORT, not restated: the argument is a `ThumbnailRef`, which carries the SIGNED
+   * sha256/mime for a v3 note and only an id for a legacy v1/v2 one. Re-declaring the signature here
+   * would let this file keep compiling against a stale shape while the port moved underneath it.
+   */
+  readonly loadThumbnail: NotesRuntime['loadThumbnail'];
 }
 
 /** `CommandRuntime.execute` returns `{ ops, result, timestamp }`; the screens want the typed result. */

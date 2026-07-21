@@ -28,6 +28,8 @@ const DDL_ORDER = [
   'title',
   'body',
   'media_id',
+  'media_sha256',
+  'media_mime',
   'archived',
   'edit_count',
   'created_by',
@@ -104,8 +106,9 @@ describe('notes conflict declarations (01 §8.1)', () => {
     expect(registry.operations.conflictFor('notes.note_archived')).toBeUndefined();
   });
 
-  test('note_created is at schemaVersion 2; the edit/archive types are v1', () => {
-    expect(registry.operations.schemaVersionFor('notes.note_created')).toBe(2);
+  test('note_created is at schemaVersion 3; the edit/archive types are v1', () => {
+    // v3 carries the whole signed mediaRef so a PULLED note can download-verify its photo (06 §6).
+    expect(registry.operations.schemaVersionFor('notes.note_created')).toBe(3);
     expect(registry.operations.schemaVersionFor('notes.note_body_edited')).toBe(1);
     expect(registry.operations.schemaVersionFor('notes.note_archived')).toBe(1);
   });

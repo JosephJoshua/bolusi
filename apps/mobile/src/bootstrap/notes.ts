@@ -28,7 +28,9 @@
 import { readStoreId, readTenantId, type CommandIdentity, type DeviceIdentity } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
+import type { MediaClient } from '../media/client.js';
 import { createNotesRuntime, readNoteSyncStatuses } from '../screens/notes/runtime-adapter.js';
+import { createNotesThumbnailLoader } from '../screens/notes/thumbnail.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import type { AppRuntime } from './runtime.js';
@@ -71,6 +73,28 @@ export const UNWIRED_NOTES_MEDIA: NotesMediaSeams = {
     Promise.reject(new Error('notes capture is not wired (no media seams injected)')),
   loadThumbnail: () => Promise.resolve({ kind: 'unavailable' }),
 };
+
+/**
+ * Choose the notes media seams for a given media client (task 120) — THE single decision of whether a
+ * note's photo can be download-verified on this device.
+ *
+ * `null` ⇒ this device has no media client (never enrolled, or the pipeline has not started yet), so
+ * the honest seams are the unwired ones: every photo is `unavailable`, which api/03 §8 makes an
+ * expected transient state. A non-null client ⇒ bind the REAL thumbnail loader, which runs 06 §6's
+ * fetch-and-verify for a pulled note.
+ *
+ * Extracted from the composition root and EXPORTED on purpose. The `null` branch is a fallback, and
+ * the failure mode of a silent fallback is the one this repo keeps shipping (CLAUDE.md §2.11): a note
+ * photo that renders `unavailable` forever throws nothing, logs nothing, and reds no test — it is
+ * indistinguishable from a photo that has genuinely not uploaded. Pulling the choice out here makes
+ * "media present ⇒ real loader, media absent ⇒ unavailable" a directly-tested contract
+ * (notes.media-seams.test.ts) rather than an untestable literal buried in `createNotes`, so the
+ * fallback is a fact a test asserts instead of a silence nobody reads.
+ */
+export function notesMediaSeamsFor(media: MediaClient | null): NotesMediaSeams {
+  if (media === null) return UNWIRED_NOTES_MEDIA;
+  return { ...UNWIRED_NOTES_MEDIA, loadThumbnail: createNotesThumbnailLoader(media) };
+}
 
 /**
  * The acting identity for a session on THIS device, or `null` when the device cannot supply one.

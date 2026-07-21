@@ -84,6 +84,8 @@ export const notesTable: ProjectionTableManifest = {
     title: 'text',
     body: 'text',
     media_id: 'text',
+    media_sha256: 'text',
+    media_mime: 'text',
     archived: 'integer',
     edit_count: 'integer',
     created_by: 'text',

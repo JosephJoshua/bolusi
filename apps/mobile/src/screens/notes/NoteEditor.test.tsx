@@ -6,7 +6,13 @@ import type { CreateNoteInput, EditNoteBodyInput } from '@bolusi/modules/notes';
 import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
-import { fakeRuntime, fire, page, renderNotes } from '../../../test/notes-support.js';
+import {
+  fakeRuntime,
+  fire,
+  page,
+  renderNotes,
+  TEST_MEDIA_REF,
+} from '../../../test/notes-support.js';
 import type { NoteRow } from '@bolusi/modules/notes';
 
 async function settle(): Promise<void> {
@@ -20,6 +26,8 @@ const note = (over: Partial<NoteRow> = {}): NoteRow => ({
   title: 'Judul lama',
   body: 'Isi lama',
   mediaId: null,
+  mediaSha256: null,
+  mediaMime: null,
   archived: false,
   editCount: 0,
   createdBy: 'user-1',
@@ -51,7 +59,7 @@ describe('NoteEditor — optimistic save (the falsified deliverable)', () => {
     fire(screen.get('notes.editor.save'), 'onPress');
 
     expect(onDone).toHaveBeenCalledTimes(1); // returned to the list without awaiting the command
-    expect(captured).toStrictEqual({ title: 'Judul baru', body: 'Isi baru', mediaId: null });
+    expect(captured).toStrictEqual({ title: 'Judul baru', body: 'Isi baru', mediaRef: null });
     expect(screen.query('notes.editor.save.spinner')).toBeNull(); // never a busy spinner (§4.2)
   });
 
@@ -185,7 +193,7 @@ describe('NoteEditor — discard ConfirmSheet + media capture', () => {
   test('capture attaches a MediaItem, and the created note carries its id', async () => {
     let captured: CreateNoteInput | null = null;
     const rt = fakeRuntime({
-      capturePhoto: () => Promise.resolve({ mediaId: 'media-99' }),
+      capturePhoto: () => Promise.resolve({ mediaRef: TEST_MEDIA_REF }),
       createNote: (input) => {
         captured = input;
         return Promise.resolve({ noteId: 'note-new' });
@@ -211,6 +219,6 @@ describe('NoteEditor — discard ConfirmSheet + media capture', () => {
 
     fire(screen.get('notes.editor.title.field'), 'onChangeText', 'Layar retak');
     fire(screen.get('notes.editor.save'), 'onPress');
-    expect(captured).toStrictEqual({ title: 'Layar retak', body: '', mediaId: 'media-99' });
+    expect(captured).toStrictEqual({ title: 'Layar retak', body: '', mediaRef: TEST_MEDIA_REF });
   });
 });

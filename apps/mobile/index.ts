@@ -16,7 +16,7 @@ import {
   type EnrollmentPlatform,
 } from './src/bootstrap/enrollment.js';
 import { readDeviceInfo } from './src/bootstrap/device-info.js';
-import { createSessionNotesRuntime, UNWIRED_NOTES_MEDIA } from './src/bootstrap/notes.js';
+import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
 import { Root } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
@@ -265,10 +265,16 @@ function createSession(
  *   - `capturePhoto` needs the in-app capture flow (a `CameraView` ref reaching `MediaClient.
  *     capturePhoto`), which lives in a screen the notes editor does not yet route to. It REJECTS, so
  *     the button reports a failure instead of silently behaving like a cancel.
- *   - `loadThumbnail` needs the SIGNED sha256/mime to verify a downloaded photo against (06 §6). For
- *     a PULLED note that value does not exist yet: `notes.note_created` carries a bare `mediaId`.
- *     That is task 120's payload change, in flight. Until it lands, `unavailable` is the only answer
- *     06 §6 permits — fetching and rendering unverified bytes is precisely what it forbids.
+ * `loadThumbnail` is now REAL (task 120). It was `unavailable` because 06 §6 needs the signed
+ * sha256/mime to verify a downloaded photo against, and schemaVersion 2's `notes.note_created`
+ * carried only a bare `mediaId` — so for a PULLED note no hash existed on this device at any price.
+ * schemaVersion 3 carries the whole signed `mediaRef`, so the verify has something to check against
+ * and the bridge binds to the real media client. A device with no media client still gets the honest
+ * `unavailable` seams rather than a thumbnail loader that cannot load.
+ *
+ * `capturePhoto` remains unwired: it needs the in-app capture flow (a `CameraView` ref reaching
+ * `MediaClient.capturePhoto`), which lives in a screen the notes editor does not yet route to. It
+ * REJECTS, so the button reports a failure instead of silently behaving like a cancel.
  *
  * The reads, writes, permission enforcement and live-query invalidation are all REAL regardless: the
  * notes list, detail and editor work over the live database today.
@@ -277,8 +283,14 @@ function createNotes(
   app: Bootstrapped,
   runtime: AppRuntime,
   identity: CommandIdentity,
+  media: MediaClient | null,
 ): NotesRuntime {
-  return createSessionNotesRuntime({ app, runtime, identity, media: UNWIRED_NOTES_MEDIA });
+  return createSessionNotesRuntime({
+    app,
+    runtime,
+    identity,
+    media: notesMediaSeamsFor(media),
+  });
 }
 
 function Bootstrapped(): React.JSX.Element | null {

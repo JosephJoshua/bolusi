@@ -41,6 +41,26 @@ export const USER_B = '01920000-0000-7000-8000-0000000e000b';
 /** A valid media attachment id (UUIDv7 — 01 §5.3; `notes.media_id` is `uuid` on the server). */
 export const MEDIA_A = '01920000-0000-7000-8000-0000000f000a';
 
+/** The SHA-256 the signed v3 `mediaRef` pins for {@link MEDIA_A} — lowercase hex, 64 chars. */
+export const MEDIA_A_SHA256 = 'a'.repeat(64);
+
+/**
+ * A complete `mediaRef` (06 §3.2) for {@link MEDIA_A} — the shape a schemaVersion-3
+ * `notes.note_created` payload carries. Complete by construction: there is no way to build one
+ * that attaches media without its signed `sha256`/`mime`.
+ */
+export const MEDIA_A_REF = {
+  mediaId: MEDIA_A,
+  sha256: MEDIA_A_SHA256,
+  mime: 'image/jpeg',
+  type: 'image',
+  sizeBytes: 231_044,
+  capturedAt: 1_726_000_000_000,
+  location: null,
+  userId: USER_A,
+  deviceId: DEVICE_A,
+} as const;
+
 /** A stable, distinct note entity id (valid UUIDv7 hex) for index `n`. */
 export function noteId(n: number): string {
   return `01920000-0000-7000-8000-${n.toString(16).padStart(12, '0')}`;
@@ -129,6 +149,10 @@ async function createNotesTables(db: Kysely<never>): Promise<void> {
     .addColumn('title', 'text', (c) => c.notNull())
     .addColumn('body', 'text', (c) => c.notNull())
     .addColumn('media_id', 'text')
+    // schemaVersion 3 (06 §3.1/§6): the SIGNED hash + mime of the attachment, so a note pulled from
+    // another device can download-verify its photo. Null for v1 (no media) and v2 (mediaId only).
+    .addColumn('media_sha256', 'text')
+    .addColumn('media_mime', 'text')
     .addColumn('archived', 'boolean', (c) => c.notNull())
     .addColumn('edit_count', 'integer', (c) => c.notNull().defaultTo(0))
     .addColumn('created_by', 'text', (c) => c.notNull())

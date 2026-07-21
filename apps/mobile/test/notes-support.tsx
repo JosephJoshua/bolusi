@@ -43,6 +43,24 @@ export function page(
   return { rows, nextCursor };
 }
 
+/**
+ * A complete signed `mediaRef` (06 §3.2) — ONE definition for every notes screen test (§2.8).
+ *
+ * Complete on purpose: at schemaVersion 3 a note either has no attachment or a whole signed ref, so
+ * a fixture carrying a bare id would not typecheck — which is the schema doing its job.
+ */
+export const TEST_MEDIA_REF = {
+  mediaId: '01920000-0000-7000-8000-0000000f0099',
+  sha256: 'd'.repeat(64),
+  mime: 'image/jpeg',
+  type: 'image',
+  sizeBytes: 231_044,
+  capturedAt: 1_726_000_000_000,
+  location: null,
+  userId: '01920000-0000-7000-8000-0000000e000a',
+  deviceId: '01920000-0000-7000-8000-0000000d000a',
+} as const;
+
 export interface HarnessRuntimeOverrides {
   readonly capturePhoto?: NotesRuntime['capturePhoto'];
   readonly loadThumbnail?: NotesRuntime['loadThumbnail'];

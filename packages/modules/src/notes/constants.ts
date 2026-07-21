@@ -31,11 +31,13 @@ export const NOTES_PERMISSION = {
 } as const;
 
 /**
- * The current payload version of `notes.note_created` (01 §9): v2 adds `mediaId`. The applier folds
- * BOTH v1 and v2 forever (05 §7 — old ops never disappear); the registry's payload schema and every
- * freshly-emitted op are v2. `note_body_edited` and `note_archived` are v1 only.
+ * The current payload version of `notes.note_created` (01 §9): v2 added `mediaId`, v3 replaced it
+ * with the whole signed `mediaRef` so a PULLED note can download-verify its photo against a hash the
+ * op's signature covers (06 §6 / 05 §2 — see operations.ts for the full argument). The applier folds
+ * ALL THREE forever (05 §7 — old ops never disappear); the registry's payload schema and every
+ * freshly-emitted op are v3. `note_body_edited` and `note_archived` are v1 only.
  */
-export const NOTE_CREATED_SCHEMA_VERSION = 2 as const;
+export const NOTE_CREATED_SCHEMA_VERSION = 3 as const;
 
 /** The conflict key `note_body_edited` declares (01 §8.1) — Rule-1 detection keys off it. */
 export const NOTE_BODY_CONFLICT_KEY = 'note.body' as const;

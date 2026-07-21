@@ -36,6 +36,7 @@ import {
   type DbDriver,
   type DbDriverOpenParams,
 } from '@bolusi/db-client';
+import { CLIENT_MIGRATIONS } from '@bolusi/db-client';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -115,6 +116,16 @@ function boot(location?: string) {
   });
 }
 
+/**
+ * Every shipped client migration version, in order — DERIVED, never a hardcoded `[1]`.
+ *
+ * The denominator below is the POINT of these assertions (T-14), so it has to track the real
+ * registry: writing the literal list means every future migration reds these tests for no reason,
+ * which is how a real signal gets retrained into noise. Deriving it keeps the assertion meaningful
+ * (a runner that applied NOTHING still fails) while surviving `note_media_ref` and its successors.
+ */
+const SHIPPED_MIGRATION_VERSIONS = CLIENT_MIGRATIONS.map((m) => m.version);
+
 describe('the DB opens, migrates, and PERSISTS — the reproduction, standing', () => {
   test('a cold boot opens the one connection and migrates it', async () => {
     expect(isClientDbOpen()).toBe(false); // nothing is open before the bootstrap runs
@@ -125,8 +136,10 @@ describe('the DB opens, migrates, and PERSISTS — the reproduction, standing', 
     // DENOMINATOR (T-14): assert the COUNT, not just "no throw". `runClientMigrations` over an
     // empty migration list returns `applied: []` and reports success having created no schema —
     // the loop-over-an-empty-registry failure this repo has shipped eight times.
-    expect(app.migrationsApplied).toStrictEqual([1]);
-    expect(app.migrationsApplied).toHaveLength(1);
+    expect(app.migrationsApplied).toStrictEqual(SHIPPED_MIGRATION_VERSIONS);
+    expect(app.migrationsApplied).toHaveLength(CLIENT_MIGRATIONS.length);
+    // …and the registry is not itself empty, which is the failure the count above exists to catch.
+    expect(CLIENT_MIGRATIONS.length).toBeGreaterThan(0);
     await app.close();
   });
 
@@ -138,8 +151,8 @@ describe('the DB opens, migrates, and PERSISTS — the reproduction, standing', 
     `.execute(app.db.db);
 
     // Read the bookkeeping the runner wrote, not the value it returned: a runner that returned
-    // `[1]` while inserting nothing would pass the test above and fail this one.
-    expect(rows.rows.map((r) => Number(r.version))).toStrictEqual([1]);
+    // the version list while inserting nothing would pass the test above and fail this one.
+    expect(rows.rows.map((r) => Number(r.version))).toStrictEqual(SHIPPED_MIGRATION_VERSIONS);
     await app.close();
   });
 
@@ -163,8 +176,8 @@ describe('the DB opens, migrates, and PERSISTS — the reproduction, standing', 
     `.execute(second.db.db);
 
     expect(rows.rows[0]?.value).toBe('written-before-restart');
-    // The runner is idempotent: the second boot re-applies nothing. An `applied: [1]` here would
-    // mean the migration ran twice — i.e. the bookkeeping is not being read.
+    // The runner is idempotent: the second boot re-applies nothing. A non-empty list here would
+    // mean the migrations ran twice — i.e. the bookkeeping is not being read.
     expect(second.migrationsApplied).toStrictEqual([]);
     await second.close();
   });
@@ -191,7 +204,7 @@ describe('EXACTLY ONE connection per DB, app-wide (08 §2.2 — a data-corruptio
 
     expect(isClientDbOpen()).toBe(true);
     const rows = await sql<{ c: number }>`SELECT COUNT(*) AS c FROM migrations`.execute(app.db.db);
-    expect(Number(rows.rows[0]?.c)).toBe(1);
+    expect(Number(rows.rows[0]?.c)).toBe(CLIENT_MIGRATIONS.length);
     await app.close();
   });
 

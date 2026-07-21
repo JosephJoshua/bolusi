@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
+import { zMediaRef } from '@bolusi/schemas';
 
 import { NOTE_ENTITY, NOTES_OP } from './constants.js';
 import { getNoteQuery } from './queries.js';
@@ -16,25 +17,32 @@ import { getNoteQuery } from './queries.js';
  * `createNote` input (04 §5).
  *
  * `title.min(1)` makes an empty title `VALIDATION_FAILED` at execute step 1 — the handler never
- * runs, nothing is appended. `mediaId` is `.nullable().default(null)` so the emitted op's payload
+ * runs, nothing is appended. `mediaRef` is `.nullable().default(null)` so the emitted op's payload
  * always carries it present-and-null (05 §3): a note created without a photo still records the
- * v2 shape, so v1 vs v2 is a property of the op's `schemaVersion`, never of which keys are present.
- * `.strict()` rejects an unknown key.
+ * v3 shape, so the version is a property of the op's `schemaVersion`, never of which keys are
+ * present. `.strict()` rejects an unknown key.
+ *
+ * It takes the WHOLE `mediaRef`, not a bare `mediaId`, because the op payload is the only
+ * tamper-evident place the attachment's `sha256` can live (05 §2) and a device that pulls this note
+ * has no other source for it (06 §6). Callers get the complete ref from the capture pipeline, which
+ * computes the hash over the final bytes at capture (06 §2.2 step 6) — so this asks for nothing the
+ * caller has to derive or invent.
  */
 export const createNoteInput = z
   .object({
     title: z.string().min(1),
     body: z.string(),
-    mediaId: z.string().nullable().default(null),
+    mediaRef: zMediaRef.nullable().default(null),
   })
   .strict();
 
 export type CreateNoteInput = z.infer<typeof createNoteInput>;
 
 /**
- * Create a note. Mints a fresh entity id (`ctx.newId()` — UUIDv7) and emits a v2 `note_created`
- * whose payload carries the `mediaId` (04 §8 media-attach: the op syncs/applies independently of the
- * media upload — the projection just records the id). No read needed: a create has no precondition.
+ * Create a note. Mints a fresh entity id (`ctx.newId()` — UUIDv7) and emits a v3 `note_created`
+ * whose payload carries the whole signed `mediaRef` (04 §8 media-attach: the op syncs/applies
+ * independently of the media UPLOAD — the projection records the ref, and the bytes catch up on
+ * their own schedule, FR-1138). No read needed: a create has no precondition.
  */
 export function createNoteHandler(
   input: CreateNoteInput,
@@ -47,9 +55,9 @@ export function createNoteHandler(
         type: NOTES_OP.noteCreated,
         entityType: NOTE_ENTITY,
         entityId: noteId,
-        // v2 payload (mediaId present-and-null). The runtime resolves schemaVersion 2 from the
+        // v3 payload (mediaRef present-and-null). The runtime resolves schemaVersion 3 from the
         // registry (ctx.ts) — a handler may not state its own version.
-        payload: { title: input.title, body: input.body, mediaId: input.mediaId },
+        payload: { title: input.title, body: input.body, mediaRef: input.mediaRef },
       }),
     ],
     result: { noteId },

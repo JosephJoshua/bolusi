@@ -36,8 +36,19 @@ export interface NotesTable {
   title: string;
   /** Last body in canonical order (LWW — the engine guarantees order, §4.2). */
   body: string;
-  /** One attachment; null for v1 notes and v2 notes with no media (01 §9). */
+  /** One attachment; null for v1 notes and v2/v3 notes with no media (01 §9). */
   mediaId: string | null;
+  /**
+   * The SIGNED SHA-256 of the attachment, from the v3 payload's `mediaRef` (06 §3.2). This is what
+   * makes a PULLED note's photo download-verifiable (06 §6) — a remote note has no `media_items` row
+   * to read a hash from, and the op signature is what makes this copy trustworthy.
+   *
+   * Null for v1 (no media) and v2 (id only, no hash ever carried). A null here is NOT "unknown yet"
+   * — it means this note can only be resolved from a local file, never fetched-and-claimed-verified.
+   */
+  mediaSha256: string | null;
+  /** The attachment's signed mime (06 §3.2) — picks the cache file extension on the render path. */
+  mediaMime: string | null;
   /** `0 | 1` — logical `'boolean'` in the manifest. See the header for why it is not `boolean`. */
   archived: number;
   /** +1 per applied `note_body_edited` (01 §9 testability column; testing-guide §3.2). */

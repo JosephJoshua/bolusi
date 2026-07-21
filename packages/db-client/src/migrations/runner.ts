@@ -1,10 +1,14 @@
 // Versioned client migration runner (10-db §9.1 `migrations` table, §11.4).
 import { toDbError, type DbDriver } from '../driver.js';
 import { initialSchemaMigration } from './001-initial-schema.js';
+import { noteMediaRefMigration } from './002-note-media-ref.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
-export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [initialSchemaMigration];
+export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
+  initialSchemaMigration,
+  noteMediaRefMigration,
+];
 
 export interface RunMigrationsOptions {
   /**

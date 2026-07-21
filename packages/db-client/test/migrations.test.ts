@@ -121,11 +121,12 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1]);
+    expect(result.applied).toEqual([1, 2]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
       { version: 1, name: 'initial_schema', applied_at: 1_700_000_000_000 },
+      { version: 2, name: 'note_media_ref', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -135,16 +136,23 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1]);
+    expect(first.applied).toEqual([1, 2]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 1 }]);
+    expect(rows.rows).toEqual([{ c: 2 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
   });
 });
+
+// The first version number NOT taken by a shipped migration. Derived, never hardcoded: these tests
+// inject a synthetic migration that must sort AFTER every real one, and writing `2` here (as they
+// originally did) silently collides the moment a real migration 2 ships — which is exactly what
+// happened when `note_media_ref` landed.
+const NEXT_FREE_VERSION = Math.max(...CLIENT_MIGRATIONS.map((m) => m.version)) + 1;
+const SHIPPED_VERSIONS = CLIENT_MIGRATIONS.map((m) => ({ version: m.version }));
 
 describe('transactional apply', () => {
   test('a failing migration leaves NO partial schema', async () => {
@@ -176,13 +184,17 @@ describe('transactional apply', () => {
         now: () => 2,
         migrations: [
           ...CLIENT_MIGRATIONS,
-          { version: 2, name: 'broken', statements: [`CREATE TABLE x (bad sql here`] },
+          {
+            version: NEXT_FREE_VERSION,
+            name: 'broken',
+            statements: [`CREATE TABLE x (bad sql here`],
+          },
         ],
       }),
     ).rejects.toMatchObject({ name: 'DbError' });
 
     const rows = await driver.execute(`SELECT version FROM migrations ORDER BY version`);
-    expect(rows.rows).toEqual([{ version: 1 }]);
+    expect(rows.rows).toEqual(SHIPPED_VERSIONS);
   });
 
   test('applies pending migrations after an already-applied one', async () => {
@@ -192,14 +204,14 @@ describe('transactional apply', () => {
       migrations: [
         ...CLIENT_MIGRATIONS,
         {
-          version: 2,
+          version: NEXT_FREE_VERSION,
           name: 'adds_table',
           statements: [`CREATE TABLE later (id TEXT PRIMARY KEY)`],
         },
       ],
     });
 
-    expect(result.applied).toEqual([2]);
+    expect(result.applied).toEqual([NEXT_FREE_VERSION]);
     expect(await objectNames('table')).toContain('later');
   });
 });

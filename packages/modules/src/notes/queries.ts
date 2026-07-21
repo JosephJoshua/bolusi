@@ -56,6 +56,13 @@ export interface NoteRow {
   readonly title: string;
   readonly body: string;
   readonly mediaId: string | null;
+  /**
+   * The SIGNED hash of the attachment (v3 payloads only — 06 §6). The render path verifies fetched
+   * bytes against THIS before display; `null` means the note predates v3 and is resolvable only from
+   * a local file, never fetched-and-claimed-verified.
+   */
+  readonly mediaSha256: string | null;
+  readonly mediaMime: string | null;
   readonly archived: boolean;
   readonly editCount: number;
   readonly createdBy: string;
@@ -74,6 +81,8 @@ const NOTE_COLUMNS = [
   'title',
   'body',
   'mediaId',
+  'mediaSha256',
+  'mediaMime',
   'archived',
   'editCount',
   'createdBy',
@@ -87,6 +96,8 @@ function toRow(row: {
   title: string;
   body: string;
   mediaId: string | null;
+  mediaSha256: string | null;
+  mediaMime: string | null;
   archived: number | boolean;
   editCount: number;
   createdBy: string;
@@ -99,6 +110,8 @@ function toRow(row: {
     title: row.title,
     body: row.body,
     mediaId: row.mediaId,
+    mediaSha256: row.mediaSha256,
+    mediaMime: row.mediaMime,
     archived: toBool(row.archived),
     editCount: row.editCount,
     createdBy: row.createdBy,

@@ -20,6 +20,7 @@
 // propagates out of the engine's apply, rolling back the whole op (engine.ts transaction model).
 import type { ProjectionApplier, ProjectionTableManifest } from '@bolusi/core';
 import type { ProjectionOperation } from '@bolusi/core';
+import type { MediaRef } from '@bolusi/schemas';
 
 import { NOTE_ENTITY, NOTES_TABLE } from './constants.js';
 import type { NotesDatabase } from './schema.js';
@@ -35,6 +36,27 @@ export interface NoteCreatedV2Payload {
   readonly title: string;
   readonly body: string;
   readonly mediaId: string | null;
+}
+
+/**
+ * `notes.note_created` v3 payload (01 §9) — the whole signed `mediaRef` replaces the bare id, so a
+ * PULLED note carries the `sha256`/`mime` its photo must be download-verified against (06 §6).
+ *
+ * One nullable object, not three sibling fields: "media attached with no signed hash" is thereby
+ * unrepresentable rather than merely discouraged (operations.ts explains at length).
+ */
+export interface NoteCreatedV3Payload {
+  readonly title: string;
+  readonly body: string;
+  readonly mediaRef: MediaRef | null;
+}
+
+/** What the fold extracts from a `note_created` payload, whatever version wrote it. */
+interface NoteMediaColumns {
+  readonly mediaId: string | null;
+  /** The SIGNED hash — v3 only. Null for v1/v2, which never carried one. */
+  readonly mediaSha256: string | null;
+  readonly mediaMime: string | null;
 }
 
 /** `notes.note_body_edited` v1 payload (01 §9). */
@@ -56,6 +78,8 @@ export const notesTable: ProjectionTableManifest = {
     title: 'text',
     body: 'text',
     media_id: 'text',
+    media_sha256: 'text',
+    media_mime: 'text',
     archived: 'boolean',
     edit_count: 'integer',
     created_by: 'text',
@@ -84,14 +108,34 @@ function noteStoreId(op: ProjectionOperation): string {
   return op.storeId;
 }
 
-/** Resolve `media_id` from a `note_created` op by its DECLARED version — never by payload shape. */
-function mediaIdForCreated(op: ProjectionOperation): string | null {
+/**
+ * Resolve the media columns from a `note_created` op by its DECLARED version — never by payload
+ * shape (a payload is caller-shaped; the version is the registry's authoritative answer).
+ *
+ * Only v3 yields a `mediaSha256`. That asymmetry is the backward-compatibility contract, and it is
+ * deliberate rather than a gap: a v2 op never carried a hash, and there is nowhere honest to get one
+ * from now. Back-filling it from the local `media_items` row would be actively harmful — it would
+ * let a render-time check verify the file against a value an attacker with local DB access could
+ * have rewritten to match a substituted file, i.e. verify the file against itself (the argument
+ * core/src/media/download.ts makes at length). So v1/v2 stay null, and the reader treats a null hash
+ * as "local-only, never fetch-and-claim-verified".
+ */
+function mediaForCreated(op: ProjectionOperation): NoteMediaColumns {
   switch (op.schemaVersion) {
     case 1:
       // v1 predates the attachment (01 §9) — no media, ever.
-      return null;
-    case 2:
-      return (op.payload as unknown as NoteCreatedV2Payload).mediaId;
+      return { mediaId: null, mediaSha256: null, mediaMime: null };
+    case 2: {
+      // v2 carried the id but no signed hash — resolvable only via local_path (06 §6).
+      const payload = op.payload as unknown as NoteCreatedV2Payload;
+      return { mediaId: payload.mediaId, mediaSha256: null, mediaMime: null };
+    }
+    case 3: {
+      const ref = (op.payload as unknown as NoteCreatedV3Payload).mediaRef;
+      if (ref === null) return { mediaId: null, mediaSha256: null, mediaMime: null };
+      // Complete by construction — the payload schema admits no ref missing `sha256`/`mime`.
+      return { mediaId: ref.mediaId, mediaSha256: ref.sha256, mediaMime: ref.mime };
+    }
     default:
       throw new Error(
         `notes.note_created is at schemaVersion ${op.schemaVersion}, which this applier does not fold (04 §3/§8). A module must handle every historical version forever (05 §7); bump the applier BEFORE emitting a new version, never after — an unfoldable op in an append-only log is permanent. Rejecting loudly rather than silently skipping (CLAUDE.md §2.11).`,
@@ -102,6 +146,7 @@ function mediaIdForCreated(op: ProjectionOperation): string | null {
 /** Fold `notes.note_created` (v1 or v2) → a fresh `notes` row. */
 export const noteCreatedApplier: ProjectionApplier<NotesDatabase> = async (db, op) => {
   const payload = op.payload as unknown as NoteCreatedV1Payload;
+  const media = mediaForCreated(op);
   await db
     .insertInto('notes')
     .values({
@@ -110,7 +155,9 @@ export const noteCreatedApplier: ProjectionApplier<NotesDatabase> = async (db, o
       storeId: noteStoreId(op),
       title: payload.title,
       body: payload.body,
-      mediaId: mediaIdForCreated(op),
+      mediaId: media.mediaId,
+      mediaSha256: media.mediaSha256,
+      mediaMime: media.mediaMime,
       archived: 0,
       // A fresh note has zero body edits — creation is not an edit (01 §9: edit_count counts
       // note_body_edited applies). A re-fold replays create-then-edits, recomputing this from 0.

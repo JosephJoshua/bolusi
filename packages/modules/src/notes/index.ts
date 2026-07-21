@@ -18,6 +18,8 @@ export {
 
 export type { NotesDatabase, NotesTable } from './schema.js';
 
+export { thumbnailRefFor, type ThumbnailRef, type NoteMediaFields } from './media-ref.js';
+
 export {
   notesOperations,
   noteCreatedPayload,
@@ -32,6 +34,7 @@ export {
   noteArchivedApplier,
   type NoteCreatedV1Payload,
   type NoteCreatedV2Payload,
+  type NoteCreatedV3Payload,
   type NoteBodyEditedPayload,
 } from './applier.js';
 

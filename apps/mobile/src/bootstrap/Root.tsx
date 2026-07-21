@@ -137,6 +137,12 @@ export interface RootProps {
     app: Bootstrapped,
     runtime: AppRuntime,
     identity: CommandIdentity,
+    /**
+     * The ALREADY-CONSTRUCTED media client, or `null` on a device that has none. Passed rather than
+     * built here so the notes thumbnail path and the upload drain share ONE client over one DB
+     * connection — a second client would mean a second drain loop competing for the same rows.
+     */
+    media: MediaClient | null,
   ) => NotesRuntime;
 }
 
@@ -155,6 +161,20 @@ export function Root({
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [enrollment, setEnrollment] = useState<AppEnrollment | null>(null);
   const [sync, setSync] = useState<SyncClient | null>(null);
+  /**
+   * The media client, mirrored into state alongside `mediaRef` (task 120).
+   *
+   * WHY STATE AND NOT JUST THE REF. The notes runtime binds this client once, at the instant a
+   * session opens (below). A ref read there is not reactive, so if the client is constructed AFTER
+   * the session effect first runs, `createNotes` receives `null`, silently falls back to
+   * `UNWIRED_NOTES_MEDIA`, and every note photo renders `unavailable` FOREVER — and because
+   * api/03 §8 makes `unavailable` an expected, transient state, nothing throws, nothing logs, and no
+   * test reds. That is the "silently checks nothing" class (CLAUDE.md §2.11): the honest answer to
+   * "if this binding were wrong, what would notice?" would be "nothing". Holding the client in state
+   * — exactly as `sync` is held in both `syncRef` and `setSync` — makes the session effect re-run
+   * when the client lands, so the binding is correct by construction rather than by boot ordering.
+   */
+  const [media, setMedia] = useState<MediaClient | null>(null);
   const [session, setSession] = useState<AppSession | null>(null);
   /**
    * The notes surface for the CURRENT session (task 119).
@@ -229,6 +249,9 @@ export function Root({
         return;
       }
       mediaRef.current = client;
+      // Mirror into state so the notes session effect re-runs and binds the REAL client, rather than
+      // whatever `mediaRef.current` happened to be when it first ran (see the `media` state comment).
+      setMedia(client);
       await client.start();
     };
 
@@ -322,6 +345,7 @@ export function Root({
       syncRef.current = null;
       mediaRef.current?.stop();
       mediaRef.current = null;
+      setMedia(null);
       sessionUnsubRef.current?.();
       sessionUnsubRef.current = null;
       sessionRef.current = null;
@@ -357,13 +381,18 @@ export function Root({
       if (cancelled || identity === null) return;
       setNotes({
         userId: sessionUserId,
-        runtime: createNotes(app, enrollment.runtime, identity),
+        // `media` (state), not `mediaRef.current`: reading the reactive value with `media` in the
+        // deps means this effect RE-RUNS and re-binds when the client lands, so the notes runtime
+        // never gets stuck on the `null` it saw before the media pipeline started (06 §6 thumbnail
+        // verify needs a real client — a stale null would silently downgrade every photo to
+        // `unavailable`, the failure the `media` state comment describes).
+        runtime: createNotes(app, enrollment.runtime, identity, media),
       });
     });
     return () => {
       cancelled = true;
     };
-  }, [app, enrollment, createNotes, sessionUserId]);
+  }, [app, enrollment, createNotes, sessionUserId, media]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning

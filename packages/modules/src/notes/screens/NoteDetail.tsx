@@ -38,6 +38,8 @@ import type { NoteRow } from '../queries.js';
 
 import { tn } from './i18n.js';
 import { hasRejectedOp } from './model.js';
+import { thumbnailRefFor } from '../media-ref.js';
+
 import { useCommand, useQuery, useThumbnail, type NoteSyncStatuses } from './runtime.js';
 
 export interface NoteDetailProps {
@@ -84,7 +86,9 @@ export function NoteDetail({
   const rejected = query.status === 'ready' && hasRejectedOp(query.data.statuses[noteId] ?? []);
 
   // Hooks run unconditionally; the thumbnail loads only once a note with an attachment is in hand.
-  const thumbnail = useThumbnail(note?.mediaId ?? null);
+  // The ref carries the SIGNED sha256/mime when the note's op was v3 — that is what lets a note
+  // pulled from another device be download-verified (06 §6) instead of silently unavailable.
+  const thumbnail = useThumbnail(note === undefined ? null : thumbnailRefFor(note));
 
   const archive = (): void => {
     setConfirmArchive(false);

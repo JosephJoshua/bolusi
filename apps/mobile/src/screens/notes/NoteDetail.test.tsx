@@ -21,6 +21,8 @@ const note = (over: Partial<NoteRow> = {}): NoteRow => ({
   title: 'Layar retak',
   body: 'Ganti LCD',
   mediaId: null,
+  mediaSha256: null,
+  mediaMime: null,
   archived: false,
   editCount: 0,
   createdBy: 'user-1',

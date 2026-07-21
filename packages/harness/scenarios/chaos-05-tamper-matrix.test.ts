@@ -56,15 +56,16 @@ const FOREIGN_TENANT = '22222222-2222-4222-8222-222222222222';
 const WRONG_HASH = 'b'.repeat(64);
 
 /**
- * An OpSpec for a valid note (the workload, §3.2). Payload is the CURRENT v2 shape
- * `{title, body, mediaId}` (notes/operations.ts) — the harness boots the REAL `createApp`
+ * An OpSpec for a valid note (the workload, §3.2). Payload is the CURRENT v3 shape
+ * `{title, body, mediaRef}` (notes/operations.ts) — the harness boots the REAL `createApp`
  * registry, which validates every new push against the current schema (05 §7), so a v1
- * `{title, body}` would (correctly) be SCHEMA_INVALID, which is T8's job, not a valid op's.
+ * `{title, body}` or a v2 `{title, body, mediaId}` would (correctly) be SCHEMA_INVALID, which is
+ * T8's job, not a valid op's. These notes carry no photo, so `mediaRef` is present-and-null (05 §3).
  */
 const note = (title: string, body: string) => ({
   type: 'notes.note_created',
   entityType: 'note',
-  payload: { title, body, mediaId: null },
+  payload: { title, body, mediaRef: null },
 });
 
 /** Adapt a raw-wire `ChainWorld` into the `DeviceIdentity` shape `HarnessServer.seedDevice` reads. */

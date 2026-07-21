@@ -171,7 +171,7 @@ async function pushCollision(
           type: NOTE_CREATED,
           entityType: 'note',
           entityId: noteId,
-          payload: { title: 't', body: 'a0', mediaId: null },
+          payload: { title: 't', body: 'a0', mediaRef: null },
         }),
         mBuilder.append({ type: NOTE_ARCHIVED, entityType: 'note', entityId: noteId, payload: {} }),
       ],

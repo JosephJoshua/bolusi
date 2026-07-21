@@ -335,6 +335,12 @@ export function pulledNote(fixture: Fixture): SignedOperation {
     type: 'notes.note_created',
     entityType: 'note',
     entityId: NOTE_FROM_ANOTHER_DEVICE,
+    // DELIBERATELY LEFT AT v2 (task 120). The current emitted version is 3, so this fixture is no
+    // longer "the shape a new op has" — it is now a BACKWARD-COMPATIBILITY regression test, and a
+    // more valuable one than a v3 copy would be. 05 §7 says historical payloads never disappear, so
+    // the applier must fold v1/v2/v3 forever; this is the composed-app proof that a v2 op pulled
+    // from another device still lands in the projection and still reaches the mounted list. Bumping
+    // it to v3 would delete that coverage and leave nothing exercising the old fold end to end.
     schemaVersion: 2,
     payload: { title: 'Dari HP lain', body: 'pulled', mediaId: null },
     timestamp: FIXED_NOW,

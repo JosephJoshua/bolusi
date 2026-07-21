@@ -20,7 +20,7 @@
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
 import { ChainBuilder, makeWorld, resign, type ChainWorld } from '@bolusi/test-support';
-import type { SignedOperation } from '@bolusi/schemas';
+import type { MediaRef, SignedOperation } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
 import { afterEach, beforeEach, describe, expect, inject, test } from 'vitest';
 
@@ -89,24 +89,34 @@ async function setupWorld(seed: number): Promise<{ world: ChainWorld; builder: C
 }
 
 /**
- * A v2 `notes.note_created` chained after the genesis (seq 2). The `ChainBuilder` stamps
- * schemaVersion 1; the current version is 2 (`{title, body, mediaId}`), so re-sign the built op with
- * schemaVersion 2 — `resign` recomputes hash+signature over the mutated core, preserving seq and
- * previousHash. Every FRESH `note_created` in production is v2, and the registry validates against
- * exactly the v2 payload.
+ * A v3 `notes.note_created` chained after the genesis (seq 2). The `ChainBuilder` stamps
+ * schemaVersion 1; the current version is 3 (`{title, body, mediaRef}`), so re-sign the built op
+ * with schemaVersion 3 — `resign` recomputes hash+signature over the mutated core, preserving seq
+ * and previousHash. Every FRESH `note_created` in production is v3, and the registry validates
+ * against exactly the v3 payload.
  */
 function noteCreated(
   world: ChainWorld,
   builder: ChainBuilder,
-  payload: { title: string; body: string; mediaId: string | null },
+  payload: { title: string; body: string; mediaRef: MediaRef | null },
 ): SignedOperation {
   const v1 = builder.append({ type: 'notes.note_created', entityType: 'note', payload });
-  return resign({ ...v1, schemaVersion: 2 }, world.secretKey, serverCryptoPort);
+  return resign({ ...v1, schemaVersion: 3 }, world.secretKey, serverCryptoPort);
 }
 
-async function readNotes(): Promise<{ id: string; title: string; mediaId: string | null }[]> {
-  const rows = await db.selectFrom('notes').select(['id', 'title', 'mediaId']).execute();
-  return rows.map((r) => ({ id: r.id, title: r.title, mediaId: r.mediaId }));
+async function readNotes(): Promise<
+  { id: string; title: string; mediaId: string | null; mediaSha256: string | null }[]
+> {
+  const rows = await db
+    .selectFrom('notes')
+    .select(['id', 'title', 'mediaId', 'mediaSha256'])
+    .execute();
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    mediaId: r.mediaId,
+    mediaSha256: r.mediaSha256,
+  }));
 }
 
 describe('SERVER_MODULES registration — the notes module folds through the real push path', () => {
@@ -117,12 +127,22 @@ describe('SERVER_MODULES registration — the notes module folds through the rea
     expect(SERVER_MODULES.map((m) => m.id)).toContain('notes');
   });
 
-  test('HEAD — a pushed v2 notes.note_created folds a notes row through production deps', async () => {
+  test('HEAD — a pushed v3 notes.note_created folds a notes row through production deps', async () => {
     const { world, builder } = await setupWorld(2501);
     const op = noteCreated(world, builder, {
       title: 'Stok kopi',
       body: 'Sisa 4 karung',
-      mediaId: '01920000-0000-7000-8000-0000000f000a',
+      mediaRef: {
+        mediaId: '01920000-0000-7000-8000-0000000f000a',
+        sha256: 'c'.repeat(64),
+        mime: 'image/jpeg',
+        type: 'image',
+        sizeBytes: 231_044,
+        capturedAt: 1_726_000_000_000,
+        location: null,
+        userId: world.userId,
+        deviceId: world.deviceId,
+      },
     });
 
     const result = await processPushBatch(
@@ -134,11 +154,20 @@ describe('SERVER_MODULES registration — the notes module folds through the rea
     // Accepted by the PRODUCTION registry — the op type is declared by a registered module.
     expect(result.results.map((r) => r.status)).toEqual(['accepted']);
     // …and folded by the PRODUCTION appliers, in the same transaction. This row is the fix: the note
-    // carries its v2 media attachment, on real PG16 — where `media_id` is a `uuid` column (so the
+    // carries its v3 media attachment, on real PG16 — where `media_id` is a `uuid` column (so the
     // applier's value must be a real UUIDv7, 01 §5.3) and `archived` a real boolean. PGlite over the
     // module suite's text DDL masked both; the real `pg` driver validates them (T-14f).
+    //
+    // `mediaSha256` is asserted on REAL PG because it is the whole point of v3: this is the value a
+    // DIFFERENT device will verify its download against (06 §6), and it has to survive the wire, the
+    // registry, and the fold to get there.
     expect(await readNotes()).toEqual([
-      { id: op.entityId, title: 'Stok kopi', mediaId: '01920000-0000-7000-8000-0000000f000a' },
+      {
+        id: op.entityId,
+        title: 'Stok kopi',
+        mediaId: '01920000-0000-7000-8000-0000000f000a',
+        mediaSha256: 'c'.repeat(64),
+      },
     ]);
   });
 
@@ -151,7 +180,7 @@ describe('SERVER_MODULES registration — the notes module folds through the rea
     const bogus = builder.append({
       type: 'notes.note_frobnicated',
       entityType: 'note',
-      payload: { title: 't', body: 'b', mediaId: null },
+      payload: { title: 't', body: 'b', mediaRef: null },
     });
 
     const result = await processPushBatch(

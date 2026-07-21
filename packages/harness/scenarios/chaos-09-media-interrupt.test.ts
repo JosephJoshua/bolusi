@@ -314,9 +314,25 @@ async function buildWorld(seed: number, chunkSize: number): Promise<MediaWorld> 
   const sha256 = hex(noblePort.sha256(content));
   const mediaId = makeIdSource(clock, mulberry32(seed ^ 0x0d_0d))();
 
-  // A real note op referencing the media (FR-1138: the op carries the mediaId and syncs
-  // independently of the file). The op id becomes the attach binding.
-  const noteId = await device.createNote({ title: `n-${seed}`, body: `b-${seed}`, mediaId });
+  // A real note op referencing the media (FR-1138: the op carries the ref and syncs independently
+  // of the file). The op id becomes the attach binding. The ref is the COMPLETE signed one (v3) —
+  // the same `sha256` computed above over the same bytes the upload will send, which is what any
+  // OTHER device pulling this note verifies the download against (06 §6).
+  const noteId = await device.createNote({
+    title: `n-${seed}`,
+    body: `b-${seed}`,
+    mediaRef: {
+      mediaId,
+      sha256,
+      mime: 'image/jpeg',
+      type: 'image',
+      sizeBytes,
+      capturedAt: CLOCK_BASE,
+      location: null,
+      userId: identity.userId,
+      deviceId: identity.deviceId,
+    },
+  });
   const opRows = await sql<{ id: string }>`
     SELECT id FROM operations WHERE entity_id = ${noteId} AND type = 'notes.note_created'
     ORDER BY seq DESC LIMIT 1

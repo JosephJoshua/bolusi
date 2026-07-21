@@ -9,25 +9,55 @@
 import { z } from 'zod';
 
 import type { OperationDeclaration } from '@bolusi/core';
+import { zMediaRef } from '@bolusi/schemas';
 
 import { noteArchivedApplier, noteBodyEditedApplier, noteCreatedApplier } from './applier.js';
 import { NOTE_BODY_CONFLICT_KEY, NOTE_CREATED_SCHEMA_VERSION, NOTES_OP } from './constants.js';
 import type { NotesDatabase } from './schema.js';
 
 /**
- * `notes.note_created` payload — the CURRENT version (v2, 01 §9): `{title, body, mediaId}`.
+ * `notes.note_created` payload — the CURRENT version (v3, 01 §9): `{title, body, mediaRef}`.
  *
- * The registry carries ONE schema per op type, the current one, and every freshly-emitted op is v2.
- * v1 payloads (`{title, body}`) live only in history and are never re-validated — the server
- * validates ONLY new pushes, which are always v2 (05 §7). `mediaId` is present-and-null, never
- * absent (05 §3's absent-vs-null rule: the JCS preimage has no optional keys) — `.nullable()`, not
- * `.optional()`.
+ * The registry carries ONE schema per op type, the current one, and every freshly-emitted op is v3.
+ * v1 (`{title, body}`) and v2 (`{title, body, mediaId}`) payloads live only in history and are never
+ * re-validated — the server validates ONLY new pushes, which are always v3 (05 §7).
+ *
+ * ── WHY v3 EXISTS: THE HASH MUST TRAVEL WITH THE SIGNATURE (05 §2, 06 §6) ──────────────────────
+ *
+ * v2's `mediaId` is sufficient for a note whose photo THIS device captured: the id resolves through
+ * `media_items.local_path`. It is NOT sufficient for a note PULLED from another device. 06 §6
+ * requires fetched bytes be "verified against `mediaRef.sha256` before display", and a pulled note
+ * has no `media_items` row to source a hash from — so a remote note's photo could not be
+ * download-verified at all. 05 §2 settles where the hash belongs: `payload` is inside the signed
+ * core, so the payload is the ONE tamper-evident carrier this system has. Anything the receiving
+ * device must TRUST has to ride in it. Hence v3.
+ *
+ * ── WHY ONE NESTED OBJECT AND NOT THREE SIBLING FIELDS ─────────────────────────────────────────
+ *
+ * `mediaRef` is a single nullable object, NOT `mediaId` + `sha256` + `mime` alongside each other.
+ * With siblings, "media attached, but no signed hash" is a representable payload — the exact defect
+ * v3 exists to close, re-admitted through the schema that was supposed to close it (CLAUDE.md §2.11:
+ * a guard whose failure mode is "silently permits the thing" is worse than none). Nested, that state
+ * has no inhabitant: either there is no attachment (`null`), or there is a COMPLETE one. The
+ * compiler and Zod both enforce it, so it cannot be forgotten at a call site.
+ *
+ * It reuses `zMediaRef` from `@bolusi/schemas` rather than declaring a narrower `{mediaId, sha256,
+ * mime}` here, on two counts. (1) 06 §3.2 defines `mediaRef` as THE shared payload fragment "any
+ * module payload that attaches media embeds — never redefine per module" (CLAUDE.md §2.8); a
+ * three-field local subset would be precisely that forbidden redefinition. (2) 06 §3.1 wants the
+ * immutable capture metadata (`capturedAt`, `location`, `userId`, `deviceId`) bound by the same
+ * signature — that binding IS the "embedded metadata" of FR-816, and dropping the fields here would
+ * quietly discard it.
+ *
+ * `.nullable()`, never `.optional()` — 05 §3's absent-vs-null rule: the JCS preimage has no optional
+ * keys, so a no-photo note carries `mediaRef: null` explicitly. `zMediaRef` states the same rule for
+ * its own fields.
  */
 export const noteCreatedPayload = z
   .object({
     title: z.string().min(1),
     body: z.string(),
-    mediaId: z.string().nullable(),
+    mediaRef: zMediaRef.nullable(),
   })
   .strict();
 
@@ -40,8 +70,8 @@ export const noteArchivedPayload = z.object({}).strict();
 /** The three `notes` op declarations (04 §3), keyed by op type. */
 export const notesOperations: Readonly<Record<string, OperationDeclaration<NotesDatabase>>> = {
   [NOTES_OP.noteCreated]: {
-    // v2 (01 §9): the mid-history schema bump the exit criteria require (04 §8). The applier folds
-    // v1 AND v2 forever (applier.ts).
+    // v3 (01 §9): the mid-history schema bumps the exit criteria require (04 §8). The applier folds
+    // v1, v2 AND v3 forever (applier.ts) — old ops never disappear (05 §7).
     schemaVersion: NOTE_CREATED_SCHEMA_VERSION,
     payload: noteCreatedPayload,
     reversal:

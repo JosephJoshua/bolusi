@@ -29,3 +29,7 @@ export {
 } from './i18n.js';
 
 export { statusesFor, hasRejectedOp, bodyPreview } from './model.js';
+
+// Re-exported so a screen consumer has one import site; DEFINED in the data layer (media-ref.ts),
+// because "may this attachment be fetched" is a property of the op version, not of a screen.
+export { thumbnailRefFor, type ThumbnailRef, type NoteMediaFields } from '../media-ref.js';

@@ -67,6 +67,7 @@ import {
 } from './pruning.js';
 import { attachMediaToOperation } from './queue.js';
 import {
+  loadLocalMediaOnly,
   loadMediaForRender,
   type RenderableMedia,
   type RenderableMediaRef,
@@ -142,6 +143,8 @@ export interface MediaClient {
   attach(mediaId: string, operationId: string): Promise<void>;
   /** 06 §6, at render time only. */
   loadForRender(ref: RenderableMediaRef): Promise<RenderableMedia>;
+  /** 06 §6 for an attachment with NO signed hash (v1/v2 payloads): local file or nothing. */
+  loadLocalForRender(mediaId: string): Promise<RenderableMedia>;
   /** 06 §5.2 (e). */
   requestManual(): void;
   /** 06 §7. Exposed so a caller can force one; the client already runs it at start and after drains. */
@@ -287,6 +290,16 @@ class MediaClientImpl implements MediaClient {
         evictCached: this.deps.evictCached,
       },
       ref,
+    );
+  }
+
+  loadLocalForRender(mediaId: string): Promise<RenderableMedia> {
+    return loadLocalMediaOnly(
+      {
+        files: this.deps.files,
+        localPathFor: async (id) => (await findMediaItem(this.deps.db.db, id))?.localPath ?? null,
+      },
+      mediaId,
     );
   }
 

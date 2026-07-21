@@ -120,3 +120,22 @@ export async function loadMediaForRender(
       return { kind: 'mismatch', expected: outcome.expected, actual: outcome.actual };
   }
 }
+
+/**
+ * Resolve an attachment that has NO signed hash — a v1/v2 `note_created` (06 §6, task 120).
+ *
+ * Local file or nothing. There is deliberately no cache read and no fetch: both would produce bytes
+ * with nothing to check them against, and 06 §6's requirement is "verified BEFORE display", not
+ * "fetched and hoped for". A legacy note whose file has been pruned is honestly `unavailable`
+ * forever — the remedy is that new notes are v3, not that old ones start trusting the network.
+ */
+export async function loadLocalMediaOnly(
+  deps: Pick<RemoteMediaDeps, 'files' | 'localPathFor'>,
+  mediaId: string,
+): Promise<RenderableMedia> {
+  const localPath = await deps.localPathFor(mediaId);
+  if (localPath !== null && (await deps.files.exists(localPath))) {
+    return { kind: 'local', uri: localPath };
+  }
+  return { kind: 'unavailable', code: null };
+}

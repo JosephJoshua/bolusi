@@ -19,6 +19,7 @@ import {
   render,
   renderNotes,
   type Harness,
+  TEST_MEDIA_REF,
 } from '../../../test/notes-support.js';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
@@ -59,7 +60,7 @@ describe('NotesList — the four §5 states on a mounted screen', () => {
     const created = await rt.createNote({
       title: 'Stok kopi',
       body: 'Sisa 4 karung',
-      mediaId: null,
+      mediaRef: null,
     });
 
     const screen = mount(rt);
@@ -128,8 +129,8 @@ describe('NotesList — media glyph + live update', () => {
   test('attachment glyph shows for a note with media, and is absent without', async () => {
     h = await openHarness(3);
     const rt = harnessRuntime(h, h.notesUserId);
-    const withMedia = await rt.createNote({ title: 'Rusak', body: '', mediaId: 'media-xyz' });
-    const withoutMedia = await rt.createNote({ title: 'Tanpa foto', body: '', mediaId: null });
+    const withMedia = await rt.createNote({ title: 'Rusak', body: '', mediaRef: TEST_MEDIA_REF });
+    const withoutMedia = await rt.createNote({ title: 'Tanpa foto', body: '', mediaRef: null });
 
     const screen = mount(rt);
     await settle();
