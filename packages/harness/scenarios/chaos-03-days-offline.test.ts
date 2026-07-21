@@ -50,7 +50,7 @@ import { HarnessServer } from '../src/server.js';
 import { mintIdentities } from '../src/identities.js';
 import { assertConvergence, canonicalFold, notesRows } from '../src/oracle.js';
 import { HttpTransport, pullDevice, pushDevice } from '../src/transport.js';
-import { activeVolumes, resolveSeeds, withSeed } from '../src/index.js';
+import { activeVolumes, nightlyX4Seeds, resolveSeeds, withSeed } from '../src/index.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const PUSH_BATCH = 500; // api/01 §3 cap.
@@ -274,9 +274,15 @@ async function fullSync(
  * The seeds this heavy scenario sweeps — DELIBERATELY bounded to the first CI seed (§3.7
  * D-CHAOS-SCALE), and flagged here rather than silently chosen. `CHAOS_SEEDS=…` (a reproduction) or
  * `CHAOS_NIGHTLY=1` runs every resolved seed.
+ *
+ * The ONE exception is the nightly ×4 LANE, where a single seed is ≈ 40 min (56,000 ops) and 100 of
+ * them would never finish: there `nightlyX4Seeds` caps the SEED SAMPLE (never the volume) to the
+ * documented `NIGHTLY_X4_SEED_CAPS['CHAOS-03']`. That cap is the nightly JOB's lever, owned by
+ * `src/nightly-scale.ts` and asserted by `scenarios/nightly-seed-cap.test.ts` — it does not apply to
+ * an explicit `CHAOS_SEEDS=` reproduction, which still runs verbatim at whatever scale it names.
  */
 function chaos03Seeds(env: NodeJS.ProcessEnv = process.env): number[] {
-  const seeds = resolveSeeds(env);
+  const seeds = nightlyX4Seeds('CHAOS-03', resolveSeeds(env), env);
   if (isFullVolume(env)) return seeds;
   return seeds.slice(0, 1);
 }
@@ -321,8 +327,11 @@ describe('CHAOS-03 days-offline bulk merge', () => {
   // The CI-reduced case is ~156 s on a quiet box; the shared CI box inflates 2–4× under load (the
   // §3.7 contention note), so it gets a 10-min ceiling — honest headroom for contention, not a masked
   // hang (a genuine hang still fails within 10 min). The full nightly/explicit case (~591 s quiet,
-  // more under load, ×4 heavier still) gets the 30-min ceiling.
-  const timeout = FULL ? 1_800_000 : 600_000;
+  // more under load) gets a 30-min ceiling — PER UNIT OF SCALE. The cost is volume-proportional, so
+  // a flat 30 min would be BELOW the ×4 case's own quiet-box estimate (~40 min for 56,000 ops): the
+  // nightly ×4 lane would time out every seed and report a red that is a budget artefact, not a bug.
+  // Scaling the ceiling keeps the same ~3× headroom at every scale (×1 is unchanged — 30 min).
+  const timeout = FULL ? 1_800_000 * volumes.scale : 600_000;
 
   for (const seed of chaos03Seeds()) {
     test(

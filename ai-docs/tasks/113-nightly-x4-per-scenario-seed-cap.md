@@ -1,6 +1,6 @@
 # TASK 113 — the nightly chaos lane's `CHAOS_SCALE=4 × 100 seeds` is impractical for the heavy scenarios; add a per-scenario ×4 nightly seed cap
 
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW — nightly is a scheduled deep run, not a merge gate; nothing is broken today. But the ×4 nightly coverage is currently **unrunnable** for CHAOS-03/08, so it is honest-on-paper only until this lands. Track it so the coverage isn't silently fictional.
 **Depends on:** 26 (done — the scale policy + scenarios this sits on)
 **Blocks:** —

@@ -398,6 +398,55 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm chaos
 
+  # Stage 13 — SECURITY SWEEP / release gate (task 28; 08 §5.6, security-guide §12). MERGE GATE.
+  #
+  # `pnpm sec:sweep` is one command with one report: it builds, runs the repo suite AND the
+  # security-sweep lane (packages/harness/vitest.security.config.ts) with a JSON reporter, then
+  # runs the SEC inventory over those reports, the repo secrets scan (working tree + FULL git
+  # history + .env discipline), and the dependency pin/lockfile audit against 08 §2.
+  #
+  # THERE WAS NO RELEASE-GATE PLACEHOLDER TO REPLACE. Task 28's file says this stage replaces one;
+  # the only placeholder in this pipeline is stage 12 (device-lane), which belongs to task 27. So
+  # this is a NEW job, and it is deliberately NOT a fail-safe stub: it runs the real sweep.
+  #
+  # IT IS EXPECTED TO BE RED TODAY, AND THAT IS THE GATE WORKING (CLAUDE.md §2.11). Three things
+  # keep it red, all recorded rather than papered over:
+  #   1. the SEC pending allowlist is non-empty — SEC-AUTH-10 is owed by task 27 (device-blocked)
+  #      and SEC-AUTH-09's leg 1 needs real SQLCipher, which only task 27a's lane has;
+  #   2. `POST /v1/media/:id/init` answers 500 for a cross-tenant media id and 404 for a
+  #      same-tenant unassigned-store one — a cross-tenant existence oracle SEC-TENANT-04 catches;
+  #   3. security-guide §12's roll-up line omits SEC-DEV-08, which task 58 shipped.
+  # Each has its own task file. Weakening a step to make this green would convert three known
+  # risks into one false assurance — the exact anti-pattern §2.11 names.
+  #
+  # It needs gitleaks (the history scan) and Docker (the repo suite's testcontainers lanes);
+  # ubuntu-latest supplies Docker, and the gitleaks install below is the same checksum-pinned
+  # release the `unit` job uses.
+  security-sweep:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The secrets scan walks the FULL history — a shallow clone would scan a few commits and
+          # report a confident zero (T-14: a sweep that goes blind reports green).
+          fetch-depth: 0
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: install gitleaks (checksum-pinned)
+        run: |
+          curl -sL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          rm gitleaks.tgz
+      - name: security sweep (SEC inventory + SEC-TENANT-04 walk + secrets + dependency audit)
+        run: pnpm sec:sweep
+
   # Stage 12 — device lane (EAS dev-client build + on-device smoke; 08 §5.6 stage 12,
   # "native change / scheduled"). PLACEHOLDER, but FAIL-SAFE. Task 27
   # (ai-docs/tasks/27-device-gates.md) wires the real lane — EAS dev-client build fingerprint-
