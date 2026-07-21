@@ -33,6 +33,7 @@ import {
   type Locale,
 } from '@bolusi/i18n';
 
+import { registerModuleCatalogs } from './bootstrap/module-catalogs.js';
 import { consoleDiagnostics } from './ports/diagnostics.js';
 
 /** The storage key for the device locale. */
@@ -97,5 +98,11 @@ export async function bootstrapI18n(store: LocaleStorePort): Promise<Locale> {
   // to the no-op default and were unobservable on-device. Same object the command runtime binds as its
   // denial-audit diagnostics sink (ports/diagnostics.ts): ONE client diagnostics channel (§2.8).
   initI18n({ locale, logger: consoleDiagnostics });
+  // Module catalogs (`notes.*`, 07-i18n §3.3) are NOT in the statically-bundled reserved catalogs
+  // `initI18n` loads — they must be merged at runtime, AFTER init (each init replaces the instance)
+  // and BEFORE the first screen resolves a label. Without this, `notes.*` chrome falls back to the
+  // humanized English key ("Title", "New") for Indonesian-first users — the task 122 defect that
+  // ~600 green screen tests could not see, because their harness registered the catalog itself.
+  registerModuleCatalogs();
   return locale;
 }

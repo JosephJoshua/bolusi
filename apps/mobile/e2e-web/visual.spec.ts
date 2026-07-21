@@ -86,9 +86,11 @@ const MATRIX: readonly Row[] = [
   { screen: 'signature', state: 'ready', testId: 'signature-pad' },
   { screen: 'signature', state: 'error', testId: 'signature-failed' },
 
-  // App-mode — the full RootNavigator gate over the demo seed.
+  // App-mode — the full RootNavigator gate over the demo seed. The shell asserts the notes list
+  // HEADER in Indonesian ("Catatan", not the "Title" key-fallback): the web entry must register the
+  // module catalog after initI18n (task 122), and this row is what goes red if it stops.
   { screen: 'app', state: 'switcher', testId: 'switcher-screen', text: PROBE_USER },
-  { screen: 'app', state: 'shell', testId: 'bolusi-app-shell' },
+  { screen: 'app', state: 'shell', testId: 'bolusi-app-shell', text: 'Catatan' },
 ];
 
 for (const row of MATRIX) {
