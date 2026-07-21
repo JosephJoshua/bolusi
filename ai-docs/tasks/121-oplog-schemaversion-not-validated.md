@@ -1,6 +1,6 @@
 # TASK 121 — the server accepts an op claiming ANY `schemaVersion`: `deriveOpRegistry`'s `resolve(type)` ignores the version and validates every push against the ONE current payload schema
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — a real op-version gate hole. Not currently exploited (one version per type exists today), but it becomes live the moment any op type has a second version, and it fails in the worst place: acceptance succeeds, then the applier throws at FOLD time, on an op that is already in the signed, append-only log (05 §7 — old ops never disappear).
 **Depends on:** 07 (op-log pipeline), 11 (module contract / registry)
 **Blocks:** any op-type version bump (e.g. task 120's `note_created` v3)
