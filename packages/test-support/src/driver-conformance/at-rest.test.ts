@@ -8,7 +8,11 @@
 import { describe, expect, test } from 'vitest';
 import type { DbDriver } from '@bolusi/db-client';
 
-import { checkDbAtRestIsCiphertext, type AtRestProbeContext } from './at-rest.js';
+import {
+  checkControlSeedIsWitnessed,
+  checkDbAtRestIsCiphertext,
+  type AtRestProbeContext,
+} from './at-rest.js';
 
 const WRONG_KEY = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 const MARKER = 'Twelve crates of stock';
@@ -145,5 +149,42 @@ describe('checkDbAtRestIsCiphertext', () => {
       context({ readCopyBytes: () => Promise.resolve(bytes) }),
     );
     expect(findings.map((finding) => finding.check)).toEqual(['no seeded plaintext markers']);
+  });
+});
+
+// The POSITIVE CONTROL for the on-device leg (testing-guide T-14b). `checkDbAtRestIsCiphertext`'s
+// last two checks pass when the seeded markers are ABSENT from the file — which is ALSO exactly what
+// happens when the seed silently wrote nothing (the parse-collapse / empty-fixture family, and the
+// RLS `UPDATE 0` incident in one shape over). So the device ctx (task 27a) must first witness the
+// SAME markers in an UNENCRYPTED control DB before it may trust their absence in the SQLCipher file.
+// This is the Node-runnable half of that control: given the control DB's raw bytes, a marker MISSING
+// means the seed is a no-op, so the whole absence result is vacuous. CI has no live seed here, so
+// this binds only the DETECTION direction; the device ctx (apps/mobile) wires it to a real control DB.
+describe('checkControlSeedIsWitnessed — the T-14b positive control', () => {
+  const MARKERS = ['Twelve crates of stock', 'faktur-0093'];
+
+  test('an empty result when every seeded marker IS present in the control bytes', () => {
+    const bytes = new Uint8Array([
+      0x00,
+      ...encode(MARKERS[0] ?? ''),
+      0x7f,
+      ...encode(MARKERS[1] ?? ''),
+    ]);
+    expect(checkControlSeedIsWitnessed(bytes, MARKERS)).toEqual([]);
+  });
+
+  test('catches a silent seed no-op: a marker missing from the control is a finding (result is vacuous)', () => {
+    // The control DB carries only the FIRST marker — the seed of the second did nothing, so
+    // "no plaintext in the ciphertext" would prove nothing for it.
+    const bytes = new Uint8Array([...encode(MARKERS[0] ?? '')]);
+    const findings = checkControlSeedIsWitnessed(bytes, MARKERS);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.check).toContain('positive control');
+    expect(findings[0]?.detail).toContain(JSON.stringify(MARKERS[1]));
+  });
+
+  test('empty control bytes fail the control for EVERY marker — the seed wrote nothing at all', () => {
+    const findings = checkControlSeedIsWitnessed(new Uint8Array(), MARKERS);
+    expect(findings).toHaveLength(MARKERS.length);
   });
 });

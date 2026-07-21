@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { resolveActingUser } from '../auth/acting-user.js';
 import { countActiveTenantAdmins, isTenantAdmin, requirePermission } from '../auth/permissions.js';
 import { TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
+import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
@@ -26,10 +27,6 @@ import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 import { uuidv7 } from '../uuidv7.js';
 
 const LOWERCASE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
-}
 
 /** §9 quota: 100 user-management mutations / tenant / day (create + patch + status + pin-verifier). */
 function enforceUsersQuota(deps: ServerDeps, tenantId: string, now: number): void {

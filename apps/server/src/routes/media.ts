@@ -264,7 +264,17 @@ export function createMediaRouter(deps: ServerDeps) {
             }
 
             const totalChunks = Math.ceil(body.sizeBytes / MEDIA_CHUNK_SIZE);
-            await db
+            // `media.id` is a GLOBAL uuid PK (10-db §8). The SELECT above is RLS-scoped, so an id an
+            // RLS-hidden row in ANOTHER tenant already holds reads as absent here — but the INSERT
+            // still trips the global unique index (RLS filters SELECTs, not unique conflicts, 10-db
+            // §6). ON CONFLICT DO NOTHING makes that collision a skipped insert (0 rows) instead of a
+            // 23505 that escapes as 500: we then render the SAME 404 MEDIA_NOT_FOUND as the
+            // nonexistent / other-device / unassigned-store legs, so status + body confirm nothing
+            // about cross-tenant existence (security-guide §2.2 media exception, SEC-MEDIA-03; the
+            // SEC-TENANT-04 oracle, task 114). Fails CLOSED — never a 2xx for a foreign id. Driver-
+            // agnostic (no error to catch): same command tag on the pg L3 lane and the PGlite
+            // security lane, exactly as runIdempotent's claim insert (identity/idempotency.ts).
+            const inserted = await db
               .insertInto('media')
               .values({
                 id,
@@ -284,7 +294,11 @@ export function createMediaRouter(deps: ServerDeps) {
                 status: 'receiving',
                 createdAt: deps.now(),
               })
-              .execute();
+              .onConflict((oc) => oc.column('id').doNothing())
+              .executeTakeFirst();
+            if (Number(inserted.numInsertedOrUpdatedRows ?? 0n) === 0) {
+              return renderMediaError(c, 'MEDIA_NOT_FOUND');
+            }
 
             return c.json({
               chunkSize: MEDIA_CHUNK_SIZE,

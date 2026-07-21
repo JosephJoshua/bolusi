@@ -340,4 +340,4 @@ Mechanism: api/00-conventions §12 (realtime channel) + api/04-push (push catego
 
 ## 12. Test index
 
-Every `SEC-*` ID above is REQUIRED and enforced by SEC-META-01 (§2.1). Roll-up: OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–07 · MEDIA 01–06 · TENANT 01–05 · RT 01–05 · SECRET 01–02 · META 01. The chaos harness (testing-guide, decisions D4) covers correctness-under-disorder; this suite covers correctness-under-malice. Both gate v0 exit.
+Every `SEC-*` ID above is REQUIRED and enforced by SEC-META-01 (§2.1). Roll-up: OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–08 · MEDIA 01–06 · TENANT 01–05 · RT 01–05 · SECRET 01–02 · META 01. The chaos harness (testing-guide, decisions D4) covers correctness-under-disorder; this suite covers correctness-under-malice. Both gate v0 exit.

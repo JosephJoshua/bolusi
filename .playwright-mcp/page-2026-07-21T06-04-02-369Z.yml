@@ -1,0 +1,11 @@
+- generic [ref=e4]:
+    - generic [ref=e5]:
+        - generic [ref=e6]: Siapa yang pakai?
+        - button "Terakhir terhubung" [ref=e8] [cursor=pointer]:
+            - generic [ref=e9]: 󱯬
+    - generic [ref=e10]:
+        - generic [ref=e11]: Ketuk nama kamu
+        - button "Andi Pratama" [ref=e16] [cursor=pointer]:
+            - generic [ref=e17]:
+                - generic [ref=e18]: AP
+                - generic [ref=e20]: Andi Pratama
