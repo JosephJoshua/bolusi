@@ -1,6 +1,6 @@
 # TASK 122 — the notes i18n catalog is registered ONLY by a test-support file: `registerNotesCatalog` has zero production callers, so the shipping app renders `notes.*` labels in English to Indonesian-first users
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **MEDIUM-HIGH** — user-visible on an Indonesian-first product (00-product-overview: tech-inadept, Indonesian-first users). The reference module's entire UI chrome falls back to English. Not a security issue; a real product defect, and the purest instance of this repo's signature class.
 **Depends on:** 96 (the screens + the catalog), 119 (the live shell that renders them)
 **Blocks:** honest i18n claims for any module UI (every later module screen copies this pattern)

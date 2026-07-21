@@ -14,6 +14,7 @@ import '@expo/metro-runtime';
 import { initI18n, isLocale, DEFAULT_LOCALE, type Locale } from '@bolusi/i18n';
 import { registerRootComponent } from 'expo';
 
+import { registerModuleCatalogs } from './src/bootstrap/module-catalogs.js';
 import { WebHarnessRoot } from './src/web/WebHarnessRoot.js';
 
 function bootLocale(): Locale {
@@ -23,5 +24,9 @@ function bootLocale(): Locale {
 }
 
 initI18n({ locale: bootLocale() });
+// Merge the module catalogs (`notes.*`, 07-i18n §3.3) right after init — same contract as the native
+// boot (src/i18n.ts): AFTER init, BEFORE any screen resolves a label. Without it the harness renders
+// module screens with the English key fallback, which is what task 116's `app-shell.png` caught.
+registerModuleCatalogs();
 
 registerRootComponent(WebHarnessRoot);
