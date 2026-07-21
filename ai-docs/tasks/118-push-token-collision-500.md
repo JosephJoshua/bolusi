@@ -1,6 +1,6 @@
 # TASK 118 — `POST /v1/push/tokens` 500s when a client-supplied Expo push token already belongs to another device/tenant, instead of applying api/04-push §2's "last registrant wins"
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — a 500 on a global-UNIQUE collision (same 23505-escape MECHANISM as task 114), but a DIFFERENT class: the colliding value is a secret FCM/Expo token, not an enumerable id, so it is not a practical cross-tenant existence oracle. Still a real defect — a spec'd path returns INTERNAL, and token ownership isn't reconciled.
 **Depends on:** 21 (push registration), 114 (the shared `isUniqueViolation` helper it reuses)
 **Blocks:** —
