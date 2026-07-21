@@ -27,7 +27,7 @@ import {
   type DeviceRateLimits,
   type RateLimitStore,
 } from './middleware/rate-limit.js';
-import { serverCryptoPort, type OpRegistry } from './oplog/index.js';
+import { isFoldableSchemaVersion, serverCryptoPort, type OpRegistry } from './oplog/index.js';
 import { nodeHubScheduler, RealtimeHub, type HubScheduler } from './realtime/hub.js';
 import { InProcessPokeHub, type PokeHub } from './realtime/poke-hub.js';
 import type { SurfacedConflict } from './sync/conflict-detection.js';
@@ -114,11 +114,37 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
     }
   }
   return {
-    resolve(type) {
+    resolve(type, schemaVersion) {
       const declaration = byType.get(type);
       if (declaration === undefined) return { kind: 'unknown' };
-      // `.strict()` payload schema (04 §3): a parse throw is a SCHEMA_INVALID payload, never a
-      // crash — classifySchema turns `false` into the distinct rejection code (05 §8).
+
+      const currentVersion = declaration.schemaVersion;
+      // THE VERSION GATE (task 121; 05 §7/§8, schema-version.ts). The contract is
+      // `resolve(type, schemaVersion)` and the schema step passes the claimed version; ignoring it —
+      // as this did — accepted an op claiming ANY version whose payload happened to satisfy the
+      // CURRENT schema, and the applier then threw at FOLD time on the durably-logged op. Consult the
+      // registry's declared version (never a literal): a version the applier cannot fold (`> current`
+      // or non-integer/`< 1`) has no registry schema for (`type`, `schemaVersion`), so it is a
+      // SCHEMA_INVALID rejected HERE, at push, before any insert or fold (05 §8; the type is present,
+      // so it is not UNKNOWN_TYPE).
+      if (!isFoldableSchemaVersion(currentVersion, schemaVersion)) {
+        return { kind: 'known', validate: () => false };
+      }
+
+      // A foldable OLD version (`1 <= claimed < current`, e.g. a rolling-out `note_created` v2 while
+      // the server is at v3): the registry retains only the CURRENT payload schema (04 §3 — one
+      // schema per type, the current one), so there is no version-specific schema to re-validate its
+      // payload against. It was validated when it was originally emitted (05 §7); the applier folds it
+      // by its declared version. Accept it — validating an old payload against the CURRENT schema
+      // would wrongly reject a legitimate foldable version (v2's `mediaId` fails v3's `.strict()`).
+      // (Per-version payload schemas would be a module-contract change, out of this task's scope.)
+      if (schemaVersion !== currentVersion) {
+        return { kind: 'known', validate: () => true };
+      }
+
+      // The CURRENT version: validate the payload against the declared `.strict()` schema (04 §3). A
+      // parse throw is a SCHEMA_INVALID payload, never a crash — classifySchema turns `false` into
+      // the distinct rejection code (05 §8).
       return {
         kind: 'known',
         validate: (payload) => {

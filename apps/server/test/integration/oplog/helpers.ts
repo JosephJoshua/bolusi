@@ -21,6 +21,7 @@ import { expect, inject } from 'vitest';
 import { z } from 'zod';
 
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
+import { isFoldableSchemaVersion } from '../../../src/oplog/schema-version.js';
 import type { OpRegistry, OplogPipelineDeps } from '../../../src/oplog/types.js';
 import { ProjectionRegistry, type CryptoPort } from '@bolusi/core';
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
@@ -150,9 +151,15 @@ const SCHEMAS: Record<string, z.ZodType> = {
 };
 
 export const testRegistry: OpRegistry = {
-  resolve(type: string) {
+  resolve(type: string, schemaVersion: number) {
     const schema = SCHEMAS[type];
     if (schema === undefined) return { kind: 'unknown' };
+    // Every type this fake models is at schemaVersion 1 (its schema IS the v1 shape, and the suite's
+    // ChainBuilder stamps v1) — so it mirrors production `deriveOpRegistry`: a push claiming any other
+    // version is unfoldable → SCHEMA_INVALID (05 §8), the version-gate the real registry now enforces
+    // (schema-version.ts). Keeping the fake honest here stops it drifting from the thing it stands in
+    // for (CLAUDE.md §2.8/§2.11).
+    if (!isFoldableSchemaVersion(1, schemaVersion)) return { kind: 'known', validate: () => false };
     return { kind: 'known', validate: (payload) => schema.safeParse(payload).success };
   },
 };

@@ -11,6 +11,7 @@ export type {
   SystemSigner,
 } from './system-op.js';
 export { allocateServerSeq, lockTenantCounter } from './server-seq.js';
+export { isFoldableSchemaVersion } from './schema-version.js';
 export { isClockSkewed, SKEW_BASE_MS } from './skew.js';
 export { ANOMALY_KINDS, type AnomalyKind } from './anomalies.js';
 export type {
