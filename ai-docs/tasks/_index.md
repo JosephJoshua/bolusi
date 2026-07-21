@@ -126,6 +126,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 115 | `security-guide.md` §12's roll-up says `DEV 01–07` while the body defines **SEC-DEV-08** (shipped by task 58) — the SEC inventory's declared denominator is one id short, so "the SEC suite is complete" is checked against the wrong number (from task 28's inventory) | done | — |
 | 116 | react-native-web + Playwright visual harness so the screens render to pixels in a headless browser and can be screenshotted/interaction-tested (the layer the test-renderer cannot cover); binds in-memory fakes for native modules via the platform-free-core ports (owner request) | in-progress | 96 |
 | 117 | Maestro native E2E flow wired into 27a's Android-emulator CI lane so the REAL RN app (native views, not a WebView) gets driven — the true-native counterpart to 116's browser approximation (owner request) | blocked | 27a |
+| 118 | POST /v1/push/tokens 500s when a client-supplied Expo push token already belongs to another device/tenant instead of applying api/04-push §2 last-registrant-wins; same 23505 mechanism as 114 but a different (non-oracle) class (from task 114 sweep) | todo | 21, 114 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
