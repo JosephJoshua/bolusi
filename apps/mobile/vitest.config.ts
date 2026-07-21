@@ -56,6 +56,9 @@ export default defineConfig({
         HERE,
         '../../packages/ui/test/doubles/expo-vector-icons.tsx',
       ),
+      // The notes module screens (task 96) render a media thumbnail through `expo-image`, a native
+      // module esbuild cannot load — doubled like `react-native`, types still checked against the SDK.
+      'expo-image': resolve(HERE, 'test/doubles/expo-image.tsx'),
     },
   },
   test: {

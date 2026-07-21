@@ -16,10 +16,13 @@
     "./notes/screens": {
       "types": "./dist/notes/screens/index.d.ts",
       "default": "./dist/notes/screens/index.js"
-    }
+    },
+    "./notes/i18n/id.json": "./notes/i18n/id.json",
+    "./notes/i18n/en.json": "./notes/i18n/en.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "notes/i18n"
   ],
   "dependencies": {
     "@bolusi/core": "workspace:*",
@@ -27,15 +30,26 @@
     "@bolusi/i18n": "workspace:*",
     "zod": "catalog:"
   },
+  "peerDependencies": {
+    "@bolusi/ui": "workspace:*",
+    "expo-image": ">=57",
+    "react": ">=19",
+    "react-native": ">=0.86"
+  },
   "devDependencies": {
     "@bolusi/db-client": "workspace:*",
     "@bolusi/test-support": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
+    "@bolusi/ui": "workspace:*",
     "@electric-sql/pglite": "catalog:",
     "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "19.2.17",
     "better-sqlite3": "catalog:",
-    "kysely": "catalog:"
+    "expo-image": "57.0.0",
+    "kysely": "catalog:",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

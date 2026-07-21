@@ -1,0 +1,36 @@
+- generic [ref=f5e3]:
+    - generic [ref=f5e4]: RNW browser approximation — NOT device-verified
+    - generic [ref=f5e7]:
+        - generic [ref=f5e8]:
+            - button "Kembali" [ref=f5e9] [cursor=pointer]:
+                - generic [ref=f5e10]: 󰁍
+            - generic [ref=f5e11]: Perubahan Ditolak
+            - generic [ref=f5e12]:
+                - button "Terakhir terhubung 4 menit lalu" [ref=f5e13] [cursor=pointer]:
+                    - generic [ref=f5e14]: 󰀨
+                - button "Siapa yang pakai?" [ref=f5e16] [cursor=pointer]:
+                    - generic [ref=f5e17]: AP
+        - alert [ref=f5e20]:
+            - generic [ref=f5e21]: 󰀨
+            - generic [ref=f5e22]: 1 perubahan ditolak server. Ketuk untuk melihat.
+        - generic [ref=f5e23]:
+            - generic [ref=f5e24]:
+                - img "Terakhir terhubung 4 menit lalu" [ref=f5e25]
+                - generic [ref=f5e29]: 1 perubahan ditolak server. Ketuk untuk melihat.
+            - generic [ref=f5e30]: Terakhir terhubung 4 menit lalu
+            - generic [ref=f5e31]:
+                - generic [ref=f5e32]:
+                    - generic [ref=f5e33]: '0'
+                    - generic [ref=f5e34]: 0 perubahan belum terkirim
+                - generic [ref=f5e35]:
+                    - generic [ref=f5e36]: '0'
+                    - generic [ref=f5e37]: 0 foto belum terkirim
+            - generic [ref=f5e38]:
+                - generic [ref=f5e39]: Perubahan Ditolak
+                - generic [ref=f5e40]: Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.
+                - button "Terjadi kesalahan. Coba lagi." [ref=f5e44] [cursor=pointer]:
+                    - generic [ref=f5e45]:
+                        - generic [ref=f5e46]: Terjadi kesalahan. Coba lagi.
+                        - generic [ref=f5e47]: 12 menit lalu
+                    - generic [ref=f5e48]: 󰅂
+        - button "Kirim Sekarang" [ref=f5e51] [cursor=pointer]
