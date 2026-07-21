@@ -1,0 +1,179 @@
+/**
+ * The react-native-web visual + interaction suite (task 116).
+ *
+ * It navigates the exported web build to each screen-state (`?screen=&state=`), makes REAL role/text
+ * assertions about the rendered DOM (never merely "a page loaded" — T-14), captures a screenshot per
+ * state into `artifacts/`, and drives three genuine interactions (PIN key press, ID↔EN language
+ * toggle, discard ConfirmSheet). Every state also asserts the mandatory "RNW browser approximation —
+ * NOT device-verified" label is present, so no artifact can be mistaken for the device lane.
+ *
+ * HONEST CEILING: this is a browser approximation. It does not replace the device gates (27a/27b) or
+ * native E2E (117); it is a fast visual feedback loop below them.
+ */
+import path from 'node:path';
+
+import { expect, test, type Page } from '@playwright/test';
+
+const ARTIFACTS = path.join(__dirname, 'artifacts');
+const APPROX_LABEL = 'RNW browser approximation — NOT device-verified';
+
+/** The distinctively-named seed user (mirrors `src/web/seed.ts` PROBE_USER_NAME) — the data probe. */
+const PROBE_USER = 'Andi Pratama';
+
+async function open(page: Page, screen: string, state: string): Promise<void> {
+  await page.goto(`/?screen=${screen}&state=${state}`);
+  await expect(page.getByTestId(`web-harness-${screen}-${state}`)).toBeVisible();
+  // The label is on every screen — assert it every time (the artifact-labelling requirement).
+  await expect(page.getByTestId('rnw-approx-label').getByText(APPROX_LABEL)).toBeVisible();
+}
+
+async function shoot(page: Page, name: string): Promise<void> {
+  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), fullPage: true });
+}
+
+/**
+ * The four-states-plus screenshot matrix. Each row asserts a screen-SPECIFIC testID AND (where a
+ * stable label exists) an i18n text, so a blank/stub page would red — that is the falsification T-14
+ * demands, wired into the committed suite rather than left to a one-off.
+ */
+interface Row {
+  readonly screen: string;
+  readonly state: string;
+  readonly testId: string;
+  readonly text?: string;
+}
+
+const MATRIX: readonly Row[] = [
+  // Switcher — the four §5 states + the data-backed happy path + the idle lock.
+  { screen: 'switcher', state: 'loading', testId: 'switcher-screen', text: 'Siapa yang pakai?' },
+  { screen: 'switcher', state: 'empty', testId: 'switcher-empty' },
+  { screen: 'switcher', state: 'error', testId: 'switcher-error' },
+  { screen: 'switcher', state: 'unauthorized', testId: 'switcher-unauthorized' },
+  { screen: 'switcher', state: 'ready', testId: 'switcher-screen', text: PROBE_USER },
+  { screen: 'switcher', state: 'lock', testId: 'switcher-lock-banner' },
+
+  // PIN — the pad's real states.
+  { screen: 'pin', state: 'entry', testId: 'pin-pad', text: PROBE_USER },
+  { screen: 'pin', state: 'wrong', testId: 'pin-pad.message' },
+  { screen: 'pin', state: 'delayed', testId: 'pin-pad.message' },
+  { screen: 'pin', state: 'lockedOut', testId: 'pin-forgot' },
+
+  // Settings — the language surface (interaction covered separately).
+  { screen: 'settings', state: 'ready', testId: 'settings-screen', text: 'Bahasa' },
+
+  // Sync-status — healthy / saved-here / offline / needs-attention.
+  { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
+  { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
+  { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
+  { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
+
+  // Enrollment — steps + revoked banner.
+  { screen: 'enrollment', state: 'credentials', testId: 'enroll-step-credentials' },
+  { screen: 'enrollment', state: 'confirm', testId: 'enroll-step-confirm' },
+  { screen: 'enrollment', state: 'done', testId: 'enroll-progress' },
+  { screen: 'enrollment', state: 'revoked', testId: 'enroll-revoked-banner' },
+
+  // Capture (media) — camera is a labelled placeholder, never a faked photo.
+  { screen: 'capture', state: 'loading', testId: 'capture-loading' },
+  { screen: 'capture', state: 'unauthorized', testId: 'capture-unauthorized' },
+  { screen: 'capture', state: 'ready', testId: 'capture-web-placeholder' },
+  { screen: 'capture', state: 'error', testId: 'capture-failed' },
+  { screen: 'capture', state: 'lowStorage', testId: 'capture-refused' },
+
+  // Signature (media) — loading / unauthorized / ready / error.
+  { screen: 'signature', state: 'loading', testId: 'signature-loading' },
+  { screen: 'signature', state: 'unauthorized', testId: 'signature-unauthorized' },
+  { screen: 'signature', state: 'ready', testId: 'signature-pad' },
+  { screen: 'signature', state: 'error', testId: 'signature-failed' },
+
+  // App-mode — the full RootNavigator gate over the demo seed.
+  { screen: 'app', state: 'switcher', testId: 'switcher-screen', text: PROBE_USER },
+  { screen: 'app', state: 'shell', testId: 'bolusi-app-shell' },
+];
+
+for (const row of MATRIX) {
+  test(`renders ${row.screen}/${row.state}`, async ({ page }) => {
+    await open(page, row.screen, row.state);
+    await expect(page.getByTestId(row.testId)).toBeVisible();
+    if (row.text !== undefined) {
+      await expect(page.getByText(row.text, { exact: true }).first()).toBeVisible();
+    }
+    await shoot(page, `${row.screen}-${row.state}`);
+  });
+}
+
+// ── DATA PROBE: the fake feed drives the render (not a page that renders empty regardless) ─────────
+
+test('switcher/ready renders every seeded user (data feeds the DOM)', async ({ page }) => {
+  await open(page, 'switcher', 'ready');
+  for (const name of [PROBE_USER, 'Siti Rahayu', 'Budi Santoso']) {
+    await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
+  }
+});
+
+test('switcher/empty renders the empty state, not a crash and not a user card', async ({
+  page,
+}) => {
+  await open(page, 'switcher', 'empty');
+  await expect(page.getByTestId('switcher-empty')).toBeVisible();
+  // The seeded names are absent when the roster is empty — the render tracks the (empty) data.
+  await expect(page.getByText(PROBE_USER, { exact: true })).toHaveCount(0);
+});
+
+// ── INTERACTION 1: the PIN pad responds to a key press, and completes on the 6th digit ────────────
+
+test('PIN pad responds to key presses and fires its one egress on the 6th digit', async ({
+  page,
+}) => {
+  await open(page, 'pin', 'interactive');
+  const dot0 = page.getByTestId('pin-pad.dot.0');
+  const emptyFill = 'rgb(244, 244, 245)';
+  const filledFill = 'rgb(24, 24, 27)';
+
+  await expect(dot0).toHaveCSS('background-color', emptyFill);
+  await page.getByTestId('pin-pad.key.1').click();
+  // The first dot fills — the browser-rendered pad genuinely reacted to the tap.
+  await expect(dot0).toHaveCSS('background-color', filledFill);
+
+  // The entered value's ONE egress: onComplete on the 6th digit. The PIN itself is never rendered.
+  await expect(page.getByTestId('pin-submitted')).toHaveCount(0);
+  for (const key of ['2', '3', '4', '5', '6']) {
+    await page.getByTestId(`pin-pad.key.${key}`).click();
+  }
+  await expect(page.getByTestId('pin-submitted')).toBeVisible();
+});
+
+// ── INTERACTION 2: the ID↔EN language toggle switches every label live ────────────────────────────
+
+test('Settings language toggle switches labels between Indonesian and English', async ({
+  page,
+}) => {
+  await open(page, 'settings', 'ready');
+  await expect(page.getByText('Bahasa', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Language', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('settings-locale-active-id')).toBeVisible();
+
+  await page.getByTestId('settings-locale-en').click();
+
+  await expect(page.getByText('Language', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Bahasa', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('settings-locale-active-en')).toBeVisible();
+  await shoot(page, 'settings-ready-en');
+});
+
+// ── INTERACTION 3: the discard ConfirmSheet opens on a back press over typed input ────────────────
+
+test('Enrollment back over typed input opens the real discard ConfirmSheet', async ({ page }) => {
+  await open(page, 'enrollment', 'credentials');
+  await expect(page.getByTestId('enroll-discard-sheet')).toHaveCount(0);
+
+  await page.getByTestId('enroll-identifier.field').fill('owner@maju');
+  await page.getByTestId('harness-enroll-back').click();
+
+  await expect(page.getByTestId('enroll-discard-sheet')).toBeVisible();
+  await shoot(page, 'enrollment-discard-sheet');
+
+  // Cancel dismisses it — the real handler, not a stub.
+  await page.getByTestId('enroll-discard-sheet.cancel').click();
+  await expect(page.getByTestId('enroll-discard-sheet')).toHaveCount(0);
+});

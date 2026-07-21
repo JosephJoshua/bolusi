@@ -53,6 +53,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json && vitest run"
+    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json ../i18n/tsconfig.build.json ../ui/tsconfig.build.json && vitest run"
   }
 }

@@ -195,3 +195,87 @@ test('rate limit: 31st registration/day/device → 429 (Retry-After + retryAfter
   );
   expect(afterReset.status).toBe(200);
 });
+
+// api/04-push §2 "last registrant wins": the global UNIQUE on expo_push_token means a token can
+// belong to at most one device. When a second device in the SAME tenant registers a token another
+// device already holds, ownership TRANSFERS to the newest registrant — a 200, not a 500 (the
+// expo_push_token 23505 must not escape; task 118) and not a hard reject.
+test('same-tenant token collision → transfers to the new device (200); old device no longer owns it', async () => {
+  const a = await h.seedDevice('reg-xfer-a');
+  const b = await h.seedDeviceInTenant('reg-xfer-b', {
+    tenantId: a.tenantId,
+    storeId: a.storeId,
+  });
+  const token = expoToken('xfer-shared');
+
+  h.clock.set(1_700_020_000_000);
+  const first = await h.app.request(
+    registerReq({ expoPushToken: token, deviceId: a.deviceId }, { auth: a.auth }),
+  );
+  expect(first.status).toBe(200);
+  expect((await tokenRow(a.deviceId))?.expoPushToken).toBe(token);
+
+  // Device B registers the SAME token → last registrant wins.
+  h.clock.set(1_700_021_000_000);
+  const transfer = await h.app.request(
+    registerReq({ expoPushToken: token, deviceId: b.deviceId }, { auth: b.auth }),
+  );
+  expect(transfer.status).toBe(200);
+  const body = (await transfer.json()) as { deviceId: string; updatedAt: number };
+  expect(body.deviceId).toBe(b.deviceId);
+  expect(body.updatedAt).toBe(1_700_021_000_000);
+
+  // T now points at B; A no longer owns T (ownership moved, not duplicated).
+  expect((await tokenRow(b.deviceId))?.expoPushToken).toBe(token);
+  expect(await h.countTokens(b.deviceId)).toBe(1);
+  expect(await tokenRow(a.deviceId)).toBeUndefined();
+  expect(await h.countTokens(a.deviceId)).toBe(0);
+});
+
+// A cross-TENANT collision cannot be transferred: RLS hides the other tenant's row (bolusi_app is
+// NOBYPASSRLS), so re-pointing it would breach tenant isolation. The endpoint must FAIL CLOSED —
+// never a 500, never touching or revealing the other tenant's row (task 118).
+test('cross-tenant token collision → fails closed (not 500); the other tenant keeps its token', async () => {
+  const a = await h.seedDevice('reg-xtenant-a');
+  const b = await h.seedDevice('reg-xtenant-b'); // a DIFFERENT tenant
+  expect(b.tenantId).not.toBe(a.tenantId);
+  const token = expoToken('xtenant-shared');
+
+  h.clock.set(1_700_030_000_000);
+  expect(
+    (
+      await h.app.request(
+        registerReq({ expoPushToken: token, deviceId: a.deviceId }, { auth: a.auth }),
+      )
+    ).status,
+  ).toBe(200);
+
+  const denied = await h.app.request(
+    registerReq({ expoPushToken: token, deviceId: b.deviceId }, { auth: b.auth }),
+  );
+  expect(denied.status).not.toBe(500);
+  expect(denied.status).toBe(403);
+  expect((await readError(denied)).error.code).toBe('PERMISSION_DENIED');
+
+  // Tenant isolation preserved: A (the other tenant) still owns T; B wrote nothing.
+  expect((await tokenRow(a.deviceId))?.expoPushToken).toBe(token);
+  expect(await h.countTokens(b.deviceId)).toBe(0);
+});
+
+// Positive control: a fresh, unheld token takes the ordinary (non-collision) path — a plain 200
+// with a new row — so the transfer/fail-closed handling never fires for the common case.
+test('fresh unique token registers normally (no collision path)', async () => {
+  const ctx = await h.seedDevice('reg-fresh-unique');
+  h.clock.set(1_700_040_000_000);
+  const res = await h.app.request(
+    registerReq(
+      { expoPushToken: expoToken('fresh-unique'), deviceId: ctx.deviceId },
+      {
+        auth: ctx.auth,
+      },
+    ),
+  );
+  expect(res.status).toBe(200);
+  expect((await tokenRow(ctx.deviceId))?.expoPushToken).toBe(expoToken('fresh-unique'));
+  expect(await h.countTokens(ctx.deviceId)).toBe(1);
+});
