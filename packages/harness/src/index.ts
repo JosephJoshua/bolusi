@@ -28,6 +28,14 @@ export {
   withSeed,
 } from './reporter.js';
 export { CI_VOLUMES, activeVolumes, scaled, type Volumes } from './volumes.js';
+export {
+  NIGHTLY_X4_SEED_CAPS,
+  X4_SEED_CAP_ENV,
+  isNightlyX4Lane,
+  nightlyX4Seeds,
+  x4SeedCap,
+  type X4CappedScenario,
+} from './nightly-scale.js';
 export { runConvergence, type ConvergenceOptions, type ConvergenceResult } from './convergence.js';
 export { toProjectionManifest, notesProjectionManifest } from './manifest.js';
 export {
