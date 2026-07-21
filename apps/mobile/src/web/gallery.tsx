@@ -48,6 +48,7 @@ import {
   HARNESS_NOW,
   SYNC_STATUS_STATES,
   demoSyncInput,
+  demoNotesRuntime,
   fakeEnrollmentController,
 } from './seed.js';
 
@@ -213,12 +214,15 @@ function EnrollmentInteractive({
 /**
  * App-mode: the FULL prop-driven `App` (its RootNavigator gate → real screens), fed the demo seed.
  * `session: null` lands on the User Switcher (the enrolled-device happy path); a `session` value
- * lands on the shell home surface (where the task-96 notes screens will render once merged — the web
- * entry renders the RootNavigator, so they appear automatically). Proves the whole navigation gate
+ * lands on the shell home surface — which, since task 119, IS the notes module surface: `App.notes`
+ * receives a `NotesRuntime`, so `app/shell` now screenshots the real `NotesList` over demo data
+ * instead of the empty `shell-home` placeholder it used to render. Proves the whole navigation gate
  * renders real screens from fake data, not just isolated components.
  */
 function AppMode({ session }: { readonly session: AppProps['session'] }): React.JSX.Element {
   const [, force] = useReducer((n: number) => n + 1, 0);
+  // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
+  const [notes] = useState(() => demoNotesRuntime());
   return (
     <App
       device="active"
@@ -227,6 +231,7 @@ function AppMode({ session }: { readonly session: AppProps['session'] }): React.
       pinRow={() => null}
       now={HARNESS_NOW}
       session={session}
+      notes={notes}
       locked={false}
       sync={demoSyncInput()}
       onSyncNow={noop}

@@ -23,6 +23,8 @@
  * lane.
  */
 import type { PinAttemptRow, SyncState } from '@bolusi/core';
+import type { NoteRow } from '@bolusi/modules/notes';
+import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 import type { LoginResult } from '../screens/enrollment/model.js';
 import type { DeviceInfo } from '../screens/settings/model.js';
@@ -180,5 +182,99 @@ export function fakeEnrollmentController(): EnrollmentController {
   return {
     login: () => Promise.resolve(DEMO_LOGIN),
     enroll: () => Promise.resolve(),
+  };
+}
+
+/** The demo notes, seeded so the app-mode shell renders a POPULATED list rather than the empty state. */
+const DEMO_NOTES: readonly NoteRow[] = [
+  {
+    id: 'note-demo-1',
+    title: 'Stok kopi menipis',
+    body: 'Sisa 4 karung di gudang belakang. Pesan ulang sebelum akhir minggu.',
+    mediaId: null,
+    archived: false,
+    editCount: 0,
+    createdBy: 'u-andi',
+    createdAt: HARNESS_NOW - 12 * MINUTE,
+    lastEditedBy: 'u-andi',
+    lastEditedAt: HARNESS_NOW - 12 * MINUTE,
+  },
+  {
+    id: 'note-demo-2',
+    title: 'Ganti LCD — Pak Budi',
+    body: 'Unit ditinggal, ambil besok sore.',
+    mediaId: 'media-demo-1',
+    archived: false,
+    editCount: 2,
+    createdBy: 'u-siti',
+    createdAt: HARNESS_NOW - 3 * 60 * MINUTE,
+    lastEditedBy: 'u-andi',
+    lastEditedAt: HARNESS_NOW - 40 * MINUTE,
+  },
+];
+
+/**
+ * A `NotesRuntime` over in-memory demo data, for app-mode in the browser harness (task 116 + 119).
+ *
+ * WHY A FAKE HERE AND A REAL ONE ON DEVICE. `createSessionNotesRuntime` composes over the SQLCipher
+ * database through better-sqlite3/op-sqlite — neither loads in a browser, which is the whole reason
+ * this harness binds the SEAM rather than the native modules (see this file's header). So the browser
+ * lane renders the REAL screens over fake data, exactly as it already does for the switcher and the
+ * sync-status screen; the device lane runs the real runtime. Writes mutate the in-memory array and
+ * notify subscribers, so the create/edit interactions genuinely re-render the list.
+ */
+export function demoNotesRuntime(): NotesRuntime {
+  let rows: NoteRow[] = [...DEMO_NOTES];
+  const listeners = new Set<() => void>();
+  const notify = (): void => {
+    for (const listener of listeners) listener();
+  };
+  const touch = (id: string, patch: Partial<NoteRow>): { readonly noteId: string } => {
+    rows = rows.map((row) => (row.id === id ? { ...row, ...patch } : row));
+    notify();
+    return { noteId: id };
+  };
+
+  return {
+    listNotes: (input) =>
+      Promise.resolve({
+        rows: rows.filter((row) => row.archived === (input.filter?.archived ?? false)),
+        nextCursor: null,
+      }),
+    getNote: (input) =>
+      Promise.resolve({ rows: rows.filter((row) => row.id === input.noteId), nextCursor: null }),
+    createNote: (input) => {
+      const id = `note-demo-${String(rows.length + 1)}`;
+      rows = [
+        {
+          id,
+          title: input.title,
+          body: input.body,
+          mediaId: input.mediaId ?? null,
+          archived: false,
+          editCount: 0,
+          createdBy: 'u-andi',
+          createdAt: HARNESS_NOW,
+          lastEditedBy: 'u-andi',
+          lastEditedAt: HARNESS_NOW,
+        },
+        ...rows,
+      ];
+      notify();
+      return Promise.resolve({ noteId: id });
+    },
+    editNoteBody: (input) =>
+      Promise.resolve(touch(input.noteId, { body: input.body, lastEditedAt: HARNESS_NOW })),
+    archiveNote: (input) => Promise.resolve(touch(input.noteId, { archived: true })),
+    noteSyncStatuses: () => Promise.resolve({ 'note-demo-1': ['local'] }),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    hasPermission: () => true,
+    // A browser has no camera flow and no verified-media pipeline; both answer the honest "not here"
+    // rather than a fabricated photo (this file's "do not fake a photo" rule).
+    capturePhoto: () => Promise.resolve(null),
+    loadThumbnail: () => Promise.resolve({ kind: 'unavailable' }),
   };
 }
