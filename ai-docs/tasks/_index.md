@@ -59,7 +59,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 48 | **HIGH-when-17** `RawOpRow` is client-shaped 3 ways: int8 seq inverts canonical order past 9; jsonb payload throws; boolean agent_initiated always truthy (from task 46) | done | 46 |
 | 49 | **HIGH** the server never applies projections — push transaction drops normative step 6; the handoff ring closes on itself; every server read model is empty (from qa orphan sweep) | done | 16 |
 | 50 | **HIGH** app bootstrap: DB open + migrations, module registration, transport, sync triggers — shell boots, data layer doesn't (from task 24) | done | 15, 18, 24 |
-| 51 | pull wire carries no per-op `serverSeq` — 10-db §9.2 says the client stores it, the wire structurally cannot carry it; client uses a local gapless counter (needs a ruling) (from task 15) | in-progress | 02, 15, 16 |
+| 51 | pull wire carries no per-op `serverSeq` — 10-db §9.2 says the client stores it, the wire structurally cannot carry it; client uses a local gapless counter (needs a ruling) (from task 15) | done | 02, 15, 16 |
 | 52 | 8 of 12 live invariants have no owner/test in a section titled "Invariants (testable, numbered)"; state FR ids are provenance (D15) (from QA sweep) | done | 31 |
 | 53 | `SyncStatus` declared 3× (core's is avoidable, ui's is boundary-forced); seams are `string` so the compiler finds zero (from inverse enum sweep) | done | 15 |
 | 54 | ~~SEC-AUTH-06/11 server push-rejection legs are unclaimed~~ — **premise refuted: both legs ship in task 07 (`scope.ts:107`), falsified load-bearing. No code owed.** Needs an owner decision on who *titles* the ids (§2.1.6); sweep filed 61 (from task 31) | done | 31 |
