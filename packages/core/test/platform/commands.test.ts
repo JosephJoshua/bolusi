@@ -247,7 +247,7 @@ describe('acknowledgeConflict — permission denial (02 §12) and lifecycle (03 
     expect(appended[0]?.entityId).toBe(conflictId);
   });
 
-  test('acknowledging an auto_resolved conflict → INVALID_TRANSITION, no op (03 §7/§12)', async () => {
+  test('acknowledging an auto_resolved conflict → INVALID_TRANSITION, no op (03 §7/§12) (I-7: acknowledged/auto_resolved are terminal; a decision is only ever a new op)', async () => {
     // 01 §8.3: `minor → auto_resolved` is TERMINAL. 03 §7's "Invalid (command-time)" row.
     fixture.queries.stub('platform.conflict_view', {
       rows: [conflictRow({ severity: 'minor', status: 'auto_resolved' })],

@@ -303,21 +303,37 @@ The v1→v2 bump on `note_created` is deliberate: it is the mid-history schema m
 
 ## 10. Invariants (testable, numbered)
 
-| # | Invariant |
-| - | --------- |
-| I-1 | A user belongs to exactly one tenant, for life. No cross-tenant user, no cross-tenant access path (FR-1040/41). |
-| I-2 | Deactivating a user preserves every operation they performed; reactivation restores access without any history gap (FR-1004). `active ↔ deactivated` is the only user transition. |
-| I-3 | The last active user holding the tenant-administration permission cannot be deactivated; the system actor counts for nothing here (PRD-011 §7). Server-endpoint-enforced: `409 LAST_ADMIN_PROTECTED` (api/02-auth §5.4). |
-| I-4 | A device belongs to exactly one (tenant, store) pair; `revoked` is terminal; pre-revocation ops remain valid and verifiable forever (FR-1019). |
-| I-5 | Every entity row in every tenant table carries `tenantId` (FR-1038); enforcement is the two-layer tenancy scheme in 10-db-schema §RLS. |
-| I-6 | MediaItem capture metadata (`sha256`, `capturedAt`, `location`, `capturedByUserId`, `deviceId`, `type`) is immutable from capture; a media id can never resolve to different bytes (FR-1142/43). |
-| I-7 | Conflict records are never deleted; `acknowledged` and `auto_resolved` are terminal; an owner decision is expressed only as a new operation (§5.4). |
-| I-8 | Projections are disposable; any projection table can be dropped and rebuilt from the log byte-identically (FR-1116, FR-1119). |
-| I-9 | `loginIdentifier` is globally unique across all tenants and role names are unique per tenant — both enforced server-side at creation (§4). Identity mutations are online-only, so no offline collision path exists. |
-| I-10 | A store-scoped role grant's `storeId` is one of the user's assigned stores; `scopeType = 'tenant'` grants carry `storeId = null`. Violations deny at evaluation (fail closed). |
-| I-11 | The system actor and system device exist exactly once per tenant, cannot log in / enroll users, and are the only permitted source of `platform.conflict_detected` ops. |
-| I-12 | Retired — tenant suspension is deferred (roadmap.md); v0 tenants are implicitly active and no status column exists (§3.1). The number is reserved to keep cross-references stable. |
-| I-13 | PIN hash material never appears in the operation log or any op payload; verifiers travel only over the control plane (TLS) and the device bundle, scoped to the user's own stores (§4.1). |
+**These are contracts, and the section title is a promise** (decision D15b). Every **live** invariant
+has exactly one owner: a test whose **title carries the invariant id verbatim**, or — when the
+universal claim is genuinely not yet shipped — a row in
+`packages/test-support/src/invariant-pending-allowlist.json` naming the owing task. The gate is
+`packages/test-support/src/invariant-meta.test.ts`, which rides the SEC-META-01 machinery
+(`sec-meta.ts`, `INVARIANT_SCHEME`) rather than duplicating it. **To find an invariant's test, grep
+its id.** Adding an invariant without an owner fails the gate; so does removing its owning title.
+
+**On `FR-####` citations (decision D15a).** An `FR-####` beside a rule is **provenance** — a pointer
+back to the PRD that motivated it — **not** a discharge contract. The **spec text is the
+requirement**, and tasks discharge **spec sections, not FR ids**; nothing tracks FR→owner and
+nothing is meant to. (PRDs are *stale input, not ground truth* — CLAUDE.md §1 — so a traceability
+contract anchored in them would invert the doc hierarchy.) Invariant ids `I-#` are the opposite:
+spec-native, universally quantified, and gated per the paragraph above. Do not infer from an
+`FR-####` that some task cites it back.
+
+| # | Invariant | Owner — task · test titling the id |
+| - | --------- | ---------------------------------- |
+| I-1 | A user belongs to exactly one tenant, for life. No cross-tenant user, no cross-tenant access path (FR-1040/41). | 05 · `db-server/test/sec-tenant-02-enforcement.test.ts` (RLS closes the cross-tenant read path) |
+| I-2 | Deactivating a user preserves every operation they performed; reactivation restores access without any history gap (FR-1004). `active ↔ deactivated` is the only user transition. | 07 · `server/test/integration/oplog/pipeline.test.ts` (the pipeline gates on membership, never status) |
+| I-3 | The last active user holding the tenant-administration permission cannot be deactivated; the system actor counts for nothing here (PRD-011 §7). Server-endpoint-enforced: `409 LAST_ADMIN_PROTECTED` (api/02-auth §5.4). | 13 · `server/test/identity/users.test.ts` |
+| I-4 | A device belongs to exactly one (tenant, store) pair; `revoked` is terminal; pre-revocation ops remain valid and verifiable forever (FR-1019). | 13 · `server/test/security/sec-dev.test.ts` (SEC-DEV-03). The `(tenant, store)` clause is additionally structural — the `devices` NOT NULL/CHECK constraints in `db-server/test/ddl-constraints.test.ts` |
+| I-5 | Every entity row in every tenant table carries `tenantId` (FR-1038); enforcement is the two-layer tenancy scheme in 10-db-schema §RLS. | 05 · `db-server/test/sec-tenant-01-rls-coverage.test.ts` (catalog walk over **every** tenant table) |
+| I-6 | MediaItem capture metadata (`sha256`, `capturedAt`, `location`, `capturedByUserId`, `deviceId`, `type`) is immutable from capture; a media id can never resolve to different bytes (FR-1142/43). | 19 · `server/test/integration/media/sec-media.test.ts` (SEC-MEDIA-02; route walk proves no mutation endpoint exists) |
+| I-7 | Conflict records are never deleted; `acknowledged` and `auto_resolved` are terminal; an owner decision is expressed only as a new operation (§5.4). | 17 · `core/test/platform/commands.test.ts` |
+| I-8 | Projections are disposable; any projection table can be dropped and rebuilt from the log byte-identically (FR-1116, FR-1119). | 08 · `core/src/projection/rebuild.test.ts` |
+| I-9 | `loginIdentifier` is globally unique across all tenants and role names are unique per tenant — both enforced server-side at creation (§4). Identity mutations are online-only, so no offline collision path exists. | 13 · `server/test/identity/users.test.ts` (the `login_identifier` UNIQUE index, surfaced as `409`) |
+| I-10 | A store-scoped role grant's `storeId` is one of the user's assigned stores; `scopeType = 'tenant'` grants carry `storeId = null`. Violations deny at evaluation (fail closed). | 09 · `core/test/authz/evaluate.test.ts` (the store→tenant escalation guard) |
+| I-11 | The system actor and system device exist exactly once per tenant, cannot log in / enroll users, and are the only permitted source of `platform.conflict_detected` ops. | 07 · `server/test/integration/oplog/pipeline.test.ts` (any non-system source is `SCOPE_VIOLATION`) |
+| I-12 | Retired — tenant suspension is deferred (roadmap.md); v0 tenants are implicitly active and no status column exists (§3.1). The number is reserved to keep cross-references stable. | **retired — no owner is correct**; excluded from the gate's denominator |
+| I-13 | PIN hash material never appears in the operation log or any op payload; verifiers travel only over the control plane (TLS) and the device bundle, scoped to the user's own stores (§4.1). | **28** (allowlisted, openly owed). Task 14 proves this **per-case** (`pin-flows.test.ts` asserts specific payloads carry no verifier); the **universal** scan over every pushed payload is SEC-AUTH-09 leg 2. **Per-case ≠ universal**, so the per-case test deliberately does *not* title I-13 |
 
 ## 11. Out of v0 (do not build here)
 

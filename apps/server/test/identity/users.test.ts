@@ -40,7 +40,7 @@ function bearer(token: string): Record<string, string> {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
-test('LAST_ADMIN_PROTECTED: deactivating the sole active tenant admin → 409, then succeeds with a second admin', async () => {
+test('LAST_ADMIN_PROTECTED: deactivating the sole active tenant admin → 409, then succeeds with a second admin (I-3)', async () => {
   const { tenantId, ownerId } = await tenant();
   const control = await seedControlSession(h, { tenantId, userId: ownerId });
 
@@ -63,7 +63,7 @@ test('LAST_ADMIN_PROTECTED: deactivating the sole active tenant admin → 409, t
   expect(((await second.json()) as { status: string }).status).toBe('deactivated');
 });
 
-test('create: password requires loginIdentifier (422); globally-unique login collision (409); scope must cover storeIds (403)', async () => {
+test('create: password requires loginIdentifier (422); globally-unique login collision (409); scope must cover storeIds (403) (I-9: loginIdentifier is globally unique across tenants, enforced server-side at creation)', async () => {
   const { tenantId, s1, ownerId } = await tenant();
   const control = await seedControlSession(h, { tenantId, userId: ownerId });
   const staffRole = await roleIdOf(h, tenantId, 'staff');

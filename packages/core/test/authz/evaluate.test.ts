@@ -347,7 +347,7 @@ describe('scope evaluation (02-permissions §5.2 step 4)', () => {
     );
   });
 
-  test('a store-scoped role granted with a null storeId is dropped as malformed — the store→tenant escalation guard (§5.2 step 5)', () => {
+  test('a store-scoped role granted with a null storeId is dropped as malformed — the store→tenant escalation guard (§5.2 step 5) (I-10: grant scope violations deny at evaluation, fail closed)', () => {
     // Control (T-14b): the SAME store-scoped role, granted correctly at STORE_A, allows — so the
     // three denials below are caused by the malformed grant, not by a dead fixture.
     expect(evaluate(v0Snapshot(), staffQuery())).toEqual(ALLOWED);

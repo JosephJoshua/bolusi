@@ -1,0 +1,4 @@
+{
+  "$comment": "Invariant pending allowlist (decision D15b; 01-domain-model.md §10 'Invariants (testable, numbered)'). Mirror of sec-pending-allowlist.json, read by the SAME gate (packages/test-support/src/sec-meta.ts auditInvariantCoverage, INVARIANT_SCHEME) — not a second gate. Every LIVE invariant (I-12 is retired) without a shipped verbatim-id test title MUST map to its owning ai-docs/tasks/NN-*.md, and that task MUST declare the id on its '**Invariants owned by THIS task:**' marker line — a prose mention does not confer ownership. An id that is BOTH titled and listed here fails the gate; an entry whose owner is done but never shipped the title is stale. I-13's universal push-payload scan is the universal half of SEC-AUTH-09 leg 2 (task 14 proves it per-case; per-case != universal, so the per-case pin-flows test does NOT title I-13).",
+  "I-13": "ai-docs/tasks/28-security-sweep.md"
+}

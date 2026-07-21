@@ -435,7 +435,7 @@ describe('scope validation (05 §9)', () => {
     expect(result.results[0]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
   });
 
-  test('MEMBERSHIP-NOT-STATUS: an op from a deactivated-but-member user is ACCEPTED (05 §9.3)', async () => {
+  test('MEMBERSHIP-NOT-STATUS: an op from a deactivated-but-member user is ACCEPTED (05 §9.3) (I-2: deactivation preserves every operation, with no history gap)', async () => {
     const { world, builder } = await setupWorld(1055);
     const genesis = builder.genesis();
     const deactivatedId = testId(99);
@@ -689,7 +689,7 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
     expect(result.results[1]).toMatchObject({ status: 'accepted' });
   });
 
-  test('platform.conflict_detected pushed from a member device is SCOPE_VIOLATION', async () => {
+  test('platform.conflict_detected pushed from a member device is SCOPE_VIOLATION (I-11: the system actor/device is the only permitted source)', async () => {
     const { world, builder } = await setupWorld(1070);
     const genesis = builder.genesis();
     const op = builder.append({

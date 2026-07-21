@@ -56,7 +56,7 @@ test('SEC-TENANT-02 the harness is not vacuous: the app role is subject to RLS w
   expect(asApp.notes).toHaveLength(1); // app role sees only tenant A's
 });
 
-test('SEC-TENANT-02 SELECT as tenant A returns zero of tenant B rows', async () => {
+test('SEC-TENANT-02 SELECT as tenant A returns zero of tenant B rows (I-1: no cross-tenant access path)', async () => {
   const { a, b } = await seedTwoTenants();
 
   const rows = await testDb.appForTenant(a.tenantId, (db) =>

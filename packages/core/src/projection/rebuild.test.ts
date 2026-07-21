@@ -21,7 +21,7 @@ import {
 } from '../../test/projection/notes-fixture.js';
 
 describe('rebuild == incremental (CHAOS-08 precursor)', () => {
-  test('a drop-tables full rebuild reproduces the incremental projection byte-for-byte at ≥2000 ops', async () => {
+  test('a drop-tables full rebuild reproduces the incremental projection byte-for-byte at ≥2000 ops (I-8: projections are disposable and rebuildable from the log)', async () => {
     // 4 devices × 520 = 2080 ops (CI-scale, > 2000).
     const generated = generateNotesScript(808, { deviceCount: 4, opsPerDevice: 520 });
     expect(generated.length).toBeGreaterThanOrEqual(2000);

@@ -67,7 +67,7 @@ describe('SEC-MEDIA-01 replace after attach → 409', () => {
 });
 
 describe('SEC-MEDIA-02 metadata immutable', () => {
-  test('SEC-MEDIA-02 varied re-init → 409 (INIT_MISMATCH receiving / MEDIA_IMMUTABLE complete); no mutation endpoint; metadata unchanged', async () => {
+  test('SEC-MEDIA-02 varied re-init → 409 (INIT_MISMATCH receiving / MEDIA_IMMUTABLE complete); no mutation endpoint; metadata unchanged (I-6: capture metadata is immutable and a media id never resolves to different bytes)', async () => {
     const ctx = await h.seedDevice('sec02');
     const bytes = buildImage(800, 'image/jpeg', 'sec02');
     const id = detUuidV7('sec02:media');

@@ -137,7 +137,7 @@ test('SEC-DEV-02 token hashed at rest: no plaintext token in devices/control_ses
   expect(stolen.status).toBe(401);
 });
 
-test('SEC-DEV-03 revocation latency semantics: revoke → next request → 401 DEVICE_REVOKED; signing_key_public retained + pre-revocation state readable', async () => {
+test('SEC-DEV-03 revocation latency semantics: revoke → next request → 401 DEVICE_REVOKED; signing_key_public retained + pre-revocation state readable (I-4: revoked is terminal and pre-revocation ops stay verifiable)', async () => {
   const { p, storeId, control } = await setup();
   const device = await seedDevice(h, { tenantId: p.tenantId, storeId, enrolledBy: p.ownerUserId });
   const pubkeyBefore = (

@@ -176,7 +176,7 @@ afterAll(async () => {
   await testDb?.close();
 });
 
-test('SEC-TENANT-01 every tenant table has RLS enabled, forced, and policies covering all four verbs', async () => {
+test('SEC-TENANT-01 every tenant table has RLS enabled, forced, and policies covering all four verbs (I-5: every tenant row carries tenantId, enforced by the two-layer scheme)', async () => {
   const tables = await readTableSecurity(testDb);
 
   // Guard against a sweep that passes because it looked at nothing.
