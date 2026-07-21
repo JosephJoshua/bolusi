@@ -96,7 +96,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 93 | the db-client load-flake class (task 67) also in apps/mobile bootstrap tests + secret-scan, still on default 5000ms — same measured nondeterminism, pre-emptive (from task 67 sweep) | done | 67 |
 | 94 | **MEDIUM** an enrolled device shows BLANK metadata: `index.ts` hands `Root` a hardcoded empty `deviceInfo`, so Settings renders no device name/store/tenant for a device that now enrolls (task 92); and the enroll POST sends `appVersion: ''` (expo-constants unpinned). Values all exist in `meta_kv` + the directory; wire them (from task 92) | done | 24, 92 |
 | 95 | the DB-driver testOnly lock is bypassed by SUBPATH imports (`@electric-sql/pglite/worker` = real DB surface) — same gap for better-sqlite3/pg; normalize to package root (from task 42 review) | done | 42 |
-| 96 | notes module SCREENS (NotesList/NoteEditor/NoteDetail) — 4 states, ConfirmSheet, optimistic save, thumbnail, i18n live-switch; carved from 25, frontend-phase (D17) | todo | 25, 24, 18 |
+| 96 | notes module SCREENS (NotesList/NoteEditor/NoteDetail) — 4 states, ConfirmSheet, optimistic save, thumbnail, i18n live-switch; carved from 25, frontend-phase (D17) | done | 25, 24, 18 |
 | 97 | CLIENT_MODULES (apps/mobile) omits authModule so auth.* ops fold as unregistered on-device — mirror of task 43 server fix, one-line + falsify (from task 43) | done | 43 |
 | 98 | the SERVER arm may deny without an FR-1045 audit op — mirror of task 44, CONFIRM by producer-trace first (from task 44) | done | 13 |
 | 99 | a persistently-failing denial-audit append is SILENT — the shared task-10 catch{} swallows it on every denial path (from task 44 review) | done | 10 |
