@@ -73,6 +73,39 @@ async function expectUnreadable(
 }
 
 /**
+ * THE POSITIVE CONTROL for `checkDbAtRestIsCiphertext` (testing-guide T-14b).
+ *
+ * The seeded-marker check below passes when the markers are ABSENT from the file — which is exactly
+ * what a SILENT SEED NO-OP also produces. "No plaintext found" then proves nothing: it is the
+ * parse-collapse / empty-fixture family (an empty result and a correct result look identical). So
+ * before the on-device leg (task 27a) trusts a marker's absence from the SQLCipher file, it writes
+ * the SAME markers to an UNENCRYPTED control DB and passes THAT copy's raw bytes here. A marker
+ * MISSING from the control means the seed wrote nothing on this device, so the encrypted-file result
+ * is vacuous and must not be believed. An empty array is the control PASSING: the seed provably
+ * lands marker bytes on disk, so their absence in ciphertext is real evidence.
+ *
+ * @returns a finding for every marker absent from the control bytes. Empty ⇒ the seed is witnessed.
+ */
+export function checkControlSeedIsWitnessed(
+  controlBytes: Uint8Array,
+  markers: readonly string[],
+): AtRestFinding[] {
+  const findings: AtRestFinding[] = [];
+  const encoder = new TextEncoder();
+  for (const marker of markers) {
+    if (indexOfBytes(controlBytes, encoder.encode(marker)) === -1) {
+      findings.push({
+        check: 'positive control: seeded marker present in the unencrypted control DB',
+        detail:
+          `seeded marker ${JSON.stringify(marker)} is ABSENT from the control DB bytes — the seed ` +
+          `is a silent no-op, so "no plaintext in the SQLCipher file" would prove nothing (T-14b)`,
+      });
+    }
+  }
+  return findings;
+}
+
+/**
  * Runs the three SEC-DEV-06 assertions against a copy of the on-device database:
  * unkeyed open fails, wrong-key open fails, and the bytes carry no plaintext.
  *
