@@ -49,6 +49,9 @@ export const ICON_GLYPHS = Object.freeze({
   retry: 'sync',
   /** §3.8 EmptyState create CTA. */
   add: 'plus',
+  /** §8.6 module rows: a note/ticket carries a media attachment. A paperclip, not a camera —
+   *  the glyph marks "has a photo", it does not invite capture (that is `media.action.takePhoto`). */
+  attachment: 'paperclip',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

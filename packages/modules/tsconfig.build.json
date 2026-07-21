@@ -1,5 +1,5 @@
 {
-  "extends": "@bolusi/tsconfig/base.json",
+  "extends": "@bolusi/tsconfig/react-native.json",
   "compilerOptions": {
     "composite": true,
     "rootDir": "src",
@@ -17,6 +17,9 @@
     },
     {
       "path": "../i18n/tsconfig.build.json"
+    },
+    {
+      "path": "../ui/tsconfig.build.json"
     }
   ]
 }
