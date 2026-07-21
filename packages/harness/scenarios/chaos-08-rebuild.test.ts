@@ -30,7 +30,13 @@ import type { SignedOperation } from '@bolusi/schemas';
 import { VirtualDevice, type DeviceIdentity } from '../src/device.js';
 import { mintIdentities } from '../src/identities.js';
 import { canonicalFold, assertConvergence, notesRows } from '../src/oracle.js';
-import { activeVolumes, insertPulledOp, resolveSeeds, withSeed } from '../src/index.js';
+import {
+  activeVolumes,
+  insertPulledOp,
+  nightlyX4Seeds,
+  resolveSeeds,
+  withSeed,
+} from '../src/index.js';
 
 /**
  * The seeds this heavy scenario sweeps — DELIBERATELY bounded to the first CI seed (testing-guide
@@ -39,9 +45,15 @@ import { activeVolumes, insertPulledOp, resolveSeeds, withSeed } from '../src/in
  * 20,000-op rebuild is ~54 s and vitest runs a file's tests SERIALLY, so seeds 1–10 would serialize
  * this one file to ~9 min and become the merge gate's long pole. `CHAOS_SEEDS=…` (a reproduction) or
  * `CHAOS_NIGHTLY=1` runs every resolved seed, so the nightly still sweeps the full set.
+ *
+ * The ONE exception is the nightly ×4 LANE: an 80,000-op rebuild is ≈ 3.6 min and 100 of them would
+ * eat the whole nightly budget, so `nightlyX4Seeds` caps the SEED SAMPLE there (never the volume) to
+ * the documented `NIGHTLY_X4_SEED_CAPS['CHAOS-08']`. That cap is the nightly JOB's lever, owned by
+ * `src/nightly-scale.ts` and asserted by `scenarios/nightly-seed-cap.test.ts`; an explicit
+ * `CHAOS_SEEDS=` reproduction is never capped and still runs verbatim.
  */
 function chaos08Seeds(env: NodeJS.ProcessEnv = process.env): number[] {
-  const seeds = resolveSeeds(env);
+  const seeds = nightlyX4Seeds('CHAOS-08', resolveSeeds(env), env);
   const explicit = env.CHAOS_SEEDS !== undefined && env.CHAOS_SEEDS !== '';
   if (explicit || env.CHAOS_NIGHTLY === '1') return seeds;
   return seeds.slice(0, 1);
