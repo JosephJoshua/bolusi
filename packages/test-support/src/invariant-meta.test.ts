@@ -119,10 +119,10 @@ test('every LIVE invariant in 01-domain-model section 10 has a verbatim test tit
   // (one is retired). A parse that silently matched nothing would report green for the wrong
   // reason — the failure this repo has shipped eight times.
   expect(result.checked.ids, 'LIVE invariants parsed from section 10 (retired excluded)').toBe(12);
-  // 11 of the 12 are discharged by a titled test; the 12th is openly owed on the allowlist. If the
-  // title walk silently found nothing, this floor goes red instead of every rule above passing
-  // vacuously.
-  expect(result.checked.idsWithTitles, 'live invariants with at least one verbatim title').toBe(11);
+  // ALL 12 are now discharged by a titled test and the allowlist is EMPTY: task 28 shipped I-13's
+  // universal push-payload verifier scan (the last openly-owed row). If the title walk silently
+  // found nothing, this floor goes red instead of every rule above passing vacuously.
+  expect(result.checked.idsWithTitles, 'live invariants with at least one verbatim title').toBe(12);
   expect(result.checked.titles, 'tracked test titles parsed').toBeGreaterThan(1000);
   expect(result.checked.taskFiles, 'tracked task files parsed').toBeGreaterThan(30);
   expect(testFiles.length, 'tracked test files walked').toBeGreaterThan(100);
