@@ -40,10 +40,15 @@ import type { Locale } from '@bolusi/i18n';
 
 import type { Bootstrapped } from './bootstrap.js';
 import type { AppEnrollment, EnrollmentController } from './enrollment.js';
+import { readSessionIdentity } from './notes.js';
 import { createNotificationChannels } from './notifications.js';
+import type { AppRuntime } from './runtime.js';
+import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
 import type { SyncClient } from './sync-client.js';
 import type { MediaClient } from '../media/client.js';
+import type { CommandIdentity } from '@bolusi/core';
+import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 /**
  * The fallback enrollment controller when none is injected (Node-driven Root with no `createEnrollment`).
@@ -110,6 +115,29 @@ export interface RootProps {
    * uploaded".
    */
   readonly createMedia?: (app: Bootstrapped) => MediaClient | null;
+  /**
+   * Build the session controller for a booted app, or `null` when the device is not enrolled
+   * (task 119) — injected for the same reason as `createSync`: the real one binds quick-crypto and the
+   * UUIDv7 source, and returning `null` for an unenrolled device is the honest "there is nobody to
+   * sign in as" rather than a controller scoped to a placeholder tenant.
+   *
+   * THIS IS WHAT MAKES `session` REAL. Before task 119 this component passed `session={null}`,
+   * `users={null}` and `onSubmitPin={() => undefined}` as literals, so an enrolled device reached the
+   * switcher, listed nobody, and had a PIN pad whose submit did nothing. The shell zone — and every
+   * module screen behind it — was unreachable on a real device by construction.
+   */
+  readonly createSession?: (app: Bootstrapped, runtime: AppRuntime) => Promise<AppSession | null>;
+  /**
+   * Bind the notes module surface for an open session (task 119) — the producer `App.notes` was
+   * waiting for. Injected because its media half binds native modules (camera, file system), the same
+   * reason `createMedia` is. Absent ⇒ `notes` stays `undefined` and `home` renders the empty shell,
+   * which is exactly the pre-task-119 behaviour.
+   */
+  readonly createNotes?: (
+    app: Bootstrapped,
+    runtime: AppRuntime,
+    identity: CommandIdentity,
+  ) => NotesRuntime;
 }
 
 export function Root({
@@ -119,12 +147,28 @@ export function Root({
   createSync,
   createEnrollment,
   createMedia,
+  createSession,
+  createNotes,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [enrollment, setEnrollment] = useState<AppEnrollment | null>(null);
   const [sync, setSync] = useState<SyncClient | null>(null);
+  const [session, setSession] = useState<AppSession | null>(null);
+  /**
+   * The notes surface for the CURRENT session (task 119).
+   *
+   * Keyed by userId, and rebuilt when it changes, because a `NotesRuntime` closes over a
+   * `CommandIdentity` — reusing one across a user switch would attribute the incoming user's notes to
+   * the outgoing user, which is the attribution failure the switcher exists to prevent (04 §5.2). Null
+   * whenever no session is open, so the shell falls back to the empty `home` rather than holding a
+   * runtime scoped to somebody who has signed out.
+   */
+  const [notes, setNotes] = useState<{
+    readonly userId: string;
+    readonly runtime: NotesRuntime;
+  } | null>(null);
   // A monotonic tick the live client bumps on every loop/connectivity change, so the shell re-reads
   // `loopState` / `isOffline` / `SyncState` from it. Without this, the banner would never clear on
   // the first sync — the value would be right in the DB and stale on screen.
@@ -137,6 +181,9 @@ export function Root({
   const unsubRef = useRef<(() => void) | null>(null);
   /** The media client (task 82), held for the same reason as `syncRef`: constructed at most once. */
   const mediaRef = useRef<MediaClient | null>(null);
+  /** The session controller (task 119), held for the same reason: constructed at most once. */
+  const sessionRef = useRef<AppSession | null>(null);
+  const sessionUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -185,6 +232,30 @@ export function Root({
       await client.start();
     };
 
+    /**
+     * The session controller (task 119), for an enrolled device — idempotent, like the two above.
+     *
+     * Gated on `deviceId` for the same reason the loop is: an unenrolled device has no directory to
+     * list and no identity to emit session ops under. It needs the SAME `AppRuntime` the enrollment
+     * caller built (`enroll.runtime`), so session ops, the genesis, and every note write share one op
+     * store and one enforcement point (§2.8) — which is why this runs after `createEnrollment`.
+     */
+    const startSessionIfEnrolled = async (
+      booted: Bootstrapped,
+      enroll: AppEnrollment | null,
+    ): Promise<void> => {
+      if (disposed || sessionRef.current !== null || booted.deviceId === null) return;
+      if (enroll === null) return;
+      const controller = (await createSession?.(booted, enroll.runtime)) ?? null;
+      if (controller === null || disposed) return;
+      sessionRef.current = controller;
+      sessionUnsubRef.current = controller.subscribe(() => bump());
+      setSession(controller);
+      // The roster the switcher renders. Without this the switcher's `users` stays null and nobody
+      // can be tapped — the surface would render its loading state forever.
+      await controller.refresh();
+    };
+
     void (async () => {
       // Order matters (08 §6.3). i18n FIRST, because the notification channels' NAMES are catalog
       // strings and Android keeps whatever name it is first given.
@@ -225,6 +296,9 @@ export function Root({
           });
           void startSyncIfEnrolled(enrolled, enroll);
           void startMediaIfEnrolled(enrolled);
+          // The device just became enrolled — the switcher can now list users and a PIN can open a
+          // session, live, without a reboot (the same no-reboot rule the loop follows).
+          void startSessionIfEnrolled(enrolled, enroll);
         }) ?? null;
       setEnrollment(enroll);
       setApp(booting);
@@ -237,6 +311,7 @@ export function Root({
       // `deviceId` is null, so nothing starts on a device that cannot sync — no faked loop.
       await startSyncIfEnrolled(booting, enroll);
       await startMediaIfEnrolled(booting);
+      await startSessionIfEnrolled(booting, enroll);
     })();
 
     return () => {
@@ -247,8 +322,48 @@ export function Root({
       syncRef.current = null;
       mediaRef.current?.stop();
       mediaRef.current = null;
+      sessionUnsubRef.current?.();
+      sessionUnsubRef.current = null;
+      sessionRef.current = null;
     };
-  }, [localeStore, boot, createSync, createEnrollment, createMedia, readDeviceInfo]);
+  }, [localeStore, boot, createSync, createEnrollment, createMedia, createSession, readDeviceInfo]);
+
+  const sessionSnapshot = session?.snapshot() ?? null;
+  const sessionUserId = sessionSnapshot?.session?.userId ?? null;
+
+  /**
+   * THE ACTIVATION (task 119): a session exists ⇒ build the notes surface for that user.
+   *
+   * This effect is the producer `App.notes` never had. It runs on the session's USER ID, so signing
+   * out drops the runtime and switching users builds a new one rather than carrying the previous
+   * user's `CommandIdentity` into the incoming user's screens.
+   *
+   * `readSessionIdentity` can answer `null` (an unenrolled device); that leaves `notes` null and the
+   * shell renders the empty `home` — the honest "this device cannot query yet" rather than a runtime
+   * scoped to a tenant that does not exist.
+   */
+  useEffect(() => {
+    if (
+      app === null ||
+      enrollment === null ||
+      createNotes === undefined ||
+      sessionUserId === null
+    ) {
+      setNotes(null);
+      return;
+    }
+    let cancelled = false;
+    void readSessionIdentity(app, sessionUserId).then((identity) => {
+      if (cancelled || identity === null) return;
+      setNotes({
+        userId: sessionUserId,
+        runtime: createNotes(app, enrollment.runtime, identity),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [app, enrollment, createNotes, sessionUserId]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning
@@ -258,19 +373,51 @@ export function Root({
   if (locale === null || app === null || deviceInfo === null) return null;
 
   const shell = resolveShellInputs(app, sync, systemClock.now());
+  const openSession = sessionSnapshot?.session ?? null;
+  /**
+   * The notes runtime, IFF it belongs to the user who is signed in right now.
+   *
+   * The `userId` comparison is not defensive noise: `notes` is set asynchronously, so a fast user
+   * switch can land a runtime built for the OUTGOING user into state after the INCOMING user's
+   * session opened. Handing that to the screens would file the new user's notes under the old user's
+   * identity — silently, and permanently, in a signed op. Mismatch ⇒ `undefined` ⇒ the empty shell
+   * for one frame, until this effect catches up.
+   */
+  const notesForSession =
+    openSession !== null && notes !== null && notes.userId === openSession.userId
+      ? notes.runtime
+      : undefined;
 
   return (
     <App
       device={shell.device}
-      users={null}
-      usersError={null}
-      pinRow={() => null}
+      users={sessionSnapshot?.users ?? null}
+      usersError={sessionSnapshot?.usersError ?? null}
+      pinRow={(userId) => session?.pinRow(userId) ?? null}
       now={systemClock.now()}
-      session={null}
+      session={openSession === null ? null : { userId: openSession.userId }}
+      notes={notesForSession}
       locked={false}
       sync={shell.sync}
       onSyncNow={() => sync?.requestManual()}
-      onSubmitPin={() => undefined}
+      // The PIN pad's one egress (task 24's PinPad contract). The controller runs the REAL
+      // `verifyPin` and only opens a session on success; the subscription above re-renders the shell,
+      // which is what moves the gate from `pin` to `shell` and mounts the notes surface.
+      //
+      // The boolean is what lets the shell retire the pending PIN target (see `AppProps.onSubmitPin`).
+      // The `catch` reports FALSE rather than rethrowing: every EXPECTED failure is already an
+      // outcome arm (`wrong` / `gated` / `needs_first_pin`), so a throw here is an infrastructure
+      // fault — and the honest response to one is "you are not signed in", which is exactly what
+      // false renders. Rethrowing would surface as an unhandled rejection and change nothing on
+      // screen; that swallow is what hid a real wiring defect during this task's own bring-up.
+      onSubmitPin={(userId, pin) =>
+        session === null
+          ? Promise.resolve(false)
+          : session
+              .submitPin(userId, pin)
+              .then((outcome) => outcome.kind === 'opened')
+              .catch(() => false)
+      }
       onSelectLocale={(next) => {
         void localeStore.write('bolusi.device_locale', next);
         setLocale(next);

@@ -81,7 +81,17 @@ export interface AppProps {
    * which case `home` stays the empty shell rather than faking a surface that cannot query.
    */
   readonly notes?: NotesRuntime | undefined;
-  readonly onSubmitPin: (userId: string, pin: string) => void;
+  /**
+   * Submit a PIN for `userId`. Resolves TRUE when a session opened (task 119).
+   *
+   * The result is load-bearing, not informational. `resolveZone` step 3 keeps rendering the pad
+   * while `pinFor` is set — even once a session exists — so something has to tell the shell the
+   * unlock succeeded and the pending PIN target is spent. Nothing did, because until this task
+   * `onSubmitPin` was `() => undefined` and no submission had ever succeeded: the shell had a
+   * success path it could not reach and therefore never had to clear. A caller that does not
+   * authenticate (the web harness) returns `void` and the pad simply stays put.
+   */
+  readonly onSubmitPin: (userId: string, pin: string) => void | Promise<boolean>;
   readonly onSelectLocale: (locale: Locale) => void;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
@@ -220,7 +230,18 @@ export default function App(props: AppProps): React.JSX.Element {
             row={props.pinRow(pinZone.userId)}
             now={props.now}
             lastAttempt="none"
-            onSubmit={(pin) => props.onSubmitPin(pinZone.userId, pin)}
+            onSubmit={(pin) => {
+              // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
+              // stays exactly where it is (its own `state` renders the failure), which is why this
+              // waits for the result rather than clearing optimistically — an optimistic clear
+              // would drop a failed attempt straight into the shell.
+              const submitted = props.onSubmitPin(pinZone.userId, pin);
+              if (submitted !== undefined) {
+                void submitted.then((opened) => {
+                  if (opened) setPinFor(null);
+                });
+              }
+            }}
             onSwitchUser={() => setPinFor(null)}
             syncChip={chip}
             onOpenSync={() => setRoute('syncStatus')}

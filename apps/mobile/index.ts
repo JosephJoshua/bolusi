@@ -1,7 +1,8 @@
 import { registerRootComponent } from 'expo';
 import { Platform } from 'react-native';
 
-import { createUuidV7Generator } from '@bolusi/core';
+import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
+import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
@@ -15,7 +16,10 @@ import {
   type EnrollmentPlatform,
 } from './src/bootstrap/enrollment.js';
 import { readDeviceInfo } from './src/bootstrap/device-info.js';
+import { createSessionNotesRuntime, UNWIRED_NOTES_MEDIA } from './src/bootstrap/notes.js';
 import { Root } from './src/bootstrap/Root.js';
+import type { AppRuntime } from './src/bootstrap/runtime.js';
+import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
@@ -225,12 +229,66 @@ function createEnrollment(
   return createAppEnrollment(app, platform, onEnrolled);
 }
 
+/**
+ * THE SESSION CONTROLLER (task 119) — what turns a PIN keypress into an open session.
+ *
+ * Bound here, alongside the other composition factories, because it needs quick-crypto (the KDF
+ * `verifyPin` runs) and the UUIDv7 source (the session id). It takes the SAME `AppRuntime` the
+ * enrollment caller built, so session ops ride the one op store and one enforcement point.
+ *
+ * `null` for an unenrolled device (`createAppSession` reads the identity and answers null): there is
+ * nobody to sign in as before enrollment, and the gate routes such a device to the wizard anyway.
+ */
+function createSession(
+  app: Bootstrapped,
+  runtime: AppRuntime,
+): Promise<AppSessionController | null> {
+  return createAppSession({
+    app,
+    runtime,
+    crypto: quickCryptoPort,
+    clock: systemClock,
+    idSource: createUuidV7Generator({
+      now: () => systemClock.now(),
+      randomBytes: (n) => quickCryptoPort.randomBytes(n),
+    }),
+  });
+}
+
+/**
+ * THE NOTES SURFACE (task 119) — the producer `App.notes` was waiting for.
+ *
+ * The command/query half is Node-safe and composed in `bootstrap/notes.ts`; what this site adds is
+ * the MEDIA half, which is native. Both seams are currently `UNWIRED_NOTES_MEDIA` and that is a
+ * deliberate, documented state rather than an oversight:
+ *
+ *   - `capturePhoto` needs the in-app capture flow (a `CameraView` ref reaching `MediaClient.
+ *     capturePhoto`), which lives in a screen the notes editor does not yet route to. It REJECTS, so
+ *     the button reports a failure instead of silently behaving like a cancel.
+ *   - `loadThumbnail` needs the SIGNED sha256/mime to verify a downloaded photo against (06 §6). For
+ *     a PULLED note that value does not exist yet: `notes.note_created` carries a bare `mediaId`.
+ *     That is task 120's payload change, in flight. Until it lands, `unavailable` is the only answer
+ *     06 §6 permits — fetching and rendering unverified bytes is precisely what it forbids.
+ *
+ * The reads, writes, permission enforcement and live-query invalidation are all REAL regardless: the
+ * notes list, detail and editor work over the live database today.
+ */
+function createNotes(
+  app: Bootstrapped,
+  runtime: AppRuntime,
+  identity: CommandIdentity,
+): NotesRuntime {
+  return createSessionNotesRuntime({ app, runtime, identity, media: UNWIRED_NOTES_MEDIA });
+}
+
 function Bootstrapped(): React.JSX.Element | null {
   return Root({
     boot,
     createSync,
     createEnrollment,
     createMedia,
+    createSession,
+    createNotes,
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process
