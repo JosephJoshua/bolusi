@@ -1,5 +1,5 @@
 {
-  "extends": "@bolusi/tsconfig/base.json",
+  "extends": "@bolusi/tsconfig/react-native.json",
   "compilerOptions": {
     "noEmit": true
   },
