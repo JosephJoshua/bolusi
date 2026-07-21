@@ -26,6 +26,7 @@
     "test:appliers": "tsc -b && vitest run --project core test/module/applier-conformance.test.ts",
     "chaos": "tsc -b && vitest run --project harness",
     "harness:device": "node scripts/harness-device.mjs",
+    "e2e:native": "maestro test .maestro/",
     "sec:sweep": "node scripts/sec-sweep.mjs",
     "sec:inventory": "node scripts/sec-inventory.mjs",
     "sec:secrets": "node scripts/secrets-scan.mjs",

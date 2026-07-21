@@ -1,0 +1,46 @@
+# PENDING task 119 (live session shell) — NOT run by CI.
+#
+# This file lives in pending-119/ on purpose: `maestro test .maestro/` discovers only TOP-LEVEL
+# flows by default, so everything here is skipped until it is promoted to the top level. Promote it
+# (move up one dir, or add a `.maestro/config.yaml` with `flows: ['**']`) once task 119 wires the
+# live session: Root.tsx currently hardcodes `session={null}` / `users={null}`, so the switcher never
+# shows a user to tap and the PIN pad is unreachable in the running app today.
+#
+# Reachability precondition once 119 lands: an ENROLLED, ACTIVE device with a populated user list and
+# no open session -> resolveZone returns { kind: 'switcher', mode: 'choose' } (navigation/zone.ts).
+# Enrollment itself needs the server, so a device-fixture / seeded-enrollment step (owned by 119)
+# has to precede this flow; that seam is out of scope for task 117.
+appId: com.bolusi.app
+tags:
+  - pending-119
+  - pin
+---
+- launchApp
+# The user switcher (SwitcherScreen.tsx). `switcher-user-.*` regex taps the first enrolled user
+# regardless of id (ids are UUIDv7, not known ahead of time).
+- assertVisible:
+    id: 'switcher-screen'
+- takeScreenshot:
+    path: pin-01-switcher
+- tapOn:
+    id: 'switcher-user-.*'
+# The PIN pad (PinScreen.tsx -> ui/PinPad.tsx). Keys are `pin-pad.key.<digit>`.
+- assertVisible:
+    id: 'pin-screen'
+- assertVisible:
+    id: 'pin-pad'
+- takeScreenshot:
+    path: pin-02-pad
+- tapOn:
+    id: 'pin-pad.key.1'
+- tapOn:
+    id: 'pin-pad.key.2'
+- tapOn:
+    id: 'pin-pad.key.3'
+- tapOn:
+    id: 'pin-pad.key.4'
+# On a correct PIN the gate advances to the shell (home). `pin-pad.onComplete` fires at the 4th digit.
+- assertVisible:
+    id: 'bolusi-app-shell'
+- takeScreenshot:
+    path: pin-03-unlocked

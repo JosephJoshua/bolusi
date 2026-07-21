@@ -1,0 +1,40 @@
+# PENDING task 119 (live session shell) — NOT run by CI (see 02-pin-entry.yaml's header for why).
+#
+# Precondition once 119 lands: an ACTIVE device with an OPEN session -> resolveZone returns
+# { kind: 'shell', route: 'home' }. Today Root.tsx passes `session={null}`, so the shell is
+# unreachable in the running app.
+#
+# The home surface has two shapes (App.tsx): the empty shell (testID `shell-home`) when no
+# `NotesRuntime` is injected, and the notes module surface (testID `notes.list`) once task 119 wires
+# a live session-scoped runtime.
+#
+# KNOWN GAP for the promoter: the header sync-chip and avatar (the affordances that navigate to Sync
+# Status / Settings) carry NO testID today — they are built inline in App.tsx with an
+# accessibilityLabel only. Task 119 (or the promoter) should add `testID`s to those chrome nodes so
+# the two `tapOn` steps below can be un-commented. The screen roots they lead to already exist:
+# `sync-status-screen` (SyncStatusScreen.tsx) and `settings-screen` (SettingsScreen.tsx).
+appId: com.bolusi.app
+tags:
+  - pending-119
+  - shell
+---
+- launchApp
+- assertVisible:
+    id: 'bolusi-app-shell'
+- takeScreenshot:
+    path: shell-01-home
+# Un-comment once the sync-chip carries a testID (see KNOWN GAP above):
+# - tapOn:
+#     id: 'shell-sync-chip'
+# - assertVisible:
+#     id: 'sync-status-screen'
+# - takeScreenshot:
+#     path: shell-02-sync-status
+# - back
+# Un-comment once the avatar / settings affordance carries a testID:
+# - tapOn:
+#     id: 'shell-avatar'
+# - assertVisible:
+#     id: 'settings-screen'
+# - takeScreenshot:
+#     path: shell-03-settings

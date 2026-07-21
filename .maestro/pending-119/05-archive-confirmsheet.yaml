@@ -1,0 +1,38 @@
+# PENDING task 119 (live session shell) — NOT run by CI (see 02-pin-entry.yaml's header for why).
+#
+# Precondition once 119 lands: the notes module surface is live (see 04-note-create.yaml) AND at
+# least one note exists (this flow can be chained after 04, or seeded). Until then unreachable.
+#
+# Journey: list -> open a note -> Archive -> the ConfirmSheet appears -> Confirm -> the archived badge
+# shows. This exercises the archive-via-ConfirmSheet path the task calls out. testIDs are the notes
+# module's own (NoteDetail.tsx) + the shared ConfirmSheet (`.archiveConfirm.confirm`).
+appId: com.bolusi.app
+tags:
+  - pending-119
+  - notes
+  - archive
+---
+- launchApp
+- assertVisible:
+    id: 'notes.list'
+# Open the first note (ids are UUIDv7 — regex-match the row).
+- tapOn:
+    id: 'notes.list.row..*'
+- assertVisible:
+    id: 'notes.detail'
+- takeScreenshot:
+    path: archive-01-detail
+- tapOn:
+    id: 'notes.detail.archive'
+# The ConfirmSheet (a mandatory confirm surface, not a silent mutation).
+- assertVisible:
+    id: 'notes.detail.archiveConfirm'
+- takeScreenshot:
+    path: archive-02-confirmsheet
+- tapOn:
+    id: 'notes.detail.archiveConfirm.confirm'
+# The note is now archived — the archived badge renders on the detail (NoteDetail.tsx).
+- assertVisible:
+    id: 'notes.detail.archivedBadge'
+- takeScreenshot:
+    path: archive-03-archived

@@ -1,0 +1,54 @@
+# LIVE NOW — the one journey reachable on a fresh Android emulator TODAY, no server required.
+#
+# Why this is reachable and the others (pending-119/) are not: the app's shell is a pure GATE
+# (apps/mobile/src/navigation/zone.ts). A fresh, unenrolled device — device status derived from a
+# null deviceId — resolves UNCONDITIONALLY to the enrollment wizard:
+#     resolveZone({ device: 'unenrolled', ... }) -> { kind: 'enrollment', revoked: false }
+# The composition root (apps/mobile/src/bootstrap/Root.tsx) currently hardcodes `session={null}`,
+# `users={null}`, `locked={false}` and passes no `notes` runtime, so the switcher/PIN/shell/notes/
+# settings surfaces are NOT yet reachable in the running app — task 119 wires the live session shell.
+# Those flows are authored under pending-119/ and are SKIPPED by CI (Maestro runs only top-level
+# flows by default), so this suite never reds on a surface the build cannot yet show.
+#
+# `clearState: true` clears app data before launch (== `adb shell pm clear com.bolusi.app`), so this
+# flow is deterministic and order-independent from 27a's harness run on the same AVD: whatever state
+# the harness left, the app comes up UNENROLLED here and gates to the wizard.
+#
+# This is true NATIVE driving (UIAutomator2 over real RN views) — the native TextInput entry below is
+# exactly what a browser/WebView tool (task 116's Playwright approximation) can never do on RN.
+appId: com.bolusi.app
+tags:
+  - live
+---
+- launchApp:
+    clearState: true
+# The shell root is up (App.tsx renders <View testID="bolusi-app-shell">). assertVisible auto-waits,
+# so this also covers the async boot (i18n + notification channels + the SQLCipher DB open).
+- assertVisible:
+    id: 'bolusi-app-shell'
+# The gate landed on the enrollment wizard, credentials step (EnrollmentScreen.tsx).
+- assertVisible:
+    id: 'enrollment-screen'
+- assertVisible:
+    id: 'enroll-step-credentials'
+- assertVisible:
+    id: 'enroll-progress'
+- takeScreenshot:
+    path: 01-enrollment-wizard
+# Drive the REAL native RN text inputs. No `submit` tap: the login POST needs the server, which this
+# lane does not stand up (EXPO_PUBLIC_API_URL is inlined but unreachable) — so we stop at a fully,
+# deterministically reachable state rather than assert a network-timing-dependent failure banner.
+- assertVisible:
+    id: 'enroll-identifier'
+- tapOn:
+    id: 'enroll-identifier'
+- inputText: 'gudang-selatan'
+- assertVisible:
+    id: 'enroll-password'
+- tapOn:
+    id: 'enroll-password'
+- inputText: 'demo-passphrase-01'
+- takeScreenshot:
+    path: 02-enrollment-credentials-entered
+- assertVisible:
+    id: 'enroll-submit'

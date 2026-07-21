@@ -1,0 +1,38 @@
+# PENDING task 119 (live session shell) — NOT run by CI (see 02-pin-entry.yaml's header for why).
+#
+# Precondition once 119 lands: an in-session device can reach Settings (SettingsScreen.tsx), which is
+# a shell route behind an open session. Today Root.tsx passes `session={null}`, so Settings — and the
+# locale toggle on it — is unreachable in the running app.
+#
+# Journey: Settings -> switch locale id <-> en -> the active-locale marker follows. This is the i18n
+# toggle the task calls out (07-i18n). testIDs are SettingsScreen's own: `settings-locale-<locale>`
+# and `settings-locale-active-<locale>`.
+#
+# KNOWN GAP for the promoter: reaching Settings needs the shell avatar/settings affordance to carry a
+# testID (same gap noted in 03-shell-navigation.yaml). The `launchApp`->Settings hop below assumes the
+# device is deep-linked or navigated to Settings by that (yet-to-exist) affordance.
+appId: com.bolusi.app
+tags:
+  - pending-119
+  - settings
+  - i18n
+---
+- launchApp
+- assertVisible:
+    id: 'settings-screen'
+- takeScreenshot:
+    path: i18n-01-settings
+# Switch to English, assert the active marker moved to en.
+- tapOn:
+    id: 'settings-locale-en'
+- assertVisible:
+    id: 'settings-locale-active-en'
+- takeScreenshot:
+    path: i18n-02-en
+# Switch back to Indonesian (the shop's default), assert the active marker moved to id.
+- tapOn:
+    id: 'settings-locale-id'
+- assertVisible:
+    id: 'settings-locale-active-id'
+- takeScreenshot:
+    path: i18n-03-id

@@ -1,0 +1,44 @@
+# PENDING task 119 (live session shell) — NOT run by CI (see 02-pin-entry.yaml's header for why).
+#
+# Precondition once 119 lands: a live session-scoped `NotesRuntime` is injected into App.tsx, so the
+# home route renders the notes module surface (testID `notes.list`, packages/modules notes screens)
+# instead of the empty `shell-home` view. Until then this journey is unreachable in the running app.
+#
+# Journey: list -> create -> fill title/body -> (attach a photo; camera is emulator-stubbed) -> save
+# -> the new note appears in the list. testIDs are the notes module's own (NoteEditor.tsx /
+# NotesList.tsx): `notes.list.create`, `notes.editor.title|body|attach|save`, `notes.list.items`.
+appId: com.bolusi.app
+tags:
+  - pending-119
+  - notes
+---
+- launchApp
+- assertVisible:
+    id: 'notes.list'
+- takeScreenshot:
+    path: note-01-list
+- tapOn:
+    id: 'notes.list.create'
+- assertVisible:
+    id: 'notes.editor'
+- tapOn:
+    id: 'notes.editor.title'
+- inputText: 'Stok kiriman pagi'
+- tapOn:
+    id: 'notes.editor.body'
+- inputText: 'Terima 12 dus, 2 rusak.'
+- takeScreenshot:
+    path: note-02-editor-filled
+# Attach a photo. On the emulator the camera is a stub; the capture surface is `enroll`-independent
+# media (CaptureScreen). Left optional because emulator camera behaviour varies by AVD image.
+- tapOn:
+    id: 'notes.editor.attach'
+    optional: true
+- takeScreenshot:
+    path: note-03-attach
+- tapOn:
+    id: 'notes.editor.save'
+- assertVisible:
+    id: 'notes.list.items'
+- takeScreenshot:
+    path: note-04-saved
