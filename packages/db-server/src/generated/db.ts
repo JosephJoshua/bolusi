@@ -289,7 +289,7 @@ export interface UserPinVerifiers {
 }
 
 export interface UserPrefs {
-  locale: Generated<string>;
+  locale: string;
   tenantId: string;
   updatedAt: Int8;
   userId: string;

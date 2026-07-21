@@ -211,7 +211,7 @@ export interface UserPinVerifiers {
 }
 
 export interface UserPrefs {
-  locale: Generated<string>;
+  locale: string;
   tenantId: string;
   updatedAt: number;
   userId: string | null;

@@ -98,6 +98,21 @@ describe('runClientMigrations against a fresh database', () => {
     expect(String(rows.rows[0]?.['sql'])).toContain('CREATE UNIQUE INDEX');
   });
 
+  test('user_prefs.locale is NOT NULL with NO column default (task 76)', async () => {
+    // The column holds a `Locale` (`id` | `en`), written verbatim by the platform applier from
+    // the `z.enum(['id','en'])` payload — NOT an Intl formatting tag. It once carried
+    // `DEFAULT 'id-ID'`, which is `INTL_LOCALE_TAG.id` and not a `Locale` at all: a decoy no fold
+    // could reach (the applier always supplies `locale`) but that a reader would trust. The read
+    // fallback ("default `id` when the row is absent") lives in the reader (`resolveLocale`), which
+    // a column default cannot express anyway. So the default is dropped, and the column stays
+    // NOT NULL because the applier always supplies the value.
+    await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
+    const info = await driver.execute(
+      `SELECT name, [notnull], dflt_value FROM pragma_table_info('user_prefs') WHERE name = 'locale'`,
+    );
+    expect(info.rows).toEqual([{ name: 'locale', notnull: 1, dflt_value: null }]);
+  });
+
   test('seeds the sync_state singleton row id = 1', async () => {
     await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
     const rows = await driver.execute(`SELECT id, pull_cursor, push_halted FROM sync_state`);
