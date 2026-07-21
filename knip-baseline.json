@@ -2,7 +2,7 @@
   "description": "Accepted unused production exports (task 68 gate). The gate fails on ADDITIONS to this set and on MASS DISAPPEARANCE from it; it does not fail on small cleanups. Regenerate with `pnpm knip:baseline` after intentionally changing the exported surface.",
   "command": "knip --production --include exports --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
-  "denominator": 115,
+  "denominator": 117,
   "exports": [
     "apps/mobile/src/i18n.ts#writeDeviceLocale",
     "apps/mobile/src/ports/location.ts#stopLocationWatcher",
@@ -77,6 +77,8 @@
     "packages/i18n/src/logger.ts#resetWarnOnceState",
     "packages/modules/src/index.ts#ALL_MODULES",
     "packages/modules/src/index.ts#PACKAGE_NAME",
+    "packages/schemas/src/auth.ts#IDLE_LOCK_DEFAULT",
+    "packages/schemas/src/auth.ts#clampIdleLock",
     "packages/schemas/src/envelope.ts#GENESIS_PREVIOUS_HASH",
     "packages/schemas/src/errors.ts#zBodyTooLargeDetails",
     "packages/schemas/src/errors.ts#zDecompressedTooLargeDetails",

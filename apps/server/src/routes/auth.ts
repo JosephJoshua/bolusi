@@ -11,7 +11,7 @@ import { mintControlSession } from '../auth/control-sessions.js';
 import { appendAudit } from '../identity/audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
-import { LoginReq, PasswordChangeReq, type LoginRes } from '../identity/schemas.js';
+import { LoginReq, PasswordChangeReq, type LoginRes } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
 import { createWithTenant } from '../tenant.js';
 

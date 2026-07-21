@@ -466,7 +466,7 @@ Mechanics:
 
 - Format: `bdt_` + base64url(32 CSPRNG bytes) — prefixed for secret-scanner friendliness. Minted only at enrollment, delivered only in the `EnrollRes` (§4.3 idempotency window is the sole re-delivery).
 - At rest server-side: **SHA-256 hash only**, unique-indexed; auth is hash-then-lookup (`bearerAuth`'s `verifyToken`, api/00-conventions middleware order). A DB dump yields no usable tokens (SEC-DEV-02). Rows carry `deviceId`; check `status = 'active'` on every request.
-- **Tenant resolution (D14).** A `bdt_`/`bcs_` token carries no tenant — it is opaque random bytes — so `verifyToken` must find the `devices` / `control_sessions` row (and read its `tenantId`, `status`, revocation/expiry) **before** the tenant is known. Like login (§4.2), this is the one read that precedes tenant context, done through the sanctioned `SECURITY DEFINER` lookups `auth_find_device_by_token_hash` / `auth_find_control_session_by_token_hash` (10-db-schema §6.4) — each returns only the minimal fields of the single hash-matched row, nothing on no-match. A revoked device → `DEVICE_REVOKED`; an expired/revoked control session → `SESSION_EXPIRED`/`AUTH_TOKEN_INVALID`. Everything downstream runs under `forTenant(tenantId)` with the resolved tenant.
+- **Tenant resolution (D14).** A `bdt_`/`bcs_` token carries no tenant — it is opaque random bytes — so `verifyToken` must find the `devices` / `control_sessions` row (and read its `tenantId`, `status`, revocation/expiry) **before** the tenant is known. Like login (§4.2), this is the one read that precedes tenant context, done through the sanctioned `SECURITY DEFINER` lookups `auth_find_device_by_token_hash` / `auth_find_control_session_by_token_hash` (10-db-schema §6.4) — each returns only the minimal fields of the single hash-matched row, nothing on no-match. A revoked device → `DEVICE_REVOKED`; an expired/revoked/unknown control session → `AUTH_TOKEN_INVALID` (there is no distinct `SESSION_EXPIRED` — see §10). Everything downstream runs under `forTenant(tenantId)` with the resolved tenant.
 - `lastSeenAt` is updated at most once per 5 minutes per device (throttled write — no hot row); `lastSyncAt` is owned by sync acceptance (api/01-sync).
 - Never logged, never in URLs; header only.
 
@@ -492,15 +492,17 @@ Envelope shape per api/00-conventions; codes are machine strings, user copy via 
 | HTTP | Code | Meaning |
 | ---- | ---- | ------- |
 | 401 | `AUTH_INVALID_CREDENTIALS` | Bad login/password (uniform for unknown identifier) |
-| 401 | `SESSION_EXPIRED` | Control session TTL elapsed / unknown |
 | 401 | `DEVICE_REVOKED` | Token of a revoked device — triggers §7.3 confirm-then-wipe |
 | 403 | `PERMISSION_DENIED` | Authenticated actor lacks the §4.5 permission (denial logged, FR-1045) |
 | 403 | `ACTING_USER_INVALID` | `X-Acting-User` missing, not usable on this device (§5.1), or not in tenant |
 | 409 | `ENROLL_DEVICE_ID_TAKEN` / `ENROLL_KEY_REUSED` | deviceId / public key already registered |
 | 409 | `IDEMPOTENCY_CONFLICT` | Same Idempotency-Key, different body (code owned by api/00-conventions §8.2) |
 | 409 | `LAST_ADMIN_PROTECTED` | Deactivation would strand the tenant with no admin (§5.4 — server endpoint check only) |
+| 409 | `LOGIN_IDENTIFIER_TAKEN` | `loginIdentifier` already in use — the globally-unique constraint (§2, §5.4) |
 | 422 | `VALIDATION_FAILED` | Zod failure (incl. §5.3 verifier bounds and a missing `Idempotency-Key` — api/00-conventions §8.2) |
 | 429 | `RATE_LIMITED` | §9 per-endpoint limits, with `retryAfterSeconds` (code owned by api/00-conventions §7) |
+
+There is **no `SESSION_EXPIRED` code.** An elapsed or unknown control session maps to `AUTH_TOKEN_INVALID` (task 12's `verifyToken`; api/00-conventions §7), for two reasons: one token-invalidity vocabulary rather than two, and a code that distinguishes *expired* from *invalid* is an **oracle** — it confirms to an attacker that a token was once valid. All identity-surface codes above are registered in the machine error registry (`@bolusi/schemas`, api/00-conventions §7).
 
 ## 11. Out of v0 (forward references — build nothing here)
 

@@ -251,8 +251,14 @@ export const authModuleManifest = {
       true,
       'Can create, rename, edit, and delete roles, and give them to employees or take them away.',
     ),
-    [AUTH_PERMISSION.deviceEnroll]: store(true, 'Can approve a new device for the store.'),
-    [AUTH_PERMISSION.deviceRevoke]: store(true, 'Can block a device (lost, stolen, retired).'),
+    [AUTH_PERMISSION.deviceEnroll]: store(
+      true,
+      'Can approve a new device for the store. An approved device can record and sign business actions.',
+    ),
+    [AUTH_PERMISSION.deviceRevoke]: store(
+      true,
+      'Can block a device (lost, stolen, retired). Anything not yet synced from it will be rejected.',
+    ),
     [AUTH_PERMISSION.deviceRead]: store(
       false,
       "Can see the store's devices, who is enrolled on them, and when each last synced.",
@@ -261,7 +267,10 @@ export const authModuleManifest = {
       true,
       'Can change business-wide settings that apply to every store.',
     ),
-    [AUTH_PERMISSION.auditView]: store(false, 'Can view the audit trail.'),
+    [AUTH_PERMISSION.auditView]: store(
+      false,
+      'Can view the audit trail: denied attempts, PIN resets, user switches, and device events.',
+    ),
   },
 
   queries: {

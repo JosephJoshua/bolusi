@@ -5,7 +5,7 @@
 import type { TenantDb } from '@bolusi/db-server';
 
 import { PermissionDeniedError } from '../identity/denial-audit.js';
-import { PERMISSION_BY_ID, TENANT_ADMIN_PERMISSION } from '../identity/permission-registry.js';
+import { PERMISSION_BY_ID, TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
 
 /**
  * 02-permissions §5.2 — does `userId` hold `permissionId` in evaluation scope `storeId`?

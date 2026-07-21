@@ -16,7 +16,7 @@ import { forTenant as dbForTenant, type ForTenant, type TenantDb } from '@bolusi
 
 import { createPasswordVerifier, randomBase58 } from '../crypto/index.js';
 import { appendAudit } from '../identity/audit.js';
-import { DEFAULT_ROLES } from '../identity/permission-registry.js';
+import { DEFAULT_ROLES } from '../identity/permissions.js';
 import { uuidv7 } from '../uuidv7.js';
 
 export interface ProvisionOpts {

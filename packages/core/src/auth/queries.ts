@@ -2,7 +2,8 @@
 // §7 / FR-1045 names for the denial audit trail, gated by `auth.audit_view`, cursor-paginated.
 //
 // WHY THIS LIVES HERE AT ALL. Everything AROUND this query shipped — the permission was seeded
-// (db-server 0008), registered (identity/permission-registry.ts), and an index was built
+// (db-server 0008), registered (the `auth` module manifest; the server projects it via
+// identity/permissions.ts), and an index was built
 // specifically to serve it (db-server 0005, trailing comment `listPermissionDenials`) — but the
 // query itself existed only in a test fixture. Without it, the write-only audit had no reader, and
 // this task's own falsification ("break the applier, watch the audit go empty") had nothing to run
