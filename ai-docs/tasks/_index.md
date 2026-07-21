@@ -34,7 +34,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 24 | app-shell (Expo dev-build config, navigation, auth screens, sync status screen) | done | 14, 22, 23 |
 | 25 | notes-reference-module DATA LAYER (ops v1+v2, applier, commands, queries, conflict-checks, SERVER_MODULES registration, i18n catalogs) — screens carved to 96 (D17) | done | 11, 18, 24, 49, 50 |
 | 26 | chaos-harness (@bolusi/harness + test-support, multi-device sim, CHAOS catalog, oracle) | done | 06, 07, 08, 15, 16 |
-| 27a | device-gates, **Android** EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number; the iOS verification lane is separate and deferred (task 85, D17/D18 §5), not folded in here | todo | 24, 25, 26, 50 |
+| 27a | device-gates, **Android** EMULATOR lane (seed-200k, rebuild, execute latency; SEC-DEV-06 L6 leg on real op-sqlite; run the SEC-OPLOG-06 JCS vectors on emulator Hermes 0.17 per D13) — every figure labelled EMULATOR, never a device number; the iOS verification lane is separate and deferred (task 85, D17/D18 §5), not folded in here | in-progress | 24, 25, 26, 50 |
 | 27b | device-gates, **Android** PHYSICAL lane (P-1..P-6 + write benchmark; decides D8 KDF params + D6 throughput; runs the FULL SEC-OPLOG-06 JCS vectors on device Hermes 0.17 per D13); the iOS on-device leg is a separate, larger gap with no runnable target here (task 80 §4), recorded (deferred, not omitted) as task 85 | blocked | 27a |
 | 28 | security-sweep (all named SEC-* tests present + passing; cross-surface adversarial run; **owns SEC-AUTH-09** per the 2026-07-15 ruling) | in-progress | 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44 |
 | 29 | close the `z.float64()` bypass in `bolusi/no-float-money` (from task 02 review) | done | 02 |
@@ -124,6 +124,8 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 113 | the nightly chaos lane's `CHAOS_SCALE=4 × 100 seeds` is unrunnable for CHAOS-03 (56k ops/seed) / CHAOS-08 (80k) — add a documented, asserted per-scenario ×4 nightly seed cap (from task 106) | done | 26 |
 | 114 | **HIGH — live security defect** `POST /v1/media/:id/init` answers **500 INTERNAL** for a cross-tenant media id and **404 MEDIA_NOT_FOUND** for a same-tenant one, so the status is a cross-tenant existence oracle (`media.id` is a GLOBAL uuid PK; RLS hides the row from the SELECT, the INSERT trips the unique index, nothing catches 23505). Fix the CLASS, not the row (from task 28's SEC-TENANT-04 walk) | in-progress | 19 |
 | 115 | `security-guide.md` §12's roll-up says `DEV 01–07` while the body defines **SEC-DEV-08** (shipped by task 58) — the SEC inventory's declared denominator is one id short, so "the SEC suite is complete" is checked against the wrong number (from task 28's inventory) | done | — |
+| 116 | react-native-web + Playwright visual harness so the screens render to pixels in a headless browser and can be screenshotted/interaction-tested (the layer the test-renderer cannot cover); binds in-memory fakes for native modules via the platform-free-core ports (owner request) | in-progress | 96 |
+| 117 | Maestro native E2E flow wired into 27a's Android-emulator CI lane so the REAL RN app (native views, not a WebView) gets driven — the true-native counterpart to 116's browser approximation (owner request) | blocked | 27a |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 

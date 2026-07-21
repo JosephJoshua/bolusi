@@ -1,5 +1,5 @@
 # TASK 27 — device-gates (on-device performance gates, Part C)
-**Status:** todo
+**Status:** in-progress
 **Depends on:** 24, 25, 26
 
 ## Goal
