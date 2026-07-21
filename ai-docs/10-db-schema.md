@@ -32,7 +32,7 @@ Verification requires byte-exact RFC 8785 (JCS) serialization of the signed core
 
 ## 3. Per-tenant `serverSeq` — chosen mechanism
 
-`serverSeq` is a per-tenant monotonic bigint assigned on acceptance (05-operation-log §2.4) and it is the pull cursor. **Mechanism: a per-tenant counter row, locked at transaction start, incremented once per ACCEPTED op inside the validation loop:**
+`serverSeq` is a per-tenant monotonic bigint assigned on acceptance (05-operation-log §2.4) and it is the pull cursor. **It is a SERVER-ONLY value: no client table stores it** — the client's own arrival counter is `operations.arrival_seq` (§9.2), a different number with a different job. **Mechanism: a per-tenant counter row, locked at transaction start, incremented once per ACCEPTED op inside the validation loop:**
 
 ```sql
 -- Taken at transaction start: serializes pushes per tenant, allocates nothing yet.
@@ -654,8 +654,8 @@ CREATE TABLE meta_kv (             -- device identity + misc scalars
 
 CREATE TABLE projection_watermarks (
   module_id          TEXT PRIMARY KEY,
-  applied_server_seq INTEGER NOT NULL DEFAULT 0,   -- pulled ops
-  applied_local_seq  INTEGER NOT NULL DEFAULT 0    -- own-device ops
+  applied_server_seq INTEGER NOT NULL DEFAULT 0,   -- pulled ops: highest CONTIGUOUS operations.arrival_seq (§9.2)
+  applied_local_seq  INTEGER NOT NULL DEFAULT 0    -- own-device ops: highest operations.seq applied at append
 );
 ```
 
@@ -688,7 +688,8 @@ CREATE TABLE operations (
   sync_status           TEXT NOT NULL DEFAULT 'local'
                           CHECK (sync_status IN ('local','synced','rejected')),
   synced_at             INTEGER,
-  server_seq            INTEGER,                   -- from push ack / pull; NULL while local
+  arrival_seq           INTEGER,                   -- LOCAL arrival counter, assigned at pull-insert;
+                                                   -- NULL while local. NEVER the server's serverSeq.
   rejection_code        TEXT,
   rejection_reason      TEXT
 );
@@ -703,6 +704,20 @@ CREATE INDEX idx_operations_rejected ON operations (id)
 ```
 
 Append-only holds by construction: `packages/db-client` exports no UPDATE/DELETE for `operations` except the single `markSyncResult()` mutator touching bookkeeping columns only (lint-enforced per 05-operation-log §1).
+
+**`arrival_seq` is NOT `server_seq` — the two sides genuinely number different things (D20 §4, task 51).** Stated once, here, so neither side has to be inferred:
+
+| | server `operations.server_seq` (§5) | client `operations.arrival_seq` (§9.2) |
+| - | - | - |
+| Meaning | per-tenant **acceptance** order | per-device **arrival** order |
+| Assigned by | the server, at acceptance, under the `tenant_op_counters` row lock (§3) | the client, at pull-insert, as `MAX(arrival_seq) + 1` |
+| Gapless over | the tenant | this device's pulled ops |
+| Own-device ops | always present | **always NULL** — the pull is the column's only writer |
+| Leaves the device | yes (it is the pull cursor's basis) | **never** |
+
+The client column cannot hold the server's value: `serverSeq` is 05 §2.4 bookkeeping assigned **after** signing, so it cannot ride inside the signed core, and the pull response carries no sibling field for it (api/01-sync §4) — the only server-assigned number on the wire is the batch's `nextCursor`. A push ack's `serverSeq` is likewise not stored: `BookkeepingPatch` (05 §2.3) deliberately excludes it, so an own-device op keeps `arrival_seq` NULL for life.
+
+Storing the server's real values here would also be **wrong, not merely impossible**: the client's stream is scope-**filtered** (api/01-sync §4.3 — this store's ops plus tenant-scoped ones), so on a multi-store tenant the true serverSeqs are inherently gappy, and the contiguity walk behind `projection_watermarks.applied_server_seq` (§9.1) would pin the watermark below the first other-store op **forever** — a silent stall. A gapless local counter is the only value that makes "caught up" expressible on a client. The resume position is `sync_state.pull_cursor` (§9.3), never this column.
 
 ### 9.3 Sync state (singleton)
 
