@@ -1,5 +1,5 @@
-// Watermark semantics (04 §4.3): applied_server_seq = highest CONTIGUOUS pulled serverSeq (a
-// gap pins it); applied_local_seq = highest appended own seq (strictly monotonic); an
+// Watermark semantics (04 §4.3): applied_server_seq = highest CONTIGUOUS pulled arrival_seq on the
+// client (10-db §9.2, D20 §4 — the server's own server_seq server-side; a gap pins it); applied_local_seq = highest appended own seq (strictly monotonic); an
 // entity-local re-fold moves NEITHER; nothing — including rebuild resume — ever decreases them.
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
@@ -18,12 +18,12 @@ afterEach(async () => {
   await harness.close();
 });
 
-/** Insert a pulled op with an explicit serverSeq, then apply it. */
+/** Insert a pulled op with an explicit arrival_seq, then apply it. */
 async function pull(
   op: ReturnType<typeof makeNoteOp>,
-  serverSeq: number,
+  arrivalSeq: number,
 ): Promise<Awaited<ReturnType<ProjectionHarness['engine']['applyPulledOp']>>> {
-  await insertOpRow(harness.db, op, serverSeq);
+  await insertOpRow(harness.db, op, arrivalSeq);
   return harness.engine.applyPulledOp(op);
 }
 
@@ -46,18 +46,19 @@ const create = (id: string, entityId: string, timestamp: number, seq: number) =>
     payload: { title: 'T', body: `b-${id}` },
   });
 
-test('applied_server_seq advances only across contiguous serverSeq; a gap pins it, a fill catches up', async () => {
+test('applied_server_seq advances only across contiguous arrival_seq; a gap pins it, a fill catches up', async () => {
   await pull(create('a', 'n1', 1000, 1), 1);
   expect((await harness.engine.readWatermarks('notes')).appliedServerSeq).toBe(1);
 
   await pull(create('b', 'n2', 2000, 2), 2);
   expect((await harness.engine.readWatermarks('notes')).appliedServerSeq).toBe(2);
 
-  // serverSeq 4 arrives with a gap at 3 → the watermark pins below the gap.
+  // arrival_seq 4 arrives with a gap at 3 → the watermark pins below the gap. Production can
+  // never produce this hole (nextArrivalSeq is MAX+1); it is forced here to prove the walk stops.
   await pull(create('d', 'n3', 3000, 3), 4);
   expect((await harness.engine.readWatermarks('notes')).appliedServerSeq).toBe(2);
 
-  // Fill the gap (serverSeq 3) → the watermark advances THROUGH 3 and catches up past 4.
+  // Fill the gap (arrival_seq 3) → the watermark advances THROUGH 3 and catches up past 4.
   await pull(create('c', 'n4', 4000, 4), 3);
   expect((await harness.engine.readWatermarks('notes')).appliedServerSeq).toBe(4);
 });
@@ -105,7 +106,7 @@ test('an entity-local re-fold moves NEITHER watermark', async () => {
   const before = await harness.engine.readWatermarks('notes');
   expect(before).toEqual({ appliedServerSeq: 2, appliedLocalSeq: 0 });
 
-  // An out-of-order edit for n1 (sorts before e-late) triggers a re-fold; its serverSeq (5)
+  // An out-of-order edit for n1 (sorts before e-late) triggers a re-fold; its arrival_seq (5)
   // is still beyond the gap, so the server watermark does not move, and it is a pull, so the
   // local watermark does not move either.
   const outcome = await pull(

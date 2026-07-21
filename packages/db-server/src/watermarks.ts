@@ -37,7 +37,7 @@ import { int8ToNumber, type Int8Value, type WatermarkStore } from '@bolusi/core'
  * RLS predicate value — the store always runs inside a `forTenant` transaction (10-db §6), so the
  * write's `tenant_id` must equal `app.tenant_id` or RLS `WITH CHECK` rejects it.
  *
- * The engine computes the advancement (contiguity via `highestContiguousServerSeq` over the op
+ * The engine computes the advancement (contiguity via `highestContiguousSeq` over the op
  * log); this store only reads/persists the scalar, keeping the monotonic MAX invariant at the
  * store (04 §4.3) even if a caller ever passes a lower value.
  */

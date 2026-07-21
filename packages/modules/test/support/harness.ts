@@ -88,7 +88,7 @@ class SqliteOpStore implements OpAppendStore {
               signature: op.signature,
               signedCoreJcs,
               syncStatus: 'local',
-              serverSeq: null,
+              arrivalSeq: null,
               syncedAt: null,
             })
             .execute();
@@ -126,7 +126,7 @@ export interface Harness {
   identity(userId: string): CommandIdentity;
   /** Deliver a REMOTE (foreign-device) op through the pull path: insert it synced, then
    *  `applyPulledOp` — the seam a sync pull uses (api/01 §4), for the live-update test. */
-  deliverPulled(op: SignedOperation, serverSeq: number): Promise<void>;
+  deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -215,7 +215,7 @@ export async function openHarness(seed: number): Promise<Harness> {
     storeId,
     deviceId,
     identity: (userId: string): CommandIdentity => ({ tenantId, storeId, userId, deviceId }),
-    deliverPulled: async (op: SignedOperation, serverSeq: number): Promise<void> => {
+    deliverPulled: async (op: SignedOperation, arrivalSeq: number): Promise<void> => {
       await db
         .insertInto('operations')
         .values({
@@ -240,7 +240,7 @@ export async function openHarness(seed: number): Promise<Harness> {
           signature: op.signature,
           signedCoreJcs: `jcs:${op.id}`,
           syncStatus: 'synced',
-          serverSeq,
+          arrivalSeq,
           syncedAt: clock.value,
         })
         .execute();

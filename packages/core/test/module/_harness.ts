@@ -156,7 +156,7 @@ class SqliteOpStore implements OpAppendStore {
               signature: row.op.signature,
               signedCoreJcs: row.signedCoreJcs,
               syncStatus: 'local',
-              serverSeq: null,
+              arrivalSeq: null,
               syncedAt: null,
             })
             .execute();

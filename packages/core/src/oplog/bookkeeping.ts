@@ -31,10 +31,11 @@ export type SyncResultEvent =
 
 /**
  * The bookkeeping columns a transition writes — EXACTLY the four the client may mutate on
- * the operation log (08 §5.2 allowlist; 05 §2.3). `serverSeq` is deliberately NOT here:
- * 08 §5.2 scopes `serverSeq` to the server's insert-time acceptance path, and a client op's
- * `operations.server_seq` (10-db §9.2) is set at pull-insert for foreign ops, never by this
- * mutator — a device's own ops keep it NULL.
+ * the operation log (08 §5.2 allowlist; 05 §2.3). `serverSeq` is deliberately NOT here, and NO
+ * client column mirrors it: 08 §5.2 scopes `serverSeq` to the server's insert-time acceptance path.
+ * The client's own `operations.arrival_seq` (10-db §9.2; D20 §4) is a LOCAL arrival counter set at
+ * pull-insert for foreign ops, never by this mutator — so a device's own ops keep it NULL for life,
+ * which is exactly what makes the pull the counter's only writer.
  */
 export interface BookkeepingPatch {
   readonly syncStatus: OpSyncStatus;

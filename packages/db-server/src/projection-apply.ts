@@ -45,6 +45,10 @@ export function createServerProjectionEngine<DB>(
     db,
     registry,
     watermarks: createServerWatermarkStore(db, tenantId),
+    // The SERVER log numbers accepted ops with the per-tenant acceptance counter (10-db §3/§5).
+    // The client's `arrival_seq` (10-db §9.2, D20 §4) is a different number and does not exist in
+    // this schema, so a mis-wiring here errors rather than answering wrongly.
+    seqColumn: 'server_seq',
     makeRebuildStore: () => PUSH_NEVER_REBUILDS,
   });
 }

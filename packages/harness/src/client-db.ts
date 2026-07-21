@@ -4,7 +4,7 @@
 //
 // This owns NO protocol logic (T-7): the op is already a signed, chained `SignedOperation`; the
 // insert only writes the operation-log columns 10-db §9.2 declares (syncStatus 'synced', the
-// assigned serverSeq), and the row→wire mapper is the inverse of that column list. Folding is the
+// assigned arrival_seq), and the row→wire mapper is the inverse of that column list. Folding is the
 // REAL engine (`applyPulledOp`), never re-done here.
 //
 // ONE DELIBERATE DIVERGENCE FROM PRODUCTION `insertPulledOp` (packages/core/src/sync/pull.ts): it
@@ -70,7 +70,7 @@ interface OperationRow {
   previousHash: string;
   hash: string;
   signature: string;
-  serverSeq: number | null;
+  arrivalSeq: number | null;
 }
 
 /** Reconstruct the wire `SignedOperation` from a stored `operations` row (the insert's inverse). */
@@ -99,7 +99,7 @@ function rowToWireOp(row: OperationRow): SignedOperation {
   };
 }
 
-/** Every op this device holds, wire shape, ascending by local `seq` per device then serverSeq. */
+/** Every op this device holds, wire shape, ascending by local `seq` per device then arrival order. */
 export async function readWireOps(db: Kysely<ClientDatabase>): Promise<SignedOperation[]> {
   const rows = (await db
     .selectFrom('operations')
@@ -117,7 +117,7 @@ export async function readWireOps(db: Kysely<ClientDatabase>): Promise<SignedOpe
 export async function insertPulledOp(
   db: Kysely<ClientDatabase>,
   op: SignedOperation,
-  serverSeq: number,
+  arrivalSeq: number,
   syncedAt: number,
 ): Promise<void> {
   await sql`
@@ -125,14 +125,14 @@ export async function insertPulledOp(
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, payload, timestamp_ms, location, source, agent_initiated,
       agent_conversation_id, previous_hash, hash, signature, signed_core_jcs,
-      sync_status, server_seq, synced_at
+      sync_status, arrival_seq, synced_at
     ) VALUES (
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${op.location === null ? null : JSON.stringify(op.location)}, ${op.source},
       ${op.agentInitiated ? 1 : 0}, ${op.agentConversationId}, ${op.previousHash}, ${op.hash},
       ${op.signature}, ${/* signed_core_jcs — the deliberate non-parity '' from the file header */ ''},
-      'synced', ${serverSeq}, ${syncedAt}
+      'synced', ${arrivalSeq}, ${syncedAt}
     )
   `.execute(db);
 }
