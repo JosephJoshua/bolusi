@@ -1,6 +1,6 @@
 # TASK 114 — `POST /v1/media/:id/init` answers **500** for a cross-tenant media id and **404** for a same-tenant one: a cross-tenant existence oracle
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH — live security defect on a shipped endpoint.** It is the exact property `security-guide §2.2`'s media exception exists to remove, and it is reachable by any enrolled device with a guessable UUIDv7.
 **Depends on:** 19 (media-server, done)
 **Blocks:** 28 (security-sweep — SEC-TENANT-04's cross-tenant leg is RED on this row and stays red until this lands)

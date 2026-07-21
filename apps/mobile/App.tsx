@@ -16,10 +16,12 @@
  * 3 s append debounce, the 60 s foreground interval, the background task, pull-to-refresh) feed
  * core's intake behind this seam — this task ships the seam, task 15 ships the loop.
  */
+import { AvatarButton, SyncChip } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
+import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import { useHardwareBack } from './src/navigation/useHardwareBack.js';
 import {
@@ -53,7 +55,8 @@ import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/mod
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PinAttemptRow } from '@bolusi/core';
-import type { Locale } from '@bolusi/i18n';
+import type { NotesRuntime } from '@bolusi/modules/notes/screens';
+import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
 /**
  * Everything the shell reads from the outside. Injected rather than imported so the root is
@@ -71,6 +74,13 @@ export interface AppProps {
   /** TASK 15 SEAM — see the file header. */
   readonly sync: SyncStatusInput;
   readonly onSyncNow: () => void;
+  /**
+   * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
+   * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
+   * session-scoped runtime is wired (the shell is still pre-session — `session` is `null` today), in
+   * which case `home` stays the empty shell rather than faking a surface that cannot query.
+   */
+  readonly notes?: NotesRuntime | undefined;
   readonly onSubmitPin: (userId: string, pin: string) => void;
   readonly onSelectLocale: (locale: Locale) => void;
   readonly locale: Locale;
@@ -247,10 +257,43 @@ export default function App(props: AppProps): React.JSX.Element {
               />
             );
           }
-          // `home` is the module surface — the notes screens land with task 25. Rendering an empty
-          // shell rather than a placeholder string: a hardcoded "coming soon" would be exactly the
+          // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
+          // available. Until the shell is session-wired (`props.notes` is `undefined` today), it stays
+          // the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly the
           // copy the label catalog exists to prevent (07-i18n).
-          return <View testID="shell-home" style={FILL} />;
+          if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
+          return (
+            <NotesHome
+              runtime={props.notes}
+              now={props.now}
+              onOpenSyncStatus={() => setRoute('syncStatus')}
+              syncChip={
+                <SyncChip
+                  state={chip}
+                  pendingCount={props.sync.pendingOperationCount}
+                  accessibilityLabel={t('sync.status.lastSynced', {
+                    relative:
+                      props.sync.state.lastSuccessfulSyncAt === null
+                        ? t('core.status.empty')
+                        : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                  })}
+                  onPress={() => setRoute('syncStatus')}
+                />
+              }
+              avatar={
+                currentUser === null ? (
+                  <View testID="notes-no-avatar" />
+                ) : (
+                  <AvatarButton
+                    userId={currentUser.id}
+                    initials={currentUser.initials}
+                    accessibilityLabel={t('auth.switcher.title')}
+                    onPress={() => setPinFor(null)}
+                  />
+                )
+              }
+            />
+          );
         },
       })}
     </View>

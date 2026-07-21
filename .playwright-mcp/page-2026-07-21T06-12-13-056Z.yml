@@ -1,0 +1,35 @@
+- generic [ref=f1e3]:
+    - generic [ref=f1e4]: RNW browser approximation — NOT device-verified
+    - generic [ref=f1e7]:
+        - generic [ref=f1e8]:
+            - button "Back" [ref=f1e55] [cursor=pointer]:
+                - generic [ref=f1e10]: 󰁍
+            - generic [ref=f1e11]: Language
+            - generic [ref=f1e12]:
+                - button "Last connected" [ref=f1e56] [cursor=pointer]:
+                    - generic [ref=f1e14]: 󱯬
+                - button "Who’s using this?" [ref=f1e57] [cursor=pointer]:
+                    - generic [ref=f1e16]: AP
+        - generic [ref=f1e18]:
+            - generic [ref=f1e19]: Language
+            - button "Bahasa Indonesia" [ref=f1e20] [cursor=pointer]
+            - button "English" [active] [ref=f1e27] [cursor=pointer]:
+                - generic [ref=f1e59]:
+                    - generic [ref=f1e60]: 󰗠
+                    - generic [ref=f1e61]: OK
+            - generic [ref=f1e30]: Device alert
+            - button "A conflict needs a decision" [ref=f1e62] [cursor=pointer]:
+                - generic [ref=f1e34]: 󰅂
+            - button "Device alert" [ref=f1e63] [cursor=pointer]:
+                - generic [ref=f1e39]: 󰅂
+            - generic [ref=f1e41]: Enroll This Device
+            - generic [ref=f1e42]:
+                - generic [ref=f1e44]:
+                    - generic [ref=f1e45]: Konter Depan
+                    - generic [ref=f1e46]: dev_7Q2K9Z4M
+                - generic [ref=f1e48]:
+                    - generic [ref=f1e49]: Servis Ponsel Maju
+                    - generic [ref=f1e50]: Maju Group
+                - generic [ref=f1e52]:
+                    - generic [ref=f1e53]: android
+                    - generic [ref=f1e54]: 0.0.0 (web-approx)

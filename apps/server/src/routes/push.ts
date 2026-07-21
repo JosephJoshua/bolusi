@@ -9,9 +9,10 @@
 import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
+import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
-import { respondError } from '../errors.js';
+import { ApiError, respondError } from '../errors.js';
 import { withIdentityErrors } from '../identity/errors.js';
 import { enforce } from '../identity/rate-limits.js';
 import { zJson } from '../middleware/validator-hook.js';
@@ -58,24 +59,47 @@ export function createPushRouter(deps: ServerDeps) {
         const userId =
           claimed !== undefined && claimed !== '' ? (await resolveActingUser(c, db)).userId : null;
 
+        // "Last registrant wins" (api/04-push §2): `expo_push_token` is a GLOBAL UNIQUE, so a token
+        // can belong to at most one device. If ANOTHER device in this tenant already holds it,
+        // ownership TRANSFERS here — re-point it by first releasing the prior holder, then upserting
+        // our own row. This DELETE is RLS-scoped to the registrant's tenant (forTenant; 10-db §6), so
+        // it touches only within-tenant rows and never reaches across tenants. The `deviceId != …`
+        // guard leaves our own existing row (idempotent replay / token rotation) for the upsert below.
         await db
-          .insertInto('pushTokens')
-          .values({
-            id: uuidv7(now),
-            tenantId: device.tenantId,
-            deviceId: device.deviceId,
-            userId,
-            expoPushToken: body.expoPushToken,
-            updatedAt: now,
-          })
-          .onConflict((oc) =>
-            oc.column('deviceId').doUpdateSet({
-              expoPushToken: body.expoPushToken,
-              userId,
-              updatedAt: now,
-            }),
-          )
+          .deleteFrom('pushTokens')
+          .where('expoPushToken', '=', body.expoPushToken)
+          .where('deviceId', '!=', device.deviceId)
           .execute();
+
+        try {
+          await db
+            .insertInto('pushTokens')
+            .values({
+              id: uuidv7(now),
+              tenantId: device.tenantId,
+              deviceId: device.deviceId,
+              userId,
+              expoPushToken: body.expoPushToken,
+              updatedAt: now,
+            })
+            .onConflict((oc) =>
+              oc.column('deviceId').doUpdateSet({
+                expoPushToken: body.expoPushToken,
+                userId,
+                updatedAt: now,
+              }),
+            )
+            .execute();
+        } catch (err) {
+          // The only unique violation reachable now is the GLOBAL `expo_push_token` UNIQUE held by a
+          // row in ANOTHER tenant: the within-tenant holder was just released, and the `device_id`
+          // conflict is absorbed by onConflict. RLS hides that row (bolusi_app is NOBYPASSRLS), so we
+          // CANNOT transfer it without breaking tenant isolation — fail closed (never 500, never
+          // reveal the other tenant), rolling back this tx. Reuses task 114's shared 23505 detector
+          // (CLAUDE.md §2.8) — no fourth copy.
+          if (isUniqueViolation(err)) throw new ApiError('PERMISSION_DENIED');
+          throw err;
+        }
 
         const response: PushTokenRegisterResponse = { deviceId: device.deviceId, updatedAt: now };
         return c.json(response);

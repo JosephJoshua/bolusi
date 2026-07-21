@@ -27,9 +27,11 @@
 import { base64ToBytes } from '@bolusi/core';
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
+import { sql } from 'kysely';
 
 import type { SurfacedConflict } from '../sync/conflict-detection.js';
 
+import { isUniqueViolation } from '../db-errors.js';
 import { recordAnomaly, type AnomalyKind } from './anomalies.js';
 import { insertOperationRow } from './persist.js';
 import { allocateServerSeq, lockTenantCounter } from './server-seq.js';
@@ -225,25 +227,47 @@ export async function processPushBatch(
       }
 
       // Accepted: allocate a gapless serverSeq, flag skew (never reject), insert with verbatim JCS.
-      const serverSeq = await allocateServerSeq(db, identity.tenantId);
       const receivedAt = deps.now();
       const clockSkewFlagged = isClockSkewed(op.timestamp, receivedAt, device.lastSyncAt);
 
-      await insertOperationRow(db, {
-        op,
-        serverSeq,
-        receivedAt,
-        jcs: signature.jcs,
-        clockSkewFlagged,
-      });
+      // `operations.id` is a GLOBAL uuid PK (10-db §5). The dedupe step above is RLS-scoped, so an
+      // op id an RLS-hidden row in ANOTHER tenant already holds passed dedupe as new — and the
+      // INSERT then trips the global PK (RLS filters SELECTs, not unique-index conflicts, 10-db §6).
+      // A per-op SAVEPOINT scopes the allocate+insert+fold so that collision rolls back THIS op
+      // alone — the serverSeq increment is undone with it, keeping the stream gapless (10-db §3) —
+      // and is reported as an indistinguishable `duplicate`, exactly like a same-tenant replay
+      // (step 1), never a 500 that would confirm the foreign op id exists (security-guide §2.2;
+      // task 114). Any OTHER unique violation is unreachable on this branch — a within-tenant
+      // (device_id, seq) break is caught by the chain step and (tenant_id, server_seq) by the
+      // counter lock — so a non-collision unique error re-throws and fails loudly, as it must.
+      let serverSeq: number;
+      await sql`SAVEPOINT op_write`.execute(db);
+      try {
+        serverSeq = await allocateServerSeq(db, identity.tenantId);
+        await insertOperationRow(db, {
+          op,
+          serverSeq,
+          receivedAt,
+          jcs: signature.jcs,
+          clockSkewFlagged,
+        });
 
-      // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models. The op
-      // is already in the log with its serverSeq, so the engine reads it as PRESENT and advances
-      // `applied_server_seq` to the highest contiguous serverSeq (04 §4.3) — the PULL-shaped path,
-      // because server projections track server-seq, not an own-device local seq (10-db §8). An
-      // applier throw propagates out of `forTenant`, rolling back this op AND the whole batch
-      // (atomic — 10-db §3). An unregistered type folds as a no-op (engine.ts).
-      await projectionEngine.applyPulledOp(op);
+        // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models. The op
+        // is already in the log with its serverSeq, so the engine reads it as PRESENT and advances
+        // `applied_server_seq` to the highest contiguous serverSeq (04 §4.3) — the PULL-shaped path,
+        // because server projections track server-seq, not an own-device local seq (10-db §8). An
+        // applier throw propagates out of `forTenant`, rolling back this op AND the whole batch
+        // (atomic — 10-db §3). An unregistered type folds as a no-op (engine.ts).
+        await projectionEngine.applyPulledOp(op);
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+        // Undo THIS op's allocation + insert + fold; the batch (and its counter lock) continue.
+        await sql`ROLLBACK TO SAVEPOINT op_write`.execute(db);
+        await sql`RELEASE SAVEPOINT op_write`.execute(db);
+        results.push({ id: op.id, status: 'duplicate' });
+        continue;
+      }
+      await sql`RELEASE SAVEPOINT op_write`.execute(db);
 
       if (clockSkewFlagged) {
         await anomaly(

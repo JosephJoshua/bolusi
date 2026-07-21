@@ -1,6 +1,6 @@
 # TASK 117 — a Maestro native E2E flow wired into 27a's Android-emulator CI lane, so the REAL React Native app (not a browser approximation) gets driven
 
-**Status:** blocked
+**Status:** in-progress
 **Priority:** MEDIUM — this is the true-native counterpart to task 116's browser approximation. It drives the actual RN app on a real Android emulator via UIAutomator2 (what Playwright cannot do — RN screens are native views, not a WebView).
 **Depends on:** 27a (the Android-emulator CI lane must exist first), 24, 96
 **Blocks:** —

@@ -7,6 +7,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The Android EMULATOR correctness lane (stage 12, task 27a) is "native change / scheduled", not
+  # per-PR: booting an AVD + a native release build is minutes, and an emulator answers CORRECTNESS
+  # only (D20 §1), so it runs nightly and on demand. Its Node-side legs (SEED-200K, the parser,
+  # flag-gating, budget constants) DO run every PR — they are plain vitest, swept by the `unit` job.
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
 
 jobs:
   # Stage 1 — install: frozen lockfile + single-zod + forbidden-packages checks.
@@ -447,26 +454,164 @@ jobs:
       - name: security sweep (SEC inventory + SEC-TENANT-04 walk + secrets + dependency audit)
         run: pnpm sec:sweep
 
-  # Stage 12 — device lane (EAS dev-client build + on-device smoke; 08 §5.6 stage 12,
-  # "native change / scheduled"). PLACEHOLDER, but FAIL-SAFE. Task 27
-  # (ai-docs/tasks/27-device-gates.md) wires the real lane — EAS dev-client build fingerprint-
-  # triggered on native change, plus on-device smoke: quick-crypto side of the interop vectors,
-  # argon2id timing, real-SQLCipher open. None of that can run here (no Expo/EAS/device).
+  # Stage 12 — Android EMULATOR CORRECTNESS lane (task 27a; D20 §1, 08 §5.6 stage 12). REPLACES the
+  # task-36 fail-safe `device-lane` stub. Scheduled / on-demand, NOT per-PR (see the `on:` note).
   #
-  # WHY THIS EXITS NON-ZERO (CLAUDE.md §2.11 / §2.1): the old step was `echo "placeholder …"` with
-  # no `exit`, so it exited 0 — a green-for-nothing job. An echo-and-exit-0 placeholder fails OPEN:
-  # it wears the stage-12 label while proving nothing, and the moment branch protection requires it
-  # the *absence* of the device lane is laundered into a green required check (an exit code
-  # describes the process it came from — an echo's 0 says only that echo ran, §2.1). A placeholder
-  # that exits 1 — like the sibling `not-implemented.mjs` stubs `pnpm simulate` / `pnpm db:seed`
-  # (task 01) — fails SAFE: nobody mistakes a red job for coverage. The difference is one line and
-  # it is the whole point of task 36. `scripts/not-implemented.mjs` is the repo's single
-  # "not implemented ⇒ exit 1" stub (§2.8) — reused here rather than hand-rolling an `exit 1`, so
-  # this reads identically to those scripts. `node` is preinstalled on ubuntu-latest; the checkout
-  # supplies the script file. Delete this job's stub and wire the real lane in task 27.
-  device-lane:
+  # WHAT THIS PROVES (emulator-answerable CORRECTNESS only): the shipping release/`test`-profile APK
+  # boots its own Hermes 0.17 and real SQLCipher (the ONLY place real SQLCipher runs — CI/Node has
+  # none), so `pnpm harness:device` captures the `BOLUSI_HARNESS_RESULT` JSON and its parser gates on:
+  # SEC-DEV-06 at-rest WITH its T-14b positive control, SEC-AUTH-09 leg 1 (verifier bytes confined to
+  # the SQLCipher DB), the SEC-OPLOG-06 JCS vectors on Hermes 0.17 (D13), and CHAOS-01/03/06/07
+  # convergence at reduced volume. EVERY figure it reports is EMULATOR, never a device number.
+  #
+  # WHAT IT DOES NOT PROVE (D12/D20): the Part C PERFORMANCE gates P-1..P-6 (cold start, rebuild
+  # time/memory, backlog time, KDF p95, command latency) and SEC-AUTH-10 (argon2id timing) — those
+  # need the physical 2 GB device (task 27b, owner-deferred) and are NOT run or asserted here.
+  #
+  # FAIL-SAFE (CLAUDE.md §2.11 / §2.1): `harness:device` exits non-zero on ANY red gate, missing
+  # gate, non-release build, or stale/absent capture — a broken build/emulator step errors the job
+  # (red), never a green-for-nothing echo. The prebuild + Gradle assemble below is the part that
+  # needs a real CI run to shake out (unverifiable on the Linux dev host, D12/D13); because this job
+  # is scheduled/dispatch, a first-run failure is a red scheduled job, never a false green on a PR.
+  android-emulator:
     runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
-      - name: device lane not yet implemented — fail safe until task 27 (§2.11)
-        run: node scripts/not-implemented.mjs device-lane 27-device-gates
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: pnpm install --frozen-lockfile
+      # KVM permissions so the AVD runs hardware-accelerated (android-emulator-runner requirement).
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Build the release/test-profile APK with the harness compiled in. UNVERIFIED here — the native
+      # toolchain (op-sqlite+SQLCipher, quick-crypto/nitro) only assembles in this lane, not on the
+      # dev host. Release signing config is Expo's template default; a first scheduled run validates it.
+      - name: prebuild + assemble release APK (BOLUSI_TEST_HARNESS=1)
+        env:
+          BOLUSI_TEST_HARNESS: '1'
+          EXPO_PUBLIC_API_URL: 'http://10.0.2.2:3000'
+        run: |
+          pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
+          ./gradlew -p apps/mobile/android assembleRelease
+      # Boot the AVD with the shipping Hermes 0.17 (real 0.17 == device 0.17, D13) and run the driver.
+      - name: harness correctness gates on the emulator (every figure EMULATOR)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          script: pnpm harness:device --apk apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+
+  # Stage 14 — iOS Simulator BUILD lane (task 85; D18 §5, D20 §2). UNSIGNED, macos-latest,
+  # scheduled / on-demand — NOT per-PR (macOS runners bill ~10× Linux; owner confirms public-vs-private
+  # minutes, D18 §5). It is a NEW job beside the Android emulator lane (stage 12), self-contained, and
+  # touches nothing there.
+  #
+  # WHAT THIS PROVES (Simulator-answerable, D20 §2): the real `expo prebuild --platform ios` generates a
+  # full Xcode project from `app.config.ts`, `xcodebuild` COMPILES AND LINKS it for the Simulator, the
+  # COMPILED app carries tasks 83/87's bundle identity + deliberate usage strings (asserted below on the
+  # built `.app`'s Info.plist — the real prebuilt artifact, stronger than ios-config.test.ts's Linux
+  # introspection), and the app BOOTS on a Simulator without crashing on launch. This closes the exact
+  # gap ios-config.test.ts names ("no macOS host, no Xcode, no Simulator ... task 85 is the infra gap").
+  #
+  # WHAT IT DOES NOT PROVE (D18 §5 / D20 §2, the honest ceiling): NOTHING that needs a SIGNED build or a
+  # physical iPhone — the EAS signed lane, Apple Developer enrollment, TestFlight, and real-device
+  # Keychain / backup-exclusion semantics (security-guide §7.4 "never resurrected") stay owner-DEFERRED
+  # and device-UNVERIFIED. Simulator Keychain/backup differ from a device; no green here is a device test.
+  #
+  # HONESTY (CLAUDE.md §2.1): this job RUNS IN CI, on a macOS runner. It was NOT and CANNOT be run on the
+  # Linux dev host (no Xcode / no Simulator). The prebuild + pod install + xcodebuild + boot below is the
+  # part a first real CI run must shake out (same posture as the Android lane's assemble step); because
+  # this job is scheduled/dispatch, a first-run failure is a red scheduled job, never a false green on a PR.
+  #
+  # FAIL-SAFE (CLAUDE.md §2.11): every step propagates its non-zero exit — there is no `continue-on-error`
+  # anywhere, and no `|| true` on build / install / launch. A compile/link failure, an absent Info.plist
+  # key, a bundle-id drift, or a crash-on-launch each fail the job red.
+  ios-simulator:
+    runs-on: macos-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      # Present so `app.config.ts`'s `extra.apiUrl` is not null at build/launch. This lane only builds
+      # and boots — it does NOT sync — so the value is an inert placeholder (localhost is the Simulator's
+      # own host); the app never reaches the network in this job.
+      EXPO_PUBLIC_API_URL: 'http://localhost:3000'
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Generate the native iOS project. `--no-install` keeps JS deps under pnpm's frozen lockfile
+      # (mirrors the Android lane's `--no-install`); CocoaPods is installed explicitly next, since
+      # `--no-install` skips the pod install prebuild would otherwise run.
+      - name: expo prebuild (iOS native project)
+        run: pnpm --filter @bolusi/mobile exec expo prebuild --platform ios --no-install
+      # CocoaPods generates the .xcworkspace that xcodebuild builds from; preinstalled on macos-latest.
+      - name: pod install
+        working-directory: apps/mobile/ios
+        run: pod install
+      # UNSIGNED Release build for the Simulator. Release EMBEDS the JS bundle, so the app launches with
+      # NO Metro server running (a Debug build would red-screen headlessly) — the same reason the Android
+      # lane assembles Release. `CODE_SIGNING_ALLOWED=NO` etc.: Simulator builds need no Apple signing
+      # (D20 §2), which is what lets this lane run with NO Apple account. Workspace/scheme are discovered
+      # (Expo names them after the app) rather than hardcoded, so a rename cannot silently mis-target.
+      - name: xcodebuild — unsigned iOS Simulator build (Release)
+        working-directory: apps/mobile/ios
+        run: |
+          set -eu
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          test -n "$WORKSPACE"
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ios-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+      # Assert the COMPILED artifact carries tasks 83/87's identity and deliberate copy. PlistBuddy exits
+      # non-zero if a key is absent; `grep -qF` fails the job if the value drifted from the Indonesian
+      # string. This is the "does the generated Info.plist match 83/87" check on the real build output.
+      - name: verify built Info.plist matches tasks 83/87
+        run: |
+          set -eu
+          APP=$(find "$RUNNER_TEMP/ios-build/Build/Products" -maxdepth 3 -name '*.app' | head -1)
+          test -n "$APP"
+          PLIST="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = 'com.bolusi.app'
+          /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$PLIST" \
+            | grep -qF 'Izinkan aplikasi memakai kamera untuk ambil foto.'
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$PLIST" \
+            | grep -qF 'Izinkan aplikasi memakai lokasi'
+      # Boot a Simulator, install and launch — the does-it-launch gate. A native crash-on-launch (bad
+      # link, missing dylib, a plist iOS rejects) fails install/launch non-zero. The liveness poll is the
+      # real does-it-STAY-up signal: `simctl launch` returns a PID even for an app that crashes instantly.
+      - name: boot Simulator, install + launch the app
+        run: |
+          set -eu
+          APP=$(find "$RUNNER_TEMP/ios-build/Build/Products" -maxdepth 3 -name '*.app' | head -1)
+          test -n "$APP"
+          DEVICE=$(xcrun simctl list devices available --json \
+            | jq -r '.devices | to_entries[] | .value[] | select(.name | startswith("iPhone")) | .udid' \
+            | head -1)
+          test -n "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" com.bolusi.app
+          sleep 8
+          xcrun simctl spawn "$DEVICE" launchctl list | grep -q com.bolusi.app
