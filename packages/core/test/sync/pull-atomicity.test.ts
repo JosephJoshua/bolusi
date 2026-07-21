@@ -4,8 +4,8 @@
 // advance all commit in ONE local transaction, or none of them do.
 //
 // WHY THIS SUITE IS THE ONE THAT MATTERS. The projection engine advances `applied_server_seq` to the
-// highest CONTIGUOUS serverSeq *present in the log* — present, not applied (projection/engine.ts →
-// oplog-source `highestContiguousServerSeq`). The engine cannot distinguish the two and is not
+// highest CONTIGUOUS `arrival_seq` *present in the log* — present, not applied (projection/engine.ts →
+// oplog-source `highestContiguousSeq`). The engine cannot distinguish the two and is not
 // supposed to: the caller's transaction is what makes "present" imply "applied". The client pull is
 // the only production path where that promise is made — server-side, projections apply inside the
 // PUSH transaction (04 §4.3, 10-db §8) and the server's pull is a pure read. So this file is where
@@ -149,7 +149,7 @@ describe('pulled batches apply atomically (api/01-sync §4)', () => {
 
     // THE OUTCOME. Two ops had already been applied inside the transaction when the third threw.
     // If the batch were not atomic, those two would be durable — and, far worse, the watermark
-    // would have advanced to the highest CONTIGUOUS serverSeq present, which (the engine inserts
+    // would have advanced to the highest CONTIGUOUS arrival_seq present, which (the engine inserts
     // before it applies) would already include ops that never projected.
     expect(await countRows(harness.db, 'operations')).toBe(0);
     expect(await countRows(harness.db, 'notes')).toBe(0);
@@ -210,11 +210,11 @@ describe('THE FALSIFICATION — per-op commits durably skip ops (why the batch i
    */
   it('commits per-op: the watermark advances PAST ops that never projected, and nothing revisits them', async () => {
     // Insert every op first (the natural, efficient shape), each in its own committed transaction.
-    let serverSeq = 0;
+    let arrivalSeq = 0;
     for (const op of ops) {
-      serverSeq += 1;
+      arrivalSeq += 1;
       await harness.transaction(async () => {
-        await insertRaw(op, serverSeq);
+        await insertRaw(op, arrivalSeq);
       });
     }
 
@@ -236,7 +236,7 @@ describe('THE FALSIFICATION — per-op commits durably skip ops (why the batch i
     // ...but only ONE was ever projected.
     expect(await countRows(harness.db, 'notes')).toBe(1);
     // And here is the silent killer: the watermark says the module is caught up through op 5,
-    // because `highestContiguousServerSeq` counts ops PRESENT in the log — all five are present.
+    // because `highestContiguousSeq` counts ops PRESENT in the log — all five are present.
     // Four ops are permanently unprojected and the bookkeeping insists nothing is owed.
     expect(await watermark()).toBe(5);
     // Nothing will ever revisit them: the cursor has moved past, so they are never re-pulled...
@@ -266,18 +266,18 @@ describe('THE FALSIFICATION — per-op commits durably skip ops (why the batch i
 });
 
 /** Raw op insert — the falsification's own plumbing, deliberately not the production path. */
-async function insertRaw(op: SignedOperation, serverSeq: number): Promise<void> {
+async function insertRaw(op: SignedOperation, arrivalSeq: number): Promise<void> {
   await sql`
     INSERT INTO operations (
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, payload, timestamp_ms, location, source, agent_initiated,
       agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      synced_at, server_seq
+      synced_at, arrival_seq
     ) VALUES (
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${`jcs:${op.id}`}, 'synced', ${1}, ${serverSeq}
+      ${op.signature}, ${`jcs:${op.id}`}, 'synced', ${1}, ${arrivalSeq}
     )
   `.execute(harness.db);
 }

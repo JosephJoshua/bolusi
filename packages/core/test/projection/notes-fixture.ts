@@ -143,10 +143,10 @@ export function makeRecordingNotesModule(): {
   return { module: { ...notesModule, appliers }, observed };
 }
 
-/** An op paired with the serverSeq it would carry when pulled (null for a local append). */
+/** An op paired with the arrival counter it would carry when pulled (null for a local append). */
 export interface GeneratedOp {
   readonly op: SignedOperation;
-  readonly serverSeq: number | null;
+  readonly arrivalSeq: number | null;
 }
 
 /** Build one `notes` op with an explicit canonical position — for hand-crafted scenarios. */
@@ -289,7 +289,7 @@ export function generateNotesScript(seed: number, options: GenerateOptions = {})
       hash: hex64(i + 1),
       signature: `sig-${seed}-${i}`,
     };
-    ops.push({ op, serverSeq: null });
+    ops.push({ op, arrivalSeq: null });
   }
 
   return ops;

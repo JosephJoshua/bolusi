@@ -8,8 +8,8 @@
 // read, so the client pull-apply is the sole production path that can get this wrong.
 //
 // WHY IT IS NOT MERELY TIDY. `ProjectionEngine.applyPulledOp` advances `applied_server_seq` to the
-// highest CONTIGUOUS serverSeq *present in the log* (projection/engine.ts → oplog-source
-// `highestContiguousServerSeq`) — PRESENT, not APPLIED. The engine cannot tell the difference and
+// highest CONTIGUOUS `arrival_seq` *present in the log* (projection/engine.ts → oplog-source
+// `highestContiguousSeq`) — PRESENT, not APPLIED. The engine cannot tell the difference and
 // should not have to: the atomicity of the caller's transaction is what makes "present" imply
 // "applied". Break the batch into per-op commits and the two come apart:
 //
@@ -375,37 +375,37 @@ async function hasOp<DB>(db: Kysely<DB>, id: string): Promise<boolean> {
 }
 
 /**
- * The next `operations.server_seq` for a pulled op.
+ * The next `operations.arrival_seq` for a pulled op.
  *
- * ── WHY THIS IS AN ARRIVAL COUNTER AND NOT THE SERVER'S `serverSeq` ──────────────────────────
+ * ── WHY THIS IS AN ARRIVAL COUNTER AND NOT THE SERVER'S `serverSeq` (D20 §4, RATIFIED) ────────
  *
  * It cannot be the server's: **the pull wire carries no per-op serverSeq**. `zPullResponse.ops` is
  * `zSignedOperation[]` — the signed core (05 §2.1) plus hash/signature — and `serverSeq` is §2.4
  * server-side bookkeeping, assigned at acceptance, i.e. after signing. It is structurally impossible
  * for it to ride inside the signed core, and no sibling field carries it. The server's pull selects
  * `serverSeq` and then drops it in `reconstructWireOp` (apps/server/src/sync/pull.ts). The only
- * server-assigned number on the wire is the batch's `nextCursor`. See TASK 49 (filed with this work).
+ * server-assigned number on the wire is the batch's `nextCursor`.
  *
- * So the column holds a LOCAL, GAPLESS, MONOTONIC arrival counter. Three things make that sound
- * rather than a fudge:
+ * So the column holds a LOCAL, GAPLESS, MONOTONIC arrival counter, and since D20 §4 it is NAMED for
+ * what it holds — the old `server_seq` spelling claimed a meaning the column never had, which is the
+ * decoy class of CLAUDE.md §2.11. Three things make the counter sound rather than a fudge:
  *
  *   1. NOTHING ELSE WRITES IT. `BookkeepingPatch` deliberately excludes `serverSeq`, so a device's
- *      own pushed ops keep `server_seq` NULL (oplog/bookkeeping.ts). The pull is the column's only
+ *      own pushed ops keep `arrival_seq` NULL (oplog/bookkeeping.ts). The pull is the column's only
  *      writer, so there is no second numbering to collide with.
- *   2. IT IS WHAT THE WATERMARK ACTUALLY NEEDS. `highestContiguousServerSeq` pins the watermark at
- *      the first HOLE. The client's op stream is scope-FILTERED (api/01 §4.3: this store's ops plus
+ *   2. IT IS WHAT THE WATERMARK ACTUALLY NEEDS. `highestContiguousSeq` pins the watermark at the
+ *      first HOLE. The client's op stream is scope-FILTERED (api/01 §4.3: this store's ops plus
  *      tenant-scoped ones), so the server's true serverSeqs are inherently gappy on a multi-store
  *      tenant — storing them would pin `applied_server_seq` below the first other-store op forever
- *      and silently freeze the watermark. A gapless arrival counter is the only value that makes the
- *      watermark mean "caught up" on a client at all.
+ *      and silently freeze the watermark (task 46's class, by another route). A gapless arrival
+ *      counter is the only value that makes the watermark mean "caught up" on a client at all.
  *   3. THE RESUME POINT IS NOT THIS NUMBER. `sync_state.pull_cursor` is the server's `nextCursor`
  *      and is the ONLY value the protocol defines as the resume position (api/01 §4). This counter
  *      never leaves the device and is never sent anywhere.
  *
- * Task 08's own engine harness already models client `server_seq` exactly this way (arrival order,
- * `MAX(server_seq)+1` — test/projection/db.ts `deliverPulled`), so this matches the established
- * model rather than inventing a fourth one. 10-db §9.2's "from push ack / pull" comment overstates
- * the push half — no code path stores a push-ack serverSeq — and TASK 49 carries the doc fix.
+ * The gapless property is what leg 2 rests on, so it is ASSERTED, not assumed: `arrival-seq.test.ts`
+ * pins 1..N across batches and watches the watermark reach the frontier, and `pull-atomicity.test.ts`
+ * fails if the counter ever emits a hole. 10-db §9.2 states the two-sided meaning once.
  */
 async function nextArrivalSeq<DB>(db: Kysely<DB>): Promise<number> {
   // `AS "maxSeq"` resolves the result key by construction, not via `CamelCasePlugin` (10-db §11.4;
@@ -415,22 +415,22 @@ async function nextArrivalSeq<DB>(db: Kysely<DB>): Promise<number> {
   //
   // `MAX(...)` over no GROUP BY ALWAYS returns exactly one row, whose column is NULL on an empty
   // log. The `?? 0` this used to carry conflated two different facts — an empty log (NULL → start
-  // at 1, correct) and a MISSING KEY (undefined → 1, WRONG) — laundering a wrong serverSeq of 1 out
-  // with no error (T-19). They are now distinguished: NULL is the empty log; an absent `maxSeq`
+  // at 1, correct) and a MISSING KEY (undefined → 1, WRONG) — laundering a wrong arrival seq of 1
+  // out with no error (T-19). They are now distinguished: NULL is the empty log; an absent `maxSeq`
   // THROWS, because a sequence number is the last place a plausible default belongs.
   const result = await sql<{ maxSeq?: number | null }>`
-    SELECT MAX(server_seq) AS "maxSeq" FROM operations
+    SELECT MAX(arrival_seq) AS "maxSeq" FROM operations
   `.execute(db);
   const row = result.rows[0];
   if (row === undefined) {
     throw new Error(
-      'nextArrivalSeq: MAX(server_seq) returned no row — impossible for an aggregate',
+      'nextArrivalSeq: MAX(arrival_seq) returned no row — impossible for an aggregate',
     );
   }
   if (row.maxSeq === undefined) {
     throw new Error(
       'nextArrivalSeq: the `maxSeq` result key did not bind — a raw-`sql` key failed to resolve. ' +
-        'Refusing to launder a missing read into a plausible serverSeq of 1 (task 74; T-19).',
+        'Refusing to launder a missing read into a plausible arrival seq of 1 (task 74; T-19).',
     );
   }
   return (row.maxSeq === null ? 0 : Number(row.maxSeq)) + 1;
@@ -445,7 +445,7 @@ async function insertPulledOp<DB>(
   db: Kysely<DB>,
   op: SignedOperation,
   crypto: CryptoPort,
-  serverSeq: number,
+  arrivalSeq: number,
   syncedAt: number,
 ): Promise<void> {
   await sql`
@@ -453,13 +453,13 @@ async function insertPulledOp<DB>(
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, payload, timestamp_ms, location, source, agent_initiated,
       agent_conversation_id, previous_hash, hash, signature, signed_core_jcs,
-      sync_status, synced_at, server_seq
+      sync_status, synced_at, arrival_seq
     ) VALUES (
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${op.location === null ? null : JSON.stringify(op.location)}, ${op.source},
       ${op.agentInitiated ? 1 : 0}, ${op.agentConversationId}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${signedCoreJcsOf(op, crypto)}, 'synced', ${syncedAt}, ${serverSeq}
+      ${op.signature}, ${signedCoreJcsOf(op, crypto)}, 'synced', ${syncedAt}, ${arrivalSeq}
     )
   `.execute(db);
 }

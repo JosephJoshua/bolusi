@@ -25,6 +25,14 @@ const INFRASTRUCTURE = [
 
 // §9.2 Operation log. Append-only by construction: this package exports no UPDATE/DELETE
 // for `operations` (the single bookkeeping mutator is task 06's, per 05 §1).
+//
+// `arrival_seq` (NOT `server_seq` — D20 §4, task 51) is a LOCAL, gapless, monotonic arrival
+// counter assigned at pull-insert as `MAX(arrival_seq) + 1`; NULL for own-device ops for life.
+// It is not, and cannot be, the server's `serverSeq`: that is assigned at acceptance i.e. AFTER
+// signing, so it rides neither the signed core nor any sibling field of the pull response. The
+// old name claimed a meaning the column never had. Renamed in place — this is the initial
+// schema, no client DB is deployed (pre-v0), and the same precedent applies as task 76's
+// `user_prefs.locale`. The two-sided meaning is stated once in 10-db §9.2.
 const OPERATION_LOG = [
   `CREATE TABLE operations (
   id                    TEXT PRIMARY KEY,
@@ -50,7 +58,7 @@ const OPERATION_LOG = [
   sync_status           TEXT NOT NULL DEFAULT 'local'
                           CHECK (sync_status IN ('local','synced','rejected')),
   synced_at             INTEGER,
-  server_seq            INTEGER,
+  arrival_seq           INTEGER,
   rejection_code        TEXT,
   rejection_reason      TEXT
 )`,

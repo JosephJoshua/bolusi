@@ -220,58 +220,80 @@ export async function readCanonicalPage<DB>(
 }
 
 /**
- * The highest contiguous `server_seq` present in the log at or above `from`, walking the
- * global stream (10-db §3 gapless per tenant). Returns `from` when `from + 1` is missing —
- * a gap pins the watermark below it until filled (04 §4.3; §5 test 5). The walk terminates
- * at the first hole, so a contiguous pull advances one step per applied op.
+ * The op-log column the contiguity walk runs over. THE TWO SIDES ARE DIFFERENT COLUMNS HOLDING
+ * DIFFERENT NUMBERS (10-db §9.2's table; D20 §4) — not a naming preference:
+ *
+ *   'server_seq'  — SERVER. The per-tenant acceptance counter (10-db §3/§5), gapless per tenant.
+ *   'arrival_seq' — CLIENT. A local, gapless arrival counter assigned at pull-insert (10-db §9.2).
+ *                   The client CANNOT store real serverSeqs: its stream is scope-filtered
+ *                   (api/01 §4.3), so they are legitimately gappy and would pin the watermark
+ *                   below the first other-store op forever.
+ *
+ * Required, never defaulted, and never inferred from the handle: a default would be right on one
+ * side and a silent decoy on the other, which is the whole class this rename removed. Mis-wiring
+ * fails LOUDLY — neither schema has the other's column, so the query errors rather than answering
+ * wrongly.
  */
-export async function highestContiguousServerSeq<DB>(
+export type OpSeqColumn = 'server_seq' | 'arrival_seq';
+
+/**
+ * The highest contiguous `column` value present in the log at or above `from`. Returns `from`
+ * when `from + 1` is missing — a gap pins the watermark below it until filled (04 §4.3; §5 test
+ * 5). The walk terminates at the first hole, so a contiguous pull advances one step per applied
+ * op. Both streams it runs over are gapless by construction (10-db §3 server-side; the client
+ * arrival counter §9.2), which is what makes "no hole" mean "caught up" rather than "lucky".
+ */
+export async function highestContiguousSeq<DB>(
   db: Kysely<DB>,
   from: number,
+  column: OpSeqColumn,
 ): Promise<number> {
   // Bounded, ordered scan of everything above the current watermark. Contiguity breaks at
-  // the first gap; the loop stops there. `> from` uses the (server_seq) column ordering.
+  // the first gap; the loop stops there. `> from` uses the sequence column's own ordering.
   //
   // The result type is `Int8Value`, NOT `number`, because that is what the drivers actually
   // return and a raw-`sql<>` annotation is an ASSERTION the compiler simply believes — it derives
   // nothing and checks nothing at runtime. This one used to read `sql<{ serverSeq: number }>`;
-  // `server_seq` is `bigint` (10-db §5) and the real `pg` driver returns int8 as a STRING, so
-  // `row.serverSeq === watermark + 1` was `"1" === 1` → false, forever. The walk returned `from`
-  // and `applied_server_seq` never advanced in production — silently, since the `>` branch below
-  // coerces (`"1" > 1` is false too) and so never fired either. Every test lane ran a driver that
-  // hands back numbers, so nothing went red (task 46; testing-guide T-14f). Widening the
-  // annotation to the truth is half the fix: it makes the compiler force the normalisation.
-  // `AS "serverSeq"` — a REAL alias to the camelCase result key. This line previously read
-  // `server_seq AS server_seq`: a NO-OP self-alias that looked like the task-18 hardening but
-  // resolved the `serverSeq` key ONLY via `CamelCasePlugin` (10-db §11.4). Without the plugin
-  // `row.serverSeq` was undefined and the walk threw — at task 46's OWN fix site, under a comment
-  // all about int8, so the second dimension went unseen (task 74; T-15: a hardened line is not a
-  // verified line). The quoted alias binds the key by construction under both wirings.
-  const result = await sql<{ serverSeq: Int8Value }>`
-    SELECT server_seq AS "serverSeq" FROM operations
-    WHERE server_seq > ${from}
-    ORDER BY server_seq
+  // the server's `server_seq` is `bigint` (10-db §5) and the real `pg` driver returns int8 as a
+  // STRING, so `row.serverSeq === watermark + 1` was `"1" === 1` → false, forever. The walk
+  // returned `from` and `applied_server_seq` never advanced in production — silently, since the
+  // `>` branch below coerces (`"1" > 1` is false too) and so never fired either. Every test lane
+  // ran a driver that hands back numbers, so nothing went red (task 46; testing-guide T-14f).
+  // Widening the annotation to the truth is half the fix: it makes the compiler force the
+  // normalisation.
+  // `AS "seqValue"` — a REAL alias to a camelCase result key with no underscore, so it is inert
+  // under both wirings. This line previously read `server_seq AS server_seq`: a NO-OP self-alias
+  // that looked like the task-18 hardening but resolved the key ONLY via `CamelCasePlugin` (10-db
+  // §11.4). Without the plugin the property was undefined and the walk threw — at task 46's OWN
+  // fix site, under a comment all about int8, so the second dimension went unseen (task 74; T-15:
+  // a hardened line is not a verified line). The alias binds the key by construction.
+  const seq = sql.ref(column);
+  const result = await sql<{ seqValue: Int8Value }>`
+    SELECT ${seq} AS "seqValue" FROM operations
+    WHERE ${seq} > ${from}
+    ORDER BY ${seq}
   `.execute(db);
 
   // The walk itself runs in BIGINT, and narrows exactly once, on the way out.
   //
-  // Not a stylistic choice: `server_seq` is bigint, so bigint is the only type in which `===` and
-  // `+ 1` are exact over the column's whole range. Narrowing per row would instead make the walk
-  // throw on a row it was about to IGNORE — a value past 2^53 sitting beyond a gap is none of this
-  // function's business, since contiguity already stopped it. Deciding "is this the next one?" in
-  // the column's own arithmetic, and only converting the answer, keeps the range check exactly
-  // where the value escapes into JS.
-  let watermark = int8ToBigInt(from, 'operations.server_seq');
+  // Not a stylistic choice: `server_seq` is bigint server-side, so bigint is the only type in which
+  // `===` and `+ 1` are exact over the column's whole range. Narrowing per row would instead make
+  // the walk throw on a row it was about to IGNORE — a value past 2^53 sitting beyond a gap is none
+  // of this function's business, since contiguity already stopped it. Deciding "is this the next
+  // one?" in the column's own arithmetic, and only converting the answer, keeps the range check
+  // exactly where the value escapes into JS.
+  const label = `operations.${column}`;
+  let watermark = int8ToBigInt(from, label);
   for (const row of result.rows) {
-    const serverSeq = int8ToBigInt(row.serverSeq, 'operations.server_seq');
-    if (serverSeq === watermark + 1n) {
-      watermark = serverSeq;
-    } else if (serverSeq > watermark + 1n) {
+    const value = int8ToBigInt(row.seqValue, label);
+    if (value === watermark + 1n) {
+      watermark = value;
+    } else if (value > watermark + 1n) {
       break;
     }
   }
   // The returned watermark is the one value that leaves this function, so this is the one place
   // the 2^53 claim has to hold. It throws rather than round (int8.ts) — a rounded watermark is a
   // wrong watermark returned with no error, which is task 46 again one magnitude up.
-  return int8ToNumber(watermark, 'operations.server_seq');
+  return int8ToNumber(watermark, label);
 }

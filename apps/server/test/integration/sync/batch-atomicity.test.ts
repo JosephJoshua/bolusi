@@ -6,7 +6,7 @@
 // advance MUST all commit in ONE transaction.
 //
 // WHY IT SILENTLY BREAKS. `applied_server_seq` advances to the highest CONTIGUOUS serverSeq
-// **present in the log** (04 §4.3; core/projection/oplog-source.ts `highestContiguousServerSeq`) —
+// **present in the log** (04 §4.3; core/projection/oplog-source.ts `highestContiguousSeq`) —
 // NOT to the highest one applied. So the moment a whole batch is in the log, the watermark that a
 // single apply computes is already the TOP OF THE BATCH. If the applier then commits per-op
 // ("insert the whole batch, then apply+commit one op at a time"), the first commit durably
@@ -14,7 +14,7 @@
 // LIES: it claims caught-up through serverSeq N while the projection is missing rows, and any
 // watermark-trusting catch-up or recovery skips those ops forever — permanently wrong, no error.
 //
-// Both tests below run the REAL task-08 engine (`ProjectionEngine` + `highestContiguousServerSeq`)
+// Both tests below run the REAL task-08 engine (`ProjectionEngine` + `highestContiguousSeq`)
 // over the REAL server tables (`operations`, `projection_watermarks`) via this task's server
 // watermark store, on real PostgreSQL 16 (task 81) over the real `pg` driver — so transaction
 // abort/rollback is genuine Postgres MVCC. The falsification test is the deliverable: it exhibits

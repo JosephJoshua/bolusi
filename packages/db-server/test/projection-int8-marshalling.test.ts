@@ -2,7 +2,7 @@
 //
 // WHY THIS FILE EXISTS IN db-server AND NOT IN packages/core, WHERE THE CODE LIVES
 // ---------------------------------------------------------------------------------
-// `highestContiguousServerSeq` reads `operations.server_seq` — a `bigint` (10-db §5). The real
+// `highestContiguousSeq` reads `operations.server_seq` — a `bigint` (10-db §5). The real
 // `pg` driver returns int8 as a **JS string**: int8's range exceeds JS's safe integers, so
 // node-postgres refuses to narrow it silently. The walk compared `row.serverSeq === watermark + 1`
 // against an asserted-`number` result type, so on real Postgres it compared `"1" === 1` → false,
@@ -27,8 +27,8 @@
 //
 // The T-8 gate has a SECOND hole this file also covers: the conformance suite only ever calls
 // `applyAppendedOp`, which takes engine.ts's `advanceLocalSeq` branch. The pull branch — the sole
-// caller of `highestContiguousServerSeq` — is never executed on the Postgres leg at all.
-import { highestContiguousServerSeq } from '@bolusi/core';
+// caller of `highestContiguousSeq` — is never executed on the Postgres leg at all.
+import { highestContiguousSeq } from '@bolusi/core';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
@@ -64,7 +64,7 @@ describe('lane coverage (T-14 — a guard must assert its own coverage)', () => 
 
   test('the fixture actually has rows — an empty log walks to `from` and reads like a pass', async () => {
     // T-14b: the shared docker daemon means a neighbour resetting the schema mid-run leaves the
-    // tables and ZERO rows. `highestContiguousServerSeq(db, 0)` over an empty log returns 0 —
+    // tables and ZERO rows. `highestContiguousSeq(db, 0)` over an empty log returns 0 —
     // indistinguishable from the very bug this file exists to catch. Assert the fixture inline.
     const rows = await testDb.db.selectFrom('operations').select('serverSeq').execute();
     expect(rows.map((r) => Number(r.serverSeq)).sort((a, b) => a - b)).toEqual([1, 2, 3, 5, 6]);
@@ -86,23 +86,23 @@ describe('lane coverage (T-14 — a guard must assert its own coverage)', () => 
   });
 });
 
-describe('highestContiguousServerSeq over the real op log', () => {
+describe('highestContiguousSeq over the real op log', () => {
   test('advances across a contiguous run', async () => {
     // THE REGRESSION. Before the fix this returned 0 on the postgres lane (`"1" === 0 + 1` is
     // false, so the walk never advanced) while returning 3 on PGlite. Removing the int8
     // normalisation in oplog-source.ts turns this line red on `pnpm test:rls` and ONLY there.
-    expect(await highestContiguousServerSeq(testDb.db, 0)).toBe(3);
+    expect(await highestContiguousSeq(testDb.db, 0, 'server_seq')).toBe(3);
   });
 
   test('stops below a gap and stays there', async () => {
     // 4 is missing, so a watermark at 3 cannot advance to 5: contiguity pins it (04 §4.3).
-    expect(await highestContiguousServerSeq(testDb.db, 3)).toBe(3);
+    expect(await highestContiguousSeq(testDb.db, 3, 'server_seq')).toBe(3);
   });
 
   test('resumes past a filled-from cursor and walks the rest of the run', async () => {
     // From 4, the present 5 and 6 are contiguous — proves the walk advances MULTIPLE steps, not
     // just one. A fix that only ever moved a single step would pass the first case and fail here.
-    expect(await highestContiguousServerSeq(testDb.db, 4)).toBe(6);
+    expect(await highestContiguousSeq(testDb.db, 4, 'server_seq')).toBe(6);
   });
 
   test('LAST — filling the hole lets the walk cross it in one pass', async () => {
@@ -110,7 +110,7 @@ describe('highestContiguousServerSeq over the real op log', () => {
     // watermark that was pinned at 3 can now reach 6 in a single walk.
     await seedOperation(testDb.db, tenant, 4n);
 
-    expect(await highestContiguousServerSeq(testDb.db, 0)).toBe(6);
+    expect(await highestContiguousSeq(testDb.db, 0, 'server_seq')).toBe(6);
   });
 });
 
@@ -150,7 +150,7 @@ describe("the 2^53 boundary — the claim the fix's shape rests on", () => {
     // Guards the guard: without this, "it throws" could just mean "big numbers throw", and the
     // test below would pass for a fix that refused everything near the boundary. From ...987 the
     // walk takes ...988 and stops (…989 is absent), landing exactly on MAX_SAFE − 3. No throw.
-    expect(await highestContiguousServerSeq(testDb.db, 9_007_199_254_740_987)).toBe(
+    expect(await highestContiguousSeq(testDb.db, 9_007_199_254_740_987, 'server_seq')).toBe(
       9_007_199_254_740_988,
     );
   });
@@ -164,9 +164,9 @@ describe("the 2^53 boundary — the claim the fix's shape rests on", () => {
     //
     // Load-bearing by construction: delete the ...992 seed and the walk stops at MAX_SAFE, returns
     // 9007199254740991 happily, and this line goes red.
-    await expect(highestContiguousServerSeq(testDb.db, 9_007_199_254_740_989)).rejects.toThrow(
-      /exceeds/,
-    );
+    await expect(
+      highestContiguousSeq(testDb.db, 9_007_199_254_740_989, 'server_seq'),
+    ).rejects.toThrow(/exceeds/);
   });
 
   test('a `from` that is itself unsafe refuses before reading anything', async () => {
@@ -174,8 +174,8 @@ describe("the 2^53 boundary — the claim the fix's shape rests on", () => {
     // A caller handing in an already-rounded watermark is corrupt input, and every reachable way
     // to trigger this (a pre-rounded `from`, NaN, a non-integral value) means the data is already
     // wrong — so refusing is the only answer that cannot corrupt a watermark silently.
-    await expect(highestContiguousServerSeq(testDb.db, Number(FIRST_UNSAFE))).rejects.toThrow(
-      /not a safe integer/,
-    );
+    await expect(
+      highestContiguousSeq(testDb.db, Number(FIRST_UNSAFE), 'server_seq'),
+    ).rejects.toThrow(/not a safe integer/);
   });
 });

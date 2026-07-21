@@ -37,7 +37,7 @@ async function sumEditCounts(db: Kysely<ClientDatabase>): Promise<number> {
 }
 
 const asPulled = (ops: readonly { id: string }[]): GeneratedOp[] =>
-  ops.map((op) => ({ op: op as GeneratedOp['op'], serverSeq: null }));
+  ops.map((op) => ({ op: op as GeneratedOp['op'], arrivalSeq: null }));
 
 /** Seeds the convergence property is asserted over. One test case each (T-2). */
 const CONVERGENCE_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;

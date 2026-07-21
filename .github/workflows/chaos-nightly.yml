@@ -6,6 +6,20 @@
 # so scale 1 would reproduce a DIFFERENT run:
 #   CHAOS_SEEDS=<printed seed> CHAOS_SCALE=<printed scale> pnpm chaos
 #
+# PER-SCENARIO ×4 SEED CAP (§3.7 D-CHAOS-SCALE, task 113) — stated here so this job's coverage claim
+# matches what it runs. "100 seeds at ×4" holds for every scenario EXCEPT the two heavy ones, whose
+# single ×4 seed is minutes-to-an-hour and whose 100-seed sweep would never finish (CHAOS-03 ×4 =
+# 56,000 ops/seed ≈ 40 min ⇒ ~2.7 days; CHAOS-08 ×4 = 80,000 ops/seed ≈ 3.6 min ⇒ ~6 h). Those two
+# run the FULL ×4 VOLUME (never reduced — that is the point of this lane) over a capped SEED SAMPLE:
+#
+#   CHAOS-03 → 3 seeds     CHAOS-08 → 5 seeds     (every other scenario → the full 100)
+#
+# The caps live in ONE registry (`packages/harness/src/nightly-scale.ts` → NIGHTLY_X4_SEED_CAPS),
+# are announced per scenario in this job's log, and are asserted against this comment and
+# testing-guide §3.7 by `packages/harness/scenarios/nightly-seed-cap.test.ts` — so the cap can never
+# drift from what these three places claim. `CHAOS_X4_SEED_CAP=<n>` (workflow_dispatch env or a local
+# run) deepens the sample; an explicit `CHAOS_SEEDS=` reproduction is never capped.
+#
 # PGlite is in-process WASM — no Postgres container, no cross-worktree collision (T-14d). The
 # real-Postgres L3 job the §3.7 nightly also names lives in the RLS lane (test:rls), not here.
 name: chaos-nightly
