@@ -1,6 +1,6 @@
 # TASK 119 — the notes screens are built + mounted-tested but not reachable in the running app: Root passes session:null, so no session-scoped NotesRuntime is constructed (the 40->102 / 20->105 inert-until-wired pattern)
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — the reference module UI (task 96) exists and is proven by mounted tests over the REAL query/command/projection runtime, but the live app shell never constructs a NotesRuntime, so a real user cannot reach the notes screens yet. Same "typed, tested, and unwired on the target" class as tasks 102 (denial timer) and 105 (realtime adapters).
 **Depends on:** 96, 24, 88, 89 (the session/auth wiring)
 **Blocks:** the visual harness (116) rendering the notes screens via the LIVE nav (it can still render them via a demo route meanwhile)
