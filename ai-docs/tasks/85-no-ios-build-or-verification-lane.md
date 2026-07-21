@@ -1,6 +1,6 @@
 # TASK 85 — iOS is a declared platform with no way to build it and no target to run it on: `08 §5.5`'s four profiles are Android-APK **by spec**, and all 10 CI jobs are `ubuntu-latest`
 
-**Status:** todo
+**Status:** in-progress
 
 > **OWNER RULING (2026-07-17):** BOTH lanes (D18 §5): GitHub Actions `macos-latest` (unsigned Simulator build + boot — I write the CI job, verifies tasks 83/84/87's generated Info.plist) AND EAS Build (signed real-device/TestFlight). **Coding waits on impl-ios (83/84/87) landing the iOS `app.config.ts` block.** **OWNER PROVISIONING (the gate, see D18 §5): Apple Developer Program (\$99/yr, 24-48h), an Expo/EAS account, GitHub macOS minutes enabled, and eventually a physical iPhone for the on-device §7.4/backup claims the Simulator cannot verify.**
 
