@@ -1,6 +1,6 @@
 # TASK 115 — `security-guide.md` §12's roll-up omits **SEC-DEV-08**, so the sweep's declared denominator is one id short
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — nothing is unprotected today (SEC-DEV-08 has a shipped, passing test), but the roll-up is the SEC inventory's **declared denominator**, and a denominator that disagrees with the doc it summarises is the drift the inventory exists to catch. It keeps `pnpm sec:sweep` red until fixed.
 **Depends on:** —
 **Blocks:** 28 (security-sweep — the inventory's roll-up assertion is RED on this)
