@@ -1,6 +1,6 @@
 # TASK 123 — module i18n catalog registration is a hand-maintained per-module call, not driven by the module list: the next module with screens can still forget it and ship English chrome
 
-**Status:** in-progress
+**Status:** done
 **Priority:** LOW-MEDIUM — the acute defect (notes) is fixed (task 122); this closes the CLASS so it cannot recur silently. Not user-visible today (notes is the only module with screens). Becomes live the moment a second module ships a screen.
 **Depends on:** 122 (the direct fix + the `registerModuleCatalogs` seam), 90 (`ALL_MODULES`, the single module list)
 **Blocks:** honest "the next module can't forget its catalog" claim

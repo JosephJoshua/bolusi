@@ -131,7 +131,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 120 | a REMOTE note's photo thumbnail can't be download-verified: note_created payload carries mediaId but not the signed sha256/mime 06 §6 needs to verify a pulled note's media (from task 96) | done | 25, 82 |
 | 121 | the server accepts an op claiming ANY schemaVersion: deriveOpRegistry's resolve(type) ignores the version and validates every push against the one current payload schema, so a bogus-version op is accepted then throws at fold (from task 120) | done | 07, 11 |
 | 122 | the notes i18n catalog is registered ONLY by a test-support file: registerNotesCatalog has zero production callers, so the shipping app renders notes.* chrome in English to Indonesian-first users — caught from a screenshot, invisible to ~600 green tests (from task 116) | done | 96, 119 |
-| 123 | module i18n catalog registration is a hand-maintained per-module call (registerModuleCatalogs), not driven by the module list — the next module with screens can still forget it and ship English chrome, invisibly (the generalization deferred by task 122) | in-progress | 122, 90 |
+| 123 | module i18n catalog registration is a hand-maintained per-module call (registerModuleCatalogs), not driven by the module list — the next module with screens can still forget it and ship English chrome, invisibly (the generalization deferred by task 122) | done | 122, 90 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
