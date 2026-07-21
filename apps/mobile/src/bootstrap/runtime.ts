@@ -31,10 +31,11 @@ import {
   type DeviceIdentity,
   type IdSource,
   type LocationPort,
+  type ModuleRuntime,
   type SigningKeyPort,
   type SyncSchedulerPort,
 } from '@bolusi/core';
-import { createClientOpStore } from '@bolusi/db-client';
+import { createClientOpStore, type ClientDatabase } from '@bolusi/db-client';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { denialAuditDiagnostics } from '../ports/diagnostics.js';
@@ -69,6 +70,18 @@ export interface AppRuntime {
    * is the `EnrollmentDeps.runtimeFor` factory: `runEnrollment` calls it once to emit the genesis.
    */
   runtimeFor(device: DeviceIdentity): CommandRuntime;
+  /**
+   * The SAME composition, with its query runtime still attached (task 119).
+   *
+   * `runtimeFor` returns only `.commands` because enrollment only ever appends. A module SCREEN reads
+   * as well as writes, and 04 §6's read enforcement lives in the query runtime — so the notes runtime
+   * needs the whole `ModuleRuntime`, not half of it. This is deliberately the same
+   * `createModuleRuntime` call rather than a second one: `createModuleRuntime`'s own header explains
+   * that composing the command/query knot twice is how a build ends up with TWO enforcement points,
+   * one of which nobody primes. Exposing the object instead of rebuilding it makes "the reads and the
+   * writes are enforced by the same evaluator" true by construction (§2.8).
+   */
+  moduleRuntimeFor(device: DeviceIdentity): ModuleRuntime<ClientDatabase>;
 }
 
 /**
@@ -89,6 +102,9 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
   return {
     evaluator,
     runtimeFor(device: DeviceIdentity): CommandRuntime {
+      return this.moduleRuntimeFor(device).commands;
+    },
+    moduleRuntimeFor(device: DeviceIdentity): ModuleRuntime<ClientDatabase> {
       return createModuleRuntime<never>(app.registry, app.db.db as never, {
         device,
         evaluator,
@@ -125,7 +141,7 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         // core guards the sink call so even a throwing sink cannot change a decided denial.
         // Proven by runtime.test.ts, which stops observing the loss when this line is removed.
         denialAuditDiagnostics,
-      }).commands;
+      }) as unknown as ModuleRuntime<ClientDatabase>;
     },
   };
 }

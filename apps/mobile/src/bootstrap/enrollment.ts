@@ -36,7 +36,7 @@ import type { LoginResult } from '../screens/enrollment/model.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { persistEnrolledNames } from './device-info.js';
 import type { LoginTransportPort } from './enroll-transport.js';
-import { createAppRuntime } from './runtime.js';
+import { createAppRuntime, type AppRuntime } from './runtime.js';
 
 /** What `App` drives — one method per wizard step. Both reject on failure; the wizard buckets it. */
 export interface EnrollmentController {
@@ -85,6 +85,18 @@ export interface AppEnrollment {
    * object that would silently disagree (§2.8).
    */
   readonly evaluator: PermissionEvaluator;
+  /**
+   * THE app runtime — the one composition this file builds (task 119).
+   *
+   * Exposed for exactly the reason `evaluator` is: something else needs it, and the alternative is a
+   * SECOND `createAppRuntime` over the same connection. That second one would mint its own
+   * `PermissionEvaluator` — unprimed, and never invalidated by the sync loop's bundle refresh, since
+   * Root wires that hook to THIS one. The notes runtime would then answer reads from a permission memo
+   * that no directory change can reach: a user whose grants were just revoked keeps reading, and a
+   * user just granted access keeps being denied, with nothing failing. `evaluator` is a projection of
+   * this object; both are here so the two can never be different objects (§2.8).
+   */
+  readonly runtime: AppRuntime;
 }
 
 /**
@@ -146,5 +158,5 @@ export function createAppEnrollment(
     },
   };
 
-  return { controller, evaluator: runtime.evaluator };
+  return { controller, evaluator: runtime.evaluator, runtime };
 }

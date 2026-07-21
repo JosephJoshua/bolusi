@@ -42,6 +42,7 @@
 // migrations below run against a REAL SQLite engine in CI rather than a fake handle.
 import {
   createProjectionEngine,
+  InvalidationBus,
   readDeviceId,
   readSyncState,
   registerModules,
@@ -82,6 +83,20 @@ export interface Bootstrapped {
   readonly db: ClientDb;
   readonly registry: ModuleRegistry<never>;
   readonly engine: ProjectionEngine<never>;
+  /**
+   * The projection engine's per-table invalidation bus (04 §7), constructed HERE and handed in rather
+   * than left to the engine's internal default — because a bus nobody can reach is a bus nobody can
+   * subscribe to.
+   *
+   * THIS IS WHAT MAKES A MODULE SCREEN LIVE (task 119). `ProjectionEngine` emits on it after EVERY
+   * applied op — own-device append (`applyAppendedOp`, the seam `runtime.ts` binds as
+   * `applyProjection`) AND pulled remote op (`applyPulledOp`, the seam the sync loop folds through).
+   * The notes runtime's `subscribe` binds to this exact object, so a note pulled from another device
+   * re-runs the mounted list's query. Before this field the engine minted a private bus internally:
+   * correct, and unreachable — every emit went to zero listeners, and no screen could ever update in
+   * place. Exposing it is the difference between a live query and a query that runs once.
+   */
+  readonly invalidation: InvalidationBus;
   /** Versions applied by THIS boot — empty on every boot after the first (the runner is idempotent). */
   readonly migrationsApplied: readonly number[];
   /**
@@ -149,8 +164,13 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     const registry = registerModules<never>(CLIENT_MODULES);
 
     // 5. The projection engine over the SAME connection and the SAME registry — `applyPulledOp` is
-    //    the seam the sync loop folds through (04 §4).
-    const engine = createProjectionEngine<never>(db.db as never, registry.projections);
+    //    the seam the sync loop folds through (04 §4). The invalidation bus is constructed here and
+    //    injected (rather than left to the engine's internal default) so the composition root can
+    //    subscribe module screens to it — see `Bootstrapped.invalidation`.
+    const invalidation = new InvalidationBus();
+    const engine = createProjectionEngine<never>(db.db as never, registry.projections, {
+      invalidation,
+    });
 
     // 6. The device's sync state, read from the seeded singleton. `readSyncState` THROWS when the
     //    row is missing rather than returning defaults — a missing row is a broken migration, and
@@ -166,6 +186,7 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
       db,
       registry,
       engine,
+      invalidation,
       migrationsApplied: applied,
       syncState,
       deviceId,
