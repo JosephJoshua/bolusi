@@ -1,6 +1,6 @@
 # TASK 116 — a react-native-web + Playwright visual harness so the screens can be SEEN and interaction-tested in a browser (the layer the test-renderer cannot cover)
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — the frontend phase (D20 §3) started but nothing renders to pixels; the test-renderer asserts the component tree only. This makes the screens visible + screenshot-testable in a headless browser, closing the "beautiful, not confirmed" gap D17 opened.
 **Depends on:** 96 (so the notes screens are in the set), 82 (media capture screens), 69 (the existing screen set)
 **Blocks:** —
