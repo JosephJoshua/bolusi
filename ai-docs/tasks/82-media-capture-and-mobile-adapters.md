@@ -1,6 +1,6 @@
 # TASK 82 — the media pipeline's mobile half: capture, compression, drain triggers, pruning, and the remote cache
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — blocks task 50's media wiring and any UI that captures evidence. Not urgent, but **it must be visible**: this is the half of task 18 that was deliberately not built.
 **Depends on:** 18 (the engine — merged), 50 (app bootstrap, for the wiring points)
 **Blocks:** 25 (notes module's media attach), 50's media queue wiring

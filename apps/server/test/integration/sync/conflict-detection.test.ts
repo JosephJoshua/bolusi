@@ -20,7 +20,7 @@
 // lines. Rule 1's `serverSeq(P) > last_pull_cursor(O.device)` comparison is done BY POSTGRES,
 // column-to-column (`conflict-candidates.ts:116` — `.whereRef('o.serverSeq', '>', 'd.lastPullCursor')`),
 // so NO `int8` ever crosses the driver into JS to be compared. It is therefore NOT the JS-marshalling
-// class T-14f names (that was `highestContiguousServerSeq`'s `"1" === 1`, task 46), and neither
+// class T-14f names (that was `highestContiguousSeq`'s `"1" === 1`, task 46), and neither
 // PGlite nor real `pg` was ever "blind" to it. What running on real `pg` here does buy is executing
 // `findRule1Candidates` — the real query, over the real driver — as part of the real pipeline; the
 // dedicated real-driver witness for that query (result marshalling, the row-value ordering) stays

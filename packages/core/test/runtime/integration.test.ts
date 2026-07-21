@@ -109,7 +109,7 @@ class SqliteOpStore implements OpAppendStore {
               signedCoreJcs,
               // Born local (03 §3 birth state) — sync is task 15.
               syncStatus: 'local',
-              serverSeq: null,
+              arrivalSeq: null,
               syncedAt: null,
             })
             .execute();

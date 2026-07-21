@@ -33,7 +33,7 @@ Final cross-surface security verification per CLAUDE.md §2.5 and the security-g
 
 - **Observable done-condition:** `pnpm sec:sweep` exits 0 locally and in CI, and the CI stage is wired as a merge/release gate (placeholder gone, failure blocks). `pnpm lint` / `pnpm typecheck` stay green; pre-commit hooks pass (no `--no-verify`).
 - **Inventory script green — no missing SEC id:**
-  - Parses `security-guide.md` for `SEC-[A-Z]+-[0-9]+`; asserts the parsed set equals the §12 roll-up exactly (OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–07 · MEDIA 01–06 · TENANT 01–05 · RT 01–05 · SECRET 01–02 · META 01 = **56 ids**) — doc/roll-up drift fails the sweep.
+  - Parses `security-guide.md` for `SEC-[A-Z]+-[0-9]+`; asserts the parsed set equals the §12 roll-up exactly (OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–08 · MEDIA 01–06 · TENANT 01–05 · RT 01–05 · SECRET 01–02 · META 01 = **57 ids**) — doc/roll-up drift fails the sweep.
   - Every id has ≥1 test title embedding it verbatim (security-guide §2.1.3); the `packages/test-support` pending allowlist is **empty**.
   - **Passes, not presence:** the sweep runs the owning suites (`pnpm test`, `test:server`, `test:rls`, `chaos`, harness security suites) with a JSON reporter and asserts every SEC-titled test's state is `passed`. Negative control: a fixture SEC-titled test forced to fail (or skip) makes the inventory fail — proves status is checked, not grep-existence.
 **SEC ids owned by THIS task:** SEC-AUTH-09, SEC-TENANT-04, SEC-SECRET-01

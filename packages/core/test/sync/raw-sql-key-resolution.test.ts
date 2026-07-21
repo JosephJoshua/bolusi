@@ -33,7 +33,7 @@ import { noblePort, type Prng } from '@bolusi/test-support';
 
 import {
   createSqlWatermarkStore,
-  highestContiguousServerSeq,
+  highestContiguousSeq,
   insertQuarantinedOp,
   readCanonicalPage,
   readDeviceRegistry,
@@ -110,20 +110,20 @@ afterEach(async () => {
 async function seedOperation(
   db: Kysely<ClientDatabase>,
   op: SignedOperation,
-  overrides: { syncStatus?: string; serverSeq?: number | null } = {},
+  overrides: { syncStatus?: string; arrivalSeq?: number | null } = {},
 ): Promise<void> {
   await sql`
     INSERT INTO operations (
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status, server_seq
+      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status, arrival_seq
     ) VALUES (
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq},
       ${op.type}, ${op.entityType}, ${op.entityId}, ${op.schemaVersion},
       ${JSON.stringify(op.payload)}, ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null},
       ${op.previousHash}, ${op.hash}, ${op.signature},
       ${JSON.stringify({ ...op, hash: undefined, signature: undefined })},
-      ${overrides.syncStatus ?? 'synced'}, ${overrides.serverSeq ?? null}
+      ${overrides.syncStatus ?? 'synced'}, ${overrides.arrivalSeq ?? null}
     )
   `.execute(db);
 }
@@ -246,16 +246,16 @@ describe('exported readers resolve their keys WITHOUT the CamelCasePlugin (task 
     expect(rest.map((o) => o.entityId)).toEqual([second.entityId]);
   });
 
-  it('highestContiguousServerSeq — the self-alias decoy resolves serverSeq (oplog-source.ts:229)', async () => {
-    await seedOperation(h.withPlugin, noteOp(1), { serverSeq: 1 });
-    await seedOperation(h.withPlugin, noteOp(2), { serverSeq: 2 });
-    await seedOperation(h.withPlugin, noteOp(3), { serverSeq: 3 });
+  it('highestContiguousSeq — the self-alias decoy resolves the seq key (oplog-source.ts)', async () => {
+    await seedOperation(h.withPlugin, noteOp(1), { arrivalSeq: 1 });
+    await seedOperation(h.withPlugin, noteOp(2), { arrivalSeq: 2 });
+    await seedOperation(h.withPlugin, noteOp(3), { arrivalSeq: 3 });
 
-    expect(await highestContiguousServerSeq(h.withPlugin, 0)).toBe(3);
+    expect(await highestContiguousSeq(h.withPlugin, 0, 'arrival_seq')).toBe(3);
 
     // `SELECT server_seq AS server_seq` was a NO-OP self-alias — the camelCase key resolved only via
-    // the plugin. Without it, `row.serverSeq` was undefined and the walk threw.
-    expect(await highestContiguousServerSeq(h.noPlugin, 0)).toBe(3);
+    // the plugin. Without it, the result property was undefined and the walk threw.
+    expect(await highestContiguousSeq(h.noPlugin, 0, 'arrival_seq')).toBe(3);
   });
 
   it('readPushBatch — signed_core_jcs resolves, not JSON.parse(undefined) (push.ts:51)', async () => {
@@ -341,12 +341,12 @@ describe('the two private readers, via their sync-phase entry points (task 74)',
 
     expect(outcome.applied).toBe(2);
 
-    // The arrival counter is MAX(server_seq)+1 per inserted op. Before the fix `nextArrivalSeq`
-    // read `row.maxSeq` = undefined and `?? 0` laundered every op to serverSeq 1 — a wrong, but
+    // The arrival counter is MAX(arrival_seq)+1 per inserted op. Before the fix `nextArrivalSeq`
+    // read `row.maxSeq` = undefined and `?? 0` laundered every op to arrival seq 1 — a wrong, but
     // entirely plausible, sequence number (T-19). Correct is 1 then 2.
-    const seqs = await sql<{ serverSeq: number }>`
-      SELECT server_seq AS "serverSeq" FROM operations ORDER BY seq
+    const seqs = await sql<{ arrivalSeq: number }>`
+      SELECT arrival_seq AS "arrivalSeq" FROM operations ORDER BY seq
     `.execute(h.noPlugin);
-    expect(seqs.rows.map((r) => r.serverSeq)).toEqual([1, 2]);
+    expect(seqs.rows.map((r) => r.arrivalSeq)).toEqual([1, 2]);
   });
 });

@@ -46,10 +46,10 @@ export async function canonicalFold(
     const stats = new ProjectionStats();
     const engine = createProjectionEngine(handle.db, registry.projections, { stats });
     const ordered = sortCanonical([...ops]);
-    let serverSeq = 0;
+    let arrivalSeq = 0;
     for (const op of ordered) {
-      serverSeq += 1;
-      await insertPulledOp(handle.db, op, serverSeq, op.timestamp);
+      arrivalSeq += 1;
+      await insertPulledOp(handle.db, op, arrivalSeq, op.timestamp);
       await engine.applyPulledOp(op);
     }
     if (stats.snapshot().refolds !== 0) {

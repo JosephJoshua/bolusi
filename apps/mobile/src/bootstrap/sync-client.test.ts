@@ -143,7 +143,7 @@ async function seedLocalOp(opId: string): Promise<void> {
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
       schema_version, payload, timestamp_ms, location, source, agent_initiated,
       agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      synced_at, server_seq
+      synced_at, arrival_seq
     ) VALUES (
       ${core.id}, ${core.tenantId}, ${core.storeId}, ${core.userId}, ${core.deviceId}, ${core.seq},
       ${core.type}, ${core.entityType}, ${core.entityId}, ${core.schemaVersion},

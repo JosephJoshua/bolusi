@@ -56,10 +56,104 @@ export function mediaCacheDirectory(): Directory {
   return new Directory(Paths.cache, 'media');
 }
 
+/**
+ * `<cacheDirectory>/media-capture/` — the scratch directory a signature is encoded into before
+ * §2.2 step 5 moves it. DELIBERATELY NOT `mediaCacheDirectory()`: that one is the remote render
+ * cache, which 06 §6 declares "always evictable — the OS or the pruning pass may drop them freely;
+ * they are re-fetchable". A freshly encoded signature is the opposite of re-fetchable, and a
+ * pruning pass that swept the render cache would delete evidence that has not reached the server
+ * if the two shared a directory. Separate names, separate lifetimes.
+ */
+function captureScratchDirectory(): Directory {
+  return new Directory(Paths.cache, 'media-capture');
+}
+
+/**
+ * Write freshly encoded bytes (a signature PNG — 06 §2.3) into the capture scratch directory and
+ * return its uri, so the SAME cache→document move photos use (`moveCaptureToDocumentDir`) applies
+ * to signatures too. §2.3 says signatures share "§2.2 steps 2, 5–8" verbatim; one move path is how
+ * that sentence stays true rather than becoming two half-implementations (§2.8).
+ *
+ * SYNCHRONOUS, and declared so. `File#write`, `File#create` and `Directory#create` all return
+ * `void` in SDK 57 (internal/NativeFileSystem.types.d.ts:155/178/43) — unlike `move()`, which
+ * returns a promise and must be awaited. Both spellings sit in this one file, so the asymmetry is
+ * stated rather than left for the next reader to assume. An `async` wrapper with nothing to await
+ * would be the well-typed decoration §2.11 keeps catching: it would imply this can fail later, and
+ * invite a caller to think a floating call is harmless here the way it was fatal ten lines down.
+ */
+export function writeCaptureToCache(bytes: Uint8Array, mediaId: string, extension: string): string {
+  const dir = captureScratchDirectory();
+  if (!dir.exists) dir.create({ intermediates: true });
+  const file = new File(dir, `${mediaId}.${extension}`);
+  if (!file.exists) file.create();
+  file.write(bytes);
+  return file.uri;
+}
+
 /** Free space in bytes (06 §7). `Paths.availableDiskSpace`, not the throwing legacy API. */
 export function availableDiskSpaceBytes(): number {
   return Paths.availableDiskSpace;
 }
+
+/**
+ * The remote render cache's on-disk face (06 §6) — read, write, list, evict.
+ *
+ * All four live together because they share one naming rule (`<mediaId>.<ext>` in
+ * `mediaCacheDirectory()`), and a rule split across four call sites is a rule that drifts. The id
+ * is recovered by cutting at the FIRST dot, which is safe because the id is a UUIDv7 (hyphens, hex,
+ * no dots) — stated because "split on the last dot" would be the reflex and would be wrong for a
+ * hypothetical `<id>.tar.gz`.
+ */
+export const remoteMediaCache = {
+  /** The cached file's uri, or `null` if it is not cached. NEVER a path to a file that is absent. */
+  find(mediaId: string, extension: string): string | null {
+    const file = new File(mediaCacheDirectory(), `${mediaId}.${extension}`);
+    return file.exists ? file.uri : null;
+  },
+
+  /** Write verified bytes into the cache. Synchronous, like every `File#write` (see below). */
+  write(mediaId: string, extension: string, bytes: Uint8Array): string {
+    const dir = mediaCacheDirectory();
+    if (!dir.exists) dir.create({ intermediates: true });
+    const file = new File(dir, `${mediaId}.${extension}`);
+    if (!file.exists) file.create();
+    file.write(bytes);
+    return file.uri;
+  },
+
+  /**
+   * Cache contents for §7's oldest-first eviction.
+   *
+   * `modificationTime` is `number | null` in SDK 57 (internal/NativeFileSystem.types.d.ts:231). The
+   * null is mapped to `0` — sort first, evict first — and that mapping is deliberate and bounded:
+   * this cache is re-fetchable by definition (06 §6), so an entry of unknown age evicted early
+   * costs one download. This is the ONLY `||`-shaped default in the media code and it is here
+   * rather than in `pruning.ts` so the whole T-19 argument sits next to the platform value it is
+   * about.
+   */
+  list(): readonly { id: string; lastUsedAt: number }[] {
+    const dir = mediaCacheDirectory();
+    if (!dir.exists) return [];
+    const entries: { id: string; lastUsedAt: number }[] = [];
+    for (const entry of dir.list()) {
+      if (!(entry instanceof File)) continue;
+      const id = entry.name.split('.')[0];
+      if (id === undefined || id === '') continue;
+      const modified = entry.modificationTime;
+      entries.push({ id, lastUsedAt: modified === null ? 0 : modified });
+    }
+    return entries;
+  },
+
+  /** Evict by id, whatever the extension. A missing entry is success — eviction is idempotent. */
+  evict(mediaId: string): void {
+    const dir = mediaCacheDirectory();
+    if (!dir.exists) return;
+    for (const entry of dir.list()) {
+      if (entry instanceof File && entry.name.split('.')[0] === mediaId) entry.delete();
+    }
+  },
+};
 
 export const expoMediaFilePort: MediaFilePort = {
   /**

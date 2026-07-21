@@ -28,7 +28,12 @@ import { sql, type Kysely } from 'kysely';
 import type { ProjectionApply } from '../oplog/append.js';
 import type { ModuleProjectionManifest, ProjectionOperation } from './manifest.js';
 import { moduleVersionSignature } from './manifest.js';
-import { hasNewerEntityOp, highestContiguousServerSeq, readEntityOps } from './oplog-source.js';
+import {
+  hasNewerEntityOp,
+  highestContiguousSeq,
+  readEntityOps,
+  type OpSeqColumn,
+} from './oplog-source.js';
 import type { ProjectionRegistry } from './registry.js';
 import {
   createSqlRebuildStore,
@@ -56,6 +61,13 @@ export interface ProjectionEngineOptions<DB> {
   readonly db: Kysely<DB>;
   readonly registry: ProjectionRegistry<DB>;
   readonly watermarks: WatermarkStore;
+  /**
+   * Which op-log column the pull-path contiguity walk reads — `'arrival_seq'` on the client,
+   * `'server_seq'` on the server (10-db §9.2's table; D20 §4). REQUIRED and never defaulted: the
+   * two sides hold different numbers under different names, and a default would be correct on one
+   * side and a silent decoy on the other. The two factories are the only places that answer it.
+   */
+  readonly seqColumn: OpSeqColumn;
   /** Factory so rebuild can bind the store to a batch transaction (rebuild.ts). */
   readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
   readonly invalidation?: InvalidationBus;
@@ -72,6 +84,7 @@ export class ProjectionEngine<DB> {
   private readonly db: Kysely<DB>;
   private readonly registry: ProjectionRegistry<DB>;
   private readonly watermarks: WatermarkStore;
+  private readonly seqColumn: OpSeqColumn;
   private readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
   readonly invalidation: InvalidationBus;
   readonly stats: ProjectionStats;
@@ -80,6 +93,7 @@ export class ProjectionEngine<DB> {
     this.db = options.db;
     this.registry = options.registry;
     this.watermarks = options.watermarks;
+    this.seqColumn = options.seqColumn;
     this.makeRebuildStore = options.makeRebuildStore;
     this.invalidation = options.invalidation ?? new InvalidationBus();
     this.stats = options.stats ?? new ProjectionStats();
@@ -100,9 +114,10 @@ export class ProjectionEngine<DB> {
   }
 
   /**
-   * Apply a pulled (foreign) op. Advances `applied_server_seq` to the highest CONTIGUOUS
-   * serverSeq now in the log (a gap pins it; the re-fold it may trigger moves it no further —
-   * §4.3). The op must already be in the log with its `server_seq` set (the pull inserts first).
+   * Apply a pulled (foreign) op. Advances `applied_server_seq` to the highest CONTIGUOUS value of
+   * this engine's `seqColumn` now in the log (a gap pins it; the re-fold it may trigger moves it
+   * no further — §4.3). The op must already be in the log with that column set — the client pull
+   * assigns `arrival_seq`, the server push assigns `server_seq`, each before its own apply call.
    */
   applyPulledOp(op: ProjectionOperation): Promise<ApplyOutcome> {
     return this.applyOp(op, 'pull');
@@ -151,7 +166,7 @@ export class ProjectionEngine<DB> {
       await this.watermarks.advanceLocalSeq(module.id, op.seq);
     } else {
       const current = await this.watermarks.read(module.id);
-      const next = await highestContiguousServerSeq(this.db, current.appliedServerSeq);
+      const next = await highestContiguousSeq(this.db, current.appliedServerSeq, this.seqColumn);
       if (next > current.appliedServerSeq) {
         await this.watermarks.advanceServerSeq(module.id, next);
       }
@@ -219,6 +234,9 @@ export function createProjectionEngine<DB>(
     db,
     registry,
     watermarks: createSqlWatermarkStore(db),
+    // The CLIENT log numbers pulled ops with a local arrival counter (10-db §9.2, D20 §4) — the
+    // server's `server_seq` column does not exist here, so a mis-wiring cannot be silent.
+    seqColumn: 'arrival_seq',
     makeRebuildStore: (handle) => createSqlRebuildStore(handle),
     ...(options?.invalidation !== undefined ? { invalidation: options.invalidation } : {}),
     ...(options?.stats !== undefined ? { stats: options.stats } : {}),

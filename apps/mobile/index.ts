@@ -17,14 +17,19 @@ import {
 import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { Root } from './src/bootstrap/Root.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
+import type { MediaClient } from './src/media/client.js';
+import { createMediaClientForApp } from './src/media/native.js';
+import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
+import { consoleDiagnostics } from './src/ports/diagnostics.js';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
 import { SecureStoreKeyStore } from './src/ports/keystore.js';
 import { fileLocaleStore } from './src/ports/locale-store.js';
 import { expoLocationPort } from './src/ports/location.js';
 import { netInfoPort } from './src/ports/netinfo.js';
+import { systemTimer } from './src/ports/timer.js';
 
 /**
  * The registered root.
@@ -136,6 +141,53 @@ function createSync(
 }
 
 /**
+ * THE MEDIA PIPELINE (task 82) — 06-media-pipeline's mobile half, bound to its native modules.
+ *
+ * `src/media/native.ts` supplies expo-file-system, expo-image-manipulator, expo-background-task and
+ * expo-task-manager; this function supplies the rest — the one DB connection, the fetch media
+ * transport (api/03 §3), and the same clock/crypto/NetInfo/AppState/location ports the sync client
+ * uses. Constructed HERE for the same reason `createSync` is: those are native modules that cannot
+ * load under Node, and everything below them names only interfaces.
+ *
+ * `null` for an UNENROLLED device: api/03 §2 requires a device token on every media endpoint, so a
+ * device that has not enrolled has nothing to upload with. Capture itself would still work — the
+ * pipeline is offline-first — but the queue would have no drain, and starting a loop that can only
+ * fail is the working-looking shape this repo refuses.
+ *
+ * The `bdt_` token is read PER CALL from SecureStore, never cached, so a revoked device stops
+ * authenticating at once (api/02-auth §7.3) — the same rule the sync legs follow.
+ */
+function createMedia(app: Bootstrapped): MediaClient | null {
+  if (app.deviceId === null) return null;
+  const keystore = new SecureStoreKeyStore();
+  return createMediaClientForApp({
+    db: app.db,
+    transport: createFetchMediaTransport({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => keystore.loadDeviceToken(),
+    }),
+    crypto: quickCryptoPort,
+    clock: systemClock,
+    timer: systemTimer,
+    appState: appStatePort,
+    netInfo: netInfoPort,
+    newId: createUuidV7Generator({
+      now: () => systemClock.now(),
+      randomBytes: (n) => quickCryptoPort.randomBytes(n),
+    }),
+    location: expoLocationPort,
+    // 06 §8: silent failure is unacceptable. The client buffers per-item surfacings for the
+    // sync-status screen; THIS sink is only for the rejections that escape a trigger (a drain that
+    // could not even read the queue). It routes through the app's ONE client diagnostics channel
+    // (§2.8 — the same object the denial audit and i18n write to), never a bare `console`.
+    onError: (error) =>
+      consoleDiagnostics.warn('media drain trigger failed', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+  });
+}
+
+/**
  * Wire the enrollment caller over a booted app (api/02-auth §4) — THE native binding for enrollment.
  *
  * ONE `SecureStoreKeyStore` serves as both the enroll keystore (persists the device seed) AND the
@@ -178,6 +230,7 @@ function Bootstrapped(): React.JSX.Element | null {
     boot,
     createSync,
     createEnrollment,
+    createMedia,
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

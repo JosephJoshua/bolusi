@@ -176,8 +176,8 @@ describe('auth session projection (auth_sessions)', () => {
       // Delivered OUT of canonical order (the close arrives first). The engine re-folds when the
       // earlier user_switched lands — folding both ops again in canonical order.
       const applied = await deliverPulled(h, [
-        { op: ended, serverSeq: 1 },
-        { op: switched, serverSeq: 2 },
+        { op: ended, arrivalSeq: 1 },
+        { op: switched, arrivalSeq: 2 },
       ]);
       expect(applied).toBe(2);
       expect(h.engine.stats.snapshot().refolds).toBeGreaterThan(0); // the re-fold actually ran (CHAOS-01)
@@ -273,9 +273,9 @@ describe('pin lockout events (pin_lockout_events)', () => {
       });
 
       await deliverPulled(h, [
-        { op: lockedOut, serverSeq: 1 },
-        { op: cleared, serverSeq: 2 },
-        { op: pinChanged, serverSeq: 3 }, // ts 500 < 1000 ⇒ re-fold
+        { op: lockedOut, arrivalSeq: 1 },
+        { op: cleared, arrivalSeq: 2 },
+        { op: pinChanged, arrivalSeq: 3 }, // ts 500 < 1000 ⇒ re-fold
       ]);
       expect(h.engine.stats.snapshot().refolds).toBeGreaterThan(0);
 

@@ -17,10 +17,11 @@ export { ProjectionRegistry, ProjectionRegistryError, type EntityTableRef } from
 export {
   cursorOf,
   hasNewerEntityOp,
-  highestContiguousServerSeq,
+  highestContiguousSeq,
   readCanonicalPage,
   readEntityOps,
   type CanonicalCursor,
+  type OpSeqColumn,
 } from './oplog-source.js';
 
 // Exported for the SERVER side, not for this package's own convenience: any store reading an

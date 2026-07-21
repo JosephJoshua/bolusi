@@ -48,6 +48,11 @@ export {
 // CI and op-sqlite on device (testing-guide §2.3).
 export * from './driver-conformance/index.js';
 
+// SEED-200K (testing-guide §4.1) — the year-equivalent local history the on-device Part C rebuild /
+// execute-latency gates seed (task 27a). Built ahead of its device consumer (the flag-gated harness
+// in apps/mobile), like the driver-conformance probe above.
+export { generateSeed200k, SEED_200K, type Seed200kSpec } from './seed/seed-200k.js';
+
 // Adversarial op builders for the server push-validation surface (task 07; 05 §8–9).
 export * from './oplog-fixtures/index.js';
 

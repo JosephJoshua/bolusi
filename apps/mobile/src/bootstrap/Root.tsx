@@ -43,6 +43,7 @@ import type { AppEnrollment, EnrollmentController } from './enrollment.js';
 import { createNotificationChannels } from './notifications.js';
 import { resolveShellInputs } from './shell-inputs.js';
 import type { SyncClient } from './sync-client.js';
+import type { MediaClient } from '../media/client.js';
 
 /**
  * The fallback enrollment controller when none is injected (Node-driven Root with no `createEnrollment`).
@@ -97,6 +98,18 @@ export interface RootProps {
     app: Bootstrapped,
     onEnrolled: (deviceId: string) => void,
   ) => AppEnrollment;
+  /**
+   * Build the media client for a booted app, or `null` when the device is not enrolled (task 82) —
+   * injected for the same reason as `boot` and `createSync`: the real one (index.ts) binds
+   * expo-file-system, expo-image-manipulator and expo-background-task, none of which load under Node.
+   *
+   * It RIDES THE SYNC LOOP'S LIFECYCLE and is deliberately independent of it (FR-1138): started in
+   * the same place, for the same enrolled-device condition, and stopped on the same teardown — but
+   * neither loop can block the other, because they share no state. A stalled 3 G photo upload must
+   * never delay an op push; 06 §1 is explicit that "a note/ticket is usable before its media has
+   * uploaded".
+   */
+  readonly createMedia?: (app: Bootstrapped) => MediaClient | null;
 }
 
 export function Root({
@@ -105,6 +118,7 @@ export function Root({
   boot,
   createSync,
   createEnrollment,
+  createMedia,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
@@ -121,6 +135,8 @@ export function Root({
   // re-running and stopping the loop it just started.
   const syncRef = useRef<SyncClient | null>(null);
   const unsubRef = useRef<(() => void) | null>(null);
+  /** The media client (task 82), held for the same reason as `syncRef`: constructed at most once. */
+  const mediaRef = useRef<MediaClient | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -147,6 +163,26 @@ export function Root({
       unsubRef.current = client.subscribe(() => bump());
       await client.start();
       setSync(client);
+    };
+
+    /**
+     * The media pipeline (task 82) — 06 §5.1's drain loop, §5.2's triggers, §5.4's background task
+     * and §7's pruning pass, for an enrolled device.
+     *
+     * Deliberately NOT awaited inside `startSyncIfEnrolled`, and not gated on it: FR-1138 says the
+     * two loops are independent, and a media start that failed (a background registration the OS
+     * refused, say) must not stop the op sync from running. Its own `start()` reports what happened
+     * rather than throwing (`MediaStartReport`), so a failure here is visible without being fatal.
+     */
+    const startMediaIfEnrolled = async (booted: Bootstrapped): Promise<void> => {
+      if (disposed || mediaRef.current !== null || booted.deviceId === null) return;
+      const client = createMedia?.(booted) ?? null;
+      if (client === null || disposed) {
+        client?.stop();
+        return;
+      }
+      mediaRef.current = client;
+      await client.start();
     };
 
     void (async () => {
@@ -188,6 +224,7 @@ export function Root({
             if (!disposed) setDeviceInfo(info);
           });
           void startSyncIfEnrolled(enrolled, enroll);
+          void startMediaIfEnrolled(enrolled);
         }) ?? null;
       setEnrollment(enroll);
       setApp(booting);
@@ -199,6 +236,7 @@ export function Root({
       // The loop, IFF the device is ALREADY enrolled at boot. `startSyncIfEnrolled` is a no-op when
       // `deviceId` is null, so nothing starts on a device that cannot sync — no faked loop.
       await startSyncIfEnrolled(booting, enroll);
+      await startMediaIfEnrolled(booting);
     })();
 
     return () => {
@@ -207,8 +245,10 @@ export function Root({
       unsubRef.current = null;
       syncRef.current?.stop();
       syncRef.current = null;
+      mediaRef.current?.stop();
+      mediaRef.current = null;
     };
-  }, [localeStore, boot, createSync, createEnrollment, readDeviceInfo]);
+  }, [localeStore, boot, createSync, createEnrollment, createMedia, readDeviceInfo]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning

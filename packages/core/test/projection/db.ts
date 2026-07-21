@@ -84,11 +84,11 @@ export async function openProjectionHarness(
   };
 }
 
-/** Insert one op row into the op log (the caller's job before apply). `serverSeq` null = local. */
+/** Insert one op row into the op log (the caller's job before apply). `arrivalSeq` null = local. */
 export async function insertOpRow(
   db: Kysely<ClientDatabase>,
   op: SignedOperation,
-  serverSeq: number | null,
+  arrivalSeq: number | null,
 ): Promise<void> {
   await db
     .insertInto('operations')
@@ -115,9 +115,9 @@ export async function insertOpRow(
       // Not verified by the projection engine (that is the sync layer's job) — a placeholder
       // satisfying the NOT NULL column. Distinct per op so no accidental collision hides a bug.
       signedCoreJcs: `test-jcs:${op.id}`,
-      syncStatus: serverSeq === null ? 'local' : 'synced',
-      serverSeq,
-      syncedAt: serverSeq === null ? null : 1,
+      syncStatus: arrivalSeq === null ? 'local' : 'synced',
+      arrivalSeq,
+      syncedAt: arrivalSeq === null ? null : 1,
     })
     .execute();
 }
@@ -130,27 +130,27 @@ export async function hasOpId(db: Kysely<ClientDatabase>, id: string): Promise<b
   return result.rows.length > 0;
 }
 
-async function nextServerSeq(db: Kysely<ClientDatabase>): Promise<number> {
+async function nextArrivalSeq(db: Kysely<ClientDatabase>): Promise<number> {
   const result = await sql<{ maxSeq: number | null }>`
-    SELECT MAX(server_seq) AS max_seq FROM operations
+    SELECT MAX(arrival_seq) AS max_seq FROM operations
   `.execute(db);
   return (result.rows[0]?.maxSeq ?? 0) + 1;
 }
 
 /**
  * Deliver ops through the PULL path in the given arrival order, deduping by id first (05 §5).
- * A pulled op with no preset serverSeq gets the next arrival-order serverSeq. Returns the count
+ * A pulled op with no preset arrivalSeq gets the next arrival-order counter value. Returns the count
  * actually applied (post-dedup) so a test can assert a non-trivial fixture (T-14b).
  */
 export async function deliverPulled(
   harness: ProjectionHarness,
   ops: readonly GeneratedOp[],
 ): Promise<number> {
-  let seq = await nextServerSeq(harness.db);
+  let seq = await nextArrivalSeq(harness.db);
   let applied = 0;
-  for (const { op, serverSeq } of ops) {
+  for (const { op, arrivalSeq } of ops) {
     if (await hasOpId(harness.db, op.id)) continue;
-    const assigned = serverSeq ?? seq++;
+    const assigned = arrivalSeq ?? seq++;
     await insertOpRow(harness.db, op, assigned);
     await harness.engine.applyPulledOp(op);
     applied += 1;
@@ -158,7 +158,7 @@ export async function deliverPulled(
   return applied;
 }
 
-/** Deliver ops through the APPEND path (own-device, serverSeq null), deduping by id. */
+/** Deliver ops through the APPEND path (own-device, arrivalSeq null), deduping by id. */
 export async function deliverAppended(
   harness: ProjectionHarness,
   ops: readonly SignedOperation[],

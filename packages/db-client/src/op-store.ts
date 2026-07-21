@@ -92,7 +92,9 @@ function makeTx(db: Kysely<ClientDatabase>): OpAppendTx {
     },
 
     async insertOp({ op, signedCoreJcs }: OpRow): Promise<void> {
-      // Born `syncStatus = 'local'` (03 §3 birth state); `serverSeq`/`syncedAt` null until pushed.
+      // Born `syncStatus = 'local'` (03 §3 birth state); `syncedAt` null until pushed. `arrivalSeq`
+      // is null and STAYS null: it is the pull's local arrival counter (10-db §9.2, D20 §4), never
+      // a push ack's `serverSeq` — `BookkeepingPatch` excludes that deliberately.
       // `signedCoreJcs` is persisted VERBATIM (10-db §2.1) — re-serializing from typed columns can
       // change bytes and break a genuine signature (05 §3).
       await db
@@ -119,7 +121,7 @@ function makeTx(db: Kysely<ClientDatabase>): OpAppendTx {
           signature: op.signature,
           signedCoreJcs,
           syncStatus: 'local',
-          serverSeq: null,
+          arrivalSeq: null,
           syncedAt: null,
         })
         .execute();

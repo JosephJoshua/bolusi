@@ -114,6 +114,7 @@ export interface Notes {
 export interface Operations {
   agentConversationId: string | null;
   agentInitiated: Generated<number>;
+  arrivalSeq: number | null;
   deviceId: string;
   entityId: string;
   entityType: string;
@@ -126,7 +127,6 @@ export interface Operations {
   rejectionReason: string | null;
   schemaVersion: number;
   seq: number;
-  serverSeq: number | null;
   signature: string;
   signedCoreJcs: string;
   source: string;
