@@ -1,6 +1,6 @@
 # TASK 142 — nothing runs what CI runs: `main`'s CI was RED for a full day and every local gate said green
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH (process).** This is the meta-defect behind three separate landed regressions. A repo whose §2.1 rule is "read the tool's OWN output" shipped a day of commits against a gate nobody read.
 **Depends on:** —
 **Blocks:** —
