@@ -21,9 +21,12 @@
 // transaction, so an op cannot be accepted without its server read model being updated — a crash
 // between the two would strand a permanently unreadable projection (only rebuild.ts recovers it).
 // An op whose type has no registered applier folds as a defined no-op (engine.ts `unregistered`):
-// the log fills, no projection moves. `deps.projections` carries the `platform` appliers today
-// (task 17 registered it); `notes` (25) and the auth tables (43) still fold nothing until those
-// tasks append to the ONE module list (deps.ts) — never by touching this orchestrator.
+// the log fills, no projection moves. `deps.projections` now carries ALL of `SERVER_MODULES`'
+// appliers — `platform.*` (17), `auth.*` (43) AND `notes.*` (25) all fold through this path
+// (deps.ts:213); an applier that trips its OWN table's constraint therefore reaches the apply step
+// below, which is exactly why that throw must propagate (task 139), not be mislabeled `duplicate`.
+// A new module is added by appending to the ONE module list (deps.ts) — never by touching this
+// orchestrator.
 import { base64ToBytes } from '@bolusi/core';
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
