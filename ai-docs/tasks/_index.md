@@ -155,6 +155,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 144 | the rest of the Sync Status screen: sync-disabled-reason is a green-guarded decoy with zero callers, sync-manual-error still hardcodes NETWORK for every failure, the attention reassurance duplicates its banner, and SyncChip's a11y label never changes (from the 126 implementer) | todo | 126, 15 |
 | 145 | **HIGH** a half-written note is destroyed two ways — Android hardware back EXITS THE APP from the editor (zone.ts yields exitApp) and any header-chrome tap unmounts the draft, both bypassing the discard gate the header back already honours (from the 124 review) | todo | 96, 24, 124 |
 | 146 | review-wave leftovers: three Unauthorized states with no §5 guidance body, an ICON_GLYPHS whitelist nothing checks against the real glyphmap (a typo renders tofu and nothing reds), a weak visual assertion, and a 2dp hit-target overlap that bites when 143 lands | todo | 124, 125, 96 |
+| 147 | **HIGH honesty** a device with 3 photos queued is headlined Semua Terkirim (All Sent) — syncChipState never reads pendingMediaCount while reassurance does, and model.test.ts pins that asymmetry (rendered by the 126 reviewer) | todo | 126, 15 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
