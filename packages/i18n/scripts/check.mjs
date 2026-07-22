@@ -29,7 +29,31 @@ import {
 /** Directories scanned for `t()` call sites by the extraction gate. */
 const SOURCE_ROOTS = ['apps', 'packages/modules', 'packages/ui'];
 const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.expo', 'coverage', 'android', 'ios']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  '.expo',
+  'coverage',
+  'android',
+  'ios',
+  // Test roots. See SKIP_TEST_FILE_RE — same reason, directory-shaped.
+  'test',
+  '__tests__',
+]);
+/**
+ * Test files are NOT extraction call sites (07-i18n §7.3 gates SHIPPING `t()` calls).
+ *
+ * This is not a loophole: a test file is never bundled, so a key it references is never rendered to
+ * a user. It is a REQUIREMENT — §6's missing-key degradation path can only be tested by calling
+ * `t()` with a key that is in no catalog (`apps/mobile/src/i18n.test.ts` does exactly that, and it
+ * is the only proof the diagnostics sink is live). Without this exclusion the gate demands the
+ * absent key be present, which is a contradiction, and the only ways out are deleting the test or
+ * seeding a fake key into a shipping catalog — both worse than the rule this encodes.
+ *
+ * The production denominator is unchanged: every non-test `.ts`/`.tsx` under SOURCE_ROOTS is still
+ * read, and a shipping `t()` call with no catalog entry still fails the gate (falsified).
+ */
+const SKIP_TEST_FILE_RE = /\.test\.tsx?$/;
 /**
  * A whole-key `t('a.b.c')` call site.
  *
@@ -100,21 +124,38 @@ function collectSourceFiles(dir, out) {
     if (SKIP_DIRS.has(entry)) continue;
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) collectSourceFiles(path, out);
-    else if (SOURCE_EXTENSIONS.some((ext) => entry.endsWith(ext))) out.push(path);
+    else if (SOURCE_EXTENSIONS.some((ext) => entry.endsWith(ext)) && !SKIP_TEST_FILE_RE.test(entry))
+      out.push(path);
   }
   return out;
 }
 
-/** @returns {string[]} every key referenced by a `t('...')` call in app/module/ui code */
+/**
+ * Floors for the extraction gate's own DENOMINATOR (CLAUDE.md §2.11 / testing-guide T-14).
+ *
+ * A file-collection bug — a bad SKIP rule, a renamed root, a regex that matches everything — makes
+ * this gate scan nothing and report PASS, which is worse than no gate: it converts an unknown risk
+ * into a false assurance. So the gate asserts how much it actually read. The floors sit well below
+ * current reality (see the printed counts) so ordinary churn never trips them; only a collapse does.
+ */
+const EXTRACTION_FILE_FLOOR = 60;
+const EXTRACTION_KEY_FLOOR = 40;
+
+/**
+ * @returns {{ keys: string[], fileCount: number }} every key referenced by a `t('...')` call in
+ * SHIPPING app/module/ui code, plus the number of files that were actually read.
+ */
 function collectUsedKeys() {
   const keys = new Set();
+  let fileCount = 0;
   for (const root of SOURCE_ROOTS) {
     for (const file of collectSourceFiles(join(REPO_ROOT, root), [])) {
+      fileCount += 1;
       const text = readFileSync(file, 'utf8');
       for (const match of text.matchAll(T_CALL_RE)) keys.add(match[1]);
     }
   }
-  return [...keys];
+  return { keys: [...keys], fileCount };
 }
 
 /**
@@ -167,7 +208,20 @@ async function checkGenerated() {
 
 async function main() {
   const sources = [...loadReservedCatalogs(), ...loadModuleCatalogs()];
-  const extraction = checkExtraction(collectUsedKeys(), sources);
+  const used = collectUsedKeys();
+  const extraction = checkExtraction(used.keys, sources);
+  // The gate's own coverage assertion — see EXTRACTION_FILE_FLOOR. Reported as an extraction error
+  // so a collapsed denominator turns this gate RED rather than silently green.
+  if (used.fileCount < EXTRACTION_FILE_FLOOR) {
+    extraction.errors.push(
+      `the extraction gate read only ${used.fileCount} shipping source file(s) (floor ${EXTRACTION_FILE_FLOOR}) — the scan collapsed; check SOURCE_ROOTS / SKIP_DIRS / SKIP_TEST_FILE_RE`,
+    );
+  }
+  if (used.keys.length < EXTRACTION_KEY_FLOOR) {
+    extraction.errors.push(
+      `the extraction gate found only ${used.keys.length} t() key(s) (floor ${EXTRACTION_KEY_FLOOR}) — T_CALL_RE is matching nothing; the gate would pass vacuously`,
+    );
+  }
   const seedRows = parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
 
   /** @type {{ name: string, errors: string[] }[]} */
@@ -208,6 +262,11 @@ async function main() {
     `i18n:check: grammar-linted ${seedRows.length} ui-labels.md row(s) and ` +
       `${new Set(sources.flatMap((s) => flattenSource(s).map((e) => e.key))).size} catalog key(s) ` +
       `(seed-row floor ${SEED_MIN_ROWS})`,
+  );
+  console.log(
+    `i18n:check: extracted ${used.keys.length} t() key(s) from ${used.fileCount} shipping source ` +
+      `file(s) under ${SOURCE_ROOTS.join(', ')} — test files excluded ` +
+      `(floors: ${EXTRACTION_FILE_FLOOR} file(s), ${EXTRACTION_KEY_FLOOR} key(s))`,
   );
 
   if (failed > 0) {
