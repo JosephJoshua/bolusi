@@ -92,6 +92,19 @@ export interface OpSpec {
   readonly entityType: string;
   readonly entityId?: string;
   readonly payload: Record<string, unknown>;
+  /**
+   * The version the payload is written in (05 §2.1). Defaults to `1` — the only version most op
+   * types have ever had, and what every caller got before this field existed.
+   *
+   * STATE IT WHENEVER THE PAYLOAD IS NOT v1. The server validates a payload against the schema its
+   * DECLARED version names (04 §3 `payloadByVersion`), so an op that carries a v3 payload under a
+   * v1 stamp is `SCHEMA_INVALID` — correctly, because that is what it says it is. Before task 127
+   * the server skipped validation for any version below current, so such an op sailed through and
+   * the mismatch was invisible; `notes.note_created` (current v3) had exactly this defect in
+   * chaos-05, where the payload was v3-shaped, the stamp was v1, and a comment asserted the op was
+   * validated against the current schema. It was not (CLAUDE.md §2.11 — the comment was the guard).
+   */
+  readonly schemaVersion?: number;
   readonly storeId?: string | null;
   readonly userId?: string;
   readonly deviceId?: string;
@@ -156,7 +169,7 @@ export class ChainBuilder {
       type: spec.type,
       entityType: spec.entityType,
       entityId: spec.entityId ?? uuidV7(this.ids, timestamp + seq * 7),
-      schemaVersion: 1,
+      schemaVersion: spec.schemaVersion ?? 1,
       payload: spec.payload,
       timestamp,
       location: null,

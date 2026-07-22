@@ -3,7 +3,7 @@
   "command": "knip --production --include exports,files --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
-  "denominator": 131,
+  "denominator": 132,
   "fileDenominator": 29,
   "nonProductionRules": [
     "test-dir",
@@ -52,6 +52,7 @@
     "packages/core/src/media/pruning.ts#remoteCacheEvictions",
     "packages/core/src/media/repository.ts#findMediaItem",
     "packages/core/src/media/repository.ts#recoverInterruptedUploads",
+    "packages/core/src/module/define-module.ts#payloadSchemaFor",
     "packages/core/src/module/registry.ts#applyModuleMigrations",
     "packages/core/src/module/registry.ts#registerModules",
     "packages/core/src/module/runtime.ts#createModuleRuntime",

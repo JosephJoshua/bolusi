@@ -89,6 +89,33 @@ export interface OperationDeclaration<DB> {
   readonly schemaVersion: number;
   /** `.strict()` payload schema (04 §3) — unknown keys rejected. Probed, not trusted. */
   readonly payload: InputParser<unknown>;
+  /**
+   * RETAINED payload schemas for every SUPERSEDED version (04 §3), keyed by version — so the pair
+   * (`type`, `schemaVersion`) that 05 §8 names as the unit of payload validation actually HAS a
+   * schema for every foldable version, not just the current one.
+   *
+   * MANDATORY and COMPLETE whenever `schemaVersion > 1`: keys must be exactly `1 .. schemaVersion-1`
+   * (`validateOperations` fails the boot otherwise). Omit it entirely at `schemaVersion: 1`, where
+   * `payload` already covers the only version that exists.
+   *
+   * ── WHY RETENTION IS PART OF THE CONTRACT AND NOT AN OPTIONAL EXTRA (task 127) ────────────────
+   *
+   * Bumping a version does not retire the old one: old ops never disappear (05 §7), so the applier
+   * must fold `1..current` forever — and a version the applier folds is a version the server will
+   * be ASKED to accept. With only the current schema retained, the server had exactly two options
+   * for an old version, and both were wrong. Validating an old payload against the CURRENT schema
+   * rejects legitimate old clients (a v2 `note_created` carries `mediaId`, which v3's `.strict()`
+   * refuses). Skipping validation accepts ANY payload at an old version — which is what shipped:
+   * the op entered the signed, append-only log unvalidated and the applier threw at FOLD time,
+   * inside the push transaction, taking the whole batch down as a `500` (poisoning honest sibling
+   * ops, security-guide §4.1) and wedging the pushing device forever, because the client reads a
+   * 500 as a transport failure and re-sends the identical batch. Retaining the schemas is the only
+   * option that is neither too tight nor open: each version is checked against what IT declared.
+   *
+   * A retained schema is `.strict()` like any other (04 §3) — otherwise "claim an old version"
+   * would remain a blanket bypass of the unknown-key rule for every type past v1.
+   */
+  readonly payloadByVersion?: Readonly<Record<number, InputParser<unknown>>>;
   /** MANDATORY prose: how this op is reversed (04 §3, 05 §7). */
   readonly reversal: string;
   /** The fold step (04 §4.1). */
@@ -97,6 +124,30 @@ export interface OperationDeclaration<DB> {
   readonly conflict?: ConflictDeclaration;
   /** Envelope scope (01 §6; 05 §2.1). Default `'store'`. */
   readonly scope?: OperationScope;
+}
+
+/**
+ * The payload schema that validates `schemaVersion` for this op type (04 §3; 05 §8), or `undefined`
+ * when the declaration retains none.
+ *
+ * `undefined` is the FAIL-CLOSED answer and callers must treat it as one: the version is either
+ * unfoldable (`> current`, or not an integer ≥ 1 — never declared, no applier branch, 05 §2.1) or
+ * foldable-but-unretained, which `defineModule` makes unreachable for a registered module and which
+ * is still refused here rather than waved through. There is no "no schema ⇒ accept" branch, because
+ * that branch IS task 127's defect.
+ *
+ * Deliberately a free function over the declaration rather than a method on it: manifests are plain
+ * data (`defineModule` returns them by reference), and a method would have to be written by every
+ * module author — i.e. it could be written differently, or forgotten, per module (CLAUDE.md §2.8).
+ */
+export function payloadSchemaFor<DB>(
+  declaration: OperationDeclaration<DB>,
+  schemaVersion: number,
+): InputParser<unknown> | undefined {
+  if (!Number.isInteger(schemaVersion) || schemaVersion < 1) return undefined;
+  if (schemaVersion === declaration.schemaVersion) return declaration.payload;
+  if (schemaVersion > declaration.schemaVersion) return undefined;
+  return declaration.payloadByVersion?.[schemaVersion];
 }
 
 /** A command, as DECLARED in a manifest (04 §5). `name` is derived from the key — see `defineModule`. */
@@ -293,6 +344,8 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
       );
     }
 
+    validateRetainedPayloads(type, declaration);
+
     // `conflict` (01 §8.1) — OPTIONAL, but a malformed one is worse than an absent one: the
     // server's Rule-1 detection reads `key` to decide what collides. An empty key would make
     // every op on an entity collide with every other; an unknown severity would land a row the
@@ -320,6 +373,57 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
         `op type ${type} declares scope ${JSON.stringify(scope)} — must be 'store' or 'tenant' (01 §6; 05 §2.1: storeId null = tenant-scoped). Omit it for the default 'store' (the device's store, 02 §5.2).`,
       );
     }
+  }
+}
+
+/**
+ * `payloadByVersion` (04 §3) — retention is COMPLETE or the boot fails.
+ *
+ * This is the "closed by construction" half of task 127's fix, and it is the half that matters:
+ * the server's `resolve(type, version)` fails closed on a missing retained schema, so a forgotten
+ * entry would not be a hole — it would be a type whose old, perfectly legitimate ops are suddenly
+ * `SCHEMA_INVALID` in production, permanently, on an append-only log. Discovering that from a
+ * rejected op is discovering it far too late, and "remember to add the schema when you bump the
+ * version" is exactly the kind of instruction CLAUDE.md §2.11 says has already failed once. So the
+ * completeness is CHECKED, at import time, against the version the declaration itself states.
+ *
+ * A key at or above `schemaVersion` is refused rather than ignored: `payloadByVersion[current]`
+ * would be a second schema for the current version, free to drift from `payload`, with nothing
+ * saying which one wins — and a key ABOVE current names a version no applier folds (05 §7).
+ */
+function validateRetainedPayloads<DB>(type: string, declaration: OperationDeclaration<DB>): void {
+  const { schemaVersion, payloadByVersion } = declaration;
+  const retained = payloadByVersion ?? {};
+
+  for (const [rawVersion, schema] of Object.entries(retained)) {
+    const version = Number(rawVersion);
+    if (!Number.isInteger(version) || version < 1 || version >= schemaVersion) {
+      throw new ModuleDefinitionError(
+        `op type ${type} retains a payload schema for version ${JSON.stringify(rawVersion)}, which is not a superseded version — payloadByVersion keys must be integers in 1..${schemaVersion - 1} (04 §3). The CURRENT version's schema is \`payload\`; a duplicate entry for it could drift from the one the runtime uses, and a version above current names a shape no applier folds (05 §7).`,
+      );
+    }
+    if (typeof schema !== 'object' || schema === null || typeof schema.parse !== 'function') {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares payloadByVersion[${version}] with no parse() (04 §3)`,
+      );
+    }
+    if (!isStrictSchema(schema)) {
+      throw new ModuleDefinitionError(
+        `op type ${type}'s payloadByVersion[${version}] schema does not reject unknown keys — 04 §3's .strict() rule applies to every retained version, not just the current one. A loose retained schema makes "claim an old schemaVersion" a blanket bypass of the unknown-key rule for this type.`,
+      );
+    }
+  }
+
+  // COMPLETENESS. The applier must fold every version in `1..schemaVersion` (05 §7), so every one
+  // of them is a version the server can be asked to accept, so every one of them needs a schema.
+  const missing: number[] = [];
+  for (let version = 1; version < schemaVersion; version += 1) {
+    if (retained[version] === undefined) missing.push(version);
+  }
+  if (missing.length > 0) {
+    throw new ModuleDefinitionError(
+      `op type ${type} declares schemaVersion ${schemaVersion} but retains no payload schema for version${missing.length > 1 ? 's' : ''} ${missing.join(', ')} — 04 §3 requires payloadByVersion to cover every superseded version. Old ops never disappear (05 §7): the applier folds ${schemaVersion === 2 ? 'v1' : `v1..v${schemaVersion - 1}`} forever, so the server will be asked to accept ${missing.length > 1 ? 'those versions' : `v${missing[0]}`} and has nothing to validate the payload against. Retaining the schema the version was emitted with is the only answer that neither rejects legitimate old clients nor accepts an unvalidated payload into the append-only log (task 127).`,
+    );
   }
 }
 

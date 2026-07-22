@@ -58,13 +58,19 @@ const WRONG_HASH = 'b'.repeat(64);
 /**
  * An OpSpec for a valid note (the workload, §3.2). Payload is the CURRENT v3 shape
  * `{title, body, mediaRef}` (notes/operations.ts) — the harness boots the REAL `createApp`
- * registry, which validates every new push against the current schema (05 §7), so a v1
- * `{title, body}` or a v2 `{title, body, mediaId}` would (correctly) be SCHEMA_INVALID, which is
- * T8's job, not a valid op's. These notes carry no photo, so `mediaRef` is present-and-null (05 §3).
+ * registry, which validates every push against the schema its DECLARED version names (04 §3), so
+ * the STAMP has to say v3 too. These notes carry no photo, so `mediaRef` is present-and-null (05 §3).
+ *
+ * `schemaVersion: 3` was added by task 127 and is not cosmetic: `ChainBuilder` stamps v1 unless
+ * told otherwise, so every "valid" note here was previously a v1-stamped op carrying a v3 payload.
+ * The paragraph above already CLAIMED these were validated against the current schema — they were
+ * not, because the server skipped validation entirely below current, which is the hole task 127
+ * closed. Stamping the version the payload is actually written in makes the claim true.
  */
 const note = (title: string, body: string) => ({
   type: 'notes.note_created',
   entityType: 'note',
+  schemaVersion: 3,
   payload: { title, body, mediaRef: null },
 });
 

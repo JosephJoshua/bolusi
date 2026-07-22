@@ -176,9 +176,11 @@ describe('schemaVersion push gate — the applier folds a RANGE; the gate accept
   test('ACCEPT (old foldable) — schemaVersion 2 STILL accepts + folds (the nuance)', async () => {
     // A rolling-out v2 client pushes a v2 payload (`{title, body, mediaId}`) while the server is at
     // v3. The applier folds v2 forever (05 §7); the gate must accept it — rejecting a legit foldable
-    // version is the exact over-correction the task warns against. The v2 payload is NOT re-validated
-    // against the current v3 schema (there is no retained v2 schema), which is why `mediaId` — a key
-    // v3's `.strict()` would reject — is fine here.
+    // version is the exact over-correction the task warns against. `mediaId` is a key v3's
+    // `.strict()` would reject, so this op is validated against the RETAINED v2 schema (04 §3
+    // `payloadByVersion`, task 127), never against the current one. Task 121 could only get this
+    // leg green by skipping validation for old versions entirely, which is what task 127 closed —
+    // the malformed-v2 legs live in `notes-old-version-payload.test.ts`.
     const { world, builder } = await setupWorld(3103);
     const op = noteCreatedAt(world, builder, 2, {
       title: 'Catatan lama',
