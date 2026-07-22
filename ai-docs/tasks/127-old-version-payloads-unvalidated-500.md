@@ -1,6 +1,6 @@
 # TASK 127 — task 121's gate leaves a hole below `current`: any `schemaVersion < current` skips payload validation entirely, so a malformed old-version payload is accepted at push and throws at fold as a 500 that rolls back the whole batch
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH — same accept-then-throw-at-fold class task 121 closed, still open on the old-version branch.** Reachable by any enrolled device (it signs its own op, so the signature step passes). The failure is a `500 INTERNAL` that rolls back the ENTIRE push batch, not a per-op rejection — so one malformed op poisons a whole sync.
 **Depends on:** 121 (the gate this completes), 07, 11
 **Blocks:** —
@@ -60,3 +60,18 @@ Reproduced on real PG16 **16.14** (Debian 16.14-1.pgdg13+1) in apps/server's own
 A defensive applier, and converting an applier throw into a per-op rejection, are a necessary backstop (that is task **139** — the same wound from the other side) but **insufficient alone**: they still land an unvalidated payload in the append-only log.
 
 **Honesty trap to note:** `notes-schema-version.test.ts` is green over all of this. It covers the version *boundary* (task 121's `> current` leg), never the *interior*.
+
+
+---
+
+## OUTCOME — DONE 2026-07-22 (commit merged to main; reviewed APPROVE, 0 blockers)
+
+Retained per-version payload schemas on the module contract, fail-closed by construction: `defineModule` refuses at import time unless `payloadByVersion` covers exactly `1..schemaVersion-1`, each `.strict()`. `payloadSchemaFor` returns `undefined` (→ `SCHEMA_INVALID`, never accept) for `0`, negative, non-integer, `>current`, and any unretained version.
+
+**Falsification, reproduced by the independent reviewer on real PG16 (own stamped lane, no peer container present):** restoring `validate: () => true` reds exactly the four reject legs of `notes-old-version-payload.test.ts` (8→4 failed) AND chaos-05 (10 failed, `TypeError` at T8) while all three positive controls (legit v1, v2, v3) stay green — the proof it is not "reject everything below current". The §4.1 honest-neighbour property is asserted on the **log and projection**, not the reply.
+
+**chaos-05 was RED on main before this** — the reviewer checked the four touched files out at the merge-base, rebuilt, and reproduced 10/12 failed. Task 121 broke T8 outright; 127 repairs a currently-failing gate, the opposite of a test bent to fit code.
+
+**Residuals filed as task 152** (both non-blocking, both falsified by the reviewer): the v1 schema's provenance comment cites a commit that actually contains v2 (this repo never shipped a v1 registry schema), and the import guard checks own keys while the runtime reads through the prototype.
+
+Merge verified on the integration tree before push: server 526, harness 136, core+modules 1164, chaos-05 12/12, knip 132/29 both canaries +0/-0, lint/typecheck/i18n all green. The `knip-baseline.json` schema conflict (task 137's file-tracking) was resolved by taking main's file and regenerating via `pnpm knip:baseline` — the one new export (`payloadSchemaFor`) added from knip's own output.
