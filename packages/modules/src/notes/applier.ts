@@ -8,16 +8,19 @@
 // which IS last-writer-wins on every engine for every arrival order (the same argument the platform
 // `user_prefs` applier documents).
 //
-// ── THE v1↔v2 SEAM (04 §3 / §8 box 1; testing-guide §3.2.2) ────────────────────────────────────
+// ── THE v1↔v2↔v3 SEAM (04 §3 / §8 box 1; testing-guide §3.2.2) ─────────────────────────────────
 //
-// `note_created` exists at schemaVersion 1 (`{title, body}`) and 2 (`{title, body, mediaId}`). Old
-// v1 ops never disappear (05 §7), so the applier folds BOTH forever, switching on the op's
-// `schemaVersion` — NOT on the presence of a payload key, because a payload is caller-shaped and the
-// version is the registry's authoritative answer (ctx.ts: a handler may not state its own version).
-// A v3-or-unknown version REJECTS LOUDLY (throws) rather than silently defaulting: a silent skip
-// would leave the projection missing an op it could not fold, on every device, permanently —
-// exactly the "silently checks nothing" failure CLAUDE.md §2.11 calls worse than none. The throw
-// propagates out of the engine's apply, rolling back the whole op (engine.ts transaction model).
+// `note_created` exists at schemaVersion 1 (`{title, body}`), 2 (`{title, body, mediaId}`) and 3
+// (current: `{title, body, mediaRef}` — task 120). Old ops never disappear (05 §7), so the applier
+// folds ALL THREE forever, switching on the op's `schemaVersion` — NOT on the presence of a payload
+// key, because a payload is caller-shaped and the version is the registry's authoritative answer
+// (ctx.ts: a handler may not state its own version). A v4-or-unknown future version REJECTS LOUDLY
+// (throws) rather than silently defaulting: a silent skip would leave the projection missing an op
+// it could not fold, on every device, permanently — exactly the "silently checks nothing" failure
+// CLAUDE.md §2.11 calls worse than none. The throw propagates out of the engine's apply, rolling
+// back the whole op (engine.ts transaction model). Per-version payload VALIDATION (task 127) is a
+// separate contract layer — `payloadByVersion` in the module registry — so a malformed old-version
+// payload is rejected at push as SCHEMA_INVALID and never reaches this fold.
 import type { ProjectionApplier, ProjectionTableManifest } from '@bolusi/core';
 import type { ProjectionOperation } from '@bolusi/core';
 import type { MediaRef } from '@bolusi/schemas';

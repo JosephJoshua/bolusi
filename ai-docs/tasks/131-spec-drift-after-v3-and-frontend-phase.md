@@ -7,7 +7,7 @@
 **SEC ids owned by THIS task:** none.
 **Filed by:** QA spec-verify sweep, 2026-07-22 (items D2/D3/D5/D8/D9 + nits).
 
-> **PARTIAL — items 1 and 2 are DONE** (orchestrator, 2026-07-22): `01-domain-model.md` now documents v3 `{title, body, mediaRef}` with the `mediaSha256`/`mediaMime` projection columns and the "every foldable version needs a retained payload schema" rule that task 127 turns into code; `10-db-schema.md` §8 (PG) and §9.6 (SQLite) now carry both columns with their migration ids (`0010` server / `002` client). Items 3-7 remain open.
+>**PARTIAL — items 1, 2 and 4 are DONE** (orchestrator, 2026-07-22): `01-domain-model.md` now documents v3 `{title, body, mediaRef}` with the `mediaSha256`/`mediaMime` projection columns and the "every foldable version needs a retained payload schema" rule that task 127 turns into code; `10-db-schema.md` §8 (PG) and §9.6 (SQLite) now carry both columns with their migration ids (`0010` server / `002` client). Item 4 (applier header) is also done — `packages/modules/src/notes/applier.ts`'s header no longer says v3 REJECTS LOUDLY; it now documents that the applier folds all three versions and that per-version payload VALIDATION is task 127's separate `payloadByVersion` layer. Items 3, 5, 6, 7 remain open — several touch contended files (App.tsx per task 133-in-review; media/client.ts per task 140) and should land after those settle.
 
 ## Drift (each with file:line; fix the DOC or the CODE, whichever is wrong — and say which)
 
