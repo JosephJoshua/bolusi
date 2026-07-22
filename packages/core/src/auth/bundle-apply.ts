@@ -12,9 +12,11 @@
 import type { Kysely } from 'kysely';
 
 import { TENANT_ID_META_KEY } from '../authz/directory.js';
+import { clampIdleLockSeconds } from './constants.js';
 import type { DeviceBundle } from './ports.js';
 import {
   deleteVerifier,
+  IDLE_LOCK_SECONDS_META_KEY,
   readVerifier,
   replaceRolesDirectory,
   replaceUserRolesDirectory,
@@ -43,6 +45,18 @@ export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Pro
   // `storeId` (never rewritten — the §7.4 store binding is irreversible), only the display names refresh.
   await writeMeta(db, STORE_NAME_META_KEY, bundle.store.name);
   await writeMeta(db, TENANT_NAME_META_KEY, bundle.tenant.name);
+
+  // The tenant's idle-lock timeout (api/02-auth §6.4) rides every bundle exactly as the display
+  // names do, and lands here for the same reason: it is server-owned, re-delivered on refresh, and
+  // the DEVICE has to hold the current value for `SessionManager` to lock on it. Persisted at APPLY
+  // time — not only at enrollment — so a `PATCH /v1/tenant/settings` that tightens 300 s to 60 s
+  // takes effect on the next pull, and so a device enrolled today does not sit on the default until
+  // its first refresh. Clamped on the way in (see the key's docblock).
+  await writeMeta(
+    db,
+    IDLE_LOCK_SECONDS_META_KEY,
+    String(clampIdleLockSeconds(bundle.settings.idleLockSeconds)),
+  );
 
   await replaceUsersDirectory(
     db,

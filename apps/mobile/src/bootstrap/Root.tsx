@@ -28,8 +28,18 @@
  * that: it resolves BEFORE any zone renders (this component returns `null` until it has), and it
  * feeds the gate's inputs rather than bypassing them. `device` is DERIVED from the real `deviceId`
  * (and `syncDisabled`), so a revoked device beats an enrolled one — the same ordering task 24 tested.
+ *
+ * ── THE IDLE LOCK, COMPOSED (task 133; api/02-auth §6.4, SEC-AUTH-08) ───────────────────────────
+ * `locked` was the literal `false` here. The gate's third input was therefore a constant, nothing
+ * called `ShellSession.tick`, and `SessionManager.checkIdle()` had no production caller at all — a
+ * security control that was green in eight unit tests and inert on every device. Three lines fixed
+ * it and all three are below: `locked` is DERIVED from the session snapshot, `createIdleTicker`
+ * drives the check while the app is foregrounded (and once on every resume), and the responder-
+ * capture wrapper resets the deadline on interaction so the lock fires on IDLE rather than on
+ * elapsed time. The DECISION is still 14's — nothing here re-derives a deadline.
  */
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { View } from 'react-native';
 
 import App from '../../App.js';
 import { bootstrapI18n, type LocaleStorePort } from '../i18n.js';
@@ -46,8 +56,11 @@ import type { AppRuntime } from './runtime.js';
 import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
 import type { SyncClient } from './sync-client.js';
+import type { AppStatePort } from './triggers.js';
+import { createIdleTicker } from '../session/idle-ticker.js';
+import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { MediaClient } from '../media/client.js';
-import type { CommandIdentity } from '@bolusi/core';
+import type { CommandIdentity, TimerPort } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 /**
@@ -144,6 +157,21 @@ export interface RootProps {
      */
     media: MediaClient | null,
   ) => NotesRuntime;
+  /**
+   * RN `AppState`, injected — the idle ticker's foreground/resume signal (api/02-auth §6.4).
+   *
+   * REQUIRED, not optional, and that is the whole point: an optional platform input with a no-op
+   * default is how a security control ends up composed on paper and absent on device (this task's
+   * entire finding). `tsc` now refuses a `Root` that has no way to run the idle check. It is the same
+   * `AppStatePort` the sync triggers take (§2.8) and it is native, so it is bound at `index.ts`.
+   */
+  readonly appState: AppStatePort;
+  /**
+   * Core's one-shot `TimerPort` — the idle tick's cadence. Node-safe (`ports/timer.ts` is plain
+   * `setTimeout`), but injected rather than imported so a test drives the tick deterministically
+   * instead of sleeping (T-6). REQUIRED for the reason `appState` is.
+   */
+  readonly timer: TimerPort;
 }
 
 export function Root({
@@ -155,6 +183,8 @@ export function Root({
   createMedia,
   createSession,
   createNotes,
+  appState,
+  timer,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
@@ -220,7 +250,17 @@ export function Root({
       const client =
         createSync?.(
           booted,
-          enroll === null ? undefined : () => enroll.evaluator.onBundleRefresh(),
+          enroll === null
+            ? undefined
+            : async () => {
+                await enroll.evaluator.onBundleRefresh();
+                // The tenant's `idleLockSeconds` rides the same bundle (api/02-auth §6.4) and
+                // `applyBundle` has just persisted it. Read through the REF, not a captured value:
+                // this callback is created before the session controller exists, and a bundle
+                // refresh that landed a tighter timeout in the database while the session kept the
+                // old one is a setting that "took effect" nowhere the user could see.
+                await sessionRef.current?.refreshSettings();
+              },
         ) ?? null;
       if (client === null || disposed) {
         client?.stop();
@@ -356,6 +396,36 @@ export function Root({
   const sessionUserId = sessionSnapshot?.session?.userId ?? null;
 
   /**
+   * THE IDLE TICK (task 133; api/02-auth §6.4) — the production caller `SessionManager.checkIdle()`
+   * never had.
+   *
+   * Keyed on the session CONTROLLER, not on the open session: the controller is what owns the shell
+   * session and the deadline, and it outlives every individual lock/unlock. Keying on `sessionUserId`
+   * would stop the ticker the moment a lock cleared the identity — i.e. exactly when the shell most
+   * needs to keep asking — and would restart the interval on every switch.
+   *
+   * The cleanup is not tidiness: `stop()` cancels the pending one-shot and unsubscribes `AppState`.
+   * A leaked ticker over an unmounted tree would go on emitting `session_ended` ops into the log.
+   */
+  useEffect(() => {
+    if (session === null) return;
+    const ticker = createIdleTicker({
+      tick: () => session.tick(),
+      timer,
+      appState,
+      // A tick can only fail by failing to append `session_ended`. Route it to the app's ONE client
+      // diagnostics channel (§2.8) rather than swallowing it — a lock that believes it happened and
+      // a log that has no record of it is precisely the silent state this task exists to remove.
+      onError: (error) =>
+        consoleDiagnostics.warn('idle lock tick failed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    });
+    ticker.start();
+    return () => ticker.stop();
+  }, [session, timer, appState]);
+
+  /**
    * THE ACTIVATION (task 119): a session exists ⇒ build the notes surface for that user.
    *
    * This effect is the producer `App.notes` never had. It runs on the session's USER ID, so signing
@@ -418,42 +488,74 @@ export function Root({
       : undefined;
 
   return (
-    <App
-      device={shell.device}
-      users={sessionSnapshot?.users ?? null}
-      usersError={sessionSnapshot?.usersError ?? null}
-      pinRow={(userId) => session?.pinRow(userId) ?? null}
-      now={systemClock.now()}
-      session={openSession === null ? null : { userId: openSession.userId }}
-      notes={notesForSession}
-      locked={false}
-      sync={shell.sync}
-      onSyncNow={() => sync?.requestManual()}
-      // The PIN pad's one egress (task 24's PinPad contract). The controller runs the REAL
-      // `verifyPin` and only opens a session on success; the subscription above re-renders the shell,
-      // which is what moves the gate from `pin` to `shell` and mounts the notes surface.
-      //
-      // The boolean is what lets the shell retire the pending PIN target (see `AppProps.onSubmitPin`).
-      // The `catch` reports FALSE rather than rethrowing: every EXPECTED failure is already an
-      // outcome arm (`wrong` / `gated` / `needs_first_pin`), so a throw here is an infrastructure
-      // fault — and the honest response to one is "you are not signed in", which is exactly what
-      // false renders. Rethrowing would surface as an unhandled rejection and change nothing on
-      // screen; that swallow is what hid a real wiring defect during this task's own bring-up.
-      onSubmitPin={(userId, pin) =>
-        session === null
-          ? Promise.resolve(false)
-          : session
-              .submitPin(userId, pin)
-              .then((outcome) => outcome.kind === 'opened')
-              .catch(() => false)
-      }
-      onSelectLocale={(next) => {
-        void localeStore.write('bolusi.device_locale', next);
-        setLocale(next);
+    /**
+     * THE ACTIVITY RESET (api/02-auth §6.4 — "any interaction resets the idle deadline"), as RN's
+     * gesture-responder CAPTURE phase.
+     *
+     * `onStartShouldSetResponderCapture` runs for every touch that STARTS inside this view, before
+     * any child can claim the responder, and returning `false` declines to capture — so this
+     * observes every tap in the app without intercepting a single one. It is the one place that can
+     * see all interaction without every screen having to remember to report it, which matters
+     * because a screen that forgot would lock a user mid-work and teach the shop to raise
+     * `idleLockSeconds` to its ceiling (§6.4; SwitcherScreen.tsx:11 makes the same argument).
+     *
+     * HONEST LIMIT: this sees touch STARTS. A user typing on a hardware keyboard, or reading without
+     * touching, is idle by this definition and will be locked — which is the spec's definition too
+     * ("idle"), but it is a definition, and it is stated here rather than left to be discovered.
+     * `View` is layout-neutral (`flex: 1` over `App`'s own fill), so the tree geometry is unchanged.
+     */
+    <View
+      style={FILL}
+      testID="root-activity"
+      onStartShouldSetResponderCapture={() => {
+        session?.recordActivity();
+        return false;
       }}
-      locale={locale}
-      deviceInfo={deviceInfo}
-      enrollment={enrollment?.controller ?? UNWIRED_ENROLLMENT}
-    />
+    >
+      <App
+        device={shell.device}
+        users={sessionSnapshot?.users ?? null}
+        usersError={sessionSnapshot?.usersError ?? null}
+        pinRow={(userId) => session?.pinRow(userId) ?? null}
+        now={systemClock.now()}
+        session={openSession === null ? null : { userId: openSession.userId }}
+        notes={notesForSession}
+        // DERIVED, never a literal (task 133). `false` here made an idle lock indistinguishable from
+        // a sign-out: `resolveZone` would render the switcher in `choose` mode, with a header back
+        // that walks straight into the previous user's session (design-system §8.2).
+        locked={sessionSnapshot?.locked ?? false}
+        sync={shell.sync}
+        onSyncNow={() => sync?.requestManual()}
+        // The PIN pad's one egress (task 24's PinPad contract), and — since task 133 — the UNLOCK
+        // path too: the controller runs the REAL `verifyPin` and, on success, `ShellSession.unlock`,
+        // which restores this user's retained workspace and clears the lock. The subscription above
+        // re-renders the shell, which is what moves the gate from `pin` to `shell`.
+        //
+        // The boolean is what lets the shell retire the pending PIN target (see `AppProps.onSubmitPin`).
+        // The `catch` reports FALSE rather than rethrowing: every EXPECTED failure is already an
+        // outcome arm (`wrong` / `gated` / `needs_first_pin`), so a throw here is an infrastructure
+        // fault — and the honest response to one is "you are not signed in", which is exactly what
+        // false renders. Rethrowing would surface as an unhandled rejection and change nothing on
+        // screen; that swallow is what hid a real wiring defect during this task's own bring-up.
+        onSubmitPin={(userId, pin) =>
+          session === null
+            ? Promise.resolve(false)
+            : session
+                .submitPin(userId, pin)
+                .then((outcome) => outcome.kind === 'opened')
+                .catch(() => false)
+        }
+        onSelectLocale={(next) => {
+          void localeStore.write('bolusi.device_locale', next);
+          setLocale(next);
+        }}
+        locale={locale}
+        deviceInfo={deviceInfo}
+        enrollment={enrollment?.controller ?? UNWIRED_ENROLLMENT}
+      />
+    </View>
   );
 }
+
+/** The activity-wrapper's fill — layout-neutral over `App`'s own `flex: 1` root. */
+const FILL = { flex: 1 } as const;

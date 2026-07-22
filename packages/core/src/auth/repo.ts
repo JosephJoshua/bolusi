@@ -10,6 +10,7 @@ import { sql, type Kysely } from 'kysely';
 import { TENANT_ID_META_KEY } from '../authz/directory.js';
 import { jsonColumnToObject, type JsonColumnValue } from '../projection/columns.js';
 import { int8ToNumber, type Int8Value } from '../projection/int8.js';
+import { clampIdleLockSeconds } from './constants.js';
 import type { CanonicalRef, PinVerifier } from './verifier.js';
 
 /** A `pin_attempt_state` row (10-db §9.5; api/02-auth §6.5). Absent ⇒ a clean slate (no failures). */
@@ -78,6 +79,36 @@ export const STORE_NAME_META_KEY = 'auth.storeName';
  * ONE definition of the key string, shared with the mobile reader (§2.8).
  */
 export const TENANT_NAME_META_KEY = 'auth.tenantName';
+
+/**
+ * `meta_kv` key holding the tenant's effective idle-lock timeout, in SECONDS (api/02-auth §6.4).
+ *
+ * Written by `applyBundle` from `bundle.settings.idleLockSeconds` on EVERY bundle — the enroll
+ * response's bundle AND every refresh — for the same reason the display names are: it is a tenant
+ * setting the server owns and re-delivers, and the device must hold the CURRENT value, not the one
+ * it saw at enrollment. One writer, so a `PATCH /v1/tenant/settings` reaches the device on the next
+ * pull without a second code path deciding what "current" means.
+ *
+ * Stored ALREADY CLAMPED to §6.4's [60, 3600]. The clamp is the server's (routes/tenant.ts) and is
+ * re-applied here as defence in depth — the value crosses the network, and a device that trusted a
+ * hostile `idleLockSeconds: 86400` would keep a shared shop-counter terminal unlocked all day.
+ * `SessionManager` clamps a third time on ingest; none of the three re-decides the range, they all
+ * call `clampIdleLockSeconds`.
+ */
+export const IDLE_LOCK_SECONDS_META_KEY = 'auth.idleLockSeconds';
+
+/**
+ * The device's effective idle-lock timeout in seconds (api/02-auth §6.4), clamped to [60, 3600].
+ *
+ * Answers §6.4's DEFAULT (300) when the key is absent or unparseable rather than throwing or
+ * answering 0: a device that has not yet applied a bundle must still lock, and "no configured value"
+ * is not "no lock". `clampIdleLockSeconds` maps a non-finite input to that default, so an empty,
+ * corrupted or hand-edited row degrades to the spec default instead of disabling the control.
+ */
+export async function readIdleLockSeconds<DB>(db: Kysely<DB>): Promise<number> {
+  const raw = await readMeta(db, IDLE_LOCK_SECONDS_META_KEY);
+  return clampIdleLockSeconds(raw === null ? Number.NaN : Number(raw));
+}
 
 /** Read the device's tenant id from `meta_kv` (10-db §9.1), or null when unbootstrapped. */
 export async function readTenantId<DB>(db: Kysely<DB>): Promise<string | null> {

@@ -301,6 +301,13 @@ function Bootstrapped(): React.JSX.Element | null {
     createMedia,
     createSession,
     createNotes,
+    // THE IDLE LOCK'S PLATFORM INPUTS (api/02-auth §6.4; task 133). `appStatePort` is the same native
+    // `AppState` binding the sync triggers take (§2.8) and is bound here for the same reason NetInfo
+    // is; `systemTimer` is the app's one `setTimeout`. Both are REQUIRED props on `Root`, so a build
+    // that fails to supply them does not compile — which is the only reason this composition cannot
+    // quietly go missing again the way `ShellSession` did.
+    appState: appStatePort,
+    timer: systemTimer,
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

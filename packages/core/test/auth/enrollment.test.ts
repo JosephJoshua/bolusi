@@ -17,8 +17,10 @@ import {
   createUuidV7Generator,
   DEVICE_ID_META_KEY,
   DomainError,
+  IDLE_LOCK_SECONDS_META_KEY,
   PermissionEvaluator,
   readDeviceId,
+  readIdleLockSeconds,
   readStoreId,
   readTenantId,
   runEnrollment,
@@ -96,6 +98,8 @@ interface Fixture {
   readonly evaluator: PermissionEvaluator;
   readonly deps: EnrollmentDeps<ClientDatabase>;
   readonly params: EnrollmentParams;
+  /** The bundle the fake enroll response carries — asserted against what `applyBundle` persisted. */
+  readonly bundle: DeviceBundle;
   readonly ownerId: string;
   readonly tenantId: string;
   runtime(): CommandRuntime | null;
@@ -222,6 +226,7 @@ async function fixture(
     evaluator,
     deps,
     params,
+    bundle,
     ownerId,
     tenantId,
     runtime: () => builtRuntime,
@@ -398,14 +403,16 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     expect(await readStoreId(restarted)).toBe(fx.params.storeId);
   });
 
-  it('after enrollment meta_kv holds EXACTLY {storeName, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
+  it('after enrollment meta_kv holds EXACTLY {idleLockSeconds, storeName, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
     // A presence spot-check would pass on a row that also wrote keys nobody declared; assert the whole
-    // set. deviceId/storeId are task 88's; tenantId AND the store/tenant DISPLAY NAMES are applyBundle's
-    // (task 109 moved the name persistence into bundle-apply, so a rename refreshes them); draft deleted.
-    // Keys arrive ORDER BY key: the two `auth.*` names sort before deviceId/storeId/tenantId.
+    // set. deviceId/storeId are task 88's; tenantId, the store/tenant DISPLAY NAMES and (task 133) the
+    // tenant's idleLockSeconds are applyBundle's — every one of them re-delivered on each refresh, so
+    // a rename or a settings change reaches the device; draft deleted.
+    // Keys arrive ORDER BY key: the three `auth.*` keys sort before deviceId/storeId/tenantId.
     fx = await fixture(12);
     await runEnrollment(fx.deps, fx.params);
     expect(await metaKeys(fx.db)).toStrictEqual([
+      IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
       TENANT_NAME_META_KEY,
       DEVICE_ID_META_KEY,
@@ -414,10 +421,15 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     ]);
     // The keys the two producers own — no draft, no undeclared key.
     expect([DEVICE_ID_META_KEY, STORE_ID_META_KEY]).toStrictEqual(['deviceId', 'storeId']);
-    expect([STORE_NAME_META_KEY, TENANT_NAME_META_KEY]).toStrictEqual([
+    expect([STORE_NAME_META_KEY, TENANT_NAME_META_KEY, IDLE_LOCK_SECONDS_META_KEY]).toStrictEqual([
       'auth.storeName',
       'auth.tenantName',
+      'auth.idleLockSeconds',
     ]);
+    // THE ENROLLED DEVICE HOLDS THE TENANT'S TIMEOUT FROM ITS FIRST MOMENT (§6.4). Before task 133
+    // this key did not exist, so a device sat on the 300 s default until its first bundle refresh —
+    // and `SessionManager` was constructed without the value at all, so it sat there forever.
+    expect(await readIdleLockSeconds(fx.db)).toBe(fx.bundle.settings.idleLockSeconds);
   });
 
   it('a crash on the draft delete leaves the identity DURABLE and the draft recoverable (ordering)', async () => {
@@ -434,6 +446,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     // store/tenant names persisted by applyBundle (task 109), which runs BEFORE the draft delete, survive.
     expect(await metaKeys(restarted)).toStrictEqual([
       'auth.enrollment_draft',
+      IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
       TENANT_NAME_META_KEY,
       DEVICE_ID_META_KEY,
