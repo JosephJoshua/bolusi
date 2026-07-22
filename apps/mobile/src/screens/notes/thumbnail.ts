@@ -36,8 +36,16 @@ function toThumbnailState(resolved: RenderableMedia): ThumbnailState {
   switch (resolved.kind) {
     case 'local':
     case 'cached':
-      // `cached` is only ever returned AFTER the bytes matched the signed hash (remote-cache.ts), so
-      // there is no path from an unverified download to a rendered uri.
+      // Both arms are hash-verified against the SIGNED ref before `loadForRender` returns them —
+      // `cached` always was, `local` since task 140, which found this arm rendering a document-dir
+      // file on `exists()` alone and so serving one device's photo as another's evidence. There is
+      // no path from unverified bytes to a rendered uri THROUGH `loadForRender`.
+      //
+      // The `legacy` branch of the loader below is the exception, and it is one this mapping cannot
+      // see: `loadLocalForRender` also answers `local`, for a v1/v2 attachment that has no signed
+      // hash anywhere on the device to check. `remote-cache.ts`'s `loadLocalMediaOnly` states that
+      // residual in full. Do not read this `case 'local'` as proof of verification on its own — the
+      // proof lives at the call site that chose which loader to use.
       return { kind: 'ready', uri: resolved.uri };
     case 'unavailable':
       return { kind: 'unavailable' };
