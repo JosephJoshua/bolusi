@@ -1,6 +1,6 @@
 # TASK 85 — iOS is a declared platform with no way to build it and no target to run it on: `08 §5.5`'s four profiles are Android-APK **by spec**, and all 10 CI jobs are `ubuntu-latest`
 
-**Status:** in-progress
+**Status:** done
 
 > **OWNER RULING (2026-07-17):** BOTH lanes (D18 §5): GitHub Actions `macos-latest` (unsigned Simulator build + boot — I write the CI job, verifies tasks 83/84/87's generated Info.plist) AND EAS Build (signed real-device/TestFlight). **Coding waits on impl-ios (83/84/87) landing the iOS `app.config.ts` block.** **OWNER PROVISIONING (the gate, see D18 §5): Apple Developer Program (\$99/yr, 24-48h), an Expo/EAS account, GitHub macOS minutes enabled, and eventually a physical iPhone for the on-device §7.4/backup claims the Simulator cannot verify.**
 
@@ -71,3 +71,30 @@ So `apps/mobile/eas.json` — which carries `"android": { "buildType": "apk" }` 
 The instructive part is that **every artifact here is individually honest**. §5.5 says "Android APK" because it meant it. `eas.json` matches §5.5 because a gate makes it. The gate asserts `android.buildType` because that is what §5.5 specifies. CI runs `ubuntu-latest` because there was never an iOS build to run. Each link is correct, each was reviewed, and the chain composes into a platform the config has claimed for the entire life of the repo and that no layer can produce.
 
 **Nothing here is a bug to find. It is a premise to change, and premises are the owner's.** Which is exactly why the deliverable of this task is a *decision doc*, not code.
+
+
+---
+
+## CLOSED 2026-07-22 — the lane has now RUN, which is the one thing that was missing
+
+Every other acceptance bullet had been satisfied for days; what had never happened was the lane executing. `.github/workflows/ci.yml` gates `ios-simulator` on `schedule || workflow_dispatch`, and **no such run had ever completed** — the sole scheduled run in the repo's history (29804441399) was cancelled. So this task sat `in-progress` against a job with no evidence behind it, which is the same "declaration nothing checks" failure its own §Note warns about, one level up.
+
+The orchestrator dispatched it manually. Two real defects surfaced and were fixed, each read from the lane's own log:
+
+1. **`./gradlew: No such file or directory` (exit 127)** on the Android lane — `expo prebuild` writes the wrapper to `apps/mobile/android`, and the step invoked it from the repo root. Fixed in `fix(ci): invoke the gradle wrapper at apps/mobile/android, not the repo root`.
+2. **`While trying to resolve module '@bolusi/core' … packages/core/dist/index.js … does not exist`** — Metro resolves the workspace packages through `dist/`, and neither native job built them. Fixed in `fix(ci): build workspace packages before the native lanes bundle with metro` by adding `npx tsc -b`, the same build every `test:*` script runs.
+
+**Run 29891270836, `ios-simulator`: SUCCESS — every step:**
+
+```
+success  build workspace packages (Metro resolves @bolusi/* through dist/)
+success  expo prebuild (iOS native project)
+success  pod install
+success  xcodebuild — unsigned iOS Simulator build (Release)
+success  verify built Info.plist matches tasks 83/87
+success  boot Simulator, install + launch the app
+```
+
+**What this closes:** compile/link on Apple's toolchain, CocoaPods integration, the generated `Info.plist`/entitlements against tasks 83/87, and does-it-launch. **What it does NOT close, unchanged:** every device-only claim in D18 §5 / D20 §2 — real-device Keychain behaviour, backup/restore, security-guide §7.4's "never resurrected". **No Simulator green is a device test**, and no iOS *behaviour* was driven: nothing tapped a screen. The lane proves the app builds and starts, nothing more.
+
+**Still true and deliberately unchanged:** `eas.json` carries no `ios` block (the Simulator lane is `xcodebuild`-driven and reads nothing from it); the signed-device/TestFlight lane stays owner-deferred per D20 §2; `test/eas-profiles.test.ts`'s denominator still pins exactly four Android profiles.
