@@ -241,6 +241,34 @@ export function syncChipState(input: SyncStatusInput): SyncChipState {
 }
 
 /**
+ * The screen's HEADER TITLE, one key per chip state (design-system §8.1/§8.4).
+ *
+ * ── WHY THIS MAP EXISTS (task 126) ──────────────────────────────────────────────────────────────
+ * The screen used to hardcode `sync.rejected.title` — "Perubahan Ditolak" / "Rejected Changes" —
+ * for EVERY state. A fully-synced device was headed by a report of a problem it did not have, over
+ * a body reading "Semua perubahan terkirim". On the one screen whose entire job is telling a shop
+ * owner whether their work is safe, that is the failure this whole model exists to prevent
+ * (see the header): spending the shop's attention on nothing until nobody reads the header at all.
+ *
+ * It is keyed on `syncChipState` rather than `reassurance` on purpose. The chip and the title are
+ * then the SAME verdict rendered twice — they cannot disagree by construction, which is the same
+ * argument `syncChipState` makes for the chip vs the screen. It also gives `offline` its own title:
+ * offline is an input, never a problem (the header's thesis), so it gets its own calm words instead
+ * of borrowing `pending`'s.
+ *
+ * `sync.rejected.title` stays what it always should have been: the header of the rejected SECTION,
+ * rendered only when that section renders. `attention` titles the screen `sync.status.titleAttention`
+ * instead, so the phrase appears once rather than three times.
+ */
+export const SYNC_TITLE_KEY = {
+  synced: 'sync.status.titleSynced',
+  pending: 'sync.status.titlePending',
+  syncing: 'sync.status.titleSyncing',
+  offline: 'sync.status.titleOffline',
+  attention: 'sync.status.titleAttention',
+} as const satisfies Record<SyncChipState, string>;
+
+/**
  * §8.4 item 3: manual sync is disabled, WITH an explanation, when the loop cannot run at all.
  * A disabled button with no reason is how a user concludes the app is broken; `reason` is the key
  * the screen renders beside it.

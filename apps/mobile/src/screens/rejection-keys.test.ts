@@ -18,7 +18,7 @@ import { failureKey } from './enrollment/model.js';
 import { PIN_MESSAGE_KEY } from './pin/model.js';
 import { categoryNameKey, localeNameKey, MUTABLE_PUSH_CATEGORIES } from './settings/model.js';
 import { SWITCHER_EMPTY_CTA_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
-import { MEDIA_STATUS_KEY, REASSURANCE_KEY } from './sync-status/model.js';
+import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status/model.js';
 
 /**
  * The catalogs a v0 user can actually reach. `zh` is scaffolded in `LOCALES` but ships NO catalog
@@ -153,6 +153,22 @@ describe('screen key maps', () => {
     for (const key of Object.values(MEDIA_STATUS_KEY)) expectInEveryCatalog(key);
     expect(Object.values(REASSURANCE_KEY)).toHaveLength(4);
     expect(Object.values(MEDIA_STATUS_KEY)).toHaveLength(3);
+  });
+
+  test('every sync-status header title key exists in both catalogs (task 126)', () => {
+    // The screen titles itself `t(SYNC_TITLE_KEY[syncChipState(input)])`. The values arrive through
+    // a `satisfies Record<…, string>` map, so their type is `string` and the generated key union
+    // never sees them — a renamed key would compile, and the header would degrade to a humanized
+    // final segment ("Title synced") on the screen that exists to be believed.
+    let covered = 0;
+    for (const key of Object.values(SYNC_TITLE_KEY)) {
+      expectInEveryCatalog(key);
+      covered += 1;
+    }
+    expect(covered).toBe(5);
+    // The titles are five DISTINCT keys, not one key repeated — the task-126 defect, at key level.
+    expect(new Set(Object.values(SYNC_TITLE_KEY)).size).toBe(5);
+    expect(Object.values(SYNC_TITLE_KEY)).not.toContain('sync.rejected.title');
   });
 
   test('every settings key exists — languages and mutable push categories', () => {

@@ -15,6 +15,11 @@
  *      nothing at all: no "0 rejected", no green all-clear badge. A section that is usually empty
  *      trains people to skim past it, and this is the one section that must never be skimmed.
  *
+ * The HEADER TITLE is part of that argument, not chrome above it: it names the state the device is
+ * actually in (`SYNC_TITLE_KEY`, model.ts). A fixed title cannot be honest on this screen — a title
+ * that says "Rejected Changes" over "everything is sent" is the screen contradicting itself in its
+ * largest text, and the largest text wins.
+ *
  * Offline appears exactly once, at tier 1, phrased as `sync.status.offline` — "Tidak ada koneksi.
  * Perubahan tersimpan di perangkat ini." It is a statement about the network AND a reassurance about
  * the data, in that order, in one sentence. It is never red.
@@ -50,6 +55,7 @@ import {
   REASSURANCE_KEY,
   showsRejectedSection,
   staleness,
+  SYNC_TITLE_KEY,
   syncChipState,
   syncProblems,
   type MediaQueueRow,
@@ -81,19 +87,26 @@ export function SyncStatusScreen({
   const sync = manualSync(input);
   const queue = mediaQueue(input);
   const problems = syncProblems(input);
+  // ONE verdict, rendered twice — as the header chip and as the header title. Computing it once is
+  // what makes "the chip and the title cannot disagree" a property of the code, not a convention.
+  const chip = syncChipState(input);
 
   const rejectedState: ListState<RejectedOpRow> = { kind: 'ready', items: [...input.rejected] };
   const mediaState: ListState<MediaQueueRow> = { kind: 'ready', items: [...queue] };
 
   return (
     <AppShell
-      title={t('sync.rejected.title')}
+      // task 126: the title is the STATE, read from `SYNC_TITLE_KEY` (model.ts) — the one
+      // view→key mapping (§2.8), keyed on the same `syncChipState` the header chip renders, so the
+      // chip and the title cannot disagree. It was `t('sync.rejected.title')` unconditionally,
+      // which headed a fully-synced device "Perubahan Ditolak" above "Semua perubahan terkirim".
+      title={t(SYNC_TITLE_KEY[chip])}
       titleVariant="detail"
       onBack={onBack}
       backLabel={t('core.action.back')}
       syncChip={
         <SyncChip
-          state={syncChipState(input)}
+          state={chip}
           pendingCount={input.pendingOperationCount}
           accessibilityLabel={t('sync.status.lastSynced', { relative: relativeLabel(input) })}
           onPress={onBack}
