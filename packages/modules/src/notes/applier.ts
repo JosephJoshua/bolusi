@@ -197,6 +197,18 @@ export const noteBodyEditedApplier: ProjectionApplier<NotesDatabase> = async (db
       lastEditedAt: op.timestamp,
     }))
     .where('id', '=', op.entityId)
+    // STORE-SAFETY (task 157 leg 2, D22 / SEC-TENANT-06). Matching on `id` ALONE made this a
+    // cross-store write primitive: `id` is a global uuid and `notes` RLS is TENANT-only (no store
+    // predicate — db-server `secureTenantTable`), so a device in store A could sign an edit naming a
+    // note that lives in store B and this UPDATE would overwrite it. Nothing else stopped it —
+    // 05 §9.2's device→store rule guards the op's DECLARED `storeId`, which this applier never read.
+    // Constraining the UPDATE to the op's OWN store makes a mismatch a NO-OP fold (0 rows) instead
+    // of a silent cross-store overwrite, which is also the correct out-of-order behaviour: an edit
+    // whose note is absent from this store simply matches nothing, exactly as an edge folded before
+    // its create does. `noteStoreId` keeps the store-scoped invariant explicit (it throws on a null
+    // store, the state leg 1 now rejects at push) rather than letting a null quietly become a
+    // `store_id = NULL` predicate that matches no row and hides the bug as a no-op.
+    .where('storeId', '=', noteStoreId(op))
     .execute();
 };
 
@@ -207,7 +219,15 @@ export const noteBodyEditedApplier: ProjectionApplier<NotesDatabase> = async (db
  * a body edit. UPDATE-matches-nothing is a safe no-op for the same out-of-order reason as edits.
  */
 export const noteArchivedApplier: ProjectionApplier<NotesDatabase> = async (db, op) => {
-  await db.updateTable('notes').set({ archived: 1 }).where('id', '=', op.entityId).execute();
+  await db
+    .updateTable('notes')
+    .set({ archived: 1 })
+    .where('id', '=', op.entityId)
+    // STORE-SAFETY — same rule and same reasoning as the body-edit applier above (task 157 leg 2).
+    // Archiving is TERMINAL (01 §9: there is no unarchive), so a cross-store archive was the more
+    // damaging of the two: it retired another branch's note irreversibly.
+    .where('storeId', '=', noteStoreId(op))
+    .execute();
 };
 
 /** Re-exported for the manifest's table map keyed by table name. */

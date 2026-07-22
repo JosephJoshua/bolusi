@@ -33,6 +33,7 @@ import {
   makeOplogTestDb,
   readOps,
   seedWorld,
+  testScopeOf,
   type OplogTestDb,
 } from './helpers.js';
 
@@ -102,6 +103,10 @@ function probeProjections(opts: { throwOn?: string } = {}): ProjectionRegistry<D
  *  and are INSERTed). The SAME module list feeds both registries in production; here both are
  *  built from the same constants, modelling that one-list property (CLAUDE.md §2.8). */
 const probeOpRegistry: OpRegistry = {
+  // Both types this probe knows are store-scoped (the `OperationDeclaration.scope` default), so
+  // their ops must carry a store — which the probe's ops do (05 §9.2).
+  scopeOf: testScopeOf((type) => type === GENESIS_TYPE || type === PROBE_TYPE),
+
   resolve(type) {
     if (type === GENESIS_TYPE) return { kind: 'known', validate: () => true };
     if (type === PROBE_TYPE) {
