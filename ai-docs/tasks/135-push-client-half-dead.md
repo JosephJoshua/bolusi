@@ -1,6 +1,6 @@
 # TASK 135 — the app never registers a push token and never routes a notification tap: `registerPushTokenOnAppStart` / `registerPushTokenOnEnrollment` / `resolvePushRoute` have no production importer
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH** — client half of the dead push vertical. What *does* ship is `createNotificationChannels` at every boot: channels with no notifications.
 **Depends on:** 134 (a server that never sends makes this untestable end-to-end), 119
 **Blocks:** —
