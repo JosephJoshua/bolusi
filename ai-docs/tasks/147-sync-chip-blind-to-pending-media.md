@@ -1,6 +1,6 @@
 # TASK 147 — a device with 3 photos queued reports "Semua Terkirim" (All Sent): `syncChipState` never reads `pendingMediaCount`, and task 126 propagated that blind spot into the screen's headline
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH (honesty surface)** — a falsehood in the *reassuring* direction, in the largest text on the one screen whose entire thesis is that a shop owner can believe it. FR/design-system treat sync status as the trust surface; this is the failure mode that costs trust rather than merely annoying.
 **Depends on:** 126, 15
 **Blocks:** —
