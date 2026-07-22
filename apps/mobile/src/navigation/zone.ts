@@ -32,10 +32,14 @@ export type ShellRoute = 'home' | 'syncStatus' | 'settings';
  * `assertNever` in the screen switch turns a new zone into a COMPILE error rather than a blank
  * screen. "No state maps to a blank screen" is this task's acceptance, and this is how it is bought
  * structurally rather than by remembering to test it.
+ *
+ * The switcher carries `origin`: the shell route it was opened FROM, so an abandoned voluntary switch
+ * returns THERE and not unconditionally home (task 143). Pre-session that origin is `home` (there is
+ * no shell behind it); reached from a live session it is wherever the avatar was tapped.
  */
 export type Zone =
   | { readonly kind: 'enrollment'; readonly revoked: boolean }
-  | { readonly kind: 'switcher'; readonly mode: SwitcherMode }
+  | { readonly kind: 'switcher'; readonly mode: SwitcherMode; readonly origin: ShellRoute }
   | { readonly kind: 'pin'; readonly userId: string; readonly mode: SwitcherMode }
   | { readonly kind: 'shell'; readonly route: ShellRoute };
 
@@ -48,6 +52,16 @@ export interface ZoneInput {
   readonly locked: boolean;
   /** The user tapped on the switcher, awaiting PIN. Null ⇒ the switcher itself. */
   readonly pinFor: string | null;
+  /**
+   * A session is open and the user asked for the switcher — the voluntary quick-switch (PRD-011 §6.1;
+   * api/02-auth §6.2/§6.3). This is the field task 124 could not add without redesigning the model:
+   * without it no input reachable from a live session produces the switcher zone, so `resolveZone`
+   * returned the shell for every session-open render and the avatar was a dead control (task 143). The
+   * op behind the switch is still emitted downstream, at the incoming user's PIN verify (§6.3) — this
+   * flag only reaches the roster; it never stands in for the op. Ignored when no session is open (the
+   * switcher is then reached by `session === null`) and while `pinFor` is set (the PIN pad wins).
+   */
+  readonly switching: boolean;
   /** Where the user navigated inside the shell. Ignored unless the shell zone is reached. */
   readonly route: ShellRoute;
 }
@@ -71,11 +85,16 @@ export function resolveZone(input: ZoneInput): Zone {
   if (input.session === null) {
     const mode: SwitcherMode = input.locked ? 'lock' : 'choose';
     if (input.pinFor !== null) return { kind: 'pin', userId: input.pinFor, mode };
-    return { kind: 'switcher', mode };
+    return { kind: 'switcher', mode, origin: input.route };
   }
 
-  // 3. A session is open, but the user may still be switching to someone else voluntarily.
+  // 3. A session is open, but the user may still be switching to someone else voluntarily (§6.2):
+  //    they tapped a face (→ the PIN pad) or asked for the switcher itself (→ the roster). The
+  //    switcher carries `input.route` as `origin`, so abandoning the switch returns to the surface
+  //    the avatar was tapped from rather than unconditionally home (task 143). The PIN pad wins over a
+  //    pending `switching` — a picked face is a later step than "open the switcher".
   if (input.pinFor !== null) return { kind: 'pin', userId: input.pinFor, mode: 'choose' };
+  if (input.switching) return { kind: 'switcher', mode: 'choose', origin: input.route };
 
   return { kind: 'shell', route: input.route };
 }
@@ -101,8 +120,10 @@ export function backTarget(zone: Zone): BackTarget | null {
       // the wizard's own state (see enrollment/model.ts), not the shell's.
       return null;
     case 'switcher':
-      // A voluntary switch can be abandoned; a LOCK cannot (§8.2).
-      return zone.mode === 'lock' ? null : { kind: 'shellRoute', route: 'home' };
+      // A voluntary switch can be abandoned; a LOCK cannot (§8.2). Abandoning returns to the surface
+      // the switch was opened FROM (`origin`) — pre-session that is `home`, from a live-session switch
+      // it is wherever the avatar was tapped (task 143), never unconditionally home.
+      return zone.mode === 'lock' ? null : { kind: 'shellRoute', route: zone.origin };
     case 'pin':
       // Back from the PIN pad returns to the user list in BOTH modes — picking the wrong face on a
       // shared terminal is the likely mistake, and it must not cost a lockout attempt.
