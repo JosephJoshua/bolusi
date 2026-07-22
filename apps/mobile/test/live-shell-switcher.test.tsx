@@ -223,6 +223,31 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
     expect(screen.query('notes.list.title')).toBeNull();
   });
 
+  test('ORIGIN DRIFT (task 145): the switcher sync chip does not move `origin` — back still lands home', async () => {
+    // The LOW folded in from the 143 review. On the live-session switcher the sync chip cannot reach
+    // Sync Status (the gate keeps showing the roster while `switching`), but a bare `setRoute` folded
+    // `syncStatus` into `origin`, so a later back landed on Sync Status instead of where the switch was
+    // opened. Repro the exact path: home → avatar → the switcher's sync chip → back.
+    const screen = await unlockedShell();
+
+    fireOn(screen, 'ui.avatarButton');
+    await settle();
+    expect(screen.query('switcher-screen')).not.toBeNull();
+
+    // Tap the switcher's own header sync chip — the drift trigger. It is inert here (still the roster).
+    fireOn(screen, 'ui.syncChip');
+    await settle();
+    expect(screen.query('switcher-screen')).not.toBeNull();
+
+    const consumed = await pressHardwareBack();
+
+    // Back lands on HOME — the origin the switch was opened from — NOT on Sync Status.
+    expect(consumed).toBe(true);
+    expect(screen.query('notes.list.title')).not.toBeNull();
+    expect(screen.query('sync-status-screen')).toBeNull();
+    expect(screen.query('switcher-screen')).toBeNull();
+  });
+
   test('POSITIVE CONTROL: the avatar entry point is absent before the unlock — no switch pre-session', async () => {
     // The arm that makes the reproduction mean something. Pre-session the switcher is ALREADY the
     // surface (`session === null`), so "switcher renders" is trivially true and cannot prove the fix.

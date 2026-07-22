@@ -12,10 +12,13 @@ import {
   NoteEditor,
   NotesList,
   NotesRuntimeProvider,
+  type DiscardGuard,
   type NotesRuntime,
 } from '@bolusi/modules/notes/screens';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+
+import type { SurfaceNav } from '../../navigation/surface.js';
 
 type NotesView =
   | { readonly kind: 'list' }
@@ -32,6 +35,14 @@ export interface NotesHomeProps {
   readonly avatar: ReactNode;
   /** A rejected chip / banner action → the shell's Sync Status screen (§8.4). */
   readonly onOpenSyncStatus: () => void;
+  /**
+   * Publish this surface's internal back/leave to the shell (design-system §8.1; task 145). Registered
+   * whenever the surface is off its list root (an editor or detail is open) so hardware back and
+   * header-chrome taps route through the module's own navigation — and the editor's discard gate —
+   * instead of exiting the app or unmounting a dirty draft; `null` at the list root. Optional so a
+   * direct mount (tests) is unaffected.
+   */
+  readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
 }
 
 export function NotesHome({
@@ -40,8 +51,49 @@ export function NotesHome({
   syncChip,
   avatar,
   onOpenSyncStatus,
+  onRegisterSurfaceNav,
 }: NotesHomeProps): React.JSX.Element {
   const [view, setView] = useState<NotesView>({ kind: 'list' });
+
+  /**
+   * The live editor's discard gate (task 145), set by `NoteEditor` while a create/edit form is mounted
+   * and cleared on unmount. Held in a ref because the shell reads it at the moment of a back/leave —
+   * long after any render — and a value change must not itself re-render this tree.
+   */
+  const discardGuardRef = useRef<DiscardGuard | null>(null);
+  const registerDiscardGuard = useCallback((guard: DiscardGuard | null): void => {
+    discardGuardRef.current = guard;
+  }, []);
+
+  // Register the surface's back/leave with the shell whenever it is off the list root. `handleBack`
+  // (hardware back) returns one step the way the header back does; `requestLeave` (a chrome tap)
+  // carries the shell's destination. Both run the editor's discard gate when a form is mounted (else
+  // there is no draft to guard and they leave at once), so §8.1's "back == header back" holds here too.
+  useEffect(() => {
+    if (view.kind === 'list') {
+      onRegisterSurfaceNav?.(null);
+      return;
+    }
+    // The step this surface returns to — identical to the editor's own `onCancel`/`onBack` target, so
+    // hardware back and header back land in the same place: create/detail → list, edit → its detail.
+    const backTo: () => void =
+      view.kind === 'edit'
+        ? () => setView({ kind: 'detail', noteId: view.noteId })
+        : () => setView({ kind: 'list' });
+    const runLeave = (proceed: () => void): void => {
+      const guard = discardGuardRef.current;
+      if (guard !== null) guard(proceed);
+      else proceed();
+    };
+    onRegisterSurfaceNav?.({
+      handleBack: () => {
+        runLeave(backTo);
+        return true;
+      },
+      requestLeave: runLeave,
+    });
+    return () => onRegisterSurfaceNav?.(null);
+  }, [view, onRegisterSurfaceNav]);
 
   return (
     <NotesRuntimeProvider runtime={runtime}>
@@ -63,6 +115,7 @@ export function NotesHome({
           avatar={avatar}
           onDone={() => setView({ kind: 'list' })}
           onCancel={() => setView({ kind: 'list' })}
+          onRegisterDiscardGuard={registerDiscardGuard}
         />
       ) : null}
 
@@ -74,6 +127,7 @@ export function NotesHome({
           avatar={avatar}
           onDone={() => setView({ kind: 'detail', noteId: view.noteId })}
           onCancel={() => setView({ kind: 'detail', noteId: view.noteId })}
+          onRegisterDiscardGuard={registerDiscardGuard}
         />
       ) : null}
 

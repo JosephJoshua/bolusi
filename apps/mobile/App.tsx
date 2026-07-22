@@ -18,11 +18,12 @@
  */
 import { AvatarButton, Chip, SyncChip, touch } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
+import type { SurfaceNav } from './src/navigation/surface.js';
 import { useHardwareBack } from './src/navigation/useHardwareBack.js';
 import {
   backTarget,
@@ -148,7 +149,47 @@ export default function App(props: AppProps): React.JSX.Element {
     route,
   });
 
+  /**
+   * The `home` module surface's own back/leave delegate (task 145). `NotesHome` owns a list→detail→
+   * editor stack the pure zone gate cannot see, so it publishes this while it is off its list root;
+   * the shell reads it at the moment of a back/leave. A ref, not state — a registration change must not
+   * re-render the shell, and `goBack`/`leaveHome` must see the LIVE value, not a captured one.
+   */
+  const surfaceNavRef = useRef<SurfaceNav | null>(null);
+  const registerSurfaceNav = useCallback((nav: SurfaceNav | null): void => {
+    surfaceNavRef.current = nav;
+  }, []);
+
+  /**
+   * Navigate away from the `home` surface toward `proceed`, but let the surface guard the leave first
+   * (task 145): a dirty editor raises its ConfirmSheet and proceeds only on confirm; anything else
+   * proceeds at once. Every header-chrome control on the notes surface goes through this, so a chip /
+   * avatar / sync-chip tap can no longer unmount a half-written draft with no confirm.
+   */
+  const leaveHome = useCallback((proceed: () => void): void => {
+    const nav = surfaceNavRef.current;
+    if (nav !== null) nav.requestLeave(proceed);
+    else proceed();
+  }, []);
+
+  /**
+   * The switcher/PIN sync chip's navigation, guarded against origin drift (task 145). During a
+   * live-session voluntary switch the gate keeps showing the switcher, so this chip cannot actually
+   * reach Sync Status — but a bare `setRoute('syncStatus')` would still fold into the switcher's
+   * `origin`, landing a later back on Sync Status instead of where the switch was opened (task 143's
+   * `origin: ShellRoute`). Ignore it while `switching`, so `origin` stays put.
+   */
+  const openSyncStatus = useCallback((): void => {
+    if (!switching) setRoute('syncStatus');
+  }, [switching]);
+
   const goBack = useCallback((): boolean => {
+    // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
+    // list→detail→editor). While it has somewhere to go back to, hardware back IS that surface's back
+    // — routed through the editor's discard gate — never an app exit (design-system §8.1; task 145).
+    if (zone.kind === 'shell' && zone.route === 'home' && surfaceNavRef.current !== null) {
+      return surfaceNavRef.current.handleBack();
+    }
     const target = backTarget(zone);
     if (target === null) return true; // Nothing behind this surface — consume, never exit past a lock.
     if (target.kind === 'switcher') {
@@ -254,7 +295,7 @@ export default function App(props: AppProps): React.JSX.Element {
             onEnroll={noop}
             onRetry={noop}
             syncChip={chip}
-            onOpenSync={() => setRoute('syncStatus')}
+            onOpenSync={openSyncStatus}
           />
         ),
         pin: (pinZone) => (
@@ -284,7 +325,7 @@ export default function App(props: AppProps): React.JSX.Element {
             }}
             onSwitchUser={() => setPinFor(null)}
             syncChip={chip}
-            onOpenSync={() => setRoute('syncStatus')}
+            onOpenSync={openSyncStatus}
           />
         ),
         shell: (shellZone) => {
@@ -327,7 +368,9 @@ export default function App(props: AppProps): React.JSX.Element {
             <NotesHome
               runtime={props.notes}
               now={props.now}
-              onOpenSyncStatus={() => setRoute('syncStatus')}
+              // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
+              onRegisterSurfaceNav={registerSurfaceNav}
+              onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
               syncChip={
                 <SyncChip
                   state={chip}
@@ -338,7 +381,7 @@ export default function App(props: AppProps): React.JSX.Element {
                         ? t('core.status.empty')
                         : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
                   })}
-                  onPress={() => setRoute('syncStatus')}
+                  onPress={() => leaveHome(() => setRoute('syncStatus'))}
                 />
               }
               avatar={
@@ -370,18 +413,21 @@ export default function App(props: AppProps): React.JSX.Element {
                   // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
                   // users this product is for) and pads its 28 dp body to the §1.4 48 dp floor. It
                   // rides the header-right group beside the avatar, in reach of the same thumb (§0).
+                  // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
+                  // outright, taking an open editor's title/body/mediaRef with it and showing no
+                  // confirm — the §8.1 discard gate the editor's own header back has always run.
                   <View style={styles.headerChrome}>
                     <Chip
                       label={t('core.settings.language')}
                       icon="language"
-                      onPress={() => setRoute('settings')}
+                      onPress={() => leaveHome(() => setRoute('settings'))}
                       testID="shell-open-settings"
                     />
                     <AvatarButton
                       userId={currentUser.id}
                       initials={currentUser.initials}
                       accessibilityLabel={t('auth.switcher.title')}
-                      onPress={() => setSwitching(true)}
+                      onPress={() => leaveHome(() => setSwitching(true))}
                     />
                   </View>
                 )
