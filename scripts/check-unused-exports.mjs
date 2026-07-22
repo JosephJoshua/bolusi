@@ -68,6 +68,15 @@
 // `src/**/scripts/` or `src/**/*.config.*` files exist, so no other rule reaches under `src/`
 // today — and if one ever does, it fails LOUD rather than swallowing.
 //
+// TASK 149 — THE CHECK OF THAT INVARIANT NOW TESTS THE CLASS, NOT TWO INSTANCES. Until 149,
+// assertPartitionInvariant() pinned only migrations-dir and scripts-dir under `src/`, so
+// SRC_EXCLUDABLE_RULES could be widened with a rule the cases never exercised (`test-dir`) and a
+// dead file under `src/**/test/` went silently excluded (+0 / EXIT=0) while the invariant stayed
+// green — and its `cases` table could be emptied to [] for a vacuous pass. The check now (a) pins
+// SRC_EXCLUDABLE_RULES to SRC_EXCUSABLE_BY_INTENT EXACTLY, (b) derives one enforced-under-`src/`
+// probe PER non-excludable rule from NON_PRODUCTION_RULES itself, so a newly-added rule is covered
+// with no edit to the assertion, and (c) floors the `cases` table. See assertPartitionInvariant().
+//
 // Lanes. THIS GATE runs exactly one knip process: `--production --include exports,files` (see
 // KNIP_ARGS — the literal argv, not a paraphrase). Verified on knip 6.27.0: adding `files` to
 // `--include` leaves the export finding set byte-identical to `--include exports`, so the export
@@ -143,11 +152,37 @@ const NON_PRODUCTION_RULES = [
 const SRC_PATH = /(^|\/)src\//;
 const SRC_EXCLUDABLE_RULES = new Set(['test-file', 'type-test-file']);
 
+// The guard's INDEPENDENT statement of which rules SRC_EXCLUDABLE_RULES is ALLOWED to hold: exactly
+// the two literal test-FILENAME rules above, nothing else. classify() consults SRC_EXCLUDABLE_RULES;
+// assertPartitionInvariant() pins that Set to this list AND, rule by rule, proves classify()
+// ENFORCES every OTHER rule under src/. The two are kept as separate statements ON PURPOSE — a
+// widening of SRC_EXCLUDABLE_RULES (task 149's Gap B: add 'test-dir', silently excuse a dead file
+// under src/**/test/) diverges from this and throws BEFORE knip runs. Adding a legitimately new
+// test-filename rule is a deliberate two-place edit here and above; nothing else may land in either.
+const SRC_EXCUSABLE_BY_INTENT = ['test-file', 'type-test-file'];
+
 function classify(file) {
   const rule = NON_PRODUCTION_RULES.find((r) => r.re.test(file));
   if (rule === undefined) return null;
   if (SRC_PATH.test(file) && !SRC_EXCLUDABLE_RULES.has(rule.name)) return null;
   return rule.name;
+}
+
+// Synthesize `src/` paths that MATCH a rule's regex, derived from the literal word tokens in the
+// regex source (a directory name like `scripts`, a filename infix like `config`). Used by the class
+// check to prove classify() ENFORCES (returns null for) every non-excludable rule under a package's
+// src/. SELF-VERIFYING and fail-CLOSED: only a candidate that ACTUALLY matches `re` (and lies under
+// src/) is returned, so a bad token is dropped silently but a rule that yields NO matching candidate
+// returns [] — which the caller turns into a LOUD failure, never a silent skip (§2.11 / T-13). This
+// is what lets a NEWLY-ADDED rule be covered with no edit to the assertion: the loop reads the rule
+// list, and the synthesizer reads the new rule's own regex.
+function synthSrcProbes(re) {
+  const tokens = re.source.match(/[A-Za-z0-9_]+/g) ?? [];
+  const candidates = [];
+  for (const t of tokens) {
+    candidates.push(`pkg/src/${t}/probe.ts`, `pkg/src/probe.${t}.ts`, `pkg/src/probe.${t}.js`);
+  }
+  return candidates.filter((p) => SRC_PATH.test(p) && re.test(p));
 }
 
 // The `src/` invariant is INERT in a clean tree: today no rule reaches under `src/`, so removing
@@ -158,6 +193,13 @@ function classify(file) {
 // these are assertions about classify() as a FUNCTION, independent of what is on disk, so they
 // keep working even if the files named here are legitimately deleted one day.
 function assertPartitionInvariant() {
+  const problems = [];
+
+  // Representative behavioural cases for classify(): the "excused src/ path" direction (a literal
+  // test filename IS still excused; a directory rule under src/ is NOT) and the outside-src/
+  // direction (directory rules still apply there). These pin INSTANCES; the CLASS check below
+  // generalises them. Kept because they also assert the invariant did not collapse into "enforce
+  // everything under src/", which the class check alone would not notice.
   const cases = [
     // The exact regression the task 137 review found: a live migration on a static import chain
     // (`db-client/src/index.ts:37` → `runner.ts` → `001`) that `migrations-dir` used to swallow.
@@ -172,18 +214,82 @@ function assertPartitionInvariant() {
     // Outside `src/`, directory rules still apply (server migrations ARE dynamically loaded).
     ['packages/db-server/migrations/0001_roles.ts', 'migrations-dir'],
   ];
-  const broken = cases.filter(([file, want]) => classify(file) !== want);
-  if (!SRC_PATH.test(FILE_CANARY)) {
-    broken.push([`SRC_PATH does not match the canary's own path (${FILE_CANARY})`, 'src-detector']);
+  // Gap A — DENOMINATOR FLOOR (task 149; §2.11 / T-14). `cases` is a literal in this function, so it
+  // cannot silently shrink as the tree changes — but emptying it to [] makes the loop below check
+  // ZERO properties and report green, the exact archetype §2.11 names ("looped over a parse that
+  // would check zero properties and report green"). Refuse to run on a gutted table.
+  if (cases.length < 5) {
+    problems.push(
+      `denominator floor: the classify() case table has ${cases.length} entries (< 5) — refusing a ` +
+        `vacuous pass (§2.11 / T-14). Restore the representative cases.`,
+    );
   }
-  if (broken.length > 0) {
+  for (const [file, want] of cases) {
+    if (classify(file) !== want) {
+      problems.push(`${file} → expected ${want}, got ${classify(file)}`);
+    }
+  }
+  if (!SRC_PATH.test(FILE_CANARY)) {
+    problems.push(`SRC_PATH does not match the canary's own path (${FILE_CANARY})`);
+  }
+
+  // Gap B — the CLASS check (task 149; §2.11 / T-11/T-12). The cases above pin two INSTANCES
+  // (migrations-dir, scripts-dir under src/); classify() can still be made wrong for a THIRD rule by
+  // widening SRC_EXCLUDABLE_RULES past those instances — the task-149 demonstration added 'test-dir'
+  // and a dead file under src/**/test/ went silently excluded, +0 / EXIT=0. So check the CLASS,
+  // derived from the rule list so it cannot drift as rules are added:
+  //   (a) SRC_EXCLUDABLE_RULES must be EXACTLY the by-intent set — nothing else may excuse src/;
+  //   (b) every rule NOT excusable by intent must be ENFORCED (classify === null) for a synthesized
+  //       src/ path matching it — which covers a NEWLY-ADDED rule with no edit here (the loop reads
+  //       NON_PRODUCTION_RULES, the synthesizer reads the new rule's own regex). That, not a third
+  //       hard-coded instance, is what makes this a class check.
+  const excludable = [...SRC_EXCLUDABLE_RULES].sort();
+  const intent = [...SRC_EXCUSABLE_BY_INTENT].sort();
+  if (excludable.length !== intent.length || excludable.some((name, i) => name !== intent[i])) {
+    problems.push(
+      `SRC_EXCLUDABLE_RULES is {${excludable.join(', ')}} but only {${intent.join(', ')}} may excuse ` +
+        `production source under a package's src/ — a directory/config rule never may (task 149). Do ` +
+        `NOT widen this Set; enforce the path or narrow the offending rule's regex instead.`,
+    );
+  }
+  let probed = 0;
+  for (const r of NON_PRODUCTION_RULES) {
+    if (SRC_EXCUSABLE_BY_INTENT.includes(r.name)) continue;
+    const probes = synthSrcProbes(r.re);
+    if (probes.length === 0) {
+      problems.push(
+        `class check could not synthesize an src/ path matching non-excludable rule '${r.name}' — it ` +
+          `cannot prove classify() enforces that rule under src/ (extend synthSrcProbes). Refusing to ` +
+          `skip it silently (§2.11 / T-13).`,
+      );
+      continue;
+    }
+    for (const probe of probes) {
+      probed += 1;
+      const got = classify(probe);
+      if (got !== null) {
+        problems.push(
+          `${probe} lies under src/ and matches non-excludable rule '${r.name}', so classify() must ` +
+            `ENFORCE it (return null) — it returned '${got}'. SRC_EXCLUDABLE_RULES has been widened ` +
+            `past the src/ invariant (task 149; §2.11).`,
+        );
+      }
+    }
+  }
+  if (probed === 0) {
+    problems.push(
+      `class check evaluated ZERO src/ probes — NON_PRODUCTION_RULES or the excludable set is ` +
+        `degenerate and the loop is checking nothing (§2.11 / T-13).`,
+    );
+  }
+
+  if (problems.length > 0) {
     throw new Error(
-      `check-unused-exports: the \`src/\` partition invariant is broken — production source under ` +
-        `a package's \`src/\` can now be excused by a directory rule (task 137 review; §2.11). ` +
-        `This is checked here BECAUSE the invariant is otherwise inert and would fail silently:\n` +
-        broken
-          .map(([file, want]) => `    ${file} → expected ${want}, got ${classify(file)}`)
-          .join('\n'),
+      `check-unused-exports: the \`src/\` partition invariant is broken — production source under a ` +
+        `package's \`src/\` can now be excused by a non-test-filename rule (task 137 review + task ` +
+        `149; §2.11). This is checked here BECAUSE the invariant is otherwise inert and would fail ` +
+        `silently:\n` +
+        problems.map((p) => `    ${p}`).join('\n'),
     );
   }
 }
