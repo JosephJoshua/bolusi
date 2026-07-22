@@ -47,8 +47,26 @@
 // route to a muted gate. So findings are partitioned by NON_PRODUCTION_RULES below and only the
 // production remainder is enforced. The partition is fail-CLOSED: a path is excluded only if it
 // matches a named rule, so an unanticipated file class is ENFORCED (loud), never dropped (silent).
-// Both directions of a broken partition are fatal: swallowing production paths takes the file
-// canary with it (rule 1 below), and swallowing nothing floods the additions check.
+//
+// THE `src/` INVARIANT (the review of task 137 found the hole this closes). Rule names alone are
+// not enough: a rule can be WIDENED without adding one, and a narrow widening trips nothing —
+// `nonProductionRules` stays byte-identical and a handful of vanished findings stays under the
+// MASS DISAPPEARANCE limit. That was not hypothetical. `migrations-dir` (`/(^|\/)migrations\//`)
+// was written for `packages/db-server/migrations/**`, which Kysely loads dynamically by filename,
+// and it also swallowed `packages/db-client/src/migrations/**` — four LIVE files on a plain static
+// import chain (`db-client/src/index.ts:37` → `migrations/runner.ts:3-4` → `001`/`002`). The
+// realistic bug it hid: an author adds `003-*.ts`, forgets to register it in `CLIENT_MIGRATIONS`,
+// so it never runs on device — and this gate reported `no new unused production files` / EXIT=0.
+//
+// So the exclusion is now bounded BY CONSTRUCTION rather than by care: a path under a package's
+// `src/` may be excluded ONLY by a literal test-filename rule (SRC_EXCLUDABLE_RULES). Anything
+// else under `src/` is production source and is ENFORCED no matter which rule matched. This makes
+// the whole "a rule quietly grew" class unreachable for production source, which is the only place
+// it mattered. Measured over all 829 tracked JS/TS files: 424 match some rule, and of the 108
+// under `src/`, 104 are literal test files and the 4 remainders are exactly the db-client
+// migrations above. Zero `src/**/{test,tests,__tests__,e2e-web}/` directories and zero
+// `src/**/scripts/` or `src/**/*.config.*` files exist, so no other rule reaches under `src/`
+// today — and if one ever does, it fails LOUD rather than swallowing.
 //
 // Lanes. THIS GATE runs exactly one knip process: `--production --include exports,files` (see
 // KNIP_ARGS — the literal argv, not a paraphrase). Verified on knip 6.27.0: adding `files` to
@@ -89,6 +107,20 @@ const KNIP_ARGS = [
 // stand in for the file half (an entry is never an unused file). FILE_CANARY is the opposite: not
 // an entry, imported by nothing, so it must always be reported as an unused file. Two halves, two
 // denominators; neither one covers the other.
+//
+// WHAT FILE_CANARY ACTUALLY COVERS — stated exactly, because the first version of this header
+// over-claimed and the review caught it (§2.11: the comment was the guard). A canary is one file
+// at one path. It detects failures that make the sweep miss EVERYTHING, or that specifically hit
+// `packages/test-support/src/`: knip reporting nothing, `files` dropped from --include, the
+// read-site or JSON shape drifting, the entry/project globs collapsing, or an exclusion rule
+// widened far enough to cover the canary's own directory.
+//
+// It does NOT detect an exclusion widened over some OTHER directory. The earlier header claimed
+// "the partition swallowing `src/` paths takes the canary with it"; that was false, and the
+// review demonstrated it — `migrations-dir` swallowed four live `db-client/src/migrations/**`
+// files with this canary PRESENT and the gate GREEN. That class is closed by the `src/`
+// invariant in classify() — by construction, not by this canary and not by a promise to be
+// careful. Keep the two mechanisms distinct when reading a green run.
 const EXPORT_CANARY = 'packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY';
 const FILE_CANARY = 'packages/test-support/src/knip-file-canary.ts';
 
@@ -104,8 +136,56 @@ const NON_PRODUCTION_RULES = [
   { name: 'migrations-dir', re: /(^|\/)migrations\// },
 ];
 
+// Anything under a package's `src/` is production source. Only a rule that identifies a file by
+// its own TEST FILENAME may excuse it; a rule that matches on a DIRECTORY may not, because a
+// directory name under `src/` ("migrations", "scripts", "test") describes where production code
+// is organised, not whether it ships. See THE `src/` INVARIANT in the header.
+const SRC_PATH = /(^|\/)src\//;
+const SRC_EXCLUDABLE_RULES = new Set(['test-file', 'type-test-file']);
+
 function classify(file) {
-  return NON_PRODUCTION_RULES.find((rule) => rule.re.test(file))?.name ?? null;
+  const rule = NON_PRODUCTION_RULES.find((r) => r.re.test(file));
+  if (rule === undefined) return null;
+  if (SRC_PATH.test(file) && !SRC_EXCLUDABLE_RULES.has(rule.name)) return null;
+  return rule.name;
+}
+
+// The `src/` invariant is INERT in a clean tree: today no rule reaches under `src/`, so removing
+// it changes nothing observable and every count stays identical. That is precisely the §2.11
+// failure shape — a guard that only matters on the day it is needed can be deleted, mangled or
+// regex-typo'd months earlier and stay green the whole time. Nothing in the gate's numbers would
+// notice. So the invariant is checked directly, on every run, against the case that motivated it:
+// these are assertions about classify() as a FUNCTION, independent of what is on disk, so they
+// keep working even if the files named here are legitimately deleted one day.
+function assertPartitionInvariant() {
+  const cases = [
+    // The exact regression the task 137 review found: a live migration on a static import chain
+    // (`db-client/src/index.ts:37` → `runner.ts` → `001`) that `migrations-dir` used to swallow.
+    ['packages/db-client/src/migrations/001-initial-schema.ts', null],
+    // Same shape, the probe that proved it: an unregistered `003` must be ENFORCED, not excused.
+    ['packages/db-client/src/migrations/003-anything.ts', null],
+    // A directory rule under `src/` may never excuse production source, whichever rule it is.
+    ['apps/mobile/src/scripts/whatever.ts', null],
+    // ...but a literal test filename under `src/` still is excused — the invariant must not have
+    // collapsed into "enforce everything", which would flood the additions check instead.
+    ['apps/mobile/src/media/capture.test.ts', 'test-file'],
+    // Outside `src/`, directory rules still apply (server migrations ARE dynamically loaded).
+    ['packages/db-server/migrations/0001_roles.ts', 'migrations-dir'],
+  ];
+  const broken = cases.filter(([file, want]) => classify(file) !== want);
+  if (!SRC_PATH.test(FILE_CANARY)) {
+    broken.push([`SRC_PATH does not match the canary's own path (${FILE_CANARY})`, 'src-detector']);
+  }
+  if (broken.length > 0) {
+    throw new Error(
+      `check-unused-exports: the \`src/\` partition invariant is broken — production source under ` +
+        `a package's \`src/\` can now be excused by a directory rule (task 137 review; §2.11). ` +
+        `This is checked here BECAUSE the invariant is otherwise inert and would fail silently:\n` +
+        broken
+          .map(([file, want]) => `    ${file} → expected ${want}, got ${classify(file)}`)
+          .join('\n'),
+    );
+  }
 }
 
 /**
@@ -197,9 +277,11 @@ function writeBaseline(current) {
     fileCanary: FILE_CANARY,
     denominator: current.exports.length,
     fileDenominator: current.files.length,
-    // The rule NAMES are recorded here as well as in code so a silent widening of the exclusion
-    // set is a two-place reviewable diff (§2.11: the partition is fail-closed and must stay
-    // auditable). The excluded COUNT is deliberately NOT recorded: it is build-state dependent
+    // The rule NAMES are recorded here as well as in code so a rule ADDITION is a two-place
+    // reviewable diff. They do nothing about a rule WIDENING — editing `test-dir` to `…|src)\//`
+    // leaves this array byte-identical — which is why widening is contained by the `src/`
+    // invariant in classify() instead of by this record. The excluded COUNT is deliberately NOT
+    // recorded: it is build-state dependent
     // (unbuilt 158 vs post-`tsc -b` 84, because a resolvable `apps/server/vitest.config.ts` makes
     // that workspace's tests reachable), so freezing it would be a stable-looking number with an
     // unstable provenance. The enforced set is build-state INDEPENDENT — verified: 39 findings,
@@ -231,6 +313,8 @@ function diff(current, baseline) {
 }
 
 const update = process.argv.includes('--update');
+// Before knip is even spawned — a broken partition must not be able to write a baseline either.
+assertPartitionInvariant();
 const current = runKnip();
 
 if (update) {
@@ -256,9 +340,11 @@ if (!files.currentSet.has(FILE_CANARY)) {
     `POSITIVE CONTROL MISSING (file half): knip did not report the unused-file canary ` +
       `(${FILE_CANARY}) in the enforced production set. The file sweep is blind — \`files\` was ` +
       `dropped from --include, \`issue.files\` is no longer read or changed shape, the entry/` +
-      `project globs broke, or the non-production partition is swallowing \`src/\` paths. A file ` +
-      `sweep that cannot see its own canary reports a confident zero (§2.11, task 137). This is ` +
-      `NOT a pass — fix the sweep, never the canary.`,
+      `project globs broke, or an exclusion rule was widened over \`packages/test-support/src/\`. ` +
+      `A file sweep that cannot see its own canary reports a confident zero (§2.11, task 137). ` +
+      `NOTE: this canary does NOT cover a rule widened over some OTHER directory — that class is ` +
+      `closed by the \`src/\` invariant in classify(), not here. This is NOT a pass — fix the ` +
+      `sweep, never the canary.`,
   );
 }
 if (exp.additions.length > 0) {

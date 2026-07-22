@@ -10,13 +10,19 @@
 // So this file is the file half's denominator. It is deliberately NOT registered as an entry in
 // knip.json, and NOTHING imports it, so `knip --production --include files` MUST report it as an
 // unused file on every run. `scripts/check-unused-exports.mjs` asserts it appears in the ENFORCED
-// partition of the file findings and FAILS LOUDLY if it does not. Every way the file sweep can go
-// blind takes this file out first:
+// partition of the file findings and FAILS LOUDLY if it does not. What that catches:
 //
 //   - `--include files` dropped from KNIP_ARGS, or `issue.files` stopped being read  → gone.
 //   - knip's JSON shape changes (`files: [{ name }]`)                                → gone.
 //   - entry/project globs break so knip scans a fraction of the tree                 → gone.
-//   - the production/non-production partition starts swallowing `src/` paths         → gone.
+//   - an exclusion rule widened over THIS file's directory                           → gone.
+//
+// And what it does NOT catch, stated because the first version of this comment claimed otherwise
+// and the review of task 137 disproved it: an exclusion rule widened over some OTHER directory.
+// `migrations-dir` swallowed four live `packages/db-client/src/migrations/**` files while this
+// canary sat here present and green. A canary is one file at one path; it cannot speak for paths
+// it does not occupy. That class is closed by the `src/` invariant in classify() — by
+// construction — not by this file. Do not read a present canary as "the partition is sound".
 //
 // DO NOT import this symbol, reference it from a test, delete it, or "clean it up". This file is
 // unreachable BY DESIGN. If knip stops reporting it, the sweep is broken — fix the sweep, not

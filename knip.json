@@ -7,6 +7,9 @@
     "apps/server": {
       "entry": ["src/index.ts!", "src/client.ts!", "src/main.ts!", "src/cli/*.ts!"]
     },
+    "packages/modules": {
+      "entry": ["src/index.ts!", "src/notes/index.ts!", "src/notes/screens/index.ts!"]
+    },
     "packages/test-support": {
       "entry": ["src/index.ts!", "src/knip-canary.ts!"]
     }
