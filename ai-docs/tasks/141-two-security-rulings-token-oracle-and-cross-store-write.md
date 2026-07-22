@@ -27,3 +27,13 @@ HTTP-E: a store-1 device's op scoped to store 2 is **accepted** and pokes store 
 
 ## Deliverable
 A dated entry in `ai-docs/decisions/` recording both rulings, plus whatever doc or code change each ruling implies. **Do not silently pick the convenient answer** — if the ruling is "as-is", the deliverable is the written rationale, because an undocumented exception is what made both of these findable.
+
+
+---
+
+## OWNER RULINGS 2026-07-22 (D22)
+
+- **Question 1 (push-token oracle): DOCUMENT AS AN ALLOWED §2.2 EXCEPTION.** Keep task 118's 403 fail-closed behaviour; amend `security-guide §2.2` to enumerate BOTH the media-id probe AND the push-token registration as allowed v0 existence exceptions, each with the ~88-bit-entropy rationale (confirms a token you already hold, never enumerates), and correct the "only v0 exception" wording. Reconcile any gate/test that treats the push-token 403 as a §2.2 violation to the documented decision. **This half stays on task 141 (141a).** It is a doc/spec change (CLAUDE.md §4) — implement + light review.
+- **Question 2 (cross-store writes): ADD A DEVICE→STORE SCOPE RULE.** Spun out to **task 157** (a permission-matrix change, §6, with adversarial tests). This task no longer owns the cross-store question.
+
+**Remaining scope of 141 = 141a only** (document the token-oracle exception). Close 141 when the §2.2 amendment lands and its guard is reconciled.

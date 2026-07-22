@@ -106,3 +106,18 @@ Mechanism if option 3 is chosen: `expo-build-properties` (already installed, 57.
 
 ### 5. Sibling finding — see task 151
 The same investigation found **SQLCipher is silently OFF on iOS** (`[OP-SQLITE] using pure SQLite`), because the podspec's config discovery walks to the pnpm repo root and misses the block at `apps/mobile/package.json:14`. That is why the iOS lane is green: it is not evidence the iOS collision is resolved, it is evidence op-sqlite never links OpenSSL there. **Expect this same collision on iOS the moment 151 is fixed.**
+
+
+---
+
+## OWNER RULING 2026-07-22 (D22): DROP SQLCipher, RE-HOME AT-REST ENCRYPTION — design first.
+
+The owner chose the correct-by-construction option (not `pickFirst`): remove `sqlcipher: true` from op-sqlite and protect the local SQLite at rest by a mechanism that does not vendor a second OpenSSL. **This is an architecture change to a security control, so it does NOT authorize blind implementation.**
+
+**Next step = a DESIGN pass (owner-reviewed before code):** produce the concrete re-homing mechanism and its threat-model implications —
+- what encrypts the SQLite file at rest once SQLCipher is gone (candidates to evaluate: an app-layer key from `expo-secure-store`/Keystore feeding a supported SQLite encryption that reuses quick-crypto's OpenSSL; expo-sqlite's own encryption; or a page-level scheme — establish which are real on Expo SDK 57 + RN 0.86, verified via Context7, not memory);
+- where the key lives and how it compares to SQLCipher 4.14's guarantees (what is gained/lost);
+- what `10-db-schema` §11 / `security-guide` §7 / `api/02-auth` must change;
+- and whether removing SQLCipher also resolves task 151 (iOS SQLCipher-off) or changes its shape.
+
+Bring that mechanism back for the owner before writing code. Only then: implement, with adversarial at-rest tests (wrong key fails; on-disk bytes are not plaintext-SQLite-readable) and the SEC-AUTH-09 leg it feeds. 27a/27b/28/117 stay blocked until the APK builds AND the new at-rest control is proven on the emulator.
