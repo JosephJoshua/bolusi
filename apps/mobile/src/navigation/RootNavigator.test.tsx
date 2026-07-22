@@ -37,8 +37,12 @@ describe('every zone renders — no state maps to a blank screen', () => {
   test.each<[string, Zone, string]>([
     ['unenrolled', { kind: 'enrollment', revoked: false }, 'enrollment:false'],
     ['revoked', { kind: 'enrollment', revoked: true }, 'enrollment:true'],
-    ['lock switcher', { kind: 'switcher', mode: 'lock' }, 'switcher:lock'],
-    ['voluntary switcher', { kind: 'switcher', mode: 'choose' }, 'switcher:choose'],
+    ['lock switcher', { kind: 'switcher', mode: 'lock', origin: 'home' }, 'switcher:lock'],
+    [
+      'voluntary switcher',
+      { kind: 'switcher', mode: 'choose', origin: 'settings' },
+      'switcher:choose',
+    ],
     ['pin', { kind: 'pin', userId: 'u-1', mode: 'lock' }, 'pin:u-1'],
     ['shell home', { kind: 'shell', route: 'home' }, 'shell:home'],
     ['shell sync', { kind: 'shell', route: 'syncStatus' }, 'shell:syncStatus'],
@@ -62,14 +66,15 @@ describe('every zone renders — no state maps to a blank screen', () => {
       for (const session of [null, { userId: 'user-a' }])
         for (const locked of [true, false])
           for (const pinFor of [null, 'user-b'])
-            for (const route of routes) {
-              const zone = resolveZone({ device, session, locked, pinFor, route });
-              expect(renderZone(zone, renderers(seen))).toBeDefined();
-              count += 1;
-            }
+            for (const switching of [true, false])
+              for (const route of routes) {
+                const zone = resolveZone({ device, session, locked, pinFor, switching, route });
+                expect(renderZone(zone, renderers(seen))).toBeDefined();
+                count += 1;
+              }
 
     // The sweep's own denominator (T-14): a zero-iteration loop would otherwise report green.
-    expect(count).toBe(devices.length * 2 * 2 * 2 * routes.length);
+    expect(count).toBe(devices.length * 2 * 2 * 2 * 2 * routes.length);
     expect(seen).toHaveLength(count);
     // And every arm was genuinely exercised — not just the easy ones.
     expect(new Set(seen.map((entry) => entry.split(':')[0])).size).toBe(4);

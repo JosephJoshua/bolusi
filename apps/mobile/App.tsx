@@ -115,6 +115,13 @@ export interface AppProps {
 export default function App(props: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<ShellRoute>('home');
   const [pinFor, setPinFor] = useState<string | null>(null);
+  /**
+   * The user asked to open the switcher while a session is open — the voluntary quick-switch
+   * (task 143; api/02-auth §6.2). `resolveZone` turns this into the switcher zone only when a session
+   * is live; it is cleared the moment the switch lands on a shell surface (abandoned back, or a
+   * completed switch), so a stale intent can never re-open the roster over the incoming user's shell.
+   */
+  const [switching, setSwitching] = useState(false);
   const [enrollment, setEnrollment] = useState<EnrollmentState>(() =>
     initialEnrollmentState(props.device === 'revoked'),
   );
@@ -137,6 +144,7 @@ export default function App(props: AppProps): React.JSX.Element {
     session: props.session,
     locked: props.locked,
     pinFor,
+    switching,
     route,
   });
 
@@ -144,11 +152,17 @@ export default function App(props: AppProps): React.JSX.Element {
     const target = backTarget(zone);
     if (target === null) return true; // Nothing behind this surface — consume, never exit past a lock.
     if (target.kind === 'switcher') {
+      // Back from the PIN pad to the roster — a mis-tapped face costs no attempt (§8.2). The switch is
+      // still in progress, so `switching` STAYS set: clearing it here would drop straight to the shell.
       setPinFor(null);
       return true;
     }
     if (target.kind === 'shellRoute') {
+      // Landing on a shell surface ends any voluntary switch (task 143): the abandoned switcher returns
+      // to its `origin`, a shell sub-route returns home. `setSwitching(false)` is a no-op off the
+      // switcher and the load-bearing clear on it — without it `resolveZone` would re-open the roster.
       setPinFor(null);
+      setSwitching(false);
       setRoute(target.route);
       return true;
     }
@@ -258,7 +272,13 @@ export default function App(props: AppProps): React.JSX.Element {
               const submitted = props.onSubmitPin(pinZone.userId, pin);
               if (submitted !== undefined) {
                 void submitted.then((opened) => {
-                  if (opened) setPinFor(null);
+                  if (opened) {
+                    // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
+                    // the pending target AND the switch intent, so the gate lands on the incoming
+                    // user's shell rather than re-rendering the roster over their session (task 143).
+                    setPinFor(null);
+                    setSwitching(false);
+                  }
                 });
               }
             }}
@@ -277,7 +297,7 @@ export default function App(props: AppProps): React.JSX.Element {
                 onSyncNow={props.onSyncNow}
                 onOpenRejected={noop}
                 onRetryMedia={noop}
-                onOpenSwitcher={() => setPinFor(null)}
+                onOpenSwitcher={() => setSwitching(true)}
               />
             );
           }
@@ -292,7 +312,7 @@ export default function App(props: AppProps): React.JSX.Element {
                 device={props.deviceInfo}
                 currentUser={currentUser}
                 onBack={() => setRoute('home')}
-                onOpenSwitcher={() => setRoute('home')}
+                onOpenSwitcher={() => setSwitching(true)}
                 syncChip={chip}
                 onOpenSync={() => setRoute('syncStatus')}
               />
@@ -325,21 +345,31 @@ export default function App(props: AppProps): React.JSX.Element {
                 currentUser === null ? (
                   <View testID="notes-no-avatar" />
                 ) : (
-                  // THE HEADER CHROME (§8.1) — and the ONLY producer of `route: 'settings'`.
+                  // THE HEADER CHROME (§8.1): the language Chip (the ONLY producer of `route:
+                  // 'settings'`) and the avatar (the producer of the User Switcher).
                   //
-                  // The Settings screen holds the language toggle, the notification deep-links and
-                  // the device-identity readout, and until this node existed nothing in shipping
-                  // source ever called `setRoute('settings')`: the render arm below was live,
-                  // typed and tested, and no user could open it (CLAUDE.md §2.11's "sound tests,
-                  // zero callers"). On an Indonesian-first product the language rows are the ONLY
-                  // way out of a wrong locale (07-i18n §1.2), so the entry point cannot be behind
-                  // the avatar → User Switcher hop that §8.1 describes: `resolveZone` returns the
-                  // shell for every session-open render, so nothing reaches the switcher from here.
+                  // WHY THE LANGUAGE CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
+                  // toggle, the notification deep-links and the device-identity readout, and until
+                  // task 124 added this node nothing in shipping source ever called
+                  // `setRoute('settings')` — the render arm below was live, typed and tested, and no
+                  // user could open it (CLAUDE.md §2.11's "sound tests, zero callers"). On an
+                  // Indonesian-first product the language rows are the ONLY way out of a wrong locale
+                  // (07-i18n §1.2), so the entry point cannot be folded behind the avatar: the avatar
+                  // opens the User Switcher (a roster of faces), not Settings, so Settings needs its
+                  // own direct control regardless of whether the switcher is reachable.
                   //
-                  // A `Chip` rather than a bespoke control: §3.5 gives it the icon+label pair §0
-                  // requires ("no icons without labels" — a bare cog is unreadable to the users
-                  // this product is for) and pads its 28 dp body to the §1.4 48 dp floor. It rides
-                  // the header-right group beside the avatar, in reach of the same thumb (§0).
+                  // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
+                  // control before: `resolveZone` returned the shell for every session-open render
+                  // (`session !== null && pinFor === null`), and the only writer was `setPinFor(null)`
+                  // — a no-op in that state — so tapping the avatar left the notes list exactly where
+                  // it was. `setSwitching(true)` is the input the model was missing: it produces the
+                  // switcher zone from a live session, and `backTarget` returns to `home` (this
+                  // surface's route) when the switch is abandoned.
+                  //
+                  // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
+                  // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
+                  // users this product is for) and pads its 28 dp body to the §1.4 48 dp floor. It
+                  // rides the header-right group beside the avatar, in reach of the same thumb (§0).
                   <View style={styles.headerChrome}>
                     <Chip
                       label={t('core.settings.language')}
@@ -351,7 +381,7 @@ export default function App(props: AppProps): React.JSX.Element {
                       userId={currentUser.id}
                       initials={currentUser.initials}
                       accessibilityLabel={t('auth.switcher.title')}
-                      onPress={() => setPinFor(null)}
+                      onPress={() => setSwitching(true)}
                     />
                   </View>
                 )
