@@ -1,6 +1,6 @@
 # TASK 128 — the note BODY is a single-line input that clips: the shared `TextInput` never sets `multiline`
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH — the reference module's core content is unusable.** On a 360dp phone the body shows ~35 characters at a time with no wrap and no scroll affordance. This is not an RNW artifact: a single-line RN `TextInput` clips identically on Android.
 **Depends on:** 96 (notes screens), the `@bolusi/ui` kit
 **Blocks:** —
