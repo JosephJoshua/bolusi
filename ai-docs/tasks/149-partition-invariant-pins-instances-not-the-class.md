@@ -1,6 +1,6 @@
 # TASK 149 — the knip partition invariant can pass while `classify()` is wrong: it pins two instances, not the class, and has no denominator floor
 
-**Status:** in-review
+**Status:** done
 **Priority:** MEDIUM — no dead file is invisible in the tree today and all four directory rules are contained as shipped, so this is not a live hole. Both gaps need a deliberate edit to the guard itself. Filed because **Gap B is demonstrated, not hypothetical**, and the edit that triggers it is a plausible one.
 **Depends on:** 137 (Half B, merged 2026-07-22)
 **Blocks:** —
@@ -50,3 +50,16 @@ or, simpler and arguably better because it states the intent directly: assert `S
 - Gap A: empty `cases` → must throw on the floor, not pass.
 - **Positive control:** a clean tree still gives `+0/-0`, `EXIT=0` — the fix must not red the gate in its healthy state, or it will be muted.
 - Add a rule to `NON_PRODUCTION_RULES` that is deliberately not in `SRC_EXCLUDABLE_RULES` and confirm the derived loop covers it automatically. That is the property that makes this a class check rather than a third instance.
+
+
+---
+
+## DONE 2026-07-22 (merged, reviewed APPROVE). Two non-blocking notes carried forward.
+
+Shipped three mechanisms in `assertPartitionInvariant()`, all firing before knip spawns: a denominator floor (Gap A), an exact-set pin against an independent `SRC_EXCUSABLE_BY_INTENT = {test-file, type-test-file}` (Gap B), and a derived loop over `NON_PRODUCTION_RULES` that synthesizes `src/` probes and asserts `classify() === null`. The reviewer verified all three red when broken, the class property (a new non-excludable rule is auto-covered without editing the assertion), and — the key second-order check — that `synthSrcProbes` failing to cover a rule throws loudly ("could not synthesize … Refusing to skip it silently") rather than skipping.
+
+**A bug in this task's OWN suggested snippet, caught by the implementer and confirmed by the reviewer:** `if (SRC_EXCLUDABLE_RULES.has(r.name)) continue;` does NOT catch Gap B, because widening moves the attacked rule INTO that Set, so the skip skips exactly the rule under attack. The fix keys the skip on the independent `SRC_EXCUSABLE_BY_INTENT` constant.
+
+**Non-blocking, carried forward (not worth its own task yet — fold into the next `check-unused-exports.mjs` change):**
+1. `classify()` uses `NON_PRODUCTION_RULES.find(...)` (first-match). If a future rule's synthesized probes ALL also matched an earlier rule, the loop's `classify(probe)` would be governed by the earlier rule, so the loop alone might miss a break of the later rule. Fully backstopped today by the exact-set pin (catches any Set widening) and by no rule's probes cross-matching an excludable rule. Worth a one-line comment when the file is next touched.
+2. The retained instance `cases` (e.g. `capture.test.ts → 'test-file'`) guard the OPPOSITE direction — that the invariant didn't collapse into "enforce everything under src/" — which the class loop alone wouldn't notice. Justified; keep them.
