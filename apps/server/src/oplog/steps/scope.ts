@@ -5,7 +5,8 @@
 // Device binding is checked SEPARATELY and EARLIER by the orchestrator (before signature) so an
 // op signed by its real device but pushed via another device's token attributes as SCOPE_VIOLATION
 // rather than BAD_SIGNATURE. This module carries the rest: tenant/store/user consistency,
-// membership-not-status, and the per-type extension rules.
+// membership-not-status, the media-ref → envelope binding (task 140 Leg B), and the per-type
+// extension rules.
 import type { TenantDb } from '@bolusi/db-server';
 import type { SignedOperation } from '@bolusi/schemas';
 
@@ -85,6 +86,38 @@ export async function checkScope(
     .where('id', '=', op.userId)
     .executeTakeFirst();
   if (user === undefined) return { reason: 'op userId is not a member of the tenant directory' };
+
+  // §9 media-ref binding (task 140 Leg B; 06 §3.2). A payload's `mediaRef` is self-describing: it
+  // carries its OWN `userId`/`deviceId` (06 §3.2 — "capture and attach happen in one command", so
+  // in v0 they duplicate the envelope). Bind them to the ENVELOPE's authenticated signer, exactly
+  // as §9.1 binds the op `deviceId` to the token device. Without this a device signs a note whose
+  // ref names ANOTHER device's `mediaId`, and a puller renders that device's photo as this note's
+  // evidence with zero verification (task 140's composed evidence-substitution attack). Universal,
+  // not per-type: the ref is the shared `zMediaRef` fragment (06 §3.2, defined once — CLAUDE.md
+  // §2.8), so ANY op carrying one at `payload.mediaRef` is bound here, not just `notes.note_created`.
+  //
+  // This runs BEFORE the schema step (pipeline step 6, SCHEMA_INVALID), so guard the comparison: a
+  // STRUCTURALLY-VALID ref whose id is a string that mismatches is a binding violation
+  // (SCOPE_VIOLATION); a structurally-malformed ref (absent/non-string id, or a `mediaRef` that is
+  // not an object) is LEFT for the schema step — we compare only when the id is present as a string,
+  // so a malformed payload is never mis-attributed to scope, and 127's per-version schema gate is
+  // not weakened. A null `mediaRef` (no photo, 05 §3) has nothing to bind and is skipped.
+  //
+  // WHAT IS NOT CHECKED HERE, and cannot be: media EXISTENCE/ownership of `mediaId`. The op syncs
+  // independently of the file and the server never cross-validates a push against `media` rows
+  // (api/03 §1, 06 §4, FR-1138) — the referenced media may not have been uploaded (or `init`-ed)
+  // yet. So this binds the SIGNER; `mediaId` existence stays defended downstream by download scope
+  // (api/03 §2) + the client's `sha256` pre-display check (task 140 Leg A). Residual in task 140.
+  const rawMediaRef = (op.payload as { readonly mediaRef?: unknown }).mediaRef;
+  if (rawMediaRef !== null && typeof rawMediaRef === 'object') {
+    const ref = rawMediaRef as { readonly userId?: unknown; readonly deviceId?: unknown };
+    if (typeof ref.deviceId === 'string' && ref.deviceId !== op.deviceId) {
+      return { reason: 'mediaRef.deviceId does not match the envelope device' };
+    }
+    if (typeof ref.userId === 'string' && ref.userId !== op.userId) {
+      return { reason: 'mediaRef.userId does not match the envelope user' };
+    }
+  }
 
   // §9.5 per-type extension rules.
   switch (op.type) {

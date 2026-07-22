@@ -1,6 +1,6 @@
 # TASK 152 — task 127's residuals: a false provenance claim on the v1 schema, and an import guard whose checked set is not the runtime's reachable set
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM (item 1) / LOW (item 2) — neither is a fail-open path in any realistic construction; both were falsified end-to-end by the reviewer and both are the §2.11 class the module contract exists to prevent.
 **Depends on:** 127 (merged 2026-07-22)
 **Blocks:** —

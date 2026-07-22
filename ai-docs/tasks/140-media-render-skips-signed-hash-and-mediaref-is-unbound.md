@@ -1,6 +1,6 @@
 # TASK 140 — the render path skips the SIGNED hash check whenever a local file exists (including for REMOTE notes), and the server accepts a `mediaRef` bound to nothing — together, one device's photo renders as another's evidence
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH — security.** 06 §6 requires verification "against `mediaRef.sha256` **before display**", with no local-file exception. Two independently-sound-looking decisions compose into evidence substitution on a product whose whole point is a signed repair record.
 **Depends on:** 120 (the v3 `mediaRef`), 82
 **Blocks:** —
@@ -47,3 +47,14 @@ Contended: `remote-cache.ts` (media) and the push validation path (127/139) — 
 **Leg B is UNTOUCHED — the composed attack is HALF-closed.** No server file changed. The server still accepts a `mediaRef` with an arbitrary `mediaId`/`sha256` and a `userId`/`deviceId` that are not the envelope's, and folds it. Device B no longer renders its own photo as A's evidence, but nothing yet binds a ref to real media, to the tenant, or to the signer. **Leg B must still be implemented** — sequence it after task 139 (both touch the push validation path) and read `05 §9` for the scope rule.
 
 **Residuals → task 153:** the SEC list has no id for the client pre-display verification 140 just shipped (propose SEC-MEDIA-07), and the legacy v1/v2 arm remains an evidence-substitution vector (bounded by `NOTE_CREATED_SCHEMA_VERSION = 3`, so no producer exists yet).
+
+
+---
+
+## LEG B DONE 2026-07-22 (merged, reviewed APPROVE). TASK 140 NOW FULLY CLOSED (both legs).
+
+Leg B binds `mediaRef.userId`/`deviceId` to the envelope signer at the scope step (before schema, before the applier), rejecting a mismatch **per-op** as the existing `SCOPE_VIOLATION` — honest siblings survive (§4.1, 139 not regressed), a correctly-bound ref is accepted (positive control load-bearing), and a *malformed* ref still falls to `SCHEMA_INVALID` (127 not weakened — the reviewer tried 5 ways to make the defensive access throw and could not; a null payload is caught at the envelope with 422, never reaching the check).
+
+**The composed evidence-substitution attack (Leg A client + Leg B server) is now CLOSED across tenant and store boundaries:** A can no longer sign a note claiming B's `deviceId` (Leg B → SCOPE_VIOLATION), and a matching-device ref with a bogus hash won't render another photo (Leg A re-hashes before display). The download route is genuinely tenant+store scoped (reviewer-verified, not prose), so a substituted `mediaId` can't even resolve cross-scope.
+
+**Residuals (all tracked, none newly opened):** the legacy v1/v2 render arm (task 153 Part B, bounded by `NOTE_CREATED_SCHEMA_VERSION = 3` — no producer exists); `mediaId` existence not checkable at push (FR-1138, defended downstream); and the spec/SEC-inventory homing of BOTH the client and server rules (task 153 Part A + the new addendum).
