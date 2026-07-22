@@ -68,7 +68,8 @@ operations: {
 
 1. **Deterministic.** Same ops in ⇒ same rows out. No clocks, no randomness, no I/O beyond `ProjectionDb`.
 2. **Entity-scoped writes.** An applier may only write rows keyed by the op's (`entityType`, `entityId`). Cross-entity aggregates are a v1 projection class — not in v0.
-3. **Fold semantics.** An applier is a fold step: `apply(db, op, /* ops arrive in canonical order for this entity */)`.
+3. **Store-scoped writes must also match on the store (D22, SEC-TENANT-06).** For a store-scoped op type, an applier that UPDATEs/DELETEs an existing row MUST constrain the statement to the op's own `storeId` as well as its `entityId` — `WHERE id = op.entityId AND store_id = op.storeId`. `entityId` is a global UUID and projection tables are protected by **tenant**-scoped RLS only (10-db-schema §6), so matching on the entity alone is a cross-store write primitive: a device in store A signs a mutation naming a row that lives in store B and the UPDATE silently overwrites it. 05-operation-log §9.2 guards the op's *declared* `storeId`; it cannot guard an `entityId` the server does not resolve, so this rule is the half that closes it. A store mismatch must be a **no-op fold** (zero rows), which is also the correct out-of-order behaviour — an op whose entity is absent here matches nothing, exactly as a mutation folded before its create does. Insert-shaped appliers get this for free by writing `storeId` from the op. Tenant-scoped op types (`scope: 'tenant'`) are exempt: they have no store to match on.
+4. **Fold semantics.** An applier is a fold step: `apply(db, op, /* ops arrive in canonical order for this entity */)`.
 
 ### 4.2 Order-independence (how FR-1118 is satisfied)
 
