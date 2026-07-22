@@ -10,6 +10,11 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "task:status": "node scripts/task-status.mjs",
+    "verify": "node scripts/verify.mjs",
+    "verify:full": "node scripts/verify.mjs --full",
+    "verify:list": "node scripts/verify.mjs --list",
+    "ci:parity": "node scripts/ci-parity.mjs",
+    "ci:status": "node scripts/ci-status.mjs",
     "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
     "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
