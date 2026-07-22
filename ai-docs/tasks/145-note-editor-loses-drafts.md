@@ -1,6 +1,6 @@
 # TASK 145 — a half-written note is destroyed two ways: Android hardware back EXITS THE APP from the editor, and any header-chrome tap discards the draft without the §8.1 confirm
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH** — silent data loss on the reference module's core flow, on a product whose users are mechanics writing repair notes one-handed in a bright shop. Both paths bypass a discard gate that already exists and works.
 **Depends on:** 96 (NotesHome/NoteEditor), 24 (zone/back), 124 (which added the third header control)
 **Blocks:** —
