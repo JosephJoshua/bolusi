@@ -16,6 +16,7 @@ import {
   applyBundle,
   buildPinVerifier,
   FLOOR_KDF_PARAMS,
+  readIdleLockSeconds,
   readMeta,
   readVerifier,
   VerifierBoundsError,
@@ -152,6 +153,39 @@ describe('applyBundle — the four directory tables (api/02-auth §5.2)', () => 
     );
     expect(await readMeta(k, 'auth.storeName')).toBe('Toko Baru');
     expect(await readMeta(k, 'auth.tenantName')).toBe('PT Baru');
+  });
+
+  it('persists the tenant`s idleLockSeconds into meta_kv, clamped, refreshing it on a change (§6.4)', async () => {
+    const k = await open();
+    // The wire key is asserted LITERALLY for the same reason the display names are: it pins the
+    // exact key `readIdleLockSeconds` — and therefore `SessionManager` — will look for, so a write
+    // to the wrong key cannot hide behind the constant both sides share (T-15).
+    await applyBundle(k, bundle([], { settings: { idleLockSeconds: 900 } }));
+    expect(await readMeta(k, 'auth.idleLockSeconds')).toBe('900');
+    expect(await readIdleLockSeconds(k)).toBe(900);
+
+    // The tenant TIGHTENS the timeout (PATCH /v1/tenant/settings). The next pull's bundle carries
+    // it, and persisting on every apply is what makes the change reach the device's session rather
+    // than only its database.
+    await applyBundle(k, bundle([], { settings: { idleLockSeconds: 60 } }));
+    expect(await readIdleLockSeconds(k)).toBe(60);
+
+    // A hostile / buggy value that crossed the network is clamped ON THE DEVICE too: the server
+    // clamps at the write, this clamps at the read, and neither re-decides the range. Without the
+    // device-side clamp an `idleLockSeconds: 86400` bundle would keep a shared shop-counter terminal
+    // unlocked all day, which is the control being silently disabled by data.
+    await applyBundle(k, bundle([], { settings: { idleLockSeconds: 86_400 } }));
+    expect(await readIdleLockSeconds(k)).toBe(3600);
+    await applyBundle(k, bundle([], { settings: { idleLockSeconds: 1 } }));
+    expect(await readIdleLockSeconds(k)).toBe(60);
+  });
+
+  it('a device with no bundle applied yet still locks — the §6.4 default, never "no lock"', async () => {
+    const k = await open();
+    // Absent key ⇒ 300 s, not 0 and not a throw. A fresh device must not be lock-less while it waits
+    // for its first refresh; "no configured value" is not "no idle lock".
+    expect(await readMeta(k, 'auth.idleLockSeconds')).toBeNull();
+    expect(await readIdleLockSeconds(k)).toBe(300);
   });
 
   it('re-applying is idempotent — the tables do not accumulate', async () => {

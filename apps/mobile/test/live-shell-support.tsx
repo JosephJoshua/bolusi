@@ -8,17 +8,19 @@
  * command runtime, so what the app reads back at boot is what production would have written.
  */
 import {
+  applyBundle,
   buildPinVerifier,
   createUuidV7Generator,
-  replaceRolesDirectory,
-  replaceUsersDirectory,
-  replaceUserRolesDirectory,
+  IDLE_LOCK_DEFAULT_SECONDS,
   readPinAttempt,
   writeMeta,
-  writeVerifier,
   DEVICE_ID_META_KEY,
   STORE_ID_META_KEY,
+  type CancelTimer,
+  type ClockPort,
+  type DeviceBundle,
   type PermissionEvaluator,
+  type TimerPort,
 } from '@bolusi/core';
 import { closeClientDb } from '@bolusi/db-client';
 import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
@@ -28,9 +30,10 @@ import { act } from 'react';
 import { bootstrap, type Bootstrapped } from '../src/bootstrap/bootstrap.js';
 import { createAppRuntime, type AppRuntime } from '../src/bootstrap/runtime.js';
 import { createSessionNotesRuntime, UNWIRED_NOTES_MEDIA } from '../src/bootstrap/notes.js';
-import { createAppSession } from '../src/bootstrap/session.js';
+import { createAppSession, type AppSessionController } from '../src/bootstrap/session.js';
 import { Root } from '../src/bootstrap/Root.js';
 import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
+import type { AppStatePort, AppStatus } from '../src/bootstrap/triggers.js';
 import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
 import { render, fire, type RenderResult } from '../../../packages/ui/test/render.js';
 import { ensureNotesCatalog } from './notes-support.js';
@@ -155,28 +158,22 @@ export async function enrolledDevice(fixture: Fixture): Promise<void> {
 }
 
 /**
- * Seed the directory mirror + the PIN verifier — the state a bundle refresh leaves behind
- * (api/02-auth §5.2/§5.3). The verifier is a REAL argon2id derivation of `TEST_PIN`, so `verifyPin`
- * genuinely has to match it; a wrong PIN genuinely fails.
+ * Seed the directory mirror + the PIN verifier THROUGH `applyBundle` — the exact writer a real
+ * device's enroll response and every bundle refresh use (api/02-auth §5.2/§5.3).
+ *
+ * It used to call the four low-level directory writers instead. Going through `applyBundle` is
+ * strictly more faithful and it is what lets this fixture carry `settings.idleLockSeconds`: that
+ * value only reaches a device because `applyBundle` persists it, so a fixture that wrote the rows by
+ * hand could never witness the §6.4 threading (task 133's second defect — `SessionManager` was
+ * constructed without it and the tenant's setting stopped at the server).
+ *
+ * The verifier is a REAL argon2id derivation of `TEST_PIN`, so `verifyPin` genuinely has to match
+ * it; a wrong PIN genuinely fails.
  */
-export async function seedDirectory(fixture: Fixture): Promise<void> {
-  const db = fixture.app.db.db;
-  await replaceUsersDirectory(db, [
-    { id: fixture.userId, name: 'Andi Pratama', photoMediaId: null, status: 'active' },
-  ]);
-  await replaceRolesDirectory(db, [
-    {
-      id: ROLE_ID,
-      name: 'Notes',
-      scopeType: 'store',
-      isSystemDefault: false,
-      permissionIds: ['notes.read', 'notes.create', 'notes.edit', 'notes.archive'],
-    },
-  ]);
-  await replaceUserRolesDirectory(db, [
-    { userId: fixture.userId, roleId: ROLE_ID, storeId: fixture.storeId },
-  ]);
-
+export async function seedDirectory(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
   const verifier = await buildPinVerifier(
     noblePort,
     new TextEncoder().encode(TEST_PIN),
@@ -187,7 +184,110 @@ export async function seedDirectory(fixture: Fixture): Promise<void> {
     Uint8Array.from({ length: 16 }, (_, i) => i + 1),
     { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq: 1 },
   );
-  await writeVerifier(db, fixture.userId, verifier);
+
+  const bundle: DeviceBundle = {
+    tenant: { id: fixture.tenantId, name: 'Maju Group' },
+    store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
+    settings: { idleLockSeconds },
+    users: [
+      {
+        id: fixture.userId,
+        name: 'Andi Pratama',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: verifier,
+      },
+    ],
+    rolesSnapshot: [
+      {
+        id: ROLE_ID,
+        name: 'Notes',
+        scopeType: 'store',
+        isSystemDefault: false,
+        permissionIds: ['notes.read', 'notes.create', 'notes.edit', 'notes.archive'],
+      },
+    ],
+    permissionsSnapshot: [],
+  };
+  await applyBundle(fixture.app.db.db, bundle);
+}
+
+/**
+ * A FakeClock for the fixture (testing-guide §3.3) — time moves only when a test moves it.
+ *
+ * `SessionManager` reads its idle deadline from whatever clock this fixture hands `createAppSession`,
+ * so this is what makes the §6.4 transition drivable without sleeping (T-6: a test that sleeps is a
+ * bug). The default `mountRoot` clock is still the FIXED one, so tests that do not care are unchanged.
+ */
+export function advanceableClock(start = FIXED_NOW): ClockPort & { advance(ms: number): void } {
+  let now = start;
+  return {
+    now: () => now,
+    advance: (ms) => {
+      now += ms;
+    },
+  };
+}
+
+/**
+ * A `TimerPort` that fires only when the test says so.
+ *
+ * Deliberately NOT a real `setTimeout`: the idle ticker re-arms itself, so a real timer would make
+ * this suite depend on wall-clock scheduling on a loaded runner — the flake class
+ * `apps/mobile/vitest.config.ts` documents at length. `fire()` runs every callback pending AT THE
+ * MOMENT OF THE CALL and not the ones they re-arm, so one call is exactly one tick.
+ */
+export interface ManualTimer extends TimerPort {
+  /** Run every currently-pending callback once. Returns how many ran. */
+  fire(): number;
+  pending(): number;
+}
+
+export function manualTimer(): ManualTimer {
+  let nextId = 0;
+  const scheduled = new Map<number, () => void>();
+  return {
+    schedule(_delayMs: number, fn: () => void): CancelTimer {
+      const id = (nextId += 1);
+      scheduled.set(id, fn);
+      return () => {
+        scheduled.delete(id);
+      };
+    },
+    fire(): number {
+      // Snapshot first: every callback re-arms, and iterating the live map would spin forever.
+      const due = [...scheduled.entries()];
+      for (const [id, fn] of due) {
+        scheduled.delete(id);
+        fn();
+      }
+      return due.length;
+    },
+    pending: () => scheduled.size,
+  };
+}
+
+/** An `AppStatePort` the test drives — starts foregrounded, which is what a device in use is. */
+export interface FakeAppState extends AppStatePort {
+  /** Push a status change to every subscriber (RN's `AppState` change event). */
+  set(status: AppStatus): void;
+}
+
+export function fakeAppState(initial: AppStatus = 'active'): FakeAppState {
+  let status = initial;
+  const listeners = new Set<(next: AppStatus) => void>();
+  return {
+    current: () => status,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    set(next) {
+      status = next;
+      for (const listener of listeners) listener(next);
+    },
+  };
 }
 
 /**
@@ -198,12 +298,38 @@ export async function seedDirectory(fixture: Fixture): Promise<void> {
  * never called because the device is already enrolled. `createSession` and `createNotes` are the
  * PRODUCTION functions — this test exercises the same code `index.ts` wires.
  */
-export async function mountRoot(fixture: Fixture): Promise<RenderResult> {
+export interface MountOptions {
+  /**
+   * The clock `SessionManager` measures the idle deadline against (api/02-auth §6.4). Defaults to
+   * the FIXED one, so every pre-task-133 test behaves exactly as before; an idle-lock test passes an
+   * {@link advanceableClock} and moves it.
+   */
+  readonly clock?: ClockPort;
+  /**
+   * The idle ticker's `TimerPort`. Defaults to a timer that NEVER fires — a fixture default that
+   * fails in the SAFE direction: a test that forgets to drive it sees no lock and reds, rather than
+   * a real `setTimeout` leaking past the test and firing over an unmounted tree.
+   */
+  readonly timer?: TimerPort;
+  /** The idle ticker's `AppStatePort`. Defaults to foregrounded. */
+  readonly appState?: AppStatePort;
+  /**
+   * Hand the test the session controller `Root` composed — the PRODUCTION `createAppSession` result,
+   * not a substitute, so an assertion on it is an assertion about what the app is running.
+   */
+  readonly onSessionController?: (controller: AppSessionController) => void;
+}
+
+export async function mountRoot(
+  fixture: Fixture,
+  options: MountOptions = {},
+): Promise<RenderResult> {
   ensureNotesCatalog();
   await closeClientDb();
   fixture.app = await bootAt(fixture.location);
   const app = fixture.app;
   const runtime = runtimeFor(app);
+  const sessionClock: ClockPort = options.clock ?? { now: () => FIXED_NOW };
 
   const enrollment: AppEnrollment = {
     controller: {
@@ -229,18 +355,25 @@ export async function mountRoot(fixture: Fixture): Promise<RenderResult> {
       }
       boot={() => Promise.resolve(app)}
       createEnrollment={() => enrollment}
-      createSession={(booted, appRuntime) =>
-        createAppSession({
+      // The idle-lock platform inputs (task 133). Both are REQUIRED props on `Root`, so this fixture
+      // cannot silently stop supplying them; the defaults above make every other test's behaviour
+      // identical to before (a timer that never fires drives no tick).
+      appState={options.appState ?? fakeAppState()}
+      timer={options.timer ?? manualTimer()}
+      createSession={async (booted, appRuntime) => {
+        const controller = await createAppSession({
           app: booted,
           runtime: appRuntime,
           crypto: noblePort,
-          clock: { now: () => FIXED_NOW },
+          clock: sessionClock,
           idSource: createUuidV7Generator({
             now: () => FIXED_NOW,
             randomBytes: (n) => prngBytes(mulberry32(7), n),
           }),
-        })
-      }
+        });
+        if (controller !== null) options.onSessionController?.(controller);
+        return controller;
+      }}
       createNotes={(booted, appRuntime, identity) =>
         createSessionNotesRuntime({
           app: booted,
