@@ -168,6 +168,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 157 | **HIGH permission-matrix (§6, owner-approved D22)** add a device→store scope rule — a device may write only its OWN store's ops, closing 05 §9.2's cross-store write gap; propose SEC-TENANT-06, model on 140 Leg B, carve out system/multi-store devices | done | 141, 07, 140 |
 | 158 | captured media FILES sit unencrypted on disk at rest — task 148's column encryption covers the DB, not the photos local_path points to; file-level AEAD reusing 148's key, streamed (owner ruled: separate task, don't block 148) | todo | 148, 06, 82 |
 | 159 | a push-notification tap is the LAST producer of task 145's draft-loss class (bare setRoute bypasses leaveHome → dirty editor destroyed, no ConfirmSheet) and drifts the switcher origin; needs a UX ruling (gate / preserve-then-navigate / defer) before code (from the 145 review) | todo | 145, 135, 143 |
+| 160 | **HIGH** the boot self-heal can no longer fire after SQLCipher removal — a restored plaintext DB now OPENS fine and the app boots into a silent half-enrolled state that throws AEAD errors deep in the UI (was a loud self-healing boot failure); needs a decrypt-probe with empty/partial/transient semantics (from the 148 review F2) | todo | 148 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
