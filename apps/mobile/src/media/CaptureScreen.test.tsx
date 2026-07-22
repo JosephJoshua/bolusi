@@ -13,7 +13,7 @@
 // — is still witnessed: `secondary` means a `surface` fill, `danger` means `dangerBg`, and those
 // are design-system §1.1/§3.1 facts rather than incidental styling.
 import { color } from '@bolusi/ui';
-import { t } from '@bolusi/i18n';
+import { hasKey, t } from '@bolusi/i18n';
 import type { StorageBand } from '@bolusi/core';
 import { act } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -75,15 +75,62 @@ describe('design-system §5 — the mandatory states this screen has', () => {
   );
 
   test('UNAUTHORIZED: a denied camera permission is a LOCK, never an empty box', () => {
-    // §5: Unauthorized "must not masquerade as Empty" and must not dead-end. The title is the same
-    // sentence the OS permission dialog shows, so the two never contradict each other.
+    // §5: Unauthorized "must not masquerade as Empty" and must not dead-end.
     const screen = renderCapture({ kind: 'permission_denied' });
     expect(screen.query('capture-unauthorized')).not.toBeNull();
-    expect(screen.get('capture-unauthorized.title').props['children']).toBe(
-      t('media.permission.camera'),
-    );
     expect(screen.query('capture-unauthorized.back')).not.toBeNull();
     expect(screen.query('capture-shutter')).toBeNull();
+  });
+
+  test('UNAUTHORIZED: the denial resolves the CAMERA-PERMISSION keys, never the device-revoked ones', () => {
+    // Task 125. The hint used to be `auth.revoked.body`, so tapping "Deny" on the OS camera prompt
+    // told a technician the shop had BLOCKED their handset and to get it re-enrolled — a false
+    // revocation signal on a product where revocation is a real security control (api/02-auth §7.3).
+    //
+    // What is asserted is the BINDING, never the sentence (T-4): each rendered string is compared to
+    // what the catalog returns for a key, and to what it returns for the WRONG key. Point the branch
+    // back at `auth.revoked.body` and the second block reds.
+    const screen = renderCapture({ kind: 'permission_denied' });
+    const title = screen.get('capture-unauthorized.title').props['children'];
+    const hint = screen.get('capture-unauthorized.hint').props['children'];
+
+    // INTERROGATE THE ORACLE first (T-13): `not.toBe` against a key that resolved to `undefined`,
+    // or to the same string as the right key, would pass while checking nothing. So prove the
+    // revoked copy is present, non-empty and genuinely different before relying on its absence.
+    for (const revoked of ['auth.revoked.title', 'auth.revoked.body'] as const) {
+      expect(t(revoked)).not.toBe('');
+      expect(t(revoked)).not.toBe(t('media.permission.cameraDeniedTitle'));
+      expect(t(revoked)).not.toBe(t('media.permission.cameraDeniedBody'));
+    }
+
+    // THE DIFFERENT-KEY LEG, asserted before the positive one so that reintroducing the defect
+    // trips *this* — "the denial resolved the revoked key" — and not merely "some string moved".
+    for (const revoked of ['auth.revoked.title', 'auth.revoked.body'] as const) {
+      expect(title).not.toBe(t(revoked));
+      expect(hint).not.toBe(t(revoked));
+    }
+
+    expect(title).toBe(t('media.permission.cameraDeniedTitle'));
+    expect(hint).toBe(t('media.permission.cameraDeniedBody'));
+  });
+
+  test('UNAUTHORIZED: the keys it resolves ship in BOTH catalogs, id and en', () => {
+    // 07-i18n §7.1: `id` is the source language and `en` follows in the same PR. A key present only
+    // in `id` renders the Indonesian sentence to an owner who toggled to English (§6's fallback) —
+    // silently, which is the failure this asserts away. `zh` is scaffold-only (§1: no catalog files)
+    // and is deliberately not in the list.
+    for (const key of [
+      'media.permission.cameraDeniedTitle',
+      'media.permission.cameraDeniedBody',
+    ] as const) {
+      for (const locale of ['id', 'en'] as const) {
+        expect(hasKey(key, locale)).toBe(true);
+      }
+    }
+    // NEGATIVE CONTROL: `hasKey` is not a function that says `true` to everything, so the loop above
+    // is an assertion rather than a formality (CLAUDE.md §2.11 — a guard must be able to go red).
+    expect(hasKey('media.permission.cameraDeniedNothing', 'id')).toBe(false);
+    expect(hasKey('media.permission.cameraDeniedNothing', 'en')).toBe(false);
   });
 
   test('ERROR (06 §7): a full disk gets an EXPLICIT dialog and NO shutter', () => {
@@ -107,6 +154,25 @@ describe('design-system §5 — the mandatory states this screen has', () => {
     expect(screen.get('capture-failed.code').props['children']).toBe('CAMERA_UNAVAILABLE');
     // §5: "dead-end without retry/back" is a review failure. The retry is wired to the handler.
     expect(screen.get('capture-failed.retry').props['onPress']).toBeTypeOf('function');
+  });
+
+  test('ERROR: the message is DERIVED from the code, not one fixed sentence for every failure', () => {
+    // Same class as task 125's headline defect, found in the branch next door: the title was a
+    // hardcoded `t('core.errors.UNEXPECTED')`, so a failure whose code the catalog DOES cover still
+    // said "something went wrong" and the screen never named what broke. §5's Error row wants "what
+    // failed … keyed by DomainError.code"; 07-i18n §4.2 makes that lookup derived, and
+    // `translateErrorCode` is its one implementation.
+    const covered = renderCapture({ kind: 'failed', code: 'STORAGE_ERROR' });
+    const title = covered.get('capture-failed.title').props['children'];
+    expect(title).toBe(t('core.errors.STORAGE_ERROR'));
+    // The oracle again: the two rows differ, so `not.toBe` below is load-bearing.
+    expect(t('core.errors.STORAGE_ERROR')).not.toBe(t('core.errors.UNEXPECTED'));
+    expect(title).not.toBe(t('core.errors.UNEXPECTED'));
+
+    // …and an UNCOVERED code still degrades to UNEXPECTED (§4.2, §6) rather than leaking a raw
+    // dotted key onto the screen — the behaviour the hardcode got right, kept.
+    const unknown = renderCapture({ kind: 'failed', code: 'NOT_A_REAL_CAPTURE_CODE' });
+    expect(unknown.get('capture-failed.title').props['children']).toBe(t('core.errors.UNEXPECTED'));
   });
 });
 

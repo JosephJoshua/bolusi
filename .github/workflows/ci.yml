@@ -497,13 +497,25 @@ jobs:
       # Build the release/test-profile APK with the harness compiled in. UNVERIFIED here — the native
       # toolchain (op-sqlite+SQLCipher, quick-crypto/nitro) only assembles in this lane, not on the
       # dev host. Release signing config is Expo's template default; a first scheduled run validates it.
+      # Metro bundles `apps/mobile/index.ts`, which imports the workspace packages; their
+      # package.json `exports` point at `dist/`, which nothing in this job had built. Observed on
+      # this lane's second-ever run (29890798289): `While trying to resolve module '@bolusi/core' …
+      # the resolution … is packages/core/dist/index.js, however this file does not exist` →
+      # `Android Bundling failed`. `tsc -b` is the same build every `test:*` script runs first.
+      - name: build workspace packages (Metro resolves @bolusi/* through dist/)
+        run: npx tsc -b
       - name: prebuild + assemble release APK (BOLUSI_TEST_HARNESS=1)
         env:
           BOLUSI_TEST_HARNESS: '1'
           EXPO_PUBLIC_API_URL: 'http://10.0.2.2:3000'
         run: |
           pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
-          ./gradlew -p apps/mobile/android assembleRelease
+          # `expo prebuild` writes the Gradle wrapper into apps/mobile/android — there is no
+          # ./gradlew at the repo root, and invoking one there fails with exit 127 before Gradle is
+          # ever reached. Observed on this lane's FIRST-EVER run (29890632296, 2026-07-22):
+          # `./gradlew: No such file or directory`. `-p` sets Gradle's project dir; it does not
+          # locate the wrapper script, so the path to the wrapper has to be right on its own.
+          ./apps/mobile/android/gradlew -p apps/mobile/android assembleRelease
       # Task 117: install the Maestro CLI on the runner host (no emulator needed yet). Maestro's
       # documented installer drops the binary in ~/.maestro/bin; the temurin-17 JDK this job already
       # set up is its JVM runtime. Added to $GITHUB_PATH so later steps resolve `maestro`.
@@ -592,6 +604,11 @@ jobs:
       # Generate the native iOS project. `--no-install` keeps JS deps under pnpm's frozen lockfile
       # (mirrors the Android lane's `--no-install`); CocoaPods is installed explicitly next, since
       # `--no-install` skips the pod install prebuild would otherwise run.
+      # Same reason as the Android lane: Metro resolves @bolusi/* through each package's `dist/`,
+      # so the workspace must be built before xcodebuild runs the bundling phase. Same failure
+      # observed on this lane's first-ever run (29890798289).
+      - name: build workspace packages (Metro resolves @bolusi/* through dist/)
+        run: npx tsc -b
       - name: expo prebuild (iOS native project)
         run: pnpm --filter @bolusi/mobile exec expo prebuild --platform ios --no-install
       # CocoaPods generates the .xcworkspace that xcodebuild builds from; preinstalled on macos-latest.

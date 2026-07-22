@@ -1,6 +1,6 @@
 # TASK 127 — task 121's gate leaves a hole below `current`: any `schemaVersion < current` skips payload validation entirely, so a malformed old-version payload is accepted at push and throws at fold as a 500 that rolls back the whole batch
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — same accept-then-throw-at-fold class task 121 closed, still open on the old-version branch.** Reachable by any enrolled device (it signs its own op, so the signature step passes). The failure is a `500 INTERNAL` that rolls back the ENTIRE push batch, not a per-op rejection — so one malformed op poisons a whole sync.
 **Depends on:** 121 (the gate this completes), 07, 11
 **Blocks:** —
@@ -31,3 +31,32 @@ Task 121 correctly accepts `1..current` as foldable and rejects `> current` / no
 
 ## Provenance note (read before reproducing)
 Two leaked Postgres containers from other worktrees were found running during this sweep (the §2.11 "a number served by another worktree's container" hazard) and have since been removed. Anyone reproducing this on PG must assert the container's own provenance (T-14d).
+
+
+---
+
+## ADDENDUM — 2026-07-22 adversarial sweep: worse than filed, and the fix direction changed
+
+Reproduced on real PG16 **16.14** (Debian 16.14-1.pgdg13+1) in apps/server's own testcontainer, per-file clones of `bolusi_tmpl`, stamped by `setupPgLane` (owners `l3lane-3580852-mrvjff6f`, `l3lane-3601096-mrvji1z6`). Two peer containers were leaked on the box and **neither answered** — the stamp is what proves it (T-14d).
+
+`notes.note_created` is the only type with `current > 1` (=3), so **v1 and v2 accept any payload at all**:
+
+| probe | input | result |
+| --- | --- | --- |
+| pipeline P1 | `schemaVersion: 2`, payload `{}` | throws `null value in column "title" of relation "notes" violates not-null constraint`; op not logged |
+| pipeline P2 | `schemaVersion: 2`, `mediaId: "NOT-A-UUID-AT-ALL"` | throws `invalid input syntax for type uuid` |
+| HTTP-A | same via `POST /v1/sync/push` | **500 `{"error":{"code":"INTERNAL"}}`** |
+| HTTP-B | `[valid v3 op, junk v2 op]` | **500**, `ops in log: 0`, good op logged: **false**, `notes` rows: `[]` |
+| P2b | `schemaVersion: 1` + extra key `whateverIWant` | **accepted**, durably logged (v3's `.strict()` would reject it) |
+
+**HTTP-B violates security-guide §4.1 literally** — "one bad op must not poison honest neighbors, except behind a `CHAIN_BROKEN` halt".
+
+**Why this is HIGH, not MEDIUM — it permanently wedges a device.** `packages/core/src/sync/loop.ts:264-306` treats a 500 as a *transport* failure → backoff; `push.ts:104-107` keeps the ops `local`, so **the same batch is re-sent**. `backoff.ts` caps at 5 min and never stops retrying, and `failureCount` is in-memory so a restart retries immediately. One malformed op wedges that device's sync forever, and every op queued behind it never drains (05 §10: no pruning).
+
+**Falsification already performed:** patched `deps.ts:142` to parse the declared schema → HTTP-A became `200 {status:"rejected",code:"SCHEMA_INVALID"}` and HTTP-B's honest sibling was `accepted` + logged. Reverted; baseline re-verified green.
+
+**The fix direction has changed — do NOT just parse against the current schema.** `deps.ts`'s comment is right that validating a v2 payload against v3's `.strict()` wrongly rejects a legitimate old version. The real fix is **retained per-version payload schemas** on `OperationDeclaration` (a `payloadByVersion` map) so `resolve(type, v)` has a real schema for every foldable `v` — which is what 05 §8's wording ("Payload fails registry Zod for (`type`, **`schemaVersion`**)") already presumes. That is a **module-contract change** (`04-module-contract.md` §3): update the doc in the same commit.
+
+A defensive applier, and converting an applier throw into a per-op rejection, are a necessary backstop (that is task **139** — the same wound from the other side) but **insufficient alone**: they still land an unvalidated payload in the append-only log.
+
+**Honesty trap to note:** `notes-schema-version.test.ts` is green over all of this. It covers the version *boundary* (task 121's `> current` leg), never the *interior*.

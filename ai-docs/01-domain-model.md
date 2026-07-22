@@ -286,6 +286,8 @@ Deliberately trivial; exists to prove the contract (04-module-contract §8). Sto
 | `title` | string | Set at creation; v0 has no title edit (keeps op surface minimal). |
 | `body` | string | Last body in canonical order. |
 | `mediaId` | UUIDv7 \| null | One attachment (exercises the media pipeline). Introduced by payload `schemaVersion: 2`. |
+| `mediaSha256` | 64-char lowercase hex \| null | The SIGNED hash of the attachment's final bytes, from the v3 payload's `mediaRef` (06 §3.2). Non-null exactly when the note was created at v3 **with** an attachment — a v2 note has a `mediaId` and a null hash, and that asymmetry is why the render path must distinguish them (06 §6). |
+| `mediaMime` | `image/jpeg` \| `image/png` \| null | From the same v3 `mediaRef`. Null for v1/v2 notes. |
 | `archived` | boolean | Set by `note_archived`; no unarchive in v0. |
 | `edit_count` | integer | Count of applied `note_body_edited` ops. **Testability column** (testing-guide §3.2): a pure-LWW projection cannot reveal double-application; the convergence oracle digests it. In both engines' DDL (10-db-schema). |
 | `createdBy`, `createdAt` | UUIDv7, ms epoch | From the creation op. |
@@ -295,11 +297,13 @@ Deliberately trivial; exists to prove the contract (04-module-contract §8). Sto
 
 | Type | schemaVersions | Payload | Conflict decl |
 | ---- | -------------- | ------- | ------------- |
-| `notes.note_created` | 1: `{title, body}` · 2: `{title, body, mediaId: string \| null}` | applier handles both forever | — |
+| `notes.note_created` | 1: `{title, body}` · 2: `{title, body, mediaId: string \| null}` · **3 (current): `{title, body, mediaRef: MediaRef \| null}`** | applier handles all three forever | — |
 | `notes.note_body_edited` | 1: `{body}` | | `{key: 'note.body', severity: 'minor'}` |
 | `notes.note_archived` | 1: `{}` | | — |
 
-The v1→v2 bump on `note_created` is deliberate: it is the mid-history schema migration the exit criteria require (04-module-contract §8). Commands (`createNote`, `editNoteBody`, `archiveNote`) and queries (`listNotes`, `getNote`) follow 04-module-contract §5–6; permissions `notes.create`, `notes.edit`, `notes.archive`, `notes.read` (matrix: 02-permissions). Editing a note that is archived in the local projection is a command-level denial (`DomainError`), not a projection rule; the concurrent case — an edit appended by a device that had not yet seen the archive — is caught server-side by the registered Rule-2 check `notes:edit_after_archive` (§8.2).
+The version bumps on `note_created` are deliberate: they are the mid-history schema migration the exit criteria require (04-module-contract §8). **v1→v2** added the bare `mediaId`. **v2→v3** replaced it with the whole signed `mediaRef` (`zMediaRef`, `packages/schemas/src/media.ts` — `{mediaId, sha256, mime, type, sizeBytes, capturedAt, location, userId, deviceId}`, strict), because a bare id is not verifiable: a device that PULLS someone else's note must be able to check the downloaded bytes against a hash the author signed (06 §6). The applier folds `mediaRef.sha256`/`.mime` into the projection's `mediaSha256`/`mediaMime`; a v2 note keeps its `mediaId` with both null, forever.
+
+**Every foldable version needs a retained payload schema.** 05 §8 defines `SCHEMA_INVALID` as "payload fails registry Zod for (`type`, `schemaVersion`)" — the pair, not the type alone. Retaining only the current schema means an op declaring an older version is accepted unvalidated and throws at fold instead (task 127). "The applier handles it" is a fold-time contract, not a validation one. Commands (`createNote`, `editNoteBody`, `archiveNote`) and queries (`listNotes`, `getNote`) follow 04-module-contract §5–6; permissions `notes.create`, `notes.edit`, `notes.archive`, `notes.read` (matrix: 02-permissions). Editing a note that is archived in the local projection is a command-level denial (`DomainError`), not a projection rule; the concurrent case — an edit appended by a device that had not yet seen the archive — is caught server-side by the registered Rule-2 check `notes:edit_after_archive` (§8.2).
 
 ## 10. Invariants (testable, numbered)
 

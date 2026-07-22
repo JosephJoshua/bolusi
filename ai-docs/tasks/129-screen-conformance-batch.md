@@ -21,3 +21,13 @@
 
 ## Deliverable
 Fix each, adding catalog keys where one is genuinely missing (do not reuse a semantically-wrong key to make a string appear). For each, add or extend a render test that asserts the CONTENT, not just the testID — that gap is why all nine shipped green. Regenerate the 116 screenshots and re-inspect.
+
+
+---
+
+## ADDED 2026-07-22 (found by the task-125 implementer, same class, different file)
+
+10. **`apps/mobile/src/media/SignaturePadScreen.tsx:235` has the identical `failed`-branch defect task 125 fixed in `CaptureScreen`:** `title={t('core.errors.UNEXPECTED')}` sits beside a live `errorCode={state.code}`, so a failure whose code the catalog DOES cover still reads "Terjadi kesalahan. Coba lagi." Fix is the same one line — `translateErrorCode(state.code)` (07-i18n §4.2's derived lookup, already exported); uncovered codes still degrade to UNEXPECTED.
+11. **`SignaturePadScreen.tsx:213`'s `UnauthorizedState` ships no `hint` at all** — design-system §5 requires body guidance. Note its title (`core.errors.PERMISSION_DENIED`) IS correct here: unlike `CaptureScreen`'s OS-permission case, this is an *account* denial, so the fix is to add guidance, not to change the title.
+
+12. **The note TITLE in edit mode reads as an unfilled placeholder** (visually confirmed on `artifacts/notes-editor-long-body.png` by the task-128 implementer). The title is the note's real value, rendered in `color.textDisabled` grey because edit-mode expresses read-only via `disabled` — and design-system §6.1 **exempts disabled text from the 4.5:1 contrast floor**, so no contrast gate fires on it. **This needs a decision before code:** either the design system grows a distinct read-only treatment (a new component state in a contended package — CLAUDE.md §6 territory), or §6.1 records why `disabled` is the right expression of read-only here. Do not silently restyle it.

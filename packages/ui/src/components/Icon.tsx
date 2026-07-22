@@ -52,6 +52,11 @@ export const ICON_GLYPHS = Object.freeze({
   /** §8.6 module rows: a note/ticket carries a media attachment. A paperclip, not a camera —
    *  the glyph marks "has a photo", it does not invite capture (that is `media.action.takePhoto`). */
   attachment: 'paperclip',
+  /** §8.1 header: the Settings entry, whose screen is titled `core.settings.language`. A translate
+   *  glyph rather than a cog — the chip carries the label "Bahasa"/"Language" beside it (§0 forbids
+   *  an icon without a label), and a user stranded in a locale they cannot read recognises this one
+   *  by shape. */
+  language: 'translate',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

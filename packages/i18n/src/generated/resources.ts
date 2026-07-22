@@ -219,6 +219,8 @@ export const resources: SeededResources = {
         },
         permission: {
           camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+          cameraDeniedTitle: 'Kamera belum diizinkan',
+          cameraDeniedBody: 'Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera.',
         },
         storage: {
           lowWarning: 'Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.',
@@ -468,6 +470,9 @@ export const resources: SeededResources = {
         },
         permission: {
           camera: 'Allow the app to use the camera to take photos.',
+          cameraDeniedTitle: 'Camera is not allowed',
+          cameraDeniedBody:
+            'Open your phone Settings, find this app, then turn on the Camera permission.',
         },
         storage: {
           lowWarning:

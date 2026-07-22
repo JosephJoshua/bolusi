@@ -1,6 +1,6 @@
 # TASK 124 — the Settings screen has no producer: `setRoute('settings')` is called nowhere, so language, device identity and notification settings are unreachable in the shipping app
 
-**Status:** todo
+**Status:** done
 **Priority:** **HIGH — user-visible on an Indonesian-first product.** The language toggle is the ONLY UI for the device locale (07-i18n §1.2); a user who cannot reach Settings cannot choose or recover their language. The device-ID/store/tenant readout exists specifically "so the shop can read its own device's identity to an owner over the phone during a revocation" (`settings/model.ts:18-19`) — unreachable. The notification-settings deep-link (api/04-push §5, task 59) — unreachable.
 **Depends on:** 24 (app shell / navigation), 119 (live session shell)
 **Blocks:** —

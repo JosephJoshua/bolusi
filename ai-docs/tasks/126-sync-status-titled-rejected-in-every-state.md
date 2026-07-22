@@ -1,6 +1,6 @@
 # TASK 126 — the Sync Status screen is titled "Rejected Changes" in EVERY state, including all-clear
 
-**Status:** todo
+**Status:** in-review
 **Priority:** **HIGH — a healthy device reports a problem.** A shop owner opening the sync screen on a fully-synced device sees the header "Perubahan Ditolak" (Rejected Changes) above the body "Semua perubahan terkirim" (everything sent). On a product whose trust model depends on the sync chip and this screen being believable (design-system §3.5/§8.4), a false alarm in the title is corrosive.
 **Depends on:** 24, 15 (sync)
 **Blocks:** —

@@ -612,7 +612,12 @@ CREATE TABLE notes (
   store_id       uuid NOT NULL REFERENCES stores(id),
   title          text NOT NULL,
   body           text NOT NULL,
-  media_id       uuid,                           -- schemaVersion 2 payloads (01-domain-model §9)
+  media_id       uuid,                           -- schemaVersion 2 AND 3 payloads (01-domain-model §9)
+  media_sha256   text,                           -- v3 only: mediaRef.sha256, the SIGNED hash a
+                                                 -- PULLED note verifies its bytes against (06 §6).
+                                                 -- Null for v1/v2 notes — that asymmetry is load-
+                                                 -- bearing, not incidental. Migration 0010.
+  media_mime     text,                           -- v3 only: mediaRef.mime. Migration 0010.
   archived       boolean NOT NULL DEFAULT false,
   edit_count     integer NOT NULL DEFAULT 0,     -- +1 per notes.note_body_edited fold; testability
                                                  -- column (01-domain-model §9; testing-guide §3.2)
@@ -906,6 +911,8 @@ CREATE TABLE notes (
   title          TEXT NOT NULL,
   body           TEXT NOT NULL,
   media_id       TEXT,
+  media_sha256   TEXT,                           -- v3 only (see server §8); client migration 002
+  media_mime     TEXT,                           -- v3 only; client migration 002
   archived       INTEGER NOT NULL DEFAULT 0,
   edit_count     INTEGER NOT NULL DEFAULT 0,     -- +1 per notes.note_body_edited fold; testability
                                                  -- column (01-domain-model §9; testing-guide §3.2)

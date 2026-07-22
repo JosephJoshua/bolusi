@@ -106,6 +106,8 @@ export interface Notes {
   lastEditedAt: number;
   lastEditedBy: string;
   mediaId: string | null;
+  mediaMime: string | null;
+  mediaSha256: string | null;
   storeId: string;
   tenantId: string;
   title: string;

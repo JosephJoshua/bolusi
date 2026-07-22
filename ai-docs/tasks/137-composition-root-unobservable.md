@@ -1,6 +1,6 @@
 # TASK 137 — the composition root is structurally unguarded (one test mounts `Root`, with substituted factories) and the knip gate cannot see unused FILES
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — this is the **cause** of tasks 122/133/134/135/136, not another instance of them. Both halves are guard blindness: nothing observes production wiring, and the sweep that exists to catch dead code has dead files outside its denominator.
 **Depends on:** —
 **Blocks:** —
@@ -29,3 +29,20 @@ Running knip *without* `--include exports` lists them plainly: `push/registratio
 ## FALSIFY (§2.11 — REPORT it)
 - Half A: for each guarded decision, break it → the new composed test reds; restore → green. A harness that passes against a blank mount proves nothing (T-14: assert real content).
 - Half B: add a throwaway unreachable production file → the file gate reds and names it; delete it → green. And confirm the export half still reds on a new unused export (don't trade one blindness for another).
+
+
+---
+
+## Half B: DONE 2026-07-22 (commit `d020f1a`, pending review). Half A still open — that is why this task stays open.
+
+What the implementer established, and what it changed beyond the stated scope:
+
+- **The knip JSON shape** (knip 6.27.0, read from its own output): one record per file; `--include` gates which keys exist. With `--include exports` there is **no `files` key at all**. The `files` and `exports` finding sets are **disjoint — 0 files appear in both**, so the old lane could not have seen an unreachable file under any baseline. Adding `files` to `--include` leaves the export set byte-identical (123 == 123), so one process serves both halves.
+- **The `apps/server` entry bug was not a path problem — it was production-mode semantics.** knip's `--production` lane uses **only** entry patterns suffixed `!`, and a config `entry` array replaces the defaults entirely. `apps/server`'s entries had no `!`, so that workspace had *no entry at all* in the production lane → 78 of 82 `src` files reported unused. (`packages/test-support` already used `!`, which is why its canary worked.) Four `!` suffixes fixed it: server file findings 158 → 93, `apps/server/src` 78 → 13.
+- **That un-blinded the EXPORT half too:** **+4** previously-invisible unused exports appeared in `apps/server/src/middleware/auth.ts` (`CONTROL_TOKEN_PREFIX`, `DEVICE_TOKEN_PREFIX`, `InMemoryTokenStore`, `emptyTokenStore`), with **0 lost**. Export baseline 119 → 123. So the export sweep had a hole of its own the whole time, in the auth middleware.
+- **Category partitioning, fail-closed.** Of 197 raw production-lane file findings, 158 are category artifacts (tests, scripts, migrations, configs — unreachable from a production entry *by definition*); baselining those would red the gate on every task that adds a test, which is the muting outcome. Only the 39-file production remainder is enforced, and a path is excluded **only if it matches a named rule**, so an unanticipated file class is enforced loudly rather than dropped silently.
+- **A deliberate refusal worth keeping:** the excluded count is build-state dependent (158 → 84 after `tsc -b`) while the enforced set is not (39, +0/-0 either way). CI runs knip with no build, so the implementer refused to freeze the excluded count in the baseline — "a stable-looking number with unstable provenance". Rule *names* are recorded instead.
+
+### Two findings this surfaced, for the next sweep (not defects of this task)
+1. **The entire `apps/server/src/push/*` module is dead in production** — `expo-sender`, `fanout`, `payload`, `port`, `receipts`, 5 files. This is **independent corroboration of task 134**, arrived at by a different instrument (semantic reachability, not grep).
+2. **`packages/modules/src/notes/screens/*` (7 files) plus `notes/{index,media-ref,conflict-checks}.ts` report as unreachable.** These screens demonstrably DO render (task 119 wired them; the visual harness screenshots them), so this is most likely knip being unable to follow the module registry's dynamic resolution — a false-positive class, not dead code. **Confirm which before acting**, and if it is the registry, record that so nobody later "cleans up" a live screen on the strength of this baseline.
