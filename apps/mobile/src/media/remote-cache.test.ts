@@ -13,13 +13,15 @@ import { noblePort } from '@bolusi/test-support';
 import { describe, expect, test } from 'vitest';
 
 import { FakeFs, bytesOfLength, sha256Hex } from './_harness.test.js';
-import { loadMediaForRender, type RemoteMediaDeps } from './remote-cache.js';
+import { loadLocalMediaOnly, loadMediaForRender, type RemoteMediaDeps } from './remote-cache.js';
 
 const BYTES = bytesOfLength(512);
 const REF = { mediaId: 'm-1', sha256: sha256Hex(BYTES), mime: 'image/jpeg' } as const;
 
 function rig(options: {
   localPath?: string | null;
+  /** What actually sits at `localPath`. Defaults to the bytes `REF.sha256` was taken over. */
+  localBytes?: Uint8Array;
   download?: () => Promise<Uint8Array>;
   seedCache?: Uint8Array;
 }) {
@@ -27,7 +29,7 @@ function rig(options: {
   const evictions: string[] = [];
   const downloads: number[] = [];
   if (options.localPath !== undefined && options.localPath !== null) {
-    fs.write(options.localPath, BYTES);
+    fs.write(options.localPath, options.localBytes ?? BYTES);
   }
   if (options.seedCache !== undefined) {
     fs.write('/cache/media/m-1.jpg', options.seedCache);
@@ -60,9 +62,11 @@ function rig(options: {
 }
 
 describe('§6 — resolution order: local, then cache, then network', () => {
-  test('self-captured media is served from the DOCUMENT dir with no fetch at all', () => {
-    // "Only self-captured media lives in the document dir" — and the network is never touched for
-    // it. A prefetch or a re-download here would be a data-cost bug on a metered connection.
+  test('POSITIVE CONTROL: a MATCHING document-dir file is served with ZERO downloads', () => {
+    // The offline-first half of task 140, and the reason its fix could not be "always fetch". The
+    // local file hashes to the signed ref, so it renders from the document dir and the network is
+    // never touched — a prefetch or a re-download here would be a data-cost bug on a metered
+    // connection and would break capture-then-view with no uplink at all.
     const { deps, downloads } = rig({ localPath: '/documents/media/m-1.jpg' });
     return loadMediaForRender(deps, REF).then((outcome) => {
       expect(outcome).toEqual({ kind: 'local', uri: '/documents/media/m-1.jpg' });
@@ -136,6 +140,59 @@ describe('§6 — the verification IS the security property', () => {
     expect(fs.read('/cache/media/m-1.jpg')).toEqual(BYTES);
   });
 
+  test('ADVERSARIAL: a LOCAL file that is not the signed bytes is NEVER rendered (task 140)', async () => {
+    // The evidence-substitution case, and the one the local arm used to serve straight to a screen.
+    // Device A signs a note whose `mediaRef.mediaId` names media THIS device holds; `localPathFor`
+    // answers by id, so before task 140 `exists()` alone returned `{kind:'local'}` and the renderer
+    // showed OUR photo as A's repair evidence — no hash read, no download. The local bytes here are
+    // deliberately a DIFFERENT real file, so the refusal is a SHA-256 statement and not an
+    // equality between two fixture strings.
+    const foreign = bytesOfLength(512, 3);
+    const { deps, downloads } = rig({
+      localPath: '/documents/media/m-1.jpg',
+      localBytes: foreign,
+      download: () => Promise.resolve(BYTES),
+    });
+    expect(sha256Hex(foreign)).not.toBe(REF.sha256);
+
+    const outcome = await loadMediaForRender(deps, REF);
+
+    // Not `local`, and not the local uri under any other kind either.
+    expect(outcome.kind).not.toBe('local');
+    // It fell through to the VERIFYING fetch, which returned the signed bytes.
+    expect(outcome).toEqual({ kind: 'cached', uri: '/cache/media/m-1.jpg' });
+    expect(downloads).toHaveLength(1);
+  });
+
+  test('a mismatching LOCAL file is not deleted — it may be un-uploaded evidence (§7)', async () => {
+    // The fall-through must withhold DISPLAY, not destroy bytes. §7 never prunes pending/uploading/
+    // failed media automatically, and a rotted local file's owner is the drain's LOCAL_CORRUPT
+    // (§5.1) — a render-path eviction here would be this repo deleting evidence to fix a display bug.
+    const foreign = bytesOfLength(512, 3);
+    const { deps, fs, evictions } = rig({
+      localPath: '/documents/media/m-1.jpg',
+      localBytes: foreign,
+    });
+    await loadMediaForRender(deps, REF);
+    expect(fs.read('/documents/media/m-1.jpg')).toEqual(foreign);
+    expect(evictions).toEqual([]);
+  });
+
+  test('a mismatching LOCAL file with nothing on the server is `unavailable`, never `local`', async () => {
+    // The offline leg of the same case: no cache entry, and the fetch 404s. The honest answer is
+    // "no verified bytes exist here", which the screen renders as unavailable — NOT the local file.
+    const { deps } = rig({
+      localPath: '/documents/media/m-1.jpg',
+      localBytes: bytesOfLength(512, 3),
+      download: () =>
+        Promise.reject(new MediaTransportError('nope', { code: 'MEDIA_NOT_FOUND', status: 404 })),
+    });
+    expect(await loadMediaForRender(deps, REF)).toEqual({
+      kind: 'unavailable',
+      code: 'MEDIA_NOT_FOUND',
+    });
+  });
+
   test('POSITIVE CONTROL: an INTACT cache entry is served without eviction or a fetch', async () => {
     // Without this, the test above would pass on an implementation that evicted the cache on every
     // render — correct-looking, and a full re-download of every photo on every screen.
@@ -156,6 +213,58 @@ describe('§6 — the verification IS the security property', () => {
     expect(await loadMediaForRender(deps, REF)).toEqual({
       kind: 'unavailable',
       code: 'MEDIA_NOT_FOUND',
+    });
+  });
+});
+
+describe('§6 — the LEGACY arm: what verification can mean when no signed hash exists', () => {
+  // `loadLocalMediaOnly` serves v1/v2 `note_created`, whose payload never carried a hash. The fix
+  // above is unavailable here BY CONSTRUCTION, not by omission: there is nothing on this device to
+  // check the bytes against, and the one candidate — the `media_items` row — is the rewritable local
+  // state `notes/applier.ts` already refuses to back-fill from. These tests pin the narrower
+  // guarantee this arm actually makes, so a reader cannot mistake it for the verified one.
+
+  function legacyRig(seed?: { path: string; bytes: Uint8Array }) {
+    const fs = new FakeFs();
+    if (seed !== undefined) fs.write(seed.path, seed.bytes);
+    return {
+      fs,
+      deps: {
+        files: fs.port,
+        localPathFor: (): Promise<string | null> => Promise.resolve(seed?.path ?? null),
+      },
+    };
+  }
+
+  test('a document-dir file is served, and NOTHING is fetched or read from the cache', async () => {
+    // The whole arm: `files` and `localPathFor` are the only deps it is given, so "it must never
+    // fetch" is enforced by the type — there is no transport in reach to call. That is the
+    // structural half of the guarantee; the assertion below is the behavioural half.
+    const { deps } = legacyRig({ path: '/documents/media/m-9.jpg', bytes: BYTES });
+    expect(await loadLocalMediaOnly(deps, 'm-9')).toEqual({
+      kind: 'local',
+      uri: '/documents/media/m-9.jpg',
+    });
+  });
+
+  test('a pruned legacy attachment is honestly `unavailable` forever — never fetched on spec', async () => {
+    const { deps } = legacyRig();
+    expect(await loadLocalMediaOnly(deps, 'm-9')).toEqual({ kind: 'unavailable', code: null });
+  });
+
+  test('the guarantee is about the FILE, not the OP — the residual task 140 could not close', async () => {
+    // Written as a test rather than left in prose so it cannot rot silently: these bytes are NOT any
+    // signed value, and this arm still returns them, because no signed value exists for a v1/v2
+    // attachment. The closure is authorship ("did THIS device author the op"), which needs the note's
+    // author DEVICE at the call site — `ThumbnailRef.legacy` carries a bare mediaId and the `notes`
+    // projection has only `created_by` (a user id) — i.e. a migration + projection change, its own
+    // task. Bounded today by NOTE_CREATED_SCHEMA_VERSION = 3: nothing freshly emitted lands here.
+    const foreign = bytesOfLength(512, 3);
+    expect(sha256Hex(foreign)).not.toBe(REF.sha256);
+    const { deps } = legacyRig({ path: '/documents/media/m-9.jpg', bytes: foreign });
+    expect(await loadLocalMediaOnly(deps, 'm-9')).toEqual({
+      kind: 'local',
+      uri: '/documents/media/m-9.jpg',
     });
   });
 });
