@@ -1,6 +1,6 @@
 // The app bootstrap (08 §6.3's order; task 24's item 2, completed by task 50).
 //
-//   SQLCipher key from SecureStore  →  open the encrypted DB  →  run client migrations
+//   DB key from SecureStore  →  open (plaintext file) + install the column cipher  →  migrations
 //   →  register modules  →  projection engine  →  sync state
 //
 // ── WHAT IS REAL HERE, AND WHAT IS STILL ABSENT ───────────────────────────────────────────────
@@ -9,7 +9,7 @@
 // green-for-the-wrong-reason shape". A stub here is the most expensive lie available — the shell
 // would boot, screens would render, tests would pass, and nothing would persist.
 //
-//   REAL:    the SQLCipher key (ports/db-keystore.ts), `openClientDb`, `runClientMigrations`,
+//   REAL:    the at-rest column-encryption key (ports/db-keystore.ts), `openClientDb`, `runClientMigrations`,
 //            `registerModules(CLIENT_MODULES)`, the projection engine, `readSyncState`, and — since
 //            task 88 — `readDeviceId`, which exposes the enrolled device id (`deviceId` in `meta_kv`)
 //            as the boot signal that gates the sync loop.
@@ -26,7 +26,7 @@
 //            after enrollment (and live, via Root's re-derive), this `readDeviceId` returns a real id
 //            and the loop starts. A FRESH, never-enrolled device still reads `deviceId: null` here —
 //            the honest unenrolled state — and the loop stays unstarted until the wizard runs. The
-//            on-device/on-server leg (a real POST, SQLCipher at rest) is owed to task 27a (D12/D13).
+//            on-device/on-server leg (a real POST, at-rest ciphertext on device) is owed to task 27a (D12/D13).
 //
 // ── ONE CONNECTION, APP-WIDE (08 §2.2) ────────────────────────────────────────────────────────
 // op-sqlite's rule is EXACTLY ONE open connection per database, app-wide; concurrency comes from
@@ -135,14 +135,14 @@ export interface Bootstrapped {
 /**
  * Boot the data layer. Ordered per 08 §6.3; every step's failure is loud.
  *
- * @throws {DbOpenError} `missing_key` (no SQLCipher key — never a plaintext fallback, SEC-DEV-06),
+ * @throws {DbOpenError} `missing_key` (no DB key — never a plaintext-column fallback, SEC-DEV-06),
  *   `already_open` (a connection is live — 08 §2.2's one-connection rule), `driver_open_failed`
  *   (wrong key or corrupt file, with the key scrubbed from the message).
  * @throws {ModuleRegistryError | PermissionRegistryError} a registration defect — duplicate module
  *   id, duplicate op type, unresolvable permission. 02 §3.2: "startup failure (not a warning)".
  */
 export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
-  // 1. The SQLCipher key (security-guide §6.4). Generate-once lives in the key store; this call is
+  // 1. The at-rest column-encryption key (security-guide §6.4). Generate-once lives in the key store; this call is
   //    what makes a first boot mint one, and every later boot read the same one back. It runs
   //    BEFORE `openClientDb` so a fresh device has a key by the time the driver is asked for it —
   //    `getDatabaseEncryptionKey` deliberately does not generate (see db-keystore.ts).

@@ -64,7 +64,8 @@ import { systemTimer } from './src/ports/timer.js';
  * `@bolusi/db-client/op-sqlite` is a JSI native module that cannot load under Node, which is why it
  * is imported HERE — the one file no Node test imports — and injected downward. Everything below
  * (`bootstrap`, `Root`) names only `DbDriverFactory`, so the whole data layer runs against
- * better-sqlite3 in CI and against SQLCipher on device, through identical code.
+ * better-sqlite3 in CI and against op-sqlite on device, through identical code — with the SAME
+ * app-layer column cipher on both (D22), so at-rest behaviour is no longer platform-dependent.
  *
  * The op-sqlite CONFIG (`performanceMode: true`) is not here and cannot be: 08 §2.2 says it goes in
  * `package.json`'s `op-sqlite` block, read at native build time. It is there. **`sqlcipher` is NOT
@@ -82,7 +83,7 @@ import { systemTimer } from './src/ports/timer.js';
 const APP_VERSION = '';
 
 function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
-  // ONE key store serves BOTH the boot (mint/read the SQLCipher key — security-guide §6.4; quick-
+  // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
   // `bootWithLocalRecovery` self-heals the one boot failure that is NOT a corrupt data layer but a
