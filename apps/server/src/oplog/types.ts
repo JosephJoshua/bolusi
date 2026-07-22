@@ -1,6 +1,6 @@
 // Shared types for the server op-acceptance pipeline (05 §8–9, 10-db §3). No HTTP here — the
 // pipeline is a pure function of deps + batch (task 16 wires it to POST /v1/sync/push).
-import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
+import type { CryptoPort, OperationScope, ProjectionRegistry } from '@bolusi/core';
 import type { DB, ForTenant, TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
 
@@ -20,6 +20,22 @@ export type RegistryResolution =
 
 export interface OpRegistry {
   resolve(type: string, schemaVersion: number): RegistryResolution;
+  /**
+   * The op TYPE's declared envelope scope (01 §6; 05 §2.1) — `'store'` or `'tenant'` — or
+   * `undefined` when no module declares the type.
+   *
+   * The scope step reads this to decide whether a `storeId = null` envelope is legal for this type
+   * (05 §9.2): a STORE-scoped type carrying a null store is malformed, while a TENANT-scoped one
+   * (`platform.user_locale_changed`) legitimately carries null. It is DERIVED from the module's
+   * `OperationDeclaration.scope` (default `'store'`), never a hardcoded list here — a new
+   * store-scoped op type is covered the moment its module declares it, and a module that means
+   * "tenant" has to say so (CLAUDE.md §2.8: one implementation, not per-caller copies).
+   *
+   * `undefined` (unknown type) is deliberately NOT a rejection at the scope step: the schema step
+   * owns that verdict and answers `UNKNOWN_TYPE` (05 §8), so returning `undefined` lets an unknown
+   * type fall through to the code that names it correctly instead of mis-attributing it to scope.
+   */
+  scopeOf(type: string): OperationScope | undefined;
 }
 
 /** Everything the pipeline needs that is an I/O boundary or a not-yet-built collaborator. */

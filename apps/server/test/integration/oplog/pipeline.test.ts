@@ -414,12 +414,41 @@ describe('scope validation (05 §9)', () => {
   test('accepts a tenant-scoped op with storeId null (not every op has a store)', async () => {
     const { world, builder } = await setupWorld(1053);
     const genesis = builder.genesis();
-    const tenantScoped = builder.append({ ...note('a', 'b'), storeId: null });
+    // A GENUINELY tenant-scoped type. This used to be a `notes` op with a forced null store, which
+    // proved the wrong thing: `notes` is STORE-scoped (01 §9), so a null store on it is malformed,
+    // not "tenant-scoped". That mislabelling was the exact dodge task 157 leg 1 closes — the null
+    // slipped past the device→store rule (which only fires on a non-null store) and the mutation
+    // appliers then wrote by `entityId` into another store. `platform.user_locale_changed` is the one
+    // v0 type declared `scope: 'tenant'` (01 §6), so it is what "not every op has a store" means.
+    const tenantScoped = builder.append({
+      type: 'platform.user_locale_changed',
+      entityType: 'user_pref',
+      entityId: world.userId,
+      storeId: null,
+      payload: { locale: 'en' },
+    });
     const deps = makeDeps({ forTenant: testDb.appForTenant });
 
     const result = await processPushBatch(deps, identityOf(world), [genesis, tenantScoped]);
 
     expect(result.results[1]).toMatchObject({ status: 'accepted' });
+  });
+
+  test('rejects SCOPE_VIOLATION when a STORE-scoped op type carries storeId null (05 §9.2, task 157 leg 1)', async () => {
+    const { world, builder } = await setupWorld(1055);
+    const genesis = builder.genesis();
+    // `notes.note_created` is store-scoped, so a null store is malformed — and it is the dodge that
+    // made the device→store rule bypassable, because that rule can only fire on a NON-null store.
+    const nullStore = builder.append({ ...note('a', 'b'), storeId: null });
+    const deps = makeDeps({ forTenant: testDb.appForTenant });
+
+    const result = await processPushBatch(deps, identityOf(world), [genesis, nullStore]);
+
+    expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    // Never logged ⇒ never pulled: a null-store op is visible to EVERY device of the tenant
+    // (`storeId = device.storeId OR storeId IS NULL`, api/01-sync §4.1), which is what made this
+    // variant worse than a plain cross-store write.
+    expect((await readOps(testDb.db, world.tenantId)).map((r) => r.id)).toEqual([genesis.id]);
   });
 
   test('rejects SCOPE_VIOLATION when userId is not in the tenant directory', async () => {

@@ -150,7 +150,35 @@ const SCHEMAS: Record<string, z.ZodType> = {
   'notes.note_body_edited': z.object({ body: z.string() }).loose(),
 };
 
+/**
+ * The op TYPES v0 declares TENANT-scoped (01 §6) — in v0 that is exactly one,
+ * `platform.user_locale_changed` ("the preference follows the user to every device";
+ * core/platform/operations.ts is the declaration). EVERY other type is store-scoped, which is
+ * `OperationDeclaration.scope`'s documented default.
+ */
+export const TENANT_SCOPED_OP_TYPES: ReadonlySet<string> = new Set([
+  'platform.user_locale_changed',
+]);
+
+/**
+ * Build a test registry's `scopeOf` (05 §9.2's null-store rule) from the set of types the stub KNOWS.
+ *
+ * ONE implementation shared by every test OpRegistry stub (CLAUDE.md §2.8) so they all answer the
+ * scope step exactly as production's `deriveOpRegistry` does. Copied per file, a stub that quietly
+ * answered `'tenant'` for a store-scoped type would disable leg 1 for that whole suite and nothing
+ * would say so — the "silently checks nothing" failure §2.11 calls worse than no guard.
+ *
+ * `undefined` for a type the stub does not know: the schema step owns that verdict (`UNKNOWN_TYPE`,
+ * 05 §8), so scope must not pre-empt it.
+ */
+export function testScopeOf(isKnown: (type: string) => boolean): OpRegistry['scopeOf'] {
+  return (type) =>
+    isKnown(type) ? (TENANT_SCOPED_OP_TYPES.has(type) ? 'tenant' : 'store') : undefined;
+}
+
 export const testRegistry: OpRegistry = {
+  scopeOf: testScopeOf((type) => type in SCHEMAS),
+
   resolve(type: string, schemaVersion: number) {
     const schema = SCHEMAS[type];
     if (schema === undefined) return { kind: 'unknown' };

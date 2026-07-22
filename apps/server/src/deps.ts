@@ -124,6 +124,15 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
     }
   }
   return {
+    // The op TYPE's declared envelope scope (01 §6; 05 §2.1), for the scope step's null-store rule.
+    // `declaration.scope ?? 'store'` mirrors `OperationDeclaration.scope`'s documented default, so a
+    // module that says nothing is store-scoped — which is what 01 §9 already asserts for `notes`.
+    // Unknown type ⇒ `undefined`, never a default: guessing `'store'` for a type no module declares
+    // would let the scope step reject an op the schema step must answer for as `UNKNOWN_TYPE`.
+    scopeOf(type) {
+      return byType.get(type)?.scope ?? (byType.has(type) ? 'store' : undefined);
+    },
+
     resolve(type, schemaVersion) {
       const declaration = byType.get(type);
       if (declaration === undefined) return { kind: 'unknown' };

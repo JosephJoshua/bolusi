@@ -60,6 +60,7 @@ import {
   readOps,
   seedDevice,
   seedWorld,
+  testScopeOf,
   type OplogTestDb,
 } from '../oplog/helpers.js';
 
@@ -138,6 +139,19 @@ const noteArchivedApplier: ProjectionApplier<DB> = async (db, op) => {
 
 /** The op registry for the types this suite pushes (the platform types come from the real one). */
 const suiteRegistry: OpRegistry = {
+  // 05 §9.2's null-store rule reads the op TYPE's declared scope; the shared helper answers it the
+  // same way production's `deriveOpRegistry` does (only `platform.user_locale_changed` is tenant-
+  // scoped, and this suite really does push it with a null store).
+  scopeOf: testScopeOf((type) =>
+    [
+      NOTE_CREATED,
+      NOTE_EDITED,
+      NOTE_ARCHIVED,
+      PLATFORM_OP.conflictDetected,
+      PLATFORM_OP.userLocaleChanged,
+    ].includes(type),
+  ),
+
   resolve(type) {
     if (type === NOTE_CREATED || type === NOTE_EDITED || type === NOTE_ARCHIVED) {
       return { kind: 'known', validate: () => true };

@@ -14,11 +14,14 @@
 // device also legitimately emits TENANT-scoped ops with `storeId = null` — `platform.user_locale_
 // changed`, whose preference "follows the user to every device" (01 §6) — so the rule lets `null`
 // through and rejects only a NON-NULL store that differs. Member devices always carry a `store_id`
-// (10-db §4 CHECK `kind = 'system' OR store_id IS NOT NULL`); the tenant SYSTEM device carries none
-// and signs only `platform.conflict_detected`, built server-side via `appendSystemOp`, which NEVER
-// traverses this push scope step (01 §3.6 — "no carve-outs to §9's scope checks"). So the rule is
-// keyed on the device's own store, not its kind: a store-less device is simply never constrained to
-// a store it does not have, and no legitimate system op reaches — or is rejected by — this step.
+// (10-db §4 CHECK `kind = 'system' OR store_id IS NOT NULL`).
+//
+// The tenant SYSTEM device is carved out, and NOT because it is store-less: its only op,
+// `platform.conflict_detected`, carries a NON-null `storeId` (the conflicted entity's store), so the
+// rule WOULD reject it if it ever reached here. The carve-out rests ENTIRELY on the fact that it
+// never does — system ops are built by `appendSystemOp`, which INSERTs straight through and never
+// calls `checkScope` (01 §3.6). Routing them through push would break conflict detection at that
+// line, deliberately.
 //
 // THIS DRIVES THE REAL HTTP SURFACE — production `createApp` + `serverOpRegistry` (the real v3 notes
 // schema AND applier, and the real `platform.user_locale_changed` fold) over real PG16, with the DB
@@ -31,11 +34,10 @@
 // while the two POSITIVE CONTROLS (own-store + tenant-scoped null) stay green. Restore → green.
 // Verbatim in the task Outcome.
 import type { SignedOperation } from '@bolusi/schemas';
-import { resign, type ChainBuilder, type ChainWorld } from '@bolusi/test-support';
+import { type ChainBuilder, type ChainWorld } from '@bolusi/test-support';
 import { beforeEach, afterEach, describe, expect, test } from 'vitest';
 
 import { serverOpRegistry } from '../../../src/deps.js';
-import { serverCryptoPort } from '../../../src/oplog/index.js';
 import { makeSyncHarness, type SyncHarness } from './helpers.js';
 
 let h: SyncHarness;
@@ -77,6 +79,21 @@ async function noteStore(entityId: string): Promise<string | undefined> {
   return rows[0]?.storeId ?? undefined;
 }
 
+/** The victim row's mutable state — what a cross-store mutation would have changed. */
+async function noteState(
+  entityId: string,
+): Promise<{ body: string; archived: boolean; storeId: string } | undefined> {
+  const rows = await h.db
+    .selectFrom('notes')
+    .select(['body', 'archived', 'storeId'])
+    .where('id', '=', entityId)
+    .execute();
+  const row = rows[0];
+  return row === undefined
+    ? undefined
+    : { body: row.body, archived: Boolean(row.archived), storeId: row.storeId };
+}
+
 async function anomalyKinds(deviceId: string): Promise<string[]> {
   const rows = await h.db
     .selectFrom('deviceAnomalies')
@@ -87,32 +104,31 @@ async function anomalyKinds(deviceId: string): Promise<string[]> {
 }
 
 /**
- * A v3 `notes.note_created` (no photo) at an OVERRIDDEN `storeId`, genuinely re-signed so ONLY the
- * scope step can reject it — never a bad signature (the core is re-signed over its final fields) and
- * never SCHEMA_INVALID (the payload is a valid v3 note). `previousHash` is overridable because
- * re-signing changes the op's hash: a second op in one batch must re-link to the FIRST op's
- * post-resign hash or the chain step rejects it before scope ever runs (task 140 B).
+ * A v3 `notes.note_created` (no photo) at an OVERRIDDEN `storeId`.
+ *
+ * Built through `builder.append` at `schemaVersion: 3` rather than re-signed after the fact: the
+ * builder signs the final core AND keeps its chain head, so ONLY the scope step can reject it (never
+ * a bad signature, never SCHEMA_INVALID — the payload is a valid v3 note) and any FOLLOWING op in
+ * the same chain links correctly. Re-signing would advance the head to the pre-resign hash and the
+ * next op would be CHAIN_BROKEN before the scope step ever ran — which is exactly how this file's
+ * same-store positive control first went red for the wrong reason.
  */
 function noteV3(
   world: ChainWorld,
   builder: ChainBuilder,
   title: string,
-  opts: { readonly storeId?: string | null; readonly previousHash?: string } = {},
+  opts: {
+    readonly storeId?: string | null;
+    readonly body?: string;
+  } = {},
 ): SignedOperation {
-  const payload = { title, body: `body-${title}`, mediaRef: null };
-  const built = builder.append({
+  return builder.append({
     type: 'notes.note_created',
     entityType: 'note',
-    payload,
+    schemaVersion: 3,
+    payload: { title, body: opts.body ?? `body-${title}`, mediaRef: null },
     ...(opts.storeId !== undefined ? { storeId: opts.storeId } : {}),
   });
-  const core = {
-    ...built,
-    schemaVersion: 3,
-    payload,
-    ...(opts.previousHash !== undefined ? { previousHash: opts.previousHash } : {}),
-  };
-  return resign(core, world.secretKey, serverCryptoPort);
 }
 
 /** Seed a member device (store-1), land its genesis, and add a SECOND store to its tenant. */
@@ -162,7 +178,7 @@ describe('a member device may write only its own store’s ops (task 157, D22, S
   test('SEC-TENANT-06 an honest same-store sibling in the SAME batch as a cross-store op still commits and is DURABLY LOGGED', async () => {
     const { world, builder, auth, store2 } = await seedTwoStores(7102);
     const good = noteV3(world, builder, 'jujur'); // the device's OWN store (store-1)
-    const cross = noteV3(world, builder, 'lintas', { storeId: store2, previousHash: good.hash });
+    const cross = noteV3(world, builder, 'lintas', { storeId: store2 });
 
     const response = await h.push(auth, world.deviceId, [good, cross]);
 
@@ -213,5 +229,204 @@ describe('a member device may write only its own store’s ops (task 157, D22, S
     expect(response.status).toBe(200);
     expect((await readResults(response))[0]).toMatchObject({ id: locale.id, status: 'accepted' });
     expect(await logHas(locale.id)).toBe(true);
+  });
+});
+
+// =================================================================================================
+// THE MUTATION PATH — the hole the DECLARED-storeId rule above does NOT close on its own.
+//
+// The rule above guards the op's DECLARED `storeId`. The mutation appliers derive their effective
+// store from `entityId` and (before this fix) never read `op.storeId` at all:
+// `noteBodyEditedApplier`/`noteArchivedApplier` ran `UPDATE notes … WHERE id = op.entityId`, and
+// `notes` RLS is TENANT-only (no store predicate — db-server security.ts `secureTenantTable`), so
+// the UPDATE crossed stores inside the tenant. Two dodges reached it:
+//   (A) `storeId = null`  — the declared-store rule only fires on a NON-null store, so null slipped
+//       past. STRICTLY WORSE: a null-store op is pulled by EVERY device of the tenant
+//       (`storeId = device.storeId OR storeId IS NULL`, api/01-sync §4.1), so the victim store's own
+//       devices re-fold it and overwrite the note locally too.
+//   (B) `storeId = <the attacker's OWN store>` — passes `op.storeId == device.storeId` trivially,
+//       because the envelope never has to agree with the entity it names.
+// `note_created` survived (A) only because its applier calls `noteStoreId`, which throws on null;
+// edit and archive never did.
+//
+// THE TWO LEGS THAT CLOSE IT:
+//   LEG 1 (scope step, general): a STORE-scoped op TYPE carrying `storeId = null` is malformed →
+//     `SCOPE_VIOLATION`. Derived from the op-type's DECLARED scope
+//     (`OperationDeclaration.scope`, default `'store'` — 01 §6 / 05 §2.1), read through the registry
+//     seam, never a hardcoded list of notes types. `platform.user_locale_changed` is declared
+//     `'tenant'`, so its legitimate null store still passes (the PC2 control above).
+//   LEG 2 (applier, defense-in-depth): the mutation UPDATEs are constrained to the op's own store,
+//     so a store mismatch is a no-op fold rather than a cross-store write.
+//
+// FALSIFICATION (§2.11): revert leg 1 → (A) and the archive dodge overwrite store-2 again; revert
+// leg 2 → (B) overwrites store-2 again. Both restored → green, with the same-store positive control
+// green throughout (proving neither leg broke legitimate editing).
+describe('a device cannot MUTATE another store’s note via entityId (task 157 legs 1+2, SEC-TENANT-06)', () => {
+  const PWNED = 'PWNED BY STORE-1 DEVICE';
+  const HONEST = 'HONEST BODY';
+
+  /**
+   * A timestamp comfortably AFTER the victim's `note_created`, stamped on every attack op.
+   *
+   * NOT cosmetic — it is what makes these reproductions real. Both `ChainBuilder`s start from the
+   * same base and step +1s per op, so an unstamped attack op lands on the SAME timestamp as the
+   * victim's create and the canonical key `(timestamp, deviceId, seq)` falls through to `deviceId`.
+   * When the attacker's device id sorts lower, the edit is canonically BEFORE the create: the fold
+   * applies it to a row that does not exist yet (a no-op) and the create then inserts the honest
+   * body — so the note survives by ACCIDENT OF ORDERING and the test passes while the hole is wide
+   * open (CLAUDE.md §2.11, green for the wrong reason — this file's own DODGE B did exactly that on
+   * the first run). Ordering the attack strictly after the create removes that alibi: the only thing
+   * that can keep the note honest is the guard under test.
+   */
+  const AFTER_VICTIM = 1_726_000_500_000;
+
+  /**
+   * A store-1 attacker device + a note that genuinely lives in store-2, created by a store-2 device
+   * through the real production path (so the victim row is exactly what normal use produces).
+   */
+  async function seedVictimNote(seed: number): Promise<{
+    world: ChainWorld;
+    builder: ChainBuilder;
+    auth: string;
+    store2: string;
+    victimNoteId: string;
+  }> {
+    const { world, builder, auth, store2 } = await seedTwoStores(seed);
+    const victim = await h.seedDeviceIn(world.tenantId, store2, seed + 900_000);
+    const vGenesis = victim.builder.genesis();
+    expect(
+      (await readResults(await h.push(victim.auth, victim.world.deviceId, [vGenesis])))[0]?.status,
+    ).toBe('accepted');
+    const vNote = noteV3(victim.world, victim.builder, 'victim', { body: HONEST });
+    expect(
+      (await readResults(await h.push(victim.auth, victim.world.deviceId, [vNote])))[0]?.status,
+    ).toBe('accepted');
+    // The victim row is real, in store-2, and honest before the attack.
+    expect(await noteState(vNote.entityId)).toMatchObject({
+      body: HONEST,
+      archived: false,
+      storeId: store2,
+    });
+    return { world, builder, auth, store2, victimNoteId: vNote.entityId };
+  }
+
+  // ── DODGE A: null storeId on a STORE-scoped edit — closed by LEG 1 ────────────────────────────
+  test('SEC-TENANT-06 a note_body_edited carrying storeId NULL cannot edit another store’s note (leg 1)', async () => {
+    const { world, builder, auth, store2, victimNoteId } = await seedVictimNote(7201);
+    const dodge = builder.append({
+      type: 'notes.note_body_edited',
+      entityType: 'note',
+      entityId: victimNoteId,
+      storeId: null, // dodges a rule that only fires on a NON-null store
+      timestamp: AFTER_VICTIM,
+      payload: { body: PWNED },
+    });
+
+    const response = await h.push(auth, world.deviceId, [dodge]);
+
+    // BEFORE leg 1: accepted, logged, folded — store-2's body becomes PWNED, and because the op's
+    // storeId is null EVERY store-2 device pulls and re-folds it (api/01-sync §4.1).
+    expect(response.status).toBe(200);
+    expect((await readResults(response))[0]).toMatchObject({
+      id: dodge.id,
+      status: 'rejected',
+      code: 'SCOPE_VIOLATION',
+    });
+    // Not in the log ⇒ no device can ever pull or re-fold it. That is the null variant's real sting.
+    expect(await logHas(dodge.id)).toBe(false);
+    expect(await noteState(victimNoteId)).toMatchObject({
+      body: HONEST,
+      archived: false,
+      storeId: store2,
+    });
+  });
+
+  // ── DODGE B: the attacker's OWN storeId on an edit naming a foreign note — closed by LEG 2 ─────
+  test('SEC-TENANT-06 a note_body_edited carrying the device’s OWN storeId cannot edit another store’s note (leg 2)', async () => {
+    const { world, builder, auth, store2, victimNoteId } = await seedVictimNote(7202);
+    const dodge = builder.append({
+      type: 'notes.note_body_edited',
+      entityType: 'note',
+      entityId: victimNoteId,
+      storeId: world.storeId, // its OWN store — passes `op.storeId == device.storeId` trivially
+      timestamp: AFTER_VICTIM,
+      payload: { body: PWNED },
+    });
+
+    const response = await h.push(auth, world.deviceId, [dodge]);
+
+    // This op is legitimately SCOPED (it claims the device's own store), so the scope step cannot
+    // and does not reject it — the envelope is self-consistent; only the ENTITY it names is foreign.
+    // It is accepted and logged, and the applier must fold it to NOTHING (store mismatch → no-op).
+    expect(response.status).toBe(200);
+    expect((await readResults(response))[0]).toMatchObject({ id: dodge.id, status: 'accepted' });
+    // BEFORE leg 2 the UPDATE matched on `id` alone and store-2's body became PWNED.
+    expect(await noteState(victimNoteId)).toMatchObject({
+      body: HONEST,
+      archived: false,
+      storeId: store2,
+    });
+  });
+
+  // ── DODGE C: null storeId on a STORE-scoped archive — closed by LEG 1 ─────────────────────────
+  test('SEC-TENANT-06 a note_archived carrying storeId NULL cannot archive another store’s note (leg 1)', async () => {
+    const { world, builder, auth, store2, victimNoteId } = await seedVictimNote(7203);
+    const dodge = builder.append({
+      type: 'notes.note_archived',
+      entityType: 'note',
+      entityId: victimNoteId,
+      storeId: null,
+      timestamp: AFTER_VICTIM,
+      payload: {},
+    });
+
+    const response = await h.push(auth, world.deviceId, [dodge]);
+
+    expect(response.status).toBe(200);
+    expect((await readResults(response))[0]).toMatchObject({
+      id: dodge.id,
+      status: 'rejected',
+      code: 'SCOPE_VIOLATION',
+    });
+    expect(await logHas(dodge.id)).toBe(false);
+    // BEFORE leg 1 this flipped store-2's note to archived — terminal and irreversible (01 §9).
+    expect(await noteState(victimNoteId)).toMatchObject({ archived: false, storeId: store2 });
+  });
+
+  // ── POSITIVE CONTROL: neither leg may break a legitimate SAME-store edit + archive ────────────
+  //
+  // Without this, both legs could be "never fold a mutation" and every dodge test above would still
+  // be green — the fix would have closed the hole by breaking the feature (§2.11).
+  test('SEC-TENANT-06 POSITIVE CONTROL — a device editing and archiving its OWN store’s note still folds', async () => {
+    const { world, builder, auth } = await seedTwoStores(7204);
+    const own = noteV3(world, builder, 'mine', { body: HONEST });
+    expect((await readResults(await h.push(auth, world.deviceId, [own])))[0]?.status).toBe(
+      'accepted',
+    );
+
+    const edit = builder.append({
+      type: 'notes.note_body_edited',
+      entityType: 'note',
+      entityId: own.entityId,
+      payload: { body: 'legitimately edited' },
+    });
+    const archive = builder.append({
+      type: 'notes.note_archived',
+      entityType: 'note',
+      entityId: own.entityId,
+      payload: {},
+    });
+
+    const response = await h.push(auth, world.deviceId, [edit, archive]);
+
+    expect(response.status).toBe(200);
+    const results = await readResults(response);
+    expect(results.map((r) => r.status)).toEqual(['accepted', 'accepted']);
+    // The fold really happened — both mutations landed on the device's own note.
+    expect(await noteState(own.entityId)).toMatchObject({
+      body: 'legitimately edited',
+      archived: true,
+      storeId: world.storeId,
+    });
   });
 });
