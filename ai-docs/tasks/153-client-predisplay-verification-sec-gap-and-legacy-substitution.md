@@ -26,3 +26,15 @@ Part A: add SEC-MEDIA-07 and wire the sweep. Part B: either implement the author
 
 ## FALSIFY (§2.11 — REPORT it)
 Part A: declare SEC-MEDIA-07 with no test → sweep red; add the 140 tests → green; break 140's local-arm check → the id's test reds (proving the id actually guards the behaviour, not just its own title).
+
+
+---
+
+## ADDENDUM 2026-07-22 — task 140 LEG B landed; it opened a matching SERVER-side spec/SEC gap (from the 140B review, MEDIUM)
+
+Leg B (merged `b09290d` → main) added a real security control: the push scope step now rejects any op whose `mediaRef.deviceId`/`userId` are not the envelope signer's (`SCOPE_VIOLATION`). The 140B reviewer verified it is genuinely load-bearing AND that the residual is defended downstream (the media download route IS tenant+store-scoped with RLS + a non-vacuous 404 matrix — verified at `apps/server/src/routes/media.ts:495-507`, `test/integration/media/download.test.ts`).
+
+But — same class as Part A — **the binding rule is not enumerated in `05 §9` and has no SEC id**, so `sec:inventory` cannot see it and a reader of the spec (not the code) won't know it exists. This §Part A already proposes SEC-MEDIA-07 for the CLIENT pre-display check; **extend this task to also home the SERVER binding rule**:
+- Add the `mediaRef`→envelope-signer binding as a general `05 §9` scope sub-rule (it is currently only in `scope.ts`'s comment — excellent and citation-dense, but a rule no gate reads is the §2.11 drift risk).
+- Give it a SEC-MEDIA id (SEC-MEDIA-08, or fold both client+server media-provenance checks under one id — decide when homing) and wire the sweep so it reds if a passing test stops carrying it.
+- **v1 forward-compat marker (140B review LOW):** `06 §3.2` says v1 may attach previously-captured media from a *different session*; the `deviceId` binding is v0-correct ("capture+attach in one command") but would be too strict for a v1 attach-prior-media flow. When homing the rule in the spec, carry a `v0-scope, revisit-at-v1` marker so a future v1 task knows to relax it deliberately, not by accident.
