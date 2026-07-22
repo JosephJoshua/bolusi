@@ -1,6 +1,6 @@
 # TASK 127 — task 121's gate leaves a hole below `current`: any `schemaVersion < current` skips payload validation entirely, so a malformed old-version payload is accepted at push and throws at fold as a 500 that rolls back the whole batch
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — same accept-then-throw-at-fold class task 121 closed, still open on the old-version branch.** Reachable by any enrolled device (it signs its own op, so the signature step passes). The failure is a `500 INTERNAL` that rolls back the ENTIRE push batch, not a per-op rejection — so one malformed op poisons a whole sync.
 **Depends on:** 121 (the gate this completes), 07, 11
 **Blocks:** —
