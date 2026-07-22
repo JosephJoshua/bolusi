@@ -5,6 +5,14 @@
 import type { TenantDb } from '@bolusi/db-server';
 import type { SignedOperation } from '@bolusi/schemas';
 
+// The PRIMARY KEY constraint name Postgres auto-assigns to `operations.id uuid PRIMARY KEY`
+// (migration 0003_operations.ts; the `<table>_pkey` rule for an inline column PK). It is the ONLY
+// unique index `insertOperationRow` below can violate — a cross-tenant op-id collision on the global
+// PK (10-db §5/§6). The push pipeline keys its `duplicate` mapping on THIS name (task 114/139), so it
+// lives next to the INSERT that raises it: rename the constraint in the migration and this is the one
+// place the code that matches it must change too.
+export const OPERATIONS_PK_CONSTRAINT = 'operations_pkey';
+
 export interface OperationInsert {
   readonly op: SignedOperation;
   readonly serverSeq: number;

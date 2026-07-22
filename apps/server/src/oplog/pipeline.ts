@@ -31,9 +31,9 @@ import { sql } from 'kysely';
 
 import type { SurfacedConflict } from '../sync/conflict-detection.js';
 
-import { isUniqueViolation } from '../db-errors.js';
+import { isUniqueViolationOn } from '../db-errors.js';
 import { recordAnomaly, type AnomalyKind } from './anomalies.js';
-import { insertOperationRow } from './persist.js';
+import { insertOperationRow, OPERATIONS_PK_CONSTRAINT } from './persist.js';
 import { allocateServerSeq, lockTenantCounter } from './server-seq.js';
 import { isClockSkewed } from './skew.js';
 import { classifyChain, type ChainHead } from './steps/chain.js';
@@ -232,14 +232,22 @@ export async function processPushBatch(
 
       // `operations.id` is a GLOBAL uuid PK (10-db §5). The dedupe step above is RLS-scoped, so an
       // op id an RLS-hidden row in ANOTHER tenant already holds passed dedupe as new — and the
-      // INSERT then trips the global PK (RLS filters SELECTs, not unique-index conflicts, 10-db §6).
-      // A per-op SAVEPOINT scopes the allocate+insert+fold so that collision rolls back THIS op
-      // alone — the serverSeq increment is undone with it, keeping the stream gapless (10-db §3) —
-      // and is reported as an indistinguishable `duplicate`, exactly like a same-tenant replay
-      // (step 1), never a 500 that would confirm the foreign op id exists (security-guide §2.2;
-      // task 114). Any OTHER unique violation is unreachable on this branch — a within-tenant
-      // (device_id, seq) break is caught by the chain step and (tenant_id, server_seq) by the
-      // counter lock — so a non-collision unique error re-throws and fails loudly, as it must.
+      // INSERT then trips the global PK `operations_pkey` (RLS filters SELECTs, not unique-index
+      // conflicts, 10-db §6). A per-op SAVEPOINT scopes the allocate+insert so that collision rolls
+      // back THIS op alone — the serverSeq increment is undone with it, keeping the stream gapless
+      // (10-db §3) — and is reported as an indistinguishable `duplicate`, exactly like a same-tenant
+      // replay (step 1), never a 500 that would confirm the foreign op id exists (security-guide
+      // §2.2; task 114).
+      //
+      // The catch is keyed on the constraint NAME (`operations_pkey`), not SQLSTATE 23505 alone. That
+      // global-PK collision is the ONLY unique violation these two statements can raise: a within-
+      // tenant (device_id, seq) break is caught earlier by the chain step and (tenant_id, server_seq)
+      // by the counter lock, so any 23505 that is NOT `operations_pkey` is an unexpected fault and
+      // MUST re-throw and fail loudly. Naming the constraint stops the map silently widening if a
+      // statement able to raise a DIFFERENT 23505 is ever added to this try — which is exactly what
+      // the projection fold below used to be (task 139): it ran INSIDE this catch, so a second,
+      // correctly-chained op sharing an entityId tripped the notes-projection PK and was misread as a
+      // `duplicate`, silently dropping a distinct op from the append-only log.
       let serverSeq: number;
       await sql`SAVEPOINT op_write`.execute(db);
       try {
@@ -251,22 +259,29 @@ export async function processPushBatch(
           jcs: signature.jcs,
           clockSkewFlagged,
         });
-
-        // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models. The op
-        // is already in the log with its serverSeq, so the engine reads it as PRESENT and advances
-        // `applied_server_seq` to the highest contiguous serverSeq (04 §4.3) — the PULL-shaped path,
-        // because server projections track server-seq, not an own-device local seq (10-db §8). An
-        // applier throw propagates out of `forTenant`, rolling back this op AND the whole batch
-        // (atomic — 10-db §3). An unregistered type folds as a no-op (engine.ts).
-        await projectionEngine.applyPulledOp(op);
       } catch (err) {
-        if (!isUniqueViolation(err)) throw err;
-        // Undo THIS op's allocation + insert + fold; the batch (and its counter lock) continue.
+        if (!isUniqueViolationOn(err, OPERATIONS_PK_CONSTRAINT)) throw err;
+        // Undo THIS op's allocation + insert; the batch (and its counter lock) continue.
         await sql`ROLLBACK TO SAVEPOINT op_write`.execute(db);
         await sql`RELEASE SAVEPOINT op_write`.execute(db);
         results.push({ id: op.id, status: 'duplicate' });
         continue;
       }
+
+      // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models — AFTER, and
+      // OUTSIDE, the dedupe catch above (task 139). The applier runs arbitrary module SQL, so a
+      // unique/FK/check violation it raises is NOT a dedupe collision and must NEVER be reclassified
+      // as `duplicate`: that would silently drop a distinct, correctly-chained op from the append-only
+      // log (05 §1) while telling the client `synced` (api/01 §3), desyncing the chain head into a
+      // permanent CHAIN_BROKEN brick (05 §8). So an applier throw propagates out of `forTenant`,
+      // rolling back this op AND the whole batch atomically (10-db §3) and surfacing loudly (500 —
+      // there is NO 05 §8 rejection code for a schema-valid-but-unfoldable op, and minting one is out
+      // of scope, CLAUDE.md §6). Still inside the savepoint, so the whole-tx rollback subsumes it. The
+      // op is already in the log with its serverSeq, so the engine reads it as PRESENT and advances
+      // `applied_server_seq` to the highest contiguous serverSeq (04 §4.3) — the PULL-shaped path,
+      // because server projections track server-seq, not an own-device local seq (10-db §8). An
+      // unregistered type folds as a no-op (engine.ts).
+      await projectionEngine.applyPulledOp(op);
       await sql`RELEASE SAVEPOINT op_write`.execute(db);
 
       if (clockSkewFlagged) {
