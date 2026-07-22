@@ -25,3 +25,15 @@ The owner ruled that a mechanic's device should NOT be able to write ops into an
 - 148's ruling does not bless a specific encryption mechanism — that is the design task's output, owner-reviewed before code.
 - 141a documents existing behaviour; it does not change the wire.
 - 141b is approved in principle; the exact scope-rule shape (and any system-device carve-out) is the task's design, adversarially tested, and must not silently break a spec'd multi-branch flow.
+
+---
+
+## D22 addendum — 148 mechanism accepted (2026-07-22): application-layer AEAD, reshaped guarantee
+
+After the design pass established that NO whole-file encryption survives without the second-OpenSSL collision, the owner accepted the recommended mechanism: **application-layer AEAD (AES-256-GCM via quick-crypto's already-linked OpenSSL) on the sensitive columns**, with the reshaped at-rest guarantee — **sensitive VALUES encrypted (note bodies, GPS, op payloads, PIN verifiers); relational STRUCTURE plaintext (ids, op types, timestamps, hashes, row counts)**. The key stays 32 CSPRNG bytes in expo-secure-store (Keystore-wrapped), unchanged.
+
+**Accepted residual:** metadata/activity-shape exposure to forensic extraction of a non-running, non-rooted device; "attacker running as the app decrypts everything" is unchanged from SQLCipher today (revocation is the answer). Perf on the P-2 budget is verifiable only on the emulator/device.
+
+**GATE before implementation:** the owner still signs off the exhaustive encrypted-column set (a missed column is a silent PII leak). The orchestrator produces that list from a full walk of the client DDL (`10-db-schema §9`), classifying EVERY column encrypt/plaintext with the reason, and verifying no encrypted column is ever content-filtered by SQL (WHERE/index/ORDER BY) — an encrypted column that a query filters on would break. Only after column sign-off does code begin, with adversarial at-rest tests (raw file → ciphertext for protected columns; wrong key fails; VACUUM leaves no stale plaintext) and the SEC-AUTH-09 leg.
+
+**Task 151 re-scoped** (not closed): app-layer AEAD is platform-agnostic JS, so "iOS SQLCipher-off" ceases to be a bug and the "iOS collision on config-fix" risk is pre-empted; 151's root cause (podspec misses the pnpm-root config block) still governs `performanceMode` discovery on iOS, which is 151's remaining scope.
