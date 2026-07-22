@@ -60,10 +60,22 @@ export interface OplogPipelineDeps {
     accepted: readonly SignedOperation[],
   ) => Promise<DetectConflictsResult>;
   /**
-   * Fired once per SURFACED (significant) conflict, AFTER the transaction commits (03 §7). Task 21
-   * subscribes to deliver push category `conflict`; the default is absent (no delivery).
+   * Fired once per SURFACED (significant) conflict, AFTER the transaction commits (03 §7). `deps.ts`
+   * binds it to push category `conflict` by default (task 134); absent ⇒ no delivery.
    */
   readonly onConflictSurfaced?: (conflict: SurfacedConflict) => Promise<void>;
+  /**
+   * Fired once per pushing device that had ≥1 `device_anomalies` row written in this batch
+   * (BAD_SIGNATURE / CHAIN_BROKEN / SCOPE_VIOLATION / CLOCK_SKEW — anomalies.ts), AFTER the
+   * transaction commits. `deps.ts` binds it to push category `device` by default (api/04-push §3;
+   * task 134): owner devices are alerted a device misbehaved. Collected then fired post-commit for
+   * the same two reasons as `onConflictSurfaced` — a rolled-back anomaly must not alert, and
+   * delivery I/O must not run under the tenant counter lock. Absent ⇒ no delivery.
+   */
+  readonly onDeviceAnomaly?: (params: {
+    readonly tenantId: string;
+    readonly deviceId: string;
+  }) => Promise<void>;
 }
 
 /** The token-authenticated device pushing this batch (api/01 §2; task 16 supplies it). */

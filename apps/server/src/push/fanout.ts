@@ -11,7 +11,11 @@
 //
 // Dispatch is POST-COMMIT, fire-and-forget (api/04-push §6): a sender that throws never fails the
 // triggering request, and a push failure is logged, never surfaced as a sync error. The trigger
-// functions below are what tasks 16/17 and the anomaly path call.
+// functions below are wired into the server composition by task 134: `sendSyncWake` runs off the
+// sync-push accept path (deps.pokeHub subscription in app.ts, post-commit), `sendConflictSurfaced`
+// is `deps.onConflictSurfaced`'s default (deps.ts), and `sendDeviceAlert` fires from BOTH the
+// revocation hook (app.ts → revocationHooks) and the anomaly hook (`deps.onDeviceAnomaly`, fired
+// post-commit by the push pipeline). They receive a `PushDeliveryDeps` built once in `resolveDeps`.
 import type { ForTenant, TenantDb } from '@bolusi/db-server';
 
 import { hasPermission } from '../auth/permissions.js';
@@ -170,8 +174,11 @@ export async function sendSyncWake(
 
 /**
  * `conflict` surfaced (api/04-push §3; 03-state-machines §7). Targets every active device of the
- * conflict's store (a tenant-wide conflict — `storeId = null` — reaches every device). Wired to
- * `deps.onConflictSurfaced` in composition; task 17 emits the surfacing.
+ * conflict's store (a tenant-wide conflict — `storeId = null` — reaches every device). `deps.ts`
+ * binds this as `onConflictSurfaced`'s default (task 134); the push pipeline fires it once per
+ * surfaced conflict, AFTER the push transaction commits (pipeline.ts). Conflict detection itself is
+ * enabled by a `SystemKeyStore` (SYSTEM_KEY_DIR); with detection off, nothing surfaces and this
+ * never runs.
  */
 export async function sendConflictSurfaced(
   deps: PushDeliveryDeps,

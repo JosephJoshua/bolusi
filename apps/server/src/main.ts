@@ -10,10 +10,19 @@ import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
 import { serverCryptoPort } from './oplog/index.js';
+import { pushPortFromConfig } from './push/expo-transport.js';
 import { makeRealtimeWebSocketServer } from './realtime/serve.js';
 import { systemKeyStoreFromConfig } from './sync/system-key-store.js';
 
 const config = loadConfig();
+
+// PUSH DELIVERY (task 134; api/04-push §7, 08 §8). This is the ONE production injection point for
+// the push sender: build the real `ExpoPushSender` from `EXPO_ACCESS_TOKEN` and inject it, so a
+// running server actually delivers what `POST /v1/push/tokens` collects. UNLIKE `SYSTEM_KEY_DIR`,
+// an absent token is NOT a graceful "push off" — `pushPortFromConfig` THROWS here, before `serve`,
+// because a silent push port is the exact defect this task removed. resolveDeps's field default
+// (`unconfiguredPushPort`) exists only for the type-derivation `createApp()` and tests (fakes).
+const pushPort = pushPortFromConfig(config);
 
 // DEPLOYMENT CONVENTION (task 78): set `SYSTEM_KEY_DIR` to the directory holding the
 // `system-device-<tenantId>.key` files `provision-tenant` writes (base64 Ed25519 secret) to ENABLE
@@ -36,6 +45,7 @@ function productionClientIp(c: Context<AppEnv>): string {
 
 const app = createApp({
   clientIp: productionClientIp,
+  pushPort,
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
 });
 

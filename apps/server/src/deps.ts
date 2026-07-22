@@ -29,6 +29,15 @@ import {
   type RateLimitStore,
 } from './middleware/rate-limit.js';
 import { isFoldableSchemaVersion, serverCryptoPort, type OpRegistry } from './oplog/index.js';
+import {
+  InMemorySyncCoalescer,
+  sendConflictSurfaced,
+  sendDeviceAlert,
+  type PushDeliveryDeps,
+} from './push/fanout.js';
+import { ImmediateDeliveryDispatcher, type DeliveryDispatcher } from './push/dispatcher.js';
+import { unconfiguredPushPort, type PushPort } from './push/port.js';
+import { timerReceiptScheduler } from './push/receipts.js';
 import { nodeHubScheduler, RealtimeHub, type HubScheduler } from './realtime/hub.js';
 import { InProcessPokeHub, type PokeHub } from './realtime/poke-hub.js';
 import type { SurfacedConflict } from './sync/conflict-detection.js';
@@ -221,9 +230,29 @@ export interface ServerDeps {
    *  v0 default, because no `SystemKeyStore` is configured (conflict-wiring.ts). Built from
    *  SERVER_MODULES + the injected key store when one is present. */
   readonly detectConflicts?: DetectConflictsFn;
-  /** Post-commit hook for surfaced (significant) conflicts (03 §7). Task 21 subscribes to deliver
-   *  push category `conflict`; default absent (no delivery). */
+  /** The outward-facing push sender (api/04-push §7). Default in production is `ExpoPushSender`,
+   *  built from `EXPO_ACCESS_TOKEN` and injected by main.ts (`pushPortFromConfig`); the field
+   *  default here is `unconfiguredPushPort` (throws on use, never a silent no-op — task 134); tests
+   *  bind `FakePushPort`. */
+  readonly pushPort: PushPort;
+  /** The bundle the fanout trigger functions (fanout.ts) receive — `pushPort` + `forTenant` + the
+   *  live-connection registry (the realtime hub), sync coalescer, receipt scheduler and clock.
+   *  Built once from the resolved `pushPort`; the sync-wake / revocation / anomaly / conflict
+   *  deliveries all run through it (task 134). */
+  readonly pushDelivery: PushDeliveryDeps;
+  /** The fire-and-forget boundary (api/04-push §1/§6): every delivery is handed to this OFF the
+   *  request path, so an in-contract Expo outage can never block or fail a sync push. Production is
+   *  `ImmediateDeliveryDispatcher`; tests install one and `flush()` before asserting (task 134). */
+  readonly deliveryDispatcher: DeliveryDispatcher;
+  /** Post-commit hook for surfaced (significant) conflicts (03 §7). Bound by default to deliver push
+   *  category `conflict` through `pushDelivery` (task 134); an override wins (tests). */
   readonly onConflictSurfaced?: (conflict: SurfacedConflict) => Promise<void>;
+  /** Post-commit hook for a device that tripped an anomaly this batch (api/04-push §3). Bound by
+   *  default to deliver push category `device` through `pushDelivery` (task 134). */
+  readonly onDeviceAnomaly?: (params: {
+    readonly tenantId: string;
+    readonly deviceId: string;
+  }) => Promise<void>;
   /** The deployment-owned source of tenant system-device signing keys (01 §3.6, 10-db §12).
    *  Absent in v0 — no secret-store loader exists yet (filed as a deployment task); its presence
    *  is what ENABLES conflict detection. */
@@ -266,9 +295,60 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   // This decision is made ONCE, server-wide: it is NOT re-evaluated per tenant, so with a store
   // present a tenant lacking a key fails loudly at emission rather than skipping detection.
   // An explicit override wins for tests.
+  const forTenant = overrides.forTenant ?? dbForTenant;
   const newOpLogId = overrides.newOpLogId ?? (() => uuidv7(now()));
   const serverCrypto = overrides.serverCrypto ?? serverCryptoPort;
   const realtimeScheduler = overrides.realtimeScheduler ?? nodeHubScheduler;
+
+  // The realtime hub doubles as the push fan-out's `LiveConnectionRegistry` (hub.isConnected): a
+  // `sync` push goes ONLY to devices with no live WS/SSE connection (api/04-push §6) — the poke
+  // already covers the connected ones. One hub instance, so the two channels can never disagree
+  // about who is connected.
+  const realtimeHub =
+    overrides.realtimeHub ?? new RealtimeHub({ now, scheduler: realtimeScheduler });
+
+  // The push port (api/04-push §7). Default is `unconfiguredPushPort` (throws on use — never a
+  // silent no-op, task 134); main.ts overrides it with the production `ExpoPushSender` and tests
+  // bind `FakePushPort`. `pushDelivery` bundles it with everything the fanout triggers need.
+  const pushPort = overrides.pushPort ?? unconfiguredPushPort;
+  const pushDelivery: PushDeliveryDeps = overrides.pushDelivery ?? {
+    forTenant,
+    pushPort,
+    liveConnections: realtimeHub,
+    coalescer: new InMemorySyncCoalescer(),
+    receiptScheduler: timerReceiptScheduler,
+    now,
+    logger: (event) => console.warn('[push] dispatch failed', event),
+  };
+  const deliveryDispatcher = overrides.deliveryDispatcher ?? new ImmediateDeliveryDispatcher();
+
+  // The post-commit delivery hooks the push pipeline fires (pipeline.ts). Bound by DEFAULT here —
+  // this is the wiring task 134 restored: before it, `onConflictSurfaced` was set only by tests and
+  // the chaos harness, so a shipping server surfaced conflicts and delivered nothing. An override
+  // still wins (the pipeline suites inject their own recorder).
+  //
+  // CRITICAL (api/04-push §1/§6): the default dispatches the delivery FIRE-AND-FORGET and returns
+  // immediately. The pipeline `await`s this hook post-commit, so it must resolve without waiting on
+  // the Expo round-trip (network I/O + retry backoff up to minutes) — otherwise an in-contract Expo
+  // outage would block the sync-push response and make push load-bearing on the latency axis.
+  const onConflictSurfaced: ServerDeps['onConflictSurfaced'] =
+    overrides.onConflictSurfaced ??
+    ((conflict: SurfacedConflict) => {
+      deliveryDispatcher.dispatch(() => sendConflictSurfaced(pushDelivery, conflict));
+      return Promise.resolve();
+    });
+  const onDeviceAnomaly: ServerDeps['onDeviceAnomaly'] =
+    overrides.onDeviceAnomaly ??
+    ((params: { tenantId: string; deviceId: string }) => {
+      deliveryDispatcher.dispatch(() =>
+        sendDeviceAlert(pushDelivery, {
+          tenantId: params.tenantId,
+          aboutDeviceId: params.deviceId,
+        }),
+      );
+      return Promise.resolve();
+    });
+
   const detectConflicts =
     overrides.detectConflicts ??
     (overrides.systemKeyStore === undefined
@@ -284,7 +364,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   return {
     now,
     newRequestId: overrides.newRequestId ?? (() => uuidv7(now())),
-    forTenant: overrides.forTenant ?? dbForTenant,
+    forTenant,
     authDirectory,
     verifyToken: overrides.verifyToken ?? createDbVerifyToken(authDirectory, now),
     identityRateStore: overrides.identityRateStore ?? new InMemoryWindowLimitStore(),
@@ -303,11 +383,13 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
     realtimeScheduler,
-    realtimeHub: overrides.realtimeHub ?? new RealtimeHub({ now, scheduler: realtimeScheduler }),
+    realtimeHub,
+    pushPort,
+    pushDelivery,
+    deliveryDispatcher,
+    onConflictSurfaced,
+    onDeviceAnomaly,
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
-    ...(overrides.onConflictSurfaced === undefined
-      ? {}
-      : { onConflictSurfaced: overrides.onConflictSurfaced }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),
     ...(overrides.gzipOnProgress !== undefined ? { gzipOnProgress: overrides.gzipOnProgress } : {}),

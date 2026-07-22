@@ -223,6 +223,9 @@ export async function makePushHarness(): Promise<PushHarness> {
       return rows.length;
     },
     async close() {
+      // Drain fire-and-forget deliveries before the pool closes (task 134) — a dispatched alert's
+      // recipient query must not fault against a torn-down pool.
+      await harness.deliveries.flush();
       await testDb.close();
     },
   };

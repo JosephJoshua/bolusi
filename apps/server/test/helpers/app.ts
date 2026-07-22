@@ -4,9 +4,12 @@
 // capture. No mocking of the middleware chain itself — the real chain runs.
 import { createApp } from '../../src/app.js';
 import type { ServerDeps } from '../../src/deps.js';
+import { RevocationHooks } from '../../src/identity/revocation.js';
 import type { AccessLogRecord } from '../../src/middleware/access-log.js';
 import { createVerifyToken, InMemoryTokenStore } from '../../src/middleware/auth.js';
 import type { RateLimitDecision, RateLimitStore } from '../../src/middleware/rate-limit.js';
+import { ImmediateDeliveryDispatcher } from '../../src/push/dispatcher.js';
+import { FakePushPort } from '../../src/push/port.js';
 
 /** Records every consume; denies for keys placed in `denyKeys` (retryAfter = `denySeconds`). */
 export class RecordingRateLimitStore implements RateLimitStore {
@@ -61,6 +64,18 @@ export interface TestHarness {
   readonly accessLogs: AccessLogRecord[];
   readonly stubCalls: string[];
   readonly clock: FakeClock;
+  /** The injected fake push sender — every send is recorded here (CLAUDE.md §6: no real Expo in a
+   *  test). The default `unconfiguredPushPort` would THROW; this makes composed delivery assertions
+   *  possible and keeps any accidental send off the network (task 134). */
+  readonly pushPort: FakePushPort;
+  /** The injected on-revoke registry — createApp registers the `device`-alert hook onto it (task
+   *  134), so a test fires `revocationHooks.fire(...)` and reads `pushPort` to prove the composed
+   *  binding delivers. */
+  readonly revocationHooks: RevocationHooks;
+  /** The injected fire-and-forget delivery dispatcher (task 134). Deliveries run OFF the request
+   *  path, so a composed test drains them with `await deliveries.flush()` before asserting on
+   *  `pushPort` — the flush is the deterministic seam the production request path never uses. */
+  readonly deliveries: ImmediateDeliveryDispatcher;
 }
 
 export function makeTestApp(overrides: Partial<ServerDeps> = {}): TestHarness {
@@ -70,6 +85,9 @@ export function makeTestApp(overrides: Partial<ServerDeps> = {}): TestHarness {
   const accessLogs: AccessLogRecord[] = [];
   const stubCalls: string[] = [];
   const clock = makeFakeClock();
+  const pushPort = new FakePushPort();
+  const revocationHooks = new RevocationHooks();
+  const deliveries = new ImmediateDeliveryDispatcher();
   let requestCounter = 0;
 
   const app = createApp({
@@ -83,10 +101,24 @@ export function makeTestApp(overrides: Partial<ServerDeps> = {}): TestHarness {
     perDeviceStore,
     accessLogSink: (record) => accessLogs.push(record),
     onStub: (routeKey) => stubCalls.push(routeKey),
+    pushPort,
+    revocationHooks,
+    deliveryDispatcher: deliveries,
     ...overrides,
   });
 
-  return { app, tokenStore, perIpStore, perDeviceStore, accessLogs, stubCalls, clock };
+  return {
+    app,
+    tokenStore,
+    perIpStore,
+    perDeviceStore,
+    accessLogs,
+    stubCalls,
+    clock,
+    pushPort,
+    revocationHooks,
+    deliveries,
+  };
 }
 
 /** Register an active device token in the harness store and return its bearer header value. */
