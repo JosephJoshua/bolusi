@@ -110,7 +110,10 @@ export interface AppEnrollment {
 export function createAppEnrollment(
   app: Bootstrapped,
   platform: EnrollmentPlatform,
-  onEnrolled: (deviceId: string) => void,
+  // `ownerUserId` travels alongside the id so the composition root can register the device's push
+  // token for the just-enrolled OWNER (api/04-push §2 (b)); no PIN session exists yet, so the owner is
+  // the only acting user known at this instant.
+  onEnrolled: (deviceId: string, ownerUserId: string) => void,
 ): AppEnrollment {
   const runtime = createAppRuntime(app, {
     crypto: platform.crypto,
@@ -154,7 +157,7 @@ export function createAppEnrollment(
       // hand in. Only `deviceName` is written here (it is not on the bundle); the store/tenant names
       // are core's single-writer keys, refreshed on every bundle (§2.8 — no second writer).
       await persistEnrolledNames(app, { deviceName: req.deviceName });
-      onEnrolled(result.deviceId);
+      onEnrolled(result.deviceId, req.login.user.id);
     },
   };
 

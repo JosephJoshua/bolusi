@@ -52,6 +52,17 @@ import type { Bootstrapped } from './bootstrap.js';
 import type { AppEnrollment, EnrollmentController } from './enrollment.js';
 import { readSessionIdentity } from './notes.js';
 import { createNotificationChannels } from './notifications.js';
+import {
+  registerPushTokenOnAppStart,
+  registerPushTokenOnEnrollment,
+  type PushRegistrationPorts,
+} from '../push/registration.js';
+import {
+  resolvePushShellRoute,
+  type PushResponse,
+  type PushRouteRequest,
+  type PushRouterPort,
+} from '../push/router.js';
 import type { AppRuntime } from './runtime.js';
 import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
@@ -114,7 +125,7 @@ export interface RootProps {
    */
   readonly createEnrollment?: (
     app: Bootstrapped,
-    onEnrolled: (deviceId: string) => void,
+    onEnrolled: (deviceId: string, ownerUserId: string) => void,
   ) => AppEnrollment;
   /**
    * Build the media client for a booted app, or `null` when the device is not enrolled (task 82) —
@@ -172,6 +183,26 @@ export interface RootProps {
    * instead of sleeping (T-6). REQUIRED for the reason `appState` is.
    */
   readonly timer: TimerPort;
+  /**
+   * Build the push-token registration ports for a booted app + the acting user, or `undefined` when
+   * push is not wired (a build with no EAS project id — api/04-push §7; index.ts). Injected for the
+   * same reason as `createSync`: `postToken` binds the fetch transport + the SecureStore device bearer,
+   * and `getExpoPushTokenAsync` is a native module — none load under Node. `Root` calls
+   * `registerPushTokenOnAppStart` with it once a session exists and `registerPushTokenOnEnrollment` on
+   * enroll (api/04-push §2). `actingUserId` rides the `X-Acting-User` header: the session user, or
+   * `null` pre-login. Push is best-effort (§1), so a failure here NEVER blocks or crashes the boot.
+   */
+  readonly createPushRegistration?:
+    | ((app: Bootstrapped, actingUserId: string | null) => PushRegistrationPorts | undefined)
+    | undefined;
+  /**
+   * The notification-tap seam (api/04-push §4/§6), or `undefined` when unwired — injected because it
+   * binds `expo-notifications` (native). `Root` subscribes to warm taps and reads the cold-start tap,
+   * resolves each through `resolvePushShellRoute`, and drives the shell's route. A tap NEVER navigates
+   * to an unreachable surface (the resolver maps only to `ShellRoute` members) and an unknown payload
+   * navigates nowhere.
+   */
+  readonly pushRouter?: PushRouterPort | undefined;
 }
 
 export function Root({
@@ -185,6 +216,8 @@ export function Root({
   createNotes,
   appState,
   timer,
+  createPushRegistration,
+  pushRouter,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
@@ -206,6 +239,12 @@ export function Root({
    */
   const [media, setMedia] = useState<MediaClient | null>(null);
   const [session, setSession] = useState<AppSession | null>(null);
+  /**
+   * The deep link a notification tap requested (api/04-push §4), handed to `App` to apply. A FRESH
+   * object per tap, set ONLY by the push-router effect below (never on an unrelated render), so `App`'s
+   * effect re-navigates on each tap but not on every render. `null` until the first tap.
+   */
+  const [pushRoute, setPushRoute] = useState<PushRouteRequest | null>(null);
   /**
    * The notes surface for the CURRENT session (task 119).
    *
@@ -348,7 +387,7 @@ export function Root({
       // callback can close over the value assigned on the same line (called only later, never in TDZ).
       let enroll: AppEnrollment | null = null;
       enroll =
-        createEnrollment?.(booting, (deviceId) => {
+        createEnrollment?.(booting, (deviceId, ownerUserId) => {
           const enrolled: Bootstrapped = { ...booting, deviceId };
           setApp(enrolled);
           // Re-derive the Settings device-info NOW: enrollment.ts persisted the device/store/tenant
@@ -362,6 +401,15 @@ export function Root({
           // The device just became enrolled — the switcher can now list users and a PIN can open a
           // session, live, without a reboot (the same no-reboot rule the loop follows).
           void startSessionIfEnrolled(enrolled, enroll);
+          // Register the push token immediately post-enrollment (api/04-push §2 (b)) — ALWAYS, so the
+          // server stamps `user_id` for the just-enrolled device even if the token has not changed.
+          // The acting user is the OWNER who enrolled (the only user known at this instant; no PIN
+          // session is open yet — the gate shows the switcher next). Fire-and-forget: push is
+          // best-effort and this must not delay or fail the enroll-success path (§1).
+          if (createPushRegistration !== undefined) {
+            const ports = createPushRegistration(enrolled, ownerUserId);
+            if (ports !== undefined) void registerPushTokenOnEnrollment(ports);
+          }
         }) ?? null;
       setEnrollment(enroll);
       setApp(booting);
@@ -390,7 +438,16 @@ export function Root({
       sessionUnsubRef.current = null;
       sessionRef.current = null;
     };
-  }, [localeStore, boot, createSync, createEnrollment, createMedia, createSession, readDeviceInfo]);
+  }, [
+    localeStore,
+    boot,
+    createSync,
+    createEnrollment,
+    createMedia,
+    createSession,
+    readDeviceInfo,
+    createPushRegistration,
+  ]);
 
   const sessionSnapshot = session?.snapshot() ?? null;
   const sessionUserId = sessionSnapshot?.session?.userId ?? null;
@@ -424,6 +481,45 @@ export function Root({
     ticker.start();
     return () => ticker.stop();
   }, [session, timer, appState]);
+
+  /**
+   * PUSH-TOKEN REGISTRATION, once a session exists (api/04-push §2 (a)) — the production caller
+   * `registerPushTokenOnAppStart` never had (this task's finding: the function shipped with unit tests
+   * and ZERO importers). Keyed on the enrolled app + the session user, so it fires when a PIN opens a
+   * session and re-checks on a user switch. The acting user rides `X-Acting-User` so the server stamps
+   * `user_id` (§2/§4); it is diff-gated inside (an unchanged token issues no request), and it swallows
+   * offline/permission-denied/token-unavailable to `skipped` — a device that refuses notifications
+   * still boots and works (deliverable 3; §1 "push is best-effort and never load-bearing"). Gated on a
+   * NON-null `deviceId` because an unenrolled device has no bearer to register with.
+   */
+  useEffect(() => {
+    if (createPushRegistration === undefined) return;
+    if (app === null || app.deviceId === null || sessionUserId === null) return;
+    // The factory may decline (a build with no EAS project id, api/04-push §7) — then push simply is
+    // not registered, and the boot is unaffected (§1).
+    const ports = createPushRegistration(app, sessionUserId);
+    if (ports !== undefined) void registerPushTokenOnAppStart(ports);
+  }, [app, sessionUserId, createPushRegistration]);
+
+  /**
+   * THE NOTIFICATION-TAP ROUTER (api/04-push §4/§6) — the production caller `resolvePushRoute` never
+   * had. Subscribe to warm taps AND read the cold-start tap that launched the app from a killed state,
+   * resolve each through `resolvePushShellRoute`, and hand `App` a route to apply. `null` (an unknown
+   * route, a missing id, a `sync` data-only wake) sets NOTHING — the positive control that keeps
+   * "always navigates" from passing. A fresh object per tap so a repeat tap re-navigates.
+   */
+  useEffect(() => {
+    if (pushRouter === undefined) return;
+    const handle = (response: PushResponse): void => {
+      const route = resolvePushShellRoute(response.data);
+      if (route !== null) setPushRoute({ route });
+    };
+    const unsubscribe = pushRouter.subscribeToResponses(handle);
+    void pushRouter.getInitialResponse().then((initial) => {
+      if (initial !== null) handle(initial);
+    });
+    return unsubscribe;
+  }, [pushRouter]);
 
   /**
    * THE ACTIVATION (task 119): a session exists ⇒ build the notes surface for that user.
@@ -552,6 +648,9 @@ export function Root({
         locale={locale}
         deviceInfo={deviceInfo}
         enrollment={enrollment?.controller ?? UNWIRED_ENROLLMENT}
+        // The notification-tap deep link (api/04-push §4), or null until a tap resolves to a reachable
+        // route. `App` applies it via `setRoute`; the gate still decides what actually shows.
+        pushRoute={pushRoute}
       />
     </View>
   );
