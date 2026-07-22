@@ -36,3 +36,14 @@ HTTP-D (real PG16 16.14, stamped lane): the server accepts a v3 `mediaRef` with 
 
 ## Constraints
 Contended: `remote-cache.ts` (media) and the push validation path (127/139) — serialize with those. Do not weaken the cache arm to match the local arm; the cache arm is the correct one. A new *rejection code* is a §6 red flag — if one is needed, propose it and stop.
+
+
+---
+
+## LEG A DONE 2026-07-22 (merged, reviewed APPROVE). LEG B still open. Residuals → task 153.
+
+**Leg A** — `loadMediaForRender`'s local arm now hashes the file against `ref.sha256` exactly as the cache arm does; a mismatch falls through to the verifying fetch **without** deleting/evicting the local file (§7 never auto-prunes un-uploaded evidence). The design choice was hash, **not** authorship, and the reviewer confirmed authorship is *unavailable* not merely worse: `mediaRef.deviceId` is a payload field the server never binds to the envelope signer (that is Leg B), so keying the skip on it would hand the attacker the field that disables the check. Fail-closed confirmed: a `hashFile` throw rejects the resolver and `useThumbnail` maps a rejection to `unavailable`, never `ready`. Positive control (a matching local file still renders with **zero** downloads) proven load-bearing by two independent breaks.
+
+**Leg B is UNTOUCHED — the composed attack is HALF-closed.** No server file changed. The server still accepts a `mediaRef` with an arbitrary `mediaId`/`sha256` and a `userId`/`deviceId` that are not the envelope's, and folds it. Device B no longer renders its own photo as A's evidence, but nothing yet binds a ref to real media, to the tenant, or to the signer. **Leg B must still be implemented** — sequence it after task 139 (both touch the push validation path) and read `05 §9` for the scope rule.
+
+**Residuals → task 153:** the SEC list has no id for the client pre-display verification 140 just shipped (propose SEC-MEDIA-07), and the legacy v1/v2 arm remains an evidence-substitution vector (bounded by `NOTE_CREATED_SCHEMA_VERSION = 3`, so no producer exists yet).

@@ -161,6 +161,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 150 | catalog-guard residuals: blank catalog values pass every generalized assertion (caught only by the notes-pinned tests the work exists to generalize past), and a comment credits the leaf floor with catching a starved parse it does not catch (from the 132 review) | todo | 132, 123 |
 | 151 | **HIGH security** SQLCipher is silently OFF on iOS — the podspec's discovery walks to the pnpm repo root and misses the op-sqlite config block, so the iOS build logs \|using pure SQLite\| and ships an unencrypted client DB; the green ios lane is green for that reason (from the 148 investigation) | todo | 85, 148 |
 | 152 | task 127 residuals: the v1 schema's provenance comment claims recovery from a commit that actually contains v2 (this repo never shipped a v1 registry schema) while citing T-16, and the payloadByVersion import guard checks own keys while the runtime reads through the prototype (both falsified by the 127 reviewer) | todo | 127 |
+| 153 | the SEC list has no id for client pre-display media verification (a normative 06 §6 property 140 shipped unguarded) → propose SEC-MEDIA-07; and the legacy v1/v2 render arm is an evidence-substitution vector until the author device reaches the render path (from the 140 impl + review) | todo | 140 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
