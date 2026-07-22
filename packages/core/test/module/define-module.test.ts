@@ -385,6 +385,48 @@ describe('payloadByVersion — retained schemas for superseded versions (04 §3;
     // empty map on them would be noise every module author must write and could get wrong.
     expect(() => manifestAt(150, 1)()).not.toThrow();
   });
+
+  test('rejects a NON-STRICT retained schema supplied on the PROTOTYPE chain (task 152)', () => {
+    // The runtime reads `retained[version]` — prototype-inclusive (payloadSchemaFor, §3 of the file).
+    // A non-strict schema hidden on the prototype is therefore what production validates an old
+    // version against; `Object.entries` (own keys only) never sees it — here the sole OWN key is `2`.
+    // The guard must read the SAME prototype-inclusive way so the checked set IS the reachable set
+    // (CLAUDE.md §2.11: a guard must assert its own coverage). Before task 152 this construction
+    // passed import and then ACCEPTED an unknown-key v1 op at runtime.
+    const payloadByVersion = Object.assign(Object.create({ 1: strippingSchema() }), {
+      2: strictSchema(),
+    }) as Record<number, InputParser<unknown>>;
+    expect(Object.keys(payloadByVersion)).toEqual(['2']); // the v1 schema is NOT an own key
+    const error = expectRejected(manifestAt(153, 3, payloadByVersion), 'payloadByVersion');
+    expect(error.message).toContain('.strict()');
+    expect(error.message).toContain('[1]'); // it names v1 specifically — the prototype-supplied one
+  });
+
+  test('POSITIVE CONTROL — a STRICT retained schema on the prototype chain is ACCEPTED (task 152)', () => {
+    // The fix must not become "reject any retained schema reached through a prototype". A strict
+    // schema the runtime can return is a valid retention: the guard checks it, it is strict, it
+    // passes — and it is the SAME object `payloadSchemaFor` resolves for that version. Without this,
+    // the strictness fix could over-reach into rejecting the reachable set wholesale.
+    const seed = 154;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+    const protoV1 = strictSchema();
+    const payloadByVersion = Object.assign(Object.create({ 1: protoV1 }), {
+      2: strictSchema(),
+    }) as Record<number, InputParser<unknown>>;
+
+    const defined = defineModule<FixtureSuiteDatabase, typeof manifest>({
+      ...manifest,
+      operations: {
+        [`${id}.widget_created`]: {
+          ...manifest.operations[`${id}.widget_created`]!,
+          schemaVersion: 3,
+          payloadByVersion,
+        },
+      },
+    });
+    expect(payloadSchemaFor(defined.operations[`${id}.widget_created`]!, 1)).toBe(protoV1);
+  });
 });
 
 describe('payloadSchemaFor — (type, schemaVersion) → the schema that validates it (04 §3, 05 §8)', () => {

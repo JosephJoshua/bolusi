@@ -65,12 +65,16 @@ export const noteCreatedPayload = z
 /**
  * `notes.note_created` v1 — RETAINED (04 §3 `payloadByVersion`; task 127). `{title, body}` (01 §9).
  *
- * NOT reconstructed from the applier's TypeScript interface, which cannot express `min(1)` or
- * strictness: this is the schema this repo actually shipped at v1, recovered from the module's own
- * migration history (`git show 5f1948d:packages/modules/src/notes/operations.ts` — `title`,
- * `body`, `.strict()`, with `mediaId` added only at v2). Deriving it from the applier ALONE would
- * have guessed; the history is the producer, and `NoteCreatedV1Payload` in applier.ts is the
- * cross-check that the two agree (T-16: trace to the producer).
+ * RECONSTRUCTED as v2-minus-`mediaId` — not recovered from history, and the distinction is exactly
+ * T-16's (a mention is not a producer; trace to one). `5f1948d` introduced this module ALREADY AT
+ * v2: its `constants.ts` reads `NOTE_CREATED_SCHEMA_VERSION = 2` and its `operations.ts` carries the
+ * v2 schema (`{title, body, mediaId}`) as the current version. This repo never shipped a v1 registry
+ * schema, so there is no migration history to recover one from — `noteCreatedPayloadV1` is derived
+ * by dropping `mediaId` from that v2 shape and cross-checked against `NoteCreatedV1Payload` in
+ * applier.ts (the applier folds v1, so its interface is the one independent statement of the v1
+ * shape). Runtime risk is none: `ctx.op()` has no `schemaVersion` parameter (runtime/ctx.ts stamps
+ * the registry's CURRENT version), so no v1 `note_created` op can exist; this schema fails closed
+ * only if a hand-crafted v1 envelope ever appears.
  *
  * `title: z.string().min(1)` is load-bearing, not decorative: `notes.title` is `NOT NULL` and the
  * v1 applier writes `payload.title` straight into it, so a payload without a title is UNFOLDABLE —
