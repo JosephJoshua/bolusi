@@ -1,6 +1,6 @@
 # TASK 157 — add a device→store scope rule: a device may write only its OWN store's ops, not any store of its tenant
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH — permission-matrix change (CLAUDE.md §6), owner-approved (D22).** Closes the `05 §9.2` gap where a mechanic at Branch A can write a repair note into Branch B's book.
 **Depends on:** 141 (the ruling), 07 (op-log pipeline scope step), 140 Leg B (the adjacent per-op scope check to model on)
 **Blocks:** —
