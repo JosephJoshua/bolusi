@@ -210,6 +210,8 @@ States per `MediaItem.uploadStatus` machine: `pending → uploading → uploaded
 | `media.action.usePhoto` | Pakai Foto Ini | Use This Photo |
 | `media.action.retryUpload` | Kirim Ulang | Send Again |
 | `media.permission.camera` | Izinkan aplikasi memakai kamera untuk ambil foto. | Allow the app to use the camera to take photos. |
+| `media.permission.cameraDeniedTitle` | Kamera belum diizinkan | Camera is not allowed |
+| `media.permission.cameraDeniedBody` | Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera. | Open your phone Settings, find this app, then turn on the Camera permission. |
 | `media.storage.lowWarning` | Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan. | Storage is getting low. Old photos that have already been sent will be cleaned up. |
 | `media.storage.lowCritical` | Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman. | Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept. |
 | `media.capture.refusedTitle` | Penyimpanan penuh | Storage full |
