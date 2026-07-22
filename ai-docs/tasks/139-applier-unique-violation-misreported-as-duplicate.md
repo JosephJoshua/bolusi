@@ -1,6 +1,6 @@
 # TASK 139 — a projection applier's unique violation is misreported as `duplicate`: the op VANISHES from the append-only log, the client is told "synced", and the chain head desyncs into a permanent `CHAIN_BROKEN` brick
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — data loss + a permanent client brick.** An op is neither accepted-and-logged nor rejected-and-reported. 05 §1 says the log is append-only; this silently drops from it.
 **Depends on:** 114 (whose `isUniqueViolation` mapping this narrows)
 **Blocks:** —

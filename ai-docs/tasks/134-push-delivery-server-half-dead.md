@@ -1,6 +1,6 @@
 # TASK 134 — push delivery has NO production caller on the server: `sendSyncWake`/`sendConflictSurfaced`/`sendDeviceAlert`/`ExpoPushSender` are dead, and three comments claim otherwise
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH** — the whole notification product is built, tested and unreachable. `POST /v1/push/tokens` (tasks 21/118) receives tokens nobody ever sends to, and nothing is ever delivered.
 **Depends on:** 16, 17, 21
 **Blocks:** 135 (client half is pointless without this)
