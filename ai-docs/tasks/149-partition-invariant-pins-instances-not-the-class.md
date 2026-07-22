@@ -1,6 +1,6 @@
 # TASK 149 — the knip partition invariant can pass while `classify()` is wrong: it pins two instances, not the class, and has no denominator floor
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — no dead file is invisible in the tree today and all four directory rules are contained as shipped, so this is not a live hole. Both gaps need a deliberate edit to the guard itself. Filed because **Gap B is demonstrated, not hypothetical**, and the edit that triggers it is a plausible one.
 **Depends on:** 137 (Half B, merged 2026-07-22)
 **Blocks:** —
