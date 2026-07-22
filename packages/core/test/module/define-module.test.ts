@@ -5,7 +5,12 @@
 // from `validManifest(seed)` and breaks exactly one thing — so a red test names its own cause.
 import { describe, expect, test } from 'vitest';
 
-import { defineModule, ModuleDefinitionError } from '../../src/index.js';
+import {
+  defineModule,
+  ModuleDefinitionError,
+  payloadSchemaFor,
+  type InputParser,
+} from '../../src/index.js';
 import {
   moduleIdFor,
   passthroughSchema,
@@ -277,6 +282,149 @@ describe('schemaVersion (04 §3)', () => {
         }),
       'schemaVersion',
     );
+  });
+});
+
+describe('payloadByVersion — retained schemas for superseded versions (04 §3; task 127)', () => {
+  /** A manifest whose one op type declares `schemaVersion` with the given retention map. */
+  function manifestAt(
+    seed: number,
+    schemaVersion: number,
+    payloadByVersion?: Record<number, InputParser<unknown>>,
+  ): () => unknown {
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+    return () =>
+      defineModule<FixtureSuiteDatabase, typeof manifest>({
+        ...manifest,
+        operations: {
+          [`${id}.widget_created`]: {
+            ...manifest.operations[`${id}.widget_created`]!,
+            schemaVersion,
+            ...(payloadByVersion === undefined ? {} : { payloadByVersion }),
+          },
+        },
+      });
+  }
+
+  test('rejects a bumped version that retains NOTHING', () => {
+    // THE task-127 defect, closed by construction: a type at v2 whose v1 schema was not retained
+    // leaves the server with nothing to validate a v1 push against. Before this rule the server
+    // answered "accept anything", which put an unvalidated payload in the append-only log and threw
+    // at fold time — a 500 that rolled back the whole batch.
+    const error = expectRejected(manifestAt(141, 2), 'payloadByVersion', 'version 1');
+    expect(error.message).toContain('05 §7');
+  });
+
+  test('rejects a bumped version that retains only SOME superseded versions', () => {
+    // The interesting case: partial retention looks like compliance. v3 retaining only v2 leaves v1
+    // — an equally foldable, equally pushable version — with no schema. The message must name the
+    // MISSING versions, not merely say the map is wrong.
+    const error = expectRejected(manifestAt(142, 3, { 2: strictSchema() }), 'payloadByVersion');
+    expect(error.message).toContain('version 1');
+  });
+
+  test('rejects a retained schema for the CURRENT version (it could drift from `payload`)', () => {
+    expectRejected(
+      manifestAt(143, 2, { 1: strictSchema(), 2: strictSchema() }),
+      'payloadByVersion',
+    );
+  });
+
+  test('rejects a retained schema for a version ABOVE current (no applier folds it)', () => {
+    expectRejected(
+      manifestAt(144, 2, { 1: strictSchema(), 5: strictSchema() }),
+      'payloadByVersion',
+    );
+  });
+
+  test('rejects a retained schema at v1, where nothing is superseded', () => {
+    expectRejected(manifestAt(145, 1, { 1: strictSchema() }), 'payloadByVersion');
+  });
+
+  test.each([
+    ['strips unknown keys', strippingSchema],
+    ['passes unknown keys through', passthroughSchema],
+  ])('rejects a retained schema that %s — .strict() applies to every version', (_label, make) => {
+    // Otherwise "claim an old schemaVersion" stays a blanket bypass of 04 §3's unknown-key rule for
+    // every type past v1 — the hole reopened one level down (T-12: test the class).
+    const seed = 146 + String(_label).length;
+    const error = expectRejected(manifestAt(seed, 2, { 1: make() }), 'payloadByVersion');
+    expect(error.message).toContain('.strict()');
+  });
+
+  test('rejects a retained entry with no parse()', () => {
+    expectRejected(
+      manifestAt(148, 2, { 1: {} as unknown as InputParser<unknown> }),
+      'payloadByVersion',
+      'parse()',
+    );
+  });
+
+  test('POSITIVE CONTROL — complete retention is accepted and carried through by reference', () => {
+    // Without this the rules above could all be satisfied by "reject every payloadByVersion".
+    const seed = 149;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+    const retainedV1 = strictSchema();
+    const defined = defineModule<FixtureSuiteDatabase, typeof manifest>({
+      ...manifest,
+      operations: {
+        [`${id}.widget_created`]: {
+          ...manifest.operations[`${id}.widget_created`]!,
+          schemaVersion: 2,
+          payloadByVersion: { 1: retainedV1 },
+        },
+      },
+    });
+    expect(defined.operations[`${id}.widget_created`]?.payloadByVersion?.[1]).toBe(retainedV1);
+  });
+
+  test('POSITIVE CONTROL — a v1-only type still needs no retention map', () => {
+    // The overwhelmingly common case (every `auth.*` and `platform.*` type). A rule that forced an
+    // empty map on them would be noise every module author must write and could get wrong.
+    expect(() => manifestAt(150, 1)()).not.toThrow();
+  });
+});
+
+describe('payloadSchemaFor — (type, schemaVersion) → the schema that validates it (04 §3, 05 §8)', () => {
+  const current = strictSchema();
+  const retainedV1 = strictSchema();
+  const retainedV2 = strictSchema();
+  const declaration = {
+    schemaVersion: 3,
+    payload: current,
+    payloadByVersion: { 1: retainedV1, 2: retainedV2 },
+    reversal: 'n/a',
+    apply: () => Promise.resolve(),
+  };
+
+  test('resolves each foldable version to ITS OWN schema, never to the current one', () => {
+    // The whole point: v2 must NOT be validated against v3's schema (that rejects a legitimate old
+    // client), and must not be validated against nothing (that accepts anything).
+    expect(payloadSchemaFor(declaration, 1)).toBe(retainedV1);
+    expect(payloadSchemaFor(declaration, 2)).toBe(retainedV2);
+    expect(payloadSchemaFor(declaration, 3)).toBe(current);
+  });
+
+  test.each([
+    ['above current', 4],
+    ['far above current', 99],
+    ['zero', 0],
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['NaN', Number.NaN],
+  ])('fails closed on a version %s', (_label, version) => {
+    expect(payloadSchemaFor(declaration, version)).toBeUndefined();
+  });
+
+  test('fails closed on a foldable version whose schema was NOT retained', () => {
+    // `defineModule` makes this unreachable for a registered module — which is precisely why the
+    // lookup is tested directly against a declaration that bypasses it. A resolver that answered
+    // "no schema ⇒ accept" would be green everywhere else and would BE the task-127 defect
+    // (CLAUDE.md §2.11: interrogate the oracle, do not assume the construction holds).
+    const holed = { ...declaration, payloadByVersion: { 1: retainedV1 } };
+    expect(payloadSchemaFor(holed, 2)).toBeUndefined();
   });
 });
 

@@ -4,6 +4,7 @@
 // real implementations without reshaping the skeleton.
 import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
 import {
+  payloadSchemaFor,
   registerModules,
   type AnyModuleDefinition,
   type CryptoPort,
@@ -131,25 +132,39 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
         return { kind: 'known', validate: () => false };
       }
 
-      // A foldable OLD version (`1 <= claimed < current`, e.g. a rolling-out `note_created` v2 while
-      // the server is at v3): the registry retains only the CURRENT payload schema (04 §3 — one
-      // schema per type, the current one), so there is no version-specific schema to re-validate its
-      // payload against. It was validated when it was originally emitted (05 §7); the applier folds it
-      // by its declared version. Accept it — validating an old payload against the CURRENT schema
-      // would wrongly reject a legitimate foldable version (v2's `mediaId` fails v3's `.strict()`).
-      // (Per-version payload schemas would be a module-contract change, out of this task's scope.)
-      if (schemaVersion !== currentVersion) {
-        return { kind: 'known', validate: () => true };
+      // THE PAYLOAD GATE (task 127; 05 §8, 04 §3). The version is foldable, so validate the payload
+      // against the schema THAT VERSION declared — `payloadSchemaFor` returns `payload` for the
+      // current version and the retained `payloadByVersion[v]` for a superseded one.
+      //
+      // This branch used to read `if (schemaVersion !== currentVersion) return { validate: () =>
+      // true }`, and the comment justifying it was half right: re-validating an old payload against
+      // the CURRENT schema really would reject a legitimate rolling-out client (a v2 `note_created`
+      // carries `mediaId`, which v3's `.strict()` refuses). What it missed is that "no schema" is
+      // not the only alternative to "the wrong schema". Skipping validation accepted ANY payload at
+      // any version below current — `notes.note_created` is at v3, so v1 and v2 were a blanket
+      // bypass — and the op then entered the signed, append-only log and threw inside the APPLIER,
+      // where an exception propagates out of `forTenant` and rolls back the entire batch as a `500`.
+      // That poisons honest sibling ops (security-guide §4.1) and wedges the pushing device: the
+      // client reads a 500 as a transport failure, keeps the ops local, and re-sends the identical
+      // batch forever. Retained per-version schemas (04 §3) are the answer that is neither too tight
+      // nor open, and they are what 05 §8's "registry Zod for (`type`, `schemaVersion`)" already
+      // presumed existed.
+      const schema = payloadSchemaFor(declaration, schemaVersion);
+      // FAIL CLOSED. `defineModule` makes retention complete for a registered module, so this is
+      // unreachable in production — which is exactly why it must not be an `accept` (§2.11: a guard
+      // whose failure mode is "silently permits" converts an unknown risk into a false assurance).
+      // A version with no retained schema is a version nothing can validate; it is rejected.
+      if (schema === undefined) {
+        return { kind: 'known', validate: () => false };
       }
 
-      // The CURRENT version: validate the payload against the declared `.strict()` schema (04 §3). A
-      // parse throw is a SCHEMA_INVALID payload, never a crash — classifySchema turns `false` into
+      // A parse throw is a SCHEMA_INVALID payload, never a crash — classifySchema turns `false` into
       // the distinct rejection code (05 §8).
       return {
         kind: 'known',
         validate: (payload) => {
           try {
-            declaration.payload.parse(payload);
+            schema.parse(payload);
             return true;
           } catch {
             return false;

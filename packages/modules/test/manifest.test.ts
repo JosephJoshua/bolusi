@@ -119,3 +119,72 @@ describe('notes conflict declarations (01 §8.1)', () => {
     }
   });
 });
+
+describe('note_created retained per-version payload schemas (04 §3 payloadByVersion; task 127)', () => {
+  // The applier folds v1/v2/v3 forever (05 §7), so all three are versions the server can be ASKED
+  // to accept — and each must be validated against the schema ITS OWN version declared. The server
+  // integration gate for this is apps/server's `notes-old-version-payload.test.ts`, over the real
+  // push path; this pins the SHAPES the declaration retains, where a wrong one is readable.
+  const declaration = notesModule.operations['notes.note_created']!;
+  const v1 = declaration.payloadByVersion?.[1];
+  const v2 = declaration.payloadByVersion?.[2];
+
+  /** Does this retained schema accept `payload`? A throw is a rejection (parse, not safeParse). */
+  function accepts(schema: typeof v1, payload: unknown): boolean {
+    if (schema === undefined) return false;
+    try {
+      schema.parse(payload);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  test('retention covers exactly the superseded versions 1 and 2', () => {
+    // The denominator (T-14): a map that silently covered only v2 would leave v1 rejected forever
+    // in production, and every assertion below about v2 would still be green.
+    expect(Object.keys(declaration.payloadByVersion ?? {}).sort()).toEqual(['1', '2']);
+  });
+
+  test('v1 accepts {title, body} and rejects a missing title — the NOT NULL column it folds into', () => {
+    expect(accepts(v1, { title: 'Catatan', body: 'isi' })).toBe(true);
+    expect(accepts(v1, { body: 'no title' })).toBe(false);
+    expect(accepts(v1, {})).toBe(false);
+    expect(accepts(v1, { title: '', body: 'isi' })).toBe(false);
+  });
+
+  test('v1 is strict — an unknown key is rejected, so an old version is not an unknown-key bypass', () => {
+    expect(accepts(v1, { title: 'Catatan', body: 'isi', whateverIWant: 1 })).toBe(false);
+    // A v3 payload stamped v1 is a version/payload MISMATCH and must be rejected as such: it is
+    // not what it says it is. (This is what chaos-05's fixture used to emit, invisibly.)
+    expect(accepts(v1, { title: 'Catatan', body: 'isi', mediaRef: null })).toBe(false);
+  });
+
+  test('v2 accepts a uuid mediaId (and null) and rejects a non-uuid — the uuid column it folds into', () => {
+    expect(
+      accepts(v2, {
+        title: 'Catatan',
+        body: 'isi',
+        mediaId: '01920000-0000-7000-8000-00000000beef',
+      }),
+    ).toBe(true);
+    expect(accepts(v2, { title: 'Catatan', body: 'isi', mediaId: null })).toBe(true);
+    expect(accepts(v2, { title: 'Catatan', body: 'isi', mediaId: 'NOT-A-UUID-AT-ALL' })).toBe(
+      false,
+    );
+    // Present-and-null, never absent (05 §3): the JCS preimage has no optional keys.
+    expect(accepts(v2, { title: 'Catatan', body: 'isi' })).toBe(false);
+  });
+
+  test('the CURRENT schema still rejects a legitimate v2 payload — which is WHY v2 is retained', () => {
+    // The one-line refutation of "just validate old payloads against the current schema": v3's
+    // `.strict()` refuses `mediaId`, so that shortcut would reject the rolling-out old client.
+    const legitimateV2 = {
+      title: 'Catatan',
+      body: 'isi',
+      mediaId: '01920000-0000-7000-8000-00000000beef',
+    };
+    expect(accepts(declaration.payload, legitimateV2)).toBe(false);
+    expect(accepts(v2, legitimateV2)).toBe(true);
+  });
+});

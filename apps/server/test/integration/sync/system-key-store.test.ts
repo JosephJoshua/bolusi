@@ -171,6 +171,11 @@ async function pushCollision(
           type: NOTE_CREATED,
           entityType: 'note',
           entityId: noteId,
+          // v3 is the shape below (`mediaRef`), so the op must SAY v3: these deps carry the real
+          // registry, which validates a payload against the schema its declared version names
+          // (04 §3 `payloadByVersion`). `ChainBuilder` stamps v1 unless told, and before task 127
+          // the server skipped validation below current, so the mismatch was silently accepted.
+          schemaVersion: 3,
           payload: { title: 't', body: 'a0', mediaRef: null },
         }),
         mBuilder.append({ type: NOTE_ARCHIVED, entityType: 'note', entityId: noteId, payload: {} }),

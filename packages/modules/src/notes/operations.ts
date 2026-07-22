@@ -9,7 +9,7 @@
 import { z } from 'zod';
 
 import type { OperationDeclaration } from '@bolusi/core';
-import { zMediaRef } from '@bolusi/schemas';
+import { zMediaRef, zUuidV7 } from '@bolusi/schemas';
 
 import { noteArchivedApplier, noteBodyEditedApplier, noteCreatedApplier } from './applier.js';
 import { NOTE_BODY_CONFLICT_KEY, NOTE_CREATED_SCHEMA_VERSION, NOTES_OP } from './constants.js';
@@ -18,9 +18,10 @@ import type { NotesDatabase } from './schema.js';
 /**
  * `notes.note_created` payload — the CURRENT version (v3, 01 §9): `{title, body, mediaRef}`.
  *
- * The registry carries ONE schema per op type, the current one, and every freshly-emitted op is v3.
- * v1 (`{title, body}`) and v2 (`{title, body, mediaId}`) payloads live only in history and are never
- * re-validated — the server validates ONLY new pushes, which are always v3 (05 §7).
+ * Every freshly-emitted op is v3. v1 (`{title, body}`) and v2 (`{title, body, mediaId}`) payloads
+ * live only in history — but they are still PUSHED, by an old or rolling-out client, and they are
+ * still folded (05 §7), so they are re-validated against their OWN retained schema below rather
+ * than against this one (04 §3 `payloadByVersion`; task 127).
  *
  * ── WHY v3 EXISTS: THE HASH MUST TRAVEL WITH THE SIGNATURE (05 §2, 06 §6) ──────────────────────
  *
@@ -61,6 +62,44 @@ export const noteCreatedPayload = z
   })
   .strict();
 
+/**
+ * `notes.note_created` v1 — RETAINED (04 §3 `payloadByVersion`; task 127). `{title, body}` (01 §9).
+ *
+ * NOT reconstructed from the applier's TypeScript interface, which cannot express `min(1)` or
+ * strictness: this is the schema this repo actually shipped at v1, recovered from the module's own
+ * migration history (`git show 5f1948d:packages/modules/src/notes/operations.ts` — `title`,
+ * `body`, `.strict()`, with `mediaId` added only at v2). Deriving it from the applier ALONE would
+ * have guessed; the history is the producer, and `NoteCreatedV1Payload` in applier.ts is the
+ * cross-check that the two agree (T-16: trace to the producer).
+ *
+ * `title: z.string().min(1)` is load-bearing, not decorative: `notes.title` is `NOT NULL` and the
+ * v1 applier writes `payload.title` straight into it, so a payload without a title is UNFOLDABLE —
+ * the exact shape that used to be accepted here and then threw `null value in column "title"` at
+ * fold time, rolling back the whole push batch.
+ */
+const noteCreatedPayloadV1 = z.object({ title: z.string().min(1), body: z.string() }).strict();
+
+/**
+ * `notes.note_created` v2 — RETAINED (04 §3 `payloadByVersion`; task 127). `{title, body, mediaId}`.
+ *
+ * `mediaId` is present-and-null, never absent (05 §3's absent-vs-null rule: the JCS preimage has no
+ * optional keys), which is why `.nullable()` and never `.optional()` — the shape v2 shipped with.
+ *
+ * ONE DELIBERATE TIGHTENING vs the historical text, which typed it `z.string().nullable()`. That
+ * was under-strict against its own fold target and always had been: `mediaId` is a `MediaItem.id`
+ * (01 §9 types it UUIDv7; `zMediaRef.mediaId` — the SAME field, carried forward into v3 — is
+ * `zUuidV7`), and the v2 applier writes it straight into `notes.media_id uuid` (10-db §8). A
+ * non-uuid string therefore satisfied the old text and still could not fold: it threw
+ * `invalid input syntax for type uuid` inside the push transaction. Retaining the looser text
+ * verbatim would have re-admitted precisely one of the two probes this task exists to close, so
+ * the retained schema is the FOLDABLE v2 domain rather than the historical typo. It rejects
+ * nothing a legitimate v2 client could have emitted — every media id this system has ever minted
+ * is a UUIDv7 — and it fails closed on what could only ever have 500'd.
+ */
+const noteCreatedPayloadV2 = z
+  .object({ title: z.string().min(1), body: z.string(), mediaId: zUuidV7.nullable() })
+  .strict();
+
 /** `notes.note_body_edited` payload (01 §9): `{body}`. */
 export const noteBodyEditedPayload = z.object({ body: z.string() }).strict();
 
@@ -74,6 +113,10 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     // v1, v2 AND v3 forever (applier.ts) — old ops never disappear (05 §7).
     schemaVersion: NOTE_CREATED_SCHEMA_VERSION,
     payload: noteCreatedPayload,
+    // The applier folds v1/v2/v3, so the server can be ASKED to accept v1/v2/v3 — each against the
+    // schema its own version declared (04 §3). `defineModule` fails the boot if this map does not
+    // cover exactly 1..current-1, so bumping to v4 without retaining v3 cannot compile past import.
+    payloadByVersion: { 1: noteCreatedPayloadV1, 2: noteCreatedPayloadV2 },
     reversal:
       'Reversed by notes.note_archived on the same entityId (04 §3 / 05 §7) — a note is not deleted, it is archived (01 §9: no hard delete, archive is terminal). v0 keeps this as documentation; an executable buildReversal slots in for V2.',
     apply: noteCreatedApplier,

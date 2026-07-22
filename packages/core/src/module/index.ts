@@ -22,6 +22,10 @@ export {
   type OperationDeclaration,
   // 01 §6's envelope scope (`storeId: null` = tenant-scoped).
   type OperationScope,
+  // 04 §3's (type, schemaVersion) → retained payload schema lookup. Crosses the boundary because
+  // the SERVER's push-time schema step (05 §8) is its caller — one implementation, not a per-app
+  // re-derivation of which schema validates which version (CLAUDE.md §2.8).
+  payloadSchemaFor,
   type QueryDeclaration,
 } from './define-module.js';
 

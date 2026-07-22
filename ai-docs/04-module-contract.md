@@ -39,8 +39,11 @@ Every op type the module emits is declared:
 ```ts
 operations: {
   'notes.note_created': {
-    schemaVersion: 1,
-    payload: z.object({ title: z.string().min(1), body: z.string() }).strict(),
+    schemaVersion: 2,
+    payload: z.object({ title: z.string().min(1), body: z.string(), mediaId: zUuidV7.nullable() }).strict(),
+    payloadByVersion: {         // MANDATORY when schemaVersion > 1 — every superseded version (below)
+      1: z.object({ title: z.string().min(1), body: z.string() }).strict(),
+    },
     reversal: 'Reversed by notes.note_archived on the same entityId.',   // MANDATORY (05 §7)
     apply: notesApplier,        // §4
     // conflict: { key: 'note.body', severity: 'minor' },  // OPTIONAL — 01 §8.1; absent ⇒ this type never produces a Conflict
@@ -51,7 +54,10 @@ operations: {
 
 - Type string format: `<moduleId>.<entity>_<event-past-tense>`.
 - `payload` schemas are `.strict()` — unknown keys rejected. Money fields are integer IDR. No floats (05 §3).
-- Bumping a payload shape = new `schemaVersion` + the applier must handle **all** historical versions forever (old ops never disappear).
+- Bumping a payload shape = new `schemaVersion` + the applier must handle **all** historical versions forever (old ops never disappear) + **retain the superseded version's schema in `payloadByVersion`**.
+- `payloadByVersion?: Record<number, ZodSchema>` — **the retained schemas for superseded versions**, keyed by version. **Omitted at `schemaVersion: 1`** (there is nothing superseded); **MANDATORY and COMPLETE for every version `1 .. schemaVersion-1`** once the version has been bumped. Each retained schema is `.strict()` like any other. A key at or above `schemaVersion` is rejected: the current version's schema is `payload`, and a duplicate entry could drift from it. `defineModule` enforces all of this at **import time** — a bump that forgets to retain is a startup failure, not a runtime surprise.
+  - **Why retention is part of the contract.** 05 §8 makes the unit of payload validation the pair (`type`, **`schemaVersion`**) — so the server needs a schema for *every* version it can be asked to accept, and since the applier folds `1..current` forever (05 §7), that is every version. With only the current schema retained there were exactly two options and both were wrong: validating an old payload against the *current* schema rejects a legitimate rolling-out old client (a v2 `note_created` carries `mediaId`, which a later `.strict()` refuses), while skipping validation accepts **any** payload at an old version — which then enters the signed, append-only log unvalidated and throws inside the **applier**, where the exception rolls back the whole push transaction as a `500`. That poisons honest sibling ops (security-guide §4.1) and wedges the pushing device, whose client reads a `500` as a transport failure and re-sends the identical batch forever. Retained schemas are the only option that is neither too tight nor open.
+  - A version with **no** retained schema fails **closed** — rejected `SCHEMA_INVALID` (05 §8), never accepted unvalidated.
 - `reversal` is documentation in v0; executable `buildReversal` slots in for V2 without contract change.
 - `conflict?: { key, severity }` — **OPTIONAL**, semantics owned by **01 §8.1** (which frames itself as *extending* this registry entry, the way `permissions` in §1 is owned by 02 §3). It is the only thing that makes two accepted ops on one entity a collision rather than a sequence: the server's Rule-1 detection keys off `(entityId, conflict.key)`. `severity` (`minor | significant`) is **static** per op type (01 §8.3 — v0 has no payload-dependent severity). Absent ⇒ the type never produces a Conflict record.
 - `scope?: 'store' | 'tenant'` — **OPTIONAL, default `'store'`**. The envelope scope the op is recorded in (05 §2.1: `storeId` null = tenant-scoped). Declared on the **type** and resolved by `ctx.op()` from this registry — the same rationale as `schemaVersion`: it is a property of the type, not of the emission, and a handler that could state its own scope could record an op in a store it was not authorized in. `'store'` resolves to the device's store (02 §5.2's v0 rule — what every op type got before this field existed, so omitting it is unchanged behaviour); `'tenant'` records `storeId = null`. Required by **01 §6**, which states the *fact* that `platform.user_locale_changed` is tenant-scoped (the preference follows the user to every device) but named no mechanism before this field.
