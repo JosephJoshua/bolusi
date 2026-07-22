@@ -166,6 +166,7 @@ export function isOfflineButHealthy(input: SyncStatusInput): boolean {
 export type Reassurance =
   | { readonly kind: 'allSent' }
   | { readonly kind: 'savedHere'; readonly pendingOperationCount: number }
+  | { readonly kind: 'photosPending' }
   | { readonly kind: 'syncing' }
   | { readonly kind: 'attention'; readonly problems: readonly SyncProblem[] };
 
@@ -175,9 +176,16 @@ export function reassurance(input: SyncStatusInput): Reassurance {
   if (input.loopState === 'pushing' || input.loopState === 'pulling') {
     return { kind: 'syncing' };
   }
-  if (input.pendingOperationCount > 0 || input.pendingMediaCount > 0) {
+  if (input.pendingOperationCount > 0) {
     return { kind: 'savedHere', pendingOperationCount: input.pendingOperationCount };
   }
+  // Operations are all sent, but media drains on its OWN schedule (FR-1138, 06-media-pipeline §3):
+  // the op loop never waits on media and vice versa, so "ops sent, photos still queued" is a
+  // legitimate steady state — not a problem, and NOT "all sent". It is its own honest answer,
+  // distinct from `savedHere` (which, keyed on the OP count, would render "0 changes not sent yet"
+  // here) and from `allSent` (which would claim the photos were sent too). `syncTitleState` draws
+  // the same distinction for the header title, so the answer and the title agree (task 147).
+  if (input.pendingMediaCount > 0) return { kind: 'photosPending' };
   return { kind: 'allSent' };
 }
 
@@ -185,6 +193,7 @@ export function reassurance(input: SyncStatusInput): Reassurance {
 export const REASSURANCE_KEY = {
   allSent: 'sync.status.upToDate',
   savedHere: 'sync.status.pending',
+  photosPending: 'sync.status.photosPending',
   syncing: 'sync.status.syncing',
   attention: 'sync.rejected.banner',
 } as const satisfies Record<Reassurance['kind'], string>;
@@ -241,7 +250,40 @@ export function syncChipState(input: SyncStatusInput): SyncChipState {
 }
 
 /**
- * The screen's HEADER TITLE, one key per chip state (design-system §8.1/§8.4).
+ * The header-title state. It is the five chip states PLUS one the chip cannot carry: `photosPending`
+ * — operations all sent, photos still on their own drain schedule (FR-1138). See `syncTitleState`.
+ */
+export type SyncTitleState = SyncChipState | 'photosPending';
+
+/**
+ * The state the HEADER TITLE names — the same verdict as the chip, except for the one distinction the
+ * five-state chip is not built to draw (design-system §8.1).
+ *
+ * ── WHY THIS IS NOT SIMPLY `syncChipState` (task 147) ───────────────────────────────────────────
+ * The chip is media-blind BY SPEC: §8.1 gives it five states and defines `pending` as the count of
+ * `local` ops only. That is correct for a tiny ambient pill about the OP loop. But task 126 keyed the
+ * screen's LARGEST text on the chip, propagating that blind spot into the headline — so a device with
+ * photos still queued (`pendingMediaCount > 0`, ops sent) read "Semua Terkirim" / "All Sent" above a
+ * counter saying "3 foto belum terkirim". "All sent" while three photos are pending is a falsehood in
+ * the *reassuring* direction, in the one text on the one screen a shop owner opens to trust it.
+ *
+ * The fix is NOT to fold media into the chip. Media drains independently of ops (FR-1138), so "ops
+ * sent, photos uploading" is a legitimate steady state, never `attention`; and folding it into
+ * `pending` or `synced` (the two mirror-image errors) would make a normal state look like a problem
+ * or keep hiding it. Instead the TITLE — and only the title — gains its own honest state for exactly
+ * that case. The chip stays `synced`: its verdict (the op loop is caught up) is still true, it has no
+ * sixth state to spend, and media is surfaced where §8.4 puts it (the counter and the media queue).
+ * So the chip and title still AGREE that nothing is wrong; the title merely says the one more true
+ * thing the chip has no room for.
+ */
+export function syncTitleState(input: SyncStatusInput): SyncTitleState {
+  const chip = syncChipState(input);
+  if (chip === 'synced' && input.pendingMediaCount > 0) return 'photosPending';
+  return chip;
+}
+
+/**
+ * The screen's HEADER TITLE, one key per title state (design-system §8.1/§8.4; task 126, task 147).
  *
  * ── WHY THIS MAP EXISTS (task 126) ──────────────────────────────────────────────────────────────
  * The screen used to hardcode `sync.rejected.title` — "Perubahan Ditolak" / "Rejected Changes" —
@@ -250,11 +292,11 @@ export function syncChipState(input: SyncStatusInput): SyncChipState {
  * owner whether their work is safe, that is the failure this whole model exists to prevent
  * (see the header): spending the shop's attention on nothing until nobody reads the header at all.
  *
- * It is keyed on `syncChipState` rather than `reassurance` on purpose. The chip and the title are
- * then the SAME verdict rendered twice — they cannot disagree by construction, which is the same
- * argument `syncChipState` makes for the chip vs the screen. It also gives `offline` its own title:
- * offline is an input, never a problem (the header's thesis), so it gets its own calm words instead
- * of borrowing `pending`'s.
+ * It is keyed on `syncTitleState` — the chip's verdict, plus the `photosPending` distinction the chip
+ * cannot draw (task 147). The chip and the title never disagree about whether anything is WRONG (both
+ * read `attention` together, `synced` together); the title only adds `photosPending`, which the chip
+ * renders as `synced`. `offline` still gets its own title: offline is an input, never a problem (the
+ * header's thesis), so it gets its own calm words instead of borrowing `pending`'s.
  *
  * `sync.rejected.title` stays what it always should have been: the header of the rejected SECTION,
  * rendered only when that section renders. `attention` titles the screen `sync.status.titleAttention`
@@ -263,10 +305,11 @@ export function syncChipState(input: SyncStatusInput): SyncChipState {
 export const SYNC_TITLE_KEY = {
   synced: 'sync.status.titleSynced',
   pending: 'sync.status.titlePending',
+  photosPending: 'sync.status.titlePhotosPending',
   syncing: 'sync.status.titleSyncing',
   offline: 'sync.status.titleOffline',
   attention: 'sync.status.titleAttention',
-} as const satisfies Record<SyncChipState, string>;
+} as const satisfies Record<SyncTitleState, string>;
 
 /**
  * §8.4 item 3: manual sync is disabled, WITH an explanation, when the loop cannot run at all.
