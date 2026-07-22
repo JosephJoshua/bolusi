@@ -66,8 +66,10 @@ import { systemTimer } from './src/ports/timer.js';
  * (`bootstrap`, `Root`) names only `DbDriverFactory`, so the whole data layer runs against
  * better-sqlite3 in CI and against SQLCipher on device, through identical code.
  *
- * The op-sqlite CONFIG (`sqlcipher: true`, `performanceMode: true`) is not here and cannot be: 08
- * §2.2 says it goes in `package.json`'s `op-sqlite` block, read at native build time. It is there.
+ * The op-sqlite CONFIG (`performanceMode: true`) is not here and cannot be: 08 §2.2 says it goes in
+ * `package.json`'s `op-sqlite` block, read at native build time. It is there. **`sqlcipher` is NOT
+ * set, deliberately** (D22/task 148: it vendored a second `libcrypto.so` and the Android APK would
+ * not link). At-rest confidentiality is the app-layer column cipher wired below via `aead`.
  */
 /**
  * The app version string reported to the server on enroll AND shown on the Settings device block —
@@ -99,8 +101,9 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
         aead: deviceColumnAead,
         clock: systemClock,
       }),
-    // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the SQLCipher key
-    // FIRST (the DB is unreadable ciphertext from this moment), then (2) delete the DB file(s) +
+    // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the column-cipher
+    // key FIRST (from this moment the PROTECTED COLUMNS are unrecoverable — the file itself is still a
+    // readable SQLite file since D22, so this is a value-erase, not a file-erase), then (2) delete the DB file(s) +
     // WAL/SHM. On new hardware the identity keys (private key, token) are already absent
     // (THIS_DEVICE_ONLY, never restored), and a fresh empty DB reads `deviceId: null` → the
     // enrollment wizard, so this destroys exactly what makes the re-open clean. It NEVER opens the DB

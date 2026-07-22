@@ -5,18 +5,36 @@
 //
 //     stored = COLUMN_CIPHER_MARKER ‖ base64( nonce(12) ‖ ciphertext ‖ tag(16) )
 //
-// ── WHY THE MARKER (and why a control byte) ─────────────────────────────────────────────────────
+// ── THE MARKER IS A READ-SIDE HINT ONLY. IT MUST NEVER STEER A WRITE. ───────────────────────────
 // Decryption is TRANSPARENT: the read seam (the Kysely plugin) sees result values with no column
-// context (raw `sql` and `SELECT *` both hide which column a value came from), so it decrypts a value
-// iff the value ITSELF says it is one of ours. The base64 body is exactly D22's `base64(nonce ‖ ct ‖
-// tag)`; the marker is a self-identification prefix so the seam never tries to "decrypt" a plaintext
-// column. It leads with U+0001 (SOH) deliberately: none of the plaintext columns this DB stores —
-// UUIDs, base64 hashes/signatures, JSON, enums, display names, integers-as-text — can begin with a
-// C0 control byte, so a plaintext value can never be mistaken for ciphertext. (U+0001, not U+0000:
-// a NUL would risk C-string truncation across the JSI boundary.) `isCiphertext` additionally requires
-// the body to decode to at least nonce+tag bytes, so even a pathological plaintext that somehow began
-// with the marker is rejected structurally rather than fed to `open` — and if one ever did reach
-// `open`, GCM would THROW, never silently surface plaintext.
+// context (raw `sql` and `SELECT *` both hide which column a value came from), so on READ it decrypts
+// a value iff the value ITSELF carries the marker. The base64 body is exactly D22's
+// `base64(nonce ‖ ct ‖ tag)`; the marker (U+0001 — not U+0000, which would risk C-string truncation
+// across JSI) is a self-identification prefix for that read dispatch.
+//
+// `encrypt` DELIBERATELY DOES NOT LOOK AT ITS INPUT. An earlier revision had an "idempotence guard"
+// — `if (this.isCiphertext(plaintext)) return plaintext;` — justified by a comment claiming no
+// plaintext column could begin with a C0 control byte. **That comment was false and it was the only
+// thing holding the guard up** (CLAUDE.md §2.11: the comment was the guard). `notes.title`/`body` are
+// bare `z.string()` and `users_directory.name` is `z.string().min(1).max(64)`; there is no
+// control-character validation anywhere in this repo. So an attacker on a second enrolled device —
+// the insider case that is explicitly IN the threat model — could put the marker plus any
+// base64-legal text in a note body, and the guard would store that PII **verbatim, in the clear**,
+// and then throw on every subsequent read of the table (one poisoned row bricking the switcher).
+// Confidentiality loss AND a permanent DoS, from one line of shape-sniffing.
+//
+// The rule that replaces it: **sealing is unconditional.** Nothing an attacker can put in a value
+// can route it away from the cipher. Double-sealing is not a real hazard to defend against — the
+// plugin transforms each query's AST once from source, `encryptColumnValue` is called once per value
+// at its call site, and no production path ever reads a raw cell and writes it back — so there is
+// nothing to trade the vulnerability for.
+//
+// RESIDUAL, ACCEPTED AND LOUD (read side): a value in a PLAINTEXT-by-design column that begins with
+// the marker and decodes as a well-formed blob (e.g. an attacker-supplied `notes.media_mime`) will be
+// decrypt-attempted on read and will THROW. That is a denial of service, never a disclosure, and it
+// is loud. Restricting the read to the encrypted column NAMES was considered and REJECTED: result
+// keys depend on each query's aliases, so a future `SELECT body AS noteText` would silently return
+// CIPHERTEXT to the UI — trading a loud failure for a silent one, which §2.11 forbids.
 //
 // ── ONE KEY, RANDOM NONCE PER VALUE ─────────────────────────────────────────────────────────────
 // The key is the existing 32-byte SecureStore DB key (`SecureStoreDbKeyStore`, 10-db §12) — the same
@@ -68,9 +86,10 @@ export class Aes256GcmColumnCipher implements ColumnCipher {
   }
 
   encrypt(plaintext: string): string {
-    // Idempotent: never double-seal. The registry writers hand plaintext, but a re-run of an already
-    // sealed value (e.g. a value that round-tripped without decrypt) must not nest a second envelope.
-    if (this.isCiphertext(plaintext)) return plaintext;
+    // UNCONDITIONAL BY CONSTRUCTION — this method never inspects `plaintext`. See the file header:
+    // the shape-sniffing "already sealed?" short-circuit that used to live here stored attacker-shaped
+    // PII in the clear. A value that merely LOOKS like ciphertext is still plaintext, and is sealed
+    // like any other; it round-trips back byte-identical because the read decrypts exactly once.
     const nonce = this.#aead.randomBytes(COLUMN_NONCE_BYTES);
     const sealed = this.#aead.seal(this.#key, nonce, utf8ToBytes(plaintext));
     const blob = new Uint8Array(nonce.length + sealed.length);

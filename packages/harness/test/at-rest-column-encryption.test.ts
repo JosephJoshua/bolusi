@@ -48,6 +48,7 @@ import {
   runClientMigrations,
   type ClientDb,
 } from '@bolusi/db-client';
+import { noteBodyEditedApplier } from '@bolusi/modules/notes';
 import { nodeColumnAead } from '@bolusi/test-support';
 
 import { openFileDriver } from '../src/driver.js';
@@ -207,14 +208,21 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
     await closeClientDb();
 
     const bytes = readFileSync(opened.file);
-    const text = bytes.toString('latin1');
 
     // (a) THE LEAK CHECK, enumerated per column. A missed column is a silent PII leak, so every
     //     signed-off value is hunted for individually and named in the failure.
+    //
+    //     BYTE-EXACT, and that is load-bearing: this hunt used to decode the file with `latin1` and
+    //     compare strings, so any needle containing a non-ASCII character — `notes.body` carries an
+    //     em-dash and a ✅ — could NEVER match, whether or not the column was sealed. The check for
+    //     the single most sensitive free-text column in the set was structurally incapable of going
+    //     red (§2.11). Comparing UTF-8 bytes against the raw buffer removes the encoding from the
+    //     equation entirely.
     for (const [column, plaintext] of Object.entries(PLAIN)) {
-      expect(text.includes(plaintext), `${column} was stored in the CLEAR in the raw DB file`).toBe(
-        false,
-      );
+      expect(
+        bytes.includes(Buffer.from(plaintext, 'utf8')),
+        `${column} was stored in the CLEAR in the raw DB file`,
+      ).toBe(false);
     }
 
     // (b) …and the cells really are OUR ciphertext, not merely absent/empty. Without this, a codec
@@ -252,14 +260,15 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
     await writeAllTheSensitiveThings(opened.db);
     await closeClientDb();
 
-    const text = readFileSync(opened.file).toString('latin1');
+    const bytes = readFileSync(opened.file);
+    const onDisk = (needle: string): boolean => bytes.includes(Buffer.from(needle, 'utf8'));
     // D22 addendum 2's PLAINTEXT list, asserted so nobody later "improves" this into a whole-file
     // claim the mechanism does not make: ids, hashes and signatures are visible on disk BY DESIGN,
     // and the accepted residual is metadata/activity-shape exposure to forensic extraction.
-    expect(text).toContain('1'.repeat(64)); // operations.hash
-    expect(text).toContain('notes.note_created'); // operations.type
-    expect(text).toContain('bad_signature'); // quarantined_ops.reason
-    expect(text).toContain('user-1'); // ids / FKs
+    expect(onDisk('1'.repeat(64))).toBe(true); // operations.hash
+    expect(onDisk('notes.note_created')).toBe(true); // operations.type
+    expect(onDisk('bad_signature')).toBe(true); // quarantined_ops.reason
+    expect(onDisk('user-1')).toBe(true); // ids / FKs
   });
 
   test('round-trip is lossless through the real readers — UTF-8, emoji, JSON and JCS included', async () => {
@@ -308,6 +317,124 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
   });
 });
 
+describe('at-rest column encryption — attacker-shaped plaintext cannot steer the write path', () => {
+  // THE F1 REGRESSION TEST. `encrypt` once short-circuited on `isCiphertext(plaintext)`, so a
+  // plaintext that merely LOOKED sealed was stored verbatim — PII in the clear, plus a permanent
+  // read DoS (one poisoned row threw on every later SELECT, bricking the switcher). The value below
+  // is a fully legal `notes.body` / `users_directory.name`: the marker plus base64-legal text, which
+  // needs no randomness at all. It reaches the device from another enrolled device's signed op or
+  // from the server bundle — the in-scope insider path.
+  const ATTACKER_SHAPED = `${COLUMN_CIPHER_MARKER}BRIBERYLEDGERkickbackRp250jutaBudiSanto5`;
+
+  test('a plaintext that looks like ciphertext is SEALED, round-trips exactly, and never hits the disk', async () => {
+    opened = await openAt(DB_KEY);
+
+    // Seam 1 — the builder/plugin path (`notes.body`).
+    await opened.db.db
+      .insertInto('notes')
+      .values({
+        id: 'note-poison',
+        tenantId: 'tenant-1',
+        storeId: 'store-1',
+        title: 'ordinary title',
+        body: ATTACKER_SHAPED,
+        mediaId: null,
+        mediaSha256: null,
+        mediaMime: null,
+        archived: 0,
+        editCount: 0,
+        createdBy: 'user-1',
+        createdAt: 1,
+        lastEditedBy: 'user-1',
+        lastEditedAt: 1,
+      })
+      .execute();
+
+    // Seam 2 — the raw-`sql` / registry path (`users_directory.name`).
+    await replaceUsersDirectory(opened.db.db, [
+      { id: 'user-1', name: ATTACKER_SHAPED, photoMediaId: null, status: 'active' },
+    ]);
+
+    // (a) STORED AS CIPHERTEXT on both seams — not passed through verbatim.
+    const rawNote = await opened.db.driver.execute(`SELECT body FROM notes WHERE id='note-poison'`);
+    const rawUser = await opened.db.driver.execute(`SELECT name FROM users_directory`);
+    expect(rawNote.rows[0]?.['body']).not.toBe(ATTACKER_SHAPED);
+    expect(rawUser.rows[0]?.['name']).not.toBe(ATTACKER_SHAPED);
+    // A sealed value is strictly longer than its plaintext (nonce+tag+base64), so "still marked" is
+    // not enough on its own — length pins that a real envelope was added rather than the input echoed.
+    expect(String(rawNote.rows[0]?.['body']).length).toBeGreaterThan(ATTACKER_SHAPED.length);
+    expect(String(rawUser.rows[0]?.['name']).length).toBeGreaterThan(ATTACKER_SHAPED.length);
+
+    // (b) ROUND-TRIPS BYTE-IDENTICAL through the real readers — decrypt runs exactly once, so the
+    //     marker inside the recovered plaintext is not mistaken for a second envelope.
+    const note = await opened.db.db
+      .selectFrom('notes')
+      .select('body')
+      .where('id', '=', 'note-poison')
+      .executeTakeFirstOrThrow();
+    expect(note.body).toBe(ATTACKER_SHAPED);
+    const users = await listSwitcherUsers(opened.db.db);
+    expect(users[0]?.name).toBe(ATTACKER_SHAPED);
+
+    // (c) THE SECRET IS NOT IN THE FILE.
+    await closeClientDb();
+    const bytes = readFileSync(opened.file);
+    expect(bytes.includes(Buffer.from('BRIBERYLEDGERkickbackRp250juta', 'utf8'))).toBe(false);
+  });
+});
+
+describe('at-rest column encryption — the UPDATE seam', () => {
+  test('the real note-body-edited applier re-seals on UPDATE, not only on INSERT', async () => {
+    // INSERT and UPDATE take DIFFERENT branches of the encrypt transform (a builder INSERT binds a
+    // primitive value list; a builder UPDATE binds a ColumnUpdateNode). Only the INSERT branch was
+    // covered, so a regression in the UPDATE branch would have shipped a note whose ORIGINAL body was
+    // sealed and whose every EDIT landed in the clear — the more likely long-run leak of the two.
+    // Driven through the REAL module applier, so this also pins that appliers stay unaware (04 §2).
+    opened = await openAt(DB_KEY);
+    const edited = 'PLAINTEXT-EDITED-BODY-tiga belas krat — ✅ dihitung ulang';
+
+    await writeAllTheSensitiveThings(opened.db);
+    await noteBodyEditedApplier(
+      opened.db.db as never,
+      {
+        id: 'op-2',
+        tenantId: 'tenant-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        deviceId: 'device-1',
+        seq: 2,
+        type: 'notes.note_body_edited',
+        entityType: 'note',
+        entityId: 'note-1',
+        schemaVersion: 1,
+        payload: { body: edited } as never,
+        timestamp: 1_700_000_001_000,
+        location: null,
+        source: 'ui',
+        agentInitiated: false,
+        agentConversationId: null,
+      } as never,
+    );
+
+    // The stored cell is a marked blob, and the edited cleartext is not in it…
+    const raw = await opened.db.driver.execute(`SELECT body FROM notes WHERE id='note-1'`);
+    expect(String(raw.rows[0]?.['body']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+    expect(String(raw.rows[0]?.['body'])).not.toContain('tiga belas krat');
+
+    // …it round-trips through the reader…
+    const note = await opened.db.db
+      .selectFrom('notes')
+      .select('body')
+      .where('id', '=', 'note-1')
+      .executeTakeFirstOrThrow();
+    expect(note.body).toBe(edited);
+
+    // …and the edited body never reaches the file in the clear.
+    await closeClientDb();
+    expect(readFileSync(opened.file).includes(Buffer.from(edited, 'utf8'))).toBe(false);
+  });
+});
+
 describe('at-rest column encryption — the failure modes', () => {
   test('the WRONG key throws; it never returns garbage and never returns plaintext', async () => {
     opened = await openAt(DB_KEY);
@@ -332,14 +459,23 @@ describe('at-rest column encryption — the failure modes', () => {
     expect(right.decrypt(sealed)).toBe(PLAIN.noteBody);
   });
 
-  test('a tampered blob throws — the tag is checked, not just the nonce', async () => {
+  test('tampering with the CIPHERTEXT/TAG region throws — the tag is verified, not just the nonce', () => {
     const cipher = new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead);
     const sealed = cipher.encrypt(PLAIN.noteTitle);
-    // Flip one character of the base64 body (after the marker) — GCM must refuse it.
-    const marker = COLUMN_CIPHER_MARKER;
-    const body = sealed.slice(marker.length);
-    const flipped = (body[10] === 'A' ? 'B' : 'A') + body.slice(1);
-    expect(() => cipher.decrypt(marker + flipped)).toThrow();
+    const body = sealed.slice(COLUMN_CIPHER_MARKER.length);
+
+    // Mutate the LAST base64 character, which lands in the authentication tag — the earlier version
+    // of this test read index 10 but rewrote index 0 (the nonce), so it both mis-described what it
+    // proved AND was a no-op whenever index 10 already held the replacement character. Substituting
+    // deterministically ('A'↔'B') guarantees a real one-character change every run.
+    const last = body[body.length - 1];
+    const mutated = body.slice(0, -1) + (last === 'A' ? 'B' : 'A');
+    expect(mutated).not.toBe(body);
+    expect(() => cipher.decrypt(COLUMN_CIPHER_MARKER + mutated)).toThrow();
+
+    // …and the nonce region is authenticated too: GCM binds the IV into the tag.
+    const nonceMutated = (body[0] === 'A' ? 'B' : 'A') + body.slice(1);
+    expect(() => cipher.decrypt(COLUMN_CIPHER_MARKER + nonceMutated)).toThrow();
   });
 
   test('VACUUM leaves no stale plaintext after an in-place plaintext→ciphertext conversion', async () => {
@@ -368,7 +504,7 @@ describe('at-rest column encryption — the failure modes', () => {
     // oracle before believing it).
     await opened.db.driver.execute('PRAGMA wal_checkpoint(TRUNCATE)');
     expect(
-      readFileSync(opened.file).toString('latin1').includes(legacy),
+      readFileSync(opened.file).includes(Buffer.from(legacy, 'utf8')),
       'setup failed: the cleartext never reached the main DB file, so this test would prove nothing',
     ).toBe(true);
 
@@ -384,13 +520,13 @@ describe('at-rest column encryption — the failure modes', () => {
     // THE LEAK, DEMONSTRATED: every row now reads as ciphertext, yet the OLD cleartext is still
     // physically present in the file's freed space. This is precisely why the migration must VACUUM —
     // and this assertion is what stops the one below from passing for the wrong reason.
-    expect(readFileSync(opened.file).toString('latin1')).toContain(legacy);
+    expect(readFileSync(opened.file).includes(Buffer.from(legacy, 'utf8'))).toBe(true);
 
     await opened.db.driver.execute('VACUUM');
     await closeClientDb();
 
     // …and gone once the file is rewritten.
-    expect(readFileSync(opened.file).toString('latin1')).not.toContain(legacy);
+    expect(readFileSync(opened.file).includes(Buffer.from(legacy, 'utf8'))).toBe(false);
   });
 });
 
