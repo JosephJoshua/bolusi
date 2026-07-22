@@ -30,3 +30,12 @@ A boot-time **"can we decrypt a known cell?" probe** that classifies an undecryp
 - After the fix: the same input is classified at boot and self-heals (or fails loudly), never a half-enrolled boot.
 - **Positive controls (all three mandatory):** a fresh empty DB boots normally and is NOT wiped; a healthy enrolled DB boots normally; a simulated transient read error does NOT trigger the wipe.
 - Reconcile `recovery.ts`'s header and `security-guide §6.6` (148 marked the SQLCipher paragraph as history; this task makes the replacement true).
+
+
+---
+
+## RAISED IN IMPORTANCE 2026-07-22 by task 148 round 3 (the keyed marker)
+
+148's keyed marker makes the marker unforgeable by deriving it from the DB key. A necessary consequence: values sealed under a **different** key no longer match the marker, so a foreign-key DB's rows now surface as **opaque envelope text instead of throwing**. The security property is intact (no plaintext; `decrypt` still throws; `isCiphertext` false) — but it removes the last incidental place a restored foreign DB announced itself.
+
+**So this task is now MORE load-bearing, not less:** a stored key-tag comparison at open is the ONLY remaining place a restored foreign DB gets caught. Before the keyed marker, a wrong-key read at least threw; now it can return sealed text that a caller may treat as data. Design the probe accordingly — it is no longer a nice-to-have boot check, it is the detection mechanism.
