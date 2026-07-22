@@ -3,7 +3,7 @@
 // module screen copies: `useQuery`/`useCommand` over a `NotesRuntime` the composition root binds
 // (04 §7), all four §5 states, live-query invalidation, media, and full i18n.
 export { NotesList, type NotesListProps } from './NotesList.js';
-export { NoteEditor, type NoteEditorProps } from './NoteEditor.js';
+export { NoteEditor, type NoteEditorProps, type DiscardGuard } from './NoteEditor.js';
 export { NoteDetail, type NoteDetailProps } from './NoteDetail.js';
 
 export {
