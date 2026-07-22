@@ -40,3 +40,36 @@ CLAUDE.md §2.1 says read the tool's own output — and every local run *was* re
 - Break one thing per CI job (an unused export, a stale codegen, a missing i18n key, a type error) and confirm `pnpm verify` reds on each with the SAME failure CI reports. A local command that passes while CI fails is the exact defect this task exists to remove.
 - Remove a step from the local command → the drift gate reds. Restore → green.
 - State the runtime honestly: if full parity is too slow to run per-commit, say so and define the subset + when the full run is mandatory (pre-merge), rather than quietly dropping steps.
+
+
+---
+
+## ADDENDUM — the same blindness on the other side: two lanes that have NEVER RUN
+
+While reading `gh run list` I checked whether the lanes v0's exit actually depends on had ever executed:
+
+```
+event breakdown of the last 60 runs: {'push': 59, 'schedule': 1}
+the one schedule run: 29804441399  2026-07-21T05:35  CANCELLED  (only job listed: chaos-nightly)
+```
+
+`.github/workflows/ci.yml:478` and `:578` gate `android-emulator` and `ios-simulator` on
+`github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'`. That gating is
+**deliberate and correct** (the comment at :473-475 explains it: an expensive lane whose first-run
+failure should be a red scheduled job, not a false green on a PR). The problem is that neither
+trigger has ever produced a completed run — the sole scheduled run was cancelled, and no
+`workflow_dispatch` had ever been issued.
+
+**Consequence:** tasks 27a, 85 and 117 have sat `in-progress` against a lane that has never
+executed, and **SEC-AUTH-09 leg 1** — the one item D21 says v0's exit still waits on, described
+there as "a CI event, not a hardware purchase" — had never been attempted. The gate was not red or
+green; it was absent, and nothing said so.
+
+The orchestrator dispatched the first run manually on 2026-07-22 (`gh workflow run ci --ref main` →
+run `29890632296`).
+
+**Additional deliverable for this task:** the by-design-skipped lanes must be as legible as the
+by-design-red one (item 3 above). A lane that has never run is not evidence of anything, and a task
+must not be able to sit `in-progress` citing a lane with no completed run behind it. At minimum:
+state in the task index (or the lane's own doc) when each dispatch-only lane last completed, and
+make "never" visible.
