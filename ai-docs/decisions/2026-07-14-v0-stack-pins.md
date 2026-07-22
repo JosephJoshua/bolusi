@@ -12,6 +12,8 @@
 
 **Risk accepted:** op-sqlite is effectively single-maintainer — mitigated by the wrapper + swap target. Device write benchmark required before freezing throughput numbers (testing-guide gates).
 
+> **Forward note (2026-07-22 — D21): D6 is RATIFIED, ON AN ASSUMPTION.** The write benchmark this pin was owed to (P-2's throughput floor, testing-guide §4.2) is **assumed to pass per D21 (owner ruling, 2026-07-22); unverified on device** — see `decisions/2026-07-22-assume-device-performance-passes.md`. No throughput figure has been observed on the 2 GB reference device; none appears in this repo, and none may be written as though it had (CLAUDE.md §2.1). The pin therefore stands on an accepted assumption, not on a measurement. **The wrapper and the expo-sqlite swap target are unaffected** — they were never contingent on the number and stay exactly as specified above, which is also what leaves a real device free to refute this later. Note the sizing recorded in `ai-docs/OPEN-QUESTIONS.md` §1 is unchanged: expo-sqlite is *slower*, so a throughput failure would not be rescued by swapping.
+
 ## D7 — Tenant isolation: forTenant() wrapper + Postgres RLS (resolves Q2)
 
 **What:** Two mandatory layers. (1) `forTenant(tenantId)` Kysely wrapper factory — the only exported query path for tenant tables. (2) Postgres RLS policies `USING (tenant_id = current_setting('app.tenant_id')::uuid)` with **transaction-local** `set_config('app.tenant_id', $1, true)` at the top of every request transaction.
@@ -27,6 +29,8 @@
 **Why:** Hermes has no JIT — pure-JS crypto is 100×+ too slow on the target device (multi-second KDFs); quick-crypto's OpenSSL path is sub-ms signing, native argon2id lands <300ms at OWASP-band params.
 
 **Rejected:** pure-JS-only (noble) on device — infeasible per Hermes benchmarks; expo-crypto (Promise-per-call digest, no Ed25519/argon2).
+
+> **Forward note (2026-07-22 — D21): D8's open parameter question is RESOLVED — the DEFAULT ships (`m=32768 KiB / t=3 / p=1`). ASSUMED, NOT MEASURED.** Which profile ships was owed to the P-4 device benchmark; owner ruling D21 (`decisions/2026-07-22-assume-device-performance-passes.md`) directs us to proceed as if it passes, so the default holds: **assumed to pass per D21 (owner ruling, 2026-07-22); unverified on device.** No argon2id p95 has been observed on the 2 GB target. The default is the **stronger** of the two profiles, so the assumption lands conservatively — it keeps the harder parameters rather than weakening a security parameter on no evidence. The documented floor `m=19456/t=2/p=1` stays the pre-written fallback if a real device refutes it (`api/02-auth.md` §5.3, which is the decision record). **SEC-AUTH-10 is not discharged**: its acceptance is a committed on-device benchmark artifact, and an assumption produces no artifact — the id stays on the pending allowlist.
 
 ## D9 — Server pins
 
