@@ -1,6 +1,6 @@
 # TASK 137 — the composition root is structurally unguarded (one test mounts `Root`, with substituted factories) and the knip gate cannot see unused FILES
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — this is the **cause** of tasks 122/133/134/135/136, not another instance of them. Both halves are guard blindness: nothing observes production wiring, and the sweep that exists to catch dead code has dead files outside its denominator.
 **Depends on:** —
 **Blocks:** —
