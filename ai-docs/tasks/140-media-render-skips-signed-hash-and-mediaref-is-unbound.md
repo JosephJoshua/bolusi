@@ -1,6 +1,6 @@
 # TASK 140 — the render path skips the SIGNED hash check whenever a local file exists (including for REMOTE notes), and the server accepts a `mediaRef` bound to nothing — together, one device's photo renders as another's evidence
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH — security.** 06 §6 requires verification "against `mediaRef.sha256` **before display**", with no local-file exception. Two independently-sound-looking decisions compose into evidence substitution on a product whose whole point is a signed repair record.
 **Depends on:** 120 (the v3 `mediaRef`), 82
 **Blocks:** —
