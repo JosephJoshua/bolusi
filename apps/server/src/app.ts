@@ -14,6 +14,7 @@ import { resolveDeps, type ServerDeps } from './deps.js';
 import type { AppEnv } from './env.js';
 import { ApiError, respondError } from './errors.js';
 import { PermissionDeniedError, recordPermissionDenial } from './identity/denial-audit.js';
+import { sendDeviceAlert } from './push/fanout.js';
 import { accessLog } from './middleware/access-log.js';
 import { bearerAuth } from './middleware/auth.js';
 import { gzipDecompress } from './middleware/gzip-decompress.js';
@@ -53,6 +54,19 @@ function isMedia(path: string): boolean {
 export function createApp(overrides: Partial<ServerDeps> = {}) {
   const deps = resolveDeps(overrides);
   const app = new Hono<AppEnv>();
+
+  // PUSH `device` ALERT ON REVOCATION (api/04-push §3; task 134). The revoke handler fires this hook
+  // post-commit (routes/devices.ts → revocationHooks.fire), the SAME registry the realtime
+  // socket-close hook uses (routes/realtime.ts). Owner devices (auth.device_read holders) are told a
+  // device was revoked. The delivery is DISPATCHED fire-and-forget (api/04-push §1/§6): the hook
+  // returns immediately, so the awaited `revocationHooks.fire` never waits on the Expo round-trip —
+  // a revocation must not block or fail on a push. Registered once, at composition, so it can never
+  // be the "only tests installed it" defect this task removed.
+  deps.revocationHooks.register((ctx) => {
+    deps.deliveryDispatcher.dispatch(() =>
+      sendDeviceAlert(deps.pushDelivery, { tenantId: ctx.tenantId, aboutDeviceId: ctx.deviceId }),
+    );
+  });
 
   // Error envelope (§6/§7). A thrown ApiError maps to its registry code; anything else is an
   // unhandled server error → 500 INTERNAL with the request id (§7).

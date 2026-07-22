@@ -28,9 +28,6 @@ import { z } from 'zod';
 export const PUSH_CATEGORIES = ['sync', 'conflict', 'device'] as const;
 export type PushCategory = (typeof PUSH_CATEGORIES)[number];
 
-/** Deep-link route registry (api/04-push §4). Visible categories only; `sync` has no route. */
-export const PUSH_ROUTES = { conflict: 'conflicts', device: 'devices' } as const;
-
 /**
  * `data` blocks per category (api/04-push §4). `sync` is data-only: `{ category }` and nothing else
  * — no `route`, no `params`. `conflict`/`device` carry a deep-link route key + entity ids ONLY.

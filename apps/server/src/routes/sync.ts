@@ -26,10 +26,13 @@ export function createSyncRouter(deps: ServerDeps) {
           registry: deps.opRegistry,
           projections: deps.projections,
           pokeHub: deps.pokeHub,
+          pushDelivery: deps.pushDelivery,
+          deliveryDispatcher: deps.deliveryDispatcher,
           ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
           ...(deps.onConflictSurfaced === undefined
             ? {}
             : { onConflictSurfaced: deps.onConflictSurfaced }),
+          ...(deps.onDeviceAnomaly === undefined ? {} : { onDeviceAnomaly: deps.onDeviceAnomaly }),
         },
         { deviceId: device.deviceId, tenantId: device.tenantId },
         c.req.valid('json'),

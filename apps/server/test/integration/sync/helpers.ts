@@ -23,6 +23,8 @@ import { serverCryptoPort } from '../../../src/oplog/index.js';
 import type { OpRegistry } from '../../../src/oplog/index.js';
 import type { AccessLogRecord } from '../../../src/middleware/access-log.js';
 import { createVerifyToken, InMemoryTokenStore } from '../../../src/middleware/auth.js';
+import { ImmediateDeliveryDispatcher } from '../../../src/push/dispatcher.js';
+import { FakePushPort, type PushPort } from '../../../src/push/port.js';
 import { InProcessPokeHub, type PokeScope } from '../../../src/realtime/poke-hub.js';
 import { testRegistry } from '../oplog/helpers.js';
 
@@ -63,6 +65,14 @@ export interface SyncHarness {
   /** Route keys of handlers that ran (the onStub seam) — a "handler executed" witness. */
   readonly stubCalls: string[];
   readonly tokenStore: InMemoryTokenStore;
+  /** The harness's default fake push sender — accepted pushes deliver `sync`/`conflict`/`device`
+   *  here (no real Expo, CLAUDE.md §6). Used UNLESS the caller passes `options.pushPort` (e.g. the
+   *  latency test's blocking port); when a custom port is given the app sends through THAT and the
+   *  caller asserts on its own reference (task 134). */
+  readonly pushPort: FakePushPort;
+  /** The injected fire-and-forget delivery dispatcher (task 134). Deliveries run OFF the request
+   *  path (api/04-push §1/§6); drain them with `await deliveries.flush()` before asserting. */
+  readonly deliveries: ImmediateDeliveryDispatcher;
   /** Provenance: which real PostgreSQL database answered (T-14d). */
   readonly provenance: string;
   /** Seed a fresh tenant+store+device+user, enroll its token; returns its chain builder. */
@@ -103,7 +113,13 @@ function tokenFor(seed: number): string {
 }
 
 export async function makeSyncHarness(
-  options: { readonly registry?: OpRegistry; readonly overrides?: Partial<ServerDeps> } = {},
+  options: {
+    readonly registry?: OpRegistry;
+    readonly overrides?: Partial<ServerDeps>;
+    /** A custom push sender for the app (e.g. a blocking port for the latency probe). Defaults to
+     *  the harness's FakePushPort; when set, assert on your own reference, not `h.pushPort`. */
+    readonly pushPort?: PushPort;
+  } = {},
 ): Promise<SyncHarness> {
   // Clone this file's own real PG16 database from the pre-migrated template (§2.8 — the seam owns
   // the `pg.Pool` + CamelCasePlugin so `pg` never crosses the boundary). `close` destroys the pool.
@@ -124,6 +140,8 @@ export async function makeSyncHarness(
   pokeHub.subscribe((scope) => pokes.push(scope));
   const accessLogs: AccessLogRecord[] = [];
   const stubCalls: string[] = [];
+  const pushPort = new FakePushPort();
+  const deliveries = new ImmediateDeliveryDispatcher();
 
   const app = createApp({
     // A capturing access-log sink + onStub witness by default; caller extras (gzipOnProgress, rate
@@ -137,6 +155,11 @@ export async function makeSyncHarness(
     verifyToken: createVerifyToken({ store: tokenStore, now: () => clock.now() }),
     opRegistry: options.registry ?? testRegistry,
     pokeHub,
+    // The app sends through `options.pushPort` when given (e.g. the latency probe's blocking port),
+    // else the harness's own fake exposed as `h.pushPort`. Delivery is fire-and-forget through
+    // `deliveries`, drained by `flush()` before assertions (task 134).
+    pushPort: options.pushPort ?? pushPort,
+    deliveryDispatcher: deliveries,
   });
 
   const createdAt = 1_726_000_000_000n;
@@ -301,8 +324,17 @@ export async function makeSyncHarness(
     revokeDevice,
     push,
     pull,
+    pushPort,
+    deliveries,
     provenance,
-    close,
+    // Drain the fire-and-forget deliveries BEFORE tearing the pool down: a push dispatches its
+    // `sync` wake off the request path (task 134), so an accepted push's recipient query can still
+    // be in flight at teardown and would otherwise fault against a closed pool. `flush()` is
+    // instant with the FakePushPort; a test that injected a blocking port flushes in-body first.
+    close: async () => {
+      await deliveries.flush();
+      await close();
+    },
   };
 }
 

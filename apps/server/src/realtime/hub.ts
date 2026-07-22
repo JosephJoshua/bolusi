@@ -149,6 +149,16 @@ export class RealtimeHub {
     return this.#entries.size;
   }
 
+  /**
+   * `LiveConnectionRegistry` (push/fanout.ts): does this device hold a live WS/SSE connection right
+   * now? A `sync` push is sent ONLY to devices for which this is false — the realtime poke already
+   * covers connected ones (api/04-push §6). `#byDevice` is the single-connection-per-device map, so
+   * this is exact: a disposed/torn-down entry is already removed from it.
+   */
+  isConnected(deviceId: string): boolean {
+    return this.#byDevice.has(deviceId);
+  }
+
   register(conn: RealtimeConnection): HubRegistration {
     // Single connection per device: a second upgrade for the same token closes the first (§12.1).
     const existing = this.#byDevice.get(conn.deviceId);

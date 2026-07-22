@@ -1,6 +1,10 @@
 // The `PushPort` seam (api/04-push §7). The FCM/Expo send is OUTWARD-FACING — every test runs
 // against `FakePushPort`, never the real service (CLAUDE.md §6: no real send in a test). Production
-// binds `ExpoPushSender` (expo-sender.ts); the fanout, receipts, and every SEC test bind the fake.
+// binds `ExpoPushSender` (expo-sender.ts) in `main.ts` via `pushPortFromConfig` (expo-transport.ts,
+// keyed on `EXPO_ACCESS_TOKEN`); `resolveDeps`'s field default is `unconfiguredPushPort` (below),
+// which THROWS on use rather than silently dropping — main.ts always overrides it, tests bind the
+// fake, and the boot fails closed if the token is absent (task 134). A silent default no-op is the
+// exact defect this task removed.
 //
 // A push is addressed to a device (api/04-push §2): we carry `deviceId` alongside the token on both
 // the way out and back, so a `DeviceNotRegistered` ticket/receipt maps to the row to delete (§8)
@@ -42,6 +46,30 @@ export interface PushPort {
   send(messages: readonly OutgoingPush[]): Promise<readonly PushTicket[]>;
   getReceipts(receiptIds: readonly string[]): Promise<ReadonlyMap<string, PushReceipt>>;
 }
+
+/**
+ * The `resolveDeps` field default (deps.ts). It exists so `createApp()` with no `pushPort` override
+ * — the `AppType`-derivation instance and any partial-override test — CONSTRUCTS without reading
+ * env, yet it can never become a silent no-op: both methods THROW. Production overrides it in
+ * `main.ts` with the real `ExpoPushSender` (`pushPortFromConfig`); tests bind `FakePushPort`. If it
+ * were ever reached at runtime the throw is caught by the fanout's fire-and-forget dispatch and
+ * LOGGED (`dispatch_failed`) — loud, never a dead letter — but boot has already failed closed if
+ * `EXPO_ACCESS_TOKEN` was absent, so a correctly-wired server never reaches it (task 134).
+ */
+export const unconfiguredPushPort: PushPort = {
+  send() {
+    return Promise.reject(
+      new Error(
+        'push port not configured: main.ts must inject the production ExpoPushSender ' +
+          '(pushPortFromConfig / EXPO_ACCESS_TOKEN, api/04-push §7). A default no-op would make ' +
+          'push a silent dead letter (task 134).',
+      ),
+    );
+  },
+  getReceipts() {
+    return Promise.reject(new Error('push port not configured (task 134)'));
+  },
+};
 
 /** A recorded `send` call — the WHOLE captured set (T-14: assertions read `sent`, not a sample). */
 export interface RecordedSend {

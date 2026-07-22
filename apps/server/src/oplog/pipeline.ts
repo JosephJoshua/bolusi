@@ -96,6 +96,8 @@ export async function processPushBatch(
 ): Promise<ProcessPushResult> {
   // Collected INSIDE the transaction, fired AFTER it commits (see the tail of this function).
   const surfacedOut: SurfacedConflict[] = [];
+  /** Devices that had ≥1 anomaly row written in this (committed) batch — the `device`-alert set. */
+  const anomalyDevicesOut = new Set<string>();
 
   const result = await deps.forTenant(identity.tenantId, async (db) => {
     // Take the per-tenant counter lock FIRST — the serialisation point for every push in this
@@ -144,6 +146,8 @@ export async function processPushBatch(
     const accepted: SignedOperation[] = [];
     /** Significant conflicts, for the POST-COMMIT hook (03 §7). Collected, never fired, in here. */
     const surfaced: SurfacedConflict[] = [];
+    /** Devices with an anomaly this batch, for the POST-COMMIT `device` alert (api/04-push §3). */
+    const anomalyDevices = new Set<string>();
     let head: ChainHead = { seq: device.lastSeq, hash: device.lastHash };
     let halted = false;
 
@@ -163,6 +167,9 @@ export async function processPushBatch(
         at: deps.now(),
         detail: { opId: op.id, seq: op.seq, reason },
       });
+      // Remember the offending device for the post-commit `device` alert (api/04-push §3). All
+      // anomalies in a batch are about the ONE pushing device, so the set dedupes to a single alert.
+      anomalyDevices.add(device.id);
     };
 
     for (const op of ops) {
@@ -333,6 +340,7 @@ export async function processPushBatch(
       .execute();
 
     surfacedOut.push(...surfaced);
+    for (const id of anomalyDevices) anomalyDevicesOut.add(id);
     return { results };
   });
 
@@ -353,6 +361,13 @@ export async function processPushBatch(
   // alternative and it is worse: a permanently undelivered notification with no signal anywhere.
   for (const conflict of surfacedOut) {
     await deps.onConflictSurfaced?.(conflict);
+  }
+  // The `device`-category alert (api/04-push §3): a device that tripped an anomaly this batch. Same
+  // post-commit placement and reasons as the conflict hook. The default binding (deps.ts →
+  // `sendDeviceAlert`) swallows every delivery failure internally (fanout.ts), so a broken push
+  // never fails the sync response (api/04-push §6).
+  for (const deviceId of anomalyDevicesOut) {
+    await deps.onDeviceAnomaly?.({ tenantId: identity.tenantId, deviceId });
   }
 
   return result;
