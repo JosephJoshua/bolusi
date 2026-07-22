@@ -156,6 +156,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 145 | **HIGH** a half-written note is destroyed two ways — Android hardware back EXITS THE APP from the editor (zone.ts yields exitApp) and any header-chrome tap unmounts the draft, both bypassing the discard gate the header back already honours (from the 124 review) | todo | 96, 24, 124 |
 | 146 | review-wave leftovers: three Unauthorized states with no §5 guidance body, an ICON_GLYPHS whitelist nothing checks against the real glyphmap (a typo renders tofu and nothing reds), a weak visual assertion, and a 2dp hit-target overlap that bites when 143 lands | todo | 124, 125, 96 |
 | 147 | **HIGH honesty** a device with 3 photos queued is headlined Semua Terkirim (All Sent) — syncChipState never reads pendingMediaCount while reassurance does, and model.test.ts pins that asymmetry (rendered by the 126 reviewer) | todo | 126, 15 |
+| 148 | **HIGH** the Android APK cannot be assembled at all — op-sqlite (SQLCipher) and react-native-quick-crypto each ship lib/arm64-v8a/libcrypto.so and mergeReleaseNativeLibs refuses; the naive pickFirst is a crypto-surface decision (first-ever emulator lane run) | todo | 27a |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
