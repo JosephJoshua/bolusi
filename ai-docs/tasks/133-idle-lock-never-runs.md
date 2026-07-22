@@ -1,6 +1,6 @@
 # TASK 133 — SEC-AUTH-08's idle lock NEVER RUNS: `ShellSession` has zero production callers and `Root` hardcodes `locked={false}`
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH — security.** api/02-auth §6.4 makes the idle lock a security control. A shared shop-counter terminal never locks. The SEC-AUTH-08 UI leg is currently green over a mechanism that is not composed — the tasks 60/69/122 shape, on a security surface.
 **Depends on:** 14 (session/`checkIdle`), 119 (the live shell)
 **Blocks:** 28 (the SEC roll-up should not close while a SEC-AUTH-08 leg is inert)
