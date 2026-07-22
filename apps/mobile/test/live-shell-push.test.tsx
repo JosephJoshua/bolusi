@@ -69,8 +69,21 @@ vi.mock('expo-location', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 
+import {
+  createUuidV7Generator,
+  readDeviceId,
+  type DeviceBundle,
+  type EnrollResponse,
+  type LocationPort,
+} from '@bolusi/core';
+import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+
 import type { RootProps } from '../src/bootstrap/Root.js';
 import type { PushResponse } from '../src/push/router.js';
+import { createAppEnrollment, type EnrollmentPlatform } from '../src/bootstrap/enrollment.js';
+import { SecureStoreKeyStore } from '../src/ports/keystore.js';
+import type { LoginResult } from '../src/screens/enrollment/model.js';
+import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
 import {
   bootFixture,
   closeClientDb,
@@ -145,6 +158,90 @@ function fakePushRouter(): {
 }
 
 const CONFLICT_ID = '018f4e2a-1111-7abc-8def-000000000abc';
+
+// ── Enrollment-leg fixtures (api/02-auth §4.1), mirroring enrollment.test.ts so the enroll runs REAL:
+// runEnrollment → genesis → meta_kv → applyBundle, over fake transports. The OWNER is the acting user
+// the enrollment push registration must stamp (api/04-push §2 (b)).
+const ENROLL_OWNER_ID = '00000000-0000-4000-8000-00000000a001';
+const ENROLL_TENANT_ID = '00000000-0000-4000-8000-00000000b001';
+const ENROLL_STORE_ID = '00000000-0000-4000-8000-00000000c001';
+const ENROLL_ROLE_ID = '00000000-0000-4000-8000-00000000d001';
+const ENROLL_NOW = 1_726_000_000_000;
+
+function enrollLoginResult(): LoginResult {
+  return {
+    controlSession: 'bcs_test_control_session',
+    tenantId: ENROLL_TENANT_ID,
+    tenantName: 'Bolusi Papua',
+    user: { id: ENROLL_OWNER_ID, name: 'Ocep' },
+    stores: [{ id: ENROLL_STORE_ID, name: 'Toko Jayapura' }],
+  };
+}
+
+function enrollDeviceBundle(): DeviceBundle {
+  return {
+    tenant: { id: ENROLL_TENANT_ID, name: 'Bolusi Papua' },
+    store: { id: ENROLL_STORE_ID, name: 'Toko Jayapura' },
+    settings: { idleLockSeconds: 300 },
+    users: [
+      {
+        id: ENROLL_OWNER_ID,
+        name: 'Ocep',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ENROLL_ROLE_ID, storeId: null }],
+        pinVerifier: null,
+      },
+    ],
+    rolesSnapshot: [
+      {
+        id: ENROLL_ROLE_ID,
+        name: 'main_owner',
+        scopeType: 'tenant',
+        isSystemDefault: true,
+        permissionIds: [],
+      },
+    ],
+    permissionsSnapshot: [],
+  };
+}
+
+function enrollResponse(): EnrollResponse {
+  return {
+    deviceId: 'server-echoes-the-client-id',
+    deviceToken: 'bdt_test_device_token',
+    tenant: { id: ENROLL_TENANT_ID, name: 'Bolusi Papua' },
+    store: { id: ENROLL_STORE_ID, name: 'Toko Jayapura' },
+    settings: { idleLockSeconds: 300 },
+    bundle: enrollDeviceBundle(),
+    bundleEtag: 'etag-1',
+    serverTime: ENROLL_NOW,
+  };
+}
+
+const nullLocation: LocationPort = { getBestFix: () => null };
+
+/** A real `EnrollmentPlatform` over fake transports (no sockets) — the enroll platform index.ts binds. */
+function enrollPlatform(): EnrollmentPlatform {
+  const prng = mulberry32(0x51);
+  return {
+    loginTransport: { login: () => Promise.resolve(enrollLoginResult()) },
+    // Zero-param fake (valid via parameter bivariance) — the enroll body is not asserted here; the
+    // OWNER id under test flows through `req.login`, not the transport.
+    enrollTransport: { enroll: () => Promise.resolve(enrollResponse()) },
+    keystore: new SecureStoreKeyStore(),
+    crypto: noblePort,
+    clock: { now: () => ENROLL_NOW },
+    idSource: createUuidV7Generator({
+      now: () => ENROLL_NOW,
+      randomBytes: (n) => prngBytes(prng, n),
+    }),
+    location: nullLocation,
+    syncScheduler: { schedule: () => undefined },
+    platform: 'android',
+    appVersion: '1.0.0',
+  };
+}
 
 let tempDir: string;
 let secureStore: Map<string, string>;
@@ -253,5 +350,65 @@ describe('the LIVE shell registers a push token and routes a tap (task 135; api/
 
     expect(screen.query('notes.list.title')).not.toBeNull();
     expect(screen.query('sync-status-screen')).toBeNull();
+  });
+});
+
+describe('the ENROLLMENT leg registers the push token for the just-enrolled owner (task 135; api/04-push §2 (b))', () => {
+  test('THE REPRODUCTION, STANDING: wizard enroll ⇒ the app registers with THIS device`s id and the OWNER as acting user', async () => {
+    // The enrollment leg, guarded. This drives the WIZARD ENROLL path — a FRESH, unenrolled device —
+    // NOT the pre-enrolled-session path, so it exercises `Root`'s `onEnrolled` push call (which the
+    // app-start composed test never reaches) AND the `ownerUserId` threading through `onEnrolled`
+    // (enrollment.ts passes `req.login.user.id`; Root forwards it to `createPushRegistration`). Break
+    // either and this reds — the guard the review found missing.
+    fixture = await bootFixture(); // deliberately NOT enrolledDevice(): the device must enroll here.
+    const push = fakePushRegistration();
+
+    // A REAL `createAppEnrollment` over fake transports — `onEnrolled` fires through the real
+    // composition, exactly as index.ts wires it. Capture the controller Root composes so we can drive
+    // the enroll the wizard's enroll button would (App.runEnroll → controller.enroll).
+    const platform = enrollPlatform();
+    let controller: AppEnrollment['controller'] | null = null;
+    const createEnrollment: RootProps['createEnrollment'] = (app, onEnrolled) => {
+      const composed = createAppEnrollment(app, platform, onEnrolled);
+      controller = composed.controller;
+      return composed;
+    };
+
+    const screen = await mountRoot(fixture, {
+      createEnrollment,
+      createPushRegistration: push.factory,
+    });
+
+    // Denominator (T-14): an UNENROLLED device sits on the enrollment wizard, and NOTHING has been
+    // registered yet. Without this the assertions below could pass against an already-enrolled shell.
+    expect(screen.query('enrollment-screen')).not.toBeNull();
+    expect(push.posts).toHaveLength(0);
+    if (controller === null) throw new Error('Root composed no enrollment controller');
+    const enrollController: AppEnrollment['controller'] = controller;
+
+    // Enroll — the real runEnrollment (draft → POST → token → bundle → genesis → meta_kv), then
+    // `onEnrolled(deviceId, req.login.user.id)` → Root's `registerPushTokenOnEnrollment`.
+    await act(async () => {
+      await enrollController.enroll({
+        login: enrollLoginResult(),
+        storeId: ENROLL_STORE_ID,
+        deviceName: 'Kasir 1',
+      });
+      for (let i = 0; i < 12; i += 1) await Promise.resolve();
+    });
+
+    await waitUntil(() => push.posts.length > 0);
+
+    // THE ASSERTION THE REVIEW REQUIRED. The enrollment leg registered — ONCE, carrying the client's
+    // enrolled device id and the OWNER as `X-Acting-User` (api/04-push §2 (b)/§4). A wrong owner id
+    // (break the threading) makes `actingUserId` mismatch; removing Root's enroll call makes `posts`
+    // empty. The app-start effect did NOT fire (no PIN session opened), so this is the enrollment
+    // trigger alone.
+    const enrolledDeviceId = await readDeviceId(fixture.app.db.db);
+    expect(enrolledDeviceId).not.toBeNull();
+    expect(push.posts).toHaveLength(1);
+    expect(push.posts[0]?.token).toBe(EXPO_TOKEN);
+    expect(push.posts[0]?.deviceId).toBe(enrolledDeviceId);
+    expect(push.posts[0]?.actingUserId).toBe(ENROLL_OWNER_ID);
   });
 });

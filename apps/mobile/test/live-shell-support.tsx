@@ -326,6 +326,13 @@ export interface MountOptions {
   readonly createPushRegistration?: RootProps['createPushRegistration'];
   /** The notification-tap seam (api/04-push §4/§6; task 135). Omitted by default (no listener). */
   readonly pushRouter?: RootProps['pushRouter'];
+  /**
+   * The enrollment factory (api/02-auth §4; task 92). Omitted by default, so the pre-enrolled tests use
+   * the rejecting stub below (the device is already enrolled — the transports are never called). The
+   * push ENROLLMENT-leg test (task 135) injects a REAL `createAppEnrollment` over fake transports so
+   * `onEnrolled` fires through the real composition and Root's push registration runs.
+   */
+  readonly createEnrollment?: RootProps['createEnrollment'];
 }
 
 export async function mountRoot(
@@ -362,7 +369,9 @@ export async function mountRoot(
         })
       }
       boot={() => Promise.resolve(app)}
-      createEnrollment={() => enrollment}
+      // Real when the enroll-leg test injects one (task 135), else the rejecting stub (device already
+      // enrolled, transports never called) — every pre-enrolled test is unchanged.
+      createEnrollment={options.createEnrollment ?? (() => enrollment)}
       // The idle-lock platform inputs (task 133). Both are REQUIRED props on `Root`, so this fixture
       // cannot silently stop supplying them; the defaults above make every other test's behaviour
       // identical to before (a timer that never fires drives no tick).
