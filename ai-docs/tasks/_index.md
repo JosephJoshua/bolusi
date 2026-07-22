@@ -132,6 +132,15 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 121 | the server accepts an op claiming ANY schemaVersion: deriveOpRegistry's resolve(type) ignores the version and validates every push against the one current payload schema, so a bogus-version op is accepted then throws at fold (from task 120) | done | 07, 11 |
 | 122 | the notes i18n catalog is registered ONLY by a test-support file: registerNotesCatalog has zero production callers, so the shipping app renders notes.* chrome in English to Indonesian-first users — caught from a screenshot, invisible to ~600 green tests (from task 116) | done | 96, 119 |
 | 123 | module i18n catalog registration is a hand-maintained per-module call (registerModuleCatalogs), not driven by the module list — the next module with screens can still forget it and ship English chrome, invisibly (the generalization deferred by task 122) | done | 122, 90 |
+| 124 | **HIGH** the Settings screen has no producer — setRoute('settings') is called nowhere, so the language toggle, device identity readout and notification deep-link are unreachable in the shipping app (from QA visual sweep) | todo | 24, 119 |
+| 125 | **HIGH** declining the camera permission tells the user their DEVICE IS REVOKED — CaptureScreen renders auth.revoked.body for permission_denied, contradicting its own file header 200 lines above (from QA visual sweep) | todo | 82 |
+| 126 | **HIGH** the Sync Status screen is titled Rejected Changes in EVERY state including all-clear — a healthy device reports a problem (from QA visual sweep) | todo | 24, 15 |
+| 127 | **HIGH** task 121's gate leaves a hole below current: any schemaVersion < current skips payload validation, so a malformed old-version payload is accepted at push then throws at fold as a 500 that rolls back the whole batch (from QA spec sweep) | todo | 121 |
+| 128 | **HIGH** the note BODY is a single-line input that clips — the shared TextInput never sets multiline, so the reference module's core content shows ~35 chars on a 360dp phone (from QA visual sweep) | todo | 96 |
+| 129 | design-system conformance batch on the new screens: wrong title keys, missing author/rejection-code fields, two primaries on any empty list, counter overflow at 360dp, truncating unauthorized hint, missing §5 guidance body (from QA sweeps) | todo | 96, 82, 24 |
+| 130 | five shipping controls are wired to noop (media retry, open-rejected, enroll, switcher retry/back) and two built capabilities have no production consumer (storage bands, in-app camera entry) (from QA spec sweep) | todo | 82, 96, 119 |
+| 131 | spec drift after the v3 payload and the frontend phase: 01-domain-model and 10-db-schema still describe v1/v2 and lack the media columns; three code comments describe the opposite of the code beneath them (from QA spec sweep) | todo | 120, 119, 118 |
+| 132 | coverage gaps: the chaos schemaVersion seam is dead data no scenario consumes, useHardwareBack has no test, and the module-catalog guard proves membership but not content (from QA sweep) | todo | 26, 123, 24 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
