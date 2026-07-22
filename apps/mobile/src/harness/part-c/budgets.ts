@@ -8,9 +8,18 @@
 // (task 27b, owner-deferred) — an emulator cannot produce a device perf number. The emulator lane
 // (27a) may emit these figures for regression tracking, ALWAYS labelled EMULATOR, never as
 // acceptance. SEC-AUTH-10 (the argon2id KDF timing benchmark, P-4) is likewise 27b.
+//
+// D21 (2026-07-22, owner ruling — ai-docs/decisions/2026-07-22-assume-device-performance-passes.md):
+// these gates are ASSUMED-PASS, DEVICE-UNVERIFIED. NOTHING HERE HAS BEEN MEASURED — no gate has run,
+// and every constant below is a BUDGET, never a result. The constants are deliberately UNCHANGED by
+// that ruling ("assumed, not deleted") precisely so a real device can still confirm or REFUTE the
+// assumption; widening one to match a future device figure is still a spec change, not a fix.
 
-/** argon2id parameters (D8; api/02-auth). The default is validated on the real device by P-4; if it
- * exceeds 300 ms the documented FLOOR is engaged and recorded — that decision is 27b's. */
+/** argon2id parameters (D8; api/02-auth §5.3). D21 RESOLVED D8 BY ASSUMPTION: the DEFAULT ships —
+ * assumed to pass per D21 (owner ruling, 2026-07-22), unverified on device; no p95 has been observed.
+ * The default is the stronger profile, so the assumption keeps the harder parameters. If a real device
+ * later runs P-4 and exceeds the 300 ms budget, the documented FLOOR is engaged and recorded then —
+ * that path is unchanged and still 27b's. */
 export interface Argon2idParams {
   readonly memKiB: number;
   readonly timeCost: number;

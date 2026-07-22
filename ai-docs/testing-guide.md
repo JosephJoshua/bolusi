@@ -327,6 +327,8 @@ What lever 1 bounds is the seed dimension only; what lever 2 reduces is stated a
 
 Gate results are emitted in the L6 JSON (§2.6) with raw distributions, not just pass/fail — budgets get renegotiated through this doc, never through a silently widened assertion.
 
+**Status of P-1…P-6 (D21, 2026-07-22): ASSUMED-PASS, DEVICE-UNVERIFIED. Every budget above is a budget, never a result.** No gate in this table has been run: there is no physical 2 GB device, so no p95, no ops/s, no cold-start time and no PSS figure exists for any row — and none may be written as though it did (T-14 / CLAUDE.md §2.1: a number carries the run that produced it). The owner ruled (`decisions/2026-07-22-assume-device-performance-passes.md`) that we proceed as if these pass; the only honest form for any downstream claim is *"assumed to pass per D21 (owner ruling, 2026-07-22); unverified on device."* Two decisions were resolved on that assumption — **P-4 → D8** (the argon2id default `m = 32768 KiB, t = 3, p = 1` ships; the floor stays the pre-written fallback, `api/02-auth.md` §5.3) and **P-2's throughput floor → D6** (ratified). **Nothing here is deleted or relaxed:** the gates, their budgets, and the pinned code constants (`apps/mobile/src/harness/part-c/budgets.ts`) stay verbatim so a real device can still **confirm or refute** the assumption — assumed, not deleted, on D12's "blocked, not deleted" precedent. SEC-AUTH-10 is unaffected and stays pending: its acceptance is a committed on-device benchmark **artifact**, which an assumption cannot produce.
+
 ---
 
 ## 5. What this doc does not own

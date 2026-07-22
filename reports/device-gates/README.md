@@ -10,5 +10,10 @@ ci.yml`, scheduled/dispatch) runs `pnpm harness:device` and drops its capture he
   placeholder until then (§2.1 — the lane does not run on the Linux dev host: no emulator/adb).
 - **Physical-device lane (27b, PERFORMANCE):** P-1..P-5, SEC-AUTH-10, and the write-throughput figure
   — BLOCKED on a physical 2 GB device the owner has not provided. Its captures land here when 27b runs.
+  **D21 (2026-07-22) does not change that.** The owner ruled that these gates are _assumed_ to pass
+  (`ai-docs/decisions/2026-07-22-assume-device-performance-passes.md`) — an assumption produces **no
+  capture**. There is no physical-device JSON in this directory and there will be none until a device
+  runs the lane; anything claiming to be one is not a D21 artefact. SEC-AUTH-10 stays pending for
+  exactly this reason: its acceptance is the artifact, and no artifact exists.
 
 Filenames: `YYYY-MM-DD-<lane>.json` (e.g. `2026-07-21-emulator.json`).
