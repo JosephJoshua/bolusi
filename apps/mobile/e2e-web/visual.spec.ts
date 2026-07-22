@@ -3,8 +3,9 @@
  *
  * It navigates the exported web build to each screen-state (`?screen=&state=`), makes REAL role/text
  * assertions about the rendered DOM (never merely "a page loaded" — T-14), captures a screenshot per
- * state into `artifacts/`, and drives three genuine interactions (PIN key press, ID↔EN language
- * toggle, discard ConfirmSheet). Every state also asserts the mandatory "RNW browser approximation —
+ * state into `artifacts/`, and drives four genuine interactions (PIN key press, ID↔EN language
+ * toggle, discard ConfirmSheet, and the running shell's Settings entry point — task 124). Every state
+ * also asserts the mandatory "RNW browser approximation —
  * NOT device-verified" label is present, so no artifact can be mistaken for the device lane.
  *
  * HONEST CEILING: this is a browser approximation. It does not replace the device gates (27a/27b) or
@@ -178,4 +179,27 @@ test('Enrollment back over typed input opens the real discard ConfirmSheet', asy
   // Cancel dismisses it — the real handler, not a stub.
   await page.getByTestId('enroll-discard-sheet.cancel').click();
   await expect(page.getByTestId('enroll-discard-sheet')).toHaveCount(0);
+});
+
+// ── INTERACTION 4: Settings is REACHABLE from the running shell (task 124) ────────────────────────
+
+test('the running shell opens Settings from its header — the language escape hatch is reachable', async ({
+  page,
+}) => {
+  // The browser twin of `test/live-shell-settings.test.tsx`. `app/shell` is the FULL `App` over the
+  // demo seed, so this clicks the same node a thumb hits on a device. Until task 124 nothing in
+  // shipping source produced `route: 'settings'` and this click had no target to find.
+  await open(page, 'app', 'shell');
+  await expect(page.getByTestId('settings-screen')).toHaveCount(0);
+
+  await page.getByTestId('shell-open-settings').click();
+
+  await expect(page.getByTestId('settings-screen')).toBeVisible();
+  // REAL content, not merely a testID: the active-locale marker plus the device-identity readout the
+  // screen exists to show ("so the shop can read its own device's identity to an owner over the
+  // phone"). A blank Settings would satisfy the testID and fail these.
+  await expect(page.getByTestId('settings-locale-active-id')).toBeVisible();
+  await expect(page.getByText('dev_7Q2K9Z4M', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Servis Ponsel Maju', { exact: true }).first()).toBeVisible();
+  await shoot(page, 'app-settings');
 });
