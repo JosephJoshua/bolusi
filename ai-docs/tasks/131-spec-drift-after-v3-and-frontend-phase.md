@@ -7,6 +7,8 @@
 **SEC ids owned by THIS task:** none.
 **Filed by:** QA spec-verify sweep, 2026-07-22 (items D2/D3/D5/D8/D9 + nits).
 
+> **PARTIAL — items 1 and 2 are DONE** (orchestrator, 2026-07-22): `01-domain-model.md` now documents v3 `{title, body, mediaRef}` with the `mediaSha256`/`mediaMime` projection columns and the "every foldable version needs a retained payload schema" rule that task 127 turns into code; `10-db-schema.md` §8 (PG) and §9.6 (SQLite) now carry both columns with their migration ids (`0010` server / `002` client). Items 3-7 remain open.
+
 ## Drift (each with file:line; fix the DOC or the CODE, whichever is wrong — and say which)
 
 1. **`01-domain-model.md:288,298,302`** documents `note_created` at **v1/v2 only** and says `mediaId` was "Introduced by payload `schemaVersion: 2`" and "The v1→v2 bump … is deliberate". Task 120 made **v3** `{title, body, mediaRef}` current and added `mediaSha256`/`mediaMime` to the Note projection. `applier.ts:1` cites this section as "the authoritative type list" — so the authority is now wrong.
