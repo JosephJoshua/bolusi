@@ -179,3 +179,46 @@ test('Enrollment back over typed input opens the real discard ConfirmSheet', asy
   await page.getByTestId('enroll-discard-sheet.cancel').click();
   await expect(page.getByTestId('enroll-discard-sheet')).toHaveCount(0);
 });
+
+// ── INTERACTION 4: the note BODY wraps instead of clipping (task 128) ─────────────────────────────
+//
+// THE ONLY LANE THAT CAN SEE THIS. The unit lanes read declared props and styles; nothing there
+// measures a rendered box, which is why a body clipping at ~35 characters sat behind green tests.
+// Here the field is real DOM with a real height: RNW renders `multiline` as a <textarea> and a
+// single-line field as an <input>, and the measured height separates "wraps" from "one strip".
+// This is the QA repro path walked end to end — app shell → note row → Ubah → the body field.
+
+test('the note editor body wraps a long note instead of clipping it to one line', async ({
+  page,
+}) => {
+  await open(page, 'app', 'shell');
+  await page.getByTestId('notes.list.row.note-demo-1').click();
+  await page.getByTestId('notes.detail.edit').click();
+
+  const body = page.getByTestId('notes.editor.body.field');
+  const title = page.getByTestId('notes.editor.title.field');
+  await expect(body).toBeVisible();
+
+  // The element RNW chose IS the wrap: <textarea> soft-wraps, <input> does not, at any width.
+  expect(await body.evaluate((el) => el.tagName)).toBe('TEXTAREA');
+  // The title is set once at creation (01 §9) and stays a one-line control — the variant is additive.
+  expect(await title.evaluate((el) => el.tagName)).toBe('INPUT');
+
+  // A note longer than the ~35 characters the single-line field showed. Typed through the real
+  // onChangeText path, so this is the running screen, not a seeded string.
+  const longNote =
+    'Sisa 4 karung di gudang belakang. Pesan ulang sebelum akhir minggu, lalu cek rak atas ' +
+    'dan catat nomor seri unit yang ditinggal pelanggan kemarin sore.';
+  await body.fill(longNote);
+  await expect(body).toHaveValue(longNote);
+
+  // MEASURED, not declared: the box is several lines of `type.body` (lineHeight 26) tall. The
+  // defect rendered this whole note inside one 56 dp strip, so a >= 2-line box is the separation.
+  const box = await body.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.height).toBeGreaterThan(2 * 26);
+  // And the text genuinely occupies more than one line inside it (scrollHeight tracks wrapped rows).
+  expect(await body.evaluate((el) => el.scrollHeight)).toBeGreaterThan(2 * 26);
+
+  await shoot(page, 'notes-editor-long-body');
+});

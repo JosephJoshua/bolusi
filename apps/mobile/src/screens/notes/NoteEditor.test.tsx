@@ -112,6 +112,73 @@ describe('NoteEditor — optimistic save (the falsified deliverable)', () => {
   });
 });
 
+// ── task 128: the BODY wraps, the TITLE does not ─────────────────────────────────────────────────
+// The body shipped as a single-line box (RN's `multiline` default is `false`), clipping a repair
+// note at ~35 characters on a 360 dp phone. Nothing above went red, because every assertion here
+// asked whether the field RENDERED — the exact trap the visual sweep found 35 times. These read the
+// `multiline` prop that reaches the RN primitive: delete the wiring and they are the ones that fail.
+describe('NoteEditor — the body is a multiline field, the title stays single-line (§8.6)', () => {
+  test('create: the body field tells RN it is multiline; the title field does not', () => {
+    const screen = renderNotes(
+      fakeRuntime(),
+      <NoteEditor
+        mode="create"
+        syncChip={null}
+        avatar={null}
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.get('notes.editor.body.field').props['multiline']).toBe(true);
+    expect(screen.get('notes.editor.title.field').props['multiline']).toBe(false);
+  });
+
+  test('create: a long body is laid out to wrap, not clipped to one line', () => {
+    const screen = renderNotes(
+      fakeRuntime(),
+      <NoteEditor
+        mode="create"
+        syncChip={null}
+        avatar={null}
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const long =
+      'Sisa 4 karung di gudang belakang. Pesan ulang sebelum akhir minggu, dan cek juga rak atas.';
+    fire(screen.get('notes.editor.body.field'), 'onChangeText', long);
+
+    // The whole value is held (never truncated by the field) AND the box is taller than a single
+    // line, top-aligned, and bounded — the four properties that turn "wraps" into something a
+    // declared style can actually witness in this lane.
+    expect(screen.get('notes.editor.body.field').props['value']).toBe(long);
+    expect(screen.get('notes.editor.body.field').props['multiline']).toBe(true);
+    const style = screen.styleOf('notes.editor.body.field');
+    expect(style['textAlignVertical']).toBe('top');
+    expect(Number(style['minHeight'])).toBeGreaterThan(Number(style['maxHeight']) / 2);
+    expect(Number(style['maxHeight'])).toBeGreaterThan(Number(style['minHeight']));
+  });
+
+  test('edit: the loaded body is multiline too — the mode the QA repro walked through', async () => {
+    const screen = renderNotes(
+      fakeRuntime({ getNote: () => Promise.resolve(page([note()])) }),
+      <NoteEditor
+        mode="edit"
+        noteId="note-1"
+        syncChip={null}
+        avatar={null}
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    await settle();
+
+    expect(screen.get('notes.editor.body.field').props['multiline']).toBe(true);
+    expect(screen.get('notes.editor.title.field').props['multiline']).toBe(false);
+  });
+});
+
 describe('NoteEditor — edit path ships the four §5 states', () => {
   const editor = (rt: ReturnType<typeof fakeRuntime>) =>
     renderNotes(

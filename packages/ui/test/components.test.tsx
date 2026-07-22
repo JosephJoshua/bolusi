@@ -20,7 +20,7 @@ import {
 import { resolveSyncChip, SyncStatusChip } from '../src/components/SyncStatusChip.js';
 import { TextInput } from '../src/components/TextInput.js';
 import { UnauthorizedState } from '../src/components/UnauthorizedState.js';
-import { border, color, identityPalette, touch } from '../src/tokens.js';
+import { border, color, identityPalette, size, touch } from '../src/tokens.js';
 import { fire, isUnwired, render } from './render.js';
 
 afterEach(() => {
@@ -465,5 +465,68 @@ describe('TextInput (§3.2)', () => {
   test('min height meets the 56 dp primary target', () => {
     const r = render(<TextInput {...base} />);
     expect(r.styleOf('ui.textInput.field')['minHeight']).toBe(touch.primary);
+  });
+
+  // ── the §8.6 multiline variant ────────────────────────────────────────────────────────────────
+  // These read the props/styles that REACH the RN primitive, never "a field rendered". The defect
+  // this covers (task 128) was invisible to every assertion above precisely because the component
+  // did render — it rendered a one-line box, and RN's `multiline` default of `false` is what made
+  // a note body clip at ~35 characters. `multiline` is the prop RN reads, so it is what is asserted.
+  describe('multiline (§8.6 free-form body)', () => {
+    test('DEFAULT OFF: an unadorned field tells RN it is single-line', () => {
+      const r = render(<TextInput {...base} />);
+      expect(r.get('ui.textInput.field').props['multiline']).toBe(false);
+    });
+
+    test('every single-line-shaped variant stays single-line — the class, not one instance', () => {
+      for (const extra of [
+        { secureTextEntry: true },
+        { keyboardType: 'number-pad' as const },
+        { disabled: true },
+        { autoFocus: true },
+        { errorMessage: 'Wajib diisi' },
+      ]) {
+        const r = render(<TextInput {...base} {...extra} />);
+        expect(r.get('ui.textInput.field').props['multiline']).toBe(false);
+        expect(r.styleOf('ui.textInput.field')['maxHeight']).toBeUndefined();
+      }
+    });
+
+    test('multiline reaches the RN primitive as the `multiline` prop', () => {
+      const r = render(<TextInput {...base} multiline />);
+      expect(r.get('ui.textInput.field').props['multiline']).toBe(true);
+    });
+
+    test('multiline tops its text — RN CENTRES multiline text on Android without this', () => {
+      // Not cosmetic and not iOS trivia: the RN 0.86 docs say multiline aligns to the top on iOS
+      // and CENTRES on Android, and Android is the target (§0). Dropping this leaves the body's
+      // first line floating mid-box.
+      expect(
+        render(<TextInput {...base} multiline />).styleOf('ui.textInput.field')[
+          'textAlignVertical'
+        ],
+      ).toBe('top');
+      // The single-line field never declares it — the variant is additive.
+      expect(
+        render(<TextInput {...base} />).styleOf('ui.textInput.field')['textAlignVertical'],
+      ).toBeUndefined();
+    });
+
+    test('multiline is sized to show several lines and to stop growing', () => {
+      const s = render(<TextInput {...base} multiline />).styleOf('ui.textInput.field');
+      expect(s['minHeight']).toBe(size.fieldMultilineMin);
+      expect(s['maxHeight']).toBe(size.fieldMultilineMax);
+      // Roomier than the single-line touch floor, and bounded — an unbounded field would push the
+      // §8.1 bottom action bar off a 360x640 screen.
+      expect(size.fieldMultilineMin).toBeGreaterThan(touch.primary);
+      expect(size.fieldMultilineMax).toBeGreaterThan(size.fieldMultilineMin);
+    });
+
+    test('the multiline variant keeps the §3.2 chrome: label, focus ring, error adornment', () => {
+      const r = render(<TextInput {...base} multiline errorMessage="Wajib diisi" />);
+      expect(r.query('ui.textInput.label')).not.toBeNull();
+      expect(r.query('ui.textInput.error')).not.toBeNull();
+      expect(r.styleOf('ui.textInput.field')['borderColor']).toBe(color.danger);
+    });
   });
 });

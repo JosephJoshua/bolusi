@@ -187,6 +187,15 @@ export const size = Object.freeze({
   bannerDot: 12,
   /** §3.3 PIN entry dot. */
   pinDot: 16,
+  /**
+   * §3.2 + §8.6 multiline TextInput (the free-form note BODY). Single-line's 56 dp floor is a
+   * TOUCH target; a body the user composes needs a READING area, so these are DERIVED from the
+   * type scale rather than invented: four `type.body` lines of visible text plus the field's
+   * vertical padding, growing to eight before the field stops and scrolls its own content.
+   * Capped so the field can never push the §8.1 bottom action bar off a 360x640 dp screen (§0).
+   */
+  fieldMultilineMin: 4 * type.body.lineHeight + 2 * space.md,
+  fieldMultilineMax: 8 * type.body.lineHeight + 2 * space.md,
 } as const);
 
 /**
