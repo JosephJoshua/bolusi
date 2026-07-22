@@ -244,8 +244,15 @@ type DeviceBundle = {
 
 | Profile | mKiB | t | p | output | When |
 | ------- | ---- | - | - | ------ | ---- |
-| **Default** | 32768 | 3 | 1 | 32 bytes | Always, unless the floor triggers |
+| **Default** | 32768 | 3 | 1 | 32 bytes | **Shipped profile** — always, unless the floor triggers |
 | **Floor** | 19456 | 2 | 1 | 32 bytes | Only if the on-device benchmark on the 2 GB Android target exceeds 300 ms at default params (benchmark output is a committed build artifact — SEC-AUTH-10) |
+
+**D8 is RESOLVED — the DEFAULT profile ships (`m=32768 KiB, t=3, p=1`). ASSUMED, NOT MEASURED.** Which row ships was owed to the P-4 on-device benchmark (testing-guide §4.2) on the 2 GB reference device. Owner ruling **D21** (`decisions/2026-07-22-assume-device-performance-passes.md`) directs us to proceed as if that gate passes, so the default holds and the floor is not engaged. Stated in the only honest form: **assumed to pass per D21 (owner ruling, 2026-07-22); unverified on device.** No argon2id timing has been observed on the target — there is no run, and no p95 for this KDF appears anywhere in this repo (CLAUDE.md §2.1: a number carries the run that produced it).
+
+- **The assumption lands conservatively.** The default is the **stronger** of the two profiles, so assuming success *keeps* the harder parameters; it cannot weaken the security posture. Had the assumption gone the other way it would have engaged the floor on no evidence — which is why "assume it passes" is safe here specifically.
+- **The floor stays as the pre-written fallback**, unchanged. If a real device later refutes the assumption (P-4 red at default params), engage `m=19456, t=2, p=1`, record it in `decisions/`, and update this section in the same change — exactly the path P-4 already specifies. Nothing about that path is lost by assuming.
+- **SEC-AUTH-10 is NOT discharged by D21** and stays on `packages/test-support/src/sec-pending-allowlist.json`. Its acceptance is a *recorded on-device benchmark committed as a build artifact*; an assumption produces no artifact. Retiring the id against a params-pinning test would be moving the yardstick (CLAUDE.md §2.11). It retires when a device produces the artifact.
+- The Zod-enforced accepted bounds below are unchanged by this — they already admit both profiles.
 
 - Verifiers are **self-describing** (params travel in the record); verification never guesses parameters.
 - **Accepted bounds, Zod-enforced everywhere a verifier enters the system** (`POST /v1/users` §5.4, `POST /v1/users/:userId/pin-verifier` §5.4 — verifiers never appear in op payloads, §6.2): `mKiB ∈ [19456, 65536]`, `t ∈ [2, 4]`, `p = 1`, salt exactly 16 bytes, hash exactly 32 bytes. Out-of-bounds → `422 VALIDATION_FAILED`. This is the DoS guard: a hostile verifier declaring `mKiB = 1048576` must never reach a verifying device — and cannot, because verifiers enter only through these server-validated doors and devices receive them only via the bundle (SEC-AUTH-01).
@@ -298,7 +305,7 @@ const PutPinVerifierReq = z.object({
 ### 6.1 PIN and verify procedure
 
 - **PIN length: 6 digits** (OQ-1001 decided here). Rationale: the verifier bundle is necessarily on-device (FR-1010), and security-guide §5.2's own math shows a 4-digit space falls offline in under a minute while 6 digits costs hours at default params — for one extra digit of typing on a numeric pad, a >100× work-factor is the right trade. Fixed in v0 (not tenant-configurable).
-- Verify: look up the user's effective verifier (§5.3) → `argon2id(pin, salt, params)` async via quick-crypto → constant-time compare. **Budget: < 300 ms** for the KDF (SEC-AUTH-10 enforces on the 2 GB target); total tap-to-in must keep FR-1013's five-second switch.
+- Verify: look up the user's effective verifier (§5.3) → `argon2id(pin, salt, params)` async via quick-crypto → constant-time compare. **Budget: < 300 ms** for the KDF (SEC-AUTH-10 enforces on the 2 GB target — the budget is **unmeasured**: assumed to pass per D21, unverified on device, §5.3); total tap-to-in must keep FR-1013's five-second switch.
 - Verifier rows live only inside the SQLCipher DB (SEC-AUTH-09). Failed and successful attempts update the local `pin_attempt_state` table (§6.5) — not the op log, except as specified in §6.5.
 
 ### 6.2 The `auth` module operation registry
