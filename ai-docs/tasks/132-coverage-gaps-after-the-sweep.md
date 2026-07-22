@@ -1,6 +1,6 @@
 # TASK 132 — coverage gaps: a shape-asserted chaos seam with no consumer, an untested Android back handler, and a catalog guard that proves membership but not content
 
-**Status:** in-review
+**Status:** in-progress
 **Priority:** MEDIUM — each is a guard or a seam that looks covered and is not. Filed from the coverage half of the sweep so the gaps are owned rather than rediscovered.
 **Depends on:** 26, 123, 24
 **Blocks:** —
@@ -16,3 +16,14 @@
 
 ## Deliverable
 Close each: make the chaos seam actually fold old versions (or delete the dead generator field and say so); test `useHardwareBack`'s subscription lifecycle; extend the catalog guard to assert non-empty content per registered module and widen the id regex; add the app-layer independence assertion. Each fix must be **falsified** — break the thing, watch the specific guard red, restore.
+
+
+---
+
+## PARTIAL — items 2 and 3 landed 2026-07-22 (merged, reviewed, APPROVED). Items 1 and 4 remain open.
+
+- **Item 2 (`useHardwareBack`)** — 6 tests; the reviewer reproduced all three falsifications and verified the RN double against BOTH the 0.86 docs (Context7) and the installed `Libraries/Utilities/BackHandler.android.js`. The subtle part held up: test 3 alone is *structurally blind* to a leaked subscription, because RN iterates in reverse and the newest handler's `true` consumes the press first — which is why test 4's handler must **decline**. Verified at the source, not the docs.
+- **Item 3 (catalog guard)** — 4 → 12 tests, content folded over `CLIENT_SCREEN_MODULES` with no module id as a literal. The task's own premise about hyphenated ids was **refuted** by the implementer (T-16): `defineModule` validates ids against `/^[a-z][a-z0-9]*$/` (`packages/core/src/module/define-module.ts:193`) and throws at module-evaluation time, so such a module cannot reach `ALL_MODULES` at all. The reviewer confirmed independently and judged the widened regex alone *would* be over-engineering — `unparsedScreensExportKeys` is the load-bearing half, and it reds against the real `packages/modules/package.json`.
+- Residual findings from the review are **task 150** — most importantly that blank catalog values still pass every generalized assertion.
+
+**Still open here: item 1** (the chaos `schemaVersion` seam is dead data no scenario consumes) **and item 4** (no app-layer media↔sync independence guard).
