@@ -1,6 +1,6 @@
 # TASK 150 — catalog-guard residuals: blank strings pass for every module but `notes`, and a comment points at the wrong assertion
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** LOW-MEDIUM — item 1 undercuts the exact thing task 132 item 3 was built for (generalizing past the `notes`-pinned tests). Item 2 is the §2.11 comment class, in a file that itself cites "a comment is a hypothesis, not evidence".
 **Depends on:** 132 (items 2-3, merged 2026-07-22), 123
 **Blocks:** —
