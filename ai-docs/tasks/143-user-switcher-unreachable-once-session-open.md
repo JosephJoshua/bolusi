@@ -1,6 +1,6 @@
 # TASK 143 — the User Switcher is unreachable once a session is open: the avatar button is a dead control, and PRD-011's shared-device quick-switch does not exist
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH** — same class as task 124 (a built, tested screen with no reachable producer), on the feature that justifies the shared-device product shape. `design-system.md` §8.1 says "tap the avatar → User Switcher"; tapping it does nothing.
 **Depends on:** 24 (the navigation zone), 124 (which proved the class and shares `App.tsx`)
 **Blocks:** —
