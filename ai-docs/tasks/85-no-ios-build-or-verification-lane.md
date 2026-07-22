@@ -98,3 +98,19 @@ success  boot Simulator, install + launch the app
 **What this closes:** compile/link on Apple's toolchain, CocoaPods integration, the generated `Info.plist`/entitlements against tasks 83/87, and does-it-launch. **What it does NOT close, unchanged:** every device-only claim in D18 §5 / D20 §2 — real-device Keychain behaviour, backup/restore, security-guide §7.4's "never resurrected". **No Simulator green is a device test**, and no iOS *behaviour* was driven: nothing tapped a screen. The lane proves the app builds and starts, nothing more.
 
 **Still true and deliberately unchanged:** `eas.json` carries no `ios` block (the Simulator lane is `xcodebuild`-driven and reads nothing from it); the signed-device/TestFlight lane stays owner-deferred per D20 §2; `test/eas-profiles.test.ts`'s denominator still pins exactly four Android profiles.
+
+
+### CORRECTION 2026-07-22 (same day) — read this closure knowing SQLCipher was OFF in that build
+
+The task-148 investigation read the `ios-simulator` lane's own log and found:
+
+```
+[OP-SQLITE] Configuration found at /Users/runner/work/bolusi/bolusi/package.json
+[OP-SQLITE] using pure SQLite
+```
+
+The podspec's config discovery walks to the **pnpm repo root**, which has no `op-sqlite` key; the block lives at `apps/mobile/package.json:14`. So the build this closure cites was produced **without SQLCipher** — tracked as **task 151**.
+
+**What that does and does not change here.** The claims made above stand exactly as written: compile/link on Apple's toolchain, CocoaPods integration, the generated `Info.plist`/entitlements against tasks 83/87, and does-it-launch — none of those depend on the SQLite flavour. **What it removes is an inference nobody should draw from the green:** `08 §2` warns of iOS duplicate-symbol conflicts when another dependency links SQLite, and this lane did **not** exercise that, because op-sqlite was not linking OpenSSL at all. Expect task 148's Android collision to appear on iOS once 151 is fixed.
+
+This is the §2.11 pattern one level up: a lane that is green for a reason other than the one its reader assumes.
