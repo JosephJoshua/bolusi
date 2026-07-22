@@ -278,6 +278,20 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
         />
       ),
     },
+    {
+      // The §8.6 body variant. The value is deliberately several labels long: a single-line field
+      // renders this as one clipped strip, so the Gallery card SHOWS the difference rather than
+      // asserting it.
+      id: 'multiline',
+      render: (l) => (
+        <componentInventory.TextInput
+          label={l.fieldLabel}
+          value={`${l.primaryText} ${l.secondaryText} ${l.message} ${l.hint}`}
+          onChangeText={noop}
+          multiline
+        />
+      ),
+    },
   ],
 
   PinPad: [

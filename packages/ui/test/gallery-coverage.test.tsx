@@ -98,7 +98,7 @@ describe('the §3 inventory covers what design-system §3 requires', () => {
   });
 
   test.each([
-    ['TextInput', ['default', 'focused', 'error', 'disabled']],
+    ['TextInput', ['default', 'focused', 'error', 'disabled', 'multiline']],
     ['PinPad', ['entry', 'error', 'locked']],
     ['SyncStatusChip', ['synced', 'pending', 'rejected']],
     ['LoadingState', ['skeleton', 'spinner']],

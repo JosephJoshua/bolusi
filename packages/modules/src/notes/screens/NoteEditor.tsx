@@ -256,10 +256,17 @@ function EditorForm({
       </View>
 
       <View style={styles.field}>
+        {/*
+          The body is the note (§8.6) — free-form prose a mechanic types on a 360 dp phone, so it
+          MUST wrap. Single-line (RN's default, and what this field shipped as) clipped it at
+          roughly 35 characters with no wrap and no scroll: the user could not read back what they
+          had just written. `multiline` is the field's only correct variant here.
+        */}
         <TextInput
           label={tn('notes.editor.bodyField')}
           value={body}
           onChangeText={setBody}
+          multiline
           testID={`${testID}.body`}
         />
       </View>

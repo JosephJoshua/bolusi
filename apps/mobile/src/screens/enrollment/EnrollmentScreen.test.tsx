@@ -121,3 +121,26 @@ describe('changing the store RE-ARMS the confirmation (design-system §8.5)', ()
     expect(onChange).toHaveBeenCalledWith({ selectedStoreId: STORE_A.id, confirmed: false });
   });
 });
+
+// ── task 128 regression control: enrollment's fields are NOT swept into the multiline variant ────
+// Task 128 gave the shared TextInput a `multiline` capability for the §8.6 note body. It is additive
+// by design, and this is the assertion that keeps it additive: an identifier, a password, and a
+// device name are one-line values, and a change that flipped the shared default would silently turn
+// all three into growing boxes. It is deliberately filed against the CALL SITES, because the
+// component's own default passing proves nothing about what these three actually pass.
+describe('enrollment fields stay single-line after the §8.6 multiline variant (task 128)', () => {
+  test('identifier and password declare multiline false', () => {
+    const screen = renderConfirm(initialEnrollmentState(), vi.fn());
+
+    expect(screen.get('enroll-identifier.field').props['multiline']).toBe(false);
+    expect(screen.get('enroll-password.field').props['multiline']).toBe(false);
+    // A password box that grew line-by-line would also change how much of the entry is on screen.
+    expect(screen.get('enroll-password.field').props['secureTextEntry']).toBe(true);
+  });
+
+  test('the device-name field on the confirm step declares multiline false', () => {
+    const screen = renderConfirm(confirmedOnA(), vi.fn());
+
+    expect(screen.get('enroll-device-name.field').props['multiline']).toBe(false);
+  });
+});
