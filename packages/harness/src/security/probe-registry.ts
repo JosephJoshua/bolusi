@@ -8,7 +8,14 @@
 // The registry is total in both directions — `unmappedEndpoints` fails on an endpoint with no row
 // (unknown != skipped, §8.2: future endpoints must register probes) and `staleProbeKeys` fails on
 // a row for an endpoint that no longer exists.
-import type { EndpointProbes, ProbeContext, ProbeRegistry } from './route-walker.js';
+import type {
+  EndpointKey,
+  EndpointProbes,
+  ExistenceException,
+  ProbeContext,
+  ProbeRegistry,
+  ProbeRequest,
+} from './route-walker.js';
 
 const JSON_CT = { 'Content-Type': 'application/json' } as const;
 
@@ -422,15 +429,16 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/pull'),
   },
 
-  // ── media (the §2.2 documented exception) ─────────────────────────────────────────────────────
+  // ── media (the §2.2 documented exception 1) ───────────────────────────────────────────────────
   //
-  // FINDING (task 28, filed as its own task — NOT patched here per CLAUDE.md §2.6/§2.7): the
-  // cross-tenant leg of `POST /v1/media/:id/init` currently answers `500 INTERNAL` while the
-  // unassigned-store leg answers `404 MEDIA_NOT_FOUND`. `media.id` is a GLOBAL `uuid PRIMARY KEY`,
-  // RLS hides the foreign row from the handler's SELECT, and the ensuing INSERT trips a unique
-  // violation nothing catches — so the status distinguishes "exists in another tenant" from "does
-  // not exist". That is precisely the existence oracle §2.2's media exception exists to remove.
-  // The expectation below states the RULE, so this row is red until the defect is fixed.
+  // HISTORY: the cross-tenant leg of `POST /v1/media/:id/init` used to answer `500 INTERNAL` (a
+  // `media.id` unique violation nothing caught) while the unassigned-store leg answered `404`, so
+  // the status distinguished "exists in another tenant" from "does not exist". These rows state the
+  // RULE, so they were red until commit `d12face` fixed the route; they are green now.
+  //
+  // STILL OPEN (task 141a's sweep, NOT patched here per CLAUDE.md §2.6/§2.7): `init` creates a media
+  // row at a caller-supplied id, so it still answers `404` for an id another tenant holds and `200`
+  // for a free one. See `KNOWN_EXISTENCE_CONTROL_DIFFERENCES` in the suite.
   'POST /v1/media/:id/init': mediaProbes('POST', '/init', (ctx) => mediaInitBody(ctx)),
   'PUT /v1/media/:id/chunks/:index': mediaProbes(
     'PUT',
@@ -441,7 +449,12 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   'POST /v1/media/:id/complete': mediaProbes('POST', '/complete', () => '{}'),
   'GET /v1/media/:id': mediaProbes('GET', ''),
 
-  // ── push ──────────────────────────────────────────────────────────────────────────────────────
+  // ── push (the §2.2 documented exception 2) ────────────────────────────────────────────────────
+  //
+  // The exception is on the TOKEN VALUE (held → 403 vs fresh → 200, D22 §2) — not on the device id
+  // probed below, which answers a foreign device and a nonexistent one identically. Both halves are
+  // asserted: this row by the cross-tenant walk + its nonexistent-id control, the token pair by
+  // `DOCUMENTED_EXISTENCE_EXCEPTIONS` below.
   'POST /v1/push/tokens': {
     crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
     crossTenantRequest: (ctx) => ({
@@ -484,6 +497,80 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unassignedStore: { kind: 'absent', reason: 'same — the scope is the bearer device’s' },
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('GET', () => '/v1/realtime/sse'),
+  },
+};
+
+/**
+ * security-guide §2.2's documented existence exceptions — the two endpoints allowed to answer in a
+ * way that confirms existence, each with the legs that PROVE the documented behaviour.
+ *
+ * This is an allowlist of what is DOCUMENTED, not an exemption from any check: the nonexistent-id
+ * control (`nonexistentControlOf`) runs over every endpoint with no exemptions, and both endpoints
+ * below pass it — neither distinguishes on the id it is addressed by. What §2.2 excepts is narrower
+ * and is exactly what the legs here assert.
+ *
+ * Membership is pinned to `ai-docs/security-guide.md` §2.2 in both directions (SEC-TENANT-04), so a
+ * third exception cannot be added here to quiet a red probe — it takes an owner ruling and a spec
+ * edit first (CLAUDE.md §6).
+ */
+export const DOCUMENTED_EXISTENCE_EXCEPTIONS: Readonly<Record<EndpointKey, ExistenceException>> = {
+  // Exception 1 — a blind fetch by resource id must not become an existence oracle, so every
+  // out-of-scope id (cross-tenant, unassigned store, another device's in-flight upload) is the SAME
+  // `404` as an id that exists nowhere. This is SEC-MEDIA-03's `404` on every leg.
+  'GET /v1/media/:id': {
+    rationale:
+      '§2.2 exception 1 — id-keyed resource probes: every out-of-scope or nonexistent media id is one indistinguishable 404 (api/03-media §2)',
+    indistinguishable: true,
+    legs: (ctx) =>
+      (
+        [
+          ['cross-tenant', ctx.tenantBMediaId],
+          ['unassigned-store', ctx.tenantAStore2MediaId],
+          ['other-device in-flight', ctx.tenantAOtherDeviceMediaId],
+          ['nonexistent', ctx.nonexistentId],
+        ] as const
+      ).map(([leg, id]) => ({
+        leg,
+        request: {
+          path: `/v1/media/${id}`,
+          init: { method: 'GET', headers: { Authorization: ctx.tenantAAuth } },
+        },
+        status: 404,
+        code: 'MEDIA_NOT_FOUND',
+      })),
+  },
+  // Exception 2 — an Expo token already held by ANOTHER tenant's device fails closed at 403 (RLS
+  // hides the row, so ownership cannot transfer: task 118), while a token nobody holds registers at
+  // 200. Documented as allowed by D22 §2 on the entropy argument: ~88 bits means the caller can only
+  // ever present a token it already holds, so the 403 confirms a possession and enumerates nothing.
+  'POST /v1/push/tokens': {
+    rationale:
+      '§2.2 exception 2 — push-token registration: a token held by another tenant is 403, a fresh one 200 (D22 §2, ~88 bits of token entropy)',
+    indistinguishable: false,
+    legs: (ctx) => {
+      const register = (expoPushToken: string): ProbeRequest => ({
+        path: '/v1/push/tokens',
+        init: {
+          method: 'POST',
+          headers: deviceHeaders(ctx),
+          body: JSON.stringify({ deviceId: ctx.tenantADeviceId, expoPushToken }),
+        },
+      });
+      return [
+        {
+          leg: 'held by another tenant',
+          request: register(ctx.tenantBHeldPushToken),
+          status: 403,
+          code: 'PERMISSION_DENIED',
+        },
+        {
+          leg: 'fresh',
+          request: register('ExponentPushToken[sec-tenant-04-fresh-000]'),
+          status: 200,
+          code: null,
+        },
+      ];
+    },
   },
 };
 

@@ -143,6 +143,12 @@ export interface ProbeContext {
   readonly tenantBStoreId: string;
   readonly tenantBMediaId: string;
   readonly tenantBLoginIdentifier: string;
+  /**
+   * An `ExponentPushToken[…]` ALREADY registered to tenant B's device — the "held" half of
+   * security-guide §2.2's documented exception 2. Tenant A can only distinguish it from a fresh
+   * token because it already possesses the value (the ~88-bit entropy argument).
+   */
+  readonly tenantBHeldPushToken: string;
 
   /** A syntactically valid id that exists nowhere (the "nonexistent" media leg). */
   readonly nonexistentId: string;
@@ -286,6 +292,125 @@ export function judgeProbe(
     });
   }
   return violations;
+}
+
+// ── the §2.2 documented-exception allowlist ─────────────────────────────────────────────────────
+//
+// security-guide §2.2 allows exactly TWO endpoints to distinguish "exists but denied" from "does
+// not exist". Everything else must answer a cross-tenant id and a nonexistent one identically.
+//
+// The allowlist is pinned to the DOC, not to a constant a test can quietly grow: the sweep parses
+// §2.2 and requires the harness's exception set to equal it in BOTH directions. Widening the
+// allowlist therefore takes a spec edit (an owner ruling, CLAUDE.md §6) and cannot be done by
+// editing a test to make a red probe green.
+
+/** One exception as the guide declares it: its ordinal and the endpoint it names. */
+export interface DocumentedException {
+  readonly index: number;
+  readonly endpoint: EndpointKey;
+}
+
+/** One leg of a documented exception's own proof, with the verdict §2.2 records for it. */
+export interface ExistenceExceptionLeg {
+  readonly leg: string;
+  readonly request: ProbeRequest;
+  readonly status: number;
+  /** The api/00 §7 error code, or `null` where §2.2 documents a `2xx`. */
+  readonly code: string | null;
+}
+
+/**
+ * What an allowlisted endpoint claims, made runnable. `indistinguishable: true` is exception 1's
+ * shape (every out-of-scope media id is ONE `404`); `false` is exception 2's (the push-token pair
+ * is documented to DIFFER). Either way the legs are issued and judged, so a documented exception
+ * cannot describe behaviour the server no longer has — the prose is a live claim.
+ */
+export interface ExistenceException {
+  readonly rationale: string;
+  readonly indistinguishable: boolean;
+  readonly legs: (ctx: ProbeContext) => readonly ExistenceExceptionLeg[];
+}
+
+/**
+ * The exceptions security-guide §2.2 enumerates, in document order. The grammar is fixed:
+ *
+ * ```
+ * **Documented exception 1 — id-keyed resource probes (`GET /v1/media/:id`).**
+ * ```
+ *
+ * Only §2.2 is scanned, so an "exception" written up in another section cannot smuggle itself in.
+ * An EMPTY result means the parse matched nothing — callers must fail loudly rather than read it as
+ * "no exceptions declared" (testing-guide T-14).
+ */
+export function parseDocumentedExistenceExceptions(guideText: string): DocumentedException[] {
+  const start = guideText.indexOf('### 2.2 ');
+  if (start === -1) return [];
+  const afterHeading = guideText.slice(start + 1);
+  const nextHeading = afterHeading.search(/\n#{2,3} /);
+  const section = nextHeading === -1 ? afterHeading : afterHeading.slice(0, nextHeading);
+  const pattern = /\*\*Documented exception (\d+) [^*\n]*\(`([A-Z]+ \/[^`]+)`\)\.\*\*/g;
+  const found: DocumentedException[] = [];
+  for (const match of section.matchAll(pattern)) {
+    found.push({ index: Number(match[1]), endpoint: match[2] as EndpointKey });
+  }
+  return found;
+}
+
+/**
+ * Derive the NONEXISTENT-ID control for a cross-tenant probe: the same request with the foreign id
+ * swapped for one that exists nowhere. If the two responses differ, the endpoint confirms existence
+ * across the tenant boundary — §2.2 row 1's rationale, stated as a runnable check.
+ *
+ * Two things this must not do, both of which would make it pass vacuously (T-14):
+ *
+ *  * re-issue the SAME request. If the declared `foreignId` appears nowhere in the path, headers or
+ *    body, the "control" is a duplicate of the probe and can never differ — that throws.
+ *  * answer from the idempotency layer instead of the handler. A replayed `Idempotency-Key` with a
+ *    changed body is a conflict, which is a difference that says nothing about existence, so the
+ *    control gets its own key.
+ */
+export function nonexistentControlOf(
+  endpoint: EndpointKey,
+  request: ProbeRequest,
+  nonexistentId: string,
+): ProbeRequest {
+  const foreignId = request.foreignId;
+  if (foreignId === undefined || foreignId === '') {
+    throw new Error(
+      `${endpoint}: the cross-tenant probe declares no foreignId, so its nonexistent-id control cannot be derived`,
+    );
+  }
+  const swap = (text: string): string => text.split(foreignId).join(nonexistentId);
+
+  const rawHeaders: unknown = request.init.headers;
+  if (rawHeaders !== undefined && (typeof rawHeaders !== 'object' || rawHeaders === null)) {
+    throw new Error(`${endpoint}: probe headers must be a plain record for the control to swap`);
+  }
+  const headers: Record<string, string> = {};
+  let headersChanged = false;
+  for (const [name, value] of Object.entries((rawHeaders ?? {}) as Record<string, string>)) {
+    if (name.toLowerCase() === 'idempotency-key') {
+      headers[name] = `${value}-nonexistent-control`;
+      continue;
+    }
+    headers[name] = swap(value);
+    if (headers[name] !== value) headersChanged = true;
+  }
+
+  const path = swap(request.path);
+  const body = request.init.body;
+  const swappedBody = typeof body === 'string' ? swap(body) : body;
+  if (path === request.path && !headersChanged && swappedBody === body) {
+    throw new Error(
+      `${endpoint}: the declared foreignId ${foreignId} appears nowhere in the probe request — ` +
+        `the control would re-issue the SAME request and could never fail`,
+    );
+  }
+  return {
+    path,
+    init: { ...request.init, headers, ...(swappedBody === undefined ? {} : { body: swappedBody }) },
+    foreignId: nonexistentId,
+  };
 }
 
 /**

@@ -37,3 +37,15 @@ A dated entry in `ai-docs/decisions/` recording both rulings, plus whatever doc 
 - **Question 2 (cross-store writes): ADD A DEVICE→STORE SCOPE RULE.** Spun out to **task 157** (a permission-matrix change, §6, with adversarial tests). This task no longer owns the cross-store question.
 
 **Remaining scope of 141 = 141a only** (document the token-oracle exception). Close 141 when the §2.2 amendment lands and its guard is reconciled.
+
+---
+
+## FOUND BY 141a's SWEEP — NOT FIXED, NEEDS A RULING: `POST /v1/media/:id/init` is a third existence distinguisher
+
+141a's new SEC-TENANT-04 control leg (every endpoint's cross-tenant id vs an id existing nowhere must be indistinguishable) found **one** endpoint outside the two documented exceptions that distinguishes: `POST /v1/media/:id/init` answers `404 MEDIA_NOT_FOUND` for a media id **another tenant already holds** and `200` for a **free** id. Reproduced by the sweep; every other endpoint's pair is byte-identical modulo `requestId`.
+
+This is *not* the `500` defect commit `d12face` fixed — that one is gone. It is inherent to **create-by-caller-supplied-id**: the endpoint must either reject a taken id or overwrite it, and rejecting is what reveals it. Removing it needs either a lying `200` (the client then uploads chunks into nothing) or **server-generated media ids**, a wire change (api/03-media §3).
+
+**The same entropy argument the owner accepted for the push token applies** — media ids are UUIDv7 (~74 random bits) and reach a client only inside ops it was authorized to pull — so the likely ruling is "a third documented §2.2 exception". **But that is an owner call (CLAUDE.md §6), not an implementer's**, and 141a's ruling covers the push token only. Pinned in the harness as `KNOWN_EXISTENCE_CONTROL_DIFFERENCES` (an exact set, so a *second* endpoint joining fails the sweep and so does this one leaving) and reported up rather than silently excepted.
+
+**Also unfixed (out of 141a's scope — no route change was authorized):** the cross-device `403` at `push.ts:37-39` still returns *before* the 30/day `enforce(...)` at `:43-50`, so denied cross-device attempts consume no budget. The cross-**tenant** collision `403` is raised at `:100`, i.e. **after** the limiter, so the documented §2.2 exception's probe rate *is* capped — the entropy rationale in §2.2 says only that, and it was verified against the code, not assumed.

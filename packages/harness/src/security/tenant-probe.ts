@@ -50,10 +50,18 @@ const ID = {
   mediaA2: '0a333333-3333-7333-8333-333333333333',
   mediaAOther: '0a444444-4444-7444-8444-444444444444',
   mediaB: '0b555555-5555-7555-8555-555555555555',
+  pushTokenB: '0b666666-6666-7666-8666-666666666666',
   nonexistent: '0f999999-9999-7999-8999-999999999999',
 } as const;
 
 const TENANT_B_LOGIN = 'tenant-b-owner@probe.invalid';
+
+/**
+ * An Expo token already registered to tenant B's device — the "held" half of security-guide §2.2's
+ * documented exception 2. `expo_push_token` is a GLOBAL UNIQUE, so tenant A registering this value
+ * trips the constraint on a row RLS hides from it and the route fails closed at `403` (task 118).
+ */
+const TENANT_B_HELD_PUSH_TOKEN = 'ExponentPushToken[sec-tenant-04-held-by-b]';
 
 /** A test password KDF: real shape, no argon2 cost. Only the login probe reaches it. */
 const fastPasswordKdf = {
@@ -198,6 +206,10 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
   await seedMedia(ID.tenantA, ID.mediaA2, ID.storeA2, ID.deviceA2, ID.userA2, 'complete');
   await seedMedia(ID.tenantA, ID.mediaAOther, ID.storeA1, ID.deviceA2, ID.userA2, 'receiving');
   await seedMedia(ID.tenantB, ID.mediaB, ID.storeB, ID.deviceB, ID.userB, 'complete');
+  await sql`INSERT INTO push_tokens (id, tenant_id, device_id, user_id, expo_push_token, platform, updated_at)
+            VALUES (${ID.pushTokenB}, ${ID.tenantB}, ${ID.deviceB}, ${ID.userB}, ${TENANT_B_HELD_PUSH_TOKEN}, ${'android'}, ${CREATED_AT})`.execute(
+    db,
+  );
 
   const deviceToken = 'bdt_probe_tenant_a_device_1';
   const controlToken = 'bcs_probe_tenant_a_control';
@@ -233,6 +245,7 @@ export async function openTenantProbeFixture(): Promise<TenantProbeFixture> {
     tenantBStoreId: ID.storeB,
     tenantBMediaId: ID.mediaB,
     tenantBLoginIdentifier: TENANT_B_LOGIN,
+    tenantBHeldPushToken: TENANT_B_HELD_PUSH_TOKEN,
     nonexistentId: ID.nonexistent,
   };
 
