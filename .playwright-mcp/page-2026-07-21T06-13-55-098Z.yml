@@ -1,9 +1,0 @@
-- generic [ref=f4e3]:
-    - generic [ref=f4e4]: RNW browser approximation — NOT device-verified
-    - generic [ref=f4e7]:
-        - generic [ref=f4e8]:
-            - button "Kembali" [ref=f4e9] [cursor=pointer]:
-                - generic [ref=f4e10]: 󰁍
-            - generic [ref=f4e11]: Foto kerusakan
-        - generic [ref=f4e12]: Camera preview unavailable on web (device-only) — RNW approximation
-        - button "Ambil Foto" [ref=f4e17] [cursor=pointer]

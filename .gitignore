@@ -30,3 +30,6 @@ secrets.*
 # os / editor
 .DS_Store
 *.log
+
+# Playwright MCP browser session dumps (agent scratch, never source)
+.playwright-mcp/
