@@ -134,7 +134,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 123 | module i18n catalog registration is a hand-maintained per-module call (registerModuleCatalogs), not driven by the module list — the next module with screens can still forget it and ship English chrome, invisibly (the generalization deferred by task 122) | done | 122, 90 |
 | 124 | **HIGH** the Settings screen has no producer — setRoute('settings') is called nowhere, so the language toggle, device identity readout and notification deep-link are unreachable in the shipping app (from QA visual sweep) | in-review | 24, 119 |
 | 125 | **HIGH** declining the camera permission tells the user their DEVICE IS REVOKED — CaptureScreen renders auth.revoked.body for permission_denied, contradicting its own file header 200 lines above (from QA visual sweep) | in-review | 82 |
-| 126 | **HIGH** the Sync Status screen is titled Rejected Changes in EVERY state including all-clear — a healthy device reports a problem (from QA visual sweep) | in-progress | 24, 15 |
+| 126 | **HIGH** the Sync Status screen is titled Rejected Changes in EVERY state including all-clear — a healthy device reports a problem (from QA visual sweep) | in-review | 24, 15 |
 | 127 | **HIGH** task 121's gate leaves a hole below current: any schemaVersion < current skips payload validation, so a malformed old-version payload is accepted at push then throws at fold as a 500 that rolls back the whole batch (from QA spec sweep) | in-progress | 121 |
 | 128 | **HIGH** the note BODY is a single-line input that clips — the shared TextInput never sets multiline, so the reference module's core content shows ~35 chars on a 360dp phone (from QA visual sweep) | in-progress | 96 |
 | 129 | design-system conformance batch on the new screens: wrong title keys, missing author/rejection-code fields, two primaries on any empty list, counter overflow at 360dp, truncating unauthorized hint, missing §5 guidance body (from QA sweeps) | todo | 96, 82, 24 |
@@ -152,6 +152,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 141 | two security-surface questions needing a RULING not code: the push-token registration oracle contradicts security-guide §2.2's normative \|only\| exception, and 05 §9.2 lets any device write into any store of its tenant (from QA adversarial sweep) | todo | 118, 105 |
 | 142 | **HIGH process** nothing runs what CI runs — main's CI was red for a full day (lint/i18n, db-client codegen drift, chaos-05) while every local gate said green; needs a pnpm verify with a drift gate and a legible by-design red | todo | — |
 | 143 | **HIGH** the User Switcher is unreachable once a session is open — resolveZone can never yield the switcher zone from a live session, so the avatar is a dead control and PRD-011's shared-device quick-switch does not exist (probed by the 124 implementer) | todo | 24, 124 |
+| 144 | the rest of the Sync Status screen: sync-disabled-reason is a green-guarded decoy with zero callers, sync-manual-error still hardcodes NETWORK for every failure, the attention reassurance duplicates its banner, and SyncChip's a11y label never changes (from the 126 implementer) | todo | 126, 15 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
