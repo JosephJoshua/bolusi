@@ -13,7 +13,9 @@
     "retryUpload": "Kirim Ulang"
   },
   "permission": {
-    "camera": "Izinkan aplikasi memakai kamera untuk ambil foto."
+    "camera": "Izinkan aplikasi memakai kamera untuk ambil foto.",
+    "cameraDeniedTitle": "Kamera belum diizinkan",
+    "cameraDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera."
   },
   "storage": {
     "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.",

@@ -16,10 +16,10 @@
  * 3 s append debounce, the 60 s foreground interval, the background task, pull-to-refresh) feed
  * core's intake behind this seam — this task ships the seam, task 15 ships the loop.
  */
-import { AvatarButton, SyncChip } from '@bolusi/ui';
+import { AvatarButton, Chip, SyncChip, touch } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
@@ -305,12 +305,35 @@ export default function App(props: AppProps): React.JSX.Element {
                 currentUser === null ? (
                   <View testID="notes-no-avatar" />
                 ) : (
-                  <AvatarButton
-                    userId={currentUser.id}
-                    initials={currentUser.initials}
-                    accessibilityLabel={t('auth.switcher.title')}
-                    onPress={() => setPinFor(null)}
-                  />
+                  // THE HEADER CHROME (§8.1) — and the ONLY producer of `route: 'settings'`.
+                  //
+                  // The Settings screen holds the language toggle, the notification deep-links and
+                  // the device-identity readout, and until this node existed nothing in shipping
+                  // source ever called `setRoute('settings')`: the render arm below was live,
+                  // typed and tested, and no user could open it (CLAUDE.md §2.11's "sound tests,
+                  // zero callers"). On an Indonesian-first product the language rows are the ONLY
+                  // way out of a wrong locale (07-i18n §1.2), so the entry point cannot be behind
+                  // the avatar → User Switcher hop that §8.1 describes: `resolveZone` returns the
+                  // shell for every session-open render, so nothing reaches the switcher from here.
+                  //
+                  // A `Chip` rather than a bespoke control: §3.5 gives it the icon+label pair §0
+                  // requires ("no icons without labels" — a bare cog is unreadable to the users
+                  // this product is for) and pads its 28 dp body to the §1.4 48 dp floor. It rides
+                  // the header-right group beside the avatar, in reach of the same thumb (§0).
+                  <View style={styles.headerChrome}>
+                    <Chip
+                      label={t('core.settings.language')}
+                      icon="language"
+                      onPress={() => setRoute('settings')}
+                      testID="shell-open-settings"
+                    />
+                    <AvatarButton
+                      userId={currentUser.id}
+                      initials={currentUser.initials}
+                      accessibilityLabel={t('auth.switcher.title')}
+                      onPress={() => setPinFor(null)}
+                    />
+                  </View>
                 )
               }
             />
@@ -330,3 +353,8 @@ function noop(): void {
 }
 
 const FILL = { flex: 1 } as const;
+
+const styles = StyleSheet.create({
+  /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
+  headerChrome: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
+});

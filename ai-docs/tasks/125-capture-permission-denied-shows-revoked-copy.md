@@ -1,6 +1,6 @@
 # TASK 125 — declining the camera permission tells the user their DEVICE IS REVOKED: `CaptureScreen` renders `auth.revoked.body` for `permission_denied`
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH — actively misleading, security-adjacent copy.** A technician who taps "Deny" on the OS camera prompt is told the device is blocked and to contact the shop owner to re-enroll. That is a false revocation signal on a product whose revocation flow is a real security control (api/02-auth §7.3) — it will generate support calls and may trigger an unnecessary re-enrollment.
 **Depends on:** 82 (media capture)
 **Blocks:** —
