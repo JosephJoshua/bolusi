@@ -8,7 +8,8 @@ import { sql } from 'kysely';
 
 import { closeClientDb, openClientDb, type ClientDb } from '../src/connection.js';
 import { runClientMigrations } from '../src/migrations/runner.js';
-import { openBetterSqlite3Driver } from './better-sqlite3-adapter.js';
+import { COLUMN_CIPHER_MARKER } from '../src/crypto/column-cipher.js';
+import { openBetterSqlite3Driver, testAead, testKeyStore } from './better-sqlite3-adapter.js';
 
 let connection: ClientDb;
 
@@ -30,7 +31,8 @@ const NOTE = {
 beforeEach(async () => {
   connection = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
-    keyStore: { getDatabaseEncryptionKey: () => Promise.resolve('test-key') },
+    keyStore: testKeyStore,
+    aead: testAead,
     location: ':memory:',
   });
   await runClientMigrations(connection.driver, { now: () => 1 });
@@ -43,8 +45,25 @@ afterEach(async () => {
 test('Kysely insert is visible to the raw driver on the same connection', async () => {
   await connection.db.insertInto('notes').values(NOTE).execute();
 
+  // ONE connection: the row the Kysely handle wrote is the row the raw driver reads.
   const raw = await connection.driver.execute(`SELECT id, title, body FROM notes`);
-  expect(raw.rows).toEqual([{ id: 'note-1', title: 'Stock count', body: 'Twelve crates' }]);
+  expect(raw.rows).toHaveLength(1);
+  expect(raw.rows[0]?.['id']).toBe('note-1');
+
+  // …but `notes.title`/`body` are D22 at-rest-encrypted columns, and the RAW driver sits BELOW the
+  // decrypt seam (which is a Kysely plugin). So what is physically stored is ciphertext — the whole
+  // point of the control. This is the same-connection visibility assertion AND the at-rest one.
+  expect(raw.rows[0]?.['title']).not.toBe('Stock count');
+  expect(raw.rows[0]?.['body']).not.toBe('Twelve crates');
+  expect(String(raw.rows[0]?.['title']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+  expect(String(raw.rows[0]?.['body']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+
+  // Read back THROUGH Kysely and the plaintext returns — the transform is transparent to callers.
+  const viaKysely = await connection.db
+    .selectFrom('notes')
+    .select(['id', 'title', 'body'])
+    .execute();
+  expect(viaKysely).toEqual([{ id: 'note-1', title: 'Stock count', body: 'Twelve crates' }]);
 });
 
 // The identifier contract 04 §2 depends on: ONE applier, written in camelCase, lands in
@@ -133,8 +152,16 @@ test('Kysely update and delete agree with the raw driver', async () => {
     .set({ title: 'Recount', editCount: 1 })
     .where('id', '=', 'note-1')
     .execute();
-  expect((await connection.driver.execute(`SELECT title, edit_count FROM notes`)).rows).toEqual([
-    { title: 'Recount', edit_count: 1 },
+
+  // `edit_count` is plaintext, so the raw driver reads it verbatim; `title` is an encrypted column, so
+  // the UPDATE stored ciphertext (the encrypt seam covers UPDATE, not only INSERT — a title that
+  // round-tripped in the clear on edit would be a silent leak on every note rename).
+  const raw = await connection.driver.execute(`SELECT title, edit_count FROM notes`);
+  expect(raw.rows[0]?.['edit_count']).toBe(1);
+  expect(raw.rows[0]?.['title']).not.toBe('Recount');
+  expect(String(raw.rows[0]?.['title']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+  expect(await connection.db.selectFrom('notes').select('title').execute()).toEqual([
+    { title: 'Recount' },
   ]);
 
   await connection.db.deleteFrom('notes').where('id', '=', 'note-1').execute();

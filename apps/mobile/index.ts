@@ -30,6 +30,7 @@ import { createMediaClientForApp } from './src/media/native.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
+import { deviceColumnAead } from './src/ports/aead.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
 import { consoleDiagnostics } from './src/ports/diagnostics.js';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
@@ -93,6 +94,9 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
         driverFactory: openOpSqliteDriver,
         keyStore,
         crypto: quickCryptoPort,
+        // D22: the 32-byte SecureStore key now drives app-layer AES-256-GCM over the sensitive columns
+        // (via quick-crypto's OpenSSL), replacing SQLCipher's whole-file encryption — task 148.
+        aead: deviceColumnAead,
         clock: systemClock,
       }),
     // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the SQLCipher key

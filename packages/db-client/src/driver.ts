@@ -54,11 +54,6 @@ export interface DbDriverOpenParams {
   readonly name: string;
   /** Directory prefix. `:memory:` opens an in-memory database. */
   readonly location?: string | undefined;
-  /**
-   * The SQLCipher key. Always present and always passed: there is no unkeyed open path
-   * anywhere in this package (security-guide §6.4).
-   */
-  readonly encryptionKey: string;
 }
 
 /** Adapter entry point. Injected into `openClientDb` so the wrapper never names a driver. */
@@ -79,8 +74,9 @@ export type DbErrorCode =
   /** Write attempted against a read-only database. */
   | 'readonly'
   /**
-   * The file is not a database this connection can read — SQLCipher's symptom for a
-   * wrong or absent key (SEC-DEV-06). Never retried with a different key by this package.
+   * The file is not a database this connection can read — a corrupt or non-SQLite file.
+   * (Under the app-layer AEAD scheme the DB file itself is plaintext SQLite, so a "wrong key"
+   * no longer surfaces here — that is now the column cipher's `open` throw; D22.)
    */
   | 'not_a_database'
   | 'unknown';

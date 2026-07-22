@@ -13,6 +13,7 @@ import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 import { FakeFs, sha256Hex } from './_harness.test.js';
 import { captureSignature, type SignatureCaptureDeps } from './signature.js';
 import type { SignatureStroke } from './signature-png.js';
+import { nodeColumnAead } from '@bolusi/test-support';
 
 const KEY = 'a'.repeat(64);
 const keyStore = { getDatabaseEncryptionKey: () => Promise.resolve(KEY) };
@@ -74,6 +75,7 @@ beforeEach(async () => {
   db = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
     keyStore,
+    aead: nodeColumnAead,
     location: ':memory:',
   });
   await runClientMigrations(db.driver, { now: () => 1 });

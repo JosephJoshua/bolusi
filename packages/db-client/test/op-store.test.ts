@@ -35,7 +35,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { closeClientDb, openClientDb, type ClientDb } from '../src/connection.js';
 import { runClientMigrations } from '../src/migrations/runner.js';
 import { createClientOpStore } from '../src/op-store.js';
-import { openBetterSqlite3Driver } from './better-sqlite3-adapter.js';
+import { openBetterSqlite3Driver, testAead } from './better-sqlite3-adapter.js';
 
 const KEY = 'a'.repeat(64);
 const T = 1_726_000_000_000;
@@ -149,6 +149,7 @@ beforeEach(async () => {
   db = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
     keyStore: { getDatabaseEncryptionKey: () => Promise.resolve(KEY) },
+    aead: testAead,
     location: ':memory:',
   });
   await runClientMigrations(db.driver, { now: () => 1 });

@@ -120,15 +120,16 @@ function createDriver(db: DB): DbDriver {
 }
 
 /**
- * Opens the device database. `encryptionKey` is a first-class `open()` param on op-sqlite
- * (D6's reason for choosing it over expo-sqlite's string-interpolated `PRAGMA key`), and
- * it is always passed — this factory has no unkeyed path.
+ * Opens the device database. NO `encryptionKey` is passed: D22 dropped SQLCipher (`sqlcipher: true`
+ * removed from the op-sqlite package.json block — it vendored a second `libcrypto` that broke the
+ * Android APK, task 148). The file is plaintext SQLite; at-rest confidentiality is the app-layer
+ * column cipher (connection.ts + crypto/column-cipher.ts), not this open. The 32-byte SecureStore key
+ * still exists — it now feeds that cipher, not `open()`.
  */
 export const openOpSqliteDriver = async (params: DbDriverOpenParams): Promise<DbDriver> => {
   const db = open({
     name: params.name,
     ...(params.location === undefined ? {} : { location: params.location }),
-    encryptionKey: params.encryptionKey,
   });
   return createDriver(db);
 };

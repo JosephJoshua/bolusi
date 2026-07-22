@@ -12,7 +12,6 @@
     "test:visual": "pnpm run build:web && playwright test --config e2e-web/playwright.config.ts"
   },
   "op-sqlite": {
-    "sqlcipher": true,
     "performanceMode": true
   },
   "dependencies": {

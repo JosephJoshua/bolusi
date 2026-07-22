@@ -14,6 +14,7 @@ export {
   type JsonPrimitive,
   type JsonValue,
 } from './jcs.js';
+export { encryptColumnValue, registerColumnCipher, type ColumnCipher } from './column-cipher.js';
 export { compareCanonicalOrder, sortCanonical, type CanonicalOrderKey } from './order.js';
 export {
   DEFAULT_KDF_PARAMS,

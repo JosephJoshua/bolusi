@@ -33,7 +33,12 @@ import {
   type LocationPort,
 } from '@bolusi/core';
 import { GENESIS_PREVIOUS_HASH, type SignedOperation } from '@bolusi/schemas';
-import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+import {
+  mulberry32,
+  noblePort,
+  randomBytes as prngBytes,
+  nodeColumnAead,
+} from '@bolusi/test-support';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import type { LoginResult } from '../screens/enrollment/model.js';
@@ -87,6 +92,7 @@ beforeEach(async () => {
   app = await bootstrap({
     driverFactory: openBetterSqlite3Driver,
     keyStore: new SecureStoreDbKeyStore(dbFakeCrypto),
+    aead: nodeColumnAead,
     crypto: dbFakeCrypto,
     clock,
     databaseLocation: ':memory:',

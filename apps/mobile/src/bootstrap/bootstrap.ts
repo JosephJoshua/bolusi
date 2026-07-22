@@ -55,6 +55,7 @@ import {
 import {
   openClientDb,
   runClientMigrations,
+  type AeadCipher,
   type ClientDb,
   type DbDriverFactory,
 } from '@bolusi/db-client';
@@ -66,9 +67,15 @@ import { CLIENT_MODULES } from './modules.js';
 export interface BootstrapDeps {
   /** op-sqlite on device, better-sqlite3 in CI. See the header. */
   readonly driverFactory: DbDriverFactory;
-  /** The SQLCipher key surface (security-guide §6.4). */
+  /** The database-key surface (security-guide §6.4) — feeds the at-rest column cipher (D22). */
   readonly keyStore: SecureStoreDbKeyStore;
   readonly crypto: CryptoPort;
+  /**
+   * The AES-256-GCM primitive backing at-rest column encryption (D22). Device binds quick-crypto
+   * (`ports/aead.ts`); CI binds `node:crypto` (`@bolusi/test-support` `nodeColumnAead`). Required, so
+   * a build cannot silently open a connection that seals nothing (SEC-DEV-06).
+   */
+  readonly aead: AeadCipher;
   readonly clock: ClockPort;
   /** Overrides the 10-db §9 default (`bolusi.db`). Tests pass `:memory:` through `location`. */
   readonly databaseName?: string | undefined;
@@ -146,6 +153,7 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
   const db = await openClientDb({
     driverFactory: deps.driverFactory,
     keyStore: deps.keyStore,
+    aead: deps.aead,
     name: deps.databaseName,
     location: deps.databaseLocation,
   });

@@ -31,6 +31,21 @@ export type {
 
 export { createClientDialect } from './dialect/index.js';
 
+export {
+  AEAD_TAG_BYTES,
+  createNodeCompatibleAead,
+  type AeadCipher,
+  type NodeCompatibleCryptoModule,
+} from './crypto/aead.js';
+export {
+  Aes256GcmColumnCipher,
+  ColumnCipherError,
+  COLUMN_CIPHER_MARKER,
+  COLUMN_KEY_BYTES,
+  COLUMN_NONCE_BYTES,
+} from './crypto/column-cipher.js';
+export { createColumnEncryptionPlugin } from './crypto/column-encryption-plugin.js';
+
 export { createClientOpStore } from './op-store.js';
 export type { OpStoreConnection } from './op-store.js';
 

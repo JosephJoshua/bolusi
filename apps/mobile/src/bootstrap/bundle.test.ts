@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 import { BUNDLE_ETAG_META_KEY, createFetchBundleRefresh } from './bundle.js';
+import { nodeColumnAead } from '@bolusi/test-support';
 
 const KEY = 'a'.repeat(64);
 const keyStore = { getDatabaseEncryptionKey: () => Promise.resolve(KEY) };
@@ -40,6 +41,7 @@ beforeEach(async () => {
   db = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
     keyStore,
+    aead: nodeColumnAead,
     location: ':memory:',
   });
   await runClientMigrations(db.driver, { now: () => 1 });

@@ -20,7 +20,7 @@ import type { Kysely } from 'kysely';
 
 import { closeClientDb, openClientDb, type ClientDb } from '../src/connection.js';
 import { runClientMigrations } from '../src/migrations/runner.js';
-import { openBetterSqlite3Driver } from './better-sqlite3-adapter.js';
+import { openBetterSqlite3Driver, testAead, testKeyStore } from './better-sqlite3-adapter.js';
 
 const generatedPath = join(dirname(fileURLToPath(import.meta.url)), '../src/generated/db.ts');
 
@@ -47,7 +47,8 @@ let connection: ClientDb;
 beforeAll(async () => {
   connection = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
-    keyStore: { getDatabaseEncryptionKey: () => Promise.resolve('test-key') },
+    keyStore: testKeyStore,
+    aead: testAead,
     location: ':memory:',
   });
   await runClientMigrations(connection.driver, { now: () => 1 });

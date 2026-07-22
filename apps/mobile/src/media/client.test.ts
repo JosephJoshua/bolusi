@@ -18,7 +18,7 @@
 // declarations and unexecuted.
 import { createUuidV7Generator, type MediaTransportPort } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
-import { noblePort } from '@bolusi/test-support';
+import { noblePort, nodeColumnAead } from '@bolusi/test-support';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
@@ -143,6 +143,7 @@ beforeEach(async () => {
   db = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
     keyStore,
+    aead: nodeColumnAead,
     location: ':memory:',
   });
   await runClientMigrations(db.driver, { now: () => 1 });
