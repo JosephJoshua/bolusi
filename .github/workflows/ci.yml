@@ -503,7 +503,12 @@ jobs:
           EXPO_PUBLIC_API_URL: 'http://10.0.2.2:3000'
         run: |
           pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
-          ./gradlew -p apps/mobile/android assembleRelease
+          # `expo prebuild` writes the Gradle wrapper into apps/mobile/android — there is no
+          # ./gradlew at the repo root, and invoking one there fails with exit 127 before Gradle is
+          # ever reached. Observed on this lane's FIRST-EVER run (29890632296, 2026-07-22):
+          # `./gradlew: No such file or directory`. `-p` sets Gradle's project dir; it does not
+          # locate the wrapper script, so the path to the wrapper has to be right on its own.
+          ./apps/mobile/android/gradlew -p apps/mobile/android assembleRelease
       # Task 117: install the Maestro CLI on the runner host (no emulator needed yet). Maestro's
       # documented installer drops the binary in ~/.maestro/bin; the temurin-17 JDK this job already
       # set up is its JVM runtime. Added to $GITHUB_PATH so later steps resolve `maestro`.
