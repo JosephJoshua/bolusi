@@ -156,10 +156,18 @@ describe('screen key maps', () => {
   });
 
   test('every sync-status header title key exists in both catalogs (task 126)', () => {
-    // The screen titles itself `t(SYNC_TITLE_KEY[syncChipState(input)])`. The values arrive through
-    // a `satisfies Record<…, string>` map, so their type is `string` and the generated key union
-    // never sees them — a renamed key would compile, and the header would degrade to a humanized
-    // final segment ("Title synced") on the screen that exists to be believed.
+    // NOT the only guard on these keys, and the compiler is the stronger half. `SYNC_TITLE_KEY` is
+    // `as const satisfies Record<…, string>`, which PRESERVES the literal types rather than widening
+    // them to `string`, so `t(SYNC_TITLE_KEY[chip])` checks each value against the generated
+    // `TranslationKey` union: renaming one slot to `'sync.status.titleSyncedTYPO'` is TS2345 at
+    // `SyncStatusScreen.tsx` and at this suite's sibling render test, not a silent degrade.
+    //
+    // What this test adds is a DIFFERENT ORACLE, not a restatement of that one. The compiler reads
+    // generated SOURCE; `hasKey` reads the BOOTED i18next instance, per locale, `fallbackLng: false`.
+    // And the union is generated from the `id` catalog ALONE (gen.mjs, `SOURCE_LOCALE`), so
+    // "resolves in id" and "resolves in en" are one question to the type system and two to this
+    // loop. It is also the check that still runs when tsc does not: under bare `vitest`, pointing a
+    // slot at an absent key fails HERE ("… missing in 'id'") with nothing else to catch it.
     let covered = 0;
     for (const key of Object.values(SYNC_TITLE_KEY)) {
       expectInEveryCatalog(key);
