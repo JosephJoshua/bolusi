@@ -151,7 +151,8 @@ describe('screen key maps', () => {
   test('every sync-status reassurance and media-status key exists', () => {
     for (const key of Object.values(REASSURANCE_KEY)) expectInEveryCatalog(key);
     for (const key of Object.values(MEDIA_STATUS_KEY)) expectInEveryCatalog(key);
-    expect(Object.values(REASSURANCE_KEY)).toHaveLength(4);
+    // 5 since task 147 added `photosPending` — ops sent, photos still draining (FR-1138).
+    expect(Object.values(REASSURANCE_KEY)).toHaveLength(5);
     expect(Object.values(MEDIA_STATUS_KEY)).toHaveLength(3);
   });
 
@@ -173,9 +174,11 @@ describe('screen key maps', () => {
       expectInEveryCatalog(key);
       covered += 1;
     }
-    expect(covered).toBe(5);
-    // The titles are five DISTINCT keys, not one key repeated — the task-126 defect, at key level.
-    expect(new Set(Object.values(SYNC_TITLE_KEY)).size).toBe(5);
+    // 6 since task 147: the five chip states plus `titlePhotosPending` (ops sent, photos still
+    // queued — the honest headline the media-blind chip cannot carry).
+    expect(covered).toBe(6);
+    // The titles are six DISTINCT keys, not one key repeated — the task-126 defect, at key level.
+    expect(new Set(Object.values(SYNC_TITLE_KEY)).size).toBe(6);
     expect(Object.values(SYNC_TITLE_KEY)).not.toContain('sync.rejected.title');
   });
 

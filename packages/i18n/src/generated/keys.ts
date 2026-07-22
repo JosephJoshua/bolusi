@@ -139,11 +139,13 @@ export type TranslationKey =
   | 'sync.status.offline'
   | 'sync.status.pending'
   | 'sync.status.pendingMedia'
+  | 'sync.status.photosPending'
   | 'sync.status.reconnected'
   | 'sync.status.syncing'
   | 'sync.status.titleAttention'
   | 'sync.status.titleOffline'
   | 'sync.status.titlePending'
+  | 'sync.status.titlePhotosPending'
   | 'sync.status.titleSynced'
   | 'sync.status.titleSyncing'
   | 'sync.status.upToDate';
@@ -274,6 +276,7 @@ export interface TranslationResources {
       syncing: string;
       pending: string;
       pendingMedia: string;
+      photosPending: string;
       offline: string;
       reconnected: string;
       lastSynced: string;
@@ -282,6 +285,7 @@ export interface TranslationResources {
       titleSyncing: string;
       titleOffline: string;
       titleAttention: string;
+      titlePhotosPending: string;
     };
     banner: {
       warning: string;
