@@ -50,10 +50,6 @@ export interface AppRuntimeDeps {
   readonly location: LocationPort;
   /** The device's Ed25519 signing key (05 §2.2) — the `SecureStoreKeyStore`, which satisfies this. */
   readonly signingKey: SigningKeyPort;
-  /** Step 7's debounced sync hook (04 §5.1). At enrollment there is no loop yet, so a no-op is the
-   *  honest binding — the genesis is durable the moment it commits, and the loop's boot sync (started
-   *  by Root on enroll success) pushes it. Task 25's command runtime binds the real trigger. */
-  readonly syncScheduler: SyncSchedulerPort;
 }
 
 export interface AppRuntime {
@@ -82,6 +78,27 @@ export interface AppRuntime {
    * writes are enforced by the same evaluator" true by construction (§2.8).
    */
   moduleRuntimeFor(device: DeviceIdentity): ModuleRuntime<ClientDatabase>;
+  /**
+   * Point step 7 (04 §5.1 — "schedule sync (debounced)") at the live loop's append trigger, or
+   * `null` to detach it on teardown (task 136).
+   *
+   * ── WHY THIS IS A LATE BIND AND NOT A CONSTRUCTOR ARGUMENT ────────────────────────────────────
+   * There is a genuine construction-order cycle. The command runtime must exist BEFORE any sync loop
+   * does: `runEnrollment` appends the genesis op through it (api/02-auth §4.1 step 6), and that
+   * append is what persists the `deviceId` a `SyncClient` requires to be constructed at all. So at
+   * the instant this composition is built there is nothing to bind, and whatever is bound then is
+   * what every later command gets — which is exactly how the shipping app came to call
+   * `{ schedule: () => undefined }` after EVERY local append, forever, while the real
+   * `createSyncTriggers(...).scheduler` sat with zero production consumers.
+   *
+   * Binding late is the one shape that lets the SAME runtime serve the genesis (no loop yet) and
+   * every note/session command afterwards (loop live) without a second composition. `Root` calls it
+   * in exactly one place — where it constructs the client — and the guard on that call is
+   * `test/live-shell-sync-scheduler.test.tsx`, which creates a note through the mounted app and
+   * watches the debounced cycle carry it. Delete the bind and that test reds; this comment is not
+   * the evidence (§2.11), that test is.
+   */
+  bindSyncScheduler(scheduler: SyncSchedulerPort | null): void;
 }
 
 /**
@@ -99,8 +116,27 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
   const store = createClientOpStore(app.db);
   const applyProjection = app.engine.asAppendSeam();
 
+  /**
+   * Step 7's hook, indirected so it can be pointed at the loop once one exists (see
+   * `bindSyncScheduler`). Every `CommandRuntime` this composition mints closes over THIS object, so
+   * one bind reaches the genesis path, the session ops and every module command at once.
+   *
+   * Unbound it does nothing — which is correct for the only window in which it is unbound (before
+   * enrollment there is no loop and nothing to sync to) and is a bug in every other window. That
+   * asymmetry is why the bind is guarded by a composed test rather than by this comment.
+   */
+  let boundScheduler: SyncSchedulerPort | null = null;
+  const syncScheduler: SyncSchedulerPort = {
+    schedule(): void {
+      boundScheduler?.schedule();
+    },
+  };
+
   return {
     evaluator,
+    bindSyncScheduler(next: SyncSchedulerPort | null): void {
+      boundScheduler = next;
+    },
     runtimeFor(device: DeviceIdentity): CommandRuntime {
       return this.moduleRuntimeFor(device).commands;
     },
@@ -115,7 +151,7 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         location: deps.location,
         signingKey: deps.signingKey,
         applyProjection,
-        syncScheduler: deps.syncScheduler,
+        syncScheduler,
         // Task 40's liveness bound, ACTIVATED here (task 102). The mechanism (`#recordBounded` in
         // core's enforcement point) is OFF unless a `RuntimeTimerPort` is wired: a denied command's
         // best-effort `auth.permission_denied` append is otherwise awaited UNBOUNDED, so a stuck

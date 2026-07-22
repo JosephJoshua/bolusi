@@ -197,7 +197,6 @@ function platformFor(overrides: Partial<EnrollmentPlatform> = {}): {
     clock,
     idSource: seededIdSource(0x51),
     location: nullLocation,
-    syncScheduler: { schedule: () => undefined },
     platform: 'android',
     appVersion: '1.0.0',
     ...overrides,

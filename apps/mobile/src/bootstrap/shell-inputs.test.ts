@@ -37,6 +37,9 @@ function fakeClient(over: {
   syncState?: SyncState;
 }): SyncClient {
   return {
+    // `resolveShellInputs` never reads it; it is on the interface because `Root` binds it into the
+    // command runtime's step-7 hook (task 136), which is a different seam entirely.
+    scheduler: { schedule: () => undefined },
     start: () => Promise.resolve(),
     requestManual: () => undefined,
     stop: () => undefined,

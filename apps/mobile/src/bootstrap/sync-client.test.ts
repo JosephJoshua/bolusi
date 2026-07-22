@@ -25,7 +25,9 @@ import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
-import { createSyncClient, type SyncClientDeps } from './sync-client.js';
+import type { Bootstrapped } from './bootstrap.js';
+import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
+import { APPEND_DEBOUNCE_MS } from './triggers.js';
 
 const KEY = 'a'.repeat(64);
 const keyStore = { getDatabaseEncryptionKey: () => Promise.resolve(KEY) };
@@ -303,6 +305,82 @@ describe('falsification — each wiring broken makes the cycle FAIL LOUDLY (§2.
     await client.settle();
     expect(transport.pulls.length).toBeGreaterThan(0);
     expect((await readSyncState(db.db)).lastSuccessfulSyncAt).toBe(T);
+    client.stop();
+  });
+});
+
+describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (task 136)', () => {
+  /**
+   * `createSyncClientForApp` is the function the composition root calls, and nothing exercised it —
+   * which left the last link between "Root binds `client.scheduler`" and "the client a DEVICE gets
+   * has a working one" unguarded. This drives that exact function and inspects what its `scheduler`
+   * arms, against the EXPORTED constant rather than a literal (T-6).
+   *
+   * A timer that records DELAYS (the rest of this file uses one that records only counts): the whole
+   * claim is "3 s, and re-armed, not queued", and a count cannot express either half.
+   */
+  function delayRecordingTimer() {
+    const armed = new Map<number, number>();
+    let nextId = 0;
+    return {
+      port: {
+        schedule(delayMs: number): () => void {
+          const id = (nextId += 1);
+          armed.set(id, delayMs);
+          return () => {
+            armed.delete(id);
+          };
+        },
+      },
+      delays: () => [...armed.values()],
+    };
+  }
+
+  async function clientForApp(timer: ReturnType<typeof delayRecordingTimer>) {
+    const app = {
+      db,
+      engine: { applyPulledOp: () => Promise.resolve() },
+      syncState: await readSyncState(db.db),
+    } as unknown as Bootstrapped;
+    return createSyncClientForApp(app, {
+      baseUrl: 'https://example.invalid',
+      deviceId: DEVICE_ID,
+      loadDeviceToken: () => Promise.resolve('bdt_test'),
+      crypto: noblePort,
+      clock: clockT,
+      appState: activeAppState,
+      netInfo: fakeNetInfo(false).port,
+      timer: timer.port,
+      // Never called: nothing here fires a timer, so no cycle runs and no request is made. Injected
+      // because the real default is the global `fetch`, and a test must not be able to reach a wire.
+      fetchImpl: () => Promise.reject(new Error('no wire in this test')),
+    });
+  }
+
+  test('one append arms ONE timer, at APPEND_DEBOUNCE_MS — not immediately, not the 60 s interval', async () => {
+    const timer = delayRecordingTimer();
+    const client = await clientForApp(timer);
+    expect(timer.delays(), 'a client that has not started must arm nothing').toStrictEqual([]);
+
+    client.scheduler.schedule();
+
+    // The no-op this task removed would arm NOTHING here; a straight-through wiring would have run a
+    // cycle instead of arming anything; the 60 s interval would be the wrong delay.
+    expect(timer.delays()).toStrictEqual([APPEND_DEBOUNCE_MS]);
+    client.stop();
+  });
+
+  test('a second append inside the window RE-ARMS rather than queues (the debounce)', async () => {
+    const timer = delayRecordingTimer();
+    const client = await clientForApp(timer);
+
+    client.scheduler.schedule();
+    client.scheduler.schedule();
+    client.scheduler.schedule();
+
+    // Still ONE armed timer: `schedule()` cancels the pending one before arming the next. Three
+    // entries here would be a queue — 40 appends would then mean 40 cycles.
+    expect(timer.delays()).toStrictEqual([APPEND_DEBOUNCE_MS]);
     client.stop();
   });
 });

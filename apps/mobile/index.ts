@@ -222,9 +222,15 @@ function createEnrollment(
       randomBytes: (n) => quickCryptoPort.randomBytes(n),
     }),
     location: expoLocationPort,
-    // No loop runs during enrollment; the genesis is durable on commit and the loop's boot sync (Root
-    // starts it on success) pushes it. Task 25's command runtime binds the real append trigger.
-    syncScheduler: { schedule: () => undefined },
+    // NO `syncScheduler` HERE ANY MORE (task 136), and its absence is the fix rather than an
+    // omission. This site used to bind `{ schedule: () => undefined }` — "honest, no loop runs during
+    // enrollment" — but the object it fed is the app's ONE `AppRuntime`, reused by the session
+    // controller and every notes command, so step 7 (04 §5.1) called that no-op after EVERY local
+    // append forever and §5 (b)'s 3 s debounce did not exist on a device. It went unnoticed because
+    // NOTHING imports this file: corrupting the binding to throw failed zero tests. The step-7 hook is
+    // now owned by `createAppRuntime` and pointed at the real `SyncClient.scheduler` by `Root` — a
+    // decision that lives where a composed test can watch it (test/live-shell-sync-scheduler.test.tsx)
+    // instead of here, where nothing can.
     platform: Platform.OS === 'ios' ? 'ios' : 'android',
     // Same `APP_VERSION` the Settings block shows — empty in v0 (expo-constants unpinned, decision
     // deferred). Valid per the server's EnrollReq (`z.string().max(32)`); not faked (T-19).
