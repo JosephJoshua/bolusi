@@ -15,6 +15,7 @@ function input(overrides: Partial<ZoneInput> = {}): ZoneInput {
     session: { userId: 'user-a' },
     locked: false,
     pinFor: null,
+    switching: false,
     route: 'home',
     ...overrides,
   };
@@ -36,13 +37,18 @@ describe('resolveZone — the gate (task 24 acceptance)', () => {
   });
 
   test('enrolled with no session lands on the switcher in `choose` mode', () => {
-    expect(resolveZone(input({ session: null }))).toEqual({ kind: 'switcher', mode: 'choose' });
+    expect(resolveZone(input({ session: null }))).toEqual({
+      kind: 'switcher',
+      mode: 'choose',
+      origin: 'home',
+    });
   });
 
   test('idle-locked lands on the switcher in `lock` mode (§8.2 — the switcher IS the lock)', () => {
     expect(resolveZone(input({ session: null, locked: true }))).toEqual({
       kind: 'switcher',
       mode: 'lock',
+      origin: 'home',
     });
   });
 
@@ -75,6 +81,44 @@ describe('resolveZone — the gate (task 24 acceptance)', () => {
       mode: 'choose',
     });
   });
+
+  test('an open session that ASKED for the switcher reaches it, carrying the origin route (task 143)', () => {
+    // THE DEFECT THIS TASK CLOSES. Before `switching`, `session !== null && pinFor === null` mapped
+    // to the shell for EVERY input, so no live-session tap could produce the switcher — the avatar
+    // was a dead control. `switching` is the reachable input; `origin` is the surface it was opened
+    // from, so the abandon path (below) can return there rather than home.
+    expect(
+      resolveZone(input({ session: { userId: 'user-a' }, switching: true, route: 'home' })),
+    ).toEqual({ kind: 'switcher', mode: 'choose', origin: 'home' });
+    expect(
+      resolveZone(input({ session: { userId: 'user-a' }, switching: true, route: 'settings' })),
+    ).toEqual({ kind: 'switcher', mode: 'choose', origin: 'settings' });
+  });
+
+  test('a picked face wins over a still-set `switching` — the PIN pad is the later step', () => {
+    // Once a face is tapped `pinFor` is set; the roster is behind us. If `switching` also lingered
+    // (it does, until the switch lands) the gate must still show the PIN pad, so back from the pad
+    // returns to the roster rather than skipping it.
+    expect(
+      resolveZone(input({ session: { userId: 'user-a' }, switching: true, pinFor: 'user-b' })),
+    ).toEqual({ kind: 'pin', userId: 'user-b', mode: 'choose' });
+  });
+
+  test('`switching` is inert without a session — the pre-session switcher is reached by session===null', () => {
+    // A stale `switching` flag cannot manufacture a switcher when there is nobody signed in: step 2
+    // (session === null) already owns that surface and decides lock-vs-choose. The flag only matters
+    // in the session-open branch.
+    expect(resolveZone(input({ session: null, switching: true }))).toEqual({
+      kind: 'switcher',
+      mode: 'choose',
+      origin: 'home',
+    });
+    expect(resolveZone(input({ session: null, locked: true, switching: true }))).toEqual({
+      kind: 'switcher',
+      mode: 'lock',
+      origin: 'home',
+    });
+  });
 });
 
 describe('revocation is terminal and beats every other input (03 §Device)', () => {
@@ -103,6 +147,7 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
     const sessions = [null, { userId: 'user-a' }];
     const locks = [true, false];
     const pins = [null, 'user-b'];
+    const switches = [true, false];
     const routes: ShellRoute[] = ['home', 'syncStatus', 'settings'];
     const kinds = new Set<Zone['kind']>();
 
@@ -111,21 +156,27 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
       for (const session of sessions)
         for (const locked of locks)
           for (const pinFor of pins)
-            for (const route of routes) {
-              const zone = resolveZone({ device, session, locked, pinFor, route });
-              expect(
-                zone,
-                JSON.stringify({ device, session, locked, pinFor, route }),
-              ).toBeDefined();
-              expect(zone.kind).toBeTruthy();
-              kinds.add(zone.kind);
-              count += 1;
-            }
+            for (const switching of switches)
+              for (const route of routes) {
+                const zone = resolveZone({ device, session, locked, pinFor, switching, route });
+                expect(
+                  zone,
+                  JSON.stringify({ device, session, locked, pinFor, switching, route }),
+                ).toBeDefined();
+                expect(zone.kind).toBeTruthy();
+                kinds.add(zone.kind);
+                count += 1;
+              }
 
     // The sweep's own denominator (T-14 — a guard must assert its own coverage). Without these two
     // lines a bug that made the loops iterate zero times would report a green "every combination".
     expect(count).toBe(
-      devices.length * sessions.length * locks.length * pins.length * routes.length,
+      devices.length *
+        sessions.length *
+        locks.length *
+        pins.length *
+        switches.length *
+        routes.length,
     );
     expect([...kinds].sort()).toEqual(['enrollment', 'pin', 'shell', 'switcher']);
   });
@@ -133,13 +184,26 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
 
 describe('backTarget — hardware back IS the header back (§8.1)', () => {
   test('the LOCK switcher has NO back — a back button would walk into A`s session (§8.2)', () => {
-    expect(backTarget({ kind: 'switcher', mode: 'lock' })).toBeNull();
+    // Origin is irrelevant to a lock: there is no shell to walk back to, that IS the property.
+    expect(backTarget({ kind: 'switcher', mode: 'lock', origin: 'home' })).toBeNull();
   });
 
-  test('a voluntary switcher can be abandoned back to the shell', () => {
-    expect(backTarget({ kind: 'switcher', mode: 'choose' })).toEqual({
+  test('a voluntary switcher is abandoned back to the ORIGIN, not unconditionally home (task 143)', () => {
+    // The pre-session / home-avatar case returns home...
+    expect(backTarget({ kind: 'switcher', mode: 'choose', origin: 'home' })).toEqual({
       kind: 'shellRoute',
       route: 'home',
+    });
+    // ...but a switch opened from the avatar ON Settings or Sync Status returns THERE. Before this
+    // task `backTarget` hardcoded `route: 'home'`, so abandoning a switch dumped the user on the notes
+    // list no matter where they came from — the return-path half of the defect.
+    expect(backTarget({ kind: 'switcher', mode: 'choose', origin: 'settings' })).toEqual({
+      kind: 'shellRoute',
+      route: 'settings',
+    });
+    expect(backTarget({ kind: 'switcher', mode: 'choose', origin: 'syncStatus' })).toEqual({
+      kind: 'shellRoute',
+      route: 'syncStatus',
     });
   });
 

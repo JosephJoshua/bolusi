@@ -1,6 +1,6 @@
 # TASK 148 — the Android APK CANNOT BE ASSEMBLED: op-sqlite (SQLCipher) and react-native-quick-crypto each ship their own `libcrypto.so`, and `:app:mergeReleaseNativeLibs` refuses
 
-**Status:** blocked
+**Status:** in-progress
 **Priority:** **HIGH — nothing Android ships until this is fixed.** There is no APK. Every device- and emulator-gated claim in the repo sits behind this, including task 27a, task 117 (Maestro), and SEC-AUTH-09 leg 1.
 **Depends on:** 27a (whose lane surfaced it)
 **Blocks:** 27a, 117, 28 (SEC-AUTH-09 leg 1 needs real SQLCipher on the emulator)
@@ -121,3 +121,48 @@ The owner chose the correct-by-construction option (not `pickFirst`): remove `sq
 - and whether removing SQLCipher also resolves task 151 (iOS SQLCipher-off) or changes its shape.
 
 Bring that mechanism back for the owner before writing code. Only then: implement, with adversarial at-rest tests (wrong key fails; on-disk bytes are not plaintext-SQLite-readable) and the SEC-AUTH-09 leg it feeds. 27a/27b/28/117 stay blocked until the APK builds AND the new at-rest control is proven on the emulator.
+
+
+---
+
+## DESIGN PASS 2026-07-22 (investigation only — nothing implemented). Finding: "drop SQLCipher" NECESSARILY means "lose whole-file encryption." Owner must accept the reshaped guarantee before code.
+
+Verified against the actual op-sqlite/expo-sqlite type defs + CMake + Expo SDK-57 docs (Context7), not memory.
+
+### There is no whole-file replacement without a second OpenSSL
+- **op-sqlite BYO-cipher reusing quick-crypto's OpenSSL — DOES NOT EXIST.** op-sqlite's only encryption path is compiled-in SQLCipher; `Storage.d.ts:7`: the key "is only used when compiled against the SQLCipher version." No `sqlite3_key`-with-your-own-crypto hook is exposed.
+- **expo-sqlite `useSQLCipher` — REPRODUCES 148 and is worse.** Its Android CMake does `find_package(openssl … CONFIG)` → the SAME `libcrypto.so` collision; also breaks Android 16 KB pages (expo/expo#39792); also a D6 reversal to the slower engine. The collision is OpenSSL↔quick-crypto, not op-sqlite-specific — switching engines does not escape it.
+- **Version-align + pickFirst — still the forbidden directive** (AGP `acceptOnlyOne()` throws on the duplicate path regardless of content). Upstream #1059 Option B (static-link, hidden visibility) is unshipped.
+- **Whole-file "vault" (encrypt file, decrypt a working copy) — rejected:** writes a plaintext DB working file the whole time the app runs / is backgrounded (worse for the lost/stolen-locked-device threat), plus a full-file decrypt on every cold start scaling with DB size on a 2 GB device.
+
+### RECOMMENDED mechanism: application-layer AEAD on the sensitive columns, via quick-crypto's already-linked OpenSSL 3.6.2
+quick-crypto (1.1.6, already the sole on-device crypto per D8) exposes AES-256-GCM / ChaCha20-Poly1305 / hkdf / pbkdf2 (`cipher.d.ts`). Encrypting value-bearing columns adds ZERO native deps and ZERO second `libcrypto` — the only mechanism that satisfies the D22 constraint and is real on the stack today.
+- **Key: unchanged** — 32 CSPRNG bytes in `expo-secure-store` (Keystore-wrapped, `WHEN_UNLOCKED_THIS_DEVICE_ONLY`), the existing `SecureStoreDbKeyStore` producer carries over; feeds an app-layer AEAD instead of `open({encryptionKey})`. Not PIN-derived (per-device, per §6.4).
+- **Encrypt (safe — read whole, never SQL-filtered by content):** op-log `payload`, `signed_core_jcs`, `location`; note `title`/`body`; `user_pin_verifiers` salt/hash/params (the SEC-AUTH-09 material); media capture-context; quarantined `signed_core_jcs`. Columns stay `TEXT` (base64 ciphertext) → **codegen types essentially unaffected** (value transform, not schema change).
+- **LOST vs SQLCipher:** all relational structure stays plaintext and MUST (ids, `entity_type`/`type`, `seq`/`timestamp_ms`, `hash`/`previous_hash`/`signature`, `sync_status`, FKs, row counts, indexes). A forensic reader of the raw file on a non-running device learns the **activity shape** (how many ops of what type against which entities/users/devices, when) but not the sensitive **values** (note bodies, GPS, PIN verifiers). Migration gotcha: encrypting an existing plaintext column leaves old plaintext in freed pages until `VACUUM`.
+
+### Threat-model delta the owner must accept
+- Attacker with the file but not SecureStore/Keystore: SQLCipher → reads nothing; app-layer → reads metadata/shape, NOT the encrypted PII/verifiers.
+- Attacker running AS the app: reads the key and decrypts everything — **identical to SQLCipher today** (already accepted; revocation is the answer, not storage).
+- In-scope threat is insider / lost-or-stolen device (root malware + hardware/Keystore attacks are OUT, §1). The crown jewels (Ed25519 seed, device token) already live in SecureStore, NOT the DB. So the concrete new residual = **metadata/activity-shape exposure to forensic extraction of a non-running, non-rooted device.**
+
+### Interactions
+- **Task 151 largely DISSOLVES (re-scope, don't close):** encryption becomes platform-agnostic JS, so "iOS SQLCipher-off" is no longer a bug and the "iOS collision the moment you fix the config" risk is pre-empted (op-sqlite links no OpenSSL on either platform). BUT 151's root cause (the podspec misses the config block at the pnpm repo root) still governs **`performanceMode`** — re-scope 151 to "prove performanceMode is discovered on iOS."
+- **D6 preserved** (op-sqlite engine unchanged). **D8 untouched** (DB key random-in-SecureStore, never PIN-derived). **16 KB-page risk REDUCED** (one fewer native OpenSSL lib).
+- **Testability WIN:** the driver-conformance suite already runs on better-sqlite3 (no SQLCipher), so CI never exercised SQLCipher; app-layer AEAD is deterministically testable in Node/CI.
+
+### Perf
+op-sqlite in-op throughput (D6 / P-2 floor) preserved (pages written plaintext at the SQLite layer). NEW cost: app-layer AEAD per sensitive value on hot paths (pull-apply, rebuild folds thousands of ops) — native AES-GCM is fast but is a JSI round-trip per value. Small payloads, minimal set → likely modest, but it is a NEW cost on a P-2 budget that is **only assumed to pass (D21), never measured** → quantifiable only on the emulator/2 GB device.
+
+### Honest ceiling (emulator/device-only)
+1. That `op-sqlite(sqlcipher:false) + quick-crypto` **actually assembles** with no duplicate `libcrypto` (#1059's reporter says clean; **not built here** — no Android SDK).
+2. That app-layer AEAD holds the P-2 write floor on 2 GB.
+3. That the produced build's raw file is genuinely ciphertext-for-the-protected-columns + wrong-key-fails (JS is CI-testable; the artifact wants the emulator + SEC-DEV-06).
+
+### DECISION REQUIRED FROM THE OWNER before any code
+1. **Accept the reshaped guarantee** — "sensitive values are AEAD-ciphertext; relational metadata/structure/activity-shape are plaintext", replacing "whole DB opaque". SEC-DEV-06 / SEC-AUTH-09 / §1 threat-model reworded to match.
+2. **Approve the encrypted-column set** (the list above — the security-critical call; a missed column is a silent PII leak).
+3. **Accept the residual** (metadata/shape to forensic extraction; app-as-attacker unchanged) and the **perf unknown** (emulator-verified).
+4. **Re-scope task 151** to the performanceMode-discovery half.
+
+If whole-file coverage is a HARD requirement, the honest finding is **there is no good option on this stack** — every whole-file route is forbidden (`pickFirst`), unshipped (#1059 Option B), or fragile (vault). Then the only path is waiting on upstream and Android stays blocked.

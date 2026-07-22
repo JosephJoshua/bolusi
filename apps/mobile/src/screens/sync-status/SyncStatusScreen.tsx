@@ -58,6 +58,7 @@ import {
   SYNC_TITLE_KEY,
   syncChipState,
   syncProblems,
+  syncTitleState,
   type MediaQueueRow,
   type RejectedOpRow,
   type SyncStatusInput,
@@ -87,20 +88,23 @@ export function SyncStatusScreen({
   const sync = manualSync(input);
   const queue = mediaQueue(input);
   const problems = syncProblems(input);
-  // ONE verdict, rendered twice — as the header chip and as the header title. Computing it once is
-  // what makes "the chip and the title cannot disagree" a property of the code, not a convention.
+  // The header chip is the five-state, media-blind verdict (design-system §8.1). The header title is
+  // that verdict PLUS the `photosPending` distinction the chip cannot carry (task 147): they agree
+  // whenever anything is wrong, and diverge only when ops are sent while photos are still queued.
   const chip = syncChipState(input);
+  const titleState = syncTitleState(input);
 
   const rejectedState: ListState<RejectedOpRow> = { kind: 'ready', items: [...input.rejected] };
   const mediaState: ListState<MediaQueueRow> = { kind: 'ready', items: [...queue] };
 
   return (
     <AppShell
-      // task 126: the title is the STATE, read from `SYNC_TITLE_KEY` (model.ts) — the one
-      // view→key mapping (§2.8), keyed on the same `syncChipState` the header chip renders, so the
-      // chip and the title cannot disagree. It was `t('sync.rejected.title')` unconditionally,
-      // which headed a fully-synced device "Perubahan Ditolak" above "Semua perubahan terkirim".
-      title={t(SYNC_TITLE_KEY[chip])}
+      // task 126/147: the title is the STATE, read from `SYNC_TITLE_KEY` (model.ts) — the one
+      // view→key mapping (§2.8). Keyed on `syncTitleState`, which is the chip's verdict plus the one
+      // distinction the media-blind chip cannot draw: ops sent, photos still queued (FR-1138). Before
+      // 126 it was `t('sync.rejected.title')` unconditionally (a synced device headed "Perubahan
+      // Ditolak"); 126 keyed it on the chip, which then read "Semua Terkirim" over 3 pending photos.
+      title={t(SYNC_TITLE_KEY[titleState])}
       titleVariant="detail"
       onBack={onBack}
       backLabel={t('core.action.back')}
@@ -276,6 +280,9 @@ function reassuranceText(input: SyncStatusInput): string {
       return t(REASSURANCE_KEY[answer.kind]);
     case 'savedHere':
       return t(REASSURANCE_KEY[answer.kind], { count: answer.pendingOperationCount });
+    case 'photosPending':
+      // Ops sent, photos still draining (FR-1138) — honest and calm, never "all sent".
+      return t(REASSURANCE_KEY[answer.kind]);
     case 'syncing':
       return t(REASSURANCE_KEY[answer.kind]);
     case 'attention':

@@ -22,9 +22,10 @@ import {
   manualSync,
   SYNC_TITLE_KEY,
   syncChipState,
+  syncTitleState,
   type RejectedOpRow,
-  type SyncChipState,
   type SyncStatusInput,
+  type SyncTitleState,
 } from './model.js';
 
 const NOW = 1_700_000_000_000;
@@ -128,26 +129,31 @@ describe('the "Sync now" button is wired to manualSync`s verdict (design-system 
 //
 // WHAT IS GUARDED, AND WHY IT IS THE MAPPING RATHER THAN THE COPY. Asserting the title string would
 // be asserting UI copy (T-4, repo rule) and would go red on a copyedit while staying green on the
-// actual defect. So each case DRIVES a state through `syncChipState` and asserts the title the screen
+// actual defect. So each case DRIVES a state through `syncTitleState` and asserts the title the screen
 // rendered is the one `SYNC_TITLE_KEY` names for that state — a KEY identity, resolved through the
 // real shipping catalog. Two controls keep that from passing vacuously: the fixtures must cover
-// every `SyncChipState` (denominator), and the comparison instrument must be shown to detect
-// SAMENESS (oracle), or "all five titles are distinct" would be green against any implementation.
+// every `SyncTitleState` (denominator), and the comparison instrument must be shown to detect
+// SAMENESS (oracle), or "all titles are distinct" would be green against any implementation.
+//
+// task 147 added `photosPending` — the title state the media-blind chip cannot carry (ops sent,
+// photos still queued). It is driven through `syncTitleState`, not `syncChipState`, because the two
+// deliberately diverge there (the chip stays `synced`); that divergence is witnessed on its own below.
 
-/** Each of design-system §8.1's five chip states, DRIVEN through the model — never asserted flat. */
+/** Each `SyncTitleState`, DRIVEN through the model — never asserted flat. `photosPending` is task 147. */
 const STATE_FIXTURES = [
   ['synced', {}],
   ['pending', { pendingOperationCount: 3 }],
+  ['photosPending', { pendingMediaCount: 3 }],
   ['syncing', { loopState: 'pushing' }],
   ['offline', { isOffline: true }],
   ['attention', { rejected: REJECTED }],
-] as const satisfies readonly (readonly [SyncChipState, Partial<SyncStatusInput>])[];
+] as const satisfies readonly (readonly [SyncTitleState, Partial<SyncStatusInput>])[];
 
-describe('the header title states the actual sync state (task 126, design-system §8.1/§8.4)', () => {
+describe('the header title states the actual sync state (task 126/147, design-system §8.1/§8.4)', () => {
   test.each(STATE_FIXTURES)('`%s` renders its own title key', (expected, over) => {
     // T-14b: pin the fixture against the model first, so this case cannot silently be testing a
     // different state than the one it is named for.
-    expect(syncChipState(input(over))).toBe(expected);
+    expect(syncTitleState(input(over))).toBe(expected);
     expect(titleOf(over)).toBe(t(SYNC_TITLE_KEY[expected]));
   });
 
@@ -156,11 +162,11 @@ describe('the header title states the actual sync state (task 126, design-system
     expect(new Set(titles).size).toBe(STATE_FIXTURES.length);
   });
 
-  test('DENOMINATOR: the fixtures cover every chip state the map can be asked for (T-14)', () => {
+  test('DENOMINATOR: the fixtures cover every title state the map can be asked for (T-14)', () => {
     // Without this, dropping fixtures to a single row would leave "all distinct" trivially true.
     const covered = STATE_FIXTURES.map(([kind]) => kind);
     expect([...covered].sort()).toEqual(Object.keys(SYNC_TITLE_KEY).sort());
-    expect(covered).toHaveLength(5);
+    expect(covered).toHaveLength(6);
   });
 
   test('POSITIVE CONTROL: the instrument detects SAMENESS, so distinctness is a real finding', () => {
@@ -187,5 +193,54 @@ describe('the header title states the actual sync state (task 126, design-system
     const attention = renderSync({ rejected: REJECTED });
     expect(textsIn(attention.get('sync-rejected-section'))).toContain(t('sync.rejected.title'));
     expect(renderSync({}).query('sync-rejected-section')).toBeNull();
+  });
+});
+
+// ── TASK 147: the CHIP and the TITLE, witnessed together in the rendered screen ───────────────────
+//
+// task 144 item 3 observed that nothing asserts the CHIP's rendered state — only the title — so "the
+// chip and the title are one verdict" was by-construction but unobserved. This reads the SyncChip's
+// per-state icon testID (`ui.syncChip.icon.<state>`, SyncChip.tsx) AND the title together, on the one
+// state where they deliberately diverge (ops sent, photos queued): the chip stays `synced`, the title
+// says photos-pending, and NEITHER claims "All Sent" over the pending-photos counter.
+describe('the chip and title are witnessed together on the pending-media screen (task 147)', () => {
+  /** Which SyncChip icon actually rendered — the ambient verdict, read the way task 144 asked for. */
+  function renderedChip(over: Partial<SyncStatusInput>) {
+    const screen = renderSync(over);
+    const states = ['synced', 'pending', 'syncing', 'offline', 'attention'] as const;
+    return states.filter((s) => screen.query(`ui.syncChip.icon.${s}`) !== null);
+  }
+
+  test('ops sent + 3 photos queued: chip renders `synced`, title is photos-pending, never "All Sent"', () => {
+    const over = { pendingMediaCount: 3, pendingOperationCount: 0 };
+    // Pin the fixtures against the model (T-14b) so this cannot drift to a different state silently.
+    expect(syncChipState(input(over))).toBe('synced');
+    expect(syncTitleState(input(over))).toBe('photosPending');
+
+    // The RENDERED chip is exactly one icon — `synced` — and no phantom sixth chip state leaked.
+    expect(renderedChip(over)).toEqual(['synced']);
+
+    // The RENDERED title is the photos-pending key, and specifically NOT the "All Sent" key that
+    // shipped over these same three pending photos. Compared as KEYS via the real catalog (not copy).
+    expect(titleOf(over)).toBe(t(SYNC_TITLE_KEY.photosPending));
+    expect(titleOf(over)).not.toBe(t(SYNC_TITLE_KEY.synced));
+
+    // The counter that contradicted the old headline is still on screen, still counting the photos —
+    // the headline now agrees with it instead of denying it.
+    const screen = renderSync(over);
+    expect(textsIn(screen.get('sync-counter-media'))).toContain('3');
+  });
+
+  test('POSITIVE CONTROL: an all-clear device renders the `synced` chip AND the "All Sent" title', () => {
+    // The chip witness must be able to SHOW `synced`+titleSynced, or the assertion above proves nothing
+    // about divergence. Here chip and title agree on the genuinely-synced verdict.
+    expect(renderedChip({})).toEqual(['synced']);
+    expect(titleOf({})).toBe(t(SYNC_TITLE_KEY.synced));
+  });
+
+  test('POSITIVE CONTROL: pending OPS render the `pending` chip AND the pending title', () => {
+    const over = { pendingOperationCount: 3 };
+    expect(renderedChip(over)).toEqual(['pending']);
+    expect(titleOf(over)).toBe(t(SYNC_TITLE_KEY.pending));
   });
 });

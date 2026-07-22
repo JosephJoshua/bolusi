@@ -1,6 +1,6 @@
 # TASK 143 — the User Switcher is unreachable once a session is open: the avatar button is a dead control, and PRD-011's shared-device quick-switch does not exist
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH** — same class as task 124 (a built, tested screen with no reachable producer), on the feature that justifies the shared-device product shape. `design-system.md` §8.1 says "tap the avatar → User Switcher"; tapping it does nothing.
 **Depends on:** 24 (the navigation zone), 124 (which proved the class and shares `App.tsx`)
 **Blocks:** —
@@ -31,3 +31,12 @@ Extend the zone model so a live session can reach the switcher, wire the avatar 
 
 ## Constraints
 `App.tsx` / `navigation/zone.ts` are contended (124 landed, 133/135/136 queued) — serialize. A new zone/route value is a navigation-model change: state it explicitly in the commit and update `design-system.md` §8.1 if the doc's description no longer matches.
+
+
+---
+
+## DONE 2026-07-22 (merged, reviewed APPROVE). Traced to the op level.
+
+The switcher is reachable from a live session via a new `switching` ZoneInput field + `origin: ShellRoute` on the switcher zone (back returns to where the switch was opened, not hardcoded home). No `@bolusi/core` change — the reviewer traced the switch to `SessionManager.switchTo` (`session.ts`), which emits `auth.session_ended{reason:'switch'}` + `auth.user_switched` at the incoming user's PIN verify; 143 only adds the navigation flag and clears it on `opened`. Falsified: reachability (revert avatar handler → composed test reds), all three back-target origins (home/settings/syncStatus), and the stuck-true clear (remove `setSwitching(false)` on PIN success → switcher persists over the incoming session).
+
+**LOW follow-up folded into task 145** (origin-drift via the switcher's sync chip — same header-chrome nav class) + a test-fidelity note (the composed test seeds one user, so it asserts navigation not the two-user op emission; the ops are verified by construction in core).

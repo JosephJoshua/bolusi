@@ -143,10 +143,14 @@ const DEMO_REJECTED: readonly RejectedOpRow[] = [
   },
 ];
 
-/** The three meaningful sync-status shapes: healthy-and-synced, offline-but-safe, needs-attention. */
+/**
+ * The meaningful sync-status shapes: healthy-and-synced, saved-here (ops pending), photos-pending
+ * (ops sent but media still draining, FR-1138 — task 147), offline-but-safe, needs-attention.
+ */
 export const SYNC_STATUS_STATES = {
   allSent: () => demoSyncInput(),
   savedHere: () => demoSyncInput({ pendingOperationCount: 3, loopState: 'idle' }),
+  photosPending: () => demoSyncInput({ pendingMediaCount: 3, pendingOperationCount: 0 }),
   offline: () => demoSyncInput({ isOffline: true, pendingOperationCount: 2 }),
   attention: () => demoSyncInput({ rejected: DEMO_REJECTED }),
 } as const;

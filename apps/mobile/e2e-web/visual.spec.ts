@@ -63,9 +63,17 @@ const MATRIX: readonly Row[] = [
   // Settings — the language surface (interaction covered separately).
   { screen: 'settings', state: 'ready', testId: 'settings-screen', text: 'Bahasa' },
 
-  // Sync-status — healthy / saved-here / offline / needs-attention.
+  // Sync-status — healthy / saved-here / photos-pending / offline / needs-attention.
   { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
+  // task 147: ops sent, 3 photos queued. The headline reads "Foto Belum Terkirim" (Photos Not Sent
+  // Yet), NOT "Semua Terkirim" — the exact string the browser lane now witnesses over the counter.
+  {
+    screen: 'sync-status',
+    state: 'photosPending',
+    testId: 'sync-counter-media',
+    text: 'Foto Belum Terkirim',
+  },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
 

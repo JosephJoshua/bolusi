@@ -8,6 +8,7 @@
     "syncing": "Syncing…",
     "pending": "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
     "pendingMedia": "{count, plural, one {# photo not sent yet} other {# photos not sent yet}}",
+    "photosPending": "Changes sent. Photos not sent yet.",
     "offline": "No connection. Changes are saved on this device.",
     "reconnected": "Back online",
     "lastSynced": "Last connected {relative}",
@@ -15,7 +16,8 @@
     "titlePending": "Not Sent Yet",
     "titleSyncing": "Sending",
     "titleOffline": "No Connection",
-    "titleAttention": "Needs Attention"
+    "titleAttention": "Needs Attention",
+    "titlePhotosPending": "Photos Not Sent Yet"
   },
   "banner": {
     "warning": "Last connected {relative}. This may not be the latest data.",

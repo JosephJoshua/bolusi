@@ -151,6 +151,7 @@ export const resources: SeededResources = {
           syncing: 'Mengirim…',
           pending: '{count} perubahan belum terkirim',
           pendingMedia: '{count} foto belum terkirim',
+          photosPending: 'Perubahan terkirim. Foto belum terkirim.',
           offline: 'Tidak ada koneksi. Perubahan tersimpan di perangkat ini.',
           reconnected: 'Terhubung kembali',
           lastSynced: 'Terakhir terhubung {relative}',
@@ -159,6 +160,7 @@ export const resources: SeededResources = {
           titleSyncing: 'Sedang Mengirim',
           titleOffline: 'Tanpa Koneksi',
           titleAttention: 'Perlu Diperiksa',
+          titlePhotosPending: 'Foto Belum Terkirim',
         },
         banner: {
           warning: 'Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.',
@@ -400,6 +402,7 @@ export const resources: SeededResources = {
           syncing: 'Syncing…',
           pending: '{count, plural, one {# change not sent yet} other {# changes not sent yet}}',
           pendingMedia: '{count, plural, one {# photo not sent yet} other {# photos not sent yet}}',
+          photosPending: 'Changes sent. Photos not sent yet.',
           offline: 'No connection. Changes are saved on this device.',
           reconnected: 'Back online',
           lastSynced: 'Last connected {relative}',
@@ -408,6 +411,7 @@ export const resources: SeededResources = {
           titleSyncing: 'Sending',
           titleOffline: 'No Connection',
           titleAttention: 'Needs Attention',
+          titlePhotosPending: 'Photos Not Sent Yet',
         },
         banner: {
           warning: 'Last connected {relative}. This may not be the latest data.',

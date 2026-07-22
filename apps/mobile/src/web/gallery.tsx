@@ -447,6 +447,11 @@ export const ENTRIES: readonly HarnessEntry[] = [
   },
   {
     screen: 'sync-status',
+    state: 'photosPending',
+    render: () => syncScreen('photosPending', SYNC_STATUS_STATES.photosPending()),
+  },
+  {
+    screen: 'sync-status',
     state: 'offline',
     render: () => syncScreen('offline', SYNC_STATUS_STATES.offline()),
   },

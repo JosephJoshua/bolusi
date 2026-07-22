@@ -28,6 +28,8 @@ import {
   staleness,
   syncChipState,
   syncProblems,
+  SYNC_TITLE_KEY,
+  syncTitleState,
   type MediaRow,
   type RejectedOpRow,
   type SyncStatusInput,
@@ -230,8 +232,24 @@ describe('the counters are DERIVED — no stored count column exists to read (01
     expect(reassurance(given)).toEqual({ kind: 'savedHere', pendingOperationCount: 3 });
   });
 
-  test('pending media alone still reports work in hand', () => {
-    expect(reassurance(input({ pendingMediaCount: 2 })).kind).toBe('savedHere');
+  test('pending media alone is its OWN state — not savedHere (task 147: was the pinned asymmetry)', () => {
+    // BEFORE task 147 this asserted `savedHere`, which was the bug's other half: `savedHere` carries
+    // the OP count, so media-only rendered "0 changes not sent yet" while the media counter said 3.
+    // The honest answer is `photosPending` — ops sent, photos still on their own drain (FR-1138). This
+    // is NOT the old assertion inverted: it names a distinct arm AND pins the KEY the screen renders,
+    // and the two controls below prove it is neither `allSent` nor `savedHere`.
+    const answer = reassurance(input({ pendingMediaCount: 2 }));
+    expect(answer.kind).toBe('photosPending');
+    expect(REASSURANCE_KEY[answer.kind]).toBe('sync.status.photosPending');
+    // It still means "your work is in hand and safe": distinct from allSent, and never a problem.
+    expect(answer.kind).not.toBe('allSent');
+    expect(syncProblems(input({ pendingMediaCount: 2 }))).toEqual([]);
+    // Ops pending OUTRANKS media in the tier-1 line: with real ops to report, savedHere leads and
+    // carries the op count (the media counter card still shows the photos).
+    expect(reassurance(input({ pendingOperationCount: 1, pendingMediaCount: 2 }))).toEqual({
+      kind: 'savedHere',
+      pendingOperationCount: 1,
+    });
   });
 });
 
@@ -243,6 +261,7 @@ describe('the reassurance line reads REASSURANCE_KEY — the map the screen rend
   test.each([
     ['allSent', input(), 'sync.status.upToDate'],
     ['savedHere', input({ pendingOperationCount: 3 }), 'sync.status.pending'],
+    ['photosPending', input({ pendingMediaCount: 3 }), 'sync.status.photosPending'],
     ['syncing', input({ loopState: 'pushing' }), 'sync.status.syncing'],
     ['syncing', input({ loopState: 'pulling' }), 'sync.status.syncing'],
     ['attention', input({ rejected: [rejectedRow('BAD_SIGNATURE')] }), 'sync.rejected.banner'],
@@ -258,6 +277,7 @@ describe('the reassurance line reads REASSURANCE_KEY — the map the screen rend
     expect(Object.keys(REASSURANCE_KEY).sort()).toEqual([
       'allSent',
       'attention',
+      'photosPending',
       'savedHere',
       'syncing',
     ]);
@@ -299,6 +319,90 @@ describe('the header chip maps all five states from the same fixtures (§8.1)', 
       rejected: [rejectedRow('UNKNOWN_TYPE')],
     });
     expect(syncChipState(given)).toBe('attention');
+  });
+});
+
+// ── TASK 147: the headline is honest about pending media, in BOTH directions ──────────────────────
+//
+// The defect: with `pendingMediaCount: 3, pendingOperationCount: 0` the header title read
+// `titleSynced` ("Semua Terkirim" / "All Sent") — because task 126 keyed the title on the media-blind
+// `syncChipState` — while the media counter said "3 foto belum terkirim". A falsehood in the
+// reassuring direction, in the largest text on the honesty screen.
+//
+// The fix must be honest BOTH ways: media pending is NOT `synced` (the bug) but NOT a problem either
+// (media drains independently, FR-1138 — folding it into `pending`/`attention` is the mirror error).
+// So the assertions below pin the state→KEY mapping (never the copy, repo rule), witness the chip and
+// title together, and carry two positive controls so "always say photos-pending" would red.
+describe('the headline is honest about pending media (task 147, FR-1138)', () => {
+  const MEDIA_PENDING = input({ pendingMediaCount: 3, pendingOperationCount: 0 });
+
+  test('THE DEFECT: ops sent + photos queued is NOT titled "All Sent"', () => {
+    // The exact reproduced state. The title state — and the key it resolves — must move off `synced`.
+    expect(syncTitleState(MEDIA_PENDING)).toBe('photosPending');
+    expect(SYNC_TITLE_KEY[syncTitleState(MEDIA_PENDING)]).toBe('sync.status.titlePhotosPending');
+    // The precise contradiction that shipped: the title must not be the "all sent" key here.
+    expect(SYNC_TITLE_KEY[syncTitleState(MEDIA_PENDING)]).not.toBe(SYNC_TITLE_KEY.synced);
+    // …and it is a distinct state, not `pending` folded in (which would claim unsent OPS).
+    expect(syncTitleState(MEDIA_PENDING)).not.toBe('pending');
+  });
+
+  test('but it is NOT a problem — media drains on its own schedule (the mirror error avoided)', () => {
+    expect(syncProblems(MEDIA_PENDING)).toEqual([]);
+    expect(syncTitleState(MEDIA_PENDING)).not.toBe('attention');
+    expect(reassurance(MEDIA_PENDING).kind).toBe('photosPending');
+    expect(isOfflineButHealthy(input({ isOffline: true, pendingMediaCount: 3 }))).toBe(true);
+  });
+
+  test('CHIP + TITLE witnessed together — they AGREE nothing is wrong (task 144 item 3)', () => {
+    // The chip stays `synced`: its verdict (the op loop is caught up) is still true, and §8.1 gives it
+    // no sixth state. The title carries the one extra truth. Crucially they never DISAGREE about a
+    // problem: neither reads `attention` here, and where a problem exists they read it together.
+    expect(syncChipState(MEDIA_PENDING)).toBe('synced');
+    expect(syncTitleState(MEDIA_PENDING)).toBe('photosPending');
+    const rejected = input({ rejected: [rejectedRow('BAD_SIGNATURE')] });
+    expect(syncChipState(rejected)).toBe('attention');
+    expect(syncTitleState(rejected)).toBe('attention');
+  });
+
+  test('POSITIVE CONTROL 1 — a genuinely all-clear device (0 ops, 0 media) stays calm', () => {
+    // Without this, the fix could be "photos-pending whenever media > 0 OR always": an empty device
+    // must still read `synced`/`allSent` and raise no problem.
+    const clear = input();
+    expect(syncTitleState(clear)).toBe('synced');
+    expect(SYNC_TITLE_KEY[syncTitleState(clear)]).toBe('sync.status.titleSynced');
+    expect(syncChipState(clear)).toBe('synced');
+    expect(reassurance(clear).kind).toBe('allSent');
+    expect(syncProblems(clear)).toEqual([]);
+  });
+
+  test('POSITIVE CONTROL 2 — a device with pending OPS still reports what it already did', () => {
+    // Without this, the fix could collapse every non-empty state into photos-pending. Pending ops
+    // must still title `pending` and lead the answer with the op receipt (savedHere), media or not.
+    const ops = input({ pendingOperationCount: 3, pendingMediaCount: 3 });
+    expect(syncTitleState(ops)).toBe('pending');
+    expect(SYNC_TITLE_KEY[syncTitleState(ops)]).toBe('sync.status.titlePending');
+    expect(reassurance(ops)).toEqual({ kind: 'savedHere', pendingOperationCount: 3 });
+  });
+
+  test('offline WITH pending media stays `offline` — the offline title already covers it', () => {
+    // Media cannot upload while offline; the calm offline title/answer is the honest state, not
+    // photos-pending. `syncTitleState` only diverges from the chip when the chip is `synced`.
+    const off = input({ isOffline: true, pendingMediaCount: 3 });
+    expect(syncChipState(off)).toBe('offline');
+    expect(syncTitleState(off)).toBe('offline');
+  });
+
+  test('DENOMINATOR: `syncTitleState` reaches all six title states, no dead arm (T-14)', () => {
+    const reached = new Set([
+      syncTitleState(input()),
+      syncTitleState(input({ pendingOperationCount: 1 })),
+      syncTitleState(input({ pendingMediaCount: 1 })),
+      syncTitleState(input({ loopState: 'pushing' })),
+      syncTitleState(input({ isOffline: true })),
+      syncTitleState(input({ rejected: [rejectedRow('BAD_SIGNATURE')] })),
+    ]);
+    expect([...reached].sort()).toEqual(Object.keys(SYNC_TITLE_KEY).sort());
+    expect(reached.size).toBe(6);
   });
 });
 
