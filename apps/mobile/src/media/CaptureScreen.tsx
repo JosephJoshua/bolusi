@@ -28,9 +28,15 @@
  * ── §5's FOUR STATES, AND THE HONEST ACCOUNT OF THE FOURTH ──────────────────────────────────────
  *   loading       — `permission_pending` / `warming_up`: a spinner (§3.9 — non-list content under 1 s).
  *   unauthorized  — `permission_denied`: `UnauthorizedState`, NOT an empty box (§5: denial must never
- *                   masquerade as Empty). The hint is `media.permission.camera`, the same sentence
- *                   the OS dialog shows, so the two do not contradict each other.
- *   error         — `failed` (with the code, for support) and `refused_low_storage`, which is 06 §7's
+ *                   masquerade as Empty). §5 also wants what went wrong AND how to fix it, and the
+ *                   fix is NOT another in-app prompt — Android answers a second request on a denied
+ *                   permission without showing the user anything — so the body sends them to the OS
+ *                   settings. This comment deliberately names no key: the previous one did, and the
+ *                   line 200 lines below it drifted to the DEVICE-REVOKED copy while the comment went
+ *                   on reading correctly (task 125; CLAUDE.md §2.11 — the comment was the guard).
+ *                   The binding is asserted in `CaptureScreen.test.tsx`, which is a thing that reds.
+ *   error         — `failed` (message DERIVED from the code per 07-i18n §4.2, plus the code itself
+ *                   in `type.caption` for support) and `refused_low_storage`, which is 06 §7's
  *                   required "explicit error dialog — never a silent camera failure"; PRD-012 §6:
  *                   a silent camera death "will be discovered at the worst moment".
  *   empty         — DELIBERATELY ABSENT, and this is the sentence a reviewer should read rather than
@@ -41,7 +47,7 @@
  *                   screen has, with their own states. The signature pad next door DOES have a real
  *                   empty (an unsigned pad) and ships it.
  */
-import { t } from '@bolusi/i18n';
+import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -228,10 +234,15 @@ function content(
       return <LoadingState variant="spinner" testID="capture-loading" />;
 
     case 'permission_denied':
+      // The OS camera permission was declined. That is the DEVICE's setting, not the workspace's
+      // verdict on this device — `auth.revoked.*` (api/02-auth §7.3) belongs to the enrollment/sync
+      // surfaces that actually receive `DEVICE_REVOKED`, and this screen can never be one of them:
+      // no arm of `CaptureScreenState` carries a revocation. Rendering that copy here told a
+      // technician who tapped "Deny" that the shop had blocked their handset.
       return (
         <UnauthorizedState
-          title={t('media.permission.camera')}
-          hint={t('auth.revoked.body')}
+          title={t('media.permission.cameraDeniedTitle')}
+          hint={t('media.permission.cameraDeniedBody')}
           backLabel={t('core.action.back')}
           onBack={handlers.onBack}
           testID="capture-unauthorized"
@@ -252,7 +263,13 @@ function content(
     case 'failed':
       return (
         <ErrorState
-          title={t('core.errors.UNEXPECTED')}
+          // §5's Error row wants "what failed", keyed by the code — 07-i18n §4.2's DERIVED lookup,
+          // which `translateErrorCode` is the one implementation of (it falls back to
+          // `core.errors.UNEXPECTED` and logs when a code has no row). This was a hardcoded
+          // `t('core.errors.UNEXPECTED')`, so a `failed` carrying a code the catalog DOES cover —
+          // `STORAGE_ERROR`, `MEDIA_TOO_LARGE`, `LOCAL_CORRUPT` — still said "Terjadi kesalahan",
+          // and the screen never told anyone what actually broke.
+          title={translateErrorCode(state.code)}
           // §5: the code, in `type.caption`, for support. Never the raw exception text.
           errorCode={state.code}
           retryLabel={t('core.action.retry')}

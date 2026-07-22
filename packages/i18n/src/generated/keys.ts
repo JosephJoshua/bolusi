@@ -106,6 +106,8 @@ export type TranslationKey =
   | 'media.capture.refusedBody'
   | 'media.capture.refusedTitle'
   | 'media.permission.camera'
+  | 'media.permission.cameraDeniedBody'
+  | 'media.permission.cameraDeniedTitle'
   | 'media.status.failed'
   | 'media.status.pending'
   | 'media.status.uploaded'
@@ -329,6 +331,8 @@ export interface TranslationResources {
     };
     permission: {
       camera: string;
+      cameraDeniedTitle: string;
+      cameraDeniedBody: string;
     };
     storage: {
       lowWarning: string;
