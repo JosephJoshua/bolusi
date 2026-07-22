@@ -28,7 +28,6 @@ import {
   type KeyStorePort,
   type LocationPort,
   type PermissionEvaluator,
-  type SyncSchedulerPort,
 } from '@bolusi/core';
 
 import type { LoginResult } from '../screens/enrollment/model.js';
@@ -68,9 +67,6 @@ export interface EnrollmentPlatform {
   readonly clock: ClockPort;
   readonly idSource: IdSource;
   readonly location: LocationPort;
-  /** No loop runs during enrollment, so a no-op is honest here — the loop's boot sync pushes the
-   *  genesis once Root starts it on success. Task 25's command runtime binds the real trigger. */
-  readonly syncScheduler: SyncSchedulerPort;
   readonly platform: 'android' | 'ios';
   readonly appVersion: string;
 }
@@ -121,7 +117,6 @@ export function createAppEnrollment(
     idSource: platform.idSource,
     location: platform.location,
     signingKey: platform.keystore,
-    syncScheduler: platform.syncScheduler,
   });
 
   const controller: EnrollmentController = {

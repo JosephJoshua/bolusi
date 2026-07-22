@@ -31,6 +31,7 @@ import {
   type CryptoPort,
   type SyncLoopState,
   type SyncState,
+  type SyncSchedulerPort,
   type SyncSurfacePort,
   type SyncSurfacing,
   type SyncTransportPort,
@@ -92,6 +93,20 @@ export interface SyncClientDeps {
 
 /** The live sync client. Owns the loop + triggers and a small reactive view Root renders from. */
 export interface SyncClient {
+  /**
+   * §5 (b), the append trigger — THE SAME OBJECT `createSyncTriggers` built, not a copy (task 136).
+   *
+   * Exposed because the command runtime's step-7 hook (04 §5.1) is on the other side of a
+   * construction-order cycle: `AppRuntime` exists before any loop does (it appends the ENROLMENT
+   * genesis, which is what produces the `deviceId` this client requires), so the runtime cannot be
+   * handed a scheduler at construction. `Root` closes the cycle by binding this into the one
+   * `AppRuntime` the moment the client starts — see `AppRuntime.bindSyncScheduler`.
+   *
+   * Until this was exposed, `createSyncTriggers(...).scheduler` had ZERO production consumers and the
+   * shipping runtime bound `{ schedule: () => undefined }`, so §5 (b)'s 3 s debounce did not exist on
+   * a device. Guarded end to end by `test/live-shell-sync-scheduler.test.tsx`.
+   */
+  readonly scheduler: SyncSchedulerPort;
   /** Hydrate the loop (mandatory before any trigger), then start the triggers (and the boot sync). */
   start(): Promise<void>;
   /** (e) pull-to-refresh. */
@@ -164,6 +179,11 @@ class SyncClientImpl implements SyncClient {
     // its ONLY edge into sync — `trigger` — over this loop; `start()` opens the socket, `stop()` tears it
     // down. Built in the constructor so the lifecycle is unconditionally coupled to this client's.
     this.realtime = deps.createRealtime?.(() => this.triggerFromRealtime()) ?? null;
+  }
+
+  /** §5 (b) — the triggers' own scheduler, handed out so `Root` can bind it into the runtime. */
+  get scheduler(): SyncSchedulerPort {
+    return this.triggers.scheduler;
   }
 
   async start(): Promise<void> {

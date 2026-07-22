@@ -97,7 +97,6 @@ function deps(): AppRuntimeDeps {
     }),
     location: nullLocation,
     signingKey,
-    syncScheduler: { schedule: () => undefined },
   };
 }
 

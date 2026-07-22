@@ -108,7 +108,6 @@ export function runtimeFor(app: Bootstrapped): AppRuntime {
     }),
     location: { getBestFix: () => null },
     signingKey: { getSigningKey: () => DEVICE_KEYPAIR.secretKey },
-    syncScheduler: { schedule: () => undefined },
   });
 }
 
@@ -268,6 +267,53 @@ export function manualTimer(): ManualTimer {
   };
 }
 
+/**
+ * A `TimerPort` with a VIRTUAL CLOCK — `advance(ms)` fires only what is due by then (task 136).
+ *
+ * {@link manualTimer} deliberately ignores delays, which is right for the idle ticker (one `fire()`
+ * = one tick) and wrong for a DEBOUNCE: a debounce is defined by its window, and a timer that fires
+ * everything on demand cannot tell "scheduled 3 s out" from "fired immediately". This one holds a
+ * due-time per callback, so a test can assert the sync has NOT run at `APPEND_DEBOUNCE_MS - 1` and
+ * HAS at `APPEND_DEBOUNCE_MS` — against the exported constant, never a literal (T-6).
+ *
+ * Deliberately NOT `vi.useFakeTimers()`: this lane's PIN unlock runs a real argon2id derivation and
+ * `waitUntil` polls on real timers, both of which a global fake-timer install would freeze.
+ */
+export interface VirtualTimer extends TimerPort {
+  /** Move virtual time forward and run everything that came due, in due order. */
+  advance(ms: number): void;
+  pending(): number;
+}
+
+export function virtualTimer(): VirtualTimer {
+  interface Entry {
+    readonly id: number;
+    readonly dueAt: number;
+    readonly fn: () => void;
+  }
+  let now = 0;
+  let nextId = 0;
+  let scheduled: Entry[] = [];
+  return {
+    schedule(delayMs: number, fn: () => void): CancelTimer {
+      const id = (nextId += 1);
+      scheduled.push({ id, dueAt: now + delayMs, fn });
+      return () => {
+        scheduled = scheduled.filter((entry) => entry.id !== id);
+      };
+    },
+    advance(ms: number): void {
+      now += ms;
+      // Snapshot and remove BEFORE running: the sync triggers re-arm inside their own callback (the
+      // 60 s interval does), and iterating the live array would spin forever.
+      const due = scheduled.filter((entry) => entry.dueAt <= now).sort((a, b) => a.dueAt - b.dueAt);
+      scheduled = scheduled.filter((entry) => entry.dueAt > now);
+      for (const entry of due) entry.fn();
+    },
+    pending: () => scheduled.length,
+  };
+}
+
 /** An `AppStatePort` the test drives — starts foregrounded, which is what a device in use is. */
 export interface FakeAppState extends AppStatePort {
   /** Push a status change to every subscriber (RN's `AppState` change event). */
@@ -333,6 +379,13 @@ export interface MountOptions {
    * `onEnrolled` fires through the real composition and Root's push registration runs.
    */
   readonly createEnrollment?: RootProps['createEnrollment'];
+  /**
+   * The sync-client factory (api/01-sync; task 136). Omitted by default — every pre-136 test mounted
+   * with NO `createSync` at all, which is precisely why `Root`'s sync wiring was unobservable and how
+   * the step-7 no-op shipped. The scheduler test passes a REAL `createSyncClient` over a fake
+   * transport and a {@link virtualTimer}, so the debounce is measured rather than assumed.
+   */
+  readonly createSync?: RootProps['createSync'];
 }
 
 export async function mountRoot(
@@ -372,6 +425,10 @@ export async function mountRoot(
       // Real when the enroll-leg test injects one (task 135), else the rejecting stub (device already
       // enrolled, transports never called) — every pre-enrolled test is unchanged.
       createEnrollment={options.createEnrollment ?? (() => enrollment)}
+      // Absent unless a test opts in (task 136), so every other live-shell test mounts exactly as
+      // before — no loop, no triggers, no timers left running past the test. Spread rather than
+      // passed as `undefined`: `exactOptionalPropertyTypes` distinguishes the two.
+      {...(options.createSync === undefined ? {} : { createSync: options.createSync })}
       // The idle-lock platform inputs (task 133). Both are REQUIRED props on `Root`, so this fixture
       // cannot silently stop supplying them; the defaults above make every other test's behaviour
       // identical to before (a timer that never fires drives no tick).

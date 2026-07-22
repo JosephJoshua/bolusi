@@ -270,6 +270,13 @@ export function Root({
   const unsubRef = useRef<(() => void) | null>(null);
   /** The media client (task 82), held for the same reason as `syncRef`: constructed at most once. */
   const mediaRef = useRef<MediaClient | null>(null);
+  /**
+   * The `AppRuntime` whose step-7 hook currently points at the live loop (task 136), held in a ref so
+   * the effect's teardown can detach it — the cleanup closure cannot see the `enroll` local, which is
+   * created inside the async body. Detaching matters because the loop is stopped on the same
+   * teardown: a scheduler left pointing at stopped triggers would arm a debounce nothing tears down.
+   */
+  const boundRuntimeRef = useRef<AppRuntime | null>(null);
   /** The session controller (task 119), held for the same reason: constructed at most once. */
   const sessionRef = useRef<AppSession | null>(null);
   const sessionUnsubRef = useRef<(() => void) | null>(null);
@@ -308,6 +315,18 @@ export function Root({
       syncRef.current = client;
       unsubRef.current = client.subscribe(() => bump());
       await client.start();
+      // ── STEP 7 GETS ITS PRODUCER (04 §5.1; api/01-sync §5 (b); task 136) ────────────────────────
+      // The one place in the app where the runtime and the loop are both in scope, which is the only
+      // place this bind can happen: the runtime is built BEFORE any loop (it appends the genesis that
+      // produces the `deviceId` a client needs), so it carries an indirected step-7 hook that is inert
+      // until pointed at a real trigger. Until this line existed the app bound
+      // `{ schedule: () => undefined }` and every local append scheduled a sync into nothing.
+      //
+      // AFTER `start()`, deliberately: `hydrate()` runs there, and `SyncLoop.requestSync` throws on an
+      // un-hydrated loop. The scheduler must never throw (a locally durable op is a successful
+      // command), so it is not reachable before the loop can answer.
+      enroll?.runtime.bindSyncScheduler(client.scheduler);
+      boundRuntimeRef.current = enroll?.runtime ?? null;
       setSync(client);
     };
 
@@ -429,6 +448,10 @@ export function Root({
       disposed = true;
       unsubRef.current?.();
       unsubRef.current = null;
+      // Detach step 7 BEFORE stopping the loop, so no append can arm a debounce on triggers that are
+      // about to be torn down. Back to inert — the same state the runtime is built in.
+      boundRuntimeRef.current?.bindSyncScheduler(null);
+      boundRuntimeRef.current = null;
       syncRef.current?.stop();
       syncRef.current = null;
       mediaRef.current?.stop();

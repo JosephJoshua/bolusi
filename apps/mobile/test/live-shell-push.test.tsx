@@ -237,7 +237,6 @@ function enrollPlatform(): EnrollmentPlatform {
       randomBytes: (n) => prngBytes(prng, n),
     }),
     location: nullLocation,
-    syncScheduler: { schedule: () => undefined },
     platform: 'android',
     appVersion: '1.0.0',
   };
