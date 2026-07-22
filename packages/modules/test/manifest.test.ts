@@ -143,7 +143,11 @@ describe('note_created retained per-version payload schemas (04 §3 payloadByVer
   test('retention covers exactly the superseded versions 1 and 2', () => {
     // The denominator (T-14): a map that silently covered only v2 would leave v1 rejected forever
     // in production, and every assertion below about v2 would still be green.
-    expect(Object.keys(declaration.payloadByVersion ?? {}).sort()).toEqual(['1', '2']);
+    expect(
+      Object.keys(declaration.payloadByVersion ?? {})
+        .map(Number)
+        .sort((a, b) => a - b),
+    ).toEqual([1, 2]);
   });
 
   test('v1 accepts {title, body} and rejects a missing title — the NOT NULL column it folds into', () => {

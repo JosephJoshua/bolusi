@@ -390,17 +390,47 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
  * A key at or above `schemaVersion` is refused rather than ignored: `payloadByVersion[current]`
  * would be a second schema for the current version, free to drift from `payload`, with nothing
  * saying which one wins — and a key ABOVE current names a version no applier folds (05 §7).
+ *
+ * ── WHY THE STRICTNESS CHECK READS THROUGH THE PROTOTYPE (task 152; CLAUDE.md §2.11) ────────────
+ *
+ * `payloadSchemaFor` (the runtime's reachable set) reads `retained[version]` — a prototype-inclusive
+ * property access. So the completeness AND the `.strict()`/`parse()` checks below read the SAME way,
+ * `retained[version]`, never `Object.entries(retained)` (own enumerable keys only). If they diverged,
+ * a retained schema supplied on the prototype — `Object.assign(Object.create({ 1: loose }), {...})`
+ * — would satisfy completeness and be what the runtime returns, while being invisible to the
+ * strictness check: the guard's checked set would be narrower than the runtime's reachable set, and
+ * a non-strict old-version schema would reach production validation unchecked. Reading `retained[v]`
+ * for every foldable `v` makes "checked" and "reachable" the same set by construction. The out-of-
+ * range refusal, by contrast, is a check on what the AUTHOR DECLARED, so it reads OWN keys: a
+ * prototype key outside `1..schemaVersion-1` is unreachable (`payloadSchemaFor` never asks for it)
+ * and needs no report.
  */
 function validateRetainedPayloads<DB>(type: string, declaration: OperationDeclaration<DB>): void {
   const { schemaVersion, payloadByVersion } = declaration;
   const retained = payloadByVersion ?? {};
 
-  for (const [rawVersion, schema] of Object.entries(retained)) {
+  // OWN keys outside `1..schemaVersion-1` are refused rather than ignored (see the header): a
+  // duplicate for the current version could drift from `payload`, a key above current names a shape
+  // no applier folds. This reads OWN keys — a stray prototype key out of range is unreachable.
+  for (const rawVersion of Object.keys(retained)) {
     const version = Number(rawVersion);
     if (!Number.isInteger(version) || version < 1 || version >= schemaVersion) {
       throw new ModuleDefinitionError(
         `op type ${type} retains a payload schema for version ${JSON.stringify(rawVersion)}, which is not a superseded version — payloadByVersion keys must be integers in 1..${schemaVersion - 1} (04 §3). The CURRENT version's schema is \`payload\`; a duplicate entry for it could drift from the one the runtime uses, and a version above current names a shape no applier folds (05 §7).`,
       );
+    }
+  }
+
+  // COMPLETENESS + STRICTNESS, over `retained[version]` — the SAME prototype-inclusive access
+  // `payloadSchemaFor` uses (see the header). The applier folds every version in `1..schemaVersion`
+  // (05 §7), so every one is a version the server can be asked to accept, so every one needs a
+  // schema — and that schema, whatever its provenance, must reject unknown keys (04 §3).
+  const missing: number[] = [];
+  for (let version = 1; version < schemaVersion; version += 1) {
+    const schema = retained[version]; // prototype-inclusive — IDENTICAL to payloadSchemaFor
+    if (schema === undefined) {
+      missing.push(version);
+      continue;
     }
     if (typeof schema !== 'object' || schema === null || typeof schema.parse !== 'function') {
       throw new ModuleDefinitionError(
@@ -412,13 +442,6 @@ function validateRetainedPayloads<DB>(type: string, declaration: OperationDeclar
         `op type ${type}'s payloadByVersion[${version}] schema does not reject unknown keys — 04 §3's .strict() rule applies to every retained version, not just the current one. A loose retained schema makes "claim an old schemaVersion" a blanket bypass of the unknown-key rule for this type.`,
       );
     }
-  }
-
-  // COMPLETENESS. The applier must fold every version in `1..schemaVersion` (05 §7), so every one
-  // of them is a version the server can be asked to accept, so every one of them needs a schema.
-  const missing: number[] = [];
-  for (let version = 1; version < schemaVersion; version += 1) {
-    if (retained[version] === undefined) missing.push(version);
   }
   if (missing.length > 0) {
     throw new ModuleDefinitionError(
