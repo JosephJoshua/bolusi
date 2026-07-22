@@ -198,16 +198,17 @@ test('inventory FAILS when an id is BOTH allowlisted and titled — the row and 
 
 // ── the real guide ──────────────────────────────────────────────────────────────────────────────
 
-test('the real security-guide body and its §12 roll-up declare the SAME 57 SEC ids (the inventory denominator)', () => {
+test('the real security-guide body and its §12 roll-up declare the SAME 58 SEC ids (the inventory denominator)', () => {
   const body = parseGuideIds(realGuide);
   const rollup = parseRollupIds(realGuide).ids;
-  // 57 is the declared denominator: the §12 roll-up ranges expanded, incl. SEC-DEV-08 (Android
-  // backup exclusion, task 58). Body ids are parsed from the §6.5-style surface tables; roll-up
-  // ids from the §12 range line — two independent reads of the guide. Asserting they are EQUAL is
-  // the cross-check task 115 restored (DEV 01–07 while SEC-DEV-08 ships reds HERE, not silently);
-  // the exact 57 makes a multi-id deletion — which the old `>50` floor waved through — fail too.
-  expect(body).toHaveLength(57);
-  expect(rollup).toHaveLength(57);
+  // 58 is the declared denominator: the §12 roll-up ranges expanded, incl. SEC-DEV-08 (Android
+  // backup exclusion, task 58) and SEC-TENANT-06 (device→store write scope, task 157). Body ids are
+  // parsed from the §6.5-style surface tables; roll-up ids from the §12 range line — two independent
+  // reads of the guide. Asserting they are EQUAL is the cross-check task 115 restored (DEV 01–07
+  // while SEC-DEV-08 ships reds HERE, not silently); the exact 58 makes a multi-id deletion — which
+  // the old `>50` floor waved through — fail too.
+  expect(body).toHaveLength(58);
+  expect(rollup).toHaveLength(58);
   expect(rollup).toEqual(body);
 });
 

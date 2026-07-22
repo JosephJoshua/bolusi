@@ -276,6 +276,7 @@ Mechanism: two mandatory layers (decisions D3, research JSON kysely area): (1) `
 - [ ] **No cross-tenant access path** (FR-1040): no support/admin ambient capability exists in v0. Platform support access, if ever built, is explicit, logged, consented impersonation — its own future spec, red-flagged per CLAUDE.md §6.
 - [ ] Endpoint semantics per §2.2: cross-tenant probes → `404`, never empty-200.
 - [ ] Client DB is single-tenant by construction (one device = one tenant), but shared TS query code still goes through the tenant-bound handle shape so it cannot silently grow a cross-tenant parameter.
+- [ ] **Device→store write scope (intra-tenant, D22):** on push, a device may write only its OWN store's ops. The scope step (05 §9.2) rejects `SCOPE_VIOLATION` any op whose non-null `storeId` is a store of the tenant *other than the pushing device's `store_id`* — a device at store A cannot write an op into store B of the same tenant (RLS confines to the tenant; this narrower rule confines to the store). Tenant-scoped ops (`storeId = null`, e.g. `platform.user_locale_changed`) are not store-bound and pass; the tenant system device (`store_id` null) never pushes (01-domain-model §3.6), so the rule is keyed on the device's own store, not its kind. Per-op, so an honest same-store sibling in the same batch still commits (§4.1).
 
 ### 8.2 Required adversarial tests
 
@@ -286,6 +287,7 @@ Mechanism: two mandatory layers (decisions D3, research JSON kysely area): (1) `
 | SEC-TENANT-03 | wrapper-only query path | Lint fixture importing the raw DB handle outside the DB package fails CI; repo-wide grep for `set_config(.*false)` and `SET app.tenant_id` is clean |
 | SEC-TENANT-04 | cross-tenant probe per endpoint | Harness iterates **every registered route** (walks the Hono route table — new endpoints are covered automatically) with tenant-A credentials against tenant-B resource ids → `404`/`403` per §2.2; any `200` (including empty-200) fails |
 | SEC-TENANT-05 | pooled-connection leak | Two sequential transactions on the same pool connection for tenants A then B: B's transaction sees zero A rows and `current_setting` returns B; a request that skips `set_config` (harness bypass) reads **nothing**, not everything |
+| SEC-TENANT-06 | device→store write scope (D22) | A member device pushing an op scoped to another store of its tenant → per-op `SCOPE_VIOLATION`, op not logged, not folded, no poke to the foreign store, `device_anomalies` row recorded; the honest same-store sibling in the same batch still commits and is durably logged (§4.1); positive controls — the device's OWN store op is accepted and folded, and a legitimately tenant-scoped op (`storeId = null`) is accepted so the rule is not "reject everything cross-store". Real PG16, driving production `createApp` + `serverOpRegistry` |
 
 ## 9. Surface: Realtime & push
 
@@ -340,4 +342,4 @@ Mechanism: api/00-conventions §12 (realtime channel) + api/04-push (push catego
 
 ## 12. Test index
 
-Every `SEC-*` ID above is REQUIRED and enforced by SEC-META-01 (§2.1). Roll-up: OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–08 · MEDIA 01–06 · TENANT 01–05 · RT 01–05 · SECRET 01–02 · META 01. The chaos harness (testing-guide, decisions D4) covers correctness-under-disorder; this suite covers correctness-under-malice. Both gate v0 exit.
+Every `SEC-*` ID above is REQUIRED and enforced by SEC-META-01 (§2.1). Roll-up: OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–08 · MEDIA 01–06 · TENANT 01–06 · RT 01–05 · SECRET 01–02 · META 01. The chaos harness (testing-guide, decisions D4) covers correctness-under-disorder; this suite covers correctness-under-malice. Both gate v0 exit.

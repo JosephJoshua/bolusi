@@ -78,6 +78,30 @@ export async function checkScope(
     if (store === undefined) return { reason: 'op storeId is not a store of the tenant' };
   }
 
+  // §9.2 (D22, task 157): a device may write ONLY its OWN store's ops — closing the gap where a
+  // device at store A could write an op INTO store B of the same tenant (a mechanic recording a
+  // repair note in another branch's book). Reject a NON-NULL `storeId` that is a store of the
+  // tenant OTHER than the pushing device's own store. This is ADDITIONAL to the tenant/store checks
+  // above and to RLS — a narrower scope, never a replacement.
+  //
+  // A TENANT-scoped op (`storeId = null`) is NOT a cross-store write and passes: a MEMBER device
+  // legitimately emits `platform.user_locale_changed` (tenant-scoped — the preference follows the
+  // user to every device, 01 §6), and a tenant-scoped-entity `conflict_acknowledged` is likewise
+  // null. Member devices always carry a `store_id` (10-db §4 CHECK `kind = 'system' OR store_id IS
+  // NOT NULL`), and the runtime stamps that store into every STORE-scoped op it appends
+  // (02-permissions §5.2), so for those `op.storeId == device.storeId`.
+  //
+  // Keyed on the device's OWN store, not its kind — deliberately no system-device branch. The tenant
+  // system device (`store_id` null) signs only `platform.conflict_detected`, built server-side via
+  // `appendSystemOp`, which NEVER traverses this push step (01 §3.6 — "no carve-outs to §9's scope
+  // checks"); a store-less device is thus simply never constrained to a store it does not have, so
+  // no legitimate op is rejected and the system path needs no exemption.
+  if (op.storeId !== null && op.storeId !== device.storeId) {
+    return {
+      reason: "op storeId is a store of the tenant other than the pushing device's own store",
+    };
+  }
+
   // §9.3: op userId is a MEMBER of the tenant directory — membership, NOT active status. Ops from
   // users deactivated while the device was offline are accepted (the audit trail wants them).
   const user = await db
