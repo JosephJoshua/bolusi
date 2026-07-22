@@ -15,3 +15,14 @@
 export function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }
+
+// A unique violation on a SPECIFICALLY NAMED constraint. node-postgres surfaces the violated
+// constraint's name on `err.constraint` (the wire `n` field of the 23505 ErrorResponse — pg-protocol
+// `parser.js`). A caller that maps only ONE unique index to a domain outcome — and must re-throw
+// every OTHER 23505 loudly — keys on this, not on SQLSTATE alone. Naming the constraint stops the map
+// silently WIDENING when a new statement able to raise a DIFFERENT 23505 is added to the same `try`:
+// SQLSTATE alone would absorb the new violation as the old outcome (CLAUDE.md §2.11; task 139 — the
+// projection applier inside the op-write savepoint did exactly that and was misread as `duplicate`).
+export function isUniqueViolationOn(err: unknown, constraint: string): boolean {
+  return isUniqueViolation(err) && (err as { constraint?: string }).constraint === constraint;
+}
