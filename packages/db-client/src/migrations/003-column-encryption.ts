@@ -20,6 +20,20 @@
 // inside a transaction, so it rides `postCommitStatements` (runner.ts), not `statements`. On the
 // empty fresh DB it is a cheap near-no-op; its presence is what makes the migration correct for the
 // general conversion case rather than only the fresh one.
+// ── WHY THE KEYED MARKER NEEDS NO MIGRATION (asked and answered, not assumed) ──────────────────
+// The cipher marker carries a key-derived suffix. Changing the marker format would normally orphan
+// every previously-sealed row — they would stop matching and read back as opaque envelope text — so
+// it is fair to ask whether a re-seal migration is owed. It is not, and the reason is checkable
+// rather than hopeful: **no client database has ever existed.** 001-initial-schema records "no client
+// DB is deployed (pre-v0)" twice, and task 148's own investigation established that the Android APK
+// has never been assembled by anyone at any point in this repo's life — so no device has ever run the
+// codec, and the earlier fixed-marker format exists only in unreleased worktree history. There is
+// nothing on disk anywhere to convert.
+//
+// If that ever stops being true — i.e. once a build ships — a marker-format change becomes a REAL
+// data migration: read each sealed cell with the OLD marker, re-seal with the new one, and `VACUUM`
+// exactly as this migration does (the old ciphertext is as much a stale freed-page artefact as old
+// plaintext would be). Whoever changes `MARKER_LABEL` or the derivation after v0 owes that work.
 import type { ClientMigration } from './types.js';
 
 export const columnEncryptionMigration: ClientMigration = {

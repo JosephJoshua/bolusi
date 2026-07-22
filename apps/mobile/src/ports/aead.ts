@@ -6,9 +6,18 @@
 // provider (so no `node:crypto` reaches the device bundle); this file is the mobile binding, exactly as
 // `ports/crypto.ts` binds quick-crypto to `CryptoPort`. CI/tests bind `node:crypto` to the SAME
 // interface (@bolusi/test-support), and the two are API-identical for GCM.
-import { createCipheriv, createDecipheriv, randomBytes } from 'react-native-quick-crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+} from 'react-native-quick-crypto';
 
-import { createNodeCompatibleAead, type AeadCipher } from '@bolusi/db-client';
+import {
+  createNodeCompatibleAead,
+  type AeadCipher,
+  type NodeCompatibleCryptoModule,
+} from '@bolusi/db-client';
 
 /** Copy a quick-crypto Buffer into a plain Uint8Array — the codec's surface never sees a Buffer. */
 function toBytes(value: { readonly [index: number]: number; readonly length: number }): Uint8Array {
@@ -63,4 +72,14 @@ export const deviceColumnAead: AeadCipher = createNodeCompatibleAead({
     };
   },
   randomBytes: (size) => toBytes(randomBytes(size)),
+  // quick-crypto exposes Node's HMAC surface verbatim (verified against its 1.1.6 docs). Used only to
+  // derive the unforgeable per-database marker suffix — never to authenticate data.
+  createHmac(algorithm, key) {
+    // quick-crypto exposes Node's HMAC surface verbatim (`createHmac(alg, key).update(d).digest()`,
+    // verified against its 1.1.6 docs). Narrowed at the seam for the same Buffer-vs-Uint8Array reason
+    // as the GCM handle above. Used ONLY to derive the unforgeable per-database marker suffix.
+    return createHmac(algorithm as 'sha256', key) as unknown as ReturnType<
+      NodeCompatibleCryptoModule['createHmac']
+    >;
+  },
 });

@@ -9,7 +9,7 @@
 // rather than importing db-client's factory. The higher-level nonce/base64/marker framing is NOT
 // duplicated — that lives once in db-client's `Aes256GcmColumnCipher`; this file provides only the raw
 // AEAD primitive it runs on.
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 
 import type { AeadCipher } from '@bolusi/db-client';
 
@@ -47,4 +47,5 @@ export const nodeColumnAead: AeadCipher = {
     return concat(bytes(decipher.update(sealed.subarray(0, split))), bytes(decipher.final()));
   },
   randomBytes: (length) => bytes(randomBytes(length)),
+  hmacSha256: (key, data) => bytes(createHmac('sha256', key).update(data).digest()),
 };

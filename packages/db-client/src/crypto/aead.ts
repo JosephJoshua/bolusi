@@ -25,6 +25,12 @@ export interface AeadCipher {
   open(key: Uint8Array, nonce: Uint8Array, sealed: Uint8Array): Uint8Array;
   /** CSPRNG bytes — the per-value nonce source. */
   randomBytes(length: number): Uint8Array;
+  /**
+   * HMAC-SHA256. Used ONLY to derive the per-database marker suffix from the DB key — never to
+   * authenticate data (GCM's tag does that). The derived value is a public identifier, not a secret;
+   * what matters is that it cannot be computed by anyone who does not hold the key.
+   */
+  hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array;
 }
 
 /** GCM's authentication tag length in bytes (the OpenSSL/Node default). */
@@ -44,10 +50,17 @@ interface GcmDecipherLike {
   setAuthTag(tag: Uint8Array): void;
 }
 
+/** The HMAC surface — `createHmac('sha256', key).update(data).digest()` on both providers. */
+interface HmacLike {
+  update(data: Uint8Array): HmacLike;
+  digest(): Uint8Array;
+}
+
 /** The Node/quick-crypto module slice this factory needs. Satisfied by `node:crypto` and quick-crypto. */
 export interface NodeCompatibleCryptoModule {
   createCipheriv(algorithm: string, key: Uint8Array, iv: Uint8Array): GcmCipherLike;
   createDecipheriv(algorithm: string, key: Uint8Array, iv: Uint8Array): GcmDecipherLike;
+  createHmac(algorithm: string, key: Uint8Array): HmacLike;
   randomBytes(size: number): Uint8Array;
 }
 
@@ -95,5 +108,6 @@ export function createNodeCompatibleAead(crypto: NodeCompatibleCryptoModule): Ae
       return concatBytes([asBytes(decipher.update(ciphertext)), asBytes(decipher.final())]);
     },
     randomBytes: (length) => asBytes(crypto.randomBytes(length)),
+    hmacSha256: (key, data) => asBytes(crypto.createHmac('sha256', key).update(data).digest()),
   };
 }

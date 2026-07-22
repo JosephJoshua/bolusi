@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 
 import {
-  COLUMN_CIPHER_MARKER,
+  COLUMN_CIPHER_SCHEME_PREFIX,
   closeClientDb,
   openClientDb,
   runClientMigrations,
@@ -73,7 +73,7 @@ test('media_items.location is ciphertext at rest; local_path and sha256 stay pla
   // The physical cell is a marked AEAD blob…
   const raw = await db.driver.execute(`SELECT location, local_path, sha256 FROM media_items`);
   const stored = String(raw.rows[0]?.['location']);
-  expect(stored.startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+  expect(stored.startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
   expect(stored).not.toContain(String(PLAIN_LOCATION_MARKER));
 
   // …and it round-trips losslessly through the decrypt seam.

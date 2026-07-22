@@ -8,7 +8,7 @@ import { sql } from 'kysely';
 
 import { closeClientDb, openClientDb, type ClientDb } from '../src/connection.js';
 import { runClientMigrations } from '../src/migrations/runner.js';
-import { COLUMN_CIPHER_MARKER } from '../src/crypto/column-cipher.js';
+import { COLUMN_CIPHER_SCHEME_PREFIX } from '../src/crypto/column-cipher.js';
 import { openBetterSqlite3Driver, testAead, testKeyStore } from './better-sqlite3-adapter.js';
 
 let connection: ClientDb;
@@ -55,8 +55,8 @@ test('Kysely insert is visible to the raw driver on the same connection', async 
   // point of the control. This is the same-connection visibility assertion AND the at-rest one.
   expect(raw.rows[0]?.['title']).not.toBe('Stock count');
   expect(raw.rows[0]?.['body']).not.toBe('Twelve crates');
-  expect(String(raw.rows[0]?.['title']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
-  expect(String(raw.rows[0]?.['body']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+  expect(String(raw.rows[0]?.['title']).startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
+  expect(String(raw.rows[0]?.['body']).startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
 
   // Read back THROUGH Kysely and the plaintext returns — the transform is transparent to callers.
   const viaKysely = await connection.db
@@ -159,7 +159,7 @@ test('Kysely update and delete agree with the raw driver', async () => {
   const raw = await connection.driver.execute(`SELECT title, edit_count FROM notes`);
   expect(raw.rows[0]?.['edit_count']).toBe(1);
   expect(raw.rows[0]?.['title']).not.toBe('Recount');
-  expect(String(raw.rows[0]?.['title']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+  expect(String(raw.rows[0]?.['title']).startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
   expect(await connection.db.selectFrom('notes').select('title').execute()).toEqual([
     { title: 'Recount' },
   ]);

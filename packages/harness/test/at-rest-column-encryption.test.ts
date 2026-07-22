@@ -34,6 +34,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import {
   insertQuarantinedOp,
   listSwitcherUsers,
+  readCanonicalPage,
   readVerifier,
   replaceUsersDirectory,
   writeVerifier,
@@ -41,7 +42,7 @@ import {
 } from '@bolusi/core';
 import {
   Aes256GcmColumnCipher,
-  COLUMN_CIPHER_MARKER,
+  COLUMN_CIPHER_SCHEME_PREFIX,
   closeClientDb,
   createClientOpStore,
   openClientDb,
@@ -248,7 +249,7 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
       expect(rows.rows.length, `${table}.${column} had no rows to check`).toBeGreaterThan(0);
       for (const row of rows.rows) {
         expect(
-          String(row['c']).startsWith(COLUMN_CIPHER_MARKER),
+          String(row['c']).startsWith(COLUMN_CIPHER_SCHEME_PREFIX),
           `${table}.${column} is not a marked AEAD blob`,
         ).toBe(true);
       }
@@ -324,7 +325,7 @@ describe('at-rest column encryption — attacker-shaped plaintext cannot steer t
   // is a fully legal `notes.body` / `users_directory.name`: the marker plus base64-legal text, which
   // needs no randomness at all. It reaches the device from another enrolled device's signed op or
   // from the server bundle — the in-scope insider path.
-  const ATTACKER_SHAPED = `${COLUMN_CIPHER_MARKER}BRIBERYLEDGERkickbackRp250jutaBudiSanto5`;
+  const ATTACKER_SHAPED = `${COLUMN_CIPHER_SCHEME_PREFIX}BRIBERYLEDGERkickbackRp250jutaBudiSanto5`;
 
   test('a plaintext that looks like ciphertext is SEALED, round-trips exactly, and never hits the disk', async () => {
     opened = await openAt(DB_KEY);
@@ -358,8 +359,11 @@ describe('at-rest column encryption — attacker-shaped plaintext cannot steer t
     // (a) STORED AS CIPHERTEXT on both seams — not passed through verbatim.
     const rawNote = await opened.db.driver.execute(`SELECT body FROM notes WHERE id='note-poison'`);
     const rawUser = await opened.db.driver.execute(`SELECT name FROM users_directory`);
-    expect(rawNote.rows[0]?.['body']).not.toBe(ATTACKER_SHAPED);
-    expect(rawUser.rows[0]?.['name']).not.toBe(ATTACKER_SHAPED);
+    // SOFT so BOTH seams are demonstrated independently on a failure. With hard assertions the first
+    // one aborts the test and the second seam is never evaluated — so a regression in only the
+    // registry seam would be reported as "the builder seam failed", pointing at the wrong code.
+    expect.soft(rawNote.rows[0]?.['body']).not.toBe(ATTACKER_SHAPED);
+    expect.soft(rawUser.rows[0]?.['name']).not.toBe(ATTACKER_SHAPED);
     // A sealed value is strictly longer than its plaintext (nonce+tag+base64), so "still marked" is
     // not enough on its own — length pins that a real envelope was added rather than the input echoed.
     expect(String(rawNote.rows[0]?.['body']).length).toBeGreaterThan(ATTACKER_SHAPED.length);
@@ -380,6 +384,100 @@ describe('at-rest column encryption — attacker-shaped plaintext cannot steer t
     await closeClientDb();
     const bytes = readFileSync(opened.file);
     expect(bytes.includes(Buffer.from('BRIBERYLEDGERkickbackRp250juta', 'utf8'))).toBe(false);
+  });
+});
+
+describe('at-rest column encryption — a forged marker in a PLAINTEXT column is inert', () => {
+  // F7. The marker used to be a FIXED string, so anyone could write it. `operations
+  // .agent_conversation_id` is plaintext BY DESIGN (correctly — it is not PII), it rides the SIGNED
+  // envelope as an unbounded `z.string().nullable()` (schemas/envelope.ts), and the projection fold
+  // selects it (`OP_COLUMNS` → `readCanonicalPage`). So a second enrolled device could sign an op
+  // whose conversation id merely LOOKED sealed, the server would accept it, it would sync to every
+  // device in the store, and the read seam would try to decrypt it and THROW — permanently breaking
+  // `runRebuild` for that module on every device, in an APPEND-ONLY table where the row cannot be
+  // deleted without breaking the hash chain. No key, no randomness, no server compromise.
+  //
+  // The attacker constructs the prefix LITERALLY here — they do not import our constant — which is
+  // the whole point: after the fix the marker carries a key-derived tag they cannot compute.
+  const FORGED = `${String.fromCharCode(1)}gcm1:${'A'.repeat(40)}`;
+
+  test('a signed op carrying a marker-shaped conversation id does not break the projection fold', async () => {
+    opened = await openAt(DB_KEY);
+
+    await opened.db.driver.execute(
+      `INSERT INTO operations (
+         id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
+         schema_version, payload, timestamp_ms, location, source, agent_initiated,
+         agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
+       ) VALUES (?, 't', 's', 'u', 'd', 1, 'notes.note_created', 'note', 'n1', 1,
+                 '{}', 1, NULL, 'ui', 0, ?, ?, ?, 'c2ln', '{}', 'synced')`,
+      ['op-forged', FORGED, '0'.repeat(64), '1'.repeat(64)],
+    );
+
+    // The column is plaintext by design — it is stored verbatim, and that is CORRECT.
+    const raw = await opened.db.driver.execute(
+      `SELECT agent_conversation_id AS c FROM operations WHERE id='op-forged'`,
+    );
+    expect(raw.rows[0]?.['c']).toBe(FORGED);
+
+    // THE ASSERTION THAT MATTERS: the real projection reader must survive it. Before the keyed
+    // marker this threw "Unsupported state or unable to authenticate data" and took every future
+    // rebuild of the module with it.
+    const page = await readCanonicalPage(opened.db.db, ['notes.note_created'], null, 10);
+    expect(page).toHaveLength(1);
+    expect(page[0]?.agentConversationId).toBe(FORGED);
+  });
+
+  test('the marker is STABLE across a reopen — existing sealed rows stay readable', async () => {
+    // THE WAY THE KEYED MARKER COULD GO BADLY WRONG. The suffix must be derived from the KEY, not
+    // minted per connection: a per-connection random tag would still pass every same-session test,
+    // and then every row written by a previous run would stop matching the marker and read back as
+    // opaque envelope text — silent, total data loss on the second launch. This asserts the property
+    // directly: seal, close, reopen with the SAME key, read.
+    opened = await openAt(DB_KEY);
+    await replaceUsersDirectory(opened.db.db, [
+      { id: 'u-1', name: PLAIN.userName, photoMediaId: null, status: 'active' },
+    ]);
+    const markerBefore = new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead).marker;
+    await closeClientDb();
+
+    const again = await reopen(opened.file, opened.dir, DB_KEY);
+    opened = { ...opened, db: again.db };
+    const users = await listSwitcherUsers(opened.db.db);
+    expect(users[0]?.name).toBe(PLAIN.userName);
+
+    // …and the marker itself is a pure function of the key, so a third construction agrees.
+    expect(new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead).marker).toBe(markerBefore);
+    // A DIFFERENT key derives a DIFFERENT marker — which is what makes it unforgeable.
+    expect(new Aes256GcmColumnCipher(keyBytes(WRONG_KEY), nodeColumnAead).marker).not.toBe(
+      markerBefore,
+    );
+  });
+
+  test('a genuinely sealed value still round-trips beside it (the fix is not "decrypt nothing")', async () => {
+    opened = await openAt(DB_KEY);
+    await opened.db.db
+      .insertInto('notes')
+      .values({
+        id: 'note-real',
+        tenantId: 't',
+        storeId: 's',
+        title: 'real title',
+        body: PLAIN.noteBody,
+        mediaId: null,
+        mediaSha256: null,
+        mediaMime: null,
+        archived: 0,
+        editCount: 0,
+        createdBy: 'u',
+        createdAt: 1,
+        lastEditedBy: 'u',
+        lastEditedAt: 1,
+      })
+      .execute();
+
+    const note = await opened.db.db.selectFrom('notes').select('body').executeTakeFirstOrThrow();
+    expect(note.body).toBe(PLAIN.noteBody);
   });
 });
 
@@ -418,7 +516,7 @@ describe('at-rest column encryption — the UPDATE seam', () => {
 
     // The stored cell is a marked blob, and the edited cleartext is not in it…
     const raw = await opened.db.driver.execute(`SELECT body FROM notes WHERE id='note-1'`);
-    expect(String(raw.rows[0]?.['body']).startsWith(COLUMN_CIPHER_MARKER)).toBe(true);
+    expect(String(raw.rows[0]?.['body']).startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
     expect(String(raw.rows[0]?.['body'])).not.toContain('tiga belas krat');
 
     // …it round-trips through the reader…
@@ -436,7 +534,7 @@ describe('at-rest column encryption — the UPDATE seam', () => {
 });
 
 describe('at-rest column encryption — the failure modes', () => {
-  test('the WRONG key throws; it never returns garbage and never returns plaintext', async () => {
+  test('the WRONG key never yields plaintext — the value stays sealed and the codec refuses it', async () => {
     opened = await openAt(DB_KEY);
     await writeAllTheSensitiveThings(opened.db);
     await closeClientDb();
@@ -444,25 +542,37 @@ describe('at-rest column encryption — the failure modes', () => {
     // Re-open the SAME file under a different (valid-shaped) key and read an encrypted column.
     const reopened = await reopen(opened.file, opened.dir, WRONG_KEY);
     opened = { ...opened, db: reopened.db };
+    const rows = await opened.db.db.selectFrom('notes').select(['title', 'body']).execute();
 
-    await expect(
-      opened.db.db.selectFrom('notes').select(['title', 'body']).execute(),
-    ).rejects.toThrow();
+    // THE SECURITY PROPERTY, UNCHANGED: no plaintext comes back. The bytes are still ciphertext.
+    expect(rows[0]?.title).not.toBe(PLAIN.noteTitle);
+    expect(rows[0]?.body).not.toBe(PLAIN.noteBody);
+    expect(String(rows[0]?.body).startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
 
-    // …and the failure is an AUTHENTICATION failure, not a silent pass-through. Assert the codec
-    // directly so the mode is pinned: GCM's tag check must reject, never yield bytes.
+    // THE BEHAVIOUR THAT CHANGED, ASSERTED RATHER THAN GLOSSED: because the marker is now keyed,
+    // rows sealed under a different key no longer match this cipher's marker, so the read seam does
+    // not claim them and they surface as OPAQUE ENVELOPE TEXT instead of throwing. That is the price
+    // of making the marker unforgeable (F7) — and it is not a disclosure. It does mean the codec can
+    // no longer detect a restored foreign database by itself; catching that belongs at boot, against
+    // a stored key tag, which is task 160's boot probe.
     const wrong = new Aes256GcmColumnCipher(keyBytes(WRONG_KEY), nodeColumnAead);
     const right = new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead);
     const sealed = right.encrypt(PLAIN.noteBody);
+    // The codec itself still REFUSES a foreign value outright rather than returning bytes…
     expect(() => wrong.decrypt(sealed)).toThrow();
-    // The right key still opens it — proving the throw above was the KEY, not a broken blob.
+    expect(wrong.isCiphertext(sealed)).toBe(false);
+    // …and the right key still opens it, proving the refusal was the KEY, not a broken blob.
     expect(right.decrypt(sealed)).toBe(PLAIN.noteBody);
+
+    // A TAMPERED value under the CORRECT key still throws — GCM's tag is untouched by this change.
+    const flipped = sealed.slice(0, -1) + (sealed.slice(-1) === 'A' ? 'B' : 'A');
+    expect(() => right.decrypt(flipped)).toThrow();
   });
 
   test('tampering with the CIPHERTEXT/TAG region throws — the tag is verified, not just the nonce', () => {
     const cipher = new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead);
     const sealed = cipher.encrypt(PLAIN.noteTitle);
-    const body = sealed.slice(COLUMN_CIPHER_MARKER.length);
+    const body = sealed.slice(COLUMN_CIPHER_SCHEME_PREFIX.length);
 
     // Mutate the LAST base64 character, which lands in the authentication tag — the earlier version
     // of this test read index 10 but rewrote index 0 (the nonce), so it both mis-described what it
@@ -471,11 +581,11 @@ describe('at-rest column encryption — the failure modes', () => {
     const last = body[body.length - 1];
     const mutated = body.slice(0, -1) + (last === 'A' ? 'B' : 'A');
     expect(mutated).not.toBe(body);
-    expect(() => cipher.decrypt(COLUMN_CIPHER_MARKER + mutated)).toThrow();
+    expect(() => cipher.decrypt(COLUMN_CIPHER_SCHEME_PREFIX + mutated)).toThrow();
 
     // …and the nonce region is authenticated too: GCM binds the IV into the tag.
     const nonceMutated = (body[0] === 'A' ? 'B' : 'A') + body.slice(1);
-    expect(() => cipher.decrypt(COLUMN_CIPHER_MARKER + nonceMutated)).toThrow();
+    expect(() => cipher.decrypt(COLUMN_CIPHER_SCHEME_PREFIX + nonceMutated)).toThrow();
   });
 
   test('VACUUM leaves no stale plaintext after an in-place plaintext→ciphertext conversion', async () => {
