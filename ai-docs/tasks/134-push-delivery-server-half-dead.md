@@ -1,6 +1,6 @@
 # TASK 134 — push delivery has NO production caller on the server: `sendSyncWake`/`sendConflictSurfaced`/`sendDeviceAlert`/`ExpoPushSender` are dead, and three comments claim otherwise
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH** — the whole notification product is built, tested and unreachable. `POST /v1/push/tokens` (tasks 21/118) receives tokens nobody ever sends to, and nothing is ever delivered.
 **Depends on:** 16, 17, 21
 **Blocks:** 135 (client half is pointless without this)
@@ -33,3 +33,19 @@
 
 ## Constraints
 `deps.ts` is contended (121/127 in flight) — serialize behind 127. Do not change the fanout functions' signatures or the wire payloads in `api/04-push` — this is composition. If a trigger point is genuinely ambiguous in the spec, STOP and report rather than guessing.
+
+
+---
+
+## DONE 2026-07-22 (merged; REJECTED once, reworked, re-reviewed APPROVE). Client half (135) still dead.
+
+The server push subtree is now production-reachable and tenant-scoped, with a boot fail-closed (`unconfiguredPushPort` throws; `pushPortFromConfig` throws when `EXPO_ACCESS_TOKEN` absent; `main.ts` calls it before `serve()`). The three false comments are corrected.
+
+**The reject-then-rework that mattered:** the first cut awaited the Expo send on the sync-push request path — `ExpoPushSender`'s retry loop (`[5s,15s,60s,300s]`, no fetch timeout) meant an in-contract Expo stall (429/5xx/stalled socket) would block every accepted write for minutes, making push load-bearing on the latency axis (violating api/04-push §1 "never load-bearing" / §6 "fire-and-forget from the request path"). Fixed with a `DeliveryDispatcher` seam (`push/dispatcher.ts`): all four deliveries (sync-wake, conflict, anomaly, revocation) `dispatch(task)` off the request path and return immediately; `flush()` is the test-only drain; `expoFetchTransport` gained `AbortSignal.timeout(30_000)`. A new **latency test** is the guard: a `SlowPushPort` blocking 3s must not delay the response past 1500ms — the reviewer independently reproduced it red (`expected 3031 to be less than 1500`) when fire-and-forget is broken.
+
+**Second-order bug found-and-fixed during rework:** the fire-and-forget `sendDeviceAlert` raced per-test pool teardown, hanging the anomaly chaos tests' `afterEach` at 120s. Fixed by `close()` awaiting `deliveries.flush()` before the pool tears down — a TEST-harness fix (the reviewer confirmed production has one long-lived pool and no per-request teardown race; on shutdown, dropping in-flight best-effort pushes is in-contract).
+
+Merge verified on the integration tree: server 541, chaos 136 (no hang), knip 24-files/+0/-0 both canaries, lint/typecheck/i18n green, **zero delivery-noise lines**.
+
+**STILL DEAD END-TO-END until task 135:** the server sends to Expo (proven via `FakePushPort` in tests), but the app does not register a real token or route a tap. Nothing reaches a device yet.
+**v0+ follow-up (non-blocking, reviewer-flagged):** `ImmediateDeliveryDispatcher` starts every dispatched task with no concurrency cap — bounded by dispatch-rate × short recipient-SELECT for DB pressure, but in-flight memory grows during an Expo outage. Negligible at v0 shared-device volume; worth a bounded queue later.
