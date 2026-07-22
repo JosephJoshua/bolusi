@@ -18,7 +18,7 @@ import { failureKey } from './enrollment/model.js';
 import { PIN_MESSAGE_KEY } from './pin/model.js';
 import { categoryNameKey, localeNameKey, MUTABLE_PUSH_CATEGORIES } from './settings/model.js';
 import { SWITCHER_EMPTY_CTA_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
-import { MEDIA_STATUS_KEY, REASSURANCE_KEY } from './sync-status/model.js';
+import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status/model.js';
 
 /**
  * The catalogs a v0 user can actually reach. `zh` is scaffolded in `LOCALES` but ships NO catalog
@@ -153,6 +153,30 @@ describe('screen key maps', () => {
     for (const key of Object.values(MEDIA_STATUS_KEY)) expectInEveryCatalog(key);
     expect(Object.values(REASSURANCE_KEY)).toHaveLength(4);
     expect(Object.values(MEDIA_STATUS_KEY)).toHaveLength(3);
+  });
+
+  test('every sync-status header title key exists in both catalogs (task 126)', () => {
+    // NOT the only guard on these keys, and the compiler is the stronger half. `SYNC_TITLE_KEY` is
+    // `as const satisfies Record<…, string>`, which PRESERVES the literal types rather than widening
+    // them to `string`, so `t(SYNC_TITLE_KEY[chip])` checks each value against the generated
+    // `TranslationKey` union: renaming one slot to `'sync.status.titleSyncedTYPO'` is TS2345 at
+    // `SyncStatusScreen.tsx` and at this suite's sibling render test, not a silent degrade.
+    //
+    // What this test adds is a DIFFERENT ORACLE, not a restatement of that one. The compiler reads
+    // generated SOURCE; `hasKey` reads the BOOTED i18next instance, per locale, `fallbackLng: false`.
+    // And the union is generated from the `id` catalog ALONE (gen.mjs, `SOURCE_LOCALE`), so
+    // "resolves in id" and "resolves in en" are one question to the type system and two to this
+    // loop. It is also the check that still runs when tsc does not: under bare `vitest`, pointing a
+    // slot at an absent key fails HERE ("… missing in 'id'") with nothing else to catch it.
+    let covered = 0;
+    for (const key of Object.values(SYNC_TITLE_KEY)) {
+      expectInEveryCatalog(key);
+      covered += 1;
+    }
+    expect(covered).toBe(5);
+    // The titles are five DISTINCT keys, not one key repeated — the task-126 defect, at key level.
+    expect(new Set(Object.values(SYNC_TITLE_KEY)).size).toBe(5);
+    expect(Object.values(SYNC_TITLE_KEY)).not.toContain('sync.rejected.title');
   });
 
   test('every settings key exists — languages and mutable push categories', () => {

@@ -154,6 +154,11 @@ export const resources: SeededResources = {
           offline: 'Tidak ada koneksi. Perubahan tersimpan di perangkat ini.',
           reconnected: 'Terhubung kembali',
           lastSynced: 'Terakhir terhubung {relative}',
+          titleSynced: 'Semua Terkirim',
+          titlePending: 'Belum Terkirim',
+          titleSyncing: 'Sedang Mengirim',
+          titleOffline: 'Tanpa Koneksi',
+          titleAttention: 'Perlu Diperiksa',
         },
         banner: {
           warning: 'Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.',
@@ -398,6 +403,11 @@ export const resources: SeededResources = {
           offline: 'No connection. Changes are saved on this device.',
           reconnected: 'Back online',
           lastSynced: 'Last connected {relative}',
+          titleSynced: 'All Sent',
+          titlePending: 'Not Sent Yet',
+          titleSyncing: 'Sending',
+          titleOffline: 'No Connection',
+          titleAttention: 'Needs Attention',
         },
         banner: {
           warning: 'Last connected {relative}. This may not be the latest data.',

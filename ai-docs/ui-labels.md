@@ -154,7 +154,7 @@ Permission display strings use the derived keys `permission.<module>.<action>.na
 
 ## sync — status, staleness, rejected changes (`sync.*`)
 
-States per `Operation.syncStatus` machine and api/01-sync §6–7. Staleness `{relative}` is computed server-relative (api/01-sync §7), formatted via `core.time.*`. `sync.banner.warning` / `sync.banner.stale` are keyed to the staleness **level names** of 03-state-machines §8 (which owns the thresholds) — never to durations, and the copy stays threshold-agnostic so a threshold change never invalidates a string. `sync.chip.*` are the sync-status chips of design-system §3.5 — the canonical pending/rejected markers on every list row and detail header. `sync.quarantine.*` is the loud surfacing of quarantined operations (pull-side verification failure, api/01-sync §4): those changes are held out of view, not applied. `sync.action.*` are the user-initiated affordances (the sync-now button, the pull-to-refresh hint) — deliberately **not** `sync.banner.*`, which is reserved for the staleness level names above.
+States per `Operation.syncStatus` machine and api/01-sync §6–7. Staleness `{relative}` is computed server-relative (api/01-sync §7), formatted via `core.time.*`. `sync.banner.warning` / `sync.banner.stale` are keyed to the staleness **level names** of 03-state-machines §8 (which owns the thresholds) — never to durations, and the copy stays threshold-agnostic so a threshold change never invalidates a string. `sync.chip.*` are the sync-status chips of design-system §3.5 — the canonical pending/rejected markers on every list row and detail header. `sync.quarantine.*` is the loud surfacing of quarantined operations (pull-side verification failure, api/01-sync §4): those changes are held out of view, not applied. `sync.action.*` are the user-initiated affordances (the sync-now button, the pull-to-refresh hint) — deliberately **not** `sync.banner.*`, which is reserved for the staleness level names above. `sync.status.title*` is one header title per design-system §8.1 chip state (`synced` / `pending` / `syncing` / `offline` / `attention`) for the §8.4 Sync Status screen: the screen's title states the state it is in, so a healthy device is never headed by a problem. It is deliberately **not** `sync.rejected.title`, which titles the rejected SECTION only — a screen-wide title that says "Rejected Changes" reports a problem that does not exist (task 126).
 
 | Key | id-ID | en |
 | --- | ----- | -- |
@@ -167,6 +167,11 @@ States per `Operation.syncStatus` machine and api/01-sync §6–7. Staleness `{r
 | `sync.status.offline` | Tidak ada koneksi. Perubahan tersimpan di perangkat ini. | No connection. Changes are saved on this device. |
 | `sync.status.reconnected` | Terhubung kembali | Back online |
 | `sync.status.lastSynced` | Terakhir terhubung {relative} | Last connected {relative} |
+| `sync.status.titleSynced` | Semua Terkirim | All Sent |
+| `sync.status.titlePending` | Belum Terkirim | Not Sent Yet |
+| `sync.status.titleSyncing` | Sedang Mengirim | Sending |
+| `sync.status.titleOffline` | Tanpa Koneksi | No Connection |
+| `sync.status.titleAttention` | Perlu Diperiksa | Needs Attention |
 | `sync.banner.warning` | Terakhir terhubung {relative}. Data mungkin bukan yang terbaru. | Last connected {relative}. This may not be the latest data. |
 | `sync.banner.stale` | Sudah lama tidak terhubung. Data di layar ini bisa jauh tertinggal. | No connection for a long time. What you see here could be far behind. |
 | `sync.rejected.banner` | {count} perubahan ditolak server. Ketuk untuk melihat. | {count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}} |

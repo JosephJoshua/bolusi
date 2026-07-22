@@ -141,6 +141,11 @@ export type TranslationKey =
   | 'sync.status.pendingMedia'
   | 'sync.status.reconnected'
   | 'sync.status.syncing'
+  | 'sync.status.titleAttention'
+  | 'sync.status.titleOffline'
+  | 'sync.status.titlePending'
+  | 'sync.status.titleSynced'
+  | 'sync.status.titleSyncing'
   | 'sync.status.upToDate';
 
 /** Nested shape of the merged catalog; fed to i18next's CustomTypeOptions in src/types.ts. */
@@ -272,6 +277,11 @@ export interface TranslationResources {
       offline: string;
       reconnected: string;
       lastSynced: string;
+      titleSynced: string;
+      titlePending: string;
+      titleSyncing: string;
+      titleOffline: string;
+      titleAttention: string;
     };
     banner: {
       warning: string;

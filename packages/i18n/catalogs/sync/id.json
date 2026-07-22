@@ -10,7 +10,12 @@
     "pendingMedia": "{count} foto belum terkirim",
     "offline": "Tidak ada koneksi. Perubahan tersimpan di perangkat ini.",
     "reconnected": "Terhubung kembali",
-    "lastSynced": "Terakhir terhubung {relative}"
+    "lastSynced": "Terakhir terhubung {relative}",
+    "titleSynced": "Semua Terkirim",
+    "titlePending": "Belum Terkirim",
+    "titleSyncing": "Sedang Mengirim",
+    "titleOffline": "Tanpa Koneksi",
+    "titleAttention": "Perlu Diperiksa"
   },
   "banner": {
     "warning": "Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.",
