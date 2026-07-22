@@ -1,6 +1,6 @@
 # TASK 136 — every local append schedules sync into a NO-OP: the shipping runtime binds `syncScheduler: { schedule: () => undefined }`, and the real `createSyncTriggers(...).scheduler` has zero consumers
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — costs latency, not data (the 60 s periodic tick, connectivity, manual refresh and realtime pokes still converge), but api/01-sync §5(b) / 04 §5.1 step 7's 3 s debounce does not exist in production.
 **Depends on:** 15, 119
 **Blocks:** —
