@@ -1,6 +1,6 @@
 # TASK 141 — two security-surface questions that need a RULING, not code: the push-token existence oracle contradicts a normative "only", and any device may write into any store of its tenant
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — neither is a bug against the code as specified; both are places where the code and the spec disagree about what is allowed. CLAUDE.md §6 makes these owner decisions, not implementer choices.
 **Depends on:** 118, 105
 **Blocks:** —
