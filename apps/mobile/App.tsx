@@ -18,7 +18,7 @@
  */
 import { AvatarButton, Chip, SyncChip, touch } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
@@ -54,6 +54,7 @@ import { syncChipState, type SyncStatusInput } from './src/screens/sync-status/m
 import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
+import type { PushRouteRequest } from './src/push/router.js';
 import type { PinAttemptRow } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
@@ -96,6 +97,13 @@ export interface AppProps {
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
+   * A deep-link navigation requested by a notification tap (api/04-push §4), driven by `Root`'s push
+   * router. A fresh object per tap, applied by the effect below via `setRoute` — the shell owns its
+   * route, so the composition root asks rather than reaches in. `null`/`undefined` on every render
+   * that is not a tap (the web harness never sets it). See `src/push/router.ts`.
+   */
+  readonly pushRoute?: PushRouteRequest | null;
+  /**
    * The enrollment caller (api/02-auth §4). `login` mints the control session + store list;
    * `enroll` registers the device, appends the genesis, persists the identity, and starts the loop.
    * Root supplies the real one (index.ts binds the transports + keystore + runtime); a test injects a
@@ -111,6 +119,18 @@ export default function App(props: AppProps): React.JSX.Element {
     initialEnrollmentState(props.device === 'revoked'),
   );
   const [discardPrompt, setDiscardPrompt] = useState(false);
+
+  /**
+   * Apply a notification-tap deep link (api/04-push §4). `Root` hands a FRESH `pushRoute` object per
+   * tap, so a repeat tap to the same route re-navigates (object identity is the trigger); an unrelated
+   * re-render passes the SAME object and this does nothing. The gate still decides what actually shows
+   * — a tap while locked sets the route but `resolveZone` keeps the lock until a PIN unlock, then lands
+   * on the requested surface. `null`/`undefined` (every non-tap render) is a no-op.
+   */
+  const pushRoute = props.pushRoute;
+  useEffect(() => {
+    if (pushRoute !== undefined && pushRoute !== null) setRoute(pushRoute.route);
+  }, [pushRoute]);
 
   const zone = resolveZone({
     device: props.device,

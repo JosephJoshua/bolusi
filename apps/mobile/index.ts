@@ -1,4 +1,5 @@
 import { registerRootComponent } from 'expo';
+import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
@@ -8,7 +9,7 @@ import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op
 
 import { bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
-import { requireApiBaseUrl } from './src/bootstrap/config.js';
+import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
 import {
   createAppEnrollment,
@@ -17,6 +18,9 @@ import {
 } from './src/bootstrap/enrollment.js';
 import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
+import type { PushRegistrationPorts } from './src/push/registration.js';
+import { createFetchPushTransport } from './src/push/transport.js';
+import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
@@ -203,7 +207,7 @@ function createMedia(app: Bootstrapped): MediaClient | null {
  */
 function createEnrollment(
   app: Bootstrapped,
-  onEnrolled: (deviceId: string) => void,
+  onEnrolled: (deviceId: string, ownerUserId: string) => void,
 ): AppEnrollment {
   const baseUrl = apiBaseUrl();
   const keystore = new SecureStoreKeyStore();
@@ -293,6 +297,72 @@ function createNotes(
   });
 }
 
+/**
+ * THE PUSH-TOKEN REGISTRATION PORTS (api/04-push §2) — bound to the native seams `registration.ts`
+ * leaves to the composition root: `getExpoPushTokenAsync` (native, inside `registration.ts`), the
+ * `POST /v1/push/tokens` transport (device bearer, read per call from SecureStore), and the
+ * last-registered value in plain local storage.
+ *
+ * The last-registered token lives in the SHARED prefs file `fileLocaleStore` owns (07-i18n §1.2's
+ * "plain local storage") rather than a second file store (§2.8 — one implementation): it is unsigned
+ * UI state, not a secret, so it does NOT belong behind the SecureStore keystore (which owns exactly the
+ * two credentials of api/02-auth §3). `null` for an unenrolled device (no `deviceId`, no bearer) or an
+ * absent EAS project id (`pushProjectId` is `null` until task 21 wires FCM/EAS) — either way `Root`
+ * simply does not register, and the boot is unaffected (push is best-effort, §1).
+ */
+const PUSH_LAST_REGISTERED_KEY = 'bolusi.push_last_registered';
+
+function createPushRegistration(
+  app: Bootstrapped,
+  actingUserId: string | null,
+): PushRegistrationPorts | undefined {
+  const projectId = pushProjectId(process.env['EXPO_PUBLIC_PROJECT_ID']);
+  if (projectId === null || app.deviceId === null) return undefined;
+  const keystore = new SecureStoreKeyStore();
+  const postToken = createFetchPushTransport({
+    baseUrl: apiBaseUrl(),
+    deviceId: app.deviceId,
+    deviceToken: () => keystore.loadDeviceToken(),
+  });
+  return {
+    projectId,
+    readLastRegistered: () => fileLocaleStore.read(PUSH_LAST_REGISTERED_KEY),
+    writeLastRegistered: (token) => fileLocaleStore.write(PUSH_LAST_REGISTERED_KEY, token),
+    postToken: (expoPushToken) => postToken(expoPushToken, actingUserId),
+    // Best-effort diagnostics through the app's ONE client channel (§2.8), never a bare console: a
+    // token that could not be acquired or POSTed is expected offline, and must not surface as an error.
+    onError: (error) =>
+      consoleDiagnostics.warn('push token registration failed', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+  };
+}
+
+/**
+ * THE NOTIFICATION-TAP SEAM (api/04-push §4/§6) — bound over `expo-notifications` (native, so bound
+ * HERE like the other native modules). Warm taps via `addNotificationResponseReceivedListener`; the
+ * cold-start tap (killed-app delivery, §6) via `getLastNotificationResponseAsync`. Each yields the
+ * payload's `content.data`, which `Root` resolves to a reachable route — verified against SDK 57's API
+ * (Context7). No permission is needed to LISTEN for a tap; token acquisition handles denial by skipping.
+ */
+function pushResponseData(
+  response: Notifications.NotificationResponse | null,
+): PushResponse | null {
+  return response === null ? null : { data: response.notification.request.content.data };
+}
+
+const expoPushRouter: PushRouterPort = {
+  subscribeToResponses(handler) {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      handler({ data: response.notification.request.content.data });
+    });
+    return () => subscription.remove();
+  },
+  async getInitialResponse() {
+    return pushResponseData(await Notifications.getLastNotificationResponseAsync());
+  },
+};
+
 function Bootstrapped(): React.JSX.Element | null {
   return Root({
     boot,
@@ -301,6 +371,12 @@ function Bootstrapped(): React.JSX.Element | null {
     createMedia,
     createSession,
     createNotes,
+    // THE PUSH VERTICAL, CLIENT HALF (api/04-push §2/§4; task 135). `createPushRegistration` returns
+    // `undefined` on an unenrolled device or a build with no EAS project id — `Root` then simply does
+    // not register (push is best-effort, §1). `expoPushRouter` binds the native tap listener so a
+    // notification deep-links into the reachable shell route.
+    createPushRegistration,
+    pushRouter: expoPushRouter,
     // THE IDLE LOCK'S PLATFORM INPUTS (api/02-auth §6.4; task 133). `appStatePort` is the same native
     // `AppState` binding the sync triggers take (§2.8) and is bound here for the same reason NetInfo
     // is; `systemTimer` is the app's one `setTimeout`. Both are REQUIRED props on `Root`, so a build

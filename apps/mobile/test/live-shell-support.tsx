@@ -31,7 +31,7 @@ import { bootstrap, type Bootstrapped } from '../src/bootstrap/bootstrap.js';
 import { createAppRuntime, type AppRuntime } from '../src/bootstrap/runtime.js';
 import { createSessionNotesRuntime, UNWIRED_NOTES_MEDIA } from '../src/bootstrap/notes.js';
 import { createAppSession, type AppSessionController } from '../src/bootstrap/session.js';
-import { Root } from '../src/bootstrap/Root.js';
+import { Root, type RootProps } from '../src/bootstrap/Root.js';
 import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
 import type { AppStatePort, AppStatus } from '../src/bootstrap/triggers.js';
 import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
@@ -318,6 +318,14 @@ export interface MountOptions {
    * not a substitute, so an assertion on it is an assertion about what the app is running.
    */
   readonly onSessionController?: (controller: AppSessionController) => void;
+  /**
+   * The push-token registration factory (api/04-push §2; task 135). Omitted by default, so tests that
+   * do not exercise push behave exactly as before — `Root` skips registration when it is `undefined`.
+   * The push composed test passes a fake that records `postToken` calls.
+   */
+  readonly createPushRegistration?: RootProps['createPushRegistration'];
+  /** The notification-tap seam (api/04-push §4/§6; task 135). Omitted by default (no listener). */
+  readonly pushRouter?: RootProps['pushRouter'];
 }
 
 export async function mountRoot(
@@ -382,6 +390,9 @@ export async function mountRoot(
           media: UNWIRED_NOTES_MEDIA,
         })
       }
+      // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
+      createPushRegistration={options.createPushRegistration}
+      pushRouter={options.pushRouter}
     />,
   );
   await settle();
