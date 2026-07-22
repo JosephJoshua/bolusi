@@ -1,7 +1,7 @@
 # TASK 152 — task 127's residuals: a false provenance claim on the v1 schema, and an import guard whose checked set is not the runtime's reachable set
 
-**Status:** in-progress
-**Priority:** MEDIUM (item 1) / LOW (item 2) — neither is a fail-open path in any realistic construction; both were falsified end-to-end by the reviewer and both are the §2.11 class the module contract exists to prevent.
+**Status:** in-review
+**Priority:** MEDIUM (item 2 — the guard hole) / MEDIUM (item 1 — the false provenance comment). **Corrected 2026-07-22:** this file originally labelled item 2 LOW. That was wrong and the implementer flagged the inconsistency rather than silently picking a reading. Item 2's falsification showed an unchecked, non-strict schema becoming the PRODUCTION validator for a v1 push (`deps.ts:161` calls `payloadSchemaFor` and validates against whatever it returns), so it is at least as severe as item 1 — low *reachability*, not low *severity*. — neither is a fail-open path in any realistic construction; both were falsified end-to-end by the reviewer and both are the §2.11 class the module contract exists to prevent.
 **Depends on:** 127 (merged 2026-07-22)
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
