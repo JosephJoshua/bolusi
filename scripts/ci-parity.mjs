@@ -831,6 +831,43 @@ export const STEP_POLICY = [
 // ── Expected reds: OWED (a decision, by design) vs everything else (UNEXPECTED) ───────────────────
 
 /**
+ * SEC ids as they appear in `scripts/sec-inventory.mjs`'s failure text — mirrors that file's
+ * `SEC_ID_PATTERN`. Taken from ANYWHERE in a line, never anchored to its start: the real producer's
+ * only failure line reads `FAIL the SEC pending allowlist is NOT empty … : SEC-AUTH-09 → …,
+ * SEC-AUTH-10 → …`, so a start-anchored `^FAIL (SEC-…)` matches nothing against it. On its own that
+ * would only make today's legitimate red trip the caller's empty-set branch; it is that branch, not
+ * this pattern, that stops an empty id set reading as a subset of everything. A fresh regex per call
+ * — a shared `/g` literal carries `lastIndex` state between callers.
+ * @param {string} text
+ */
+function secIdsIn(text) {
+  return text.match(/SEC-[A-Z]+-[0-9]+/g) ?? [];
+}
+
+/**
+ * Slice ONE step's own block out of a `pnpm sec:sweep` run, so a claim about that step is read from
+ * that step's lines and not from the whole transcript. The sweep frames every step as
+ * `── <name> — EXIT=<n>` followed by its detail (scripts/sec-sweep.mjs `record()`), so a block runs
+ * from its header to the next header.
+ *
+ * Scoping is load-bearing in BOTH directions. The test lanes' tails are vitest output, which prints
+ * its own `FAIL …` lines and its own SEC-titled test names; reading `FAIL`s or ids out of the whole
+ * output would attribute another step's text to this one. Returns `null` when the named step has no
+ * block — the caller must treat that as a failure to look, not as a clean read.
+ * @param {string} body  the sweep output BEFORE the summary marker
+ * @param {string} stepName
+ * @returns {string | null}
+ */
+function sweepStepSection(body, stepName) {
+  const start = body.indexOf(`── ${stepName} — EXIT=`);
+  if (start === -1) return null;
+  const afterHeader = body.indexOf('\n', start);
+  if (afterHeader === -1) return '';
+  const next = body.indexOf('\n── ', afterHeader);
+  return next === -1 ? body.slice(afterHeader + 1) : body.slice(afterHeader + 1, next);
+}
+
+/**
  * Deliverable 3 of task 142. `security-sweep` has been red since it landed and always will be until
  * two SEC ids are discharged — and THAT PERMANENT RED IS WHY THE OTHER FOUR FAILURES WENT UNREAD FOR
  * A DAY. A gate that is always red teaches people to stop reading the run. So the ONE genuinely
@@ -870,10 +907,47 @@ export const EXPECTED = {
      * The sweep prints an `EXIT=<n>  <step>` roll-up. The owed reds must be confined to the SEC
      * INVENTORY step: any OTHER failing sweep step (secrets scan, dependency audit, a test lane, the
      * frozen-lockfile check) is a real regression wearing the exemption's coat.
+     *
+     * STEP-LEVEL SCOPE WAS NOT ENOUGH (task 154). The first version stopped there: it confirmed the
+     * only red step was `SEC inventory…` and that 09/10 appeared SOMEWHERE in the output. It never
+     * asked which ids the inventory was actually red FOR. So a summary carrying the genuine 09/10 red
+     * PLUS a brand-new `FAIL SEC-META-01 has no PASSING test…` returned `{ok:true}` — a real SEC
+     * bookkeeping regression absorbed as "expected", which is task 142's own "a permanent red hides a
+     * real regression" recreated one level down, INSIDE the gate built to prevent it.
+     *
+     * So the failing ids are now read from the inventory step's OWN `FAIL` lines and must be a subset
+     * of the recorded owed set. Subset, not equality: the day SEC-AUTH-09 discharges alone, 10 is
+     * still legitimately owed and this must not turn into a false UNEXPECTED — an exemption that
+     * cries wolf is re-ignored, which is the failure mode this whole file exists to remove.
+     *
+     * THE PARSE IS THE NEW ORACLE, SO IT ASSERTS ITS OWN DENOMINATOR (T-14, §2.11).
+     * Every "I found nothing" branch below returns `ok:false`, never `ok:true`. That is not
+     * defensiveness — it is the specific bug this repo has shipped ten times, and it nearly shipped
+     * here: this task's own file proposed matching `FAIL SEC-…` at the line start, and the REAL line
+     * produced by `sec-inventory.mjs` begins `FAIL the SEC pending allowlist…` with both ids INLINE,
+     * so a start-anchored pattern matches ZERO lines against the real producer.
+     *
+     * Be precise about which design each half of that sentence describes, because they differ:
+     *   * The REJECTED design — anchored pattern, no empty-set branch — yields an id set that is
+     *     empty, hence a subset of everything: green, and blind. That is the hazard, not this code.
+     *   * THIS code takes ids from ANYWHERE in the line AND treats a FAIL line bearing no id at all
+     *     (`…contained ZERO assertions`, `parsed ZERO SEC ids…`) as UNEXPECTED. Re-anchor the pattern
+     *     and the `ids.length === 0` branch fires: verified by mutation, it goes LOUDLY RED, not
+     *     green. The empty-set branch is the load-bearing half; the unanchored pattern only keeps
+     *     today's legitimate red from tripping it.
      * @param {string} output
      */
     assert(output) {
-      const summary = output.slice(output.lastIndexOf('═══ sec:sweep summary ═══'));
+      const marker = '═══ sec:sweep summary ═══';
+      const summaryAt = output.lastIndexOf(marker);
+      if (summaryAt === -1) {
+        return {
+          ok: false,
+          detail: `sec:sweep failed but printed no "${marker}" block — there is nothing to confirm the red against, and "could not look" is never "as expected"`,
+        };
+      }
+      const body = output.slice(0, summaryAt);
+      const summary = output.slice(summaryAt);
       const failing = [...summary.matchAll(/^ {2}EXIT=([1-9]\d*)\s{2}(.+)$/gm)].map((m) =>
         m[2].trim(),
       );
@@ -892,17 +966,53 @@ export const EXPECTED = {
           detail: `sec:sweep failed on step(s) OUTSIDE the owed SEC inventory: ${other.join(' · ')}`,
         };
       }
-      const owed = ['SEC-AUTH-09', 'SEC-AUTH-10'].filter((id) => output.includes(id));
-      if (owed.length === 0) {
+
+      // ── WITHIN the inventory step: which ids is it actually red for? ───────────────────────────
+      const owedIds = new Set(['SEC-AUTH-09', 'SEC-AUTH-10']);
+      const seen = new Set();
+      for (const name of allowed) {
+        const section = sweepStepSection(body, name);
+        if (section === null) {
+          return {
+            ok: false,
+            detail: `the summary says "${name}" failed, but no "── ${name} — EXIT=" section is present in the output to read its FAIL lines from — the exemption cannot confirm WHICH ids are owed`,
+          };
+        }
+        const failLines = section.match(/^FAIL .*$/gm) ?? [];
+        if (failLines.length === 0) {
+          return {
+            ok: false,
+            detail: `"${name}" is red but printed no FAIL line — a red step that explains nothing cannot be matched against the owed ids`,
+          };
+        }
+        for (const line of failLines) {
+          const ids = secIdsIn(line);
+          if (ids.length === 0) {
+            return {
+              ok: false,
+              detail: `"${name}" has a FAIL line naming NO SEC id, so it cannot be attributed to the owed ${[...owedIds].join('/')}: ${line}`,
+            };
+          }
+          const strangers = [...new Set(ids)].filter((id) => !owedIds.has(id));
+          if (strangers.length > 0) {
+            return {
+              ok: false,
+              detail: `"${name}" is red for id(s) OUTSIDE the owed set: ${strangers.join(' · ')} — a NEW SEC inventory regression is hiding behind the ${[...owedIds].join('/')} exemption. Offending line: ${line}`,
+            };
+          }
+          for (const id of ids) seen.add(id);
+        }
+      }
+      if (seen.size === 0) {
         return {
           ok: false,
           detail:
-            'the SEC inventory is red but names neither SEC-AUTH-09 nor SEC-AUTH-10 — a different id is owed than the one recorded here',
+            'the SEC inventory is red but its FAIL lines name neither SEC-AUTH-09 nor SEC-AUTH-10 — a different id is owed than the one recorded here',
         };
       }
       return {
         ok: true,
-        detail: `only ${allowed.join(' · ')} is red; owed ids present: ${owed.join(', ')}`,
+        detail: `only ${allowed.join(' · ')} is red, and only for ${[...seen].sort().join(', ')} (⊆ ${[...owedIds].join(', ')})`,
       };
     },
   },

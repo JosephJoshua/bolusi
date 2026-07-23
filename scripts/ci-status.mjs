@@ -23,18 +23,61 @@
 // No `gh`, no auth, no runs, an unparseable response: each exits non-zero with the tool's own
 // output. A status reader that returns "nothing to report" when it could not look is the exact
 // green-for-the-wrong-reason shape CLAUDE.md §2.11 catalogues.
+//
+// AND IT SAYS WHICH QUESTION IT ANSWERED (task 154)
+// ------------------------------------------------
+// `gh run list --branch main` returns whatever ran most recently ON THAT BRANCH. That is NOT "did CI
+// run my commit": a push whose run has not been created yet, a run on a task branch, and a manual
+// dispatch are all invisible to it, and each would read as "main is clean" to someone who wanted
+// "my work is clean". The gap is small and the misreading is easy, which is precisely the shape of
+// the original outage — a check obeyed as written that answered a different question. So the scope
+// is printed in the command's OWN output, every run's head SHA is shown, the local HEAD is compared
+// against them, and `--sha=<sha>` turns "I want THIS commit" into a requirement that fails when the
+// commit is absent instead of passing on a neighbour's green.
 import { spawnSync } from 'node:child_process';
 
 import { EXPECTED, STEP_POLICY, dispatchOnlyJobs, loadWorkflow } from './ci-parity.mjs';
 
+// EVERY FLAG IS `--name=value`, AND AN UNRECOGNISED ARGUMENT IS FATAL.
+// Not style — the `--sha=` requirement is opt-in, so a flag that fails to parse degrades to "no SHA
+// requested" and this command answers a question the caller did not ask, with exit 0. `--sha <sha>`
+// is the shape that bites: it is how `gh` itself is invoked a few lines below, so it is the form a
+// reader is primed to type. Mirrors scripts/verify.mjs's unknown-argument rejection.
+const FLAG_PREFIXES = ['--branch=', '--limit=', '--sha='];
 const argv = process.argv.slice(2);
+const unknownArgs = argv.filter((arg) => !FLAG_PREFIXES.some((prefix) => arg.startsWith(prefix)));
+if (unknownArgs.length > 0) {
+  console.error(
+    `ci:status: unknown argument(s) ${unknownArgs.join(' ')} — usage: pnpm ci:status [--branch=<name>] [--limit=<n>] [--sha=<sha>]`,
+  );
+  console.error(
+    'ci:status: note the `=`. A space-separated `--sha <sha>` would otherwise be DROPPED silently and this command would exit 0 on a neighbouring commit’s green.',
+  );
+  process.exit(2);
+}
 const branchArg = argv.find((arg) => arg.startsWith('--branch='));
 const limitArg = argv.find((arg) => arg.startsWith('--limit='));
+const shaArg = argv.find((arg) => arg.startsWith('--sha='));
 const branch = branchArg === undefined ? 'main' : branchArg.slice('--branch='.length);
 const limit = limitArg === undefined ? 3 : Number.parseInt(limitArg.slice('--limit='.length), 10);
+const wantedSha = shaArg === undefined ? undefined : shaArg.slice('--sha='.length).trim();
 if (!Number.isInteger(limit) || limit < 1) {
   console.error('ci:status: --limit must be a positive integer');
   process.exit(2);
+}
+if (wantedSha !== undefined && !/^[0-9a-f]{7,40}$/i.test(wantedSha)) {
+  console.error(
+    `ci:status: --sha must be a 7-40 character hex commit sha, got ${JSON.stringify(wantedSha)}`,
+  );
+  process.exit(2);
+}
+
+/** The local checkout's HEAD, so the reader can see whether the runs below are even about it. */
+function localHead() {
+  const sha = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
+  const name = spawnSync('git', ['branch', '--show-current'], { encoding: 'utf8' });
+  if (sha.status !== 0) return undefined;
+  return { sha: (sha.stdout ?? '').trim(), branch: (name.stdout ?? '').trim() || '(detached)' };
 }
 
 /** @param {string[]} args */
@@ -98,13 +141,39 @@ if (!Array.isArray(runs) || runs.length === 0) {
   process.exit(1);
 }
 
-console.log(`ci:status: ${runs.length} most recent run(s) on ${branch}\n`);
+// ── say which question these runs answer, BEFORE showing their verdicts ──────────────────────────
+const shas = new Set(runs.map((run) => String(run.headSha ?? '')));
+const head = localHead();
+console.log(
+  `ci:status: read the ${runs.length} most recent run(s) on branch "${branch}" (gh run list --branch ${branch} --limit ${limit})`,
+);
+console.log(
+  `  SCOPE: this answers "are branch ${branch}'s ${runs.length} most recent run(s) clean?" — NOT "did CI run my commit".`,
+);
+console.log(
+  '  A run on any other branch, and a push whose run has not been created yet, are INVISIBLE here.',
+);
+if (head === undefined) {
+  console.log('  local HEAD: could not read `git rev-parse HEAD` — no correlation is possible.');
+} else {
+  console.log(
+    `  local HEAD: ${head.sha.slice(0, 12)} on "${head.branch}" — ${
+      shas.has(head.sha)
+        ? 'IS among the runs below.'
+        : 'is NOT among the runs below; nothing here is evidence about it.'
+    }`,
+  );
+}
+if (wantedSha !== undefined) {
+  console.log(`  --sha=${wantedSha}: required to appear below, or this command fails.`);
+}
+console.log('');
 
 let unexpectedTotal = 0;
 let unreadable = 0;
 
 for (const run of runs) {
-  const header = `run ${run.databaseId}  ${run.createdAt}  ${run.event}  ${run.status}/${run.conclusion || '—'}`;
+  const header = `run ${run.databaseId}  ${String(run.headSha ?? '').slice(0, 12)}  ${run.createdAt}  ${run.event}  ${run.status}/${run.conclusion || '—'}`;
   console.log(`${'═'.repeat(4)} ${header}`);
   console.log(`     ${run.displayTitle}`);
   if (run.status !== 'completed') {
@@ -223,9 +292,40 @@ if (unreadable > 0) {
     `ci:status: ${unreadable} run(s) could not be read (still running or no job list) — that is not a green.`,
   );
 }
+
+// A requested SHA that is not in the set read is "could not look", not "clean" — the same rule the
+// rest of this file applies to a missing `gh`, a missing run, or an unparseable response.
+const shaMissing = wantedSha !== undefined && ![...shas].some((sha) => sha.startsWith(wantedSha));
+if (shaMissing) {
+  console.error(
+    `ci:status: --sha=${wantedSha} does NOT appear in the ${runs.length} run(s) read on "${branch}". ` +
+      `That is not a green for that commit — it means no run for it was found. Widen with --limit, ` +
+      `pass --branch=<its branch>, or wait for its run to be created.`,
+  );
+}
+
+// THE LAST LINE MUST CARRY ITS OWN DENOMINATOR (T-14).
+// People read this command's final line and nothing else, so that line — not a caveat three lines
+// up, and not the exit code — is what has to be unmistakable. "No UNEXPECTED job failures in the
+// runs read" is TRUE over an empty set: three still-running runs means ZERO were inspected, and the
+// eye lands on an all-clear. That is the vacuous pass this whole task is about, one layer up from
+// the parse and expressed in prose. So the clean line states how many runs it actually inspected,
+// and anything that prevents a verdict — nothing inspected, a requested SHA absent, a real
+// regression — replaces it outright rather than sitting above it.
+const inspected = runs.length - unreadable;
+const blockers = [];
+if (inspected === 0) blockers.push(`0 of ${runs.length} run(s) inspected`);
+if (shaMissing) blockers.push(`--sha=${wantedSha} is not among the ${runs.length} run(s) read`);
+if (unexpectedTotal > 0) {
+  blockers.push(`${unexpectedTotal} UNEXPECTED job failure(s) — regressions, not the owed SEC ids`);
+}
+// The clean line leads with a word that MATCHES the denominator: a fully-inspected set is CLEAN, a
+// partially-inspected one is INCOMPLETE — so the eye never lands on "clean" for a set where some
+// runs went unread. The blocked line always leads with NO CLEAN VERDICT.
+const cleanLead = inspected === runs.length ? 'CLEAN' : 'INCOMPLETE';
 console.log(
-  unexpectedTotal === 0
-    ? 'ci:status: no UNEXPECTED job failures in the runs read above.'
-    : `ci:status: ${unexpectedTotal} UNEXPECTED job failure(s) — these are regressions, not the owed SEC ids.`,
+  blockers.length === 0
+    ? `ci:status: ${cleanLead} — ${inspected} of ${runs.length} run(s) on "${branch}" fully inspected, no UNEXPECTED job failures.`
+    : `ci:status: NO CLEAN VERDICT — ${blockers.join('; ')}.`,
 );
-process.exit(unexpectedTotal === 0 && unreadable === 0 ? 0 : 1);
+process.exit(blockers.length === 0 && unreadable === 0 ? 0 : 1);
