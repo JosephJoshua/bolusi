@@ -38,7 +38,23 @@ import { spawnSync } from 'node:child_process';
 
 import { EXPECTED, STEP_POLICY, dispatchOnlyJobs, loadWorkflow } from './ci-parity.mjs';
 
+// EVERY FLAG IS `--name=value`, AND AN UNRECOGNISED ARGUMENT IS FATAL.
+// Not style — the `--sha=` requirement is opt-in, so a flag that fails to parse degrades to "no SHA
+// requested" and this command answers a question the caller did not ask, with exit 0. `--sha <sha>`
+// is the shape that bites: it is how `gh` itself is invoked a few lines below, so it is the form a
+// reader is primed to type. Mirrors scripts/verify.mjs's unknown-argument rejection.
+const FLAG_PREFIXES = ['--branch=', '--limit=', '--sha='];
 const argv = process.argv.slice(2);
+const unknownArgs = argv.filter((arg) => !FLAG_PREFIXES.some((prefix) => arg.startsWith(prefix)));
+if (unknownArgs.length > 0) {
+  console.error(
+    `ci:status: unknown argument(s) ${unknownArgs.join(' ')} — usage: pnpm ci:status [--branch=<name>] [--limit=<n>] [--sha=<sha>]`,
+  );
+  console.error(
+    'ci:status: note the `=`. A space-separated `--sha <sha>` would otherwise be DROPPED silently and this command would exit 0 on a neighbouring commit’s green.',
+  );
+  process.exit(2);
+}
 const branchArg = argv.find((arg) => arg.startsWith('--branch='));
 const limitArg = argv.find((arg) => arg.startsWith('--limit='));
 const shaArg = argv.find((arg) => arg.startsWith('--sha='));
@@ -287,9 +303,25 @@ if (shaMissing) {
       `pass --branch=<its branch>, or wait for its run to be created.`,
   );
 }
+
+// THE LAST LINE MUST CARRY ITS OWN DENOMINATOR (T-14).
+// People read this command's final line and nothing else, so that line — not a caveat three lines
+// up, and not the exit code — is what has to be unmistakable. "No UNEXPECTED job failures in the
+// runs read" is TRUE over an empty set: three still-running runs means ZERO were inspected, and the
+// eye lands on an all-clear. That is the vacuous pass this whole task is about, one layer up from
+// the parse and expressed in prose. So the clean line states how many runs it actually inspected,
+// and anything that prevents a verdict — nothing inspected, a requested SHA absent, a real
+// regression — replaces it outright rather than sitting above it.
+const inspected = runs.length - unreadable;
+const blockers = [];
+if (inspected === 0) blockers.push(`0 of ${runs.length} run(s) inspected`);
+if (shaMissing) blockers.push(`--sha=${wantedSha} is not among the ${runs.length} run(s) read`);
+if (unexpectedTotal > 0) {
+  blockers.push(`${unexpectedTotal} UNEXPECTED job failure(s) — regressions, not the owed SEC ids`);
+}
 console.log(
-  unexpectedTotal === 0
-    ? `ci:status: no UNEXPECTED job failures in the ${runs.length} run(s) read on "${branch}".`
-    : `ci:status: ${unexpectedTotal} UNEXPECTED job failure(s) — these are regressions, not the owed SEC ids.`,
+  blockers.length === 0
+    ? `ci:status: no UNEXPECTED job failures — ${inspected} of ${runs.length} run(s) on "${branch}" fully inspected.`
+    : `ci:status: NO CLEAN VERDICT — ${blockers.join('; ')}.`,
 );
-process.exit(unexpectedTotal === 0 && unreadable === 0 && !shaMissing ? 0 : 1);
+process.exit(blockers.length === 0 && unreadable === 0 ? 0 : 1);
