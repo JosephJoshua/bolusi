@@ -133,9 +133,12 @@ export function demoSyncInput(overrides: Partial<SyncStatusInput> = {}): SyncSta
   };
 }
 
+/** The demo rejected op's id — exported so the gallery can open its §8.4 detail (task 130). */
+export const DEMO_REJECTED_OP_ID = 'op_9f3a';
+
 const DEMO_REJECTED: readonly RejectedOpRow[] = [
   {
-    opId: 'op_9f3a',
+    opId: DEMO_REJECTED_OP_ID,
     type: 'notes.create',
     at: HARNESS_NOW - 12 * MINUTE,
     rejectionCode: 'STALE_WRITE',

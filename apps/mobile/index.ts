@@ -27,6 +27,7 @@ import { createAppSession, type AppSessionController } from './src/bootstrap/ses
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
+import { createExpoCapturePlatform } from './src/media/native-capture.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
@@ -269,22 +270,21 @@ function createSession(
  * THE NOTES SURFACE (task 119) — the producer `App.notes` was waiting for.
  *
  * The command/query half is Node-safe and composed in `bootstrap/notes.ts`; what this site adds is
- * the MEDIA half, which is native. Both seams are currently `UNWIRED_NOTES_MEDIA` and that is a
- * deliberate, documented state rather than an oversight:
+ * the MEDIA half, which is native. BOTH seams are now real:
  *
- *   - `capturePhoto` needs the in-app capture flow (a `CameraView` ref reaching `MediaClient.
- *     capturePhoto`), which lives in a screen the notes editor does not yet route to. It REJECTS, so
- *     the button reports a failure instead of silently behaving like a cancel.
- * `loadThumbnail` is now REAL (task 120). It was `unavailable` because 06 §6 needs the signed
+ * `loadThumbnail` became real in task 120. It was `unavailable` because 06 §6 needs the signed
  * sha256/mime to verify a downloaded photo against, and schemaVersion 2's `notes.note_created`
  * carried only a bare `mediaId` — so for a PULLED note no hash existed on this device at any price.
  * schemaVersion 3 carries the whole signed `mediaRef`, so the verify has something to check against
  * and the bridge binds to the real media client. A device with no media client still gets the honest
  * `unavailable` seams rather than a thumbnail loader that cannot load.
  *
- * `capturePhoto` remains unwired: it needs the in-app capture flow (a `CameraView` ref reaching
- * `MediaClient.capturePhoto`), which lives in a screen the notes editor does not yet route to. It
- * REJECTS, so the button reports a failure instead of silently behaving like a cancel.
+ * `capturePhoto` became real in task 130. It was the rejecting `UNWIRED_NOTES_MEDIA` seam because
+ * the in-app capture flow — a `CameraView` ref reaching `MediaClient.capturePhoto` — lived in a
+ * screen nothing routed to, and no task owned the wiring (18 and 82 are both `done`). `Root` now
+ * hosts that flow (`media/CaptureHost.tsx`) and hands the seam in here, so the editor's attach button
+ * opens a camera instead of throwing. A build with no `capturePlatform`, or a device with no media
+ * client, still gets the REJECTING seam — never a stub that resolves `null` and reads as a cancel.
  *
  * The reads, writes, permission enforcement and live-query invalidation are all REAL regardless: the
  * notes list, detail and editor work over the live database today.
@@ -294,12 +294,13 @@ function createNotes(
   runtime: AppRuntime,
   identity: CommandIdentity,
   media: MediaClient | null,
+  capturePhoto: NotesRuntime['capturePhoto'],
 ): NotesRuntime {
   return createSessionNotesRuntime({
     app,
     runtime,
     identity,
-    media: notesMediaSeamsFor(media),
+    media: notesMediaSeamsFor(media, capturePhoto),
   });
 }
 
@@ -390,6 +391,11 @@ function Bootstrapped(): React.JSX.Element | null {
     // quietly go missing again the way `ShellSession` did.
     appState: appStatePort,
     timer: systemTimer,
+    // THE IN-APP CAMERA'S NATIVE SEAMS (06 §2.1; task 130) — `expo-camera`'s permission call, its
+    // `CameraView` and the still renderer, bound at the one site that may import them. Supplying
+    // this is what turns the notes editor's attach button from a rejecting stub into a camera, and
+    // what gives 06 §7's storage banners their first production render.
+    capturePlatform: createExpoCapturePlatform(),
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

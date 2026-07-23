@@ -72,6 +72,20 @@ export interface SyncStatusScreenProps {
   readonly onOpenRejected: (row: RejectedOpRow) => void;
   readonly onRetryMedia: (row: MediaQueueRow) => void;
   readonly onOpenSwitcher: () => void;
+  /**
+   * The rejected op whose §8.4-item-4 detail is open, or `null` when none is (task 130).
+   *
+   * §8.4 says "tap → detail with `rejectionCode`/`rejectionReason` … and label-catalog explanation +
+   * prescribed next step per code". Three of those four are ALREADY on the row: `core.rejection.<CODE>`
+   * (ui-labels §rejection) is written as "what happened, then what to do", which is the explanation
+   * AND the prescribed step, and the row renders it. The one thing a detail adds is the server's
+   * `rejectionReason`, and ui-labels states its treatment exactly — "the server's `rejectionReason`
+   * shows only as **collapsed technical detail**" under `sync.rejected.technicalDetails`, a key that
+   * shipped with zero consumers. So the detail is a DISCLOSURE on this screen rather than a new
+   * route: a second screen would have to re-render the same sentence to justify existing, and §3.10's
+   * "avoid modals, full-screen flows preferred" is about flows, not about a two-line collapsed field.
+   */
+  readonly expandedRejectedOpId: string | null;
 }
 
 export function SyncStatusScreen({
@@ -82,6 +96,7 @@ export function SyncStatusScreen({
   onOpenRejected,
   onRetryMedia,
   onOpenSwitcher,
+  expandedRejectedOpId,
 }: SyncStatusScreenProps): React.JSX.Element {
   const level = staleness(input);
   const banner = selectBanner(bannerCauses(input));
@@ -214,13 +229,31 @@ export function SyncStatusScreen({
             state={rejectedState}
             keyExtractor={(row) => row.opId}
             renderRow={(row) => (
-              <ListRow
-                primaryText={translateRejectionCode(row.rejectionCode)}
-                secondaryText={formatRelative(input.now - row.at)}
-                onPress={() => onOpenRejected(row)}
-                showChevron
-                testID={`sync-rejected-${row.opId}`}
-              />
+              <View>
+                <ListRow
+                  primaryText={translateRejectionCode(row.rejectionCode)}
+                  secondaryText={formatRelative(input.now - row.at)}
+                  onPress={() => onOpenRejected(row)}
+                  showChevron
+                  testID={`sync-rejected-${row.opId}`}
+                />
+                {row.opId === expandedRejectedOpId ? (
+                  <View style={styles.rejectedDetail} testID={`sync-rejected-detail-${row.opId}`}>
+                    {/* The code itself, for support (§5's Error row rule, applied to a rejection). */}
+                    <Text style={styles.meta} testID={`sync-rejected-code-${row.opId}`}>
+                      {row.rejectionCode}
+                    </Text>
+                    <Text style={styles.meta}>{t('sync.rejected.technicalDetails')}</Text>
+                    {/* The server's own words, and ONLY here: ui-labels §sync says the reason "shows
+                        only as collapsed technical detail". A null reason renders the catalog's empty
+                        marker rather than an empty box, so "the server sent no detail" is legible
+                        instead of looking like a rendering bug. */}
+                    <Text style={styles.meta} testID={`sync-rejected-reason-${row.opId}`}>
+                      {row.rejectionReason ?? t('core.status.empty')}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             )}
             testID="sync-rejected-list"
           />
@@ -241,6 +274,10 @@ export function SyncStatusScreen({
                     label={t(MEDIA_STATUS_KEY[row.uploadStatus])}
                     icon={row.uploadStatus === 'failed' ? 'rejected' : 'pending'}
                     tone={row.uploadStatus === 'failed' ? 'danger' : 'neutral'}
+                    // Per-row testID so a composed test can press THIS chip. The default
+                    // (`ui.chip`) is ambiguous the moment a device has two queued photos, and an
+                    // ambiguous selector is how a test ends up asserting against the wrong row.
+                    testID={`sync-media-retry-${row.mediaId}`}
                     {...(row.uploadStatus === 'failed' ? { onPress: () => onRetryMedia(row) } : {})}
                   />
                 }
@@ -318,6 +355,10 @@ const styles = StyleSheet.create({
     color: color.text,
     fontVariant: numeric.fontVariant as TextStyle['fontVariant'],
   },
+  // The disclosed technical detail sits INDENTED under its row so it reads as belonging to it, and
+  // stays in `type.caption`/`textMuted` (via `meta`) — §8.4 item 4's "collapsed technical detail" is
+  // support material, never the primary message the row already carries.
+  rejectedDetail: { gap: space.xs, marginBottom: space.md, paddingLeft: space.lg },
   sectionDanger: { ...type.heading, color: color.danger, marginTop: space.xl },
   inlineError: { ...type.bodySm, color: color.danger, marginTop: space.sm },
   disabledReason: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },

@@ -76,6 +76,15 @@ const MATRIX: readonly Row[] = [
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
+  // The §8.4-item-4 disclosure (task 130). Probed on the REASON node, not the section: the section
+  // is already visible in `attention`, so keying this row on it would pass with the detail collapsed
+  // — a screenshot row that cannot see the thing it was added for.
+  {
+    screen: 'sync-status',
+    state: 'rejectedDetail',
+    testId: 'sync-rejected-reason-op_9f3a',
+    text: 'server has a newer version',
+  },
 
   // Enrollment — steps + revoked banner.
   { screen: 'enrollment', state: 'credentials', testId: 'enroll-step-credentials' },

@@ -29,7 +29,7 @@ import { act } from 'react';
 
 import { bootstrap, type Bootstrapped } from '../src/bootstrap/bootstrap.js';
 import { createAppRuntime, type AppRuntime } from '../src/bootstrap/runtime.js';
-import { createSessionNotesRuntime, UNWIRED_NOTES_MEDIA } from '../src/bootstrap/notes.js';
+import { createSessionNotesRuntime, notesMediaSeamsFor } from '../src/bootstrap/notes.js';
 import { createAppSession, type AppSessionController } from '../src/bootstrap/session.js';
 import { Root, type RootProps } from '../src/bootstrap/Root.js';
 import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
@@ -386,6 +386,18 @@ export interface MountOptions {
    * transport and a {@link virtualTimer}, so the debounce is measured rather than assumed.
    */
   readonly createSync?: RootProps['createSync'];
+  /**
+   * The media-client factory (06; task 130). Omitted by default — every pre-130 test mounted with NO
+   * `createMedia`, which is precisely why `MediaClient.requestManual()` had zero production callers
+   * and nothing noticed: the composed lane never had a media client for `Root` to fail to call.
+   */
+  readonly createMedia?: RootProps['createMedia'];
+  /**
+   * The in-app camera's native seams (06 §2.1; task 130). Omitted by default, so the notes attach
+   * seam stays the REJECTING `UNWIRED_NOTES_MEDIA.capturePhoto` — the honest pre-130 behaviour — and
+   * only the capture test opts in with a fake camera.
+   */
+  readonly capturePlatform?: RootProps['capturePlatform'];
 }
 
 export async function mountRoot(
@@ -448,14 +460,20 @@ export async function mountRoot(
         if (controller !== null) options.onSessionController?.(controller);
         return controller;
       }}
-      createNotes={(booted, appRuntime, identity) =>
+      // THE PRODUCTION SEAM CHOICE, not a fixture-local one (task 130): `notesMediaSeamsFor` is the
+      // same function `index.ts` calls, so what this lane binds into the notes runtime is what a
+      // device binds. It was `UNWIRED_NOTES_MEDIA` unconditionally here, which meant the composed
+      // lane could not have observed a wired capture even after one existed.
+      createNotes={(booted, appRuntime, identity, media, capturePhoto) =>
         createSessionNotesRuntime({
           app: booted,
           runtime: appRuntime,
           identity,
-          media: UNWIRED_NOTES_MEDIA,
+          media: notesMediaSeamsFor(media, capturePhoto),
         })
       }
+      {...(options.createMedia === undefined ? {} : { createMedia: options.createMedia })}
+      capturePlatform={options.capturePlatform}
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
