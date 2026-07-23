@@ -31,7 +31,7 @@
  * its answers. That a real `CameraView` hands back a real JPEG is D12/D13's, not this lane's.
  */
 import { DomainError, type StorageBand } from '@bolusi/core';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { CapturedMedia } from '@bolusi/modules/notes/screens';
@@ -111,6 +111,17 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
   } | null>(null);
   const cameraRef = useRef<CameraCapturePort | null>(null);
   const settleRef = useRef<((value: CapturedMedia | null) => void) | null>(null);
+  /**
+   * The `userId` whose session OPENED the current capture, captured at the shutter's `capturePhoto`
+   * call and cleared on settle. This is what makes a capture PER-USER at the composition root, not
+   * just at the frozen `mediaRef` (06 §4). A capture is a modal step inside one user's session, and
+   * an idle lock can end that session and let a DIFFERENT user unlock underneath a still-open host
+   * (`Root` passes `identity: notes?.identity`, which changes when the switch lands). Without this,
+   * user B would unlock straight onto user A's live viewfinder, and a shot pressed there would stamp
+   * B (via `identityRef`) into A's dead promise — the very cross-user attribution the switcher exists
+   * to prevent. Compared by `userId` only: tenant/store/device are the same physical device.
+   */
+  const openedForUserRef = useRef<string | null>(null);
 
   const identityRef = useRef<CaptureIdentity | null>(deps.identity);
   identityRef.current = deps.identity;
@@ -121,10 +132,38 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
   const settle = useCallback((value: CapturedMedia | null): void => {
     const resolve = settleRef.current;
     settleRef.current = null;
+    openedForUserRef.current = null;
     setState(null);
     setReview(null);
     resolve?.(value);
   }, []);
+
+  /**
+   * Is the open capture stranded in a DIFFERENT user's session? True only when a capture is open, it
+   * was opened by some user, and the acting user is now a different NON-null user.
+   *
+   * A transient `null` is a LOCK, not a switch — the same user's own lock→unlock goes A → null → A,
+   * and the work-retention promise (SwitcherScreen.tsx:7-11, "Pekerjaanmu aman") is that A's PIN
+   * returns to A's viewfinder. So `null` never strands: only a landed different user does.
+   */
+  const strandedUser = deps.identity?.userId ?? null;
+  const stranded =
+    settleRef.current !== null &&
+    openedForUserRef.current !== null &&
+    strandedUser !== null &&
+    strandedUser !== openedForUserRef.current;
+
+  /**
+   * Cancel a capture the acting user walked away from via an idle lock + a foreign unlock.
+   *
+   * Resolves the awaiting caller (user A's `NoteEditor`, being torn down with A's session anyway) as
+   * a cancel and clears the host, so user B lands on their OWN home rather than A's viewfinder. The
+   * frame is prevented as well as cleaned up: `surface` below returns `null` while `stranded`, so B
+   * never even renders A's camera for a tick.
+   */
+  useEffect(() => {
+    if (stranded) settle(null);
+  }, [stranded, settle]);
 
   /**
    * Enter (or re-enter) the pre-shutter states: permission, then 06 §7's band.
@@ -179,6 +218,9 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
     const pending = new Promise<CapturedMedia | null>((resolve) => {
       settleRef.current = resolve;
     });
+    // Stamp the opening user NOW (see `openedForUserRef`) — `identityRef.current` is non-null here
+    // (guarded above), so a later switch has a value to diverge from.
+    openedForUserRef.current = identityRef.current?.userId ?? null;
     void enterReady();
     return pending;
   }, [deps.media, deps.platform, enterReady]);
@@ -226,7 +268,10 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
   }, []);
 
   const surface = useMemo<CaptureSurface | null>(() => {
-    if (state === null || deps.platform === null) return null;
+    // `stranded` wins over `state`: a capture open in a foreign session renders NOTHING, so the
+    // incoming user never sees the outgoing user's viewfinder even for the frame before the cancel
+    // effect above resets `state`. This is the render-side half of the identity guard.
+    if (state === null || deps.platform === null || stranded) return null;
     const platform = deps.platform;
     return {
       state,
@@ -246,7 +291,7 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
       onRetry: () => void enterReady(),
       onBack: () => settle(null),
     };
-  }, [state, deps.platform, publishCamera, onShutter, enterReady, settle, review]);
+  }, [state, deps.platform, stranded, publishCamera, onShutter, enterReady, settle, review]);
 
   return { capturePhoto, surface };
 }

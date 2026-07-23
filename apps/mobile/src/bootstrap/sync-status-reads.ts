@@ -17,6 +17,7 @@
  * Kysely + generated types only. No native import, so the composed test lane runs it against the
  * same better-sqlite3 client DB the app runs against op-sqlite.
  */
+import { pendingMediaCount, pendingOperationCount } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import type { Kysely } from 'kysely';
 
@@ -29,6 +30,14 @@ import type { MediaRow, MediaUploadStatus, RejectedOpRow } from '../screens/sync
  * oldest rather than hiding what just happened.
  */
 export const REJECTED_LIST_LIMIT = 50;
+
+/**
+ * Cap on the media queue, for the reason the rejected list has one.
+ *
+ * Oldest FIRST, because the drain is oldest-evidence-first (06 §5.1) — so the head of this list is
+ * the work the device is about to do next, and the cap drops the tail rather than the next item.
+ */
+export const MEDIA_LIST_LIMIT = 50;
 
 /** What the screen reads from the database, as one round trip's worth of answers. */
 export interface SyncStatusReads {
@@ -52,26 +61,47 @@ export const NO_SYNC_STATUS_READS: SyncStatusReads = {
  * DERIVED, NEVER STORED (01 §5.2): every number below is a `COUNT`/`SELECT` at read time. There is
  * no counter column to drift, which is the property that doc is protecting.
  *
- * THE MEDIA READ IS DELIBERATELY NOT "EVERY ROW". `media_items` keeps an `uploaded` row FOREVER (06
- * §7: "the row is kept forever with `localPath = null`"), so a shop at ~100 photos/day would grow
- * this query without bound to render a queue that §8.4 says drops uploaded rows anyway. The filter
- * lives in the SQL. `mediaQueue`'s own `uploaded` filter (model.ts) stays where it is and stays
- * tested there — it is the screen's guarantee against an input that forgot, not a duplicate of this.
+ * THE COUNTERS ARE CORE'S. `pendingOperationCount`/`pendingMediaCount` are imported, not re-derived
+ * — the media formula is CANONICAL (06 §4, 01 §5.2) and getting it wrong here lies to the user (see
+ * the call site). The two LIST queries are this file's, because core has no list reader, only counts.
+ *
+ * THE MEDIA LIST IS DELIBERATELY NOT "EVERY ROW". `media_items` keeps an `uploaded` row FOREVER (06
+ * §7: "the row is kept forever with `localPath = null`") and keeps ORPHAN rows for 24 h, so both are
+ * filtered in the SQL to exactly the queue the counter counts. `mediaQueue`'s own `uploaded` filter
+ * (model.ts) stays where it is — it is the screen's guarantee against an input that forgot, not a
+ * duplicate of this.
  */
 export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<SyncStatusReads> {
-  const [pendingOps, mediaRows, rejectedRows] = await Promise.all([
-    db
-      .selectFrom('operations')
-      .select((eb) => eb.fn.countAll<number>().as('count'))
-      // 03 §Operation.syncStatus: `local` is "appended here, not yet acknowledged by the server".
-      // `rejected` is NOT pending — it is never going to be sent (05 §8) and has its own section.
-      .where('syncStatus', '=', 'local')
-      .executeTakeFirst(),
+  const [operationCount, mediaCount, mediaRows, rejectedRows] = await Promise.all([
+    // ── THE COUNTERS ARE CORE'S, NOT THIS FILE'S (CLAUDE.md §2.8) ────────────────────────────────
+    // 06 §4 calls `pendingMediaCount`'s predicate CANONICAL and 01 §5.2 restates it verbatim, and
+    // core already implements both (`packages/core/src/sync/state.ts:143,155`). This file re-derived
+    // them once and got the media one WRONG in the direction that lies to the user: it counted every
+    // non-`uploaded` row, so ORPHANS — captures whose command was abandoned, `attachedToOperationId`
+    // still null — were reported as pending work. 06 §4: "Orphans do not count."
+    //
+    // That was not a theoretical drift, because THIS TASK is the orphan factory: `CaptureHost`'s
+    // `onRetake` deliberately leaves the discarded row for the 24 h pruning pass. A user who retook
+    // twice before keeping a shot would have seen the header chip read "Foto Belum Terkirim" on every
+    // screen for up to 24 h on a device where everything was sent (`sync-status/model.ts` branches
+    // the chip AND the headline on `pendingMediaCount > 0`). Telling someone work is queued when it
+    // is debris is precisely the class this task exists to remove.
+    pendingOperationCount(db),
+    pendingMediaCount(db),
     db
       .selectFrom('mediaItems')
       .select(['id', 'uploadStatus'])
+      // THE SAME PREDICATE AS THE COUNTER, so the list and the number can never disagree — a queue
+      // showing rows the counter does not count is its own kind of lie. `attachedToOperationId IS
+      // NOT NULL` is also what the DRAIN selects on
+      // (`packages/core/src/media/repository.ts:119`, which calls it "load-bearing security, not
+      // tidiness"), so an unattached row is one the drain will never touch: listing it under §8.4
+      // item 5 would promise an upload that cannot happen. The partial index `idx_media_items_queue`
+      // serves this, so the clause costs nothing.
+      .where('attachedToOperationId', 'is not', null)
       .where('uploadStatus', '!=', 'uploaded')
       .orderBy('capturedAt', 'asc')
+      .limit(MEDIA_LIST_LIMIT)
       .execute(),
     db
       .selectFrom('operations')
@@ -115,8 +145,13 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
   }
 
   return {
-    pendingOperationCount: Number(pendingOps?.count ?? 0),
-    pendingMediaCount: media.length,
+    // NOT `media.length` — that was the same bug one layer up. The list is CAPPED
+    // (`MEDIA_LIST_LIMIT`) and the counter is not, so a device with 60 queued photos must report 60
+    // and render 50. Deriving the count from the rendered array would silently cap the truth at the
+    // page size, which is the reporting equivalent of the orphan bug: a number the user believes,
+    // that is not the number.
+    pendingOperationCount: operationCount,
+    pendingMediaCount: mediaCount,
     rejected,
     media,
   };

@@ -82,12 +82,14 @@ import {
   advanceableClock,
   fakeAppState,
   manualTimer,
+  seedTwoUsers,
+  SECOND_USER_ID,
   virtualTimer,
   waitUntil,
   type Fixture,
   type VirtualTimer,
 } from './live-shell-support.js';
-import { fire, type RenderResult } from '../../../packages/ui/test/render.js';
+import { fire, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
 
 const MEDIA_ID = '01920000-0000-7000-8000-0000000130a1';
 
@@ -214,6 +216,44 @@ describe('media retry (06 §5.2 (e)) — the row, and the producer behind it', (
     // THE ASSERTION THAT A COMPONENT TEST CANNOT MAKE: the real client the composition root built
     // was entered. `noop` here — the shipping value until this task — leaves this at 0.
     expect(media.manualRequests).toHaveLength(1);
+  });
+
+  test('an ORPHAN capture counts as zero pending and never lists (06 §4 canonical formula)', async () => {
+    // Two rows: one ATTACHED-pending (real queued work) and one ORPHAN — captured, command abandoned,
+    // `attached_to_operation_id` still NULL. This is not a hypothetical: `CaptureHost.onRetake` leaves
+    // exactly such a row for the 24 h pruning pass, so a user who retakes produces orphans on a device
+    // where everything is sent. 06 §4: "Orphans do not count. This formula is canonical." The first
+    // implementation of this read counted every non-`uploaded` row and reported the orphan as pending,
+    // which lit the header chip "Foto Belum Terkirim" on every screen — the exact lie this task removes.
+    const ATTACHED = '01920000-0000-7000-8000-0000000130e1';
+    const ORPHAN = '01920000-0000-7000-8000-0000000130e2';
+    const insert = (id: string, attachedTo: string | null): Promise<unknown> =>
+      sql`
+      INSERT INTO media_items (
+        id, tenant_id, store_id, captured_by_user_id, device_id, type, mime_type,
+        byte_size, sha256, captured_at, location, local_path, upload_status, attached_to_operation_id
+      ) VALUES (
+        ${id}, ${fixture.tenantId}, ${fixture.storeId}, ${fixture.userId}, ${fixture.deviceId},
+        'image', 'image/jpeg', 1024, ${'a'.repeat(64)}, 1, NULL, '/tmp/x.jpg', 'pending', ${attachedTo}
+      )
+    `.execute(fixture.app.db.db);
+    await insert(ATTACHED, 'op-attached');
+    await insert(ORPHAN, null);
+
+    const screen = await mountRoot(fixture, { createMedia: () => fakeMediaClient() });
+    await signIn(screen);
+    await openSyncStatus(screen);
+
+    // The counter is core's `pendingMediaCount` (`SELECT … WHERE attached_to_operation_id IS NOT
+    // NULL`): exactly ONE, the attached row. Reading the rendered text, not the input, so this is the
+    // number a shop owner actually sees. `media.length` (the pre-fix value) would read 2.
+    expect(textsIn(screen.get('sync-counter-media')).join(' ')).toContain('1');
+
+    // And the list agrees with the counter — the attached row is there, the orphan is not. A queue
+    // that showed a row the counter did not count would promise an upload the drain never makes
+    // (`repository.ts` selects on the same `IS NOT NULL`, "load-bearing security, not tidiness").
+    expect(screen.query(`sync-media-${ATTACHED}`)).not.toBeNull();
+    expect(screen.query(`sync-media-${ORPHAN}`)).toBeNull();
   });
 });
 
@@ -571,5 +611,59 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
     const live = await waitUntil(() => screen.query('capture-shutter') !== null);
     expect(live, 'the viewfinder never became ready — this test would pass vacuously').toBe(true);
     expect(screen.query('capture-storage-banner')).toBeNull();
+  });
+
+  test('a pending capture does NOT survive an idle lock into a DIFFERENT user’s session', async () => {
+    // The compounding half of the idle-lock story (06 §4; api/02-auth §6.4). The zone guard (above)
+    // hides the viewfinder WHILE locked — but the host held `state`/`settleRef` with no identity
+    // reset, so when a DIFFERENT user unlocked they landed directly on the outgoing user's live
+    // viewfinder, shutter armed. A shot pressed there stamps the INCOMING user (`identityRef`) into
+    // the OUTGOING user's dead promise, producing an orphan attributed to the wrong person — the
+    // exact cross-user attribution the switcher exists to prevent. Two real users, real PINs.
+    await seedTwoUsers(fixture);
+
+    const clock = advanceableClock();
+    const timer = manualTimer();
+    const media = fakeMediaClient({ band: 'normal', shot: CAPTURED_REF });
+    const screen = await mountRoot(fixture, {
+      clock,
+      timer,
+      createMedia: () => media,
+      capturePlatform: fakeCapturePlatform(),
+    });
+
+    // User A opens the camera.
+    fireOn(screen, `switcher-user-${fixture.userId}`);
+    await settle();
+    expect(await submitPin(screen, TEST_PIN)).toBe(true);
+    fireOn(screen, 'notes.list.create');
+    await settle();
+    fireOn(screen, 'notes.editor.attach');
+    await settle();
+    const live = await waitUntil(() => screen.query('capture-shutter') !== null);
+    expect(live, 'user A’s viewfinder never opened — the rest is vacuous').toBe(true);
+
+    // Idle lock ends A's session.
+    clock.advance((IDLE_LOCK_DEFAULT_SECONDS + 1) * 1000);
+    await act(async () => {
+      timer.fire();
+      for (let i = 0; i < 12; i += 1) await Promise.resolve();
+    });
+    expect(await waitUntil(() => screen.query('switcher-lock-banner') !== null)).toBe(true);
+
+    // User B unlocks — a DIFFERENT user on the shared device.
+    fireOn(screen, `switcher-user-${SECOND_USER_ID}`);
+    await settle();
+    expect(await submitPin(screen, TEST_PIN)).toBe(true);
+    const home = await waitUntil(() => screen.query('notes.list.title') !== null);
+
+    // B lands on B's OWN home, never on A's camera. Pre-fix: `captureScreenAfterBUnlock: true`,
+    // `captureShutterAfterBUnlock: true`, `notesListAfterBUnlock: false` — B unlocked straight onto
+    // A's armed viewfinder. The identity guard (`openedForUserRef`/`stranded`) makes all three flip.
+    expect(home, 'user B never reached their own home').toBe(true);
+    expect(screen.query('capture-screen')).toBeNull();
+    expect(screen.query('capture-shutter')).toBeNull();
+    // And the shutter was never pressed under B — no capture was attributed across the switch.
+    expect(media.captureCalls).toHaveLength(0);
   });
 });

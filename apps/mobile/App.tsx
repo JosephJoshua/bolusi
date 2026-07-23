@@ -324,10 +324,14 @@ export default function App(props: AppProps): React.JSX.Element {
      * Falsified: dropping this conjunct turns `capture surface yields to an idle lock` red in
      * `test/live-shell-dead-controls.test.tsx`.
      *
-     * The pending capture is NOT abandoned by the lock — the host holds the deferred in `Root`,
-     * which does not unmount — so a PIN unlock returns to the viewfinder with the notes editor
-     * still waiting behind it. That is the same work-retention promise the lock screen makes
-     * ("Pekerjaanmu aman", SwitcherScreen.tsx:7-11).
+     * The pending capture survives the lock for the SAME user only — the host holds the deferred in
+     * `Root`, which does not unmount, so THIS user's PIN unlock returns to the viewfinder with the
+     * notes editor still waiting behind it ("Pekerjaanmu aman", SwitcherScreen.tsx:7-11). If a
+     * DIFFERENT user unlocks (an idle lock ended the session and someone else signed in), the host
+     * cancels the capture rather than handing the incoming user the outgoing user's live camera —
+     * that identity guard lives in `useCaptureHost` (`openedForUserRef`/`stranded`), because it needs
+     * the acting-identity change the zone gate cannot see, and it is covered by
+     * `a pending capture does not survive an idle lock into a different user's session`.
      *
      * The chrome comes from here because this is where chrome is built (§8.1: both slots always
      * present). The sync chip goes to Sync Status the way every other screen's does; the avatar

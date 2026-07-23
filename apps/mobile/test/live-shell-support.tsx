@@ -212,6 +212,70 @@ export async function seedDirectory(
   await applyBundle(fixture.app.db.db, bundle);
 }
 
+/** A SECOND enrolled user on the same device — the incoming user in a switch/lock-unlock test. */
+export const SECOND_USER_ID = '01920000-0000-7000-8000-0000000130d1';
+
+/**
+ * Seed TWO active users, each with a REAL argon2id verifier of `TEST_PIN` (task 130's Defect-2 test).
+ *
+ * Both go through `applyBundle` — the exact writer a real enroll response uses — so a switch between
+ * them exercises the real directory the switcher reads and the real `verifyPin` for each. Distinct
+ * salts + `seq`, so the two verifier rows genuinely differ even though the PIN is the same; a wrong
+ * PIN still fails for either.
+ */
+export async function seedTwoUsers(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifierFor = (
+    seq: number,
+    saltBase: number,
+  ): Promise<Awaited<ReturnType<typeof buildPinVerifier>>> =>
+    buildPinVerifier(
+      noblePort,
+      new TextEncoder().encode(TEST_PIN),
+      { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 },
+      Uint8Array.from({ length: 16 }, (_, i) => i + saltBase),
+      { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq },
+    );
+  const [verifierA, verifierB] = await Promise.all([verifierFor(1, 1), verifierFor(2, 100)]);
+
+  const bundle: DeviceBundle = {
+    tenant: { id: fixture.tenantId, name: 'Maju Group' },
+    store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
+    settings: { idleLockSeconds },
+    users: [
+      {
+        id: fixture.userId,
+        name: 'Andi Pratama',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: verifierA,
+      },
+      {
+        id: SECOND_USER_ID,
+        name: 'Budi Santoso',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: verifierB,
+      },
+    ],
+    rolesSnapshot: [
+      {
+        id: ROLE_ID,
+        name: 'Notes',
+        scopeType: 'store',
+        isSystemDefault: false,
+        permissionIds: ['notes.read', 'notes.create', 'notes.edit', 'notes.archive'],
+      },
+    ],
+    permissionsSnapshot: [],
+  };
+  await applyBundle(fixture.app.db.db, bundle);
+}
+
 /**
  * A FakeClock for the fixture (testing-guide §3.3) — time moves only when a test moves it.
  *
