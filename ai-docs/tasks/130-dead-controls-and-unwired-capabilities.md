@@ -74,19 +74,22 @@ handed to the notes attach seam through `notesMediaSeamsFor(media, capturePhoto)
 ### 4. Falsifications run (each one broken, observed, reverted)
 
 Composed suite: `apps/mobile/test/live-shell-dead-controls.test.tsx` — mounts the real `Root` with
-production factories, navigates by tapping, asserts on producers. 8/8 green.
+production factories, navigates by tapping, asserts on producers. **11/11 green** (9 original + the
+two rev-130 regressions in §7 below).
 
 | Broken | Observed failure |
 | --- | --- |
 | `onRetryMedia` → `noop` | `AssertionError: expected [] to have a length of 1 but got +0` |
 | `onOpenRejected` → `noop` | `Error: Expected exactly 1 node with testID sync-rejected-reason-<opId>, found 0` |
 | switcher `onRetry` → `noop` | `AssertionError: expected false to be true` (the roster never returns after the cause is healed) |
-| notes capture seam → `UNWIRED_NOTES_MEDIA` | `Error: notes capture is not wired (no media seams injected)` ×4; 3 tests red |
+| notes capture seam → `UNWIRED_NOTES_MEDIA` | `Error: notes capture is not wired (no media seams injected)` (×12 logged) — **6 tests red**. (An earlier report said "×4; 3 tests red"; that was a stale pre-fix measurement never re-run. Re-measured on the committed suite: 6 capture-dependent tests fail, incl. the two rev-130 regressions.) |
 | `storageBand()` → hardcoded `'normal'` | 2 band tests red (`expected null not to be null`) |
 | `syncInput` → the literals it shipped with | 2 tests red, incl. `the rejected op never reached the sync-status list` |
 | `zone.kind === 'shell'` conjunct dropped from the capture render | `AssertionError: the idle lock never reached the shell: expected false to be true` |
 | `createLabel`/`onCreate` restored on the empty roster | `AssertionError: expected TestInstance{ instance: { …(9) } } to be null` (the CTA node reappears) |
 | `auth.switcher.emptyUsers` made illegal in `ui-labels.md` (2 segments, snake_case) | key-grammar gate RED naming it in BOTH legs: `ai-docs/ui-labels.md: key 'auth.empty_users' has 2 segment(s)` and, after re-seeding, `packages/i18n/catalogs/auth/{id,en}.json: key 'auth.empty_users' has 2 segment(s)` |
+| media count → `media.length`, attach clause dropped (rev-130 Defect 1) | `AssertionError: expected '2 2 foto belum terkirim' to contain '1'` — the orphan was counted as pending |
+| `stranded` identity guard neutered (rev-130 Defect 2) | `AssertionError: user B never reached their own home: expected false to be true` — B landed on A's viewfinder |
 
 ### 5. Two defects this task found in its OWN work, recorded because they are the house failure mode
 
@@ -108,8 +111,8 @@ production factories, navigates by tapping, asserts on producers. 8/8 green.
   `auth.switcher.emptyUsers` was temporarily rewritten to `auth.empty_users` (2 segments AND
   snake_case) and the gate went RED naming it in both legs — the `ui-labels.md` row leg immediately,
   and the catalog leg after re-seeding. Restored; all 9 gates green. Both locales were then read out
-  of the generated catalogs (78 and 71 characters) rather than trusted, because task 165 documents
-  that a BLANK `id` cell passes seed + gen + check with all 9 gates green.
+  of the generated catalogs (78 and 71 characters) rather than trusted, because a BLANK `id` cell
+  passes seed + gen + check with all 9 gates green.
 
 ### 6. Found, not fixed (filed)
 
@@ -118,3 +121,65 @@ production factories, navigates by tapping, asserts on producers. 8/8 green.
 - **169** — the Sync Status quarantine section can never render: no client table or column persists a
   held-out pull batch (api/01-sync §4). Its model tests are green **because** the data is
   unreachable, not because the behaviour is right.
+
+---
+
+## 7. Review round 1 (rev-130 REJECT, 2026-07-23) — two blocking defects, both fixed
+
+The wiring passed review; two defects were found, both reproduced by the reviewer's own seeded
+probes, and they COMPOUND. Fixed here, each with a composed regression test falsified before trusted.
+
+### Defect 1 — the new read counted orphans as pending work, violating the canonical formula
+
+`sync-status-reads.ts` counted every non-`uploaded` media row (`media.length`) with no
+`attachedToOperationId` clause. 06 §4 and 01 §5.2 both state the CANONICAL formula
+(`attachedToOperationId != null AND uploadStatus IN ('pending','uploading','failed')`, "orphans do
+not count"), and **core already implements it** — `packages/core/src/sync/state.ts:143,155`. So this
+was a §2.8 violation (a third copy) that also got the copy wrong.
+
+Not theoretical: THIS task is the orphan factory. `CaptureHost.onRetake` leaves the discarded row for
+the 24 h pruning pass, so a user who retakes before keeping a shot produces orphans on a device where
+everything is sent — and the pre-fix read lit the header chip "Foto Belum Terkirim" on every screen
+for up to 24 h (`sync-status/model.ts` branches both the chip and the headline on
+`pendingMediaCount > 0`).
+
+**Fix:** the counters now call core's `pendingOperationCount()`/`pendingMediaCount()`; the list query
+carries the same `attachedToOperationId IS NOT NULL` clause (also what the drain selects on —
+`repository.ts:119`, "load-bearing security, not tidiness") so the list and the counter can never
+disagree; the count is core's number, not `media.length` (which would silently cap the truth at the
+page size). **Falsified:** reverting to `media.length` + no clause →
+`expected '2 2 foto belum terkirim' to contain '1'` — the orphan counted. Reverted, green.
+
+### Defect 2 — a pending capture crossed an idle lock into a DIFFERENT user's session
+
+The `zone.kind === 'shell'` guard (FINDING 5c) correctly hides the viewfinder WHILE locked, but
+`useCaptureHost` held `state`/`settleRef` with no identity reset. `Root` passes
+`identity: notes?.identity`, which changes when a switch lands — so after an idle lock ended user A's
+session, user B unlocking landed **directly on A's live viewfinder, shutter armed**. A shot there
+stamps B (`identityRef`) into A's dead promise: a capture attributed to the wrong person (06 §4), the
+exact cross-user failure the switcher exists to prevent — and per Defect 1 the resulting orphan would
+then inflate B's counter. The two defects chain.
+
+**Fix:** `openedForUserRef` records the `userId` that opened the capture; a `stranded` predicate is
+true only when a DIFFERENT non-null user is acting (a transient `null` is a lock, not a switch, so
+the SAME user's unlock still returns to their viewfinder — the per-user work-retention promise). When
+`stranded`, an effect settles the pending capture (cancel) and `surface` returns `null`, so the
+incoming user never sees the outgoing user's camera, not even for a frame. The `App.tsx` comment that
+said "a PIN unlock returns to the viewfinder" is corrected to "the SAME user's". **Falsified:**
+neutering the guard → `user B never reached their own home: expected false to be true` — B landed on
+A's viewfinder. Reverted, green.
+
+### The two report numbers rev-130 flagged, corrected
+
+- The seam falsification is **6 tests red** (12 rejection lines logged), re-measured on the committed
+  suite — not the stale "×4; 3 tests red", which predated FINDING 5a and the two new capture tests
+  and was never re-run. Table in §4 corrected.
+- The suite is **11 tests** (9 + the two regressions above), not "8/8". §4 corrected.
+
+### Non-blocking items rev-130 raised
+
+- The media list now has a `MEDIA_LIST_LIMIT` (50), matching the rejected list's cap — taken.
+- `Root`'s all-tables `invalidation.subscribe()` → table-granular `subscribeTable('operations'/'media_items')`
+  and overlapping-`reread` ordering: LEFT as filed follow-up, not folded in — it is a perf refinement
+  on a bounded path (the bus fires per batch), and the correctness fixes above are what this round
+  blocked on. Recorded here so it is a decision, not an omission.
