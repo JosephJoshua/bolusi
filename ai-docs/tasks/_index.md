@@ -172,6 +172,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 161 | DeviceBundle is a plain TS interface with NO zod — every server-sent field (store/tenant/role names) enters the client DB unvalidated at runtime, on the server→client trust boundary security-guide §1 calls in scope (from the 148 review) | todo | 148 |
 | 162 | **HIGH** the Android emulator lane's correctness gates have NEVER executed — `reactivecircus/android-emulator-runner` runs `script:` under dash, which has no `pipefail`, so `set -euo pipefail` aborts the step at line 1 and harness:device/adb/maestro never run; only visible now that 148 made the APK build (run 29949061877) | in-progress | 148 |
 | 165 | a blank cell in ui-labels.md seeds a blank RESERVED-namespace label and all 9 i18n gates pass (demonstrated end-to-end: seed + gen + check, EXIT=0) — task 150's blank detector only folds over module catalogs, and seed parity guards the catalog against the doc but nothing guards the doc (from the 150 impl) | todo | 150, 123 |
+| 167 | the emulator lane pins api-level 34 while we ship targetSdk 36, so every isAtLeastTargetSdk36 behaviour — predictive back's dispatch shim among them — is unexercised by construction even once 162's fix lets the gates run; needs a ruling on what the lane is for, not a silent version bump (from the 150 review) | todo | 162 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
