@@ -30,7 +30,18 @@ export function detUuid(seed: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** The canonical Expo token shape for a seed. */
+/**
+ * A deterministic FAKE Expo token for a seed — a test double, NOT a description of the real thing.
+ *
+ * It satisfies the only contract that exists: the `ExponentPushToken[…]` wrapper our validator
+ * checks (`src/push/schemas.ts`) and Expo's own `isExpoPushToken` (prefix + suffix, nothing else).
+ * The 22 hex characters inside are this fixture's arbitrary choice. **Do not read a token width,
+ * alphabet or entropy off this line** — Expo publishes none for what `getExpoPushTokenAsync`
+ * returns, and observed real tokens are mixed-case alphanumeric, not hex. A "~88 bits of entropy"
+ * claim (22 × 4) was derived from exactly this fixture and reached `security-guide.md` §2.2 and
+ * `decisions/…-owner-rulings-…md` as if it were a fact about Expo; §2.2 no longer rests on it
+ * (see its exception 2, re-based on the 30/day probe budget). CLAUDE.md §2.11 / T-16.
+ */
 export function expoToken(seed: string): string {
   return `ExponentPushToken[${seedBytes(seed).toString('hex').slice(0, 22)}]`;
 }
