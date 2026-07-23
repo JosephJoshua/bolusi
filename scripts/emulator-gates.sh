@@ -4,15 +4,22 @@
 # `script: bash scripts/emulator-gates.sh`, INSIDE reactivecircus/android-emulator-runner@v2 so both
 # gates share the one booted AVD.
 #
-# WHY THIS IS A FILE AND NOT AN INLINE `script:` BLOCK (task 162). The action runs its `script:`
-# input through `/usr/bin/sh`, which on ubuntu-latest is dash. Dash implements POSIX `set` and has
-# no `pipefail`, so the inline version aborted on its own first line:
+# WHY THIS IS A FILE AND NOT AN INLINE `script:` BLOCK (task 162). The action does NOT run `script:`
+# as a shell script. Its `src/script-parser.ts` splits the input per LINE, discarding `#`-comment and
+# blank lines, and `src/main.ts` then runs each surviving line as its OWN `sh -c <line>` — and
+# /usr/bin/sh is dash on ubuntu-latest. The run log shows exactly that: only line 1 reached a shell.
 #     [command]/usr/bin/sh -c set -euo pipefail
 #     /usr/bin/sh: 1: set: Illegal option -o pipefail
 #     ##[error]The process '/usr/bin/sh' failed with exit code 2
-# (CI run 29949061877, job 89021867602) — and NONE of the commands below ever ran. The fix changes
-# the INTERPRETER, never the semantics: the shebang and the explicit `bash` at the call site put
-# this file on a shell that has `pipefail`.
+# (CI run 29949061877, job 89021867602) — the step went red having run NONE of the gates below.
+#
+# So the inline form was broken FOUR ways, and a `pipefail`-capable shell would have fixed only one:
+# dash rejects `pipefail`; `export PATH=` never reached the `maestro` line; `APK=` never reached
+# `pnpm harness:device` or `adb` (both would have run with `--apk ''`); and `set -e` governed no
+# command at all, because every command was a separate shell. The `#` comments were being stripped
+# by the PARSER, not by a shell. What a file changes is therefore the PROCESS MODEL, not merely the
+# interpreter: N shells collapse into ONE bash, where `set -euo pipefail`, `export` and `APK=` all
+# actually take effect. Do not restore the inline form on the theory that it shares one shell.
 #
 # FAIL-SAFE (CLAUDE.md §2.11 / §2.1): `set -euo pipefail` with NO `|| true` and NO
 # `continue-on-error` anywhere is what makes a red harness OR a red Maestro flow exit non-zero and

@@ -532,12 +532,16 @@ jobs:
       # inside it — a second android-emulator-runner would boot a SECOND AVD (forbidden). The gate
       # bodies live in scripts/emulator-gates.sh (27a's harness command byte-unchanged and FIRST,
       # unmasked; Maestro then installs the test-profile APK and drives the real native RN app on the
-      # same AVD), and `bash` names the interpreter EXPLICITLY. Task 162: the action runs its
-      # `script:` input under /usr/bin/sh, which is dash on ubuntu-latest and has no `pipefail`, so an
-      # INLINE `set -euo pipefail` aborted on line 1 (`Illegal option -o pipefail`, exit 2) and these
-      # gates never once ran. Only the INTERPRETER moved — the §2.11 fail-safe (`set -euo pipefail`
-      # at the top of that file, NO `|| true`, NO `continue-on-error`) is unchanged: a red harness OR
-      # a red Maestro flow exits non-zero and fails the JOB.
+      # same AVD), and `bash <file>` is load-bearing rather than cosmetic. Task 162: this action does
+      # NOT run `script:` as a shell script — `src/script-parser.ts` splits the input per LINE
+      # (dropping `#`-comment and blank lines) and `src/main.ts` runs each surviving line as its OWN
+      # `sh -c <line>`, where /usr/bin/sh is dash. The old inline block was thus broken FOUR ways, of
+      # which `pipefail` was only the loudest: `set -euo pipefail` died on line 1 (`Illegal option -o
+      # pipefail`, exit 2) leaving the step red having run NOTHING; `export PATH=` never reached the
+      # `maestro` line; `APK=` never reached `pnpm harness:device` or `adb` (`--apk ''`); and `set -e`
+      # governed no command, every command being its own shell. A FILE is ONE bash process, so the
+      # §2.11 fail-safe (`set -euo pipefail` at its top, NO `|| true`, NO `continue-on-error`) now
+      # genuinely holds: a red harness OR a red Maestro flow exits non-zero and fails the JOB.
       - name: harness correctness gates + Maestro native E2E on the emulator (every figure EMULATOR)
         uses: reactivecircus/android-emulator-runner@v2
         with:

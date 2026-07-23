@@ -1,6 +1,6 @@
 # TASK 162 — the Android emulator lane's correctness gates have NEVER executed: the `script:` dies on its own first line under `/usr/bin/sh`
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** **HIGH — blocks 27a, 27b, 28, 117.** Not a flake and not a crypto problem: the step fails before running one assertion. It is the last thing between this project and its first-ever emulator correctness run.
 **Depends on:** 148 (must merge first — the APK only assembles with 148's SQLCipher removal)
 **Blocks:** 27a, 27b, 28, 117
