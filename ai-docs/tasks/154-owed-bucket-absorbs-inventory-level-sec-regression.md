@@ -1,6 +1,6 @@
 # TASK 154 — the OWED bucket asserts scope at the STEP level but not WITHIN the SEC-inventory step, so a new inventory-level SEC regression coexisting with the still-pending 09/10 is absorbed as "expected"
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — this is task 142's own "hide behind a permanent red" pattern, recreated one level down, inside the gate built to prevent it. Narrow (only SEC-inventory *bookkeeping* regressions that don't also red a test lane) and self-closing (it disappears the day SEC-AUTH-09/10 discharge), but real and demonstrated.
 **Depends on:** 142 (merged 2026-07-22)
 **Blocks:** —
