@@ -1,9 +1,11 @@
 # TASK 155 — nothing writes into the idle-lock work-retention path: a half-typed note is STILL lost on a real device, because no screen feeds `updateWorkspace`
 
 **Status:** todo
-**Priority:** MEDIUM — UX/ergonomics, NOT a security hole (task 133's lock fires and clears identity correctly regardless). But it is the unmet half of 133's deliverable #3 ("a lock must NOT discard the half-written note"), and it is disclosed-but-was-untracked — the exact pattern that let the original SEC-AUTH-08 inertness sit.
+**Priority:** **HIGH (raised 2026-07-23 by D23 §1)** — no longer a leftover. The owner ruled that a push-notification tap must **preserve the draft and then navigate** (task 159), and this retention path is the mechanism that ruling depends on. Until this ships, 159 cannot be implemented at all, and implementing 159 partially ("navigate and hope") would ship the silent draft-loss the ruling exists to remove.
+
+Original framing, still true: UX/ergonomics, NOT a security hole (task 133's lock fires and clears identity correctly regardless). It is the unmet half of 133's deliverable #3 ("a lock must NOT discard the half-written note"), and it was disclosed-but-untracked — the exact pattern that let the original SEC-AUTH-08 inertness sit.
 **Depends on:** 133 (the retention path + lock, merged 2026-07-22), 96 (NoteEditor)
-**Blocks:** —
+**Blocks:** **159** (D23 §1 — preserve-then-navigate needs this path to write into)
 **SEC ids owned by THIS task:** none.
 **Filed by:** the task-133 reviewer, 2026-07-22 (F1), verified by the orchestrator.
 

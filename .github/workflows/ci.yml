@@ -420,8 +420,11 @@ jobs:
   # keep it red, all recorded rather than papered over:
   #   1. the SEC pending allowlist is non-empty — SEC-AUTH-10 is owed by task 27 (device-blocked)
   #      and SEC-AUTH-09's leg 1 needs real SQLCipher, which only task 27a's lane has;
-  #   2. `POST /v1/media/:id/init` answers 500 for a cross-tenant media id and 404 for a
-  #      same-tenant unassigned-store one — a cross-tenant existence oracle SEC-TENANT-04 catches;
+  #   2. `POST /v1/media/:id/init` answers 404 for a media id ANOTHER TENANT holds and 200 for a
+  #      globally-free one — an existence DIFFERENCE, not a crash. The `500` this line used to claim
+  #      was closed in d12face (the insert became ON CONFLICT DO NOTHING -> the same 404 as every
+  #      other denied leg; see apps/server/test/integration/media/init-cross-tenant.test.ts). What
+  #      SEC-TENANT-04 still weighs is the 404-vs-200 pair;
   #   3. security-guide §12's roll-up line omits SEC-DEV-08, which task 58 shipped.
   # Each has its own task file. Weakening a step to make this green would convert three known
   # risks into one false assurance — the exact anti-pattern §2.11 names.
@@ -526,29 +529,26 @@ jobs:
       # Boot the AVD with the shipping Hermes 0.17 (real 0.17 == device 0.17, D13). ONE boot serves
       # BOTH 27a's harness correctness driver AND task 117's Maestro native E2E: the emulator lives
       # only for the duration of android-emulator-runner's `script`, so the Maestro run MUST sit
-      # inside it — a second android-emulator-runner would boot a SECOND AVD (forbidden). The
-      # `set -euo pipefail` wrapper with NO `|| true` and NO `continue-on-error` is the §2.11
-      # fail-safe: a red harness OR a red Maestro flow exits non-zero and fails the JOB. 27a's harness
-      # command is byte-unchanged and runs FIRST, unmasked; Maestro then installs the test-profile APK
-      # and drives the real native RN app on the same AVD.
+      # inside it — a second android-emulator-runner would boot a SECOND AVD (forbidden). The gate
+      # bodies live in scripts/emulator-gates.sh (27a's harness command byte-unchanged and FIRST,
+      # unmasked; Maestro then installs the test-profile APK and drives the real native RN app on the
+      # same AVD), and `bash <file>` is load-bearing rather than cosmetic. Task 162: this action does
+      # NOT run `script:` as a shell script — `src/script-parser.ts` splits the input per LINE
+      # (dropping `#`-comment and blank lines) and `src/main.ts` runs each surviving line as its OWN
+      # `sh -c <line>`, where /usr/bin/sh is dash. The old inline block was thus broken FOUR ways, of
+      # which `pipefail` was only the loudest: `set -euo pipefail` died on line 1 (`Illegal option -o
+      # pipefail`, exit 2) leaving the step red having run NOTHING; `export PATH=` never reached the
+      # `maestro` line; `APK=` never reached `pnpm harness:device` or `adb` (`--apk ''`); and `set -e`
+      # governed no command, every command being its own shell. A FILE is ONE bash process, so the
+      # §2.11 fail-safe (`set -euo pipefail` at its top, NO `|| true`, NO `continue-on-error`) now
+      # genuinely holds: a red harness OR a red Maestro flow exits non-zero and fails the JOB.
       - name: harness correctness gates + Maestro native E2E on the emulator (every figure EMULATOR)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
           profile: pixel_6
-          script: |
-            set -euo pipefail
-            export PATH="$HOME/.maestro/bin:$PATH"
-            APK=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            # 27a's correctness driver — UNCHANGED command, runs first and unmasked.
-            pnpm harness:device --apk "$APK"
-            # Task 117: install the test-profile APK so Maestro's launchApp (appId com.bolusi.app)
-            # finds it, then drive the real native app. `maestro test .maestro/` runs only the
-            # top-level LIVE flow by default; .maestro/pending-119/* is skipped until task 119 wires
-            # the live session shell. --test-output-dir collects screenshots for the upload step.
-            adb install -r "$APK"
-            maestro test --test-output-dir=maestro-artifacts .maestro/
+          script: bash scripts/emulator-gates.sh
       # Task 117: Maestro screenshots + artifacts. `if: always()` so a RED flow still uploads its
       # failure screenshots (the emulator is gone by now, but --test-output-dir wrote host files).
       - name: upload Maestro artifacts (task 117)
