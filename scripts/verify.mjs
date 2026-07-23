@@ -80,9 +80,24 @@ function record(name, status, classification, detail = '') {
 // is a CLAIM — "this machine is already provisioned equivalently" — and a claim nobody checks is
 // exactly the shape CLAUDE.md §2.11 warns about. So it is checked: a Node or pnpm mismatch against
 // the versions CI pins is reported here rather than surfacing later as an unexplained diff.
-function checkToolchain() {
+//
+// A CHECK IS SCOPED TO THE TIER THAT NEEDS IT. `gitleaks` is provisioned by CI for specific jobs, and
+// the local steps that need it are all `full`. Failing the FAST tier over a binary no fast step will
+// invoke makes the per-commit gate red for a reason unrelated to the commit — and a gate that reds
+// for irrelevant reasons is one people stop reading, which is the exact disease this file treats.
+// So a missing gitleaks is a PROBLEM only when a step that needs it is in THIS run's plan; otherwise
+// it is a NOTE that names the deferred steps it will break, so it is deferred visibly, never hidden.
+const GITLEAKS_JOBS = new Set(
+  STEP_POLICY.filter((entry) => /gitleaks/i.test(entry.key)).map((entry) => entry.job),
+);
+
+/**
+ * @param {{ included: Array<{job: string, key: string}>, deferred: Array<{job: string, key: string}> }} planned
+ */
+function checkToolchain(planned) {
   const problems = [];
   const notes = [];
+  const warnings = [];
   const nvmrcPath = resolve(REPO_ROOT, '.nvmrc');
   if (!existsSync(nvmrcPath)) {
     problems.push('.nvmrc is missing, but ci.yml pins node via `node-version-file: .nvmrc`');
@@ -108,17 +123,28 @@ function checkToolchain() {
   } else {
     notes.push(`pnpm ${actualPnpm} matches ${wantedPnpm}`);
   }
-  // `unit` and `security-sweep` both install gitleaks; SEC-SECRET-02's fixture test shells out to it
-  // and FAILS (never skips) when it is absent, so a missing binary here predicts a red `pnpm test`.
+  // SEC-SECRET-02's fixture test shells out to gitleaks and FAILS (never skips) when it is absent,
+  // so a missing binary predicts a red for the steps that reach it — and ONLY for those steps.
+  const label = (item) => `${item.job} / ${item.key}`;
+  const needs = planned.included.filter((item) => GITLEAKS_JOBS.has(item.job));
+  const willNeed = planned.deferred.filter((item) => GITLEAKS_JOBS.has(item.job));
   const gitleaks = spawnSync('gitleaks', ['version'], { encoding: 'utf8' });
-  if (gitleaks.error !== undefined) {
+  if (gitleaks.error === undefined) {
+    notes.push(`gitleaks ${(gitleaks.stdout ?? '').trim()} on PATH`);
+  } else if (needs.length > 0) {
     problems.push(
-      'gitleaks is not on PATH — CI installs it for the `unit` and `security-sweep` jobs, and SEC-SECRET-02 fails hard without it',
+      `gitleaks is not on PATH, and this run EXECUTES ${needs.map(label).join(' · ')}, which needs it — SEC-SECRET-02 fails hard rather than skipping`,
     );
   } else {
-    notes.push(`gitleaks ${(gitleaks.stdout ?? '').trim()} on PATH`);
+    warnings.push(
+      `gitleaks is NOT on PATH. No step in this tier invokes it, so this is not a failure HERE — but ${
+        willNeed.length === 0
+          ? 'the CI jobs that install it'
+          : `\`pnpm verify:full\` will run ${willNeed.map(label).join(' · ')}, which`
+      } will fail on this machine until it is installed. CI provisions it for: ${[...GITLEAKS_JOBS].join(', ')}.`,
+    );
   }
-  return { problems, notes };
+  return { problems, notes, warnings };
 }
 
 // ── the plan ─────────────────────────────────────────────────────────────────────────────────────
@@ -158,13 +184,14 @@ record(
   ].join('\n'),
 );
 
-const toolchain = checkToolchain();
+const toolchain = checkToolchain(plan);
 record(
   'local toolchain vs the versions ci.yml provisions',
   toolchain.problems.length === 0 ? 0 : 1,
   toolchain.problems.length === 0 ? 'PASS' : 'UNEXPECTED',
   [
     ...toolchain.notes.map((note) => `ok   ${note}`),
+    ...toolchain.warnings.map((warning) => `NOTE ${warning}`),
     ...toolchain.problems.map((problem) => `FAIL ${problem}`),
   ].join('\n'),
 );
