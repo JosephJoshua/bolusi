@@ -86,11 +86,16 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
-  // `bootWithLocalRecovery` self-heals the one boot failure that is NOT a corrupt data layer but a
-  // FRESH device wearing an old device's ciphertext: an iOS restore-to-new-hardware restores
-  // `bolusi.db` but not its THIS_DEVICE_ONLY key, so the open fails `not_a_database` and — before
-  // this — Root's deliberate no-catch rendered nothing forever (security-guide §6.6). On that class
-  // ONLY it wipes and drops to enrollment; every other failure still surfaces through Root's no-catch.
+  // `bootWithLocalRecovery` self-heals a boot that fails because the data layer is genuinely
+  // unopenable — a corrupt file that throws `not_a_database`/`missing_key` — by wiping and dropping
+  // to enrollment; every other failure still surfaces through Root's no-catch.
+  //
+  // ⚠️ POST-D22 THIS NO LONGER COVERS THE CASE IT WAS BUILT FOR (recovery.ts `KNOWN GAP SINCE D22`,
+  // task 160). It was built for iOS restore-to-new-hardware (security-guide §6.6): `bolusi.db`
+  // restores, the THIS_DEVICE_ONLY key does not. Under SQLCipher that was a LOUD `not_a_database` that
+  // routed here. Now `open()` takes no key and the restored PLAINTEXT file OPENS successfully, so
+  // neither trigger fires — boot "succeeds" into a silent half-enrolled state that throws AEAD errors
+  // deep in the UI. Detecting it needs a decrypt-probe at boot (task 160), not this error-class check.
   return bootWithLocalRecovery({
     boot: () =>
       bootstrap({
