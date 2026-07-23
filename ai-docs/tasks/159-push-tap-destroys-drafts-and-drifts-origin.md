@@ -1,8 +1,9 @@
 # TASK 159 — a push-notification tap is the LAST producer of the draft-loss class task 145 closed — and the same tap drifts the switcher's back-origin
 
-**Status:** todo
-**Priority:** **MEDIUM** — same silent data loss as task 145 (a dirty note editor unmounts with no ConfirmSheet), but via the one producer 145 did not cover. It needs a UX ruling before code, which is why it is separate.
-**Depends on:** 145 (the discard gate this must route through), 135 (the push router that produces the tap), 143 (the switcher `origin`)
+**Status:** blocked
+**Priority:** **MEDIUM** — same silent data loss as task 145 (a dirty note editor unmounts with no ConfirmSheet), but via the one producer 145 did not cover.
+**Depends on:** **155 (HARD PREREQUISITE — see the ruling below)**, 145 (the discard gate), 135 (the push router that produces the tap), 143 (the switcher `origin`)
+
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
 **Filed by:** the task-145 reviewer (MEDIUM finding 1) + the task-145 implementer's deferred item, 2026-07-22.
@@ -17,12 +18,31 @@
 ## Leg B — the same tap drifts the switcher origin (deferred from 145)
 A push arriving while `switching` is true calls `setRoute` unconditionally, so the switcher's `origin` drifts exactly like the sync-chip vector 145 fixed — a later back lands on the pushed route instead of where the switch was opened. 145 fixed the chip vectors with `if (!switching)`; the push path was left because it needs the same ruling as Leg A.
 
-## THE RULING NEEDED FIRST (do not code before this is decided)
-**Should a notification tap be blockable by a discard prompt?** The mechanical fix for Leg A is one line — `leaveHome(() => setRoute(pushRoute.route))` — but that means a push tap can be *refused* by a dirty editor, which is a product decision, not an implementation detail:
-- **(a) Gate it** — a push tap raises the ConfirmSheet like any other chrome navigation. Consistent with 145; the user never silently loses work. Cost: a notification tap sometimes "doesn't work" until the user answers a prompt.
-- **(b) Let it through, but preserve the draft** — navigate immediately (notifications feel broken if they don't), but persist the draft into the retention path first (task 155's workspace seam) so nothing is lost. Best UX, needs 155.
-- **(c) Defer the push while dirty** — hold the pending route and apply it after the user resolves the editor.
-For Leg B: either apply the same `!switching` guard, or freeze `origin` at switch-start (a `ZoneInput` field in the contended `zone.ts`).
+## RULED 2026-07-23 — D23 §1: option (b), PRESERVE THE DRAFT THEN NAVIGATE
+
+The ruling this task was filed to obtain has landed. **The tap must always navigate, and the draft
+must survive it.** Option (a) — gating behind the ConfirmSheet — was the orchestrator's
+recommendation because it ships now with no new machinery; **the owner ruled for (b) instead**,
+accepting the dependency it creates. Option (c) was not taken.
+
+The three options are preserved below as the record of what was weighed. **They are no longer a
+choice** — do not re-open them.
+
+- **(a) Gate it** — a push tap raises the ConfirmSheet like any other chrome navigation. Consistent with 145; the user never silently loses work. Cost: a notification tap sometimes "doesn't work" until the user answers a prompt. *(Recommended by the orchestrator; NOT ruled.)*
+- **(b) Let it through, but preserve the draft** — navigate immediately (notifications feel broken if they don't), but persist the draft into the retention path first (task 155's workspace seam) so nothing is lost. Best UX, needs 155. **← RULED.**
+- **(c) Defer the push while dirty** — hold the pending route and apply it after the user resolves the editor. *(Not ruled.)*
+
+**Consequences of the ruling:**
+- **Task 155 is now a HARD PREREQUISITE.** (b) needs a retention path that something actually writes
+  into; 155 is the task that makes `updateWorkspace` reachable from a screen. 155 was `todo` and
+  unstarted when this was ruled, and its priority was raised to HIGH accordingly. **This task is
+  `blocked` until 155 lands.**
+- **Do NOT implement this partially.** "Navigate and hope" — routing the tap without retention — ships
+  exactly the silent draft-loss the ruling exists to remove, while *looking* like the ruling was
+  honoured. That is strictly worse than today's state, which at least fails visibly to anyone testing it.
+- The draft-loss class task 145 opened is now closed by **retention**, not by prompting. A ConfirmSheet
+  on a notification tap is explicitly not the answer.
+- **Leg B is unaffected by the ruling** and can be reasoned about independently: either apply the same `!switching` guard, or freeze `origin` at switch-start (a `ZoneInput` field in the contended `zone.ts`).
 
 ## FALSIFY (§2.11 — once the ruling lands)
 - Reproduce Leg A first (dirty editor + push tap → draft gone, no sheet) and lead with it. After the fix, the chosen behaviour holds and the draft is never silently destroyed.

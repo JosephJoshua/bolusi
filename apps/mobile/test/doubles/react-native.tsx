@@ -46,6 +46,34 @@ type BackListener = () => boolean;
  * whole contract — it is what makes "hardware back equals the header back action" (design-system
  * §8.1) true for the screen on top rather than the screen underneath — so the double must not
  * simplify it.
+ *
+ * ── KNOWN DIVERGENCES FROM REAL RN 0.86 — DO NOT "ALIGN" THE TESTS TO THEM (task 150 item 3) ──────
+ * Read against the shipped source, not the docs: `react-native@0.86.0`,
+ * `Libraries/Utilities/BackHandler.android.js`. Three differences, all deliberate, none fixed here:
+ *
+ *  1. **RN DEDUPES on add; this double does not.** RN's `addEventListener` is
+ *     `if (_backPressSubscriptions.indexOf(handler) === -1) { push(handler) }`, so registering the
+ *     SAME function reference twice yields ONE entry. This double pushes unconditionally, so it
+ *     yields two. The divergence is strictly in the SAFE direction and that is the reason it stays:
+ *     the double can only ever hold MORE entries than the platform, never fewer, so
+ *     `useHardwareBack.test.tsx`'s "subscribed exactly once" can produce a false RED (a hook that
+ *     double-registers reds here while Android would silently dedupe) but never a false GREEN. A
+ *     future reader who "fixes" this to match RN would be deleting a guard against a duplicate
+ *     registration that the platform happens to paper over — the test would still pass on a hook
+ *     that is wrong. Keep the double strict; the cost is a red we would want to see anyway.
+ *  2. **RN passes a `HardwareBackPressEvent` argument.** RN constructs one per press and calls
+ *     `_backPressSubscriptions[i](event)`; `__emitHardwareBack` calls with no argument. Inert today
+ *     because `useHardwareBack`'s handlers are `() => boolean` and read no argument — it stops being
+ *     inert the moment a handler reads the event, at which point this double must grow one.
+ *  3. **RN ignores `eventName` on add.** RN's `addEventListener` never inspects `eventName`; it
+ *     registers for anything. This double early-returns an inert subscription for any name other
+ *     than `hardwareBackPress`. NOTE the direction is the OPPOSITE of (1) and (2): here the double
+ *     holds FEWER entries than the platform, so against a `toBe(false)` assertion in
+ *     `useHardwareBack.test.tsx` an unregistered listener reads as "nothing consumed" — a false
+ *     GREEN, not a false red. What keeps it inert is not the direction but the caller: production
+ *     passes only `'hardwareBackPress'` (`useHardwareBack.ts`), so the branch is never taken. If a
+ *     caller ever passes another name, this double must register it like RN does, or the test that
+ *     covers that caller is green for the wrong reason.
  */
 const backListeners: BackListener[] = [];
 
