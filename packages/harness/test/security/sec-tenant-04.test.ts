@@ -90,20 +90,36 @@ const controlId = (index: number): string =>
   `0f9000${index.toString(16).padStart(2, '0')}-9999-7999-8999-999999999999`;
 
 /**
- * The one endpoint whose nonexistent-id control legitimately differs today, pinned so the sweep is
- * green for a STATED reason rather than blind.
+ * The one endpoint whose nonexistent-id control still differs, pinned so the sweep is green for a
+ * STATED reason rather than blind. **This pin is TEMPORARY BY CONSTRUCTION — see the deletion note
+ * at the bottom.**
  *
- * `POST /v1/media/:id/init` CREATES a media row at a caller-supplied id: a `404` for an id another
- * tenant already holds versus a `200` for a free one distinguishes taken from free, which is
- * inherent to create-by-supplied-id and cannot be removed without either a lying `200` or
- * server-generated media ids (a wire change). It is NOT a security-guide §2.2 documented exception
- * — found by task 141a's sweep, reported in `ai-docs/tasks/141-…`, and an owner call (CLAUDE.md §6)
- * exactly like the push-token oracle was.
+ * `POST /v1/media/:id/init` creates a media row at a caller-supplied id and answers `404` for an id
+ * another tenant already holds versus `200` for a free one, so it distinguishes taken from free.
+ * Found by task 141a's sweep; it is NOT a security-guide §2.2 documented exception.
+ *
+ * **RULED, D23 §2: tenant-scope the media id — remove the oracle rather than document it.**
+ * Uniqueness becomes `(tenant_id, id)` instead of global, so an id another tenant holds does not
+ * exist in the caller's tenant and BOTH cases answer `200`. (An earlier version of this comment
+ * asserted the difference was "inherent to create-by-supplied-id and cannot be removed without a
+ * lying 200 or server-generated ids". That was wrong — it missed tenant-scoping entirely. A comment
+ * is a hypothesis, CLAUDE.md §2.11.) The ruling turned on the numbers, not on shape: §2.2 exception
+ * 2's only justification is its 30/day probe budget, and this route's is `perRoutePerMinute: 120`
+ * (`apps/server/src/deps.ts:71`) ≈ 172,800/day against UUIDv7's 74 random bits — so the exception's
+ * reasoning does not reach here. Tracked as the media-id tenant-scoping task (referenced by slug,
+ * not number — ids in this range are being allocated concurrently); it carries a DB migration, and
+ * migrations serialize globally (CLAUDE.md §4), so it cannot run beside another migration task.
  *
  * Pinned as the EXACT violation text, not merely the endpoint name: an endpoint set would stay
  * green if this difference changed CHARACTER — e.g. if the body began echoing the other tenant's
  * data — because the set would still be this one row. A second endpoint joining fails here, this
  * one leaving fails here, and so does this one leaking something new.
+ *
+ * **WHEN THIS GOES RED AFTER THE TENANT-SCOPING FIX LANDS, DELETE THIS ENTRY — DO NOT WIDEN IT.**
+ * The pin is bidirectional on purpose, so the fix itself trips it: that red is the success signal,
+ * and the correct response is an empty `KNOWN_EXISTENCE_CONTROL_DIFFERENCES`, not a relaxed
+ * assertion. Relaxing it would re-open the whole class this sweep exists to close, and §2.2 stays
+ * at exactly TWO documented exceptions either way — this endpoint is never added there (D23 §2).
  */
 const KNOWN_EXISTENCE_CONTROL_DIFFERENCES: readonly string[] = [
   'POST /v1/media/:id/init :: status differs (404 vs 200) — an existence oracle',

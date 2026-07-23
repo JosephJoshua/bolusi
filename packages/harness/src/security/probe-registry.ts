@@ -436,9 +436,12 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   // the status distinguished "exists in another tenant" from "does not exist". These rows state the
   // RULE, so they were red until commit `d12face` fixed the route; they are green now.
   //
-  // STILL OPEN (task 141a's sweep, NOT patched here per CLAUDE.md §2.6/§2.7): `init` creates a media
-  // row at a caller-supplied id, so it still answers `404` for an id another tenant holds and `200`
-  // for a free one. See `KNOWN_EXISTENCE_CONTROL_DIFFERENCES` in the suite.
+  // OPEN, RULED, NOT YET FIXED (found by task 141a's sweep; not patched here — this is a no-wire
+  // -change task): `init` creates a media row at a caller-supplied id, so it still answers `404` for
+  // an id another tenant holds and `200` for a free one. D23 §2 ruled the id be tenant-scoped —
+  // uniqueness `(tenant_id, id)` — so the oracle disappears rather than becoming a §2.2 exception.
+  // Until that lands the difference is pinned in `KNOWN_EXISTENCE_CONTROL_DIFFERENCES`, whose header
+  // says what to do when the fix trips it: DELETE the entry, never widen it.
   'POST /v1/media/:id/init': mediaProbes('POST', '/init', (ctx) => mediaInitBody(ctx)),
   'PUT /v1/media/:id/chunks/:index': mediaProbes(
     'PUT',
