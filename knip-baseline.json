@@ -3,8 +3,8 @@
   "command": "knip --production --include exports,files --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
-  "denominator": 139,
-  "fileDenominator": 19,
+  "denominator": 138,
+  "fileDenominator": 18,
   "nonProductionRules": [
     "test-dir",
     "test-file",
@@ -15,7 +15,6 @@
   ],
   "exports": [
     "apps/mobile/src/i18n.ts#writeDeviceLocale",
-    "apps/mobile/src/media/capture.ts#createExpoCameraCapture",
     "apps/mobile/src/ports/location.ts#stopLocationWatcher",
     "apps/mobile/src/screens/settings/model.ts#changeLocale",
     "apps/mobile/src/screens/settings/model.ts#setMuted",
@@ -161,7 +160,6 @@
     "apps/mobile/src/harness/part-c/budgets.ts",
     "apps/mobile/src/harness/registry.ts",
     "apps/mobile/src/harness/result.ts",
-    "apps/mobile/src/media/CaptureScreen.tsx",
     "apps/mobile/src/media/SignaturePadScreen.tsx",
     "apps/mobile/src/web/WebHarnessRoot.tsx",
     "apps/mobile/src/web/gallery.tsx",
