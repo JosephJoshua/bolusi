@@ -1,6 +1,6 @@
 # TASK 130 — five shipping controls are wired to `noop`, and two built capabilities have no production consumer
 
-**Status:** in-progress
+**Status:** in-review
 **Priority:** MEDIUM — controls that render, respond to touch, and do nothing. The "sound tests, zero callers" class (CLAUDE.md §2.11); component tests inject `vi.fn()` and assert the callback fires, so they can never see what the composition root actually passes.
 **Depends on:** 82, 96, 119, 24
 **Blocks:** —
