@@ -31,3 +31,37 @@ Fix each, adding catalog keys where one is genuinely missing (do not reuse a sem
 11. **`SignaturePadScreen.tsx:213`'s `UnauthorizedState` ships no `hint` at all** — design-system §5 requires body guidance. Note its title (`core.errors.PERMISSION_DENIED`) IS correct here: unlike `CaptureScreen`'s OS-permission case, this is an *account* denial, so the fix is to add guidance, not to change the title.
 
 12. **The note TITLE in edit mode reads as an unfilled placeholder** (visually confirmed on `artifacts/notes-editor-long-body.png` by the task-128 implementer). The title is the note's real value, rendered in `color.textDisabled` grey because edit-mode expresses read-only via `disabled` — and design-system §6.1 **exempts disabled text from the 4.5:1 contrast floor**, so no contrast gate fires on it. **This needs a decision before code:** either the design system grows a distinct read-only treatment (a new component state in a contended package — CLAUDE.md §6 territory), or §6.1 records why `disabled` is the right expression of read-only here. Do not silently restyle it.
+
+## ADDED 2026-07-23 (found by the task-130 implementer, adjudicated by its reviewer)
+
+13. **`EmptyState`'s 2-line hint cap cannot hold a compliant Indonesian empty-state string — same class as item 6's truncating unauthorized hint, and now demonstrated with a dated precedent.**
+
+`packages/ui/src/components/EmptyState.tsx:52` clamps the hint at `numberOfLines={2}`. The switcher's
+empty-roster guidance (`auth.switcher.emptyUsers`, 78 chars ID) renders as **exactly two lines with
+the second near-full-width** — read off `apps/mobile/e2e-web/artifacts/switcher-empty.png`, not
+inferred from a green. Zero headroom at 1.0×, so it must clip at the **1.3× font scale
+design-system §6.5 requires us to survive**.
+
+**The precedent is already in the design system.** `ai-docs/design-system.md:198` records a **67-char**
+Indonesian `bodySm` string that *"already fills two `bodySm` lines on a 360 dp screen and overflows
+them at the 1.3× font scale §6.5 requires us to survive"* — which is why `Banner` was widened 2→3
+lines (`packages/ui/test/banner.test.tsx:157`). The new string is **11 characters longer**, in the
+same `type.bodySm`, at a **narrower** content width (`EmptyState`'s root carries `padding: space.xl`
+= 24 each side). The same reasoning that moved Banner applies here and was not applied.
+
+**This PREDATES task 130.** The prior hint was `auth.enroll.instruction` (69 chars ID) — already over
+the documented 67-char threshold. Task 130 lengthens it 69 → 78; it did not create the class.
+
+**It is also not really a copy problem, which is why trimming the string is the wrong fix.**
+design-system §5 requires an Empty state to say what to do, and 07-i18n §7.2 requires "what happened,
+then what to do" — two sentences. A two-sentence Indonesian hint does not fit a 2-line cap at 1.3×.
+Either `EmptyState` grows to 3 lines as `Banner` did, or §6.5 records why this surface is exempt.
+
+**Why no gate caught it, and the gap that leaves:** **there is no 1.3×-scale render gate anywhere in
+this repo.** The visual harness renders at 1× (39/39 green on the very screenshot that shows the
+overflow), and `banner.test.tsx:157` asserts a `numberOfLines` *value*, not a rendered result. So
+every §6.5 claim in this project currently rests on arithmetic and eyeballing. That is worth its own
+task — filing a 1.3× lane would convert this whole class from "someone noticed" to "the gate reds" —
+but it is out of scope here.
+
+**Contended:** `packages/ui` (CLAUDE.md §4). Serialize with any other design-system work.

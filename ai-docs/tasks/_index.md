@@ -179,6 +179,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 170 | **HIGH security** tenant-scope the media id so `POST /v1/media/:id/init` stops being a cross-tenant existence oracle — uniqueness becomes (tenant_id, id); owner ruled REMOVE not document (D23 §2) because this route's budget is 120/min not 30/day, so exception 2's argument does not transfer; DELETE the SEC-TENANT-04 pin as part of the fix | todo | 141a |
 | 171 | §2.2's exception justification and the harness `rationale` string are two uncoupled prose copies of one claim — nothing ties them, which is how 141a's round-2 refuted-premise-in-the-failure-message happened; bind by citation and assert it resolves (from the 141a review) | todo | 141a |
 | 172 | `pnpm ci:status` classifies a red job as OWED by JOB NAME alone and never calls `assert()` (it reads the job-list API, so it has no log text) — so task 154's scope check does not reach the command run after every push; a security-sweep red for a NEW reason still prints OWED and exits 0 (from the 154 review) | todo | 142, 154 |
+| 173 | task ids are allocated by hand-reading a per-worktree `_index.md`, so concurrent branches collide (3× in one session); add `pnpm task:new` that allocates against origin/main and writes file+row atomically — reduces the rate, ledger gate stays the loud backstop | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
