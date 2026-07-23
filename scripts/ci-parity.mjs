@@ -834,9 +834,10 @@ export const STEP_POLICY = [
  * SEC ids as they appear in `scripts/sec-inventory.mjs`'s failure text — mirrors that file's
  * `SEC_ID_PATTERN`. Taken from ANYWHERE in a line, never anchored to its start: the real producer's
  * only failure line reads `FAIL the SEC pending allowlist is NOT empty … : SEC-AUTH-09 → …,
- * SEC-AUTH-10 → …`, so a start-anchored `^FAIL (SEC-…)` matches nothing and reports a confident,
- * empty, subset-of-everything id set. A fresh regex per call — a shared `/g` literal carries
- * `lastIndex` state between callers.
+ * SEC-AUTH-10 → …`, so a start-anchored `^FAIL (SEC-…)` matches nothing against it. On its own that
+ * would only make today's legitimate red trip the caller's empty-set branch; it is that branch, not
+ * this pattern, that stops an empty id set reading as a subset of everything. A fresh regex per call
+ * — a shared `/g` literal carries `lastIndex` state between callers.
  * @param {string} text
  */
 function secIdsIn(text) {
@@ -923,11 +924,17 @@ export const EXPECTED = {
      * Every "I found nothing" branch below returns `ok:false`, never `ok:true`. That is not
      * defensiveness — it is the specific bug this repo has shipped ten times, and it nearly shipped
      * here: this task's own file proposed matching `FAIL SEC-…` at the line start, and the REAL line
-     * produced by `sec-inventory.mjs` begins `FAIL the SEC pending allowlist…` with both ids INLINE.
-     * A start-anchored pattern matches ZERO lines against the real producer, yielding an empty id set
-     * that is a subset of everything — green, and blind. The ids are therefore taken from ANYWHERE in
-     * the line, and a FAIL line bearing no id at all (`…contained ZERO assertions`, `parsed ZERO SEC
-     * ids…`) is UNEXPECTED, because an unattributable failure is exactly what must not be absorbed.
+     * produced by `sec-inventory.mjs` begins `FAIL the SEC pending allowlist…` with both ids INLINE,
+     * so a start-anchored pattern matches ZERO lines against the real producer.
+     *
+     * Be precise about which design each half of that sentence describes, because they differ:
+     *   * The REJECTED design — anchored pattern, no empty-set branch — yields an id set that is
+     *     empty, hence a subset of everything: green, and blind. That is the hazard, not this code.
+     *   * THIS code takes ids from ANYWHERE in the line AND treats a FAIL line bearing no id at all
+     *     (`…contained ZERO assertions`, `parsed ZERO SEC ids…`) as UNEXPECTED. Re-anchor the pattern
+     *     and the `ids.length === 0` branch fires: verified by mutation, it goes LOUDLY RED, not
+     *     green. The empty-set branch is the load-bearing half; the unanchored pattern only keeps
+     *     today's legitimate red from tripping it.
      * @param {string} output
      */
     assert(output) {

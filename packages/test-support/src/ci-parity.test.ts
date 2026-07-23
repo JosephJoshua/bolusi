@@ -487,7 +487,10 @@ test.each([
   [
     'the summary block is absent',
     (): string => sweepOutput().replace('═══ sec:sweep summary ═══', ''),
-    'printed no',
+    // Pin the BRANCH, not just the redness. 'printed no' also matches the "printed no FAIL line"
+    // branch, so it would still pass if this input started failing for an unrelated reason — a test
+    // that cannot tell two failures apart is not evidence about either.
+    'printed no "═══ sec:sweep summary ═══" block',
   ],
   [
     "the step header's grammar shifts under the parser",
