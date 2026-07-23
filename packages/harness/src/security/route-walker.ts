@@ -145,8 +145,10 @@ export interface ProbeContext {
   readonly tenantBLoginIdentifier: string;
   /**
    * An `ExponentPushToken[…]` ALREADY registered to tenant B's device — the "held" half of
-   * security-guide §2.2's documented exception 2. Tenant A can only distinguish it from a fresh
-   * token because it already possesses the value (the ~88-bit entropy argument).
+   * security-guide §2.2's documented exception 2. Tenant A can distinguish it from a fresh token
+   * only by PRESENTING it, i.e. only for a value it already possesses; what bounds the oracle is
+   * the 30/day per-device probe budget, NOT any property of the token (§2.2 exception 2 spells out
+   * why the token's entropy is not a citable fact).
    */
   readonly tenantBHeldPushToken: string;
 

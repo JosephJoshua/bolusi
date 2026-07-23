@@ -541,11 +541,14 @@ export const DOCUMENTED_EXISTENCE_EXCEPTIONS: Readonly<Record<EndpointKey, Exist
   },
   // Exception 2 — an Expo token already held by ANOTHER tenant's device fails closed at 403 (RLS
   // hides the row, so ownership cannot transfer: task 118), while a token nobody holds registers at
-  // 200. Documented as allowed by D22 §2 on the entropy argument: ~88 bits means the caller can only
-  // ever present a token it already holds, so the 403 confirms a possession and enumerates nothing.
+  // 200. Allowed by D22 §2 and bounded by the 30/day per-device probe budget charged before the
+  // collision path (`apps/server/src/routes/push.ts:43-50` vs `:100`) — NOT by the token's entropy,
+  // which Expo does not publish and which §2.2 exception 2 refutes at length. The `rationale` below
+  // is printed as the assertion message when this leg fails, i.e. exactly when someone is triaging
+  // a live tenant-isolation regression: it must not hand them a premise the spec disowns.
   'POST /v1/push/tokens': {
     rationale:
-      '§2.2 exception 2 — push-token registration: a token held by another tenant is 403, a fresh one 200 (D22 §2, ~88 bits of token entropy)',
+      '§2.2 exception 2 — push-token registration: a token held by another tenant is 403, a fresh one 200 (D22 §2; justified by the 30/day probe budget, NOT by token entropy)',
     indistinguishable: false,
     legs: (ctx) => {
       const register = (expoPushToken: string): ProbeRequest => ({
