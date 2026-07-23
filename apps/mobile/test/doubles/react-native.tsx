@@ -67,8 +67,13 @@ type BackListener = () => boolean;
  *     inert the moment a handler reads the event, at which point this double must grow one.
  *  3. **RN ignores `eventName` on add.** RN's `addEventListener` never inspects `eventName`; it
  *     registers for anything. This double early-returns an inert subscription for any name other
- *     than `hardwareBackPress`. Inert because production passes only `'hardwareBackPress'`, and
- *     stricter than the platform in the same safe direction as (1).
+ *     than `hardwareBackPress`. NOTE the direction is the OPPOSITE of (1) and (2): here the double
+ *     holds FEWER entries than the platform, so against a `toBe(false)` assertion in
+ *     `useHardwareBack.test.tsx` an unregistered listener reads as "nothing consumed" — a false
+ *     GREEN, not a false red. What keeps it inert is not the direction but the caller: production
+ *     passes only `'hardwareBackPress'` (`useHardwareBack.ts`), so the branch is never taken. If a
+ *     caller ever passes another name, this double must register it like RN does, or the test that
+ *     covers that caller is green for the wrong reason.
  */
 const backListeners: BackListener[] = [];
 

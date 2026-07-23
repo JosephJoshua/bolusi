@@ -60,15 +60,20 @@
  *     modelled is the JS stack's POSITION and liveness in the native dispatcher — it is one callback
  *     among several (`ReactModalHostView` registers its own `OnBackPressedCallback(true)` on a
  *     shown Modal's dispatcher, entirely outside this array), and RN's shim disables and re-enables
- *     itself mid-dispatch. That path has already shipped a real defect in the exact version we
- *     depend on: RN 0.86's release notes carry a fix for `BackHandler` callbacks on Android API 36+
- *     that "stopped working after an app was resumed from the background", repaired by re-registering
- *     during `onHostResume`. A whole-lane green here would not have moved.
- *     The app pins no `targetSdkVersion` (no committed `android/`, no `expo-build-properties`
- *     override in `app.config.ts`), so the effective target comes from Expo SDK 57's prebuild
- *     template and is not determinable from this repo — which is the reason to treat the shim path
- *     as LIVE rather than hypothetical. Only an L6 on-device run settles it, and task 148 currently
- *     blocks any Android build at all.
+ *     itself mid-dispatch. That path is fragile enough to need saying out loud in the exact version
+ *     we depend on: RN 0.86's `ReactActivity.invokeDefaultOnBackPressed` must explicitly RE-ENABLE
+ *     the shim after `super.onBackPressed()` — its own comment says "Without this, the callback
+ *     remains disabled when the app returns from background" (`ReactActivity.java:127-129`). A
+ *     whole-lane green here would not have moved.
+ *     The app's own `android/` project is not committed and `app.config.ts` sets no
+ *     `expo-build-properties` override, so nothing in THIS package pins the target — but the real
+ *     build is on record at `ai-docs/tasks/148-duplicate-libcrypto-blocks-android-apk.md:89` as
+ *     `compileSdk/targetSdk 36`, which puts us squarely on the shim path rather than hypothetically
+ *     near it. Closing it needs an L6 run on a matching API level, and TWO things stand in the way
+ *     today: task 148 blocks the Android build, and the emulator lane is pinned to `api-level: 34`
+ *     (`.github/workflows/ci.yml:537`) while the shim is gated on `SDK_INT >= 36` AND
+ *     `targetSdkVersion >= 36` (`AndroidVersion.kt:51-53`) — so that lane cannot exercise this path
+ *     even once it runs. Tracked as task 167.
  */
 import { describe, expect, test, beforeEach } from 'vitest';
 

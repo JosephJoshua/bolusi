@@ -178,8 +178,17 @@ function catalogRowsWithoutScreens(
  * (`{ list: { title: 'Catatan' } }` → `[['list.title', 'Catatan']]`).
  *
  * This is the ONE descent in this file (CLAUDE.md §2.8): `leafPaths` and `blankCatalogValues` are
- * both folds over it, so the `leafPaths descends nested trees` test below is evidence for BOTH — a
- * parse that stopped descending cannot be correct for one detector and starved for the other.
+ * both folds over it, so a starved parse cannot be correct for one detector and starved for the
+ * other — one fix serves both, and there is no second walker to drift.
+ *
+ * That is a SHARING claim, not a coverage claim, and the difference was measured (task 150 review).
+ * The mutation "recurse only into single-key objects" survived the original `leafPaths descends
+ * nested trees` fixture — every subtree in it had exactly one key, so a partial descent looked
+ * identical to a full one, and that test stayed GREEN while only `blankCatalogValues` reddened. The
+ * fixture below now carries a TWO-key subtree for exactly that reason; re-applying the mutation reds
+ * it with `expected [ 'list', 'badge.archived' ] to deeply equal [ 'list.title', 'list.empty', … ]`.
+ * Keep a multi-key subtree in it: a depth fixture whose every node is single-key cannot tell "went
+ * all the way down" apart from "stopped one level in".
  */
 function leafEntries(tree: CatalogTree, prefix = ''): [path: string, value: unknown][] {
   const out: [string, unknown][] = [];
@@ -498,10 +507,16 @@ describe('every registered module ships resolvable catalog CONTENT (task 132)', 
     // (12 >= 10): forcing the descent to depth 1 leaves `the production boot RESOLVES every shipped
     // leaf` fully GREEN. This test is the one that OWNS the depth guarantee, which is why the
     // floor's comment above no longer claims the job (task 150 item 2).
-    expect(leafPaths({ list: { title: 'Catatan' }, badge: { archived: 'Diarsipkan' } })).toEqual([
-      'list.title',
-      'badge.archived',
-    ]);
+    //
+    // The `list` subtree has TWO keys deliberately — see `leafEntries`. With every subtree single-
+    // key, a parse that recursed only into single-key objects produced the identical result and this
+    // test stayed green; the second key is what makes a partial descent observable.
+    expect(
+      leafPaths({
+        list: { title: 'Catatan', empty: 'Belum ada catatan.' },
+        badge: { archived: 'Diarsipkan' },
+      }),
+    ).toEqual(['list.title', 'list.empty', 'badge.archived']);
     expect(leafPaths({})).toEqual([]);
   });
 });
