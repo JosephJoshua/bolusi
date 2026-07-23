@@ -332,8 +332,9 @@ test('no fixed-then-recurred defect is hard-coded as owned (chaos-05 / task 127 
 // anchored as `^FAIL (SEC-…)` — the shape this task was filed proposing — matches ZERO lines against
 // the real output, and an empty failing-id set is a subset of the owed set, so the gate returns OWED
 // while checking nothing. The tests would have agreed with it, because they and the producer
-// disagreed. Hence: the fixture is the producer's own bytes, and `namesNoId` below pins the
-// empty-set branch as LOUD.
+// disagreed. Hence: the fixture is the producer's own bytes, and the `test.each` row
+// 'a FAIL line names no SEC id at all' (with its siblings 'the inventory is red but printed no FAIL
+// line' and 'the inventory step block is missing entirely') pins the empty-set branch as LOUD.
 
 /** The real run's steps, in order, with the SEC inventory step's detail parameterised. */
 function sweepOutput(
