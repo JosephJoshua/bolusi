@@ -69,11 +69,14 @@
  *     `expo-build-properties` override, so nothing in THIS package pins the target — but the real
  *     build is on record at `ai-docs/tasks/148-duplicate-libcrypto-blocks-android-apk.md:89` as
  *     `compileSdk/targetSdk 36`, which puts us squarely on the shim path rather than hypothetically
- *     near it. Closing it needs an L6 run on a matching API level, and TWO things stand in the way
- *     today: task 148 blocks the Android build, and the emulator lane is pinned to `api-level: 34`
- *     (`.github/workflows/ci.yml:537`) while the shim is gated on `SDK_INT >= 36` AND
- *     `targetSdkVersion >= 36` (`AndroidVersion.kt:51-53`) — so that lane cannot exercise this path
- *     even once it runs. Tracked as task 167.
+ *     near it. Closing it needs an L6 run at a matching API level. That is a scheduled gap, not a
+ *     permanent one: the emulator lane is pinned to `api-level: 34` (`.github/workflows/ci.yml`,
+ *     the `android-emulator` job) while the shim is gated on `SDK_INT >= 36` AND
+ *     `targetSdkVersion >= 36` (`AndroidVersion.kt:51-53`), so the lane cannot exercise this path
+ *     TODAY — but the owner has ruled the lane moves to API 36 (D23 §4), tracked as task 167. Once
+ *     the lane runs API 36 per D23 §4 it WILL exercise the shim path, and this paragraph should be
+ *     rewritten to say what the lane then covers. Until then the premise above stays unmeasured, and
+ *     task 148 separately blocks the Android build.
  */
 import { describe, expect, test, beforeEach } from 'vitest';
 
