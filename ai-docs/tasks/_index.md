@@ -170,6 +170,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 159 | a push-notification tap is the LAST producer of task 145's draft-loss class (bare setRoute bypasses leaveHome → dirty editor destroyed, no ConfirmSheet) and drifts the switcher origin; needs a UX ruling (gate / preserve-then-navigate / defer) before code (from the 145 review) | todo | 145, 135, 143 |
 | 160 | **HIGH** the boot self-heal can no longer fire after SQLCipher removal — a restored plaintext DB now OPENS fine and the app boots into a silent half-enrolled state that throws AEAD errors deep in the UI (was a loud self-healing boot failure); needs a decrypt-probe with empty/partial/transient semantics (from the 148 review F2) | todo | 148 |
 | 161 | DeviceBundle is a plain TS interface with NO zod — every server-sent field (store/tenant/role names) enters the client DB unvalidated at runtime, on the server→client trust boundary security-guide §1 calls in scope (from the 148 review) | todo | 148 |
+| 165 | a blank cell in ui-labels.md seeds a blank RESERVED-namespace label and all 9 i18n gates pass (demonstrated end-to-end: seed + gen + check, EXIT=0) — task 150's blank detector only folds over module catalogs, and seed parity guards the catalog against the doc but nothing guards the doc (from the 150 impl) | todo | 150, 123 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
