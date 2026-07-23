@@ -177,6 +177,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 167 | raise the emulator lane to api-level 36 (D23 §4) — it pins 34 while we ship targetSdk 36, so every isAtLeastTargetSdk36 behaviour, predictive back's dispatch shim among them, is unexercised by construction; accepted cost is newer-image flake and boot time, first genuinely-executing run expected RED, and the log must show the AVD booted at 36 (from the 150 review) | todo | 162 |
 | 170 | **HIGH security** tenant-scope the media id so `POST /v1/media/:id/init` stops being a cross-tenant existence oracle — uniqueness becomes (tenant_id, id); owner ruled REMOVE not document (D23 §2) because this route's budget is 120/min not 30/day, so exception 2's argument does not transfer; DELETE the SEC-TENANT-04 pin as part of the fix | todo | 141a |
 | 171 | §2.2's exception justification and the harness `rationale` string are two uncoupled prose copies of one claim — nothing ties them, which is how 141a's round-2 refuted-premise-in-the-failure-message happened; bind by citation and assert it resolves (from the 141a review) | todo | 141a |
+| 173 | task ids are allocated by hand-reading a per-worktree `_index.md`, so concurrent branches collide (3× in one session); add `pnpm task:new` that allocates against origin/main and writes file+row atomically — reduces the rate, ledger gate stays the loud backstop | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
