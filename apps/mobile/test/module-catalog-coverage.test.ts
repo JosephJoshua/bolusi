@@ -52,6 +52,13 @@
  * grammar is defence-in-depth for a manifest that does not route through `defineModule` or for a
  * later relaxation of 04 §1. The part that is load-bearing NOW is `unparsedScreensExportKeys`: it
  * makes the guard state what it covered instead of quietly covering less.
+ *
+ * ── TASK 150: PRESENT, NON-EMPTY, RESOLVABLE — AND STILL BLANK ────────────────────────────────────
+ * Task 132's content block was necessary and still not sufficient, and the residual hole was fix 1's
+ * own shape one level down: `catalogs: { id: { list: { title: '' } } }` is a NON-empty tree whose
+ * every key RESOLVES, so `modulesWithEmptyCatalog`, `unresolvedCatalogKeys` AND the leaf-count floor
+ * are all green while the screen renders nothing at all. `blankCatalogValues` is the companion
+ * detector for that case; its docstring records the reproduction on the real catalogs.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -117,6 +124,14 @@ function parseScreensExportKeys(exportKeys: readonly string[]): string[] {
  * Export keys that LOOK like a screens subpath but that the id grammar cannot parse — the guard
  * asserting its own coverage (T-14). Non-empty means the denominator below is short by that many
  * modules, which is precisely the state that used to read as green.
+ *
+ * SCOPE, stated so a green is not read as more than it is (task 150 item 4): this only inspects keys
+ * matching `SCREENS_EXPORT_SHAPE`, i.e. `./…/screens`. A screen-bearing module exported under a
+ * DIFFERENT shape (`./notes/ui`) is invisible to both this coverage check and the denominator it
+ * guards, and would drop out of both sides of the equalities in silence. What makes that safe is not
+ * this function — it is boundary rule 3 (08 §3.2), which makes `./<id>/screens` the ONLY legal way
+ * apps/mobile can import a module's screens at all. The legality is enforced there; this guard only
+ * covers the ids INSIDE that shape.
  */
 function unparsedScreensExportKeys(exportKeys: readonly string[]): string[] {
   const parsed = new Set(parseScreensExportKeys(exportKeys).map((id) => `./${id}/screens`));
@@ -158,18 +173,30 @@ function catalogRowsWithoutScreens(
   return registered.filter((id) => !bearing.has(id)).sort();
 }
 
-/** Dotted leaf paths of a catalog tree (`{ list: { title: 'Catatan' } }` → `['list.title']`). */
-function leafPaths(tree: CatalogTree, prefix = ''): string[] {
-  const out: string[] = [];
+/**
+ * Dotted leaf paths of a catalog tree PAIRED WITH THEIR VALUES
+ * (`{ list: { title: 'Catatan' } }` → `[['list.title', 'Catatan']]`).
+ *
+ * This is the ONE descent in this file (CLAUDE.md §2.8): `leafPaths` and `blankCatalogValues` are
+ * both folds over it, so the `leafPaths descends nested trees` test below is evidence for BOTH — a
+ * parse that stopped descending cannot be correct for one detector and starved for the other.
+ */
+function leafEntries(tree: CatalogTree, prefix = ''): [path: string, value: unknown][] {
+  const out: [string, unknown][] = [];
   for (const [key, value] of Object.entries(tree)) {
     const path = prefix === '' ? key : `${prefix}.${key}`;
     if (typeof value === 'object' && value !== null) {
-      out.push(...leafPaths(value as CatalogTree, path));
+      out.push(...leafEntries(value as CatalogTree, path));
     } else {
-      out.push(path);
+      out.push([path, value]);
     }
   }
   return out;
+}
+
+/** Dotted leaf paths of a catalog tree (`{ list: { title: 'Catatan' } }` → `['list.title']`). */
+function leafPaths(tree: CatalogTree): string[] {
+  return leafEntries(tree).map(([path]) => path);
 }
 
 /**
@@ -201,6 +228,40 @@ function unresolvedCatalogKeys(
       for (const leaf of leafPaths(row.catalogs[locale])) {
         const key = `${row.moduleId}.${leaf}`;
         if (!resolves(key, locale)) out.push(`${locale}:${key}`);
+      }
+    }
+  }
+  return out.sort();
+}
+
+/**
+ * `<locale>:<moduleId>.<leaf>` for every shipped leaf whose value is not a NON-BLANK STRING — the
+ * hole every generalized assertion above shares (task 150 item 1).
+ *
+ * `leafEntries` counts `''` as a leaf and i18next `exists()` answers TRUE for a defined-but-empty
+ * value, so a catalog whose every value is blank satisfies `modulesWithEmptyCatalog` (the trees are
+ * not empty), `unresolvedCatalogKeys` (every key resolves — to nothing) and the leaf-count floor
+ * (the count is unchanged). Reproduced before this detector existed, on the real catalogs: blanking
+ * all 22 `notes` values left this file 12/12 green (EXIT=0) and `pnpm i18n:check` 9/9 green
+ * (EXIT=0), and the ONLY red in the whole mobile lane was 3 tests inside
+ * `notes-catalog-boot.test.tsx` / `NotesList.test.tsx` — the `notes`-PINNED tests that the task-132
+ * generalization exists to stop depending on. For module #2 a blank catalog would have shipped in
+ * silence, which is the exact defect class (task 122: chrome that renders no label) the whole file
+ * is here to prevent.
+ *
+ * The predicate is `trim() !== ''`, not `!== ''`: `'   '` renders as blank chrome exactly like `''`.
+ * The non-string arm catches a JSON leaf that is a number, boolean or `null` — `t()` yields no
+ * usable label for any of them, and `null` in particular is how a half-finished translation pass
+ * tends to leave a key it could not fill.
+ */
+function blankCatalogValues(rows: readonly CatalogRow[]): string[] {
+  const out: string[] = [];
+  for (const row of rows) {
+    for (const locale of CATALOG_LOCALES) {
+      for (const [leaf, value] of leafEntries(row.catalogs[locale])) {
+        if (typeof value !== 'string' || value.trim() === '') {
+          out.push(`${locale}:${row.moduleId}.${leaf}`);
+        }
       }
     }
   }
@@ -312,10 +373,33 @@ describe('every registered module ships resolvable catalog CONTENT (task 132)', 
     // cannot be masked by the `id` catalog answering for it.
     expect(unresolvedCatalogKeys(CLIENT_SCREEN_MODULES, hasKey)).toEqual([]);
 
-    // This assertion's own denominator (T-14): an empty registry, an empty tree, or a `leafPaths`
-    // that stopped descending would all make the line above pass by checking nothing. Today the
-    // real count is 22 (1 module x 2 locales x 11 keys); the floor sits well under it so adding or
-    // renaming catalog keys never trips it, while a starved parse fails loudly.
+    // This assertion's own denominator (T-14). What the floor ACTUALLY catches is an empty registry
+    // or an empty tree — measured, not assumed: emptying the real catalogs reds this exact line with
+    // `expected 0 to be greater than or equal to 10`. Today the real count is 22 (1 module x 2
+    // locales x 11 keys), so the floor sits well under it and adding or renaming catalog keys never
+    // trips it.
+    //
+    // What the floor does NOT catch is a `leafEntries` that stopped descending, and this comment
+    // used to claim it did (task 150 item 2 — CLAUDE.md §2.11: a comment is a hypothesis, so it was
+    // falsified rather than believed). Measured, by forcing the descent to depth 1: THIS WHOLE TEST
+    // stays green — the count is 12 (6 top-level keys x 2 locales, still >= 10) and
+    // `unresolvedCatalogKeys` passes too, because i18next `exists()` answers true for a PARENT node
+    // like `notes.action`. The depth guarantee belongs to `leafPaths descends nested trees` below,
+    // which is the assertion that reds for it (`blankCatalogValues` reds as well, incidentally: a
+    // parent node is not a string. That is a side effect of its predicate, not its purpose — do not
+    // rely on it as the depth guard).
+    expect(shippedLeafCount(CLIENT_SCREEN_MODULES)).toBeGreaterThanOrEqual(10);
+  });
+
+  test('no registered module ships a BLANK catalog value in any locale (task 150)', () => {
+    // Membership, non-emptiness and resolution can ALL be green while every label is `''` — see
+    // `blankCatalogValues` for the reproduction on the real catalogs. This is the assertion that
+    // makes "the catalog ships" mean "the screen renders words".
+    expect(blankCatalogValues(CLIENT_SCREEN_MODULES)).toEqual([]);
+
+    // Same denominator move, load-bearing for the same reason: a fold over zero leaves returns `[]`.
+    // Sharing `shippedLeafCount` with the assertion above means the two cannot disagree about how
+    // much they looked at.
     expect(shippedLeafCount(CLIENT_SCREEN_MODULES)).toBeGreaterThanOrEqual(10);
   });
 
@@ -344,9 +428,76 @@ describe('every registered module ships resolvable catalog CONTENT (task 132)', 
     expect(unresolvedCatalogKeys(ghost, () => true)).toEqual([]);
   });
 
+  test('the blank detector NAMES every blank SHAPE, and stays silent on a short REAL value', () => {
+    // `''` and whitespace-only both render as blank chrome, so both are gaps. `'OK'` is a
+    // legitimately short label — the positive control that keeps this from being a length rule.
+    expect(
+      blankCatalogValues([
+        {
+          moduleId: 'ghost',
+          catalogs: { id: { a: '', b: '   ', c: 'OK' }, en: { a: 'x', b: 'y', c: 'z' } },
+        },
+      ]),
+    ).toEqual(['id:ghost.a', 'id:ghost.b']);
+
+    // A leaf that is not a string at all yields no usable label either, and each is named.
+    expect(
+      blankCatalogValues([
+        {
+          moduleId: 'ghost',
+          catalogs: { id: { n: 1, b: false, z: null }, en: { n: 'a', b: 'b', z: 'c' } },
+        },
+      ]),
+    ).toEqual(['id:ghost.b', 'id:ghost.n', 'id:ghost.z']);
+
+    // Nested, because every shipped catalog is nested: a blank two levels down must still be named
+    // by its full path — a detector that only read the top level would report nothing here.
+    expect(
+      blankCatalogValues([
+        {
+          moduleId: 'ghost',
+          catalogs: { id: { list: { title: '' } }, en: { list: { title: 'Notes' } } },
+        },
+      ]),
+    ).toEqual(['id:ghost.list.title']);
+
+    // A whole nested tree of blanks — the shape the reviewer produced from the real catalogs — is
+    // reported leaf by leaf, per locale, rather than collapsed to one finding.
+    expect(
+      blankCatalogValues([
+        {
+          moduleId: 'ghost',
+          catalogs: {
+            id: { list: { title: '', empty: '' } },
+            en: { list: { title: '', empty: '' } },
+          },
+        },
+      ]),
+    ).toEqual([
+      'en:ghost.list.empty',
+      'en:ghost.list.title',
+      'id:ghost.list.empty',
+      'id:ghost.list.title',
+    ]);
+
+    // A fully populated row is silent — the detector is not simply returning everything it is given.
+    expect(
+      blankCatalogValues([
+        {
+          moduleId: 'ghost',
+          catalogs: { id: { list: { title: 'Catatan' } }, en: { list: { title: 'Notes' } } },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
   test('leafPaths descends nested trees — the parse the content assertions depend on', () => {
-    // T-13: the oracle above is only as good as this. A `leafPaths` that stopped at depth 1 would
-    // make `unresolvedCatalogKeys` probe `notes.list` (which does not resolve) or nothing at all.
+    // T-13: the oracle above is only as good as this. A `leafEntries` that stopped at depth 1 would
+    // make `unresolvedCatalogKeys` probe `notes.list` — which i18next `exists()` answers TRUE for,
+    // being a parent node — so that assertion would NOT red, and neither would the leaf-count floor
+    // (12 >= 10): forcing the descent to depth 1 leaves `the production boot RESOLVES every shipped
+    // leaf` fully GREEN. This test is the one that OWNS the depth guarantee, which is why the
+    // floor's comment above no longer claims the job (task 150 item 2).
     expect(leafPaths({ list: { title: 'Catatan' }, badge: { archived: 'Diarsipkan' } })).toEqual([
       'list.title',
       'badge.archived',

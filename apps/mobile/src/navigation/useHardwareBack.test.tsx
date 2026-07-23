@@ -27,6 +27,48 @@
  *     predictive back / `onBackPressed` dispatch on a real device. "Typed and compiling" is not
  *     "running on the target": the ordering rule this lane assumes is the double's re-statement of
  *     the docs, not a measurement of the platform. Only L6 (on-device) can close that.
+ *
+ * ── TWO LIMITS THE ABOVE UNDERSTATES (task 150 item 5) ────────────────────────────────────────────
+ *  A. **The double is STRICTER than shipped RN 0.86, so "subscribed exactly once" measures the
+ *     DOUBLE's policy, not Android's.** RN's `addEventListener` dedupes on add
+ *     (`if (_backPressSubscriptions.indexOf(handler) === -1) push` —
+ *     `react-native@0.86.0/Libraries/Utilities/BackHandler.android.js`); the double pushes
+ *     unconditionally. So a hook that registered the same reference twice reds here and would be
+ *     invisible on device. That is a false-RED risk only, never a false-green — see the divergence
+ *     note in `test/doubles/react-native.tsx`, and do not relax this test to match the platform.
+ *
+ *  B. **Predictive back may invalidate the ORDERING PREMISE, not merely be an untested path.** The
+ *     line above names predictive back as something this lane cannot exercise. It is worse than
+ *     that, and the claim was checked at the platform docs and against the shipped source rather
+ *     than assumed (CLAUDE.md §2.11):
+ *       - Android 16 (API 36) behaviour change, verbatim: "For apps targeting Android 16 (API level
+ *         36) or higher and running on an Android 16 or higher device, the predictive back system
+ *         animations … are enabled by default. Additionally, `onBackPressed` is not called and
+ *         `KeyEvent.KEYCODE_BACK` is not dispatched anymore."
+ *         (developer.android.com/about/versions/16/behavior-changes-16). Note the polarity: since
+ *         Android 16 the manifest flag `android:enableOnBackInvokedCallback` is the temporary
+ *         OPT-OUT, not the opt-in it was on Android 13/14 — so the new dispatch model is the
+ *         DEFAULT for a targetSdk-36 build, not a path someone has to switch on.
+ *       - RN 0.86 therefore does NOT deliver `hardwareBackPress` from `onBackPressed` on such a
+ *         build. `ReactActivity.java` registers an `androidx.activity.OnBackPressedCallback` on the
+ *         activity's `OnBackPressedDispatcher`, gated on `AndroidVersion.isAtLeastTargetSdk36`, and
+ *         says so in its own comment: "Due to enforced predictive back on targetSdk 36,
+ *         'onBackPressed()' is disabled by default. Using a workaround to trigger it manually." The
+ *         JS array this file models sits BEHIND that single shim callback.
+ *     What that costs us: the reverse-order rule WITHIN the JS array is unchanged (RN still iterates
+ *     `_backPressSubscriptions` backwards), so the assertions above stay meaningful. What is NOT
+ *     modelled is the JS stack's POSITION and liveness in the native dispatcher — it is one callback
+ *     among several (`ReactModalHostView` registers its own `OnBackPressedCallback(true)` on a
+ *     shown Modal's dispatcher, entirely outside this array), and RN's shim disables and re-enables
+ *     itself mid-dispatch. That path has already shipped a real defect in the exact version we
+ *     depend on: RN 0.86's release notes carry a fix for `BackHandler` callbacks on Android API 36+
+ *     that "stopped working after an app was resumed from the background", repaired by re-registering
+ *     during `onHostResume`. A whole-lane green here would not have moved.
+ *     The app pins no `targetSdkVersion` (no committed `android/`, no `expo-build-properties`
+ *     override in `app.config.ts`), so the effective target comes from Expo SDK 57's prebuild
+ *     template and is not determinable from this repo — which is the reason to treat the shim path
+ *     as LIVE rather than hypothetical. Only an L6 on-device run settles it, and task 148 currently
+ *     blocks any Android build at all.
  */
 import { describe, expect, test, beforeEach } from 'vitest';
 
