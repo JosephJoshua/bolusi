@@ -32,7 +32,11 @@ export interface HarnessRunners {
   readonly seedSpec: Seed200kSpec;
   /** Build the canonical SEED-200K history (seed 42) — the on-device rebuild subject. */
   buildSeed(): ScriptOp[];
-  /** Run SEC-DEV-06's at-rest leg (with its positive control) against real SQLCipher. */
+  /**
+   * Run SEC-DEV-06's at-rest leg (with its positive control) against the real app-layer column
+   * cipher. NOT SQLCipher — D22 removed it entirely (task 148); the DB file is plain SQLite by
+   * design and only the signed-off columns are sealed (10-db §9.7).
+   */
   runAtRest(env: AtRestDeviceEnv): Promise<HarnessGateResult>;
   /** The gate ids the driver's parser requires green. */
   readonly requiredGateIds: readonly string[];

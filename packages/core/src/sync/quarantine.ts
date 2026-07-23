@@ -30,6 +30,7 @@ import { sql, type Kysely } from 'kysely';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { base64ToBytes } from '../crypto/bytes.js';
+import { encryptColumnValue } from '../crypto/column-cipher.js';
 import type { CryptoPort } from '../crypto/port.js';
 import { hashSignedCore, verifyOp } from '../crypto/signed-core.js';
 import type { SignedCore } from '@bolusi/schemas';
@@ -119,12 +120,18 @@ export interface QuarantinedOp {
 /**
  * Insert a quarantine row (10-db §9.5). Idempotent on `id`: a re-pull of the same bad op must not
  * fail the batch on a PK collision — the op is already held, which is the desired state.
+ *
+ * `signed_core_jcs` carries the quarantined op's full business payload, so it is sealed at rest
+ * (D22 addendum 2 #10) exactly as `operations.signed_core_jcs` is — a held-aside op is not less
+ * sensitive than an applied one. `hash`/`signature` stay plaintext (neither is secret) and
+ * `server_seq`/`reason` stay plaintext because the release path orders and filters on them.
  */
 export async function insertQuarantinedOp<DB>(db: Kysely<DB>, row: QuarantinedOp): Promise<void> {
   await sql`
     INSERT OR IGNORE INTO quarantined_ops
       (id, device_id, server_seq, signed_core_jcs, hash, signature, reason, quarantined_at)
-    VALUES (${row.id}, ${row.deviceId}, ${row.serverSeq}, ${row.signedCoreJcs}, ${row.hash},
+    VALUES (${row.id}, ${row.deviceId}, ${row.serverSeq},
+            ${encryptColumnValue(db, row.signedCoreJcs)}, ${row.hash},
             ${row.signature}, ${row.reason}, ${row.quarantinedAt})
   `.execute(db);
 }

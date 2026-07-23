@@ -4,8 +4,11 @@
 // the driver: how many times it opens, what key it passes, which pragmas it issues in
 // which order, and what it refuses to do when the key is wrong or missing. A real driver
 // would hide exactly those observations.
+import * as nodeCrypto from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+import { createNodeCompatibleAead } from '../src/crypto/aead.js';
 import {
   CLIENT_PRAGMAS,
   closeClientDb,
@@ -17,12 +20,18 @@ import {
 } from '../src/connection.js';
 import type { DbDriver, DbDriverOpenParams, DbQueryResult } from '../src/driver.js';
 
-// Stand-in for the real SQLCipher key (32 CSPRNG bytes as hex — 10-db §9). Deliberately
-// an obviously-fake, low-entropy literal: a realistic random hex string here trips the
-// mandatory secret scanner (security-guide §10, SEC-SECRET-02), and nothing these tests
-// prove depends on the value's shape — redaction is a plain string replace, and the fake
-// driver never parses it.
-const FAKE_DB_KEY = 'fake-sqlcipher-key-for-tests-never-a-real-secret';
+// Stand-in for the real database key (32 CSPRNG bytes as hex — 10-db §9/§12). Deliberately an
+// obviously-fake, low-entropy REPEATING pattern: a realistic random hex string here trips the
+// mandatory secret scanner (security-guide §10, SEC-SECRET-02).
+//
+// It must nonetheless be VALID 64-char hex, which it was not before D22 and now has to be: the key no
+// longer goes to `open()` as an opaque SQLCipher string — it is decoded to the 32 raw bytes of the
+// AES-256-GCM column cipher, so a non-hex key now fails the open (which is itself correct behaviour,
+// and is asserted separately below).
+const FAKE_DB_KEY = 'a'.repeat(64);
+
+/** The Node AES-256-GCM binding the column cipher runs on in CI (device binds quick-crypto). */
+const testAead = createNodeCompatibleAead(nodeCrypto);
 
 /** Awaits an open that MUST fail and returns the thrown error. Fails loudly if the open
  * unexpectedly succeeds — a silent success here would vacate the assertions that follow. */
@@ -80,7 +89,7 @@ function createHarness(options: { key?: string | null; openFails?: Error } = {})
     if (options.openFails) return Promise.reject(options.openFails);
     return Promise.resolve(createFakeDriver(log));
   });
-  return { log, driverFactory, keyStore: { getDatabaseEncryptionKey } };
+  return { log, driverFactory, keyStore: { getDatabaseEncryptionKey }, aead: testAead };
 }
 
 afterEach(async () => {
@@ -88,19 +97,19 @@ afterEach(async () => {
 });
 
 describe('open path', () => {
-  test('reads the key via the injected getter exactly once and passes it as encryptionKey', async () => {
+  test('reads the key via the injected getter exactly once and NEVER hands it to the driver', async () => {
     const h = createHarness();
-    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead });
 
     expect(h.keyStore.getDatabaseEncryptionKey).toHaveBeenCalledTimes(1);
-    expect(h.log.opens).toEqual([
-      { name: DEFAULT_DATABASE_NAME, location: undefined, encryptionKey: FAKE_DB_KEY },
-    ]);
+    // D22: the key drives the app-layer column cipher, NOT `open()`. SQLCipher is gone, so the driver
+    // is handed no key at all — asserted as an exact shape so a re-added `encryptionKey` fails here.
+    expect(h.log.opens).toEqual([{ name: DEFAULT_DATABASE_NAME, location: undefined }]);
   });
 
   test('applies the spec pragmas post-open, in order', async () => {
     const h = createHarness();
-    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead });
 
     // 10-db §9 preamble: WAL first — it is what makes one connection sufficient.
     expect(h.log.executed.slice(0, CLIENT_PRAGMAS.length)).toEqual([
@@ -117,6 +126,7 @@ describe('open path', () => {
     await openClientDb({
       driverFactory: h.driverFactory,
       keyStore: h.keyStore,
+      aead: h.aead,
       name: 'other.db',
       location: ':memory:',
     });
@@ -130,22 +140,26 @@ describe('single-connection invariant', () => {
   // rule the whole wrapper exists to hold.
   test('a second open while a connection is live throws', async () => {
     const h = createHarness();
-    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead });
 
     await expect(
-      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore }),
+      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead }),
     ).rejects.toMatchObject({ name: 'DbOpenError', code: 'already_open' });
     expect(h.driverFactory).toHaveBeenCalledTimes(1);
   });
 
   test('close then open succeeds', async () => {
     const h = createHarness();
-    const first = await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    const first = await openClientDb({
+      driverFactory: h.driverFactory,
+      keyStore: h.keyStore,
+      aead: h.aead,
+    });
     await first.close();
     expect(isClientDbOpen()).toBe(false);
     expect(h.log.closes).toBe(1);
 
-    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead });
     expect(isClientDbOpen()).toBe(true);
     expect(h.driverFactory).toHaveBeenCalledTimes(2);
   });
@@ -155,6 +169,7 @@ describe('single-connection invariant', () => {
     const connection = await openClientDb({
       driverFactory: h.driverFactory,
       keyStore: h.keyStore,
+      aead: h.aead,
     });
 
     // Drive both surfaces, then prove no extra handle was ever constructed.
@@ -169,7 +184,11 @@ describe('single-connection invariant', () => {
     expect(() => getClientDb()).toThrow(DbOpenError);
 
     const h = createHarness();
-    const connection = await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    const connection = await openClientDb({
+      driverFactory: h.driverFactory,
+      keyStore: h.keyStore,
+      aead: h.aead,
+    });
     expect(getClientDb()).toBe(connection);
   });
 });
@@ -177,7 +196,11 @@ describe('single-connection invariant', () => {
 describe('transaction helper', () => {
   test('commits on success and rolls back on throw', async () => {
     const h = createHarness();
-    const connection = await openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore });
+    const connection = await openClientDb({
+      driverFactory: h.driverFactory,
+      keyStore: h.keyStore,
+      aead: h.aead,
+    });
     const commit = vi.spyOn(connection.driver, 'commit');
     const rollback = vi.spyOn(connection.driver, 'rollback');
 
@@ -212,20 +235,27 @@ describe('SEC-DEV-06 DB at rest is ciphertext', () => {
     vi.restoreAllMocks();
   });
 
-  test('wrong key: driver open error surfaces as a typed DbOpenError with no unkeyed retry', async () => {
+  test('a driver open failure surfaces as a typed DbOpenError with no retry', async () => {
     const h = createHarness({ openFails: new Error('file is not a database') });
 
     await expect(
-      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore }),
+      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead }),
     ).rejects.toMatchObject({ name: 'DbOpenError', code: 'driver_open_failed' });
 
-    // Exactly one open attempt, and it carried the key. A retry — or any attempt with a
-    // missing/blank encryptionKey — would be a silent plaintext-fallback path.
+    // Exactly ONE open attempt. A retry would be the shape a fallback path takes; there is none.
     expect(h.driverFactory).toHaveBeenCalledTimes(1);
     expect(h.log.opens).toHaveLength(1);
-    for (const attempt of h.log.opens) {
-      expect(attempt.encryptionKey).toBe(FAKE_DB_KEY);
-    }
+    expect(isClientDbOpen()).toBe(false);
+  });
+
+  test('a key that is not 32 bytes of hex fails the open — never a weaker cipher', async () => {
+    // The D22 replacement for "SQLCipher rejected the key": the key is now cipher material, so a
+    // malformed one must stop the open BEFORE any row is written, not degrade to something weaker.
+    const h = createHarness({ key: 'not-hex-and-far-too-short' });
+
+    await expect(
+      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead }),
+    ).rejects.toMatchObject({ name: 'DbOpenError', code: 'driver_open_failed' });
     expect(isClientDbOpen()).toBe(false);
   });
 
@@ -233,7 +263,7 @@ describe('SEC-DEV-06 DB at rest is ciphertext', () => {
     const h = createHarness({ key: null });
 
     await expect(
-      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore }),
+      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead }),
     ).rejects.toMatchObject({ name: 'DbOpenError', code: 'missing_key' });
     expect(h.driverFactory).not.toHaveBeenCalled();
   });
@@ -242,7 +272,7 @@ describe('SEC-DEV-06 DB at rest is ciphertext', () => {
     const h = createHarness({ key: '' });
 
     await expect(
-      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore }),
+      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead }),
     ).rejects.toMatchObject({ name: 'DbOpenError', code: 'missing_key' });
     expect(h.driverFactory).not.toHaveBeenCalled();
   });
@@ -254,7 +284,7 @@ describe('SEC-DEV-06 DB at rest is ciphertext', () => {
     });
 
     const error = await expectOpenToFail(
-      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore }),
+      openClientDb({ driverFactory: h.driverFactory, keyStore: h.keyStore, aead: h.aead }),
     );
 
     expect(error.message).not.toContain(FAKE_DB_KEY);
@@ -281,6 +311,7 @@ describe('SEC-DEV-06 DB at rest is ciphertext', () => {
       openClientDb({
         driverFactory,
         keyStore: { getDatabaseEncryptionKey: () => Promise.resolve(FAKE_DB_KEY) },
+        aead: testAead,
       }),
     );
 

@@ -23,7 +23,12 @@ import {
   type TimerPort,
 } from '@bolusi/core';
 import { closeClientDb } from '@bolusi/db-client';
-import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+import {
+  mulberry32,
+  noblePort,
+  randomBytes as prngBytes,
+  nodeColumnAead,
+} from '@bolusi/test-support';
 import type { SignedOperation } from '@bolusi/schemas';
 import { act } from 'react';
 
@@ -78,6 +83,7 @@ function bootAt(location: string): Promise<Bootstrapped> {
       ensureDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)),
       getDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)),
     } as unknown as Parameters<typeof bootstrap>[0]['keyStore'],
+    aead: nodeColumnAead,
     crypto: fakeCrypto as unknown as Parameters<typeof bootstrap>[0]['crypto'],
     clock: { now: () => FIXED_NOW },
     databaseLocation: location,

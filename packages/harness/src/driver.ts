@@ -111,3 +111,14 @@ function createDriver(db: BetterSqlite3Database): DbDriver {
 export function openMemoryDriver(): DbDriver {
   return createDriver(new Database(':memory:'));
 }
+
+/**
+ * Opens a FILE-backed better-sqlite3 driver.
+ *
+ * `:memory:` cannot answer the at-rest question: proving "the sensitive columns are ciphertext on
+ * disk" requires bytes on a disk to read back (D22; security-guide §6.4). This is the driver the
+ * at-rest column-encryption probe opens its database through.
+ */
+export function openFileDriver(path: string): DbDriver {
+  return createDriver(new Database(path));
+}

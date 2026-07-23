@@ -10,7 +10,7 @@
 import { readSyncState, type RealtimeController } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import type { PullRequest, PullResponse, PushRequest, PushResponse } from '@bolusi/schemas';
-import { noblePort } from '@bolusi/test-support';
+import { noblePort, nodeColumnAead } from '@bolusi/test-support';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
@@ -135,6 +135,7 @@ beforeEach(async () => {
   db = await openClientDb({
     driverFactory: openBetterSqlite3Driver,
     keyStore: { getDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)) },
+    aead: nodeColumnAead,
     location: ':memory:',
   });
   await runClientMigrations(db.driver, { now: () => 1 });

@@ -39,3 +39,18 @@ Make the config discoverable on both platforms (most likely: the block moves to,
 
 ## Note
 Task 85 was closed on this lane's green. That closure remains correct about what it claimed (compile/link, CocoaPods, `Info.plist` vs tasks 83/87, does-it-launch) — but it must be read knowing SQLCipher was **off** in that build. The task-85 file has been annotated.
+
+---
+
+## RE-SCOPED 2026-07-22 by task 148 (D22): the SECURITY half of this task is DISSOLVED, not fixed — do not close it, and do not work the old premise
+
+Task 148 landed D22: **`sqlcipher` is now OFF on BOTH platforms, deliberately.** op-sqlite's SQLCipher build vendored a second `libcrypto.so` that collided with react-native-quick-crypto's and made the Android APK unassemblable, so at-rest confidentiality moved to **application-layer AES-256-GCM over the sensitive columns** (10-db §9.7; security-guide §6.4), keyed by the same 32-byte SecureStore key.
+
+**What that does to this task:**
+
+1. **"iOS ships an unencrypted client database" is NO LONGER A BUG — the premise is gone.** The encryption is now platform-agnostic JavaScript running through quick-crypto (which iOS links anyway), so it applies identically on iOS and Android. There is no longer a "SQLCipher on/off" state for the podspec to get wrong, and the two platforms' at-rest posture is now the same by construction rather than by configuration.
+2. **The "expect this same collision on iOS the moment 151 is fixed" warning is PRE-EMPTED.** op-sqlite links no OpenSSL on either platform now, so fixing the config discovery cannot resurrect the collision.
+3. **The ROOT CAUSE SURVIVES and is this task's REMAINING SCOPE.** The podspec's config discovery walks to the pnpm repo root and never finds the `op-sqlite` block at `apps/mobile/package.json`. That block still exists and still carries **`performanceMode: true`**. So the live question is no longer "is SQLCipher on?" but **"is `performanceMode` actually discovered and applied on iOS, or is it silently dropped the same way `sqlcipher` was?"** — a D6 performance-pin question, not a security one.
+4. **The SEC-id hunt in the header is ANSWERED and should not be pursued as written.** The at-rest row is `SEC-DEV-06`, it is owned by the 148 lane, and D22 reshaped its claim (sensitive VALUES ciphertext; structure plaintext). This task claims no SEC id.
+
+**Re-scoped title/goal:** *prove `performanceMode` is discovered and applied on iOS* (and, while in there, that the config-discovery walk is fixed or documented as unfixable for a pnpm workspace). **Priority drops from HIGH-security to a performance/config correctness item.** The old security framing above is retained as the historical record of how this was found — it is no longer the work.

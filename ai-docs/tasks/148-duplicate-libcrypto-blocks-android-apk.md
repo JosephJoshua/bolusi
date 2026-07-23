@@ -1,6 +1,6 @@
 # TASK 148 — the Android APK CANNOT BE ASSEMBLED: op-sqlite (SQLCipher) and react-native-quick-crypto each ship their own `libcrypto.so`, and `:app:mergeReleaseNativeLibs` refuses
 
-**Status:** in-review
+**Status:** done
 **Priority:** **HIGH — nothing Android ships until this is fixed.** There is no APK. Every device- and emulator-gated claim in the repo sits behind this, including task 27a, task 117 (Maestro), and SEC-AUTH-09 leg 1.
 **Depends on:** 27a (whose lane surfaced it)
 **Blocks:** 27a, 117, 28 (SEC-AUTH-09 leg 1 needs real SQLCipher on the emulator)

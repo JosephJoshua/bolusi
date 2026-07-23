@@ -56,6 +56,7 @@ import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/boots
 import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
 import { SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
 import { openBetterSqlite3Driver, openedWith, resetOpenedWith } from './better-sqlite3-driver.js';
+import { nodeColumnAead } from '@bolusi/test-support';
 
 /**
  * A CSPRNG stand-in: deterministic across a run (T-6) but DIFFERENT ON EVERY CALL.
@@ -110,6 +111,7 @@ function boot(location?: string) {
   return bootstrap({
     driverFactory: openBetterSqlite3Driver,
     keyStore: new SecureStoreDbKeyStore(fakeCrypto),
+    aead: nodeColumnAead,
     crypto: fakeCrypto,
     clock,
     databaseLocation: location ?? ':memory:',
@@ -220,16 +222,20 @@ describe('EXACTLY ONE connection per DB, app-wide (08 §2.2 — a data-corruptio
   });
 });
 
-describe('the SQLCipher key (security-guide §6.4) — a §2.5 security surface', () => {
-  test('the key reaching the driver is the one SecureStore holds, and it is 32 bytes of hex', async () => {
+describe('the database key (security-guide §6.4) — a §2.5 security surface', () => {
+  test('the key is 32 bytes of hex in SecureStore, and NEVER travels to the driver (D22)', async () => {
     const app = await boot();
 
+    // §6.4: "Key = 32 CSPRNG bytes". Hex ⇒ 64 lowercase chars. A key that was 16 bytes, or that came
+    // from somewhere other than the store, passes neither assertion.
+    const stored = secureStore.get('bolusi.db_encryption_key');
+    expect(stored).toMatch(/^[0-9a-f]{64}$/);
+
+    // D22 dropped SQLCipher, so `open()` takes NO key: the same bytes now drive the app-layer column
+    // cipher instead. Asserted on the recorded open params so a re-added key field fails here — the
+    // key must not start flowing to a driver again without this test noticing.
     expect(openedWith).toHaveLength(1);
-    const key = openedWith[0]?.encryptionKey;
-    // §6.4: "Key = 32 CSPRNG bytes". Hex ⇒ 64 lowercase chars. Asserting the SHAPE and the SOURCE:
-    // a key that was 16 bytes, or that came from somewhere other than the store, passes neither.
-    expect(key).toMatch(/^[0-9a-f]{64}$/);
-    expect(key).toBe(secureStore.get('bolusi.db_encryption_key'));
+    expect(Object.keys(openedWith[0] ?? {})).not.toContain('encryptionKey');
     await app.close();
   });
 
@@ -246,7 +252,12 @@ describe('the SQLCipher key (security-guide §6.4) — a §2.5 security surface'
     await second.close();
 
     expect(secureStore.get('bolusi.db_encryption_key')).toBe(firstKey);
-    expect(openedWith.map((p) => p.encryptionKey)).toStrictEqual([firstKey, firstKey]);
+    // Both boots opened the same file, and neither carried key material to the driver (D22): the
+    // generate-once property now protects the COLUMN CIPHER's key rather than SQLCipher's.
+    expect(openedWith).toHaveLength(2);
+    for (const params of openedWith) {
+      expect(Object.keys(params)).not.toContain('encryptionKey');
+    }
     // Written exactly once across two boots — the second boot READ, it did not mint.
     expect(vi.mocked(SecureStore.setItemAsync).mock.calls).toHaveLength(1);
   });
@@ -302,6 +313,7 @@ describe('the SQLCipher key (security-guide §6.4) — a §2.5 security surface'
       bootstrap({
         driverFactory: openBetterSqlite3Driver,
         keyStore,
+        aead: nodeColumnAead,
         crypto: fakeCrypto,
         clock,
         databaseLocation: ':memory:',
@@ -558,6 +570,7 @@ describe('restore-to-new-hardware self-heals instead of bricking (task 91 — se
     return bootstrap({
       driverFactory,
       keyStore: new SecureStoreDbKeyStore(fakeCrypto),
+      aead: nodeColumnAead,
       crypto: fakeCrypto,
       clock,
       databaseLocation: location,

@@ -430,13 +430,16 @@ export function Root({
       //
       // NAMING THE CASES THIS NO-CATCH DOES NOT HANDLE (security-guide §6.6; task 91): this stance is
       // right for a genuinely corrupt or transiently unopenable DB — fail loud, don't fake a shell.
-      // It was WRONG for exactly one case it silently also decided not to handle: a restored device
-      // (an iOS restore-to-new-hardware restores `bolusi.db` but not its THIS_DEVICE_ONLY key), whose
-      // wrong-key open is not a corrupt DB but a fresh device wearing old ciphertext. That case is now
-      // healed INSIDE the injected `boot` (index.ts wires `bootWithLocalRecovery`, which wipes and
-      // re-enrols on `not_a_database`/`missing_key`), so by the time it resolves here the DB is either
-      // openable or genuinely failed — and this no-catch is retained ONLY for the latter. A comment
-      // that justifies not handling an error must say which errors; this one now does.
+      // The injected `boot` (index.ts wires `bootWithLocalRecovery`) self-heals a DB that throws
+      // `not_a_database`/`missing_key` by wiping and re-enrolling, so those classes never reach here.
+      //
+      // ⚠️ ONE case is neither healed there NOR caught here, POST-D22: a restored device (iOS
+      // restore-to-new-hardware restores `bolusi.db` but not its THIS_DEVICE_ONLY key). Under
+      // SQLCipher its wrong-key open was a loud `not_a_database` the self-heal caught. Now `open()`
+      // takes no key and the restored PLAINTEXT file OPENS, so `boot()` RESOLVES — this no-catch sees
+      // a success — and the app boots half-enrolled, throwing AEAD errors deep in the UI. That is the
+      // `KNOWN GAP SINCE D22` in recovery.ts, filed as task 160 (a decrypt-probe at boot). Do not read
+      // this no-catch as covering the restore case: it covers only a DB that fails to open at all.
       const booting = await boot();
 
       // Wire the enrollment caller over the booted app. `onEnrolled` fires AFTER `runEnrollment`

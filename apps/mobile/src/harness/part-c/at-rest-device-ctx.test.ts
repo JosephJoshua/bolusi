@@ -2,12 +2,16 @@
 // its positive control are unit-proven in @bolusi/test-support; what THIS test binds is the ctx that
 // wires them in the right ORDER — the CRUX: the positive control runs FIRST, and a vacuous seed
 // short-circuits to a red gate WITHOUT ever trusting the ciphertext result. On the emulator the seams
-// are real SQLCipher / a real unencrypted control DB; here they are fakes, which is enough to prove
-// the ordering because the ordering is all that this file decides.
+// are the real app-layer column cipher / a real cipher-disabled control DB (NOT SQLCipher — D22
+// removed it, task 148); here they are fakes, which is enough to prove the ordering because the
+// ordering is all that this file decides.
 import { describe, expect, test } from 'vitest';
 
-import type { DbDriver } from '@bolusi/db-client';
-import type { AtRestProbeContext } from '@bolusi/test-support';
+import {
+  AT_REST_ENCRYPTED_COLUMNS,
+  type AtRestProbeContext,
+  type SealedCell,
+} from '@bolusi/test-support';
 
 import { AT_REST_GATE_ID, runAtRestGate, type AtRestDeviceEnv } from './at-rest-device-ctx.js';
 
@@ -30,46 +34,47 @@ function controlWithMarkers(): Uint8Array {
   return bytes;
 }
 
-/** A full DbDriver fake (typed on purpose — a partial cast would hide a probe reaching a new method). */
-function driver(overrides: Partial<DbDriver> = {}): DbDriver {
-  return {
-    execute: () => Promise.resolve({ rows: [{ c: 7 }], rowsAffected: 0, insertId: null }),
-    executeBatch: () => Promise.resolve({ rowsAffected: 0 }),
-    prepare: () => ({
-      execute: () => Promise.resolve({ rows: [], rowsAffected: 0, insertId: null }),
-      finalize: () => Promise.resolve(),
-    }),
-    begin: () => Promise.resolve(),
-    commit: () => Promise.resolve(),
-    rollback: () => Promise.resolve(),
-    close: () => Promise.resolve(),
-    ...overrides,
-  };
+const SEALED_PREFIX = `${String.fromCharCode(1)}gcm1:AAAAAAAAAAAA:`;
+
+/** Every signed-off column, observed and sealed — a healthy post-D22 device. */
+function sealedCells(): SealedCell[] {
+  return AT_REST_ENCRYPTED_COLUMNS.map(([table, column]) => ({
+    table,
+    column,
+    value: `${SEALED_PREFIX}c2VhbGVk`,
+  }));
 }
 
-/** A ciphertext probe ctx: every open is refused, bytes carry no plaintext. */
+/**
+ * A HEALTHY probe ctx. Note what it now looks like: the file bytes START with the plain-SQLite magic,
+ * because post-D22 that is correct — the FILE is plain SQLite and only the COLUMNS are sealed. The
+ * previous version of this fake asserted the opposite and kept this suite green while the real gate
+ * would have gone red on healthy hardware.
+ */
 function ciphertextCtx(): AtRestProbeContext {
   return {
-    openCopy: () => Promise.reject(new Error('file is not a database')),
-    readCopyBytes: () => Promise.resolve(new Uint8Array([0x9a, 0x41, 0x00, 0xd3])),
-    wrongKey: 'ff'.repeat(32),
+    readCopyBytes: () => Promise.resolve(encode('SQLite format 3\u0000blobs')),
     plaintextMarkers: MARKERS,
+    readSealedCells: () => Promise.resolve(sealedCells()),
+    sealedPrefix: SEALED_PREFIX,
   };
 }
 
-/** A LEAKY probe ctx: the DB opens unkeyed and the bytes carry a marker — not ciphertext. */
+/** A LEAKY probe ctx: a seeded marker survives in the bytes and one column is stored unsealed. */
 function plaintextCtx(): AtRestProbeContext {
+  const cells = sealedCells();
+  cells[4] = { table: 'notes', column: 'body', value: MARKERS[0] ?? '' };
   return {
-    openCopy: () => Promise.resolve(driver()),
     readCopyBytes: () =>
       Promise.resolve(new Uint8Array([...encode('SQLite format 3'), ...encode(MARKERS[0] ?? '')])),
-    wrongKey: 'ff'.repeat(32),
     plaintextMarkers: MARKERS,
+    readSealedCells: () => Promise.resolve(cells),
+    sealedPrefix: SEALED_PREFIX,
   };
 }
 
 describe('runAtRestGate — positive control before ciphertext trust (CRUX, T-14b)', () => {
-  test('PASS: control witnessed AND the SQLCipher file is ciphertext', async () => {
+  test('PASS: control witnessed AND every protected column is sealed', async () => {
     const env: AtRestDeviceEnv = {
       plaintextMarkers: MARKERS,
       seedUnencryptedControl: () => Promise.resolve(controlWithMarkers()),
@@ -99,7 +104,7 @@ describe('runAtRestGate — positive control before ciphertext trust (CRUX, T-14
     expect(encryptedProbed).toBe(false);
   });
 
-  test('FAIL: control witnessed but the SQLCipher file leaks plaintext', async () => {
+  test('FAIL: control witnessed but a protected column is stored unsealed', async () => {
     const env: AtRestDeviceEnv = {
       plaintextMarkers: MARKERS,
       seedUnencryptedControl: () => Promise.resolve(controlWithMarkers()),

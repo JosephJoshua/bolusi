@@ -4,6 +4,7 @@
 export const PACKAGE_NAME = '@bolusi/test-support' as const;
 
 export { noblePort } from './crypto/noble-port.js';
+export { nodeColumnAead } from './crypto/node-column-aead.js';
 export {
   generateSignedCore,
   generateSignedCores,

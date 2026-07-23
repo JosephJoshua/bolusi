@@ -8,6 +8,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import { TENANT_ID_META_KEY } from '../authz/directory.js';
+import { encryptColumnValue } from '../crypto/column-cipher.js';
 import { jsonColumnToObject, type JsonColumnValue } from '../projection/columns.js';
 import { int8ToNumber, type Int8Value } from '../projection/int8.js';
 import { clampIdleLockSeconds } from './constants.js';
@@ -163,7 +164,14 @@ export async function deviceHasGenesis<DB>(db: Kysely<DB>, deviceId: string): Pr
 
 // ── directory mirrors (wholesale replace on bundle refresh, api/02-auth §5.2) ─────────────────────
 
-/** Replace `users_directory` wholesale (api/02-auth §5.2 — the mirror is overwritten, not merged). */
+/**
+ * Replace `users_directory` wholesale (api/02-auth §5.2 — the mirror is overwritten, not merged).
+ *
+ * `name` is EMPLOYEE PII and is sealed at rest (D22 addendum 2 #11), so it is written through
+ * `encryptColumnValue`. That is why nothing may filter, join or ORDER BY `name` in SQL any more —
+ * see `listSwitcherUsers`, whose sort moved into JS for exactly this reason. `id`/`status`/
+ * `photo_media_id` stay plaintext: the evaluator filters on `status` and joins on `id`.
+ */
 export async function replaceUsersDirectory<DB>(
   db: Kysely<DB>,
   users: readonly DirectoryUserRow[],
@@ -172,7 +180,7 @@ export async function replaceUsersDirectory<DB>(
   for (const u of users) {
     await sql`
       INSERT INTO users_directory (id, name, photo_media_id, status)
-      VALUES (${u.id}, ${u.name}, ${u.photoMediaId}, ${u.status})
+      VALUES (${u.id}, ${encryptColumnValue(db, u.name)}, ${u.photoMediaId}, ${u.status})
     `.execute(db);
   }
 }
@@ -283,7 +291,14 @@ export async function readVerifier<DB>(
   };
 }
 
-/** Upsert a user's verifier row (§5.3). Overwrites unconditionally — callers apply the merge rule. */
+/**
+ * Upsert a user's verifier row (§5.3). Overwrites unconditionally — callers apply the merge rule.
+ *
+ * `salt`, `params` and `hash` are the SEC-AUTH-09 PIN-verifier material and are sealed at rest
+ * (D22 addendum 2 #6–#8) — this is the leg that used to be carried by the whole-file SQLCipher
+ * encryption. `algo` and the `as_of_*` canonical position stay plaintext: `as_of_*` is compared by
+ * the §5.3 greatest-`asOf` merge, and `algo` is a CHECK-constrained enum, neither of which is secret.
+ */
 export async function writeVerifier<DB>(
   db: Kysely<DB>,
   userId: string,
@@ -293,8 +308,10 @@ export async function writeVerifier<DB>(
   await sql`
     INSERT INTO user_pin_verifiers
       (user_id, algo, salt, params, hash, as_of_timestamp, as_of_device_id, as_of_seq)
-    VALUES (${userId}, ${verifier.algorithm}, ${verifier.saltB64}, ${JSON.stringify(params)},
-            ${verifier.hashB64}, ${verifier.asOf.timestamp}, ${verifier.asOf.deviceId}, ${verifier.asOf.seq})
+    VALUES (${userId}, ${verifier.algorithm}, ${encryptColumnValue(db, verifier.saltB64)},
+            ${encryptColumnValue(db, JSON.stringify(params))},
+            ${encryptColumnValue(db, verifier.hashB64)},
+            ${verifier.asOf.timestamp}, ${verifier.asOf.deviceId}, ${verifier.asOf.seq})
     ON CONFLICT (user_id) DO UPDATE SET
       algo = excluded.algo, salt = excluded.salt, params = excluded.params, hash = excluded.hash,
       as_of_timestamp = excluded.as_of_timestamp,
@@ -402,18 +419,31 @@ export function refFromOp(op: {
 // ── switcher usability (api/02-auth §5.1, 03-state-machines §6) ────────────────────────────────────
 
 /**
- * The switcher-usable users: only `active` ones (api/02-auth §5.1). A deactivated user stays in
- * `users_directory` (their name renders on historical ops) but is excluded here — authentication is
- * gated on status; name resolution is not.
+ * The switcher-usable users: only `active` ones (api/02-auth §5.1), ordered by display name. A
+ * deactivated user stays in `users_directory` (their name renders on historical ops) but is excluded
+ * here — authentication is gated on status; name resolution is not.
+ *
+ * ── THE SORT IS IN JS, AND THAT IS LOAD-BEARING (D22 addendum 2 #11) ──────────────────────────
+ * `name` is sealed at rest, so `ORDER BY name` in SQL would sort CIPHERTEXT — i.e. it would return a
+ * stable but meaningless order (base64 of a random-nonce blob), silently, with no error. An encrypted
+ * column can never be ordered, filtered or joined by content in SQL; the sort therefore happens AFTER
+ * the rows come back (the connection's decrypt seam has already turned `name` back into plaintext by
+ * then). The row set is one store's users — a handful — so an in-memory sort is free.
+ *
+ * `localeCompare` rather than `<`: names are Indonesian/English display names and the switcher is a
+ * human-facing list (07-i18n), so byte order would be wrong for accented and mixed-case names.
+ * `status = 'active'` stays in SQL — `status` is a plaintext enum (see `replaceUsersDirectory`).
  */
 export async function listSwitcherUsers<DB>(
   db: Kysely<DB>,
 ): Promise<{ id: string; name: string; photoMediaId: string | null }[]> {
   const rows = await sql<{ id: string; name: string; photoMediaId: string | null }>`
     SELECT id, name, photo_media_id AS "photoMediaId"
-    FROM users_directory WHERE status = 'active' ORDER BY name
+    FROM users_directory WHERE status = 'active'
   `.execute(db);
-  return rows.rows.map((r) => ({ id: r.id, name: r.name, photoMediaId: r.photoMediaId }));
+  return rows.rows
+    .map((r) => ({ id: r.id, name: r.name, photoMediaId: r.photoMediaId }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Resolve ANY user's display name from the directory — including a deactivated one (for history). */

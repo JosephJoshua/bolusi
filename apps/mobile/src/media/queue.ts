@@ -24,7 +24,7 @@
 // its `rawSqlViolation` inspects the SET list of raw-`sql` templates, which is what these are.
 import { sql, type Kysely } from 'kysely';
 
-import type { PrunableItem } from '@bolusi/core';
+import { encryptColumnValue, type PrunableItem } from '@bolusi/core';
 
 /** The row as capture writes it (06 §2.2 step 7). Everything here is frozen from this moment on. */
 export interface NewMediaItem {
@@ -54,6 +54,13 @@ export interface NewMediaItem {
  * cache directory, and §10's checklist names the failure by name: "crash between capture and move
  * loses the photo cleanly, never a dangling row". The ordering is enforced at the call site
  * (`capture.ts`), where it is also asserted.
+ *
+ * AT REST (D22 addendum 2 #9): `location` is capture GPS — PII — and is sealed through
+ * `encryptColumnValue`. `sha256` stays plaintext (it is a hash), and so does `local_path`: it is a
+ * filesystem path the drain/prune passes filter on, and ENCRYPTING THE PATH WOULD NOT PROTECT THE
+ * PHOTO ANYWAY — the image bytes sit unencrypted in the document directory. Media FILES at rest are
+ * explicitly OUT of scope here and tracked as their own task (158); the accepted residual is recorded
+ * in the threat model.
  */
 export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): Promise<void> {
   await sql`
@@ -64,7 +71,8 @@ export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): P
     ) VALUES (
       ${item.id}, ${item.tenantId}, ${item.storeId}, ${item.userId}, ${item.deviceId},
       ${item.type}, ${item.mime}, ${item.sizeBytes}, ${item.sha256}, ${item.capturedAt},
-      ${item.location === null ? null : JSON.stringify(item.location)}, ${item.localPath},
+      ${encryptColumnValue(db, item.location === null ? null : JSON.stringify(item.location))},
+      ${item.localPath},
       NULL, 'pending', 0
     )
   `.execute(db);
