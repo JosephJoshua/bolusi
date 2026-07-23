@@ -34,17 +34,26 @@ the plan **entirely**, so any edit inside them is invisible: the reviewer added 
 **16/16, EXIT=0**. The step-count guard does not catch it either — it counts raw step dashes on both
 sides, so an added step increments both and cancels.
 
-**Both findings are one defect class, and neither is about SEC or about emulators:**
+## THE CLASS — four instances now, and none of them is about SEC or about emulators
 
-> the OWED / exclusion machinery scopes what it exempts **by name**, not by **what the exemption is
+> The OWED / exclusion machinery scopes what it exempts **by name**, not by **what the exemption is
 > actually licensing**.
 
-`SEC_OWED_D21` names the ids it excuses and (as of 154) checks them, but not the failure MODE those ids
-are red for. `dispatchOnly` names the jobs no local command reproduces, and thereby stops looking at
-their CONTENTS — licensing far more than "we cannot run these locally", which was the only claim being
-made. Fixing either one in isolation leaves the class open, so whoever picks up one should read the
-other first. (That task is numbered 163 on its own branch at time of writing; ids in this range were
-allocated concurrently and may shift on landing — match it by slug, not by number.)
+| where | what IS scoped | what is NOT |
+| ----- | -------------- | ----------- |
+| task 154 (fixed) | the failing STEP is the SEC inventory | *which ids* it is red for |
+| **this task** | the failing IDS are the owed ones | *which failure mode* those ids are red for |
+| task 172 | the failing JOB is `security-sweep` | *anything about why* — `assert()` is never called |
+| task 163 (dispatch-only lanes) | the JOBS no local command reproduces | *their entire contents* |
+
+Task 172 is the one to read first: it is the same hole as this file's, unclosed, in `ci:status` — the
+command run after every push — because that command reads the `gh` job-list API and so has no log text
+to call `assert()` against. Task 163 is the same shape one file over: `dispatchOnly` names the jobs
+nothing local reproduces and thereby stops inspecting them at all, which is how a whole new undeclared
+step passed 16/16. Fixing any one in isolation leaves the class open.
+
+(163 and 172 are the ids at time of writing; this range was allocated concurrently across branches and
+numbers have already collided once — match by slug, not by number.)
 
 ## FALSIFY (§2.11 — REPORT it)
 - Reproduce the input above and confirm it returns OWED **before** changing anything (it does today).
