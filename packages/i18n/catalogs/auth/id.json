@@ -3,6 +3,7 @@
     "title": "Siapa yang pakai?",
     "instruction": "Ketuk nama kamu",
     "addUser": "Tambah Pengguna",
+    "emptyUsers": "Belum ada pengguna di perangkat ini. Minta pemilik toko untuk mendaftarkannya.",
     "idleLocked": "Layar terkunci karena lama tidak dipakai. Pekerjaanmu aman."
   },
   "pin": {

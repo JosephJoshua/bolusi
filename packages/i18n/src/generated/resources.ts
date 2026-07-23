@@ -112,6 +112,8 @@ export const resources: SeededResources = {
           title: 'Siapa yang pakai?',
           instruction: 'Ketuk nama kamu',
           addUser: 'Tambah Pengguna',
+          emptyUsers:
+            'Belum ada pengguna di perangkat ini. Minta pemilik toko untuk mendaftarkannya.',
           idleLocked: 'Layar terkunci karena lama tidak dipakai. Pekerjaanmu aman.',
         },
         pin: {
@@ -363,6 +365,7 @@ export const resources: SeededResources = {
           title: 'Who’s using this?',
           instruction: 'Tap your name',
           addUser: 'Add User',
+          emptyUsers: 'No users on this device yet. Ask the store owner to enroll this device.',
           idleLocked: 'Locked after sitting idle. Your work is safe.',
         },
         pin: {

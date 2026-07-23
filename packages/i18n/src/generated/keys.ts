@@ -23,6 +23,7 @@ export type TranslationKey =
   | 'auth.revoked.body'
   | 'auth.revoked.title'
   | 'auth.switcher.addUser'
+  | 'auth.switcher.emptyUsers'
   | 'auth.switcher.idleLocked'
   | 'auth.switcher.instruction'
   | 'auth.switcher.title'
@@ -237,6 +238,7 @@ export interface TranslationResources {
       title: string;
       instruction: string;
       addUser: string;
+      emptyUsers: string;
       idleLocked: string;
     };
     pin: {
