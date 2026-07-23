@@ -318,21 +318,186 @@ test('no fixed-then-recurred defect is hard-coded as owned (chaos-05 / task 127 
   expect(EXPECTED.CHAOS_05_TASK_127).toBeUndefined();
 });
 
-test('the owed SEC red is confined to the SEC inventory step', () => {
-  const owed = expected('SEC_OWED_D21');
-  const inventoryOnly = [
+// ── 5. the owed SEC exemption asserts its scope BETWEEN steps and WITHIN the inventory step ──────
+//
+// FIXTURE PROVENANCE (T-15/T-16 — a fixture nobody has traced to a producer is a hypothesis).
+// `sweepOutput()` below is a VERBATIM transcription of a real `pnpm sec:sweep`: GitHub Actions run
+// 29949061877, job 89021942509 (`security-sweep`), 2026-07-22, log lines 203-244, with the runner's
+// `<job>\tUNKNOWN STEP\t<timestamp>` column stripped. Every other fixture in this block is that text
+// with ONE stated mutation.
+//
+// This replaced a hand-written fixture whose failure line read `FAIL SEC-AUTH-09 is pending`. The
+// real producer emits ONE line, `FAIL the SEC pending allowlist is NOT empty … : SEC-AUTH-09 → …,
+// SEC-AUTH-10 → …`, carrying BOTH ids INLINE. The difference is not cosmetic: a scope parser
+// anchored as `^FAIL (SEC-…)` — the shape this task was filed proposing — matches ZERO lines against
+// the real output, and an empty failing-id set is a subset of the owed set, so the gate returns OWED
+// while checking nothing. The tests would have agreed with it, because they and the producer
+// disagreed. Hence: the fixture is the producer's own bytes, and `namesNoId` below pins the
+// empty-set branch as LOUD.
+
+/** The real run's steps, in order, with the SEC inventory step's detail parameterised. */
+function sweepOutput(
+  options: {
+    fails?: string[];
+    secretsExit?: number;
+    inventoryHeader?: string;
+    extraHead?: string[];
+  } = {},
+): string {
+  const {
+    fails = [
+      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md, SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+    ],
+    secretsExit = 0,
+    inventoryHeader = '── SEC inventory (security-guide §2.1.4 / §12) — EXIT=1',
+    extraHead = [],
+  } = options;
+  return [
+    '── build (tsc -b) — EXIT=0',
+    '',
+    '── test lane: repo suite (all vitest projects: unit, core, schemas, server, db-server, harness, i18n, ui) — EXIT=0',
+    '',
+    '── test lane: security-sweep lane (SEC-TENANT-04, SEC-SECRET-01, I-13) — EXIT=0',
+    ...extraHead,
+    '',
+    inventoryHeader,
+    '58 ids parsed from the guide; 58 declared by the §12 roll-up (OPLOG 01-09 · SYNC 01-10 · AUTH 01-11 · DEV 01-08 · MEDIA 01-06 · TENANT 01-06 · RT 01-05 · SECRET 01-02 · META 01).',
+    '3942 test assertions read from 2 lane report(s); 56 ids have >=1 PASSING test.',
+    ...fails,
+    '',
+    '── secrets scan (security-guide §10) — EXIT=0',
+    '',
+    '── dependency pin / lockfile audit (08 §2, security-guide §11) — EXIT=0',
+    '',
+    '── lockfile in sync (pnpm install --frozen-lockfile) — EXIT=0',
+    '',
     '═══ sec:sweep summary ═══',
     '  EXIT=0  build (tsc -b)',
+    '  EXIT=0  test lane: repo suite (all vitest projects: unit, core, schemas, server, db-server, harness, i18n, ui)',
+    '  EXIT=0  test lane: security-sweep lane (SEC-TENANT-04, SEC-SECRET-01, I-13)',
     '  EXIT=1  SEC inventory (security-guide §2.1.4 / §12)',
-    '  EXIT=0  secrets scan (security-guide §10)',
-    'FAIL SEC-AUTH-09 is pending',
+    `  EXIT=${secretsExit}  secrets scan (security-guide §10)`,
+    '  EXIT=0  dependency pin / lockfile audit (08 §2, security-guide §11)',
+    '  EXIT=0  lockfile in sync (pnpm install --frozen-lockfile)',
+    '',
+    'sec:sweep: 1 step(s) failed — the release gate is RED, which is a correct outcome while any SEC id is still owed or any probe is red.',
   ].join('\n');
-  expect(owed.assert(inventoryOnly).ok).toBe(true);
-  // A secrets-scan regression must NOT be absorbed by the SEC exemption.
-  const alsoSecrets = inventoryOnly.replace(
-    '  EXIT=0  secrets scan (security-guide §10)',
-    '  EXIT=1  secrets scan (security-guide §10)',
+}
+
+test('the real, current sec:sweep red is classified OWED and names the ids it was owed for', () => {
+  // POSITIVE CONTROL, and the more important half of this task: if the scope check turns today's
+  // legitimate owed-red into an UNEXPECTED, `pnpm verify` cries wolf on every run and gets ignored.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(sweepOutput());
+  expect(result.ok).toBe(true);
+  expect(result.detail).toContain('SEC-AUTH-09');
+  expect(result.detail).toContain('SEC-AUTH-10');
+});
+
+test('a red for an id OUTSIDE the owed set is UNEXPECTED and the reader is told which id', () => {
+  // Task 154's demonstrated hole: step-level scope alone accepted this, because the only failing
+  // step was still `SEC inventory…` and 09/10 were still somewhere in the output.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(
+    sweepOutput({
+      fails: [
+        'FAIL SEC-META-01 has no PASSING test in any swept lane (titles seen: none)',
+        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md, SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      ],
+    }),
   );
-  expect(owed.assert(alsoSecrets).ok).toBe(false);
-  expect(owed.assert(alsoSecrets).detail).toContain('secrets scan');
+  expect(result.ok).toBe(false);
+  // Naming the offender is the deliverable — "UNEXPECTED" with no id sends the reader back to the log.
+  expect(result.detail).toContain('SEC-META-01');
+});
+
+test('a STRICT subset of the owed ids is still OWED, so a partial discharge does not cry wolf', () => {
+  // SEC-AUTH-09 discharges before SEC-AUTH-10 (different owners, different blockers). The remaining
+  // red is still exactly what was recorded. Equality here would false-red the day 09 lands.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(
+    sweepOutput({
+      fails: [
+        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      ],
+    }),
+  );
+  expect(result.ok).toBe(true);
+  expect(result.detail).toContain('SEC-AUTH-10');
+});
+
+test('a red step OUTSIDE the SEC inventory is not absorbed by the SEC exemption', () => {
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(sweepOutput({ secretsExit: 1 }));
+  expect(result.ok).toBe(false);
+  expect(result.detail).toContain('secrets scan');
+});
+
+test('the inventory FAIL lines are read from the inventory step, not from the whole transcript', () => {
+  // A failing vitest lane prints its own `FAIL …` lines and its own SEC-titled test names. Reading
+  // ids out of the whole output would attribute another step's text to this one — in both
+  // directions: a false UNEXPECTED here, and (before the fix) `output.includes('SEC-AUTH-09')` was
+  // satisfiable by any lane tail that merely mentioned the id.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(
+    sweepOutput({
+      extraHead: [
+        'FAIL  packages/harness/test/security/some-lane.test.ts > SEC-MEDIA-03 upload path',
+        'FAIL SEC-MEDIA-03 has no PASSING test in any swept lane (titles seen: none)',
+      ],
+    }),
+  );
+  expect(result.ok).toBe(true);
+  expect(result.detail).not.toContain('SEC-MEDIA-03');
+});
+
+// ── 6. the scope parse is itself an oracle: every "found nothing" branch must be LOUD ────────────
+//
+// A parser whose failure mode is "matched nothing, all clear" is the exact class CLAUDE.md §2.11
+// catalogues, and this one guards an exemption — the one place a silent pass is invisible forever.
+// Each case degrades the output in a different way and must produce ok:false, never ok:true.
+
+test.each([
+  [
+    'the inventory step block is missing entirely',
+    (): string => {
+      const output = sweepOutput();
+      // Drop the step's whole block from the body; the SUMMARY still reports it as failed.
+      const start = output.indexOf('── SEC inventory');
+      const end = output.indexOf('── secrets scan');
+      return output.slice(0, start) + output.slice(end);
+    },
+    'no "── SEC inventory',
+  ],
+  [
+    'the inventory is red but printed no FAIL line',
+    (): string => sweepOutput({ fails: [] }),
+    'printed no FAIL line',
+  ],
+  [
+    'a FAIL line names no SEC id at all',
+    (): string =>
+      sweepOutput({
+        fails: [
+          'FAIL the vitest reports contained ZERO assertions — the lanes did not run, so every "passed" below would be vacuous',
+        ],
+      }),
+    'naming NO SEC id',
+  ],
+  [
+    'the summary block is absent',
+    (): string => sweepOutput().replace('═══ sec:sweep summary ═══', ''),
+    'printed no',
+  ],
+  [
+    "the step header's grammar shifts under the parser",
+    (): string =>
+      sweepOutput({ inventoryHeader: '── SEC inventory (security-guide §2.1.4 / §12): exit 1' }),
+    'no "── SEC inventory',
+  ],
+])('degraded sweep output is UNEXPECTED, never OWED: %s', (_name, makeOutput, expectedDetail) => {
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(makeOutput());
+  expect(result.ok).toBe(false);
+  expect(result.detail).toContain(expectedDetail);
 });
