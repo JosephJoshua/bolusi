@@ -22,9 +22,7 @@ import { generateSeed200k, SEED_200K } from './seed-200k.js';
 function digest(script: readonly ScriptOp[]): string {
   const hash = createHash('sha256');
   for (const op of script) {
-    hash.update(
-      `${op.device}|${op.kind}|${op.entity}|${op.schemaVersion}|${op.clockAdvanceMs}|${op.value}\n`,
-    );
+    hash.update(`${op.device}|${op.kind}|${op.entity}|${op.clockAdvanceMs}|${op.value}\n`);
   }
   return hash.digest('hex');
 }
@@ -62,16 +60,6 @@ describe('SEED-200K — deterministic year-equivalent history (testing-guide §4
   test('5,000 MediaItem metadata rows: exactly 5,000 mediaAttach ops', () => {
     expect(countKind(seed42, 'mediaAttach')).toBe(SEED_200K.mediaRows);
     expect(SEED_200K.mediaRows).toBe(5_000);
-  });
-
-  test('v1→v2 schema cutover EXACTLY at op 100,000 (v1 at 99,999, v2 at 100,000)', () => {
-    expect(SEED_200K.cutoverIndex).toBe(100_000);
-    expect(seed42[99_999]?.schemaVersion).toBe(1);
-    expect(seed42[100_000]?.schemaVersion).toBe(2);
-    // And universally, not just at the boundary.
-    expect(seed42.every((op, i) => op.schemaVersion === (i < SEED_200K.cutoverIndex ? 1 : 2))).toBe(
-      true,
-    );
   });
 
   test('every non-create op targets an entity that already exists (a valid, replayable history)', () => {

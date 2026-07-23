@@ -8,7 +8,6 @@ function bigScript(seed: number): ScriptOp[] {
   return generateScript(mulberry32(seed), {
     opsPerDevice: 2000,
     deviceCount: 3,
-    cutoverIndex: 3000,
   });
 }
 
@@ -28,7 +27,6 @@ describe('generateScript — deterministic notes workload (testing-guide §3.3)'
     const script = generateScript(mulberry32(1), {
       opsPerDevice: 500,
       deviceCount: 3,
-      cutoverIndex: 750,
     });
     expect(script).toHaveLength(1500);
     for (let d = 0; d < 3; d += 1) {
@@ -86,18 +84,6 @@ describe('generateScript — deterministic notes workload (testing-guide §3.3)'
     expect(hitRate).toBeLessThan(0.5);
   });
 
-  test('honors the v1→v2 cutover seam: schemaVersion 1 before cutoverIndex, 2 at/after (§3.2, 04 §3)', () => {
-    const cutoverIndex = 1234;
-    const script = generateScript(mulberry32(5), {
-      opsPerDevice: 1000,
-      deviceCount: 3,
-      cutoverIndex,
-    });
-    script.forEach((op, i) => {
-      expect(op.schemaVersion).toBe(i < cutoverIndex ? 1 : 2);
-    });
-  });
-
   test('advances each op by a PRNG-chosen 1–600 s (integer ms)', () => {
     const script = bigScript(3);
     for (const op of script) {
@@ -114,12 +100,12 @@ describe('generateScript — deterministic notes workload (testing-guide §3.3)'
   });
 
   test('the whole script is byte-identical per seed (T-6 determinism)', () => {
-    const opts = { opsPerDevice: 800, deviceCount: 4, cutoverIndex: 1600 } as const;
+    const opts = { opsPerDevice: 800, deviceCount: 4 } as const;
     expect(generateScript(mulberry32(2024), opts)).toEqual(generateScript(mulberry32(2024), opts));
   });
 
   test('a different seed produces a different script (randomness is real)', () => {
-    const opts = { opsPerDevice: 200, deviceCount: 3, cutoverIndex: 300 } as const;
+    const opts = { opsPerDevice: 200, deviceCount: 3 } as const;
     expect(generateScript(mulberry32(1), opts)).not.toEqual(generateScript(mulberry32(2), opts));
   });
 });

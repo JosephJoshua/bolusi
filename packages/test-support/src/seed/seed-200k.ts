@@ -14,6 +14,12 @@
 // kit's PRNG + op shape. The counts are EXACT by construction (a shuffled multiset), so a silent
 // widening that halves the entity count — and so the rebuild cost — is a visible red in
 // `seed-200k.test.ts`, not a quietly easier gate.
+//
+// NO SCHEMA-VERSION / cutover field, deliberately (task 132) — see `script.ts`'s header for the
+// full reasoning. In short: the on-device runner maps each descriptor to a REAL `notes` command,
+// whose `schemaVersion` the runtime stamps from the operation registry, so a descriptor-level
+// version never reached a fold. The v1→v2→v3 fold behaviour is exercised for real in
+// `packages/modules/test/migration.test.ts` (incremental apply AND full rebuild).
 import { RECENCY_WINDOW, type ScriptOp, type ScriptOpKind } from '../determinism/script.js';
 import { randomInt, shuffle, type Prng } from '../determinism/prng.js';
 
@@ -28,15 +34,12 @@ export interface Seed200kSpec {
   readonly entityCount: number;
   /** MediaItem metadata rows (`mediaAttach` ops). */
   readonly mediaRows: number;
-  /** Global op ordinal at which payloads switch v1 → v2 (§3.2, 04 §3): v1 for `i < cutover`. */
-  readonly cutoverIndex: number;
 }
 
 export const SEED_200K: Seed200kSpec = Object.freeze({
   totalOps: 200_000,
   entityCount: 20_000,
   mediaRows: 5_000,
-  cutoverIndex: 100_000,
 });
 
 const MIN_ADVANCE_MS = 1_000; // 1 s
@@ -101,7 +104,6 @@ export function generateSeed200k(prng: Prng, spec: Seed200kSpec = SEED_200K): Sc
       entity = pickTarget(prng, pool);
     }
 
-    const schemaVersion: 1 | 2 = i < spec.cutoverIndex ? 1 : 2;
     const clockAdvanceMs = randomInt(prng, MIN_ADVANCE_MS, MAX_ADVANCE_MS);
     const token = randomInt(prng, 0, 0xffff_ffff).toString(16).padStart(8, '0');
 
@@ -109,7 +111,6 @@ export function generateSeed200k(prng: Prng, spec: Seed200kSpec = SEED_200K): Sc
       device: 0,
       kind,
       entity,
-      schemaVersion,
       clockAdvanceMs,
       value: `op${i}-${token}`,
     });
