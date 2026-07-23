@@ -40,13 +40,22 @@
 //     so the endpoint genuinely distinguished → the sweep red naming it (403 vs 404) alongside the
 //     known one, proving a NEW distinguisher cannot join unnoticed;
 //   * declared a `foreignId` that appears nowhere in its own request → "the control would re-issue
-//     the SAME request and could never fail", so the control cannot pass vacuously (T-14).
+//     the SAME request and could never fail", so the control cannot pass vacuously (T-14);
+//   * (review round 2) wrote a METHOD-LESS third exception into §2.2 — ``(`/v1/devices`)`` — which
+//     the endpoint grammar cannot read. Before `countDocumentedExceptionHeadings` this was GREEN
+//     with the spec and the harness disagreeing; now → "security-guide §2.2 starts an exception
+//     paragraph the endpoint grammar could not read …: expected 3 to be 2";
+//   * (review round 2) changed the pinned difference's BODY text as if `init` had begun echoing the
+//     other tenant's data, leaving the endpoint set identical → "the cross-tenant/nonexistent
+//     difference set changed … or the known one changed character". An endpoint-name-only pin was
+//     green for that input, which is why the pin carries the full violation text.
 import { readFileSync } from 'node:fs';
 
 import { describe, expect, test } from 'vitest';
 
 import {
   censusOf,
+  countDocumentedExceptionHeadings,
   enumerateEndpoints,
   indistinguishabilityViolations,
   judgeProbe,
@@ -89,10 +98,19 @@ const controlId = (index: number): string =>
  * inherent to create-by-supplied-id and cannot be removed without either a lying `200` or
  * server-generated media ids (a wire change). It is NOT a security-guide §2.2 documented exception
  * — found by task 141a's sweep, reported in `ai-docs/tasks/141-…`, and an owner call (CLAUDE.md §6)
- * exactly like the push-token oracle was. The list is asserted as an EXACT set: a second endpoint
- * joining it fails here, and so does this one leaving.
+ * exactly like the push-token oracle was.
+ *
+ * Pinned as the EXACT violation text, not merely the endpoint name: an endpoint set would stay
+ * green if this difference changed CHARACTER — e.g. if the body began echoing the other tenant's
+ * data — because the set would still be this one row. A second endpoint joining fails here, this
+ * one leaving fails here, and so does this one leaking something new.
  */
-const KNOWN_EXISTENCE_CONTROL_DIFFERENCES: readonly string[] = ['POST /v1/media/:id/init'];
+const KNOWN_EXISTENCE_CONTROL_DIFFERENCES: readonly string[] = [
+  'POST /v1/media/:id/init :: status differs (404 vs 200) — an existence oracle',
+  'POST /v1/media/:id/init :: body differs beyond requestId — an existence oracle. ' +
+    '{"error":{"code":"MEDIA_NOT_FOUND","message":"Media not found"}} vs ' +
+    '{"chunkSize":262144,"totalChunks":1,"receivedChunks":[],"status":"receiving"}',
+];
 
 /** Read a probe response without consuming a long-lived stream (SSE never closes on a 200). */
 async function readResponse(res: Response): Promise<ProbeResponse> {
@@ -227,6 +245,13 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
       documented,
       'security-guide §2.2 enumerates no documented exception — either the section was rewritten or the parse grammar drifted',
     ).toHaveLength(2);
+    // …and every paragraph §2.2 STARTS was parsed. The endpoint grammar fails in the dangerous
+    // direction — a heading missing its HTTP method matches nothing and disappears — so count the
+    // headings on the loosest marker and require the two numbers to agree.
+    expect(
+      countDocumentedExceptionHeadings(SECURITY_GUIDE),
+      'security-guide §2.2 starts an exception paragraph the endpoint grammar could not read — a malformed heading must fail loudly, not vanish from the allowlist',
+    ).toBe(documented.length);
     expect(documented.map((entry) => entry.index)).toEqual([1, 2]);
     expect(
       documented.map((entry) => entry.endpoint).sort(),
@@ -316,11 +341,12 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
         probed += 1;
       }
       expect(probed, 'the existence-control walk issued zero pairs').toBeGreaterThanOrEqual(15);
-      // Pinned as an exact SET, not filtered out: a newly-distinguishing endpoint changes it and
-      // fails, and so does fixing/ruling on the one below — the constant cannot go stale quietly.
+      // Pinned as the exact violation TEXT, not filtered out and not reduced to endpoint names: a
+      // newly-distinguishing endpoint fails here, fixing/ruling on the known one fails here, and so
+      // does the known one starting to leak something different (D3) — the pin cannot go stale.
       expect(
-        [...new Set(violations.map((violation) => violation.endpoint))].sort(),
-        `an endpoint outside the security-guide §2.2 documented exceptions confirms cross-tenant existence: ${JSON.stringify(violations)}`,
+        violations.map((violation) => `${violation.endpoint} :: ${violation.detail}`).sort(),
+        'the cross-tenant/nonexistent difference set changed — either an endpoint outside the security-guide §2.2 documented exceptions now confirms cross-tenant existence, or the known one changed character',
       ).toEqual([...KNOWN_EXISTENCE_CONTROL_DIFFERENCES].sort());
     } finally {
       await fixture.close();

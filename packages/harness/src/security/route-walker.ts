@@ -343,17 +343,35 @@ export interface ExistenceException {
  * "no exceptions declared" (testing-guide T-14).
  */
 export function parseDocumentedExistenceExceptions(guideText: string): DocumentedException[] {
-  const start = guideText.indexOf('### 2.2 ');
-  if (start === -1) return [];
-  const afterHeading = guideText.slice(start + 1);
-  const nextHeading = afterHeading.search(/\n#{2,3} /);
-  const section = nextHeading === -1 ? afterHeading : afterHeading.slice(0, nextHeading);
   const pattern = /\*\*Documented exception (\d+) [^*\n]*\(`([A-Z]+ \/[^`]+)`\)\.\*\*/g;
   const found: DocumentedException[] = [];
-  for (const match of section.matchAll(pattern)) {
+  for (const match of sectionTwoTwo(guideText).matchAll(pattern)) {
     found.push({ index: Number(match[1]), endpoint: match[2] as EndpointKey });
   }
   return found;
+}
+
+/**
+ * How many exception paragraphs §2.2 STARTS, counted on the loosest possible marker
+ * (`**Documented exception <n>`) with no endpoint grammar at all.
+ *
+ * This exists because the parser above fails in the dangerous direction: an exception whose
+ * backticked endpoint omits the method (``(`/v1/devices`)``) matches nothing and vanishes, and a
+ * sweep that found fewer than the spec declares is green while the spec and the harness disagree.
+ * Asserting this count EQUALS the parsed count turns a malformed heading into a loud failure — the
+ * "a guard must assert its own coverage" corollary (testing-guide T-14).
+ */
+export function countDocumentedExceptionHeadings(guideText: string): number {
+  return [...sectionTwoTwo(guideText).matchAll(/\*\*Documented exception \d+/g)].length;
+}
+
+/** The body of security-guide §2.2, from its heading to the next `##`/`###`. */
+function sectionTwoTwo(guideText: string): string {
+  const start = guideText.indexOf('### 2.2 ');
+  if (start === -1) return '';
+  const afterHeading = guideText.slice(start + 1);
+  const nextHeading = afterHeading.search(/\n#{2,3} /);
+  return nextHeading === -1 ? afterHeading : afterHeading.slice(0, nextHeading);
 }
 
 /**
