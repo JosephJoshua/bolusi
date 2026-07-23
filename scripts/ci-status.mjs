@@ -319,9 +319,13 @@ if (shaMissing) blockers.push(`--sha=${wantedSha} is not among the ${runs.length
 if (unexpectedTotal > 0) {
   blockers.push(`${unexpectedTotal} UNEXPECTED job failure(s) — regressions, not the owed SEC ids`);
 }
+// The clean line leads with a word that MATCHES the denominator: a fully-inspected set is CLEAN, a
+// partially-inspected one is INCOMPLETE — so the eye never lands on "clean" for a set where some
+// runs went unread. The blocked line always leads with NO CLEAN VERDICT.
+const cleanLead = inspected === runs.length ? 'CLEAN' : 'INCOMPLETE';
 console.log(
   blockers.length === 0
-    ? `ci:status: no UNEXPECTED job failures — ${inspected} of ${runs.length} run(s) on "${branch}" fully inspected.`
+    ? `ci:status: ${cleanLead} — ${inspected} of ${runs.length} run(s) on "${branch}" fully inspected, no UNEXPECTED job failures.`
     : `ci:status: NO CLEAN VERDICT — ${blockers.join('; ')}.`,
 );
 process.exit(blockers.length === 0 && unreadable === 0 ? 0 : 1);
