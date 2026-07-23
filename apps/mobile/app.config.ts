@@ -21,9 +21,12 @@ const config: ExpoConfig = {
     package: 'com.bolusi.app',
     // Auto-backup carries nothing off this device (security-guide §6.2:194; api/02-auth §7.4).
     // Android defaults this to TRUE, so omitting it is a decision to back up — not a neutral
-    // silence. There is nothing here worth restoring: every record is server-synced, and both the
-    // SQLCipher DB and the SecureStore prefs are ciphertext whose wrapping key is hardware-bound to
-    // the old handset and never backed up, so a restore yields undecryptable bytes rather than data.
+    // silence. Every record is server-synced, so there is nothing here worth restoring — and since
+    // D22 (task 148) this exclusion carries MORE weight, not less: `bolusi.db` is now a PLAINTEXT
+    // SQLite file (only the sensitive columns are sealed, 10-db §9.7), so a restored copy is readable
+    // as a database and leaks the op log's structure even though the protected values stay ciphertext.
+    // The SecureStore prefs remain Keystore-wrapped to the old handset and never back up, so the
+    // column key does not travel — which is exactly why the restored file must not travel either.
     //
     // This is the CLOUD leg only. It is NOT sufficient on its own: Android's own docs say that for
     // apps targeting 12+, "specifying android:allowBackup="false" disables cloud-based backup and
@@ -51,7 +54,7 @@ const config: ExpoConfig = {
     // plugin write `android:dataExtractionRules` + `android:fullBackupContent`, which is what keeps
     // the SecureStore prefs out of BOTH cloud backup and device transfer, and — because Android
     // backs up "only the files specified" once any <include> is present, and those rules include
-    // only `sharedpref` — what keeps the SQLCipher DB (bolusi.db) out of both as well.
+    // only `sharedpref` — what keeps the client DB (bolusi.db) out of both as well.
     //
     // Relying on the default would leave the control invisible: a grep for `allowBackup` /
     // `data-extraction-rules` over this repo returns nothing, which is precisely how task 58 came to

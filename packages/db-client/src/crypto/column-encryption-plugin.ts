@@ -71,7 +71,17 @@ const BUILDER_ENCRYPTED_COLUMNS: Readonly<Record<string, ReadonlySet<string>>> =
   notes: new Set(['title', 'body']),
 };
 
-/** Deep-clones the query tree, sealing the builder-written encrypted columns (see the map above). */
+/**
+ * Deep-clones the query tree, sealing the builder-written encrypted columns (see the map above).
+ *
+ * SCOPE, AND ITS TRAP: on an INSERT this seals `node.values` ONLY. An `INSERT … ON CONFLICT DO UPDATE
+ * SET` or an `INSERT … SELECT` targeting `notes`/`operations` would therefore store the conflict-set
+ * or projected values in the CLEAR — silently. No client code does either today (every `onConflict`
+ * in the repo is `apps/server`, and the client's upserts are raw `sql`, which seals at the value via
+ * `encryptColumnValue`), so this is a trap rather than a live bug. Anyone adding a builder upsert on
+ * an encrypted table must extend this transformer to cover `onConflict`/`onDuplicateKey` — and prove
+ * it with the raw-file probe, not by reading this comment.
+ */
 class ColumnEncryptTransformer extends OperationNodeTransformer {
   readonly #cipher: ColumnCipher;
 

@@ -45,7 +45,17 @@
  * this cipher produced.
  */
 export interface ColumnCipher {
-  /** Seal a plaintext column value. A value that is already ciphertext is returned unchanged. */
+  /**
+   * Seal a plaintext column value. **UNCONDITIONALLY** — an implementation MUST NOT inspect the
+   * value to decide whether it is "already encrypted".
+   *
+   * This contract used to say the opposite ("a value that is already ciphertext is returned
+   * unchanged"), and that sentence is what justified a shape-sniffing short-circuit in the
+   * implementation which stored attacker-shaped PII in the clear and then threw on every later read.
+   * Nothing an attacker can put in a value may steer it away from the cipher, and a caller cannot
+   * be trusted to have produced the value. A second implementer coding to the old wording would
+   * reintroduce that hole by following the spec.
+   */
   encrypt(plaintext: string): string;
   /** Open a sealed value. MUST throw on a wrong key or a tampered blob — never return plaintext. */
   decrypt(stored: string): string;

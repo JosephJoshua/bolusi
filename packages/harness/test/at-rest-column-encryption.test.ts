@@ -448,7 +448,13 @@ describe('at-rest column encryption — a forged marker in a PLAINTEXT column is
 
     // …and the marker itself is a pure function of the key, so a third construction agrees.
     expect(new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead).marker).toBe(markerBefore);
-    // A DIFFERENT key derives a DIFFERENT marker — which is what makes it unforgeable.
+
+    // ⚠️ THIS NEXT LINE IS THE ONLY GUARD ON THE KEYING PROPERTY — DO NOT WEAKEN IT.
+    // The forged-marker test above does NOT cover it: its literal 40-'A' forgery happens not to
+    // collide with a constant-suffix marker like `gcm1:AAAAAAAAAAAA:`, so that test still passes even
+    // if the suffix stops depending on the key. Anyone citing F7 as evidence that the marker is keyed
+    // is citing the wrong test. A DIFFERENT key must derive a DIFFERENT marker — that is what makes
+    // the marker unforgeable by someone who does not hold this device's key.
     expect(new Aes256GcmColumnCipher(keyBytes(WRONG_KEY), nodeColumnAead).marker).not.toBe(
       markerBefore,
     );

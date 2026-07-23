@@ -91,6 +91,20 @@ export const COLUMN_CIPHER_SCHEME_PREFIX = String.fromCharCode(1) + 'gcm1:';
 const MARKER_LABEL = 'bolusi/column-cipher/marker/v1';
 
 /**
+ * Label for the intermediate subkey, so the AES-256 encryption key is never used DIRECTLY as an HMAC
+ * key. Extract-then-expand shaped: `subkey = HMAC(dbKey, subkeyLabel)`, `tag = HMAC(subkey, label)`.
+ *
+ * WHAT THIS DOES AND DOES NOT BUY, stated precisely because the obvious claim is wrong: it gives
+ * clean domain separation between the AEAD key and the marker derivation. It does **NOT** remove the
+ * offline verification oracle — the marker is published in every row and is a deterministic function
+ * of the key, so ANY derivation lets someone holding a *candidate* key confirm it. What actually
+ * makes that harmless is that the key is 32 CSPRNG bytes and **never PIN-derived** (D8): there is no
+ * low-entropy guess to confirm. That makes D8's rule load-bearing here for a second reason beyond
+ * the one it was written for, which is worth knowing before anyone proposes deriving this key.
+ */
+const MARKER_SUBKEY_LABEL = 'bolusi/column-cipher/marker-subkey/v1';
+
+/**
  * Bytes of HMAC output kept in the marker. 9 bytes = 72 bits = exactly 12 base64 chars (no padding).
  * This is a forgery barrier, not a secret: an attacker must produce all 72 bits blind, and they get
  * no oracle — a wrong guess is simply treated as plaintext, so there is nothing to iterate against.
@@ -125,7 +139,8 @@ export class Aes256GcmColumnCipher implements ColumnCipher {
     }
     this.#key = key;
     this.#aead = aead;
-    const tag = aead.hmacSha256(key, utf8ToBytes(MARKER_LABEL)).subarray(0, MARKER_TAG_BYTES);
+    const subkey = aead.hmacSha256(key, utf8ToBytes(MARKER_SUBKEY_LABEL));
+    const tag = aead.hmacSha256(subkey, utf8ToBytes(MARKER_LABEL)).subarray(0, MARKER_TAG_BYTES);
     this.#marker = `${COLUMN_CIPHER_SCHEME_PREFIX}${bytesToBase64(tag)}:`;
   }
 
