@@ -1,6 +1,6 @@
 # TASK 170 — tenant-scope the media id so `POST /v1/media/:id/init` stops being a cross-tenant existence oracle
 
-**Status:** todo
+**Status:** in-review
 **Priority:** **HIGH security** — a live cross-tenant existence oracle, ruled for a real fix rather than a documented exception (D23 §2). It is the third such oracle found in this surface and the only one that is being removed instead of justified.
 **Depends on:** 141a (its SEC-TENANT-04 walk is what detects this, and its pin must be deleted by this task)
 **Blocks:** —
@@ -80,7 +80,22 @@ WIP is in worktree `.claude/worktrees/task-170` (branch `task/170-tenant-scope-m
 - `ai-docs/10-db-schema.md` §8 media + media_chunks DDL updated to match.
 - `apps/server/test/integration/media/tenant-scoped-id.test.ts` (the prior agent's adversarial test): **4/4 pass** — indistinguishability on status+code+body, two-rows-one-id, and the cross-tenant collision end-to-end (each tenant downloads ITS OWN bytes). Reverting the fix reds it exactly on the oracle (`expected 404 to be 200`); restoring greens it.
 
-**THE BLOCKER (this is why the task is bigger than "delete the pin"):**
+## RESOLVED 2026-07-24 — implementation COMPLETE on branch `task/170-tenant-scope-media-id` (HEAD `604fb17`), awaiting §2.9 review
+
+The blocker below was worked through. The security-walk redesign is done and falsified; the whole change is committed as one atomic commit (`fix(media): tenant-scope the media id …`). **Not merged — it needs a separate reviewer (§2.9), which the weekly API limit currently blocks (resets Jul 27); the branch is review-ready.**
+
+What landed on the branch (7 files, all gates green, all on real PostgreSQL 16.14 with own container stamp):
+- Migration `0011`, handler (both `onConflict` composite + the false "global unique index" comment rewritten), DDL doc — as below.
+- **Security-walk redesign (the resolved blocker):** `POST /v1/media/:id/init`'s cross-tenant leg moved from the shared-404 `mediaProbes` model to a `dedicated` leg asserting **held == free** (init at a foreign id == init at a fresh id, both 200) — a DIRECT indistinguishability check, stronger than the old fixed-404. This also removes init's side-effect row from the shared-fixture loop, so the four reader legs (chunks/status/complete/download) correctly stay uniform-404. `KNOWN_EXISTENCE_CONTROL_DIFFERENCES` emptied (not relaxed) with its stale doc block rewritten to the historical record.
+- `apps/server/test/integration/media/init-cross-tenant.test.ts` (task 114's) rewritten to D23 §2: the cross-tenant leg now proves held==free + tenant A owns its OWN new row + tenant B untouched (two tenants, one id); the same-tenant other-device 404 split into its own device-binding test.
+- **Falsified both layers (§2.11):** DB integration test green→red(`expected 404 to be 200`)→green; the SEC-TENANT-04 held==free test green→red(`expected 404 to be 200`)→green. Each by reverting the fix, reading the named red, restoring.
+- **Gates:** full server lane **562/562**, media suite **79/79**, security lane **14/14**, `pnpm lint` clean, `pnpm knip` +0/-0, and **codegen: zero db.ts drift** (migrate+regenerate leaves the generated types byte-identical — a constraint-only change; the earlier codegen:check red was a T-14d unmigrated-`bolusi_dev` artifact, not real drift).
+
+Remaining before merge: one §2.9 reviewer (re-run the two falsifications, confirm the held==free assertion is equal-or-stronger than the old 404 pin, confirm the four reader legs still uniform-404, confirm no other server test regressed). Then `pnpm task:status 170 done` at the ff.
+
+---
+
+## (superseded) THE BLOCKER as first found — kept for the record
 Tenant-scoping the id **invalidates the SEC-TENANT-04 media cross-tenant probe model across all five media endpoints**, not just init. The walk (`packages/harness/src/security/probe-registry.ts` `mediaProbes`, asserted in `sec-tenant-04.test.ts`) probes media by targeting `ctx.tenantBMediaId` and expects a uniform `404` (SEC-MEDIA-03 / §2.2 exception 1: "every out-of-scope media id is one indistinguishable 404"). **That premise is now false: a bare media id is no longer a cross-tenant reference** — `tenantBMediaId` is simply a free id in tenant A's namespace. Observed on real PG:
 - `POST /:id/init` cross-tenant → **200** (correctly creates a row in tenant A; the walk misreads it as "LEAK: 200 on out-of-scope access").
 - That init **side-effect row** then contaminates the shared-id legs: `GET /status` → 200, `PUT /chunks/0` → CHUNK_SIZE_INVALID, `POST /complete` → CHUNKS_MISSING — none is the expected 404.
