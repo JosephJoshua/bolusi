@@ -171,3 +171,29 @@ require `Status: ok`, so switching entry point (i) → (ii) does not require tou
 ## Recommendation for the next dispatch
 
 The root cause needs **no** further CI evidence — A–D are all provable from the checkout. But leg 5 alone (a `adb logcat -d` dump + `launch.stdout` on failure) is worth one dispatch **before** the rest, because it costs nothing and answers, for free, the one question this log cannot: whether the app boots at all on-device after 148's SQLCipher removal (see task 160, which predicts a silent half-enrolled boot). Landing 5 first turns the next red run into an actual diagnosis instead of a single line.
+
+## TRAPS FOR THE PRODUCER WORK (from the task-176 review, 2026-07-24)
+
+Task 176 landed the failure-path observability. Its reviewer verified `amStartFailureReason` against
+AOSP's real `ActivityManagerShellCommand.java` string table and found two latent traps that **cannot
+bite today** (the activity name is hardcoded) but bite **exactly when this task picks an entry point
+and builds the emitter**. Read both before writing leg 3 or leg 4.
+
+1. **Do not name the entry point `*Exception*`.** `amStartFailureReason`'s `/Exception/` pattern is
+   unanchored and case-sensitive, and it is matched against `am start`'s stdout — which echoes
+   `Starting: Intent { cmp=com.bolusi.app/.YourActivity }`. A component whose NAME contains
+   "Exception" self-trips: the reviewer probed `com.bolusi.app/.ExceptionHandlerActivity` with
+   `Status: ok` and got a DETECTED failure. Either avoid the name, or anchor the pattern to the
+   exception shape — the reviewer's suggestion: `/^\s*[\w.$]+Exception:/m`.
+2. **`Status: timeout` now fails fast where the old code kept polling.** It is a real `-W` value
+   (AOSP-confirmed) meaning AM's wait expired without the activity reaching focus. A cold start of a
+   release RN app on a CI emulator can plausibly hit it for a launch that would *still* eventually
+   emit. When the emitter exists, consider warning and falling through to the poll when
+   `Status: timeout` is the ONLY match, rather than failing immediately.
+
+**Also inherited, and worth closing when you touch `fail()`:** there is **no regression guard on the
+CLI orchestration** — nothing in the suite would notice if `dumpFailureDiagnostics()` were deleted
+from `fail()`. The two pure functions (`amStartFailureReason`, `tailLines`) ARE guarded (both were
+broken and watched red, including a head-anchored-bound mutation that would have discarded the crash).
+The orchestration is falsified only by stub, which is inherent to the pure/thin-CLI split — but per
+§2.11 the dump's presence is precisely the kind of line whose silent removal nothing would catch.
