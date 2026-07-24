@@ -182,6 +182,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 171 | §2.2's exception justification and the harness `rationale` string are two uncoupled prose copies of one claim — nothing ties them, which is how 141a's round-2 refuted-premise-in-the-failure-message happened; bind by citation and assert it resolves (from the 141a review) | todo | 141a |
 | 172 | `pnpm ci:status` classifies a red job as OWED by JOB NAME alone and never calls `assert()` (it reads the job-list API, so it has no log text) — so task 154's scope check does not reach the command run after every push; a security-sweep red for a NEW reason still prints OWED and exits 0 (from the 154 review) | todo | 142, 154 |
 | 173 | task ids are allocated by hand-reading a per-worktree `_index.md`, so concurrent branches collide (3× in one session); add `pnpm task:new` that allocates against origin/main and writes file+row atomically — reduces the rate, ledger gate stays the loud backstop | todo | — |
+| 175 | **HIGH — holds the v0 exit line** the emulator lane waited 20 min for a logcat line NOTHING writes: 27a shipped the consumer and never the producer — no `HarnessActivity` anywhere but the driver's own string, zero emitters of `BOLUSI_HARNESS_RESULT`, zero callers of `loadHarness()`, 4 of 7 required gates id-only — and `BOLUSI_TEST_HARNESS` lacks the `EXPO_PUBLIC_` prefix so it cannot reach a release bundle regardless (run 29990800850, job 89152942568) | todo | 162, 148 |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
