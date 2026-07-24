@@ -70,5 +70,27 @@ event that comment anticipates.
 security-guide §2.2 stays at exactly two documented exceptions. Do NOT add a third while doing this
 work — the whole point of the ruling is that this one does not become one.
 
-## PARTIAL WIP (2026-07-24) — agent stopped on the weekly API limit, resets Jul 27
-Uncommitted work-in-progress is preserved in worktree `.claude/worktrees/task-170` on branch `task/170-tenant-scope-media-id`: a start on `apps/server/test/integration/media/tenant-scoped-id.test.ts` (the reproduction test). The migration itself was NOT written. Client-side single-tenant-per-device-DB was confirmed. Resume from that worktree; do not restart from zero.
+## PROGRESS + A BLOCKER FOUND (2026-07-24, orchestrator, main loop)
+
+WIP is in worktree `.claude/worktrees/task-170` (branch `task/170-tenant-scope-media-id`), **uncommitted but complete for the DB/handler layer and proven on real PG16**:
+
+**DONE and falsified (§2.11 green→red→green on PostgreSQL 16.14, own container stamp):**
+- Migration `0011_media_id_tenant_scoped.ts`: `media` PK `(id)` → `(tenant_id, id)`; `media_chunks` PK `(media_id, chunk_index)` → `(tenant_id, media_id, chunk_index)` (else two tenants sharing an id collide on chunk 0 — caught while tracing); `media_chunks` FK rewritten to the composite `(tenant_id, media_id) → media(tenant_id, id)`.
+- `apps/server/src/routes/media.ts`: both `onConflict` targets made composite; the false "global unique index" comment rewritten.
+- `ai-docs/10-db-schema.md` §8 media + media_chunks DDL updated to match.
+- `apps/server/test/integration/media/tenant-scoped-id.test.ts` (the prior agent's adversarial test): **4/4 pass** — indistinguishability on status+code+body, two-rows-one-id, and the cross-tenant collision end-to-end (each tenant downloads ITS OWN bytes). Reverting the fix reds it exactly on the oracle (`expected 404 to be 200`); restoring greens it.
+
+**THE BLOCKER (this is why the task is bigger than "delete the pin"):**
+Tenant-scoping the id **invalidates the SEC-TENANT-04 media cross-tenant probe model across all five media endpoints**, not just init. The walk (`packages/harness/src/security/probe-registry.ts` `mediaProbes`, asserted in `sec-tenant-04.test.ts`) probes media by targeting `ctx.tenantBMediaId` and expects a uniform `404` (SEC-MEDIA-03 / §2.2 exception 1: "every out-of-scope media id is one indistinguishable 404"). **That premise is now false: a bare media id is no longer a cross-tenant reference** — `tenantBMediaId` is simply a free id in tenant A's namespace. Observed on real PG:
+- `POST /:id/init` cross-tenant → **200** (correctly creates a row in tenant A; the walk misreads it as "LEAK: 200 on out-of-scope access").
+- That init **side-effect row** then contaminates the shared-id legs: `GET /status` → 200, `PUT /chunks/0` → CHUNK_SIZE_INVALID, `POST /complete` → CHUNKS_MISSING — none is the expected 404.
+
+So SEC-TENANT-04 REDS after the fix, and **emptying `KNOWN_EXISTENCE_CONTROL_DIFFERENCES` is not sufficient** — the pin covered the specific "404 vs 200" strings, but the actual behavior is now different strings, and four other legs moved too.
+
+**Remaining work (a security-walk redesign — §2.5 care, NOT a rush):**
+1. Split `init` out of the shared-404 `mediaProbes` model. Its correct security property is **held == free**: init at `tenantBMediaId` and init at a never-used id must both return the SAME response (200 for enrolled metadata), revealing nothing about tenant B. Assert that equality, not a 404.
+2. The read/mutate legs (`chunks`/`status`/`complete`/`download`) must probe an id tenant A genuinely never created (and that init did not side-effect into existence) so they still return a uniform 404 — OR the probe must target tenant B's ACTUAL uploaded media through a mechanism that survives tenant-scoping (the real cross-tenant question is now "can tenant A read tenant B's blob," which the collision test already answers: no, blobs are tenant-prefixed).
+3. THEN empty the pin and confirm SEC-TENANT-04 green.
+4. `db:codegen:check` failed on a db:up infra contention (a container was already up), NOT on real drift — re-run uncontended; a composite-PK change does not alter kysely-codegen column output, so expect no `db.ts` diff, but verify.
+
+This is a §6-adjacent security-surface change with a wider blast radius than the ruling's "tenant-scope the id" implied. It is preserved, proven at the DB layer, and precisely characterized — resume from the worktree; do the walk redesign carefully with the held==free adversarial assertion before review (§2.5), and get a separate reviewer (§2.9).
