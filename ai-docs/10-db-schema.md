@@ -463,7 +463,7 @@ CREATE TABLE control_sessions (
 ```sql
 -- ============ media (row created at init — api/03-media §3.1) ============
 CREATE TABLE media (
-  id                    uuid PRIMARY KEY,
+  id                    uuid NOT NULL,           -- caller-supplied; unique WITHIN a tenant, not global
   tenant_id             uuid NOT NULL REFERENCES tenants(id),
   store_id              uuid REFERENCES stores(id),  -- NULL for store-less devices (api/03-media §2)
   captured_by_user_id   uuid NOT NULL,
@@ -485,7 +485,14 @@ CREATE TABLE media (
                           -- ONLY client-side (§9.4; 03-state-machines §4).
   attached_operation_id uuid,                    -- backlink; set when a referencing op is accepted (06-media-pipeline)
   completed_at          bigint,
-  created_at            bigint NOT NULL
+  created_at            bigint NOT NULL,
+
+  -- Media id is unique PER TENANT, not globally (D23 §2; migration 0011). A global `id PRIMARY KEY`
+  -- made POST /v1/media/:id/init a cross-tenant existence oracle: RLS hides a foreign tenant's row
+  -- from SELECT but a unique conflict still fires on INSERT (§6), so a held id answered 404 and a
+  -- free id answered 200. Scoping uniqueness to the tenant removes the distinction — a foreign id
+  -- simply does not exist here. Two tenants may hold the same id independently.
+  PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX idx_media_tenant_status ON media (tenant_id, status)
   WHERE status <> 'complete';
@@ -493,14 +500,17 @@ CREATE INDEX idx_media_tenant_status ON media (tenant_id, status)
 -- In-flight chunk storage; GET /v1/media/:id/status reads this — resume is
 -- SERVER-authoritative (api/03-media §3.3; 06-media-pipeline §4)
 CREATE TABLE media_chunks (
-  media_id    uuid NOT NULL REFERENCES media(id),
+  media_id    uuid NOT NULL,
   chunk_index integer NOT NULL CHECK (chunk_index >= 0),
   tenant_id   uuid NOT NULL,
   byte_size   integer NOT NULL CHECK (byte_size > 0),
   bytes       bytea NOT NULL,                    -- chunk body (api/03-media §6); rows deleted
                                                  -- after assembly at complete
   received_at bigint NOT NULL,
-  PRIMARY KEY (media_id, chunk_index)
+  -- tenant_id in the key AND the FK (D23 §2; migration 0011): media id is per-tenant, so the same
+  -- (media_id, chunk_index) can legitimately exist in two tenants — the key must separate them.
+  PRIMARY KEY (tenant_id, media_id, chunk_index),
+  FOREIGN KEY (tenant_id, media_id) REFERENCES media(tenant_id, id)
 );
 -- NO per-chunk sha256: per-chunk hashes are deliberately not part of the protocol
 -- (api/03-media §5). Integrity = exact chunk size per PUT + whole-file sha256 at
