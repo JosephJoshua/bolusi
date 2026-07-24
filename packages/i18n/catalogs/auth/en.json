@@ -3,6 +3,7 @@
     "title": "Who’s using this?",
     "instruction": "Tap your name",
     "addUser": "Add User",
+    "emptyUsers": "No users on this device yet. Ask the store owner to enroll this device.",
     "idleLocked": "Locked after sitting idle. Your work is safe."
   },
   "pin": {

@@ -1,165 +1,137 @@
 // Proves the SEC-DEV-06 probe's DETECTION LOGIC in CI, against fakes.
 //
-// CI has no SQLCipher (better-sqlite3 ships none), so CI cannot witness ciphertext at
-// rest — that is task 27's on-device leg. What CI can and must prove is that the probe
-// is not a rubber stamp: given a plaintext database it reports findings, and it only
-// reports "clean" when all three checks genuinely hold. A probe that always returned []
-// would pass a device run and prove nothing.
+// ── WHY THIS FILE WAS REWRITTEN (the lesson, kept where the next editor will read it) ──────────
+// The previous version fed fakes shaped to SQLCipher's whole-file model: "an unkeyed open is
+// refused", "the file does not start with `SQLite format 3`". D22 (task 148) deleted SQLCipher, so
+// the real device now does the OPPOSITE of what those fakes described — the file IS plain SQLite and
+// DOES open with no key — and yet this suite stayed green, because a fake will happily keep
+// describing a world that no longer exists. The probe's premise died and its guard could not see it.
+// That is the failure §2.11 names, arriving through the fixtures rather than the assertions.
+//
+// So the fakes below are written against the POST-D22 model, and the coverage test exists to stop the
+// probe from ever passing vacuously: CI cannot witness on-device encryption (that is task 27a), but it
+// can and must prove this probe is not a rubber stamp.
 import { describe, expect, test } from 'vitest';
-import type { DbDriver } from '@bolusi/db-client';
 
 import {
+  AT_REST_ENCRYPTED_COLUMNS,
   checkControlSeedIsWitnessed,
   checkDbAtRestIsCiphertext,
   type AtRestProbeContext,
+  type SealedCell,
 } from './at-rest.js';
 
-const WRONG_KEY = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+const SEALED_PREFIX = `${String.fromCharCode(1)}gcm1:AAAAAAAAAAAA:`;
 const MARKER = 'Twelve crates of stock';
 
 function encode(text: string): Uint8Array {
   return new TextEncoder().encode(text);
 }
 
-/** Bytes that look like real SQLCipher output: no header, no plaintext. */
-function ciphertextBytes(): Uint8Array {
-  return new Uint8Array([0x9a, 0x41, 0x00, 0xd3, 0x7f, 0xe2, 0x11, 0x08]);
+/** A healthy device: plain-SQLite bytes (expected!) with NO seeded plaintext anywhere in them. */
+function healthyBytes(): Uint8Array {
+  return encode('SQLite format 3\0some ciphertext blobs and ids');
 }
 
-/** Bytes of an UNENCRYPTED SQLite file. `\0` is the escape, not a literal NUL byte: the
- * real header is 16 bytes ending in NUL, but embedding one makes git treat this file as
- * binary — and this is the file that proves the SEC-DEV-06 probe isn't a rubber stamp, so
- * it has to stay readable in a diff. */
-function plaintextBytes(): Uint8Array {
-  const header = encode('SQLite format 3\0');
-  const marker = encode(MARKER);
-  const bytes = new Uint8Array(header.length + marker.length);
-  bytes.set(header, 0);
-  bytes.set(marker, header.length);
-  return bytes;
+/** Every signed-off column, observed and sealed — what a passing device produces. */
+function sealedCells(): SealedCell[] {
+  return AT_REST_ENCRYPTED_COLUMNS.map(([table, column]) => ({
+    table,
+    column,
+    value: `${SEALED_PREFIX}c2VhbGVkLWJsb2I=`,
+  }));
 }
 
 function context(overrides: Partial<AtRestProbeContext> = {}): AtRestProbeContext {
   return {
-    // Encrypted DB: every unkeyed/wrong-key open is refused.
-    openCopy: () => Promise.reject(new Error('file is not a database')),
-    readCopyBytes: () => Promise.resolve(ciphertextBytes()),
-    wrongKey: WRONG_KEY,
+    readCopyBytes: () => Promise.resolve(healthyBytes()),
     plaintextMarkers: [MARKER],
+    readSealedCells: () => Promise.resolve(sealedCells()),
+    sealedPrefix: SEALED_PREFIX,
     ...overrides,
   };
 }
 
-/**
- * A COMPLETE `DbDriver` fake. Typed as `DbDriver` on purpose: a partial fake that only
- * happens to satisfy the methods the probe calls today would break confusingly the moment
- * the probe reaches for `begin()` or `prepare()`, and a cast would hide exactly that.
- */
-function makeDriver(overrides: Partial<DbDriver> = {}): DbDriver {
-  return {
-    execute: () => Promise.resolve({ rows: [{ c: 19 }], rowsAffected: 0, insertId: null }),
-    executeBatch: () => Promise.resolve({ rowsAffected: 0 }),
-    prepare: () => ({
-      execute: () => Promise.resolve({ rows: [], rowsAffected: 0, insertId: null }),
-      finalize: () => Promise.resolve(),
-    }),
-    begin: () => Promise.resolve(),
-    commit: () => Promise.resolve(),
-    rollback: () => Promise.resolve(),
-    close: () => Promise.resolve(),
-    ...overrides,
-  };
-}
-
-/** Opens AND reads — i.e. an unencrypted database, the failure the probe must catch. */
-function readableDriver(): Promise<DbDriver> {
-  return Promise.resolve(makeDriver());
-}
-
-describe('checkDbAtRestIsCiphertext', () => {
-  test('reports nothing when the file is genuinely ciphertext', async () => {
+describe('checkDbAtRestIsCiphertext (post-D22: sealed COLUMNS, plain-SQLite FILE)', () => {
+  test('reports nothing when every column is sealed and no seeded plaintext survives', async () => {
     expect(await checkDbAtRestIsCiphertext(context())).toEqual([]);
   });
 
-  test('catches a database that opens WITHOUT a key', async () => {
+  test('a plain-SQLite file header is NOT a finding — it is the designed behaviour', async () => {
+    // The single most important assertion in this file. Under SQLCipher this header meant "no
+    // encryption"; post-D22 it is simply what the file looks like. Asserting it is absent would red
+    // the first required emulator gate on a healthy device.
     const findings = await checkDbAtRestIsCiphertext(
-      context({
-        openCopy: (key) =>
-          key === null ? readableDriver() : Promise.reject(new Error('file is not a database')),
-      }),
+      context({ readCopyBytes: () => Promise.resolve(encode('SQLite format 3\0')) }),
     );
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.check).toBe('open without key is refused');
+    expect(findings.map((f) => f.check)).not.toContain('no plaintext SQLite header');
   });
 
-  test('catches a database that opens with the WRONG key', async () => {
-    const findings = await checkDbAtRestIsCiphertext(
-      context({
-        openCopy: (key) =>
-          key === WRONG_KEY
-            ? readableDriver()
-            : Promise.reject(new Error('file is not a database')),
-      }),
-    );
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.check).toBe('open with wrong key is refused');
-  });
-
-  test('catches the plaintext SQLite header and the seeded marker in the file bytes', async () => {
-    const findings = await checkDbAtRestIsCiphertext(
-      context({ readCopyBytes: () => Promise.resolve(plaintextBytes()) }),
-    );
-    expect(findings.map((finding) => finding.check)).toEqual([
-      'no plaintext SQLite header',
-      'no seeded plaintext markers',
-    ]);
-  });
-
-  test('reports every failure at once for a fully unencrypted database', async () => {
-    const findings = await checkDbAtRestIsCiphertext(
-      context({ openCopy: readableDriver, readCopyBytes: () => Promise.resolve(plaintextBytes()) }),
-    );
-    expect(findings.map((finding) => finding.check)).toEqual([
-      'open without key is refused',
-      'open with wrong key is refused',
-      'no plaintext SQLite header',
-      'no seeded plaintext markers',
-    ]);
-  });
-
-  test('an open that succeeds but cannot READ counts as encrypted', async () => {
-    // SQLCipher defers key verification to the first page read: open() alone succeeding
-    // is not evidence of a decryptable database, so the probe must not treat it as one.
-    // This is the case that makes `expectUnreadable` probe with a real query rather than
-    // trusting open() — a full driver whose reads reject is exactly a keyed SQLCipher DB.
-    const findings = await checkDbAtRestIsCiphertext(
-      context({
-        openCopy: () =>
-          Promise.resolve(
-            makeDriver({ execute: () => Promise.reject(new Error('file is not a database')) }),
-          ),
-      }),
-    );
-    expect(findings).toEqual([]);
-  });
-
-  test('a marker appearing only as a substring of the ciphertext is still caught', async () => {
+  test('catches a seeded plaintext marker surviving in the file bytes', async () => {
     const bytes = new Uint8Array([0x00, 0x01, ...encode(MARKER), 0x02]);
     const findings = await checkDbAtRestIsCiphertext(
       context({ readCopyBytes: () => Promise.resolve(bytes) }),
     );
-    expect(findings.map((finding) => finding.check)).toEqual(['no seeded plaintext markers']);
+    expect(findings.map((f) => f.check)).toEqual(['no seeded plaintext markers']);
+  });
+
+  test('catches ONE unsealed column among the sealed ones', async () => {
+    const cells = sealedCells();
+    cells[4] = { table: 'notes', column: 'body', value: 'dua belas krat — in the clear' };
+    const findings = await checkDbAtRestIsCiphertext(
+      context({ readSealedCells: () => Promise.resolve(cells) }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.check).toBe('encrypted column is sealed');
+    expect(findings[0]?.detail).toContain('notes.body');
+  });
+
+  test('a NULL cell is not a finding — nullable columns are legitimately null', async () => {
+    const cells = sealedCells();
+    cells[2] = { table: 'operations', column: 'location', value: null };
+    const findings = await checkDbAtRestIsCiphertext(
+      context({ readSealedCells: () => Promise.resolve(cells) }),
+    );
+    // …but it DOES cost coverage for that column, which is the honest outcome: a null proves nothing.
+    expect(findings.map((f) => f.check)).toEqual(['every encrypted column was actually probed']);
+    expect(findings[0]?.detail).toContain('operations.location');
+  });
+
+  test('COVERAGE: a device that seeded nothing FAILS instead of passing vacuously', async () => {
+    // The anti-rubber-stamp assertion. With no cells and no surviving plaintext, checks (1) and (2)
+    // are both trivially satisfied — exactly the empty-fixture shape that has produced eight
+    // green-for-the-wrong-reason gates in this repo. Coverage is what makes the green mean something.
+    const findings = await checkDbAtRestIsCiphertext(
+      context({ readSealedCells: () => Promise.resolve([]) }),
+    );
+    expect(findings).toHaveLength(AT_REST_ENCRYPTED_COLUMNS.length);
+    for (const finding of findings) {
+      expect(finding.check).toBe('every encrypted column was actually probed');
+    }
+  });
+
+  test('the coverage set is exactly the 11 signed-off columns (D22 addendum 2)', () => {
+    expect(AT_REST_ENCRYPTED_COLUMNS).toHaveLength(11);
+    expect(AT_REST_ENCRYPTED_COLUMNS.map(([t, c]) => `${t}.${c}`)).toEqual([
+      'operations.payload',
+      'operations.signed_core_jcs',
+      'operations.location',
+      'notes.title',
+      'notes.body',
+      'user_pin_verifiers.salt',
+      'user_pin_verifiers.hash',
+      'user_pin_verifiers.params',
+      'media_items.location',
+      'quarantined_ops.signed_core_jcs',
+      'users_directory.name',
+    ]);
   });
 });
 
-// The POSITIVE CONTROL for the on-device leg (testing-guide T-14b). `checkDbAtRestIsCiphertext`'s
-// last two checks pass when the seeded markers are ABSENT from the file — which is ALSO exactly what
-// happens when the seed silently wrote nothing (the parse-collapse / empty-fixture family, and the
-// RLS `UPDATE 0` incident in one shape over). So the device ctx (task 27a) must first witness the
-// SAME markers in an UNENCRYPTED control DB before it may trust their absence in the SQLCipher file.
-// This is the Node-runnable half of that control: given the control DB's raw bytes, a marker MISSING
-// means the seed is a no-op, so the whole absence result is vacuous. CI has no live seed here, so
-// this binds only the DETECTION direction; the device ctx (apps/mobile) wires it to a real control DB.
+// The POSITIVE CONTROL for the on-device leg (testing-guide T-14b) — UNCHANGED by D22, because it
+// binds the SEED, not the cipher. The marker checks pass when the seeded values are ABSENT, which is
+// ALSO what a silent seed no-op produces, so the device ctx must first witness the SAME markers in a
+// cipher-disabled control DB before it may trust their absence in the real file.
 describe('checkControlSeedIsWitnessed — the T-14b positive control', () => {
   const MARKERS = ['Twelve crates of stock', 'faktur-0093'];
 
@@ -174,8 +146,6 @@ describe('checkControlSeedIsWitnessed — the T-14b positive control', () => {
   });
 
   test('catches a silent seed no-op: a marker missing from the control is a finding (result is vacuous)', () => {
-    // The control DB carries only the FIRST marker — the seed of the second did nothing, so
-    // "no plaintext in the ciphertext" would prove nothing for it.
     const bytes = new Uint8Array([...encode(MARKERS[0] ?? '')]);
     const findings = checkControlSeedIsWitnessed(bytes, MARKERS);
     expect(findings).toHaveLength(1);

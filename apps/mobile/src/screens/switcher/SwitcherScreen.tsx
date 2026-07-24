@@ -33,7 +33,7 @@ import type { SwitcherMode } from '../../navigation/zone.js';
 
 import {
   initialsOf,
-  SWITCHER_EMPTY_CTA_KEY,
+  SWITCHER_EMPTY_HINT_KEY,
   SWITCHER_LOCK_KEY,
   toGridRows,
   type SwitcherGridRow,
@@ -47,8 +47,22 @@ export interface SwitcherScreenProps {
   /** Null when acting as the lock — §8.2: no header back (it would walk into the last session). */
   readonly onBack: (() => void) | null;
   readonly onSelect: (user: SwitcherUser) => void;
-  readonly onEnroll: () => void;
+  /**
+   * §5's Error retry: re-run the directory read that failed. RE-RUN, not "go away" — see
+   * `onUnauthorizedBack` for why the distinction is a prop and not a comment.
+   */
   readonly onRetry: () => void;
+  /**
+   * §5's Unauthorized back.
+   *
+   * A SEPARATE PROP FROM `onRetry`, which is the whole point (task 130). Both arms used to be handed
+   * the same `onRetry`, so "coba lagi" on the error state and "kembali" on the unauthorized state
+   * were literally one function — two different user intents behind one callback, and the composition
+   * root passed `noop` for it, so both dead-ended. A single prop cannot be half-wired: whatever it
+   * gets, one of the two arms is doing the wrong thing. Splitting it makes the wrong wiring a
+   * compile-visible fact rather than a behaviour nobody can see.
+   */
+  readonly onUnauthorizedBack: () => void;
   readonly syncChip: SyncChipState;
   readonly onOpenSync: () => void;
 }
@@ -58,8 +72,8 @@ export function SwitcherScreen({
   mode,
   onBack,
   onSelect,
-  onEnroll,
   onRetry,
+  onUnauthorizedBack,
   syncChip,
   onOpenSync,
 }: SwitcherScreenProps): React.JSX.Element {
@@ -71,9 +85,13 @@ export function SwitcherScreen({
             kind: 'empty',
             empty: {
               title: t('core.status.empty'),
-              hint: t('auth.enroll.instruction'),
-              createLabel: t(SWITCHER_EMPTY_CTA_KEY),
-              onCreate: onEnroll,
+              // GUIDANCE, NOT A BUTTON (owner ruling D23 §3 — see `SWITCHER_EMPTY_HINT_KEY`). No
+              // `createLabel`/`onCreate`: `EmptyState` renders its CTA IFF `onCreate` is supplied
+              // (EmptyState.tsx:20-27), so omitting them is the whole removal — the affordance
+              // cannot come back by accident, because there is no handler for it to come back to.
+              // The previous hint here was `auth.enroll.instruction`, the WIZARD's copy ("Masuk
+              // dengan akun kamu…"), which addressed a login form this screen does not have.
+              hint: t(SWITCHER_EMPTY_HINT_KEY),
               testID: 'switcher-empty',
             },
           }
@@ -94,7 +112,7 @@ export function SwitcherScreen({
                 unauthorized: {
                   title: t('core.errors.PERMISSION_DENIED'),
                   backLabel: t('core.action.back'),
-                  onBack: onRetry,
+                  onBack: onUnauthorizedBack,
                   testID: 'switcher-unauthorized',
                 },
               }

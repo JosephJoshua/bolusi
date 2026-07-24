@@ -52,6 +52,8 @@ import {
 } from './src/screens/switcher/model.js';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
 import { syncChipState, type SyncStatusInput } from './src/screens/sync-status/model.js';
+import { CaptureScreen } from './src/media/CaptureScreen.js';
+import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
@@ -76,6 +78,31 @@ export interface AppProps {
   /** TASK 15 SEAM — see the file header. */
   readonly sync: SyncStatusInput;
   readonly onSyncNow: () => void;
+  /**
+   * 06 §5.2 (e)'s "manual retry from the sync-status screen" — `MediaClient.requestManual()` (task 130).
+   *
+   * A SEPARATE PROP FROM `onSyncNow`, because they are separate loops. FR-1138 makes the media drain
+   * and the op push independent by construction (`media/client.ts`'s header: they share no state), so
+   * folding the media retry into the sync button would make the tap on a `failed` photo chip either
+   * do nothing to that photo or restart something the user did not ask for.
+   */
+  readonly onRetryMedia: () => void;
+  /**
+   * §5's Error retry on the User Switcher — re-run the directory read (`AppSessionController.refresh`).
+   *
+   * The switcher's error state is reached when that read THREW (`usersError`), so the only action
+   * that can clear it is running it again. Nothing else on this shell can.
+   */
+  readonly onRetryUsers: () => void;
+  /**
+   * The in-app capture surface while a capture is running, or `null`/`undefined` when none is
+   * (06 §2.1; task 130). Built by `useCaptureHost` at the composition root, because the promise the
+   * notes editor awaits has to outlive the screen that shows the viewfinder.
+   *
+   * It replaces the SHELL ZONE only — never the gate's verdict. `resolveZone` still decides first,
+   * so an idle lock, a revocation or a pending PIN beats an open camera (see the render below).
+   */
+  readonly capture?: CaptureSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -127,6 +154,14 @@ export default function App(props: AppProps): React.JSX.Element {
     initialEnrollmentState(props.device === 'revoked'),
   );
   const [discardPrompt, setDiscardPrompt] = useState(false);
+  /**
+   * Which rejected op has its §8.4-item-4 technical detail disclosed (task 130).
+   *
+   * The op ID rather than a boolean, so opening a second row closes the first — a list where every
+   * tap leaves another block expanded turns the one section that must never be skimmed into a wall.
+   * Tapping the open row closes it, which is the only way back out of a disclosure with no chrome.
+   */
+  const [rejectedDetailFor, setRejectedDetailFor] = useState<string | null>(null);
 
   /**
    * Apply a notification-tap deep link (api/04-push §4). `Root` hands a FRESH `pushRoute` object per
@@ -183,7 +218,16 @@ export default function App(props: AppProps): React.JSX.Element {
     if (!switching) setRoute('syncStatus');
   }, [switching]);
 
+  const captureSurface = props.capture ?? null;
   const goBack = useCallback((): boolean => {
+    // A capture owns the screen while it runs (see the early return below), so back IS its cancel —
+    // §8.1's "hardware back always equals the header back action", applied to the surface actually
+    // showing. Without this the press would fall through to the zone underneath and navigate a tree
+    // the user cannot see, leaving the viewfinder on top of it.
+    if (captureSurface !== null) {
+      captureSurface.onBack();
+      return true;
+    }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
     // list→detail→editor). While it has somewhere to go back to, hardware back IS that surface's back
     // — routed through the editor's discard gate — never an app exit (design-system §8.1; task 145).
@@ -213,7 +257,7 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [zone, enrollment]);
+  }, [zone, enrollment, captureSurface]);
 
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
@@ -265,6 +309,64 @@ export default function App(props: AppProps): React.JSX.Element {
     return found === undefined ? null : { id: found.id, initials: initialsOf(found.name) };
   }, [props.session, props.users]);
 
+  const capture = captureSurface;
+  if (capture !== null && zone.kind === 'shell') {
+    /**
+     * THE CAPTURE SURFACE WINS THE SCREEN — BUT ONLY INSIDE THE SHELL ZONE (06 §2.1; task 130).
+     *
+     * `zone.kind === 'shell'` is the whole security content of this line, and it is here because
+     * the first version of it was wrong in the direction that matters. That version returned on
+     * `capture !== null` alone, with a comment asserting that a mid-capture idle lock would still
+     * lock — which was exactly backwards: `resolveZone` is recomputed on every render (above), but
+     * an unconditional early return never reads it, so a device that locked with the camera open
+     * kept showing a LIVE VIEWFINDER over a locked session. The comment was the guard, and the
+     * guard was false (CLAUDE.md §2.11). Deferring to the zone makes the lock win by construction.
+     * Falsified: dropping this conjunct turns `capture surface yields to an idle lock` red in
+     * `test/live-shell-dead-controls.test.tsx`.
+     *
+     * The pending capture survives the lock for the SAME user only — the host holds the deferred in
+     * `Root`, which does not unmount, so THIS user's PIN unlock returns to the viewfinder with the
+     * notes editor still waiting behind it ("Pekerjaanmu aman", SwitcherScreen.tsx:7-11). If a
+     * DIFFERENT user unlocks (an idle lock ended the session and someone else signed in), the host
+     * cancels the capture rather than handing the incoming user the outgoing user's live camera —
+     * that identity guard lives in `useCaptureHost` (`openedForUserRef`/`stranded`), because it needs
+     * the acting-identity change the zone gate cannot see, and it is covered by
+     * `a pending capture does not survive an idle lock into a different user's session`.
+     *
+     * The chrome comes from here because this is where chrome is built (§8.1: both slots always
+     * present). The sync chip goes to Sync Status the way every other screen's does; the avatar
+     * slot renders empty during a capture — a switcher hop from inside a half-finished photo would
+     * strand the capture behind an identity change, and 06 §4 freezes the capturing user at the
+     * shutter, so the identity must not be switchable between opening the camera and pressing it.
+     */
+    return (
+      <View testID="bolusi-app-shell" style={FILL}>
+        <StatusBar style="auto" />
+        <CaptureScreen
+          // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
+          // catalog's own name for this action ("Ambil Foto") — no new key, no hardcoded string.
+          title={t('media.action.takePhoto')}
+          state={capture.state}
+          preview={capture.preview}
+          syncChip={
+            <SyncChip
+              state={chip}
+              pendingCount={props.sync.pendingOperationCount}
+              accessibilityLabel={t('sync.status.lastSynced', { relative: '' })}
+              onPress={openSyncStatus}
+            />
+          }
+          avatar={<View testID="capture-no-avatar" />}
+          onShutter={capture.onShutter}
+          onRetake={capture.onRetake}
+          onUsePhoto={capture.onUsePhoto}
+          onRetry={capture.onRetry}
+          onBack={capture.onBack}
+        />
+      </View>
+    );
+  }
+
   return (
     <View testID="bolusi-app-shell" style={FILL}>
       <StatusBar style="auto" />
@@ -292,8 +394,27 @@ export default function App(props: AppProps): React.JSX.Element {
             // §8.2: the LOCK has no back. `backTarget` is the single source of that rule.
             onBack={backTarget(switcherZone) === null ? null : goBack}
             onSelect={(user) => setPinFor(tapTarget(user).userId)}
-            onEnroll={noop}
-            onRetry={noop}
+            // NO `onEnroll` — the prop is GONE, not passed as a stub (owner ruling D23 §3; task 130).
+            // §8.2's empty-roster CTA is out of v0: reaching Device Enrollment from an `active`
+            // device needs a new input on `resolveZone` (the security gate) and completing it runs
+            // api/02-auth §7.4 re-enrollment — new `deviceId`, new keypair, fresh chain at seq 1,
+            // old registration left `active` server-side. §5 forbids rendering a control that
+            // cannot work, so the empty state carries GUIDANCE TEXT instead
+            // (`SWITCHER_EMPTY_HINT_KEY`). Deleting the prop rather than stubbing it is the
+            // load-bearing half: a surviving prop is how the affordance grows back. Task 168
+            // carries the flow to v1.
+            //
+            // §5's Error retry — the real producer (`AppSessionController.refresh`), reached through
+            // Root. This is the read that FAILED; running it again is the only thing that can clear
+            // the state, and until now it was `noop`, so the retry button on a directory failure
+            // left the user with a permanently broken switcher and no way back.
+            onRetry={props.onRetryUsers}
+            // A DIFFERENT function from `onRetry`, which is the point (see SwitcherScreen's prop
+            // doc). Back from the unauthorized state is the shell's ONE back — the same `goBack`
+            // hardware back and the header run, so §8.2's "the lock has no back" holds here too:
+            // `backTarget` returns null for the lock and `goBack` consumes the press rather than
+            // walking into the previous user's session.
+            onUnauthorizedBack={goBack}
             syncChip={chip}
             onOpenSync={openSyncStatus}
           />
@@ -336,8 +457,20 @@ export default function App(props: AppProps): React.JSX.Element {
                 currentUser={currentUser}
                 onBack={() => setRoute('home')}
                 onSyncNow={props.onSyncNow}
-                onOpenRejected={noop}
-                onRetryMedia={noop}
+                // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
+                // carries the code's explanation; the tap discloses the server's own words under
+                // `sync.rejected.technicalDetails` (a catalog key that shipped with no consumer).
+                // Tapping the open row closes it — see `rejectedDetailFor`.
+                onOpenRejected={(row) =>
+                  setRejectedDetailFor((current) => (current === row.opId ? null : row.opId))
+                }
+                expandedRejectedOpId={rejectedDetailFor}
+                // 06 §5.2 (e). The row-level chip is per item and the producer is loop-level
+                // (`requestManual` coalesces into one immediate drain pass), which is the honest
+                // shape: the drain is single-flight and processes oldest-evidence-first (§5.1), so
+                // there is no per-item retry to call and pretending otherwise would be a control
+                // that looks more precise than the engine underneath it.
+                onRetryMedia={props.onRetryMedia}
                 onOpenSwitcher={() => setSwitching(true)}
               />
             );
@@ -442,10 +575,6 @@ export default function App(props: AppProps): React.JSX.Element {
 
 function nameOf(users: readonly SwitcherUser[] | null, userId: string): string {
   return (users ?? []).find((user) => user.id === userId)?.name ?? '';
-}
-
-function noop(): void {
-  // Wired by tasks 14/15/25 — see the file header for what is stubbed and why.
 }
 
 const FILL = { flex: 1 } as const;

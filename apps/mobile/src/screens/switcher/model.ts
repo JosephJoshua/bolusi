@@ -190,7 +190,22 @@ export function tapTarget(user: SwitcherUser): SwitcherTap {
 // shipping path the screen renders from; that is where the guard belongs (§2.8).
 
 /** §8.2: the empty state's CTA goes to Device Enrollment. */
-export const SWITCHER_EMPTY_CTA_KEY = 'auth.switcher.addUser';
+/**
+ * The empty roster's GUIDANCE line (design-system §5; owner ruling D23 §3, 2026-07-23).
+ *
+ * It was `SWITCHER_EMPTY_CTA_KEY = 'auth.switcher.addUser'` — the label of a create-CTA whose
+ * `onCreate` the composition root wired to `noop`, so the one control on the one screen a shop sees
+ * when its roster is empty rendered, took a press, and did nothing (task 130). D23 §3 ruled the CTA
+ * OUT of v0 rather than wiring it: reaching Device Enrollment from an `active` device needs a new
+ * input on the `resolveZone` security gate, and completing it runs api/02-auth §7.4 re-enrollment —
+ * a new `deviceId`, a new keypair, a fresh chain at seq 1, with the old registration left `active`
+ * server-side (03 §5 has no `active → re-enroll` transition). Task 168 carries that to v1.
+ *
+ * §5 still requires the Empty state to say what to do, so the CTA is replaced by TEXT naming the
+ * real-world action — the store owner enrols the device — rather than a button this build cannot
+ * honour. `auth.switcher.addUser` stays in the catalog for 168 to use.
+ */
+export const SWITCHER_EMPTY_HINT_KEY = 'auth.switcher.emptyUsers';
 
 /** §8.2 / §6.4: the lock's explanation — "Layar terkunci… Pekerjaanmu aman." (your work is safe). */
 export const SWITCHER_LOCK_KEY = 'auth.switcher.idleLocked';

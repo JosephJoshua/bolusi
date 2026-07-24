@@ -91,9 +91,23 @@ export const UNWIRED_NOTES_MEDIA: NotesMediaSeams = {
  * (notes.media-seams.test.ts) rather than an untestable literal buried in `createNotes`, so the
  * fallback is a fact a test asserts instead of a silence nobody reads.
  */
-export function notesMediaSeamsFor(media: MediaClient | null): NotesMediaSeams {
+export function notesMediaSeamsFor(
+  media: MediaClient | null,
+  /**
+   * The in-app capture entry point (06 §2.1; task 130's deliverable 3), or `undefined` on a build
+   * with no camera binding. OPTIONAL rather than required so the Node-driven compositions that have
+   * no camera keep the honest rejecting seam instead of being forced to invent one — and so this
+   * argument's ABSENCE is the thing that produces `UNWIRED_NOTES_MEDIA.capturePhoto`, which is now a
+   * fallback for a real condition rather than the only value the app ever had.
+   */
+  capturePhoto?: NotesRuntime['capturePhoto'],
+): NotesMediaSeams {
   if (media === null) return UNWIRED_NOTES_MEDIA;
-  return { ...UNWIRED_NOTES_MEDIA, loadThumbnail: createNotesThumbnailLoader(media) };
+  return {
+    ...UNWIRED_NOTES_MEDIA,
+    loadThumbnail: createNotesThumbnailLoader(media),
+    ...(capturePhoto === undefined ? {} : { capturePhoto }),
+  };
 }
 
 /**

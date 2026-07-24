@@ -23,13 +23,18 @@ import {
   type TimerPort,
 } from '@bolusi/core';
 import { closeClientDb } from '@bolusi/db-client';
-import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+import {
+  mulberry32,
+  noblePort,
+  randomBytes as prngBytes,
+  nodeColumnAead,
+} from '@bolusi/test-support';
 import type { SignedOperation } from '@bolusi/schemas';
 import { act } from 'react';
 
 import { bootstrap, type Bootstrapped } from '../src/bootstrap/bootstrap.js';
 import { createAppRuntime, type AppRuntime } from '../src/bootstrap/runtime.js';
-import { createSessionNotesRuntime, UNWIRED_NOTES_MEDIA } from '../src/bootstrap/notes.js';
+import { createSessionNotesRuntime, notesMediaSeamsFor } from '../src/bootstrap/notes.js';
 import { createAppSession, type AppSessionController } from '../src/bootstrap/session.js';
 import { Root, type RootProps } from '../src/bootstrap/Root.js';
 import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
@@ -78,6 +83,7 @@ function bootAt(location: string): Promise<Bootstrapped> {
       ensureDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)),
       getDatabaseEncryptionKey: () => Promise.resolve('a'.repeat(64)),
     } as unknown as Parameters<typeof bootstrap>[0]['keyStore'],
+    aead: nodeColumnAead,
     crypto: fakeCrypto as unknown as Parameters<typeof bootstrap>[0]['crypto'],
     clock: { now: () => FIXED_NOW },
     databaseLocation: location,
@@ -196,6 +202,70 @@ export async function seedDirectory(
         status: 'active',
         grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
         pinVerifier: verifier,
+      },
+    ],
+    rolesSnapshot: [
+      {
+        id: ROLE_ID,
+        name: 'Notes',
+        scopeType: 'store',
+        isSystemDefault: false,
+        permissionIds: ['notes.read', 'notes.create', 'notes.edit', 'notes.archive'],
+      },
+    ],
+    permissionsSnapshot: [],
+  };
+  await applyBundle(fixture.app.db.db, bundle);
+}
+
+/** A SECOND enrolled user on the same device — the incoming user in a switch/lock-unlock test. */
+export const SECOND_USER_ID = '01920000-0000-7000-8000-0000000130d1';
+
+/**
+ * Seed TWO active users, each with a REAL argon2id verifier of `TEST_PIN` (task 130's Defect-2 test).
+ *
+ * Both go through `applyBundle` — the exact writer a real enroll response uses — so a switch between
+ * them exercises the real directory the switcher reads and the real `verifyPin` for each. Distinct
+ * salts + `seq`, so the two verifier rows genuinely differ even though the PIN is the same; a wrong
+ * PIN still fails for either.
+ */
+export async function seedTwoUsers(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifierFor = (
+    seq: number,
+    saltBase: number,
+  ): Promise<Awaited<ReturnType<typeof buildPinVerifier>>> =>
+    buildPinVerifier(
+      noblePort,
+      new TextEncoder().encode(TEST_PIN),
+      { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 },
+      Uint8Array.from({ length: 16 }, (_, i) => i + saltBase),
+      { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq },
+    );
+  const [verifierA, verifierB] = await Promise.all([verifierFor(1, 1), verifierFor(2, 100)]);
+
+  const bundle: DeviceBundle = {
+    tenant: { id: fixture.tenantId, name: 'Maju Group' },
+    store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
+    settings: { idleLockSeconds },
+    users: [
+      {
+        id: fixture.userId,
+        name: 'Andi Pratama',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: verifierA,
+      },
+      {
+        id: SECOND_USER_ID,
+        name: 'Budi Santoso',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: verifierB,
       },
     ],
     rolesSnapshot: [
@@ -386,6 +456,18 @@ export interface MountOptions {
    * transport and a {@link virtualTimer}, so the debounce is measured rather than assumed.
    */
   readonly createSync?: RootProps['createSync'];
+  /**
+   * The media-client factory (06; task 130). Omitted by default — every pre-130 test mounted with NO
+   * `createMedia`, which is precisely why `MediaClient.requestManual()` had zero production callers
+   * and nothing noticed: the composed lane never had a media client for `Root` to fail to call.
+   */
+  readonly createMedia?: RootProps['createMedia'];
+  /**
+   * The in-app camera's native seams (06 §2.1; task 130). Omitted by default, so the notes attach
+   * seam stays the REJECTING `UNWIRED_NOTES_MEDIA.capturePhoto` — the honest pre-130 behaviour — and
+   * only the capture test opts in with a fake camera.
+   */
+  readonly capturePlatform?: RootProps['capturePlatform'];
 }
 
 export async function mountRoot(
@@ -448,14 +530,20 @@ export async function mountRoot(
         if (controller !== null) options.onSessionController?.(controller);
         return controller;
       }}
-      createNotes={(booted, appRuntime, identity) =>
+      // THE PRODUCTION SEAM CHOICE, not a fixture-local one (task 130): `notesMediaSeamsFor` is the
+      // same function `index.ts` calls, so what this lane binds into the notes runtime is what a
+      // device binds. It was `UNWIRED_NOTES_MEDIA` unconditionally here, which meant the composed
+      // lane could not have observed a wired capture even after one existed.
+      createNotes={(booted, appRuntime, identity, media, capturePhoto) =>
         createSessionNotesRuntime({
           app: booted,
           runtime: appRuntime,
           identity,
-          media: UNWIRED_NOTES_MEDIA,
+          media: notesMediaSeamsFor(media, capturePhoto),
         })
       }
+      {...(options.createMedia === undefined ? {} : { createMedia: options.createMedia })}
+      capturePlatform={options.capturePlatform}
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}

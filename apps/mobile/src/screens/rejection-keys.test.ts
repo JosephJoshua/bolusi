@@ -17,7 +17,7 @@ import { describe, expect, test } from 'vitest';
 import { failureKey } from './enrollment/model.js';
 import { PIN_MESSAGE_KEY } from './pin/model.js';
 import { categoryNameKey, localeNameKey, MUTABLE_PUSH_CATEGORIES } from './settings/model.js';
-import { SWITCHER_EMPTY_CTA_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
+import { SWITCHER_EMPTY_HINT_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
 import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status/model.js';
 
 /**
@@ -144,7 +144,7 @@ describe('screen key maps', () => {
       'auth.switcher.title',
     ] as const;
     for (const key of switcherHeadlineKeys) expectInEveryCatalog(key);
-    expectInEveryCatalog(SWITCHER_EMPTY_CTA_KEY);
+    expectInEveryCatalog(SWITCHER_EMPTY_HINT_KEY);
     expectInEveryCatalog(SWITCHER_LOCK_KEY);
   });
 

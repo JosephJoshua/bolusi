@@ -66,6 +66,12 @@ import {
 import type { AppRuntime } from './runtime.js';
 import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
+import {
+  NO_SYNC_STATUS_READS,
+  readSyncStatusRows,
+  type SyncStatusReads,
+} from './sync-status-reads.js';
+import { useCaptureHost, type CapturePlatform } from '../media/CaptureHost.js';
 import type { SyncClient } from './sync-client.js';
 import type { AppStatePort } from './triggers.js';
 import { createIdleTicker } from '../session/idle-ticker.js';
@@ -167,6 +173,12 @@ export interface RootProps {
      * connection — a second client would mean a second drain loop competing for the same rows.
      */
     media: MediaClient | null,
+    /**
+     * The in-app capture entry point (06 §2.1; task 130) — the seam that turns the editor's attach
+     * button from a rejecting stub into a camera. Passed rather than built inside `createNotes`
+     * because the promise it returns is settled by a SCREEN that only the shell can mount.
+     */
+    capturePhoto: NotesRuntime['capturePhoto'],
   ) => NotesRuntime;
   /**
    * RN `AppState`, injected — the idle ticker's foreground/resume signal (api/02-auth §6.4).
@@ -203,6 +215,16 @@ export interface RootProps {
    * navigates nowhere.
    */
   readonly pushRouter?: PushRouterPort | undefined;
+  /**
+   * The in-app camera's native seams (06 §2.1; task 130) — `expo-camera`'s permission call, its
+   * `CameraView`, and the still renderer. Injected for exactly the reason `createMedia` is: none of
+   * them load under Node, and injecting them is what lets the composed test lane press a real
+   * shutter against a fake camera and watch `MediaClient.capturePhoto` run.
+   *
+   * `undefined` ⇒ no in-app camera on this build, and the notes attach seam stays the REJECTING
+   * `UNWIRED_NOTES_MEDIA.capturePhoto` rather than a stub that behaves like a cancel.
+   */
+  readonly capturePlatform?: CapturePlatform | undefined;
 }
 
 export function Root({
@@ -218,6 +240,7 @@ export function Root({
   timer,
   createPushRegistration,
   pushRouter,
+  capturePlatform,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
@@ -256,12 +279,28 @@ export function Root({
    */
   const [notes, setNotes] = useState<{
     readonly userId: string;
+    /**
+     * The acting identity this runtime was built for. Held alongside the runtime — not re-derived —
+     * because the capture host stamps it onto every photo (06 §4, frozen at capture) and the two must
+     * be the same object by construction: a separately-resolved identity could drift from the one the
+     * notes commands sign with, and the photo would then be attributed to a different user than the
+     * note that carries it.
+     */
+    readonly identity: CommandIdentity;
     readonly runtime: NotesRuntime;
   } | null>(null);
+  /**
+   * §8.4's derived reads (01 §5.2), re-read on every projection write and every loop tick — see the
+   * effect below. `NO_SYNC_STATUS_READS` until the first read lands, which is the honest "not read
+   * yet" rather than a fabricated all-clear.
+   */
+  const [syncReads, setSyncReads] = useState<SyncStatusReads>(NO_SYNC_STATUS_READS);
   // A monotonic tick the live client bumps on every loop/connectivity change, so the shell re-reads
   // `loopState` / `isOffline` / `SyncState` from it. Without this, the banner would never clear on
   // the first sync — the value would be right in the DB and stale on screen.
-  const [, bump] = useReducer((n: number) => n + 1, 0);
+  // Read as `syncTick` since task 130: the §8.4 derived reads need the same "something moved" signal
+  // the render already keys off, and a counter nobody reads cannot be a dependency.
+  const [syncTick, bump] = useReducer((n: number) => n + 1, 0);
   // The sync client lives OUTSIDE the effect's re-run cycle: it is constructed at most once (at boot
   // if enrolled, or on enroll success), and only stopped on unmount. Holding it in a ref rather than
   // reconstructing it per render is what lets `onEnrolled` start the loop WITHOUT the boot effect
@@ -391,13 +430,16 @@ export function Root({
       //
       // NAMING THE CASES THIS NO-CATCH DOES NOT HANDLE (security-guide §6.6; task 91): this stance is
       // right for a genuinely corrupt or transiently unopenable DB — fail loud, don't fake a shell.
-      // It was WRONG for exactly one case it silently also decided not to handle: a restored device
-      // (an iOS restore-to-new-hardware restores `bolusi.db` but not its THIS_DEVICE_ONLY key), whose
-      // wrong-key open is not a corrupt DB but a fresh device wearing old ciphertext. That case is now
-      // healed INSIDE the injected `boot` (index.ts wires `bootWithLocalRecovery`, which wipes and
-      // re-enrols on `not_a_database`/`missing_key`), so by the time it resolves here the DB is either
-      // openable or genuinely failed — and this no-catch is retained ONLY for the latter. A comment
-      // that justifies not handling an error must say which errors; this one now does.
+      // The injected `boot` (index.ts wires `bootWithLocalRecovery`) self-heals a DB that throws
+      // `not_a_database`/`missing_key` by wiping and re-enrolling, so those classes never reach here.
+      //
+      // ⚠️ ONE case is neither healed there NOR caught here, POST-D22: a restored device (iOS
+      // restore-to-new-hardware restores `bolusi.db` but not its THIS_DEVICE_ONLY key). Under
+      // SQLCipher its wrong-key open was a loud `not_a_database` the self-heal caught. Now `open()`
+      // takes no key and the restored PLAINTEXT file OPENS, so `boot()` RESOLVES — this no-catch sees
+      // a success — and the app boots half-enrolled, throwing AEAD errors deep in the UI. That is the
+      // `KNOWN GAP SINCE D22` in recovery.ts, filed as task 160 (a decrypt-probe at boot). Do not read
+      // this no-catch as covering the restore case: it covers only a DB that fails to open at all.
       const booting = await boot();
 
       // Wire the enrollment caller over the booted app. `onEnrolled` fires AFTER `runEnrollment`
@@ -474,6 +516,25 @@ export function Root({
 
   const sessionSnapshot = session?.snapshot() ?? null;
   const sessionUserId = sessionSnapshot?.session?.userId ?? null;
+
+  /**
+   * THE IN-APP CAMERA (06 §2.1; task 130) — the production consumer `MediaClient.capturePhoto()` and
+   * `MediaClient.storageBand()` never had, and the owner tasks 18 and 82 left behind when both went
+   * `done`.
+   *
+   * Two halves come out of it: `capturePhoto` is the seam `createNotes` binds (so the editor's attach
+   * button stops rejecting), and `surface` is what `App` renders while a capture runs. Built HERE,
+   * above both, because the promise the notes runtime awaits has to outlive the screen that shows the
+   * viewfinder.
+   *
+   * The identity is the notes runtime's OWN — the object the note's command signs with — so a photo
+   * and the note carrying it can never be attributed to two different users (06 §4).
+   */
+  const capture = useCaptureHost({
+    media,
+    platform: capturePlatform ?? null,
+    identity: notes?.identity ?? null,
+  });
 
   /**
    * THE IDLE TICK (task 133; api/02-auth §6.4) — the production caller `SessionManager.checkIdle()`
@@ -570,18 +631,49 @@ export function Root({
       if (cancelled || identity === null) return;
       setNotes({
         userId: sessionUserId,
+        identity,
         // `media` (state), not `mediaRef.current`: reading the reactive value with `media` in the
         // deps means this effect RE-RUNS and re-binds when the client lands, so the notes runtime
         // never gets stuck on the `null` it saw before the media pipeline started (06 §6 thumbnail
         // verify needs a real client — a stale null would silently downgrade every photo to
         // `unavailable`, the failure the `media` state comment describes).
-        runtime: createNotes(app, enrollment.runtime, identity, media),
+        runtime: createNotes(app, enrollment.runtime, identity, media, capture.capturePhoto),
       });
     });
     return () => {
       cancelled = true;
     };
-  }, [app, enrollment, createNotes, sessionUserId, media]);
+  }, [app, enrollment, createNotes, sessionUserId, media, capture.capturePhoto]);
+
+  /**
+   * §8.4's DERIVED READS (01 §5.2; task 130) — the producer `SyncStatusInput.rejected` / `.media` /
+   * `.pendingOperationCount` never had. Until this effect they were the literals `[]`/`[]`/`0`, so
+   * the rejected list and the media queue could not render on any device in any state, and the two
+   * controls on those rows were unpressable as well as unwired.
+   *
+   * RE-READ ON EVERY PROJECTION WRITE, via the SAME invalidation bus the notes list subscribes to
+   * (04 §7). That is the one signal that fires for BOTH an own-device append and a pulled remote op,
+   * which is exactly the set of events that can change an op's `syncStatus` or add a media row.
+   * `bump()` (the loop/session tick) covers the rest — a push that flips `local` → `synced`/`rejected`
+   * runs inside the loop, whose subscribers already re-render this component.
+   */
+  useEffect(() => {
+    if (app === null) return;
+    let cancelled = false;
+    const reread = (): void => {
+      void readSyncStatusRows(app.db.db).then((rows) => {
+        if (!cancelled) setSyncReads(rows);
+      });
+    };
+    reread();
+    const unsubscribe = app.invalidation.subscribe(reread);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+    // `syncTick` is the loop/session bump: a pushed batch changes `syncStatus` without writing a
+    // projection table, so the invalidation bus alone would leave the counters one push behind.
+  }, [app, syncTick]);
 
   // Render nothing until the locale is resolved AND the data layer is up. One frame of the wrong
   // language on the enrollment screen is the first thing this shop would see every morning
@@ -590,7 +682,7 @@ export function Root({
   // gating on it here costs no extra wait and keeps the Settings screen from rendering blanks.
   if (locale === null || app === null || deviceInfo === null) return null;
 
-  const shell = resolveShellInputs(app, sync, systemClock.now());
+  const shell = resolveShellInputs(app, sync, systemClock.now(), syncReads);
   const openSession = sessionSnapshot?.session ?? null;
   /**
    * The notes runtime, IFF it belongs to the user who is signed in right now.
@@ -645,6 +737,18 @@ export function Root({
         locked={sessionSnapshot?.locked ?? false}
         sync={shell.sync}
         onSyncNow={() => sync?.requestManual()}
+        // 06 §5.2 (e) — the media loop's manual trigger, the exact counterpart of `onSyncNow` one
+        // line up. `MediaClient.requestManual()` shipped in task 82 with ZERO production callers
+        // while `SyncClient.requestManual()` was wired here all along; this is the missing line.
+        // Optional chaining, not a fallback: a device with no media pipeline (never enrolled) has
+        // nothing to drain, and there is no media queue on its Sync Status screen to press.
+        onRetryMedia={() => media?.requestManual()}
+        // §5's Error retry on the switcher — the read that failed, run again. `void`, because the
+        // controller reports through its subscription (which re-renders this component), never
+        // through this promise; the shell's retry button is not a place to await a directory read.
+        onRetryUsers={() => void session?.refresh()}
+        // The in-app capture surface while one is running (06 §2.1), else null.
+        capture={capture.surface}
         // The PIN pad's one egress (task 24's PinPad contract), and — since task 133 — the UNLOCK
         // path too: the controller runs the REAL `verifyPin` and, on success, `ShellSession.unlock`,
         // which restores this user's retained workspace and clears the lock. The subscription above

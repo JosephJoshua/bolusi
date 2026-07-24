@@ -306,7 +306,7 @@ const PutPinVerifierReq = z.object({
 
 - **PIN length: 6 digits** (OQ-1001 decided here). Rationale: the verifier bundle is necessarily on-device (FR-1010), and security-guide §5.2's own math shows a 4-digit space falls offline in under a minute while 6 digits costs hours at default params — for one extra digit of typing on a numeric pad, a >100× work-factor is the right trade. Fixed in v0 (not tenant-configurable).
 - Verify: look up the user's effective verifier (§5.3) → `argon2id(pin, salt, params)` async via quick-crypto → constant-time compare. **Budget: < 300 ms** for the KDF (SEC-AUTH-10 enforces on the 2 GB target — the budget is **unmeasured**: assumed to pass per D21, unverified on device, §5.3); total tap-to-in must keep FR-1013's five-second switch.
-- Verifier rows live only inside the SQLCipher DB (SEC-AUTH-09). Failed and successful attempts update the local `pin_attempt_state` table (§6.5) — not the op log, except as specified in §6.5.
+- Verifier rows live only in `user_pin_verifiers`, whose `salt`/`params`/`hash` are AEAD-encrypted at rest (SEC-AUTH-09; security-guide §6.4; 10-db §9.7). Failed and successful attempts update the local `pin_attempt_state` table (§6.5) — not the op log, except as specified in §6.5.
 
 ### 6.2 The `auth` module operation registry
 
@@ -377,7 +377,7 @@ Failing ops are rejected with `SCOPE_VIOLATION` (05 §8 — the closed set gains
 
 **This section is the canonical PIN lockout machine** — schedule, threshold, states, and recovery are owned here; 03-state-machines §9 mirrors it verbatim with a pointer, and security-guide §5.3 and the harness (CHAOS-11) import these constants.
 
-Enforced **per (userId, deviceId)**, entirely locally (offline is the normal case). State persists in the SQLCipher DB (`pin_attempt_state`: `userId, deviceId, consecutiveFailures, windowStartedAt, notBefore` — 10-db-schema §9.5), surviving app restart (SEC-AUTH-03). Other users on a shared terminal are never blocked by one user's failures.
+Enforced **per (userId, deviceId)**, entirely locally (offline is the normal case). State persists in the client DB (`pin_attempt_state` — plaintext by design: it holds counters and timestamps, no secret; `userId, deviceId, consecutiveFailures, windowStartedAt, notBefore` — 10-db-schema §9.5), surviving app restart (SEC-AUTH-03). Other users on a shared terminal are never blocked by one user's failures.
 
 | Consecutive failures | Next attempt allowed after |
 | -------------------- | -------------------------- |

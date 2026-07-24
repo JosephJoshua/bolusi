@@ -35,8 +35,8 @@ function renderSwitcher(mode: 'lock' | 'choose') {
       // As the lock there is deliberately no back (§8.2); as the chooser there is.
       onBack={mode === 'lock' ? null : vi.fn()}
       onSelect={vi.fn()}
-      onEnroll={vi.fn()}
       onRetry={vi.fn()}
+      onUnauthorizedBack={vi.fn()}
       syncChip="synced"
       onOpenSync={vi.fn()}
     />,

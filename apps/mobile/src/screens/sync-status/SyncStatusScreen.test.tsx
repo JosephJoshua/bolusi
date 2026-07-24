@@ -75,6 +75,7 @@ function renderSync(over: Partial<SyncStatusInput> = {}) {
       onOpenRejected={vi.fn()}
       onRetryMedia={vi.fn()}
       onOpenSwitcher={vi.fn()}
+      expandedRejectedOpId={null}
     />,
   );
 }

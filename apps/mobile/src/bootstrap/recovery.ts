@@ -67,6 +67,25 @@ export interface LocalDbRecoveryDeps {
  *   - anything that is NOT a `DbOpenError` — a migration / registration / keystore throw, unrelated
  *     to key-vs-ciphertext; a wipe would destroy a DB that opened fine.
  */
+/**
+ * ⚠️ KNOWN GAP SINCE D22 — THIS SELF-HEAL NO LONGER FIRES FOR THE CASE IT WAS BUILT FOR.
+ *
+ * The scenario is the iOS restore-to-new-hardware path (security-guide §6.6): `bolusi.db` restores,
+ * the THIS_DEVICE_ONLY key does not. Under SQLCipher that produced a LOUD boot failure — `open()` was
+ * handed a freshly-minted key, SQLCipher rejected the file, and `not_a_database` routed here to wipe
+ * and re-enrol. **Post-D22 neither trigger can occur:** `ensureDatabaseEncryptionKey()` mints a key
+ * (so never `missing_key`), and `open()` takes no key at all, so the restored PLAINTEXT SQLite file
+ * **opens successfully** (so never `not_a_database`). Boot then "succeeds": `readDeviceId` reads
+ * plaintext `meta_kv` and the app believes it is the old device, while every read of a protected
+ * column throws an AEAD authentication error deep in the UI.
+ *
+ * That is strictly worse than the brick it replaced — a loud, self-healing boot failure became a
+ * silent half-enrolled state — and it is NOT fixed here: detecting it needs a boot-time probe that
+ * tries to decrypt a known cell and treats failure as "this file is not ours", which is new boot
+ * semantics (what to do on an EMPTY DB, on a partial write, on a transient) and deserves its own
+ * task and its own adversarial tests rather than being smuggled into the 148 diff. Filed as a
+ * disclosure, deliberately unfixed. Do not read the branches below as covering the restore case.
+ */
 export function isUnrecoverableLocalDbError(error: unknown): boolean {
   if (!(error instanceof DbOpenError)) return false;
   if (error.code === 'missing_key') return true;

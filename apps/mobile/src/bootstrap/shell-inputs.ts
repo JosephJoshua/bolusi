@@ -13,35 +13,44 @@ import type { DeviceStatus } from '../navigation/zone.js';
 import type { SyncStatusInput } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { NO_SYNC_STATUS_READS, type SyncStatusReads } from './sync-status-reads.js';
 import type { SyncClient } from './sync-client.js';
 
 /**
- * The Sync Status screen's input, built from the device's REAL `SyncState` and the LIVE loop.
+ * The Sync Status screen's input, built from the device's REAL `SyncState`, the LIVE loop, and the
+ * derived reads (01 §5.2).
  *
  * `state`, `loopState` and `isOffline` are all reads — `state` from `sync_state`, `loopState` from the
  * running `SyncLoop` (03 §10), `isOffline` from NetInfo. Before task 89 the latter two were literals
  * (`'idle'` / `true`); they were the honest values of a device with NO loop, but only as ASSERTIONS.
  * No `?? Date.now()` and no `?? 0` on this path (T-19).
  *
- * `pendingOperationCount` / `rejected` / `quarantined` / `media` remain `0`/`[]`: they are derived DB
- * queries (01 §5.2) whose values are all empty on a device with no ops, and a device cannot append an
- * op without a session, which needs enrollment. They become real reads alongside the notes module
- * (task 25) that first produces ops to count.
+ * `pendingOperationCount` / `rejected` / `media` WERE literals too, with a comment promising they
+ * would become reads "alongside the notes module (task 25) that first produces ops to count". Notes
+ * landed and they did not, so §8.4's rejected list and media queue could not render on any device at
+ * any state — and the two controls on those rows (`onOpenRejected`, `onRetryMedia`) were therefore
+ * unpressable as well as unwired. `reads` closes that (task 130); `sync-status-reads.ts` owns the SQL.
+ *
+ * `quarantined` STAYS `[]`, and that is a different fact rather than the same one unfixed: nothing on
+ * this client persists a held-out pull batch (api/01-sync §4 quarantine has no client table — grep
+ * `quarantin` across `packages/db-client` finds no column). An empty list is what this device
+ * genuinely knows. Filed as its own finding rather than papered over here.
  */
 export function syncInput(
   state: SyncState,
   loopState: SyncLoopState,
   isOffline: boolean,
   now: number,
+  reads: SyncStatusReads = NO_SYNC_STATUS_READS,
 ): SyncStatusInput {
   return {
     state,
     loopState,
-    pendingOperationCount: 0,
-    pendingMediaCount: 0,
-    rejected: [],
+    pendingOperationCount: reads.pendingOperationCount,
+    pendingMediaCount: reads.pendingMediaCount,
+    rejected: reads.rejected,
     quarantined: [],
-    media: [],
+    media: reads.media,
     isOffline,
     manualSyncBusy: false,
     manualSyncError: null,
@@ -61,6 +70,7 @@ export function resolveShellInputs(
   app: Bootstrapped,
   sync: SyncClient | null,
   now: number,
+  reads: SyncStatusReads = NO_SYNC_STATUS_READS,
 ): { device: DeviceStatus; sync: SyncStatusInput } {
   const syncState = sync !== null ? sync.syncState() : app.syncState;
   const loopState: SyncLoopState = sync !== null ? sync.state() : 'idle';
@@ -70,5 +80,5 @@ export function resolveShellInputs(
     : app.deviceId !== null
       ? 'active'
       : 'unenrolled';
-  return { device, sync: syncInput(syncState, loopState, isOffline, now) };
+  return { device, sync: syncInput(syncState, loopState, isOffline, now, reads) };
 }

@@ -2,9 +2,22 @@
 //
 // op-sqlite's hard rule is EXACTLY ONE open connection per database, app-wide —
 // concurrency comes from WAL, never from a second handle. This module is where that rule
-// is enforced, and it is the only place the SQLCipher key is ever read.
+// is enforced, and it is the only place the database key is ever read.
+//
+// SINCE D22 THE KEY DOES NOT OPEN THE FILE — IT OPENS THE VALUES. SQLCipher is gone (it vendored a
+// second `libcrypto` that made the Android APK unassemblable, task 148), so the SQLite file itself is
+// plaintext and `open()` takes no key. The SAME 32-byte SecureStore key now drives an application-
+// layer AES-256-GCM cipher over the sensitive COLUMNS (D22 addendum 2's signed-off set), installed
+// here as a Kysely plugin (decrypt-on-read for every query) and registered on the connection so the
+// raw-`sql` writers in @bolusi/core can seal their values too. What is protected changed shape —
+// values, not the whole file — and the threat model in security-guide §1/§6.5 says so explicitly.
 import { CamelCasePlugin, Kysely } from 'kysely';
 
+import { hexToBytes, registerColumnCipher } from '@bolusi/core';
+
+import type { AeadCipher } from './crypto/aead.js';
+import { Aes256GcmColumnCipher } from './crypto/column-cipher.js';
+import { createColumnEncryptionPlugin } from './crypto/column-encryption-plugin.js';
 import { createClientDialect } from './dialect/index.js';
 import { toDbError, type DbDriver, type DbDriverFactory } from './driver.js';
 import type { ClientDatabase } from './generated/index.js';
@@ -96,6 +109,12 @@ export interface OpenClientDbOptions {
   /** Adapter injection: op-sqlite on device, better-sqlite3 in CI. */
   readonly driverFactory: DbDriverFactory;
   readonly keyStore: DbKeyStore;
+  /**
+   * The AES-256-GCM primitive backing the at-rest column cipher (D22). `apps/mobile` injects a
+   * quick-crypto adapter; CI/tests inject a `node:crypto` one — both API-identical (see crypto/aead.ts).
+   * Injected, not imported, so no `node:crypto` leaks into the device bundle.
+   */
+  readonly aead: AeadCipher;
   readonly name?: string | undefined;
   readonly location?: string | undefined;
 }
@@ -156,11 +175,22 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
 
   const encryptionKey = await options.keyStore.getDatabaseEncryptionKey();
   if (encryptionKey === null || encryptionKey === '') {
-    // Before any driver call: there is no such thing as "open it unencrypted and see".
+    // Before any driver call: refusing without a key is still load-bearing — the key now feeds the
+    // column cipher, so no key means the sensitive columns would be written in the CLEAR. There is no
+    // "open it and see" (SEC-DEV-06); a missing key fails loudly, it never degrades to plaintext.
     throw new DbOpenError(
       'missing_key',
-      'no SQLCipher key available from the key store — refusing to open the client database (security-guide §6.4)',
+      'no database key available from the key store — refusing to open the client database (security-guide §6.4)',
     );
+  }
+
+  // Build the at-rest column cipher from the SAME 32-byte key that used to feed SQLCipher (D22). A
+  // malformed key (wrong length) throws HERE, before any row is written — never a silent weak key.
+  let cipher: Aes256GcmColumnCipher;
+  try {
+    cipher = new Aes256GcmColumnCipher(hexToBytes(encryptionKey), options.aead);
+  } catch (error) {
+    throw sanitizeOpenFailure(error, encryptionKey);
   }
 
   let driver: DbDriver;
@@ -168,7 +198,6 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
     driver = await options.driverFactory({
       name: options.name ?? DEFAULT_DATABASE_NAME,
       location: options.location,
-      encryptionKey,
     });
   } catch (error) {
     throw sanitizeOpenFailure(error, encryptionKey);
@@ -191,10 +220,18 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
   //
   // Only the Kysely surface is affected. `driver` stays raw: `driver.execute` speaks the
   // verbatim snake_case SQL of 10-db §9, which is what the migration runner needs.
+  // Plugin ORDER matters: CamelCasePlugin first so the encryption plugin sees snake_case column
+  // identifiers on the way in (its builder-column map is snake_case). On the way OUT the encryption
+  // plugin decrypts by VALUE (marker), not by key, so the reverse result-transform order is immaterial.
   const db = new Kysely<ClientDatabase>({
     dialect: createClientDialect(driver),
-    plugins: [new CamelCasePlugin(CLIENT_CAMEL_CASE_OPTIONS)],
+    plugins: [new CamelCasePlugin(CLIENT_CAMEL_CASE_OPTIONS), createColumnEncryptionPlugin(cipher)],
   });
+
+  // Register the cipher ON the connection so @bolusi/core's raw-`sql` writers (pull `operations`,
+  // verifiers, users, quarantine, media) seal their values via `encryptColumnValue(db, …)`. The
+  // builder writes (op-store, notes) are sealed by the plugin above; both use THIS cipher, one format.
+  registerColumnCipher(db, cipher);
 
   const connection: ClientDb = {
     db,

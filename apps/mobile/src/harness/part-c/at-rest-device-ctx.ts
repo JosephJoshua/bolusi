@@ -1,15 +1,19 @@
-// SEC-DEV-06's L6 at-rest leg, wired to REAL SQLCipher on the emulator (task 27a; security-guide
-// §6.5, testing-guide T-14b). This is the ONLY place real SQLCipher ever runs — CI has none
-// (better-sqlite3 ships none; op-sqlite is JSI, dead on a Linux host). The probe LOGIC and its
-// positive control are unit-proven in `@bolusi/test-support` (driver-conformance/at-rest.ts); this
-// file is the device CONTEXT that feeds them a real encrypted DB and a real unencrypted control DB.
+// SEC-DEV-06's L6 at-rest leg, run on the emulator against the REAL app-layer column cipher (task
+// 27a; security-guide §6.5, 10-db §9.7, testing-guide T-14b).
 //
-// THE CRUX (T-14b). `checkDbAtRestIsCiphertext` passes when the seeded markers are ABSENT from the
-// SQLCipher file — which is ALSO what a silent seed no-op produces. So this ctx runs the POSITIVE
-// CONTROL FIRST: it writes the SAME markers to a throwaway UNENCRYPTED control DB and asserts they
-// ARE byte-present there. Only if the seed provably lands marker bytes on disk does absence in the
-// ciphertext mean anything. Without the control, "no plaintext found" proves nothing (the
-// parse-collapse / empty-fixture family).
+// **NOT SQLCipher.** D22 removed it (task 148) — there is no SQLCipher anywhere in this repo any
+// more. The device DB file is a plaintext SQLite file that opens with no key, BY DESIGN; what is
+// ciphertext is the signed-off set of sensitive COLUMNS. This file is the device CONTEXT: it seeds
+// real values through the real writers, hands the probe a copy of the real DB, and reads back the
+// physically-stored cells. The probe LOGIC and its positive control are unit-proven in
+// `@bolusi/test-support` (driver-conformance/at-rest.ts).
+//
+// THE CRUX (T-14b). The marker checks pass when the seeded plaintext is ABSENT — which is ALSO what a
+// silent seed no-op produces. So this ctx runs the POSITIVE CONTROL FIRST: it writes the SAME markers
+// to a throwaway control DB with the cipher DISABLED and asserts they ARE byte-present there. Only if
+// the seed provably lands marker bytes on disk does absence in the real file mean anything. The probe
+// additionally requires every encrypted column to have been observed, so a device that seeded nothing
+// fails loudly instead of passing vacuously.
 import {
   checkControlSeedIsWitnessed,
   checkDbAtRestIsCiphertext,
@@ -28,11 +32,11 @@ export const AT_REST_GATE_ID = 'SEC-DEV-06-at-rest';
  * short-circuit on a vacuous seed).
  */
 export interface AtRestDeviceEnv {
-  /** Values seeded into both DBs; none may survive as plaintext in the SQLCipher file. */
+  /** Values seeded into both DBs; none may survive as plaintext in the real file. */
   readonly plaintextMarkers: readonly string[];
-  /** Seed the markers into a throwaway UNENCRYPTED control DB and return its raw file bytes. */
+  /** Seed the markers into a throwaway control DB with the cipher DISABLED; return its raw file bytes. */
   seedUnencryptedControl(markers: readonly string[]): Promise<Uint8Array>;
-  /** Seed the markers into the real SQLCipher DB and return a probe ctx over a COPY of it. */
+  /** Seed the markers through the real writers and return a probe ctx over a COPY of the real DB. */
   seedEncryptedDb(markers: readonly string[]): Promise<AtRestProbeContext>;
 }
 
@@ -60,12 +64,16 @@ export async function runAtRestGate(env: AtRestDeviceEnv): Promise<HarnessGateRe
   if (findings.length > 0) {
     return failed(
       AT_REST_GATE_ID,
-      `DB at rest is NOT ciphertext: ${findings.map((f) => `${f.check} — ${f.detail}`).join('; ')}`,
+      `protected columns at rest are NOT ciphertext: ${findings
+        .map((f) => `${f.check} — ${f.detail}`)
+        .join('; ')}`,
     );
   }
   return passed(
     AT_REST_GATE_ID,
-    'DB at rest is ciphertext: unkeyed + wrong-key opens refused, no plaintext header, seeded ' +
-      'markers absent — and the positive control witnessed the seed in an unencrypted control DB',
+    'protected columns at rest are ciphertext: every signed-off column was observed and carries the ' +
+      'cipher marker, no seeded plaintext survives in the file bytes — and the positive control ' +
+      'witnessed the seed in a cipher-disabled control DB. The FILE itself is plain SQLite by design ' +
+      '(D22): only the sensitive columns are sealed.',
   );
 }

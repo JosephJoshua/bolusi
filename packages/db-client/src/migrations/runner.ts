@@ -2,12 +2,14 @@
 import { toDbError, type DbDriver } from '../driver.js';
 import { initialSchemaMigration } from './001-initial-schema.js';
 import { noteMediaRefMigration } from './002-note-media-ref.js';
+import { columnEncryptionMigration } from './003-column-encryption.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
 export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   initialSchemaMigration,
   noteMediaRefMigration,
+  columnEncryptionMigration,
 ];
 
 export interface RunMigrationsOptions {
@@ -86,6 +88,18 @@ export async function runClientMigrations(
       }
       throw toDbError(error);
     }
+
+    // Post-commit statements run OUTSIDE the transaction — `VACUUM` (the at-rest encryption migration,
+    // 003) cannot run inside one. The bookkeeping row is already committed, so the migration counts as
+    // applied even if a device dies here; `VACUUM` only ever reclaims free space, never data.
+    if (migration.postCommitStatements !== undefined) {
+      for (const statement of migration.postCommitStatements) {
+        await driver.execute(statement).catch((error: unknown) => {
+          throw toDbError(error);
+        });
+      }
+    }
+
     applied.push(migration.version);
   }
 

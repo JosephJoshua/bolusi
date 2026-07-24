@@ -48,6 +48,7 @@ import {
 } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
 
+import { encryptColumnValue } from '../crypto/column-cipher.js';
 import type { CryptoPort } from '../crypto/port.js';
 import type { ClockPort } from '../runtime/ports.js';
 import { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } from './devices.js';
@@ -456,10 +457,14 @@ async function insertPulledOp<DB>(
       sync_status, synced_at, arrival_seq
     ) VALUES (
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${op.location === null ? null : JSON.stringify(op.location)}, ${op.source},
+      ${op.entityType}, ${op.entityId}, ${op.schemaVersion},
+      ${encryptColumnValue(db, JSON.stringify(op.payload))},
+      ${op.timestamp},
+      ${encryptColumnValue(db, op.location === null ? null : JSON.stringify(op.location))},
+      ${op.source},
       ${op.agentInitiated ? 1 : 0}, ${op.agentConversationId}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${signedCoreJcsOf(op, crypto)}, 'synced', ${syncedAt}, ${arrivalSeq}
+      ${op.signature}, ${encryptColumnValue(db, signedCoreJcsOf(op, crypto))},
+      'synced', ${syncedAt}, ${arrivalSeq}
     )
   `.execute(db);
 }

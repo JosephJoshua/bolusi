@@ -27,9 +27,11 @@ import { createAppSession, type AppSessionController } from './src/bootstrap/ses
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
+import { createExpoCapturePlatform } from './src/media/native-capture.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
+import { deviceColumnAead } from './src/ports/aead.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
 import { consoleDiagnostics } from './src/ports/diagnostics.js';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
@@ -63,10 +65,13 @@ import { systemTimer } from './src/ports/timer.js';
  * `@bolusi/db-client/op-sqlite` is a JSI native module that cannot load under Node, which is why it
  * is imported HERE — the one file no Node test imports — and injected downward. Everything below
  * (`bootstrap`, `Root`) names only `DbDriverFactory`, so the whole data layer runs against
- * better-sqlite3 in CI and against SQLCipher on device, through identical code.
+ * better-sqlite3 in CI and against op-sqlite on device, through identical code — with the SAME
+ * app-layer column cipher on both (D22), so at-rest behaviour is no longer platform-dependent.
  *
- * The op-sqlite CONFIG (`sqlcipher: true`, `performanceMode: true`) is not here and cannot be: 08
- * §2.2 says it goes in `package.json`'s `op-sqlite` block, read at native build time. It is there.
+ * The op-sqlite CONFIG (`performanceMode: true`) is not here and cannot be: 08 §2.2 says it goes in
+ * `package.json`'s `op-sqlite` block, read at native build time. It is there. **`sqlcipher` is NOT
+ * set, deliberately** (D22/task 148: it vendored a second `libcrypto.so` and the Android APK would
+ * not link). At-rest confidentiality is the app-layer column cipher wired below via `aead`.
  */
 /**
  * The app version string reported to the server on enroll AND shown on the Settings device block —
@@ -79,24 +84,33 @@ import { systemTimer } from './src/ports/timer.js';
 const APP_VERSION = '';
 
 function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
-  // ONE key store serves BOTH the boot (mint/read the SQLCipher key — security-guide §6.4; quick-
+  // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
-  // `bootWithLocalRecovery` self-heals the one boot failure that is NOT a corrupt data layer but a
-  // FRESH device wearing an old device's ciphertext: an iOS restore-to-new-hardware restores
-  // `bolusi.db` but not its THIS_DEVICE_ONLY key, so the open fails `not_a_database` and — before
-  // this — Root's deliberate no-catch rendered nothing forever (security-guide §6.6). On that class
-  // ONLY it wipes and drops to enrollment; every other failure still surfaces through Root's no-catch.
+  // `bootWithLocalRecovery` self-heals a boot that fails because the data layer is genuinely
+  // unopenable — a corrupt file that throws `not_a_database`/`missing_key` — by wiping and dropping
+  // to enrollment; every other failure still surfaces through Root's no-catch.
+  //
+  // ⚠️ POST-D22 THIS NO LONGER COVERS THE CASE IT WAS BUILT FOR (recovery.ts `KNOWN GAP SINCE D22`,
+  // task 160). It was built for iOS restore-to-new-hardware (security-guide §6.6): `bolusi.db`
+  // restores, the THIS_DEVICE_ONLY key does not. Under SQLCipher that was a LOUD `not_a_database` that
+  // routed here. Now `open()` takes no key and the restored PLAINTEXT file OPENS successfully, so
+  // neither trigger fires — boot "succeeds" into a silent half-enrolled state that throws AEAD errors
+  // deep in the UI. Detecting it needs a decrypt-probe at boot (task 160), not this error-class check.
   return bootWithLocalRecovery({
     boot: () =>
       bootstrap({
         driverFactory: openOpSqliteDriver,
         keyStore,
         crypto: quickCryptoPort,
+        // D22: the 32-byte SecureStore key now drives app-layer AES-256-GCM over the sensitive columns
+        // (via quick-crypto's OpenSSL), replacing SQLCipher's whole-file encryption — task 148.
+        aead: deviceColumnAead,
         clock: systemClock,
       }),
-    // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the SQLCipher key
-    // FIRST (the DB is unreadable ciphertext from this moment), then (2) delete the DB file(s) +
+    // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the column-cipher
+    // key FIRST (from this moment the PROTECTED COLUMNS are unrecoverable — the file itself is still a
+    // readable SQLite file since D22, so this is a value-erase, not a file-erase), then (2) delete the DB file(s) +
     // WAL/SHM. On new hardware the identity keys (private key, token) are already absent
     // (THIS_DEVICE_ONLY, never restored), and a fresh empty DB reads `deviceId: null` → the
     // enrollment wizard, so this destroys exactly what makes the re-open clean. It NEVER opens the DB
@@ -269,22 +283,21 @@ function createSession(
  * THE NOTES SURFACE (task 119) — the producer `App.notes` was waiting for.
  *
  * The command/query half is Node-safe and composed in `bootstrap/notes.ts`; what this site adds is
- * the MEDIA half, which is native. Both seams are currently `UNWIRED_NOTES_MEDIA` and that is a
- * deliberate, documented state rather than an oversight:
+ * the MEDIA half, which is native. BOTH seams are now real:
  *
- *   - `capturePhoto` needs the in-app capture flow (a `CameraView` ref reaching `MediaClient.
- *     capturePhoto`), which lives in a screen the notes editor does not yet route to. It REJECTS, so
- *     the button reports a failure instead of silently behaving like a cancel.
- * `loadThumbnail` is now REAL (task 120). It was `unavailable` because 06 §6 needs the signed
+ * `loadThumbnail` became real in task 120. It was `unavailable` because 06 §6 needs the signed
  * sha256/mime to verify a downloaded photo against, and schemaVersion 2's `notes.note_created`
  * carried only a bare `mediaId` — so for a PULLED note no hash existed on this device at any price.
  * schemaVersion 3 carries the whole signed `mediaRef`, so the verify has something to check against
  * and the bridge binds to the real media client. A device with no media client still gets the honest
  * `unavailable` seams rather than a thumbnail loader that cannot load.
  *
- * `capturePhoto` remains unwired: it needs the in-app capture flow (a `CameraView` ref reaching
- * `MediaClient.capturePhoto`), which lives in a screen the notes editor does not yet route to. It
- * REJECTS, so the button reports a failure instead of silently behaving like a cancel.
+ * `capturePhoto` became real in task 130. It was the rejecting `UNWIRED_NOTES_MEDIA` seam because
+ * the in-app capture flow — a `CameraView` ref reaching `MediaClient.capturePhoto` — lived in a
+ * screen nothing routed to, and no task owned the wiring (18 and 82 are both `done`). `Root` now
+ * hosts that flow (`media/CaptureHost.tsx`) and hands the seam in here, so the editor's attach button
+ * opens a camera instead of throwing. A build with no `capturePlatform`, or a device with no media
+ * client, still gets the REJECTING seam — never a stub that resolves `null` and reads as a cancel.
  *
  * The reads, writes, permission enforcement and live-query invalidation are all REAL regardless: the
  * notes list, detail and editor work over the live database today.
@@ -294,12 +307,13 @@ function createNotes(
   runtime: AppRuntime,
   identity: CommandIdentity,
   media: MediaClient | null,
+  capturePhoto: NotesRuntime['capturePhoto'],
 ): NotesRuntime {
   return createSessionNotesRuntime({
     app,
     runtime,
     identity,
-    media: notesMediaSeamsFor(media),
+    media: notesMediaSeamsFor(media, capturePhoto),
   });
 }
 
@@ -390,6 +404,11 @@ function Bootstrapped(): React.JSX.Element | null {
     // quietly go missing again the way `ShellSession` did.
     appState: appStatePort,
     timer: systemTimer,
+    // THE IN-APP CAMERA'S NATIVE SEAMS (06 §2.1; task 130) — `expo-camera`'s permission call, its
+    // `CameraView` and the still renderer, bound at the one site that may import them. Supplying
+    // this is what turns the notes editor's attach button from a rejecting stub into a camera, and
+    // what gives 06 §7's storage banners their first production render.
+    capturePlatform: createExpoCapturePlatform(),
     localeStore: fileLocaleStore,
     // The Settings device block, DERIVED from the booted app's persisted state (task 94) rather than
     // a hardcoded empty literal. This is the only site that knows `platform`/`appVersion` (process

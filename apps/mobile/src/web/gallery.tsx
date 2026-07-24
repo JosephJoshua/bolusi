@@ -44,6 +44,7 @@ import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
   DEMO_PIN_ROWS,
+  DEMO_REJECTED_OP_ID,
   DEMO_USERS,
   HARNESS_NOW,
   SYNC_STATUS_STATES,
@@ -235,6 +236,8 @@ function AppMode({ session }: { readonly session: AppProps['session'] }): React.
       locked={false}
       sync={demoSyncInput()}
       onSyncNow={noop}
+      onRetryMedia={noop}
+      onRetryUsers={noop}
       onSubmitPin={noop}
       onSelectLocale={(next) => {
         setLocale(next);
@@ -346,8 +349,8 @@ function switcherScreen(
         mode={mode}
         onBack={mode === 'lock' ? null : noop}
         onSelect={noop}
-        onEnroll={noop}
         onRetry={noop}
+        onUnauthorizedBack={noop}
         syncChip="synced"
         onOpenSync={noop}
       />
@@ -355,7 +358,12 @@ function switcherScreen(
   );
 }
 
-function syncScreen(state: string, input: ReturnType<typeof demoSyncInput>): React.JSX.Element {
+function syncScreen(
+  state: string,
+  input: ReturnType<typeof demoSyncInput>,
+  /** The §8.4-item-4 disclosure, open for this op id (task 130). `null` renders the collapsed list. */
+  expandedRejectedOpId: string | null = null,
+): React.JSX.Element {
   return (
     <ApproxFrame screen="sync-status" state={state}>
       <SyncStatusScreen
@@ -366,6 +374,7 @@ function syncScreen(state: string, input: ReturnType<typeof demoSyncInput>): Rea
         onOpenRejected={noop}
         onRetryMedia={noop}
         onOpenSwitcher={noop}
+        expandedRejectedOpId={expandedRejectedOpId}
       />
     </ApproxFrame>
   );
@@ -459,6 +468,14 @@ export const ENTRIES: readonly HarnessEntry[] = [
     screen: 'sync-status',
     state: 'attention',
     render: () => syncScreen('attention', SYNC_STATUS_STATES.attention()),
+  },
+  {
+    // The rejected row with its technical detail disclosed (task 130). Rendered to PIXELS because
+    // this is copy stacked under a `danger` section on a 360 dp screen, and "does the server's own
+    // sentence fit and stay subordinate to the row above it" is a question no assertion answers.
+    screen: 'sync-status',
+    state: 'rejectedDetail',
+    render: () => syncScreen('rejectedDetail', SYNC_STATUS_STATES.attention(), DEMO_REJECTED_OP_ID),
   },
 
   // Enrollment — steps + revoked banner + the interactive discard ConfirmSheet.

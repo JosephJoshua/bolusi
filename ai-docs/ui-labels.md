@@ -118,6 +118,7 @@ Surfaces per PRD-011 §6 (switcher, PIN pad, idle lock, enrollment, revocation, 
 | `auth.switcher.title` | Siapa yang pakai? | Who’s using this? |
 | `auth.switcher.instruction` | Ketuk nama kamu | Tap your name |
 | `auth.switcher.addUser` | Tambah Pengguna | Add User |
+| `auth.switcher.emptyUsers` | Belum ada pengguna di perangkat ini. Minta pemilik toko untuk mendaftarkannya. | No users on this device yet. Ask the store owner to enroll this device. |
 | `auth.switcher.idleLocked` | Layar terkunci karena lama tidak dipakai. Pekerjaanmu aman. | Locked after sitting idle. Your work is safe. |
 | `auth.pin.title` | Masukkan PIN | Enter PIN |
 | `auth.pin.wrong` | PIN salah. Coba lagi. | Wrong PIN. Try again. |
