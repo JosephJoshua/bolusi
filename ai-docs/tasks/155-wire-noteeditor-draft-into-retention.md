@@ -1,6 +1,6 @@
 # TASK 155 — nothing writes into the idle-lock work-retention path: a half-typed note is STILL lost on a real device, because no screen feeds `updateWorkspace`
 
-**Status:** in-progress
+**Status:** todo
 **Priority:** **HIGH (raised 2026-07-23 by D23 §1)** — no longer a leftover. The owner ruled that a push-notification tap must **preserve the draft and then navigate** (task 159), and this retention path is the mechanism that ruling depends on. Until this ships, 159 cannot be implemented at all, and implementing 159 partially ("navigate and hope") would ship the silent draft-loss the ruling exists to remove.
 
 Original framing, still true: UX/ergonomics, NOT a security hole (task 133's lock fires and clears identity correctly regardless). It is the unmet half of 133's deliverable #3 ("a lock must NOT discard the half-written note"), and it was disclosed-but-untracked — the exact pattern that let the original SEC-AUTH-08 inertness sit.
@@ -27,3 +27,6 @@ Wire `NoteEditor`'s in-flight draft into the workspace retention seam so an idle
 - A COMPOSED test (real Root, real session): type a note body, advance the clock past `idleLockSeconds`, unlock with PIN → the body is STILL THERE (and the route restored). This is the assertion 133 could not write because no producer existed. Break the wiring → it reds. Restore → green.
 - **Positive control:** a lock with an EMPTY editor restores nothing and does not error — so "always restores" can't pass vacuously.
 - This closes the loop 133 opened: the retention path finally has a producer a test can drive through the UI.
+
+## PARTIAL WIP (2026-07-24) — agent stopped on the weekly API limit, resets Jul 27
+Uncommitted work-in-progress is preserved in worktree `.claude/worktrees/task-155` on branch `task/155-noteeditor-draft-retention`: modifications to `App.tsx`, `NotesHome.tsx`, `NoteEditor.tsx`, and the notes screens index — the retention write-through and identity discipline, incomplete and unfalsified. Resume from that worktree; the cross-user privacy control (user B must not inherit user As draft) is a REQUIRED falsification per D23 §1.

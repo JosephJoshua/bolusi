@@ -1,6 +1,6 @@
 # TASK 170 — tenant-scope the media id so `POST /v1/media/:id/init` stops being a cross-tenant existence oracle
 
-**Status:** in-progress
+**Status:** todo
 **Priority:** **HIGH security** — a live cross-tenant existence oracle, ruled for a real fix rather than a documented exception (D23 §2). It is the third such oracle found in this surface and the only one that is being removed instead of justified.
 **Depends on:** 141a (its SEC-TENANT-04 walk is what detects this, and its pin must be deleted by this task)
 **Blocks:** —
@@ -69,3 +69,6 @@ event that comment anticipates.
 ## Note
 security-guide §2.2 stays at exactly two documented exceptions. Do NOT add a third while doing this
 work — the whole point of the ruling is that this one does not become one.
+
+## PARTIAL WIP (2026-07-24) — agent stopped on the weekly API limit, resets Jul 27
+Uncommitted work-in-progress is preserved in worktree `.claude/worktrees/task-170` on branch `task/170-tenant-scope-media-id`: a start on `apps/server/test/integration/media/tenant-scoped-id.test.ts` (the reproduction test). The migration itself was NOT written. Client-side single-tenant-per-device-DB was confirmed. Resume from that worktree; do not restart from zero.
