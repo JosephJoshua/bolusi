@@ -10,8 +10,22 @@
 // — forces same-entity contention across devices), 15% archiveNote, 5% media-attach. Entities
 // live in a single shared, creation-ordered namespace so an edit authored by one device can
 // target a note created by another (the out-of-order / re-fold pressure CHAOS-01 needs). Each op
-// advances its device's clock by a PRNG-chosen 1–600 s. A v1→v2 schema cutover seam (§3.2, 04 §3)
-// is honored at `cutoverIndex` in the global sequence.
+// advances its device's clock by a PRNG-chosen 1–600 s.
+//
+// NO SCHEMA-VERSION SEAM HERE, DELIBERATELY (task 132, testing-guide §3.2.2). An earlier version
+// carried a `schemaVersion: 1 | 2` descriptor field and a `cutoverIndex` option — but no consumer
+// ever folded it: a scripted op is mapped to a REAL `notes` command on the authoring device, and
+// the command runtime stamps `schemaVersion` from the operation registry (ctx.ts —
+// `resolveSchemaVersion`, "never defaulted, never caller-supplied"), so the descriptor's version
+// was silently dropped at the command boundary and the cap `1 | 2` could not even name the version
+// production sends (v3). It was a shape assertion with no behaviour behind it (CLAUDE.md §2.11).
+// The v1→v2→v3 fold behaviour the seam was meant to prove lives — genuinely exercised, at both the
+// incremental-apply AND full-rebuild paths — in `packages/modules/test/migration.test.ts`, whose
+// `history()` is exactly "v1 payloads before a cutover, v2 after" straddling into v3. Driving old
+// versions through THIS chaos generator would require bypassing the command path with hand-built
+// signed ops (what migration.test.ts already does) for no applier coverage that test lacks: the
+// re-fold path re-resolves each op's version by the same per-op, order-independent applier the
+// rebuild test replays, and CHAOS-01 already fires both fold paths over current-version ops.
 
 import { randomInt, type Prng } from './prng.js';
 
@@ -31,8 +45,6 @@ export interface ScriptOp {
    * entity's ordinal; for the others it is the target, always `< ` the number of prior creates.
    */
   readonly entity: number;
-  /** v1 before `cutoverIndex`, v2 at/after — the migration seam (§3.2, 04 §3). */
-  readonly schemaVersion: 1 | 2;
   /** ms to advance the authoring device's FakeClock before executing (PRNG-chosen 1–600 s). */
   readonly clockAdvanceMs: number;
   /** Per-op unique, seed-derived value (a note body / marker) — T-3, no shared magic constants. */
@@ -44,8 +56,6 @@ export interface GenerateScriptOptions {
   readonly opsPerDevice: number;
   /** Number of virtual devices (default fixture N = 4). */
   readonly deviceCount: number;
-  /** Global op ordinal at which payloads switch v1 → v2. */
-  readonly cutoverIndex: number;
 }
 
 const MIN_ADVANCE_MS = 1_000; // 1 s
@@ -73,7 +83,7 @@ function pickTarget(prng: Prng, pool: number): number {
  * order; each names its authoring device, so a per-device view is `script.filter(o => o.device === d)`.
  */
 export function generateScript(prng: Prng, options: GenerateScriptOptions): ScriptOp[] {
-  const { opsPerDevice, deviceCount, cutoverIndex } = options;
+  const { opsPerDevice, deviceCount } = options;
   const total = opsPerDevice * deviceCount;
   const script: ScriptOp[] = [];
   let pool = 0; // entities created so far (shared, creation-ordered namespace)
@@ -92,11 +102,10 @@ export function generateScript(prng: Prng, options: GenerateScriptOptions): Scri
       entity = pickTarget(prng, pool);
     }
 
-    const schemaVersion: 1 | 2 = i < cutoverIndex ? 1 : 2;
     const clockAdvanceMs = randomInt(prng, MIN_ADVANCE_MS, MAX_ADVANCE_MS);
     const token = randomInt(prng, 0, 0xffff_ffff).toString(16).padStart(8, '0');
 
-    script.push({ device, kind, entity, schemaVersion, clockAdvanceMs, value: `op${i}-${token}` });
+    script.push({ device, kind, entity, clockAdvanceMs, value: `op${i}-${token}` });
   }
 
   return script;
