@@ -146,6 +146,28 @@ Not a one-line fix: this is 27a's unbuilt half. Land it in this order, each leg 
 - A bogus-component launch fails fast and red (leg 4 falsification recorded in the PR).
 - Node lanes stay green; `emulator-gates.sh` keeps `set -euo pipefail` with no `|| true` and no `continue-on-error` (162).
 
+## Observability landed — leg 5 shipped separately as task 176 (2026-07-24)
+
+Leg 5 is **done**, in `scripts/harness-device.mjs` only; legs 1–4 remain 27a's. What the lane now
+prints on failure, instead of the single line above:
+
+- The `am start` capture (status, stdout, stderr) — and a launch that did not launch now **fails
+  fast** rather than polling, because `amStartFailureReason()` reads stdout: `am start … did NOT
+  launch (it exited 0 — am start reports this on stdout, not via its exit status): Error: Activity
+  class {com.bolusi.app/com.bolusi.app.HarnessActivity} does not exist.` For the *current* main this
+  is the expected new failure, reached in seconds rather than 20 min 13 s.
+- On every failure path, `── FAILURE DIAGNOSTICS (unfiltered …)`: `adb logcat -d -b crash` then
+  unfiltered `adb logcat -d`, each bounded to the last 400 lines — so `FATAL EXCEPTION`,
+  `AndroidRuntime`, `ActivityManager` and `ReactNativeJS` are visible for the first time. This is
+  what answers the 148/160 boot question the original log could not.
+- On the poll-timeout path, `── polled N× over Ns for run id …` plus the tag-filtered text the poll
+  actually saw.
+
+Leg 2's trap is now recorded **at the poll in the driver**, not only here. Note for whoever builds
+the producer: **the launch check is positive-evidence only** — it fails on `Error:` / `does not
+exist` / `Error type N` / `Exception` / `Status: error|timeout` / `Permission Denial`, and does NOT
+require `Status: ok`, so switching entry point (i) → (ii) does not require touching it.
+
 ## Recommendation for the next dispatch
 
 The root cause needs **no** further CI evidence — A–D are all provable from the checkout. But leg 5 alone (a `adb logcat -d` dump + `launch.stdout` on failure) is worth one dispatch **before** the rest, because it costs nothing and answers, for free, the one question this log cannot: whether the app boots at all on-device after 148's SQLCipher removal (see task 160, which predicts a silent half-enrolled boot). Landing 5 first turns the next red run into an actual diagnosis instead of a single line.

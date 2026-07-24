@@ -160,3 +160,80 @@ describe('parseHarnessResult — the harness:device fail-safe', () => {
     expect(res.result.runId).toBe(RUN_ID);
   });
 });
+
+// Task 176 — the OBSERVABILITY half. The lane's 20-minute red run (CI 29990800850) produced exactly
+// one line of diagnosis because the launch check read only the exit status and every adb buffer was
+// captured then discarded. These two pure functions are the parts of the fix that can be proven
+// without an emulator; the adb orchestration around them is falsified against a stubbed `adb`.
+describe('amStartFailureReason — `am start` exits 0 when it did not start anything', () => {
+  // The verbatim shape real `am start` prints for a component that does not exist. The exit status
+  // for this output is ZERO, which is precisely why reading it is the whole point (§2.11).
+  const MISSING_COMPONENT = [
+    'Starting: Intent { act=android.intent.action.MAIN cmp=com.bolusi.app/com.bolusi.app.HarnessActivity (has extras) }',
+    'Error type 3',
+    'Error: Activity class {com.bolusi.app/com.bolusi.app.HarnessActivity} does not exist.',
+  ].join('\n');
+
+  test('detects a missing component and names it, from stdout alone', () => {
+    const reason = driver.amStartFailureReason(MISSING_COMPONENT) as string | null;
+    expect(reason).not.toBeNull();
+    // Names the component, so the reader knows WHICH activity is absent — not just "Error type 3".
+    expect(reason).toContain('com.bolusi.app.HarnessActivity');
+    expect(reason).toContain('does not exist');
+  });
+
+  test('a healthy cold launch is NOT a failure', () => {
+    const ok = [
+      'Starting: Intent { … }',
+      'Status: ok',
+      'LaunchState: COLD',
+      'TotalTime: 1187',
+      'Complete',
+    ].join('\n');
+    expect(driver.amStartFailureReason(ok)).toBeNull();
+  });
+
+  test('a WARM launch warning is NOT a failure — the check is positive evidence only', () => {
+    // `am start` on an already-foregrounded activity warns and succeeds. Treating this as a failure
+    // would make the driver red on a perfectly good launch, so the guard must stay silent here.
+    const warm = [
+      'Starting: Intent { … }',
+      'Warning: Activity not started, its current task has been brought to the front',
+      'Status: ok',
+    ].join('\n');
+    expect(driver.amStartFailureReason(warm)).toBeNull();
+  });
+
+  test('detects an explicit non-ok Status and a permission denial', () => {
+    expect(driver.amStartFailureReason('Status: error')).toContain('Status: error');
+    expect(
+      driver.amStartFailureReason(
+        'java.lang.SecurityException: Permission Denial: starting Intent',
+      ),
+    ).toContain('Permission Denial');
+  });
+
+  test('empty/absent output is not invented into a failure', () => {
+    expect(driver.amStartFailureReason('')).toBeNull();
+    expect(driver.amStartFailureReason(null)).toBeNull();
+  });
+});
+
+describe('tailLines — the failure dump is bounded so one red run stays a readable log', () => {
+  test('caps an oversized dump to the LAST maxLines and says how many it dropped', () => {
+    const input = Array.from({ length: 5000 }, (_, i) => `line ${i + 1}`).join('\n');
+    const out = driver.tailLines(input, 400) as string;
+    const lines = out.split('\n');
+    // 400 kept + 1 elision marker. Unbounded, this would put 5000 lines into the job log.
+    expect(lines).toHaveLength(401);
+    expect(lines[0]).toContain('4600');
+    // The TAIL, not the head — a crash and the give-up moment are at the END of the buffer.
+    expect(lines[1]).toBe('line 4601');
+    expect(lines[lines.length - 1]).toBe('line 5000');
+  });
+
+  test('leaves a dump that is already under the bound untouched (no spurious marker)', () => {
+    const input = 'line 1\nline 2\nline 3';
+    expect(driver.tailLines(input, 400)).toBe(input);
+  });
+});
