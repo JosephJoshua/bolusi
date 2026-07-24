@@ -1,6 +1,6 @@
 # TASK 132 — coverage gaps: a shape-asserted chaos seam with no consumer, an untested Android back handler, and a catalog guard that proves membership but not content
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — each is a guard or a seam that looks covered and is not. Filed from the coverage half of the sweep so the gaps are owned rather than rediscovered.
 **Depends on:** 26, 123, 24
 **Blocks:** —
