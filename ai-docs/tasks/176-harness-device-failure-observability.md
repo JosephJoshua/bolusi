@@ -1,6 +1,6 @@
 # TASK 176 — the emulator lane's 20-minute red run printed ONE line: make `harness-device.mjs` fail fast on a launch that did not launch, print the adb output it already captures, and dump an unfiltered logcat on the failure path
 
-**Status:** in-progress
+**Status:** done
 **Priority:** HIGH — cheap, independent, and it is what makes the NEXT dispatch informative. Not a fix for the missing producer.
 **Depends on:** 175 (the diagnosis this acts on)
 **Relates to:** 27a (owns the producer — explicitly NOT this task), 160 (predicts a silent half-enrolled boot; this dump is what can finally see it), 148 (neither implicated nor exonerated by run 29990800850 — this makes the next run able to answer)
