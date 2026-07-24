@@ -1,6 +1,6 @@
 # TASK 170 — tenant-scope the media id so `POST /v1/media/:id/init` stops being a cross-tenant existence oracle
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH security** — a live cross-tenant existence oracle, ruled for a real fix rather than a documented exception (D23 §2). It is the third such oracle found in this surface and the only one that is being removed instead of justified.
 **Depends on:** 141a (its SEC-TENANT-04 walk is what detects this, and its pin must be deleted by this task)
 **Blocks:** —
