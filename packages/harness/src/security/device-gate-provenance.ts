@@ -51,13 +51,21 @@ export const DEVICE_GATE_ARTIFACT = 'reports/device-gates/2026-07-25-emulator.js
 
 /**
  * The AT-REST SURFACE — the files whose change invalidates the leg-1 claim "the PIN-verifier bytes are
- * ciphertext at rest". Curated to the code that DETERMINES the seal, not the dispatch wiring, so the
- * gate reds on a real regression and not on unrelated harness churn. Traced to producers (T-16):
+ * ciphertext at rest". Curated to the code that DETERMINES the seal, not unrelated dispatch, so the gate
+ * reds on a real regression and not on unrelated harness churn. Traced to producers (T-16):
  *
- *   • the column cipher (seal format, keyed marker, AEAD, write-side plugin, registry seam)
+ *   • the column cipher (seal format, keyed marker, AEAD contract, write-side plugin, registry seam)
+ *   • the connection — the seal's ON/OFF SWITCH: `openClientDb` REGISTERS the cipher and installs the
+ *     encryption plugin, and the leg-1 seed opens its sealed DB through it. Omitting it was a real
+ *     stale-blind hole (rev-28-sec09): removing `registerColumnCipher` writes leg-1's verifier columns
+ *     in cleartext on device, yet the gate stayed green because this file was not watched.
  *   • `writeVerifier` — the production writer that seals salt/hash/params
  *   • the on-device gate body — `runVerifierAtRestGate` (reads the stored cells, asserts the marker)
  *   • the seed — drives `writeVerifier` under the real cipher on device
+ *   • the DEVICE SEAL BINDING — the ONE native-binding site that injects the real AES-256-GCM primitive
+ *     and the op-sqlite driver into the seed that PRODUCES the artifact (`deviceAtRestSeams`), plus the
+ *     `deviceColumnAead` primitive itself. A no-op/misconfigured AEAD or a wrong driver binding un-seals
+ *     the verifier bytes invisibly and would keep the artifact falsely green — so both are watched.
  *   • the probe — reads the physically-stored cells / the sealed-prefix the gate compares against
  *
  * If any is renamed, the freshness check would silently diff nothing for it — so the gate ALSO asserts
@@ -69,12 +77,19 @@ export const AT_REST_SURFACE: readonly string[] = Object.freeze([
   'packages/db-client/src/crypto/aead.ts',
   'packages/db-client/src/crypto/column-encryption-plugin.ts',
   'packages/core/src/crypto/column-cipher.ts',
+  // the connection — registers the cipher + installs the plugin (the seal on/off switch); the seed
+  // opens its sealed DB via openClientDb, so this is on leg-1's attested seal path.
+  'packages/db-client/src/connection.ts',
   // writeVerifier
   'packages/core/src/auth/repo.ts',
   // the on-device at-rest gate body
   'apps/mobile/src/harness/part-c/at-rest-device-ctx.ts',
   // the seed that drives writeVerifier under the real cipher
   'apps/mobile/src/harness/part-c/at-rest-device-env.ts',
+  // the device seal binding: injects the real AEAD + op-sqlite driver into the artifact-producing seed…
+  'apps/mobile/src/harness/run-and-emit.ts',
+  // …and the AES-256-GCM primitive itself (deviceColumnAead) that column-cipher.ts calls to seal.
+  'apps/mobile/src/ports/aead.ts',
   // the at-rest probe (reads the stored cells + the sealed prefix)
   'packages/test-support/src/driver-conformance/at-rest.ts',
 ]);
