@@ -37,11 +37,13 @@
  * (`needsFirstPin` on the roster row), not a silent failure.
  *
  * And the DRAFT PRODUCER. `updateWorkspace` is live and its retention round-trips through 14's
- * per-user map, but no SCREEN writes into it yet: the notes editor holds its in-flight text in its
- * own `useState`, so on a real device today an idle lock still discards a half-typed note. Wiring
- * that needs a draft seam on `NoteEditor` (@bolusi/modules, contended) plus a prop on `App`, both
- * owned by other queued tasks. Stated here rather than implied, because §6.4 is explicit that a lock
- * which loses work is a lock that gets disabled.
+ * per-user map. **Task 155 wired the producer:** `NoteEditor` now write-throughs its in-flight
+ * title/body/mediaRef into the workspace on every keystroke (a draft seam on `NoteEditor`, a prop on
+ * `App`), so an idle lock PRESERVES a half-typed note and the SAME user's unlock restores it — the
+ * §6.4 requirement (a lock that loses work is a lock that gets disabled). The per-user map key +
+ * `App`'s `retained.ownerUserId === sessionUserId` owner check keep a different user from inheriting
+ * the draft. (This comment used to say "no SCREEN writes into it yet"; task 155 made that false, and
+ * a header that under-describes a live producer is the exact "comment was the guard" hazard.)
  *
  * NODE-SAFE: core + types only. Ports arrive injected.
  */

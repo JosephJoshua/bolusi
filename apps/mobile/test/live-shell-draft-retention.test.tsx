@@ -185,6 +185,14 @@ function bodyValue(harness: Harness): string | null {
   return field === null ? null : ((field.props['value'] as string | undefined) ?? null);
 }
 
+/** Navigate to the §8.4 Sync Status route the way a user does — the always-present header sync chip. */
+async function openSyncStatus(harness: Harness): Promise<void> {
+  fire(harness.screen.get('ui.syncChip'), 'onPress');
+  await settle();
+  await waitUntil(() => harness.screen.query('sync-status-screen') !== null);
+  await settle();
+}
+
 describe('SEC-AUTH-08 — a typed draft survives the idle lock and the SAME user restores it (task 155)', () => {
   test('THE CORE CASE: type → idle lock → same user unlocks → the body is STILL THERE', async () => {
     fixture = await bootFixture();
@@ -316,5 +324,71 @@ describe('SEC-AUTH-08 PRIVACY — a different user must NOT inherit the outgoing
     await waitUntil(() => screen.query('notes.editor.title') !== null);
     expect(bodyValue(harness)).toBe(DRAFT_A);
     expect(controller.snapshot().workspace?.ownerUserId).toBe(target.userId);
+  });
+});
+
+describe('SEC-AUTH-08 ROUTE — the shell route is retained per user across the idle lock (task 155)', () => {
+  // WHY THIS SUITE EXISTS SEPARATELY FROM THE DRAFT ONES. The draft lives in task 14's per-user map,
+  // which UNMOUNTS with the notes surface on a lock — so no App-owned state carries a draft across a
+  // lock. The ROUTE is the one thing that does: `App`'s `route` is React state and `App` does NOT
+  // unmount across a lock (only the ZONE swaps to the switcher), so absent a correction the shell
+  // simply keeps whatever route was showing and hands it to whoever unlocks next. The guard is the
+  // `routeOwner` correction (App.tsx: `setRoute(workspace?.route ?? 'home')` on a user change). This
+  // suite is the producer that watches it — the task's FALSIFY line required "the route restored",
+  // and rev-155 confirmed deleting that line left the whole 686-test lane green.
+
+  test('SAME USER: A on Sync Status → idle lock → A unlocks → the route is RESTORED (not home)', async () => {
+    fixture = await bootFixture();
+    const harness = await liveShell(fixture, seedDirectory);
+    const { screen, controller } = harness;
+
+    expect(await unlockAs(harness, fixture.userId)).toBe(true);
+    await openSyncStatus(harness);
+    // DENOMINATOR: A really is off `home` — on the Sync Status surface, and the notes list is gone.
+    expect(screen.query('sync-status-screen')).not.toBeNull();
+    expect(screen.query('notes.list.title')).toBeNull();
+    // The route was retained under A (consuming task 133's `withRoute`).
+    expect(controller.snapshot().workspace?.route).toBe('syncStatus');
+
+    await idleLock(harness);
+    expect(controller.snapshot().locked).toBe(true);
+    expect(screen.query('sync-status-screen')).toBeNull(); // the lock screen replaces it
+
+    expect(await unlockAs(harness, fixture.userId)).toBe(true);
+    await waitUntil(() => screen.query('sync-status-screen') !== null);
+
+    // A lands back on Sync Status — the lock was invisible to their position, not a bounce to home.
+    // (This arm PASSES with or without the guard: A's route persisted across the non-unmounting App
+    // anyway. It is the positive half the task required; the guard is falsified by the NEXT test.)
+    expect(screen.query('sync-status-screen')).not.toBeNull();
+    expect(screen.query('notes.list.title')).toBeNull();
+  });
+
+  test('THE ROUTE PRIVACY CONTROL: A on Sync Status → idle lock → USER B unlocks → B lands on their OWN home, NOT A`s route', async () => {
+    fixture = await bootFixture();
+    const target = fixture;
+    const harness = await liveShell(target, seedTwoUsers);
+    const { screen, controller } = harness;
+
+    // A parks on a non-home route and it is retained under A.
+    expect(await unlockAs(harness, target.userId)).toBe(true);
+    await openSyncStatus(harness);
+    expect(controller.snapshot().workspace?.route).toBe('syncStatus');
+
+    await idleLock(harness);
+    expect(controller.snapshot().locked).toBe(true);
+
+    // B unlocks on the shared terminal.
+    expect(await unlockAs(harness, SECOND_USER_ID)).toBe(true);
+
+    // B MUST NOT inherit A's Sync Status position. This is the assertion that reds when the
+    // `routeOwner` correction is removed: `route` persisted across the lock as `syncStatus`, and
+    // without the correction B renders A's Sync Status surface instead of their own home.
+    await waitUntil(() => screen.query('notes.list.title') !== null);
+    expect(screen.query('sync-status-screen')).toBeNull();
+    expect(screen.query('notes.list.title')).not.toBeNull();
+    // B's retained route is their own `home`, never A's.
+    expect(controller.snapshot().workspace?.route).toBe('home');
+    expect(controller.snapshot().workspace?.ownerUserId).toBe(SECOND_USER_ID);
   });
 });
