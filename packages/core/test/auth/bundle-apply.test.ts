@@ -205,6 +205,36 @@ describe('applyBundle — the four directory tables (api/02-auth §5.2)', () => 
     expect(await count(k, 'users_directory')).toBe(1);
     expect(await count(k, 'user_roles_directory')).toBe(1);
   });
+
+  it('TASK 161 — a malformed bundle is rejected at the parse boundary; NOTHING is written (fail closed)', async () => {
+    const k = await open();
+    // (a) over-long store.name — the injection this gate exists for. Rejected before the first write,
+    // rather than the 100k string landing verbatim in meta_kv (the reproduced gap).
+    const huge = 'X'.repeat(100_000);
+    await expect(
+      applyBundle(k, bundle([], { store: { id: 'store-1', name: huge } })),
+    ).rejects.toThrow();
+    // (b) a wrong-shaped tenant (missing `name`) — before task 161 this threw a deep NOT NULL
+    // mid-apply, AFTER tenantId/storeName were already written; now it fails at the parse boundary.
+    // The cast is the point: the malformed shape is what a hostile/buggy server puts on the wire, and
+    // the compiler cannot see it at runtime.
+    await expect(
+      applyBundle(
+        k,
+        bundle([], { tenant: { id: 'tenant-1' } as unknown as DeviceBundle['tenant'] }),
+      ),
+    ).rejects.toThrow();
+    // Fail closed: neither rejected apply wrote a single directory row or meta key.
+    expect(await count(k, 'users_directory')).toBe(0);
+    expect(await count(k, 'roles_directory')).toBe(0);
+    expect(await count(k, 'user_roles_directory')).toBe(0);
+    expect(await readMeta(k, 'auth.storeName')).toBeNull();
+    expect(await readMeta(k, 'auth.tenantName')).toBeNull();
+    const tenantId = await sql<{
+      value: string;
+    }>`SELECT value FROM meta_kv WHERE key = 'tenantId'`.execute(k);
+    expect(tenantId.rows.length).toBe(0);
+  });
 });
 
 describe('applyBundle — §5.3 merge & §5.2 minimization', () => {
