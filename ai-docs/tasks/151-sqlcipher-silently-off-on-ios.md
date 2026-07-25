@@ -1,9 +1,19 @@
-# TASK 151 — SQLCipher is SILENTLY OFF on iOS: the podspec never finds the `op-sqlite` config block, so the iOS build ships an UNENCRYPTED client database
+# TASK 151 — prove the `op-sqlite` config block (`performanceMode`) is discovered/applied on iOS — the podspec's pnpm-root discovery walk missed it (the SQLCipher half is DISSOLVED by D22, see the re-scope)
+
+> **HEADER RE-SCOPED 2026-07-25** to match the D22 re-scope already recorded at the bottom of this
+> file (the header/`_index` row had drifted, still framing this as HIGH-security). **The security
+> premise is REFUTED, not open** — ground truth 2026-07-25: `op-sqlite.ts:123` "NO `encryptionKey`
+> is passed: D22 dropped SQLCipher", there is **no `.podspec` and no `apps/mobile/ios/` directory**
+> (iOS is not scaffolded — deferred to task 85/v1), and at-rest is now platform-agnostic JS AEAD
+> (SEC-DEV-06), proven on Android hardware by the SEC-AUTH-09-leg1 discharge (task 28). What survives
+> is a **performance/config** question (is `performanceMode: true` discovered on iOS?) that cannot be
+> worked until iOS is scaffolded (blocked behind 85), plus one **spec-drift** residual → rehomed to 131.
 
 **Status:** todo
-**Priority:** **HIGH — security.** At-rest encryption of the entire client DB is disabled on one platform, with no error, no warning, and a green CI lane over it. This is also why that lane is green: it is not demonstrating that the iOS OpenSSL collision is resolved, it is demonstrating that op-sqlite never links OpenSSL there.
-**Depends on:** 85 (whose lane surfaced it), 148 (the sibling collision on Android)
-**Blocks:** any honest claim that the iOS build matches the Android security posture
+**Priority:** LOW — performance/config, iOS-only, **blocked behind task 85 (iOS not scaffolded)**. NOT a v0 blocker and NOT a security item; the HIGH-security framing was refuted by the D22 re-scope + the 2026-07-25 premise-check above.
+**Depends on:** 85 (iOS scaffold — cannot start before it), 148 (D22, which dissolved the security half)
+**Blocks:** — (the "iOS matches Android security posture" claim it used to block is now true by construction: platform-agnostic JS AEAD, no SQLCipher on either platform)
+**Spec-drift residual → 131:** `08-stack-and-repo.md` §7 record 4 (line 351) still says "SQLCipher 4.14.0 … the podspec confirms the config block drives `sqlcipher`/`performanceMode`" — stale post-D22 (SQLCipher is gone; only `performanceMode` remains in the block). Fold the correction into task 131's spec-drift sweep.
 **SEC ids owned by THIS task:** none currently named — **check `security-guide.md` for the at-rest/SQLCipher row and claim it**; if the SEC list has no id covering "the DB is actually encrypted on every shipping platform", that is itself a gap worth reporting.
 **Filed by:** the task-148 investigator, 2026-07-22, from the FIRST-EVER completed runs of both native lanes.
 
