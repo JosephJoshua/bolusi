@@ -58,3 +58,11 @@ Deliver the L6 on-device performance lane: the hidden Harness screen's Part C se
 - **SEC-\*:** SEC-AUTH-10 (on-device KDF benchmark recorded, output committed as build artifact — satisfied by the P-4 run + committed report + decisions entry; assert the artifact path exists in the driver's post-run check). No other SEC-* belongs to this surface (adversarial sweep is task 28).
 - **CHAOS-\*:** CHAOS-01, CHAOS-03, CHAOS-06, CHAOS-07 at reduced volume execute in the same L6 run (testing-guide §2.6) using 26's scenarios; their pass/fail appears in the same JSON. CHAOS-08 remains Node-side in 26 — P-2 is its device counterpart (§3.5 mapping).
 - **Lint/CI gates:** `pnpm lint` / `pnpm typecheck` / `pnpm test` green (boundary rules: `@bolusi/test-support` imported only from harness/test entry points, 08 §3.4); adds the 08 §5.6 stage-12 device-lane entry (`harness:device` invocation documented in the CI config, triggered on native change/scheduled — not per-PR).
+
+## 27a — FIRST REAL GATE VERDICTS ON-DEVICE 2026-07-25 (emulator run 30153400999, sha 12d5b66)
+After 148/162/176/175/177/178 the Android emulator lane produced its first real per-gate verdicts on a
+booted AVD (`reports/device-gates/2026-07-25-emulator.json`): **SEC-DEV-06-at-rest, SEC-AUTH-09-leg1,
+SEC-OPLOG-06-jcs all PASS** (real production-writer seed, T-14b positive control, shared RFC-8785
+vectors on Hermes). CHAOS-01/03/06/07 honestly `skipped` — no on-device runner (task 181). The lane
+exits non-zero BECAUSE of the 4 honest skips (correct §2.11 outcome), not a gate failure. 27a's 3
+correctness/security legs are DONE; 27a goes fully GREEN when 181 lands the 4 chaos runners.
