@@ -1,7 +1,8 @@
 // The app bootstrap (08 §6.3's order; task 24's item 2, completed by task 50).
 //
 //   DB key from SecureStore  →  open (plaintext file) + install the column cipher  →  migrations
-//   →  register modules  →  projection engine  →  sync state
+//   →  read deviceId  →  "is this DB ours?" key-tag probe (task 160)  →  register modules
+//   →  projection engine  →  sync state
 //
 // ── WHAT IS REAL HERE, AND WHAT IS STILL ABSENT ───────────────────────────────────────────────
 // Task 24 left this file's job absent rather than stubbed, and the reason is worth restating because
@@ -62,6 +63,7 @@ import {
 
 import type { SecureStoreDbKeyStore } from '../ports/db-keystore.js';
 
+import { assertDatabaseKeyBinding } from './db-identity.js';
 import { CLIENT_MODULES } from './modules.js';
 
 export interface BootstrapDeps {
@@ -138,6 +140,8 @@ export interface Bootstrapped {
  * @throws {DbOpenError} `missing_key` (no DB key — never a plaintext-column fallback, SEC-DEV-06),
  *   `already_open` (a connection is live — 08 §2.2's one-connection rule), `driver_open_failed`
  *   (wrong key or corrupt file, with the key scrubbed from the message).
+ * @throws {ForeignDatabaseError} the file opened but was sealed with a key we do not hold — a restored
+ *   foreign DB / Android partial data-clear (security-guide §6.6). `bootWithLocalRecovery` heals it.
  * @throws {ModuleRegistryError | PermissionRegistryError} a registration defect — duplicate module
  *   id, duplicate op type, unresolvable permission. 02 §3.2: "startup failure (not a warning)".
  */
@@ -180,15 +184,26 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
       invalidation,
     });
 
-    // 6. The device's sync state, read from the seeded singleton. `readSyncState` THROWS when the
+    // Is this device enrolled? `readDeviceId` returns the id `meta_kv` holds (task 88) or null. The
+    // sync loop is constructed iff this is non-null (Root/index) — the real gate, not a comment.
+    const deviceId = await readDeviceId(db.db as never);
+
+    // 6. IS THIS DATABASE OURS? (security-guide §6.6; task 160). Since D22 the file is plaintext and
+    //    `open()` takes no key, so a restored foreign DB (or an Android partial data-clear) opens fine
+    //    and boots into a SILENT half-enrolled state — the loud SQLCipher `not_a_database` that
+    //    recovery.ts used to heal can no longer fire. This probe compares the column-cipher key tag on
+    //    disk (bound on first boot) against the tag of the key THIS boot opened with; a mismatch throws
+    //    `ForeignDatabaseError`, which `bootWithLocalRecovery` routes into the SAME wipe-and-re-enrol
+    //    heal. It runs BEFORE any sealed data is trusted, reads only plaintext `meta_kv`, and NEVER
+    //    opens a sealed cell (SEC-DEV-06). A read failure here propagates raw — the transient never
+    //    reaches the wipe. `deviceId` is passed for the defence-in-depth "enrolled but unbound" case.
+    await assertDatabaseKeyBinding(db.db as never, db.columnCipherMarker, deviceId);
+
+    // 7. The device's sync state, read from the seeded singleton. `readSyncState` THROWS when the
     //    row is missing rather than returning defaults — a missing row is a broken migration, and
     //    substituting `cursor: 0` would silently re-pull the world and look like a sync bug rather
     //    than the schema failure it is. That throw is why this call is also a migration assertion.
     const syncState = await readSyncState(db.db as never);
-
-    // Is this device enrolled? `readDeviceId` returns the id `meta_kv` holds (task 88) or null. The
-    // sync loop is constructed iff this is non-null (Root/index) — the real gate, not a comment.
-    const deviceId = await readDeviceId(db.db as never);
 
     return {
       db,
