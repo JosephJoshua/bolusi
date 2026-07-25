@@ -1,6 +1,6 @@
 # TASK 175 — the emulator lane waited 20 minutes for a logcat line NOTHING in this repo writes: 27a shipped the consumer (`harness-device.mjs`) and never the producer (no `HarnessActivity`, no emitter, no caller of `loadHarness()`), and the flag that would gate it cannot reach a release bundle anyway
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH — holds the v0 exit line.** `_index.md`'s exit clause is "26 + 25 + **27a** + 28 clean", and 27a carries **SEC-AUTH-09 leg 1** and SEC-DEV-06's L6 at-rest leg. Task 162 got the gate script *executing*; this is what it found on the other side. Not a flake, not crypto, not 148.
 **Depends on:** 162 (the gate script must execute for this to be observable at all), 148 (the APK must assemble)
 **Relates to:** 27a (this is 27a's unbuilt half), 117 (Maestro never runs — `set -e` aborts `emulator-gates.sh` at line 34 before line 40; correct behaviour, not a second bug), 163 (nothing machine-checks the dispatch-only lanes, which is how this stayed invisible)
