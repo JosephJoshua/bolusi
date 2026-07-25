@@ -92,17 +92,15 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
   // `bootWithLocalRecovery` self-heals a boot that fails because the data layer is genuinely
-  // unreadable-with-our-key — by wiping and dropping to enrollment; every other failure still
-  // surfaces through Root's no-catch.
+  // unopenable — a corrupt file that throws `not_a_database`/`missing_key` — by wiping and dropping
+  // to enrollment; every other failure still surfaces through Root's no-catch.
   //
-  // POST-D22 THE LIVE TRIGGER IS THE KEY-TAG PROBE, NOT `not_a_database` (task 160). On an iOS
-  // restore-to-new-hardware (security-guide §6.6) `bolusi.db` restores but the THIS_DEVICE_ONLY key
-  // does not. Under SQLCipher that was a LOUD `not_a_database`; now `open()` takes no key and the
-  // restored PLAINTEXT file opens successfully. What catches it instead is `bootstrap()`'s key-tag
-  // probe (bootstrap/db-identity.ts): it compares the on-disk column-cipher tag against the key this
-  // boot minted and throws `ForeignDatabaseError` on a mismatch, which `isUnrecoverableLocalDbError`
-  // routes into the SAME wipe below. The old `missing_key`/`not_a_database` branches remain as
-  // defensive backstops. Same defence covers the Android partial-data-clear (file kept, key lost).
+  // ⚠️ POST-D22 THIS NO LONGER COVERS THE CASE IT WAS BUILT FOR (recovery.ts `KNOWN GAP SINCE D22`,
+  // task 160). It was built for iOS restore-to-new-hardware (security-guide §6.6): `bolusi.db`
+  // restores, the THIS_DEVICE_ONLY key does not. Under SQLCipher that was a LOUD `not_a_database` that
+  // routed here. Now `open()` takes no key and the restored PLAINTEXT file OPENS successfully, so
+  // neither trigger fires — boot "succeeds" into a silent half-enrolled state that throws AEAD errors
+  // deep in the UI. Detecting it needs a decrypt-probe at boot (task 160), not this error-class check.
   return bootWithLocalRecovery({
     boot: () =>
       bootstrap({
@@ -121,8 +119,7 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
     // (THIS_DEVICE_ONLY, never restored), and a fresh empty DB reads `deviceId: null` → the
     // enrollment wizard, so this destroys exactly what makes the re-open clean. It NEVER opens the DB
     // unencrypted (SEC-DEV-06). Native, and unverifiable on this infra (no iOS/Android target,
-    // D12/D13) — the heal LOGIC is unit-verified against the `DbOpenError` kinds AND the key-tag
-    // probe's `ForeignDatabaseError` (recovery.test.ts, boot-decrypt-probe.test.ts).
+    // D12/D13) — the heal LOGIC is unit-verified against the `DbOpenError` kinds (recovery.test.ts).
     wipeLocalData: async () => {
       await keyStore.wipe();
       deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });

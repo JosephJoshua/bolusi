@@ -13,7 +13,6 @@ import { DbError, DbOpenError } from '@bolusi/db-client';
 import { describe, expect, test, vi } from 'vitest';
 
 import type { Bootstrapped } from './bootstrap.js';
-import { ForeignDatabaseError } from './db-identity.js';
 import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from './recovery.js';
 
 /** The exact message `sanitizeOpenFailure` builds around a native error (connection.ts). */
@@ -52,17 +51,6 @@ describe('isUnrecoverableLocalDbError — the wrong-key/orphan class heals, ever
   test('HEALS a missing_key open — the DB, if present, is unreadable ciphertext', () => {
     expect(
       isUnrecoverableLocalDbError(new DbOpenError('missing_key', 'no SQLCipher key available')),
-    ).toBe(true);
-  });
-
-  test('HEALS a ForeignDatabaseError — the LIVE post-D22 restore trigger (task 160)', () => {
-    // Since D22 the restored file opens plaintext, so the wrong-key symptom is no longer a
-    // `not_a_database` open failure but the key-tag probe's `ForeignDatabaseError` (db-identity.ts).
-    // It routes into the SAME wipe-and-re-enrol heal. See boot-decrypt-probe.test.ts for the probe.
-    expect(
-      isUnrecoverableLocalDbError(
-        new ForeignDatabaseError('sealed with a different key (restored foreign database)'),
-      ),
     ).toBe(true);
   });
 
