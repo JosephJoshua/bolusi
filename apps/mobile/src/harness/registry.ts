@@ -5,9 +5,13 @@
 //
 // This wires the EMULATOR CORRECTNESS legs (task 27a): the SEC-DEV-06 at-rest gate (with its T-14b
 // positive control) and the SEED-200K builder the on-device rebuild / execute-latency runners replay.
-// The JCS-vector and reduced-chaos legs run through the shared engines (@bolusi/core / @bolusi/harness
-// scenarios UNCHANGED) on device; their gate ids appear in `requiredGateIds` so the driver's parser
-// demands them. PERFORMANCE gates are NOT wired here — they are 27b (physical device).
+// The JCS-vector leg (SEC-OPLOG-06) runs on device — it replays the SHARED RFC 8785 vectors through
+// `canonicalizeJcs` on Hermes. The reduced-chaos legs (CHAOS-01/03/06/07) do NOT run on device and
+// CANNOT here: their scenarios live in `@bolusi/harness` (PGlite + better-sqlite3 `VirtualDevice`),
+// which apps/mobile does not bundle, and CHAOS-03/06/07 need a server round-trip a single emulator
+// lacks — so they emit an HONEST `skipped` (task 181), and the driver reds the lane on them. All 7
+// gate ids appear in `requiredGateIds` so the parser demands each. PERFORMANCE gates are NOT wired
+// here — they are 27b (physical device).
 import { generateSeed200k, SEED_200K, type Seed200kSpec } from '@bolusi/test-support/device';
 import { mulberry32, type ScriptOp } from '@bolusi/test-support/device';
 

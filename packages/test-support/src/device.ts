@@ -14,6 +14,7 @@
 //             → determinism/prng.ts
 //             → determinism/script.ts → determinism/prng.ts
 //             → driver-conformance/at-rest.ts   (self-contained; imports nothing)
+//             → vectors/jcs.ts                  (the shared RFC 8785 vectors view; imports nothing)
 // None of those imports `node:crypto` / `node:*` / `node-column-aead`. `device-bundle-safe.test.ts`
 // walks this graph from THIS file and fails if any reachable module reaches a Node-only import — the
 // §2.11 guard that keeps the claim above from silently rotting when a new export is added here.
