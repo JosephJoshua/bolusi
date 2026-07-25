@@ -431,18 +431,39 @@ export const PROBE_REGISTRY: ProbeRegistry = {
 
   // ── media (the §2.2 documented exception 1) ───────────────────────────────────────────────────
   //
-  // HISTORY: the cross-tenant leg of `POST /v1/media/:id/init` used to answer `500 INTERNAL` (a
-  // `media.id` unique violation nothing caught) while the unassigned-store leg answered `404`, so
-  // the status distinguished "exists in another tenant" from "does not exist". These rows state the
-  // RULE, so they were red until commit `d12face` fixed the route; they are green now.
-  //
-  // OPEN, RULED, NOT YET FIXED (found by task 141a's sweep; not patched here — this is a no-wire
-  // -change task): `init` creates a media row at a caller-supplied id, so it still answers `404` for
-  // an id another tenant holds and `200` for a free one. D23 §2 ruled the id be tenant-scoped —
-  // uniqueness `(tenant_id, id)` — so the oracle disappears rather than becoming a §2.2 exception.
-  // Until that lands the difference is pinned in `KNOWN_EXISTENCE_CONTROL_DIFFERENCES`, whose header
-  // says what to do when the fix trips it: DELETE the entry, never widen it.
-  'POST /v1/media/:id/init': mediaProbes('POST', '/init', (ctx) => mediaInitBody(ctx)),
+  // HISTORY (all resolved — kept so the shape is legible, not a live to-do):
+  //   * the cross-tenant leg of `POST /v1/media/:id/init` once answered `500 INTERNAL` (a `media.id`
+  //     unique violation nothing caught) while the unassigned-store leg answered `404`, distinguishing
+  //     "exists in another tenant" from "does not exist". Commit `d12face` folded it to a uniform 404.
+  //   * that 404-vs-200 (held vs free) was itself the SEC-TENANT-04 oracle task 141a's sweep pinned in
+  //     `KNOWN_EXISTENCE_CONTROL_DIFFERENCES`. Task 170 / D23 §2 REMOVED it by tenant-scoping the id
+  //     (uniqueness `(tenant_id, id)`, migration 0011) — the pin is now empty, and init's non-oracle
+  //     property is asserted directly as held == free (see the init row below and its dedicated test).
+  // init is NOT a shared-404 media leg since D23 §2 (media id is tenant-scoped, migration 0011). A
+  // foreign tenant's id is not a cross-tenant reference — it is a FREE id in the caller's own
+  // namespace — so init CREATES a row and answers 2xx, which is correct, not a leak. Its non-oracle
+  // property is HELD == FREE: init at tenantBMediaId returns the SAME response as init at a never-used
+  // id, so the caller learns nothing about tenant B. That is a DIRECT indistinguishability assertion
+  // (stronger than the old fixed-404 expectation), carried by the dedicated test named below. Keeping
+  // it in the generic `denied` walk would (a) misread the correct 2xx as a leak and (b) leave a
+  // side-effect row that contaminates the reader legs below — which is exactly what pinned it before.
+  'POST /v1/media/:id/init': {
+    crossTenant: {
+      kind: 'dedicated',
+      assertion:
+        'SEC-TENANT-04 media init at a foreign id is a local create indistinguishable from a fresh id',
+    },
+    // unassignedStore is unchanged: tenantAStore2MediaId is a REAL row in THIS tenant owned by
+    // another device, so the uploader-binding check answers 404 — a genuine existing-row denial, not
+    // the cross-tenant oracle. Still a `denied` MEDIA_NOT_FOUND leg.
+    unassignedStore: { kind: 'denied', verdict: MEDIA_NOT_FOUND, rule: RULE_MEDIA_EXCEPTION },
+    unassignedStoreRequest: (ctx) => ({
+      path: `/v1/media/${ctx.tenantAStore2MediaId}/init`,
+      init: { method: 'POST', headers: deviceHeaders(ctx), body: mediaInitBody(ctx) },
+    }),
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', (ctx) => `/v1/media/${ctx.tenantBMediaId}/init`),
+  },
   'PUT /v1/media/:id/chunks/:index': mediaProbes(
     'PUT',
     '/chunks/0',

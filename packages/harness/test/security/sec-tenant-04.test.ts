@@ -90,43 +90,32 @@ const controlId = (index: number): string =>
   `0f9000${index.toString(16).padStart(2, '0')}-9999-7999-8999-999999999999`;
 
 /**
- * The one endpoint whose nonexistent-id control still differs, pinned so the sweep is green for a
- * STATED reason rather than blind. **This pin is TEMPORARY BY CONSTRUCTION — see the deletion note
- * at the bottom.**
+ * The known-difference allowlist for the nonexistent-id control sweep. **EMPTY, and empty is the
+ * correct end state** (task 170 / D23 §2, migration 0011) — every endpoint's nonexistent-id control
+ * is now byte-identical to its real out-of-scope response, so the sweep is green because NOTHING
+ * differs, not because a difference is pinned.
  *
- * `POST /v1/media/:id/init` creates a media row at a caller-supplied id and answers `404` for an id
- * another tenant already holds versus `200` for a free one, so it distinguishes taken from free.
- * Found by task 141a's sweep; it is NOT a security-guide §2.2 documented exception.
+ * HISTORY (kept so the deletion is legible, not re-litigated): `POST /v1/media/:id/init` used to
+ * answer `404` for an id another tenant held versus `200` for a free one — a cross-tenant existence
+ * oracle over ids the caller was never shown, found by task 141a's sweep. It was pinned here as a
+ * TEMPORARY, bidirectional entry (an endpoint-set pin would have stayed green if the difference
+ * merely changed character, so the EXACT violation text was pinned). D23 §2 ruled it be REMOVED, not
+ * documented: media id uniqueness became `(tenant_id, id)`, so a foreign id is a free id in the
+ * caller's own namespace and both cases answer `200` identically. The ruling turned on the numbers —
+ * this route's budget is `perRoutePerMinute: 120` (`apps/server/src/deps.ts:71`) ≈ 172,800/day
+ * against UUIDv7's 74 random bits, so §2.2 exception 2's 30/day-budget justification does not reach
+ * here. The pin was designed to red the moment the fix landed; task 170 emptied it rather than
+ * relaxing it, and init's non-oracle property (held == free) is now asserted directly by the
+ * dedicated test `…media init at a foreign id is a local create indistinguishable from a fresh id`.
  *
- * **RULED, D23 §2: tenant-scope the media id — remove the oracle rather than document it.**
- * Uniqueness becomes `(tenant_id, id)` instead of global, so an id another tenant holds does not
- * exist in the caller's tenant and BOTH cases answer `200`. (An earlier version of this comment
- * asserted the difference was "inherent to create-by-supplied-id and cannot be removed without a
- * lying 200 or server-generated ids". That was wrong — it missed tenant-scoping entirely. A comment
- * is a hypothesis, CLAUDE.md §2.11.) The ruling turned on the numbers, not on shape: §2.2 exception
- * 2's only justification is its 30/day probe budget, and this route's is `perRoutePerMinute: 120`
- * (`apps/server/src/deps.ts:71`) ≈ 172,800/day against UUIDv7's 74 random bits — so the exception's
- * reasoning does not reach here. Tracked as the media-id tenant-scoping task (referenced by slug,
- * not number — ids in this range are being allocated concurrently); it carries a DB migration, and
- * migrations serialize globally (CLAUDE.md §4), so it cannot run beside another migration task.
+ * (An earlier draft of this comment claimed the difference was "inherent to create-by-supplied-id
+ * and cannot be removed without a lying 200 or server-generated ids." That was wrong — it missed
+ * tenant-scoping. A comment is a hypothesis, CLAUDE.md §2.11.)
  *
- * Pinned as the EXACT violation text, not merely the endpoint name: an endpoint set would stay
- * green if this difference changed CHARACTER — e.g. if the body began echoing the other tenant's
- * data — because the set would still be this one row. A second endpoint joining fails here, this
- * one leaving fails here, and so does this one leaking something new.
- *
- * **WHEN THIS GOES RED AFTER THE TENANT-SCOPING FIX LANDS, DELETE THIS ENTRY — DO NOT WIDEN IT.**
- * The pin is bidirectional on purpose, so the fix itself trips it: that red is the success signal,
- * and the correct response is an empty `KNOWN_EXISTENCE_CONTROL_DIFFERENCES`, not a relaxed
- * assertion. Relaxing it would re-open the whole class this sweep exists to close, and §2.2 stays
- * at exactly TWO documented exceptions either way — this endpoint is never added there (D23 §2).
+ * DO NOT add an entry back for a NEW oracle. A real difference must be REMOVED or RULED (D23 §2),
+ * never pinned silent — and §2.2 stays at exactly TWO documented exceptions regardless.
  */
-const KNOWN_EXISTENCE_CONTROL_DIFFERENCES: readonly string[] = [
-  'POST /v1/media/:id/init :: status differs (404 vs 200) — an existence oracle',
-  'POST /v1/media/:id/init :: body differs beyond requestId — an existence oracle. ' +
-    '{"error":{"code":"MEDIA_NOT_FOUND","message":"Media not found"}} vs ' +
-    '{"chunkSize":262144,"totalChunks":1,"receivedChunks":[],"status":"receiving"}',
-];
+const KNOWN_EXISTENCE_CONTROL_DIFFERENCES: readonly string[] = [];
 
 /** Read a probe response without consuming a long-lived stream (SSE never closes on a 200). */
 async function readResponse(res: Response): Promise<ProbeResponse> {
@@ -394,6 +383,57 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
         expect(op.tenantId).not.toBe(ctx.tenantBTenantId);
         expect(op.storeId === null || op.storeId === ctx.tenantAStore1Id).toBe(true);
       }
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  // Carries the `crossTenant: dedicated` leg for `POST /v1/media/:id/init` (probe-registry.ts). Since
+  // D23 §2 / migration 0011, media id uniqueness is (tenant_id, id): a foreign tenant's id is a FREE
+  // id in the caller's own namespace, so init CREATES a row and answers 2xx — correct, not a leak.
+  // The non-oracle property is HELD == FREE, asserted directly here (stronger than the pre-fix
+  // fixed-404 expectation). Before 0011 the foreign id tripped the global unique index → 404 while a
+  // free id → 200: that 404-vs-200 WAS the SEC-TENANT-04 oracle this discharges.
+  test('SEC-TENANT-04 media init at a foreign id is a local create indistinguishable from a fresh id', async () => {
+    const fixture = await openTenantProbeFixture();
+    try {
+      const ctx = fixture.ctx;
+      const body = JSON.stringify({
+        sizeBytes: 1024,
+        sha256: '0'.repeat(64),
+        mime: 'image/jpeg',
+        type: 'image',
+        metadata: {
+          capturedAt: 1,
+          userId: ctx.tenantAUserId,
+          deviceId: ctx.tenantADeviceId,
+          location: null,
+        },
+      });
+      const headers = { Authorization: ctx.tenantAAuth, 'Content-Type': 'application/json' };
+      // Same tenant-A caller + same body; only the id differs — a media id tenant B holds vs one that
+      // exists nowhere. Both must be byte-identical, revealing nothing about tenant B's existence.
+      const held = await readResponse(
+        await fixture.request(`/v1/media/${ctx.tenantBMediaId}/init`, {
+          method: 'POST',
+          headers,
+          body,
+        }),
+      );
+      const free = await readResponse(
+        await fixture.request(`/v1/media/${ctx.nonexistentId}/init`, {
+          method: 'POST',
+          headers,
+          body,
+        }),
+      );
+      expect(held.status, 'init at a foreign tenant id must not reveal existence via status').toBe(
+        free.status,
+      );
+      expect(held.status, 'a tenant-scoped id is free in this tenant — init creates it, 200').toBe(
+        200,
+      );
+      expect(held.bodyText, 'held and free init bodies must be identical').toEqual(free.bodyText);
     } finally {
       await fixture.close();
     }

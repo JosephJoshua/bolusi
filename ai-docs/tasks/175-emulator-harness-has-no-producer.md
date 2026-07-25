@@ -1,6 +1,6 @@
 # TASK 175 — the emulator lane waited 20 minutes for a logcat line NOTHING in this repo writes: 27a shipped the consumer (`harness-device.mjs`) and never the producer (no `HarnessActivity`, no emitter, no caller of `loadHarness()`), and the flag that would gate it cannot reach a release bundle anyway
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — holds the v0 exit line.** `_index.md`'s exit clause is "26 + 25 + **27a** + 28 clean", and 27a carries **SEC-AUTH-09 leg 1** and SEC-DEV-06's L6 at-rest leg. Task 162 got the gate script *executing*; this is what it found on the other side. Not a flake, not crypto, not 148.
 **Depends on:** 162 (the gate script must execute for this to be observable at all), 148 (the APK must assemble)
 **Relates to:** 27a (this is 27a's unbuilt half), 117 (Maestro never runs — `set -e` aborts `emulator-gates.sh` at line 34 before line 40; correct behaviour, not a second bug), 163 (nothing machine-checks the dispatch-only lanes, which is how this stayed invisible)
@@ -197,3 +197,26 @@ from `fail()`. The two pure functions (`amStartFailureReason`, `tailLines`) ARE 
 broken and watched red, including a head-anchored-bound mutation that would have discarded the crash).
 The orchestration is falsified only by stub, which is inherent to the pure/thin-CLI split — but per
 §2.11 the dump's presence is precisely the kind of line whose silent removal nothing would catch.
+
+## CONFIRMED ON REAL HARDWARE (2026-07-24, run 30096218782, job android-emulator)
+
+The diagnosis was verified on a booted API-34 AVD, and task 176's observability made it readable in
+SECONDS instead of a 20-minute silent timeout:
+```
+Error type 3
+Error: Activity class {com.bolusi.app/com.bolusi.app.HarnessActivity} does not exist.
+harness:device: am start … did NOT launch (it exited 0 — am start reports this on stdout, not via
+  its exit status)
+── FAILURE DIAGNOSTICS (unfiltered — the poll cannot see any of this) ──
+```
+The logcat dump confirms: the APK **installs** (`ActivityTaskManager: … NEW_INSTALL … com.bolusi.app`),
+`am start .HarnessActivity` returns `result code=-92` (START_CLASS_NOT_FOUND), and there is **no
+FATAL EXCEPTION / no crash** — because the app's real MainActivity was never launched. So the four
+static defects (A–D) are now hardware-confirmed, not just source-proven.
+
+**Task 160's boot question is still OPEN and this run did not answer it.** The harness driver only
+`am start`s `HarnessActivity` (which does not exist); it never launches the app's real launcher
+activity, so we have NOT observed whether the app boots into a silent half-enrolled state post-148.
+When building the producer (leg 3), have the gate ALSO smoke-launch the real MainActivity and dump
+logcat — that is the cheap way to answer 160 on-device, and it is one `am start` + the dump 176
+already emits.

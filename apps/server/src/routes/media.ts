@@ -264,16 +264,20 @@ export function createMediaRouter(deps: ServerDeps) {
             }
 
             const totalChunks = Math.ceil(body.sizeBytes / MEDIA_CHUNK_SIZE);
-            // `media.id` is a GLOBAL uuid PK (10-db §8). The SELECT above is RLS-scoped, so an id an
-            // RLS-hidden row in ANOTHER tenant already holds reads as absent here — but the INSERT
-            // still trips the global unique index (RLS filters SELECTs, not unique conflicts, 10-db
-            // §6). ON CONFLICT DO NOTHING makes that collision a skipped insert (0 rows) instead of a
-            // 23505 that escapes as 500: we then render the SAME 404 MEDIA_NOT_FOUND as the
-            // nonexistent / other-device / unassigned-store legs, so status + body confirm nothing
-            // about cross-tenant existence (security-guide §2.2 media exception, SEC-MEDIA-03; the
-            // SEC-TENANT-04 oracle, task 114). Fails CLOSED — never a 2xx for a foreign id. Driver-
-            // agnostic (no error to catch): same command tag on the pg L3 lane and the PGlite
-            // security lane, exactly as runIdempotent's claim insert (identity/idempotency.ts).
+            // `media`'s uniqueness is `(tenant_id, id)` (10-db §8; migration 0011, task 170 / D23 §2),
+            // NOT global `id`. So an id another tenant already holds simply does NOT exist in this
+            // tenant: the insert stamps `tenantId = device.tenantId` and trips no conflict, returning
+            // a clean `200` — byte-identical to a free id. That is the whole fix: held-vs-free is no
+            // longer distinguishable across a tenant boundary, so this route stopped being the
+            // SEC-TENANT-04 existence oracle (task 141a's pin for it is deleted by this task). Before
+            // 0011 the global unique index tripped on a foreign id and `ON CONFLICT` rendered a 404
+            // that leaked cross-tenant existence.
+            //
+            // `ON CONFLICT (tenant_id, id) DO NOTHING` now guards only ONE thing: a same-tenant race
+            // (two concurrent inits of the same id in this tenant) that the RLS-scoped SELECT above
+            // missed. 0 rows on that race renders 404 — the client retries and the SELECT path serves
+            // the idempotent 200. Driver-agnostic (no error to catch): same command tag on the pg L3
+            // lane and the PGlite security lane, exactly as runIdempotent's claim insert.
             const inserted = await db
               .insertInto('media')
               .values({
@@ -294,7 +298,7 @@ export function createMediaRouter(deps: ServerDeps) {
                 status: 'receiving',
                 createdAt: deps.now(),
               })
-              .onConflict((oc) => oc.column('id').doNothing())
+              .onConflict((oc) => oc.columns(['tenantId', 'id']).doNothing())
               .executeTakeFirst();
             if (Number(inserted.numInsertedOrUpdatedRows ?? 0n) === 0) {
               return renderMediaError(c, 'MEDIA_NOT_FOUND');
@@ -356,7 +360,9 @@ export function createMediaRouter(deps: ServerDeps) {
                 receivedAt: deps.now(),
               })
               .onConflict((oc) =>
-                oc.columns(['mediaId', 'chunkIndex']).doUpdateSet({
+                // PK is (tenant_id, media_id, chunk_index) since migration 0011 — a re-PUT of the
+                // caller's own chunk still upserts, and two tenants sharing a media id do not collide.
+                oc.columns(['tenantId', 'mediaId', 'chunkIndex']).doUpdateSet({
                   bytes: Buffer.from(bytes),
                   byteSize: bytes.byteLength,
                   receivedAt: deps.now(),
