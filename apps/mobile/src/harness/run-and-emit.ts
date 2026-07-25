@@ -4,6 +4,7 @@
 // emit.ts (the native module) and RN's `__DEV__` / `HermesInternal` globals, none of which exist in
 // Node, so no Node test imports it (the pure pieces it calls ARE Node-tested in harness-run.test.ts).
 import { emitHarnessResult } from './emit.js';
+import { loadHarness } from './registry.js';
 import { buildHarnessResult, resolveGateResults, type HarnessRuntimeFacts } from './run.js';
 
 declare const __DEV__: boolean;
@@ -38,11 +39,16 @@ function runtimeFacts(): HarnessRuntimeFacts {
  * driver's freshness check matches. An empty/absent run id is emitted honestly and the driver's
  * run-id check then fails the lane — a mislabelled capture, never a silent pass.
  *
- * It does NOT call `loadHarness()` (registry.ts): that would import `@bolusi/test-support` into the
- * release bundle, whose barrel pulls `node:crypto` and breaks the APK assemble (task 177). So today
- * `resolveGateResults()` emits an honest all-skipped partial; the real runners land with 177.
+ * It DOES call `loadHarness()` (registry.ts) now (task 177). That value import is what pulls
+ * `@bolusi/test-support/device` into the release bundle — the device-bundle-safe subpath that carries no
+ * `node:crypto`, so `expo export --platform android` assembles (the OLD barrel here fails Metro on
+ * `node:crypto`, which is the falsification task 177 records). The runners are reachable; the on-device
+ * SEAMS they need (the at-rest op-sqlite env, the JCS/chaos scenario runners) are 27a Part C / task 178,
+ * so `resolveGateResults(harness)` still emits an HONEST all-skipped partial with corrected reasons —
+ * bundle-safety is fixed, the seams are not — never a silent pass (§2.11).
  */
 export async function runAndEmitHarness(runId: string): Promise<void> {
-  const gates = resolveGateResults();
+  const harness = loadHarness();
+  const gates = resolveGateResults(harness);
   emitHarnessResult(buildHarnessResult(runId, gates, runtimeFacts()));
 }

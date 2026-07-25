@@ -18,7 +18,7 @@ import {
   checkControlSeedIsWitnessed,
   checkDbAtRestIsCiphertext,
   type AtRestProbeContext,
-} from '@bolusi/test-support';
+} from '@bolusi/test-support/device';
 
 import { failed, passed, type HarnessGateResult } from '../result.js';
 

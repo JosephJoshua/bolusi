@@ -8,8 +8,8 @@
 // The JCS-vector and reduced-chaos legs run through the shared engines (@bolusi/core / @bolusi/harness
 // scenarios UNCHANGED) on device; their gate ids appear in `requiredGateIds` so the driver's parser
 // demands them. PERFORMANCE gates are NOT wired here — they are 27b (physical device).
-import { generateSeed200k, SEED_200K, type Seed200kSpec } from '@bolusi/test-support';
-import { mulberry32, type ScriptOp } from '@bolusi/test-support';
+import { generateSeed200k, SEED_200K, type Seed200kSpec } from '@bolusi/test-support/device';
+import { mulberry32, type ScriptOp } from '@bolusi/test-support/device';
 
 import { harnessEnabled } from './flag.js';
 import { EMULATOR_CORRECTNESS_GATE_IDS } from './gates.js';
@@ -17,10 +17,11 @@ import { runAtRestGate, type AtRestDeviceEnv } from './part-c/at-rest-device-ctx
 import type { HarnessGateResult } from './result.js';
 
 // The correctness gate ids live in the dependency-free `gates.js` (re-exported here for
-// `loadHarness().requiredGateIds`) so the device entry can name them WITHOUT importing this file — a
-// value-import of `registry.ts` pulls `@bolusi/test-support` → `node:crypto` into the release bundle and
-// breaks the APK assemble (task 177). This file, and everything it reaches (the SEED-200K builder, the
-// at-rest runner), stay Node-/test-only until 177 makes test-support device-bundle-safe.
+// `loadHarness().requiredGateIds`) so the device entry can name them without depending on the runner
+// machinery. Task 177 made this file itself device-bundle-safe: it imports `@bolusi/test-support/device`
+// (the SEED-200K builder + the at-rest gate body), a subpath that carries NO `node:crypto` — so a
+// value-import of `registry.ts` from run-and-emit.ts now bundles into the release APK (the OLD barrel
+// root would break the Metro assemble on `node:crypto`; that is the 177 falsification).
 export { EMULATOR_CORRECTNESS_GATE_IDS };
 
 export interface HarnessRunners {

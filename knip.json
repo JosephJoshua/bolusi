@@ -11,7 +11,7 @@
       "entry": ["src/index.ts!", "src/notes/index.ts!", "src/notes/screens/index.ts!"]
     },
     "packages/test-support": {
-      "entry": ["src/index.ts!", "src/knip-canary.ts!"]
+      "entry": ["src/index.ts!", "src/device.ts!", "src/knip-canary.ts!"]
     }
   }
 }

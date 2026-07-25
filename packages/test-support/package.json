@@ -9,6 +9,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./device": {
+      "types": "./dist/device.d.ts",
+      "default": "./dist/device.js"
+    },
     "./vectors/ed25519.json": "./vectors/ed25519.json"
   },
   "files": [

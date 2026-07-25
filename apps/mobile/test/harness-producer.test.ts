@@ -57,7 +57,10 @@ describe('producer ↔ driver wire contract', () => {
   });
 
   test('the honest partial parses through the REAL driver and is RED, naming every skipped gate', () => {
-    const gates = resolveGateResults(); // no wired runner yet → all required gates skip (task 177)
+    // Task 177 made the gate BODIES importable but the on-device seams are unbuilt (task 178), so every
+    // required gate still skips honestly. `null` = the flag-off `loadHarness()`; the driver contract
+    // asserted here (RED, names each skipped gate, shape valid) is identical either way.
+    const gates = resolveGateResults(null);
     const doc = buildHarnessResult(RUN_ID, gates, {
       profile: 'test',
       variant: 'release',

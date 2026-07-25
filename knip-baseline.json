@@ -3,8 +3,8 @@
   "command": "knip --production --include exports,files --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
-  "denominator": 142,
-  "fileDenominator": 17,
+  "denominator": 140,
+  "fileDenominator": 15,
   "nonProductionRules": [
     "test-dir",
     "test-file",
@@ -14,8 +14,6 @@
     "migrations-dir"
   ],
   "exports": [
-    "apps/mobile/src/harness/result.ts#failed",
-    "apps/mobile/src/harness/result.ts#passed",
     "apps/mobile/src/i18n.ts#writeDeviceLocale",
     "apps/mobile/src/ports/location.ts#stopLocationWatcher",
     "apps/mobile/src/screens/settings/model.ts#changeLocale",
@@ -160,9 +158,7 @@
   "files": [
     "apps/mobile/index.web.tsx",
     "apps/mobile/plugins/withHarnessActivity.ts",
-    "apps/mobile/src/harness/part-c/at-rest-device-ctx.ts",
     "apps/mobile/src/harness/part-c/budgets.ts",
-    "apps/mobile/src/harness/registry.ts",
     "apps/mobile/src/media/SignaturePadScreen.tsx",
     "apps/mobile/src/web/WebHarnessRoot.tsx",
     "apps/mobile/src/web/gallery.tsx",
