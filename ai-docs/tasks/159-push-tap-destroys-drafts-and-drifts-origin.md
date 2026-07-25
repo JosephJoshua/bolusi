@@ -1,6 +1,6 @@
 # TASK 159 — a push-notification tap is the LAST producer of the draft-loss class task 145 closed — and the same tap drifts the switcher's back-origin
 
-**Status:** blocked
+**Status:** todo
 **Priority:** **MEDIUM** — same silent data loss as task 145 (a dirty note editor unmounts with no ConfirmSheet), but via the one producer 145 did not cover.
 **Depends on:** **155 (HARD PREREQUISITE — see the ruling below)**, 145 (the discard gate), 135 (the push router that produces the tap), 143 (the switcher `origin`)
 
@@ -55,3 +55,12 @@ choice** — do not re-open them.
 
 ## Coverage gaps noted by the reviewer (not defects — their probes passed against shipped code)
 The shipped suite covers the avatar + language chip as chrome-leave paths but **not the sync chip**, and has no clean-editor positive control for the language chip. Worth adding when you touch this.
+
+## UNBLOCKED 2026-07-25 — task 155 merged; the "preserve" half is DONE by construction
+Task 155 wired `NoteEditor`'s draft into the retention path with **write-through on every keystroke**,
+so the draft is preserved BEFORE any navigation — the D23 §1 "preserve" half needs no further work
+here. **159's remaining scope is only the push-tap → navigate wiring** (route the deep-link tap through
+the same path, and apply Leg B's `!switching` / frozen-origin guard). The draft is already safe when
+the tap arrives; do NOT re-implement retention. Falsify: a push tap mid-edit navigates AND the draft
+survives (it already does — assert it), plus Leg B (back lands where the switch opened, not the pushed
+route). No longer blocked.
