@@ -118,36 +118,105 @@ export interface TenantSettings {
   idleLockSeconds: number;
 }
 
-export interface BundleUser {
-  id: string;
-  name: string;
-  photoMediaId: string | null;
-  status: 'active' | 'deactivated';
-  grants: Array<{ roleId: string; storeId: string | null }>;
-  pinVerifier: PinVerifier | null;
-}
+// ── The device bundle is the ONE server→client wire type that used to be types-only (task 161). ──
+// The bundle is the server→client trust boundary (security-guide §1: "compromised server injecting
+// history"); its `store.name` / `tenant.name` / `rolesSnapshot[].name` flow verbatim into the client
+// DB (`meta_kv`, `roles_directory`). Like every other wire type here it is now a Zod object parsed at
+// its boundary — `applyBundle` (@bolusi/core), the SINGLE writer of the directory tables, parses it
+// before the first write, so a malformed/oversized field fails closed instead of landing in the DB.
+//
+// Constraints are DERIVED FROM THE SPEC, and no further (task 161):
+//   • ids: the §5.2 wire type declares every bundle id as a bare `string` — contrast §5.4, which uses
+//     `z.string().uuid()`. Entities are UUIDv7 in production, but roles carry non-uuid ids in fixtures
+//     and permission ids are `<module>.<action>` slugs, and the directory tables key on these
+//     verbatim. So bundle ids are bounded in LENGTH only; a uuid charset here would reject real
+//     traffic. The ONE id with a spec-stated format is the permission id (02-permissions §2).
+//   • names (store/tenant/role): genuinely free-form display text with no spec length bound — bounded
+//     generously so a real name never trips it, while unbounded server text cannot reach the DB. The
+//     user name is the exception: §5.4 states `min(1).max(64)`, applied verbatim.
+//   • idleLockSeconds: integer seconds with NO range bound — the [60,3600] range is owned by the
+//     device-side clamp (`applyBundle` → clampIdleLockSeconds); the spec has the clamp swallow
+//     out-of-range values (§6.4), it does not reject the bundle over them.
+//   • pinVerifier: SHAPE only. Its §5.3 numeric/byte DoS bounds (SEC-AUTH-01) are owned by
+//     `assertVerifierInBounds` on the device (the single verifier-bounds authority, §2.8) — imposing
+//     them here would fork that guard and change which error a hostile verifier raises.
 
-export interface DeviceBundle {
-  tenant: { id: string; name: string };
-  store: { id: string; name: string };
-  settings: TenantSettings;
-  users: BundleUser[];
-  rolesSnapshot: Array<{
-    id: string;
-    name: string;
-    scopeType: 'tenant' | 'store';
-    isSystemDefault: boolean;
-    permissionIds: string[];
-  }>;
-  permissionsSnapshot: Array<{
-    id: string;
-    module: string;
-    action: string;
-    scope: 'tenant' | 'store';
-    isDangerous: boolean;
-    description: string;
-  }>;
-}
+/** An opaque server-assigned bundle id (§5.2 types these as bare `string`). Length-bounded only. */
+const zBundleId = z.string().min(1).max(64);
+
+/** A permission id — the one bundle id with a spec-stated format (02-permissions §2, CI-enforced). */
+const zPermissionId = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/, 'must be a <module>.<action> permission id');
+
+/** A free-form display name (store/tenant/role). No spec length bound → bounded generously. */
+const zDisplayName = z.string().min(1).max(200);
+
+/**
+ * The bundle's PIN verifier — structural shape only (see the section note). `.strict()` rejects a
+ * mis-shaped verifier; the §5.3 value bounds are re-checked by `assertVerifierInBounds` on the device.
+ */
+const BundlePinVerifierSchema = z
+  .object({
+    algorithm: z.string(),
+    saltB64: z.string(),
+    mKiB: z.number().int(),
+    t: z.number().int(),
+    p: z.number().int(),
+    hashB64: z.string(),
+    asOf: CanonicalRefSchema,
+  })
+  .strict();
+
+export const DeviceBundleSchema = z
+  .object({
+    tenant: z.object({ id: zBundleId, name: zDisplayName }).strict(),
+    store: z.object({ id: zBundleId, name: zDisplayName }).strict(),
+    // idleLockSeconds: integer seconds, NO range bound — the [60,3600] range is owned by the
+    // device-side clamp (`applyBundle` → clampIdleLockSeconds), which swallows out-of-range values
+    // rather than rejecting the bundle over them (§6.4). `.int()` only: the server always truncates.
+    settings: z.object({ idleLockSeconds: z.number().int() }).strict(),
+    users: z.array(
+      z
+        .object({
+          id: zBundleId,
+          name: z.string().min(1).max(64), // §5.4 user-name bound, applied verbatim
+          photoMediaId: zBundleId.nullable(),
+          status: z.enum(['active', 'deactivated']),
+          grants: z.array(z.object({ roleId: zBundleId, storeId: zBundleId.nullable() }).strict()),
+          pinVerifier: BundlePinVerifierSchema.nullable(),
+        })
+        .strict(),
+    ),
+    rolesSnapshot: z.array(
+      z
+        .object({
+          id: zBundleId,
+          name: zDisplayName,
+          scopeType: z.enum(['tenant', 'store']),
+          isSystemDefault: z.boolean(),
+          permissionIds: z.array(zPermissionId),
+        })
+        .strict(),
+    ),
+    permissionsSnapshot: z.array(
+      z
+        .object({
+          id: zPermissionId,
+          module: z.string().min(1).max(64),
+          action: z.string().min(1).max(64),
+          scope: z.enum(['tenant', 'store']),
+          isDangerous: z.boolean(),
+          description: z.string().min(1).max(200),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type DeviceBundle = z.infer<typeof DeviceBundleSchema>;
 
 export interface EnrollRes {
   deviceId: string;

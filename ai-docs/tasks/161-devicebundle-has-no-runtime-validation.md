@@ -1,6 +1,6 @@
 # TASK 161 — `DeviceBundle` is a plain TypeScript interface with NO zod: every field the server sends is unvalidated at runtime before it reaches the client DB
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — the immediate DoS instance is closed by task 148's keyed marker, but the underlying gap (server text entering the client with zero runtime validation) is broader than that one symptom and outlives it.
 **Depends on:** 148 (which surfaced it)
 **Blocks:** —

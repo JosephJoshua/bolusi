@@ -10,7 +10,7 @@
 // bytes — which is all the schema's byte-length DoS check keys on (the string length + padding).
 import { describe, expect, test } from 'vitest';
 
-import { CreateUserReq, EnrollReq, PinVerifierSchema } from '../src/index.js';
+import { CreateUserReq, DeviceBundleSchema, EnrollReq, PinVerifierSchema } from '../src/index.js';
 
 /**
  * A standard padded base64 string (RFC 4648 §4) decoding to exactly `bytes` bytes, built without
@@ -103,6 +103,119 @@ describe('EnrollReq — 32-byte public key + non-nil ids', () => {
       false,
     );
     expect(EnrollReq.safeParse({ ...base, deviceId: NIL }).success).toBe(false);
+  });
+});
+
+describe('DeviceBundleSchema — the server→client bundle boundary (task 161; §5.2)', () => {
+  const VALID_BUNDLE = {
+    tenant: { id: 'tenant-1', name: 'Bolusi Papua' },
+    store: { id: 'store-1', name: 'Toko Jayapura' },
+    settings: { idleLockSeconds: 300 },
+    users: [
+      {
+        id: 'u-owner',
+        name: 'Ocep',
+        photoMediaId: null,
+        status: 'active' as const,
+        grants: [{ roleId: 'role-main', storeId: null }],
+        pinVerifier: {
+          algorithm: 'argon2id',
+          saltB64: salt16,
+          mKiB: 19456,
+          t: 2,
+          p: 1,
+          hashB64: hash32,
+          asOf: { timestamp: 1, deviceId: NIL, seq: 0 },
+        },
+      },
+    ],
+    rolesSnapshot: [
+      {
+        id: 'role-main',
+        name: 'main_owner',
+        scopeType: 'tenant' as const,
+        isSystemDefault: true,
+        permissionIds: ['auth.pin_change'],
+      },
+    ],
+    permissionsSnapshot: [
+      {
+        id: 'auth.pin_change',
+        module: 'auth',
+        action: 'pin_change',
+        scope: 'store' as const,
+        isDangerous: false,
+        description: 'Can change their own PIN.',
+      },
+    ],
+  };
+
+  test('a realistic bundle passes (positive control — the schema must not reject real traffic)', () => {
+    expect(DeviceBundleSchema.safeParse(VALID_BUNDLE).success).toBe(true);
+    // Non-uuid ids (slugs) pass on purpose: the §5.2 wire type declares bundle ids as bare `string`,
+    // and the directory keys on them verbatim. A uuid charset would reject the enrolled-device fixtures.
+    expect(
+      DeviceBundleSchema.safeParse({
+        ...VALID_BUNDLE,
+        tenant: { id: 'not-a-uuid', name: 'T' },
+      }).success,
+    ).toBe(true);
+  });
+
+  test('an out-of-range idleLockSeconds is ACCEPTED — the device-side clamp owns the range (§6.4)', () => {
+    // Deliberately NOT rejected: the spec has the clamp swallow 86_400 → 3600, not reject the bundle.
+    expect(
+      DeviceBundleSchema.safeParse({ ...VALID_BUNDLE, settings: { idleLockSeconds: 86_400 } })
+        .success,
+    ).toBe(true);
+  });
+
+  test('an over-long store.name / tenant.name is rejected (the task-161 injection the gate exists for)', () => {
+    const huge = 'X'.repeat(100_000);
+    expect(
+      DeviceBundleSchema.safeParse({ ...VALID_BUNDLE, store: { id: 'store-1', name: huge } })
+        .success,
+    ).toBe(false);
+    expect(
+      DeviceBundleSchema.safeParse({ ...VALID_BUNDLE, tenant: { id: 'tenant-1', name: huge } })
+        .success,
+    ).toBe(false);
+    // just past the 200-char display-name bound, both name fields
+    expect(
+      DeviceBundleSchema.safeParse({
+        ...VALID_BUNDLE,
+        rolesSnapshot: [{ ...VALID_BUNDLE.rolesSnapshot[0], name: 'r'.repeat(201) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  test('a missing required field is rejected at the boundary (not a deep DB throw later)', () => {
+    // tenant present but missing its required `name`
+    expect(
+      DeviceBundleSchema.safeParse({ ...VALID_BUNDLE, tenant: { id: 'tenant-1' } }).success,
+    ).toBe(false);
+    // the whole `store` object absent
+    const noStore: Record<string, unknown> = { ...VALID_BUNDLE };
+    delete noStore.store;
+    expect(DeviceBundleSchema.safeParse(noStore).success).toBe(false);
+  });
+
+  test('a wrong-shaped field is rejected: bad status enum, non-permission-id, unknown key (.strict)', () => {
+    expect(
+      DeviceBundleSchema.safeParse({
+        ...VALID_BUNDLE,
+        users: [{ ...VALID_BUNDLE.users[0], status: 'banned' }],
+      }).success,
+    ).toBe(false);
+    // permission ids carry the ONE spec-stated format (02-permissions §2) — a non-conforming id fails.
+    expect(
+      DeviceBundleSchema.safeParse({
+        ...VALID_BUNDLE,
+        rolesSnapshot: [{ ...VALID_BUNDLE.rolesSnapshot[0], permissionIds: ['NotAPermissionId'] }],
+      }).success,
+    ).toBe(false);
+    // .strict rejects an injected extra key on the top-level object.
+    expect(DeviceBundleSchema.safeParse({ ...VALID_BUNDLE, evil: '<script>' }).success).toBe(false);
   });
 });
 

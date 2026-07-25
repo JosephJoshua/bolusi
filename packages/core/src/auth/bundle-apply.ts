@@ -9,6 +9,7 @@
 //
 // Callers wrap this in a transaction and, after it commits, invalidate the permission memo
 // (`evaluator.onBundleRefresh()`, 02-permissions §6) — the mirrors it reads just changed.
+import { DeviceBundleSchema } from '@bolusi/schemas';
 import type { Kysely } from 'kysely';
 
 import { TENANT_ID_META_KEY } from '../authz/directory.js';
@@ -36,6 +37,17 @@ import { assertVerifierInBounds, chooseEffectiveVerifier } from './verifier.js';
  * evaluator's `tenantId` matches (authz/directory.ts).
  */
 export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Promise<void> {
+  // Runtime-validate the server bundle BEFORE any field reaches the client DB (task 161). This is the
+  // SINGLE writer of the directory tables, so parsing here gates EVERY path that applies a bundle from
+  // one place (§2.8): enrollment (`runEnrollment` → here) and every steady-state refresh
+  // (`bootstrap/bundle.ts` → here). The bundle is the server→client trust boundary (security-guide
+  // §1); a malformed field — an unbounded `store.name`, a wrong-shaped `tenant`, a missing required
+  // key — throws HERE, before the first write, so nothing lands in `meta_kv`/`roles_directory` (fail
+  // closed) instead of being stored verbatim or surfacing as a NOT NULL / decrypt failure mid-apply.
+  // The §5.3 verifier bounds stay owned by `assertVerifierInBounds` below (SEC-AUTH-01) — the schema
+  // validates the verifier's shape only, so it does not duplicate or fork that guard.
+  DeviceBundleSchema.parse(bundle);
+
   await writeMeta(db, TENANT_ID_META_KEY, bundle.tenant.id);
 
   // The store/tenant DISPLAY NAMES ride every bundle (api/02-auth §5.2). Persist them HERE — the one

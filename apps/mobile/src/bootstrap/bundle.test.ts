@@ -99,6 +99,24 @@ describe('the conditional GET /v1/devices/me/bundle (api/02-auth §5.2)', () => 
     expect(await readTenantId(db.db)).toBe('tenant-1');
   });
 
+  test('TASK 161 — a 200 carrying a MALFORMED bundle fails closed: refresh rejects, nothing applied', async () => {
+    // The server→client trust boundary (security-guide §1): a 200 whose bundle has an over-long
+    // store.name must be rejected by the parse in applyBundle BEFORE the directory/etag transaction
+    // commits — not stored verbatim. Asserted through the REAL producer + REAL client DB (the gate
+    // lives in @bolusi/core's applyBundle, which this refresh path calls — trace to the producer).
+    const badBundle = { ...BUNDLE, store: { id: 'store-1', name: 'X'.repeat(100_000) } };
+    const doFetch = vi.fn(async () =>
+      jsonResponse(200, { bundle: badBundle, etag: 'etag-bad', serverTime: 5 }),
+    );
+
+    await expect(producer(doFetch as unknown as typeof fetch).refresh()).rejects.toThrow();
+
+    // Fail closed: the apply+etag transaction rolled back — the directory and the stored ETag are
+    // untouched, so the device keeps its last good state rather than a poisoned one.
+    expect(await readTenantId(db.db)).toBeNull();
+    expect(await readMeta(db.db, BUNDLE_ETAG_META_KEY)).toBeNull();
+  });
+
   test('a 5xx failure throws SyncTransportError carrying the envelope code (→ backoff, 03 §10)', async () => {
     const doFetch = vi.fn(async () =>
       jsonResponse(503, { error: { code: 'INTERNAL', message: 'down' } }),
