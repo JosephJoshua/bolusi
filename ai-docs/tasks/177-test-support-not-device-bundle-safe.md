@@ -1,6 +1,6 @@
 # TASK 177 — `@bolusi/test-support` cannot be bundled into the release APK: its barrel re-exports `node:crypto`, so the on-device harness (task 175) can name the gates but cannot RUN them
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** **HIGH — the last thing between the emulator lane and a GREEN 27a.** Task 175 landed the producer plumbing (flag → HarnessActivity → JS harness → native tagged emit) and the lane now emits an honest partial with all 7 gates `skipped`. Wiring the real gate BODIES (`loadHarness()` → SEED-200K rebuild + the SEC-DEV-06 at-rest probe + the JCS/chaos legs) is blocked HERE.
 **Depends on:** 175 (which discovered this by building the producer and running `expo export`)
 **Blocks:** 27a (its emulator gates stay `skipped` until this lands), 27b indirectly (same package)
