@@ -118,7 +118,7 @@ const fetchOk =
 
 // ── 1. the positive control: the genuine current red stays OWED ──────────────────────────────────
 
-test('the genuine security-sweep red (only SEC-AUTH-10) is OWED, and the detail cites the id', () => {
+test('the genuine security-sweep red (only the owed physical-benchmark id) is OWED, and the detail cites it', () => {
   // The MORE IMPORTANT half of this task: if the log assert turns today's legitimate owed-red into
   // UNEXPECTED, ci:status reds on every push and gets ignored — worse than the hole it closes.
   const verdict = classifyExpectedRed(owed(), fetchOk(rawSweep()));
