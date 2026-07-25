@@ -27,3 +27,6 @@ Wire `NoteEditor`'s in-flight draft into the workspace retention seam so an idle
 - A COMPOSED test (real Root, real session): type a note body, advance the clock past `idleLockSeconds`, unlock with PIN → the body is STILL THERE (and the route restored). This is the assertion 133 could not write because no producer existed. Break the wiring → it reds. Restore → green.
 - **Positive control:** a lock with an EMPTY editor restores nothing and does not error — so "always restores" can't pass vacuously.
 - This closes the loop 133 opened: the retention path finally has a producer a test can drive through the UI.
+
+## PARTIAL WIP (2026-07-24) — agent stopped on the weekly API limit, resets Jul 27
+Uncommitted work-in-progress is preserved in worktree `.claude/worktrees/task-155` on branch `task/155-noteeditor-draft-retention`: modifications to `App.tsx`, `NotesHome.tsx`, `NoteEditor.tsx`, and the notes screens index — the retention write-through and identity discipline, incomplete and unfalsified. Resume from that worktree; the cross-user privacy control (user B must not inherit user As draft) is a REQUIRED falsification per D23 §1.
