@@ -1,11 +1,43 @@
 # TASK 160 — the boot self-heal can no longer fire for the case it exists for: a restored plaintext DB now opens successfully, so the app boots into a SILENT half-enrolled state
 
-**Status:** done
+**Status:** todo
 **Priority:** **HIGH** — a failure that used to be loud at boot and self-healed is now silent and strictly worse. Surfaced by the task-148 review (F2), confirmed by the implementer, deliberately NOT fixed in 148 because the hard part is semantics, not code.
 **Depends on:** 148 (which created the condition by removing SQLCipher)
 **Blocks:** **27a** — named blocker, see "Why this blocks 27a" below.
 **SEC ids owned by THIS task:** none new — but it degrades the recovery leg `security-guide §6.6` describes, so reconcile that row.
 **Filed by:** the task-148 reviewer (F2) + implementer concurrence, 2026-07-22.
+
+## ⚠️ IMPLEMENTED, REVIEWED, MERGED — THEN REVERTED 2026-07-25. Re-land is coupled to an emulator re-run.
+The fix was built and reviewed (rev-160 APPROVE — silent-path + heal reproduced through real `bootstrap()`,
+all 6 falsifications re-run, the boot-ordering invariant proven) and merged (commits `78edee6` +
+`af2210d`), then **reverted from `main`** in the same day's hotfix. The reviewed code is preserved on
+branch **`task/160-boot-decrypt-probe`** — do not re-implement; re-land it.
+
+**Why it was reverted (not a defect in the fix):** the boot key-tag probe MUST read the column-cipher
+marker, which required exposing it on `packages/db-client/src/connection.ts` — an `AT_REST_SURFACE` file
+watched by the **SEC-AUTH-09 provenance guard** (task 28). On merge the guard correctly RED'd the
+`security-sweep` lane: *"Artifact STALE: connection.ts changed since the emulator artifact's commit
+0e2096b"*. That is the guard **working as designed** — 160's at-rest-surface change means the committed
+on-device SEC-AUTH-09 leg-1 evidence no longer covers the shipped code. (Task 172's new oracle is what
+surfaced it: "the failure does not match the owed id.") Reverting restores `connection.ts` to pre-160, so
+SEC-AUTH-09 stays legitimately discharged and the honest floor (only SEC-AUTH-10 owed) is restored.
+
+**Also confirmed by this episode:** the fix originally shipped through an INCOMPLETE local gate (`tsc -b` +
+targeted tests, not `pnpm verify:full`) — `tsc -b` skips test-file tsconfigs (missed a double-`Promise`
+type error in `boot-decrypt-probe.test.ts`) and the targeted run missed the full `unit` lane. **Re-land
+MUST pass `pnpm verify:full` before the ff.**
+
+**Re-land checklist (do NOT skip, do NOT hack the guard):**
+1. Restore branch `task/160-boot-decrypt-probe` (or cherry-pick `78edee6`+`af2210d`) onto current main.
+2. Run a FRESH emulator run (27a android-emulator lane) over the code WITH 160's `connection.ts` change →
+   a new `leg-1 = pass` artifact under `reports/device-gates/`.
+3. Commit that artifact and **re-anchor** `device-gate-provenance.ts` to the new artifact's commit.
+   Re-anchoring WITHOUT a real re-run is the §2.11 "move the yardstick" anti-pattern the guard exists to
+   prevent — the whole point of task 28.
+4. `pnpm verify:full` green (only SEC-AUTH-10 owed) before the ff.
+The bug 160 fixes is unreachable today (no client DB has ever existed on any device; 160 blocks 27a, the
+first hardware DB), so deferral is safe. Natural sequence: **re-land 160 + emulator re-run together, before
+27a enrolls on hardware.** See also task 182 (stamp a build-sha in the artifact).
 
 ## The finding
 `apps/mobile/src/bootstrap/recovery.ts` heals only on `missing_key` or a `driver_open_failed` classified `not_a_database`. **Post-148 the iOS restore-to-new-hardware path produces neither:**
