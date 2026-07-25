@@ -1,6 +1,6 @@
 # TASK 172 — `pnpm ci:status` classifies a red job as OWED by JOB NAME alone and never calls `assert()`, so task 154's scope check does not reach the command the team actually runs after every push
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — bigger blast radius than the two residuals it sits beside (166, and the dispatch-only lane task), because this is the command run after *every* push to main, by people and agents alike. Pre-existing from task 142, not introduced by 154. Self-closing the day SEC-AUTH-09/10 discharge.
 **Depends on:** 142, 154
 **Blocks:** —

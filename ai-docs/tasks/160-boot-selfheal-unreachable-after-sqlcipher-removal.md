@@ -1,6 +1,6 @@
 # TASK 160 — the boot self-heal can no longer fire for the case it exists for: a restored plaintext DB now opens successfully, so the app boots into a SILENT half-enrolled state
 
-**Status:** in-progress
+**Status:** done
 **Priority:** **HIGH** — a failure that used to be loud at boot and self-healed is now silent and strictly worse. Surfaced by the task-148 review (F2), confirmed by the implementer, deliberately NOT fixed in 148 because the hard part is semantics, not code.
 **Depends on:** 148 (which created the condition by removing SQLCipher)
 **Blocks:** **27a** — named blocker, see "Why this blocks 27a" below.
