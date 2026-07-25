@@ -124,15 +124,6 @@ export interface ClientDb {
   readonly db: Kysely<ClientDatabase>;
   /** Raw helpers (prepared statements, executeBatch) over that SAME connection. */
   readonly driver: DbDriver;
-  /**
-   * This connection's at-rest column-cipher marker — the scheme prefix plus the key-derived tag
-   * (`Aes256GcmColumnCipher.marker`, §9.7). It is a PURE FUNCTION OF THE DB KEY (deterministic,
-   * reopen-stable), so it is the same every time the same key reopens the same file, and DIFFERENT
-   * for a different key — which is exactly what the boot "is this database ours?" probe compares
-   * against a stored copy (apps/mobile db-identity.ts, task 160). It is a PUBLIC identifier, not a
-   * secret: the same bytes already prefix every sealed cell on disk (see column-cipher.ts header).
-   */
-  readonly columnCipherMarker: string;
   /** Runs `fn` between begin/commit, rolling back on any throw. */
   transaction<T>(fn: (driver: DbDriver) => Promise<T>): Promise<T>;
   close(): Promise<void>;
@@ -245,10 +236,6 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
   const connection: ClientDb = {
     db,
     driver,
-    // Exposed from the cipher actually installed on THIS connection (one source of truth — never
-    // re-derived by a consumer), so the boot probe compares the marker of the key the DB is really
-    // reading through, not a recomputation that could drift (task 160).
-    columnCipherMarker: cipher.marker,
     async transaction<T>(fn: (handle: DbDriver) => Promise<T>): Promise<T> {
       await driver.begin();
       try {
