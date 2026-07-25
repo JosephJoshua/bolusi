@@ -197,3 +197,26 @@ from `fail()`. The two pure functions (`amStartFailureReason`, `tailLines`) ARE 
 broken and watched red, including a head-anchored-bound mutation that would have discarded the crash).
 The orchestration is falsified only by stub, which is inherent to the pure/thin-CLI split — but per
 §2.11 the dump's presence is precisely the kind of line whose silent removal nothing would catch.
+
+## CONFIRMED ON REAL HARDWARE (2026-07-24, run 30096218782, job android-emulator)
+
+The diagnosis was verified on a booted API-34 AVD, and task 176's observability made it readable in
+SECONDS instead of a 20-minute silent timeout:
+```
+Error type 3
+Error: Activity class {com.bolusi.app/com.bolusi.app.HarnessActivity} does not exist.
+harness:device: am start … did NOT launch (it exited 0 — am start reports this on stdout, not via
+  its exit status)
+── FAILURE DIAGNOSTICS (unfiltered — the poll cannot see any of this) ──
+```
+The logcat dump confirms: the APK **installs** (`ActivityTaskManager: … NEW_INSTALL … com.bolusi.app`),
+`am start .HarnessActivity` returns `result code=-92` (START_CLASS_NOT_FOUND), and there is **no
+FATAL EXCEPTION / no crash** — because the app's real MainActivity was never launched. So the four
+static defects (A–D) are now hardware-confirmed, not just source-proven.
+
+**Task 160's boot question is still OPEN and this run did not answer it.** The harness driver only
+`am start`s `HarnessActivity` (which does not exist); it never launches the app's real launcher
+activity, so we have NOT observed whether the app boots into a silent half-enrolled state post-148.
+When building the producer (leg 3), have the gate ALSO smoke-launch the real MainActivity and dump
+logcat — that is the cheap way to answer 160 on-device, and it is one `am start` + the dump 176
+already emits.
