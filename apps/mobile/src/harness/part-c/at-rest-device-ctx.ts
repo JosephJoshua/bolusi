@@ -77,3 +77,67 @@ export async function runAtRestGate(env: AtRestDeviceEnv): Promise<HarnessGateRe
       '(D22): only the sensitive columns are sealed.',
   );
 }
+
+/** SEC-AUTH-09 leg 1's on-device gate id (the PIN-verifier material at-rest leg; security-guide §5.4,
+ * decisions/2026-07-22). Post-D22 it IS the at-rest column-cipher claim scoped to the three verifier
+ * columns, so it rides the SAME `AtRestDeviceEnv` seed as SEC-DEV-06. */
+export const VERIFIER_AT_REST_GATE_ID = 'SEC-AUTH-09-leg1';
+
+/** The three signed-off `user_pin_verifiers` columns — the SEC-AUTH-09 material (D22 addendum 2 #6–#8). */
+const VERIFIER_COLUMNS: readonly (readonly [table: string, column: string])[] = [
+  ['user_pin_verifiers', 'salt'],
+  ['user_pin_verifiers', 'hash'],
+  ['user_pin_verifiers', 'params'],
+];
+
+/**
+ * Run SEC-AUTH-09 leg 1 on device: the PIN-verifier salt/hash/params exist on disk ONLY as ciphertext
+ * (decisions/2026-07-22 — "is the byte on disk ciphertext, yes/no"). It reuses the at-rest env's real
+ * seed (which drives the production `writeVerifier`) and asserts, over the physically-stored cells:
+ *   - COVERAGE: every verifier column was observed with a non-null value (else the enrollment seed did
+ *     not populate it and the run proves nothing — the §2.11 vacuity trap), and
+ *   - SEAL: every such cell carries the cipher marker (POSITIVE evidence, so no T-14b control is
+ *     needed here — a plaintext verifier byte is caught by the prefix's ABSENCE, not by a marker's).
+ *
+ * Falsifiable: break `writeVerifier`'s seal and the cells stop carrying the prefix → red; skip the
+ * verifier seed and coverage → red. Both are watched in the host test.
+ */
+export async function runVerifierAtRestGate(env: AtRestDeviceEnv): Promise<HarnessGateResult> {
+  const ctx = await env.seedEncryptedDb(env.plaintextMarkers);
+  const cells = await ctx.readSealedCells();
+
+  const findings: string[] = [];
+  for (const [table, column] of VERIFIER_COLUMNS) {
+    const observed = cells.filter(
+      (cell) => cell.table === table && cell.column === column && cell.value !== null,
+    );
+    if (observed.length === 0) {
+      findings.push(
+        `${table}.${column} produced no non-null cell — enrollment's verifier seed did not populate ` +
+          `it, so this run proves NOTHING about it (coverage, §2.11)`,
+      );
+      continue;
+    }
+    for (const cell of observed) {
+      if (cell.value === null || !cell.value.startsWith(ctx.sealedPrefix)) {
+        findings.push(
+          `${table}.${column} is stored WITHOUT the cipher marker — the PIN-verifier material is ` +
+            `plaintext at rest`,
+        );
+      }
+    }
+  }
+
+  if (findings.length > 0) {
+    return failed(
+      VERIFIER_AT_REST_GATE_ID,
+      `PIN-verifier material at rest is NOT ciphertext: ${findings.join('; ')}`,
+    );
+  }
+  return passed(
+    VERIFIER_AT_REST_GATE_ID,
+    'the SEC-AUTH-09 PIN-verifier material (salt, hash, params) is sealed at rest: every ' +
+      'user_pin_verifiers column was observed with a non-null value carrying the cipher marker, so the ' +
+      'verifier bytes exist on disk only as ciphertext (SEC-AUTH-09 leg 1, on the post-D22 column cipher).',
+  );
+}

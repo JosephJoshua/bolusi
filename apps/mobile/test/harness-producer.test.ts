@@ -16,7 +16,7 @@ import { describe, expect, test } from 'vitest';
 
 import { HARNESS_RESULT_SCHEMA, HARNESS_RESULT_TAG } from '../src/harness/flag.js';
 import { EMULATOR_CORRECTNESS_GATE_IDS } from '../src/harness/gates.js';
-import { passed, type HarnessGateResult } from '../src/harness/result.js';
+import { failed, passed, type HarnessGateResult } from '../src/harness/result.js';
 import { buildHarnessResult, resolveGateResults } from '../src/harness/run.js';
 
 // Plain .mjs CLI — resolved as JS under this package's `allowJs` (types are inferred, not declared).
@@ -56,11 +56,11 @@ describe('producer ↔ driver wire contract', () => {
     ]);
   });
 
-  test('the honest partial parses through the REAL driver and is RED, naming every skipped gate', () => {
-    // Task 177 made the gate BODIES importable but the on-device seams are unbuilt (task 178), so every
-    // required gate still skips honestly. `null` = the flag-off `loadHarness()`; the driver contract
-    // asserted here (RED, names each skipped gate, shape valid) is identical either way.
-    const gates = resolveGateResults(null);
+  test('the honest partial parses through the REAL driver and is RED, naming every skipped gate', async () => {
+    // `null` = the flag-off `loadHarness()`: every gate skips honestly regardless of any runners, which
+    // is the runtime half of the harness lock. The driver contract asserted here (RED, names each
+    // skipped gate, shape valid) is what a flagless build emits.
+    const gates = await resolveGateResults(null);
     const doc = buildHarnessResult(RUN_ID, gates, {
       profile: 'test',
       variant: 'release',
@@ -98,5 +98,53 @@ describe('producer ↔ driver wire contract', () => {
     const verdict = driver.parseHarnessResult(nativeLogLine(doc), { expectedRunId: RUN_ID });
     expect(verdict.errors).toEqual([]);
     expect(verdict.ok).toBe(true);
+  });
+});
+
+// The task-178 wiring seam: `resolveGateResults(harness, runners)` runs an injected runner for a gate
+// that has one, and skips honestly for a gate that does not. These prove the seam can go BOTH ways
+// (§2.11) WITHOUT a device — an always-skip resolver (the pre-178 state) and an always-pass resolver are
+// the two failure shapes this guards against.
+const nonNullHarness = { requiredGateIds: EMULATOR_CORRECTNESS_GATE_IDS } as unknown as Parameters<
+  typeof resolveGateResults
+>[0];
+
+describe('resolveGateResults — the injected-runner seam (task 178)', () => {
+  test('a runner that PASSES makes its gate green; a gate with no runner skips honestly', async () => {
+    const id = EMULATOR_CORRECTNESS_GATE_IDS[0] as string;
+    const gates = await resolveGateResults(nonNullHarness, {
+      [id]: () => Promise.resolve(passed(id, 'runner ran on device')),
+    });
+    const ran = gates.find((g) => g.id === id);
+    expect(ran?.status).toBe('pass');
+    // Every OTHER required gate has no runner here, so it must be an honest skip — never a fabricated pass.
+    for (const other of EMULATOR_CORRECTNESS_GATE_IDS) {
+      if (other === id) continue;
+      expect(gates.find((g) => g.id === other)?.status).toBe('skipped');
+    }
+  });
+
+  test('a runner that RETURNS a fail reds its gate; a runner that THROWS also reds it, naming the id', async () => {
+    const failId = EMULATOR_CORRECTNESS_GATE_IDS[0] as string;
+    const throwId = EMULATOR_CORRECTNESS_GATE_IDS[1] as string;
+    const gates = await resolveGateResults(nonNullHarness, {
+      [failId]: () => Promise.resolve(failed(failId, 'the seeded column was plaintext')),
+      [throwId]: () => Promise.reject(new Error('op-sqlite blew up')),
+    });
+    expect(gates.find((g) => g.id === failId)?.status).toBe('fail');
+    const threw = gates.find((g) => g.id === throwId);
+    expect(threw?.status).toBe('fail');
+    // A crash is turned into a RED that names the gate and says it THREW — not a silent gap (§2.11).
+    expect(threw?.detail).toContain(throwId);
+    expect(threw?.detail).toContain('THREW');
+  });
+
+  test('with the flag OFF (harness null) an injected runner is IGNORED — the lock is runtime, not just build', async () => {
+    const id = EMULATOR_CORRECTNESS_GATE_IDS[0] as string;
+    // A runner that would PASS is present, but harness===null must force a skip anyway.
+    const gates = await resolveGateResults(null, {
+      [id]: () => Promise.resolve(passed(id, 'should never run')),
+    });
+    expect(gates.every((g) => g.status === 'skipped')).toBe(true);
   });
 });

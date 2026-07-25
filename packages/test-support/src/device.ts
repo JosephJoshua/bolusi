@@ -41,3 +41,17 @@ export {
   type AtRestProbeContext,
   type SealedCell,
 } from './driver-conformance/at-rest.js';
+
+// The shared RFC 8785 (JCS) golden vectors (SEC-OPLOG-06) — the SAME fixture set the Node stage-5 suite
+// replays, so the on-device SEC-OPLOG-06-jcs runner (task 178) proves byte-identical canonicalization on
+// Hermes against ONE source of truth (T-5), never a device-only copy. Pure data view over the shared
+// JSON — no `node:*`, no `crypto/` file — so it stays device-bundle-safe (device-bundle-safe.test.ts).
+export {
+  numberVectors,
+  canonicalizationVectors,
+  propertySortingVector,
+  ieee754HexToNumber,
+  type NumberVector,
+  type CanonicalizationVector,
+  type PropertySortingVector,
+} from './vectors/jcs.js';
