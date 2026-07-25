@@ -67,3 +67,15 @@ This was first filed as a follow-up. It is re-filed as a **named blocker on task
 - It MUST block **27a**. The emulator lane is the first moment a database exists on real hardware that can later be restored, and 27a is where **SEC-DEV-06 gets claimed**. Claiming "the sensitive columns are ciphertext at rest" on a device whose boot cannot tell a foreign database from its own would be claiming the control while its recovery leg is missing.
 
 **The fix, for whoever takes it:** a boot-time probe that decides "is this database ours?" against a stored key tag (the cipher already derives one — `Aes256GcmColumnCipher.marker`), rather than waiting for a read to fail. The hard part is semantics, not code: what to do on an EMPTY database, on a partially-written one, and on a transient I/O failure — and `recovery.ts`'s existing rule that a transient must **never** reach the wipe still binds.
+
+## BOOT EVIDENCE 2026-07-25 (emulator run 30147394950) — the app boots CLEAN post-148 on a cold start
+
+The first real emulator run of the harness (task 175) booted the release app on an AVD post-SQLCipher
+removal: `Boot completed`, the RN runtime came up, the JS harness ran, and the native emitter wrote a
+valid result — with NO `FATAL EXCEPTION`, no AEAD boot error, no `not_a_database`, no emit-failure
+marker. So the app-layer-AEAD boot path (148) initializes and runs on-device for a FRESH install.
+
+This does NOT close task 160: 160 is about the RESTORE-foreign-DB path (a plaintext DB restored onto
+new hardware opening successfully and booting half-enrolled), which a cold-install harness run does
+not exercise. The decrypt-probe-at-boot this task specifies is still needed. But the baseline "does
+the app boot at all post-148" worry is answered: yes, cleanly.

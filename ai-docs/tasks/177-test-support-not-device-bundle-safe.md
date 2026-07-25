@@ -53,3 +53,25 @@ Give `@bolusi/test-support` a **device-bundle-safe** surface the harness can imp
 ## Note for the picker
 
 Task 175's `apps/mobile/src/harness/gates.ts` is the seam: the device path reads gate ids from there today. When you repoint registry.ts at the device-safe subpath, `run-and-emit.ts` can call `loadHarness()` again and `resolveGateResults()` can take the runners — the single change site is documented in both files' headers.
+
+## HARDWARE-CONFIRMED 2026-07-25 (run 30147394950) — the producer chain WORKS; 177 is the ONLY remaining gap
+
+Task 175 merged and the emulator lane ran the FULL producer chain on a real AVD for the first time:
+- APK assembled with `HarnessActivity.kt` + `HarnessNativeModule.kt` compiled in (Kotlin compiles — the round-2 runner-only claim, now verified).
+- `Boot completed in 33061 ms`; the release app launched; the native emitter wrote a valid
+  `BOLUSI_HARNESS_RESULT` document under the exact driver tag; the driver PARSED it and failed the
+  lane on the 7 `skipped` gates — the honest partial, exactly as designed (§2.11).
+- **No `BOLUSI_HARNESS_EMIT_FAILED` marker, no app crash** — the native module worked, the loud
+  fallback never fired.
+
+So the lane now produces a real, driver-parseable verdict instead of a 20-minute timeout. **This task
+is the last structural piece: wiring the 7 gate BODIES needs `@bolusi/test-support` device-bundle-safe.**
+Each emitted gate detail already names it verbatim ("the gate BODIES need @bolusi/test-support … not
+device-bundle-safe … task 177").
+
+**One minor gap found in the run, fold into this task's runner work:** the emitted result carried
+`"runId":""` — the driver passes a runId via the launch intent extra, but it did not round-trip
+(`am start --es` → `HarnessActivity.getLaunchOptions()` → JS `bolusiHarnessRunId` → result). Not
+blocking (the driver matched on tag+content), but the result can't be correlated to the driver's run
+until this is wired. Fix it when wiring the real runners, and assert the round-tripped runId is
+non-empty.
