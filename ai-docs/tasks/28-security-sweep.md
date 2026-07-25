@@ -90,3 +90,22 @@ Do not weaken a step to make it green — and note that D21 changed what **block
 **Task 43 became a dependency because of a line already in this file.** Acceptance requires that every dangerous-permission denial asserts *"a denial operation logged (02 §7, FR-1045) — never an empty-200."* That audit trail is currently **write-only**: the ops are emitted (tasks 09/10) and the projection tables exist (task 04, `10-db §549+`), but **no appliers fold one into the other and no task owned them** until task 43 was filed. A release gate that asserts an audit trail must be able to read it back.
 
 Worth carrying into the sweep's mindset: the three orphans found this session (the permission registry, the `@bolusi/schemas` auth DTOs, and the auth appliers) all failed by being **absent rather than broken** — no error, no red test, just a join that was never made. Your inventory parses the security-guide for ids and cross-checks them against *shipped test titles*, which is exactly the shape that catches absence. Point it at everything.
+
+## SEC-AUTH-09 LEG 1 — PROVEN ON-DEVICE 2026-07-25 (emulator run 30153400999)
+
+The at-rest leg that could only be verified on real op-sqlite (D20/D22) now PASSES on a booted AVD.
+Emitted gate (`reports/device-gates/2026-07-25-emulator.json`), verbatim:
+> **SEC-AUTH-09-leg1 = pass**: "the SEC-AUTH-09 PIN-verifier material (salt, hash, params) is sealed
+> at rest: every user_pin_verifiers column was observed with a non-null value carrying the cipher
+> marker, so the verifier bytes exist on disk only as ciphertext (SEC-AUTH-09 leg 1, on the post-D22
+> column cipher)."
+Driven through the REAL `writeVerifier` production writer (task 178, rev-178 falsified by un-sealing
+the writer in core → the gate went red naming `user_pin_verifiers.hash`; a hand-inserted cell would
+not have). `SEC-DEV-06-at-rest` also PASSES (all 11 signed-off columns sealed; positive control
+witnessed plaintext in a cipher-disabled control DB, T-14b).
+
+**Consequence for THIS task:** SEC-AUTH-09's on-device evidence exists. When discharging SEC-AUTH-09
+from `sec-pending-allowlist.json`, cite this run + confirm the OTHER legs (leg 2 / I-13 payload scan,
+already shipped here). **The allowlist writeback is a §6 security-control change — do it deliberately
+through this task's review, not as a side effect.** (The lane still exits non-zero on the 4 honest
+CHAOS skips — task 181 — but SEC-AUTH-09 discharge rests on the per-gate at-rest PASS, not the lane.)

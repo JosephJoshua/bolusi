@@ -1,0 +1,57 @@
+{
+  "schema": "bolusi-harness-result/1",
+  "runId": "run-2026-07-25T10-10-50-919Z-741874",
+  "profile": "test",
+  "variant": "release",
+  "target": "emulator",
+  "hermesVersion": "250829098.0.14",
+  "gates": [
+    {
+      "id": "SEC-DEV-06-at-rest",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "protected columns at rest are ciphertext: every signed-off column was observed and carries the cipher marker, no seeded plaintext survives in the file bytes \u2014 and the positive control witnessed the seed in a cipher-disabled control DB. The FILE itself is plain SQLite by design (D22): only the sensitive columns are sealed."
+    },
+    {
+      "id": "SEC-AUTH-09-leg1",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "the SEC-AUTH-09 PIN-verifier material (salt, hash, params) is sealed at rest: every user_pin_verifiers column was observed with a non-null value carrying the cipher marker, so the verifier bytes exist on disk only as ciphertext (SEC-AUTH-09 leg 1, on the post-D22 column cipher)."
+    },
+    {
+      "id": "SEC-OPLOG-06-jcs",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "Hermes canonicalizeJcs matches the shared RFC 8785 golden vectors byte-for-byte: 26 number, 1 canonicalization (text + \u00a73.2.4 UTF-8 bytes), and the property-sort (UTF-16 code-unit order) vectors all agree \u2014 the on-device hash preimage is identical to the Node engine's (SEC-OPLOG-06).",
+      "figures": {
+        "numberVectors": 26,
+        "canonicalizationVectors": 1,
+        "propertyVectors": 1
+      }
+    },
+    {
+      "id": "CHAOS-01",
+      "kind": "correctness",
+      "status": "skipped",
+      "detail": "CHAOS-01 has no on-device runner: the chaos scenarios live in @bolusi/harness (PGlite server + better-sqlite3 VirtualDevice), which apps/mobile may not depend on at runtime (shipping-deps + boundaries), and CHAOS-03/06/07 additionally need a real SERVER round-trip that a single emulator does not have. Running reduced chaos on op-sqlite needs a device-native scenario rig that does not exist yet (filed as task 181). Honest skip (\u00a72.11): the lane reds on this id, never a fabricated green."
+    },
+    {
+      "id": "CHAOS-03",
+      "kind": "correctness",
+      "status": "skipped",
+      "detail": "CHAOS-03 has no on-device runner: the chaos scenarios live in @bolusi/harness (PGlite server + better-sqlite3 VirtualDevice), which apps/mobile may not depend on at runtime (shipping-deps + boundaries), and CHAOS-03/06/07 additionally need a real SERVER round-trip that a single emulator does not have. Running reduced chaos on op-sqlite needs a device-native scenario rig that does not exist yet (filed as task 181). Honest skip (\u00a72.11): the lane reds on this id, never a fabricated green."
+    },
+    {
+      "id": "CHAOS-06",
+      "kind": "correctness",
+      "status": "skipped",
+      "detail": "CHAOS-06 has no on-device runner: the chaos scenarios live in @bolusi/harness (PGlite server + better-sqlite3 VirtualDevice), which apps/mobile may not depend on at runtime (shipping-deps + boundaries), and CHAOS-03/06/07 additionally need a real SERVER round-trip that a single emulator does not have. Running reduced chaos on op-sqlite needs a device-native scenario rig that does not exist yet (filed as task 181). Honest skip (\u00a72.11): the lane reds on this id, never a fabricated green."
+    },
+    {
+      "id": "CHAOS-07",
+      "kind": "correctness",
+      "status": "skipped",
+      "detail": "CHAOS-07 has no on-device runner: the chaos scenarios live in @bolusi/harness (PGlite server + better-sqlite3 VirtualDevice), which apps/mobile may not depend on at runtime (shipping-deps + boundaries), and CHAOS-03/06/07 additionally need a real SERVER round-trip that a single emulator does not have. Running reduced chaos on op-sqlite needs a device-native scenario rig that does not exist yet (filed as task 181). Honest skip (\u00a72.11): the lane reds on this id, never a fabricated green."
+    }
+  ]
+}
