@@ -79,9 +79,6 @@ class ${HARNESS_ACTIVITY_NAME} : ReactActivity() {
   override fun getMainComponentName(): String = "${HARNESS_COMPONENT_NAME}"
 
   override fun createReactActivityDelegate(): ReactActivityDelegate {
-    // Forward the launching intent's extras (the driver's --es ${HARNESS_RUN_ID_EXTRA} <id>) to JS as
-    // initialProps, so the harness echoes the run id back for the driver's freshness check.
-    val launchExtras = intent?.extras
     return ReactActivityDelegateWrapper(
       this,
       BuildConfig.IS_NEW_ARCHITECTURE_ENABLED,
@@ -90,7 +87,19 @@ class ${HARNESS_ACTIVITY_NAME} : ReactActivity() {
         mainComponentName,
         fabricEnabled
       ) {
-        override fun getLaunchOptions(): Bundle? = launchExtras
+        // Forward the launching intent's extras (the driver's --es ${HARNESS_RUN_ID_EXTRA} <id>) to JS
+        // as initialProps, so the harness echoes the run id back for the driver's freshness check.
+        //
+        // READ LAZILY, NOT CAPTURED (task 177 runId fix). ReactActivity's CONSTRUCTOR calls
+        // createReactActivityDelegate() (ReactActivity.java: \`protected ReactActivity() { mDelegate =
+        // createReactActivityDelegate(); }\`), and at construction time the Activity is NOT yet attached
+        // to its launching intent, so getIntent() is null. The previous code snapshotted the extras into
+        // a local at delegate-construction and froze that null — the driver's --es ${HARNESS_RUN_ID_EXTRA}
+        // never reached JS and the emitted result carried an empty run id (the task 175 hardware run,
+        // run 30147394950). RN calls getLaunchOptions() from ReactActivityDelegate.onCreate()
+        // (composeLaunchOptions()), AFTER the intent is attached, so reading intent?.extras HERE returns
+        // the real launching extras.
+        override fun getLaunchOptions(): Bundle? = this@${HARNESS_ACTIVITY_NAME}.intent?.extras
       }
     )
   }

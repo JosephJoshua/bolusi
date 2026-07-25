@@ -85,9 +85,21 @@ describe('withHarnessActivity — generated Kotlin', () => {
     expect(kt).toContain(`getMainComponentName(): String = "${HARNESS_COMPONENT_NAME}"`);
   });
 
-  test('is a ReactActivity that forwards the run-id intent extra as initialProps', () => {
+  test('forwards the run-id intent extra as initialProps, read LAZILY (task 177 runId round-trip fix)', () => {
     expect(kt).toContain('class HarnessActivity : ReactActivity()');
-    expect(kt).toContain('override fun getLaunchOptions(): Bundle? = launchExtras');
+    // getLaunchOptions() must read the LIVE intent's extras at call time. RN invokes it from
+    // ReactActivityDelegate.onCreate() (composeLaunchOptions()), AFTER the Activity is attached to its
+    // launching intent. The previous code captured `val launchExtras = intent?.extras` inside
+    // createReactActivityDelegate(), which ReactActivity calls from its CONSTRUCTOR — before the intent
+    // is attached, so it froze null and the emitted result carried "runId":"" (task 175 hardware run).
+    expect(kt).toContain(
+      'override fun getLaunchOptions(): Bundle? = this@HarnessActivity.intent?.extras',
+    );
+    // REGRESSION GUARD (§2.11): the eager capture must NEVER come back. The bug was precisely a
+    // `val launchExtras = intent?.extras` snapshot taken before the intent existed; assert that pattern
+    // is gone so a future refactor cannot silently re-freeze null and re-empty the runId.
+    expect(kt).not.toMatch(/val\s+launchExtras\s*=/);
+    expect(kt).not.toContain('= launchExtras');
     // Names the exact extra key the driver passes (`--es bolusiHarnessRunId`), so the contract is visible.
     expect(kt).toContain(HARNESS_RUN_ID_EXTRA);
     expect(kt).toContain('package com.bolusi.app');
