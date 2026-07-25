@@ -13,6 +13,7 @@ import {
   NotesList,
   NotesRuntimeProvider,
   type DiscardGuard,
+  type NoteDraft,
   type NotesRuntime,
 } from '@bolusi/modules/notes/screens';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -43,6 +44,14 @@ export interface NotesHomeProps {
    * direct mount (tests) is unaffected.
    */
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
+  /**
+   * This user's retained editor work (SEC-AUTH-08; task 155), or `null`. Already owner-checked by the
+   * shell — `App` only forwards a workspace whose `ownerUserId` is the user whose session is open, so
+   * a draft that reaches here belongs to the person looking at the screen.
+   */
+  readonly restoredDraft?: NoteDraft | null;
+  /** Report the live editor's draft to the shell's retention, or `null` when there is none. */
+  readonly onDraftChange?: ((draft: NoteDraft | null) => void) | undefined;
 }
 
 export function NotesHome({
@@ -52,8 +61,27 @@ export function NotesHome({
   avatar,
   onOpenSyncStatus,
   onRegisterSurfaceNav,
+  restoredDraft,
+  onDraftChange,
 }: NotesHomeProps): React.JSX.Element {
-  const [view, setView] = useState<NotesView>({ kind: 'list' });
+  /**
+   * THE RESTORE (task 155) — a LAZY initializer, read exactly once, at mount.
+   *
+   * This surface is unmounted by the lock and remounted by the unlock, so "at mount" is precisely
+   * "when this user comes back". Reading the retained draft any later (an effect, a derived value)
+   * would re-open the editor on a user who had since navigated away, and reading it EARLIER is not
+   * possible — there is no surface before the session that owns it.
+   *
+   * `restoredDraft` is only ever consulted here and in the initial state of the form below, which is
+   * what keeps the write-through from fighting the typing: once the editor is up, the editor is the
+   * source of truth for its own text and retention is a downstream copy.
+   */
+  const [view, setView] = useState<NotesView>(() => {
+    if (restoredDraft === null || restoredDraft === undefined) return { kind: 'list' };
+    return restoredDraft.mode === 'edit' && restoredDraft.noteId !== null
+      ? { kind: 'edit', noteId: restoredDraft.noteId }
+      : { kind: 'create' };
+  });
 
   /**
    * The live editor's discard gate (task 145), set by `NoteEditor` while a create/edit form is mounted
@@ -111,6 +139,8 @@ export function NotesHome({
       {view.kind === 'create' ? (
         <NoteEditor
           mode="create"
+          restoredDraft={restoredDraft}
+          onDraftChange={onDraftChange}
           syncChip={syncChip}
           avatar={avatar}
           onDone={() => setView({ kind: 'list' })}
@@ -123,6 +153,8 @@ export function NotesHome({
         <NoteEditor
           mode="edit"
           noteId={view.noteId}
+          restoredDraft={restoredDraft}
+          onDraftChange={onDraftChange}
           syncChip={syncChip}
           avatar={avatar}
           onDone={() => setView({ kind: 'detail', noteId: view.noteId })}

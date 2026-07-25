@@ -24,6 +24,12 @@ import { StyleSheet, View } from 'react-native';
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
+import {
+  emptyWorkspace,
+  withDraft,
+  withRoute,
+  type UserWorkspace,
+} from './src/state/user-workspaces.js';
 import { useHardwareBack } from './src/navigation/useHardwareBack.js';
 import {
   backTarget,
@@ -59,7 +65,8 @@ import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import type { PinAttemptRow } from '@bolusi/core';
-import type { NotesRuntime } from '@bolusi/modules/notes/screens';
+import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
+import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
 /**
@@ -121,6 +128,25 @@ export interface AppProps {
    * authenticate (the web harness) returns `void` and the pad simply stays put.
    */
   readonly onSubmitPin: (userId: string, pin: string) => void | Promise<boolean>;
+  /**
+   * THE ACTIVE USER'S RETAINED WORK (SEC-AUTH-08; api/02-auth §6.4; task 155) — `ShellSession`'s
+   * workspace, forwarded by `Root`, or `null` when nobody is signed in.
+   *
+   * This is the READ half of task 133's retention path, which shipped with a producer and no
+   * consumer: a lock preserved the workspace, an unlock restored it, and no screen ever looked at
+   * it, so a half-typed note was still lost on a real device. The shell reads two things out of it —
+   * the route the user was on, and the notes module's draft — and treats the draft as OPAQUE
+   * (`drafts` is `Record<string, unknown>` by design; only the module knows the shape).
+   *
+   * Absent for hosts with no session to retain into (the web gallery), which is why it is optional.
+   */
+  readonly workspace?: UserWorkspace | null;
+  /**
+   * Write the active user's work back into retention (task 155). Bound to
+   * `AppSessionController.updateWorkspace`, which is keyed by the SIGNED-IN user and ignores a write
+   * for anyone else — so this seam cannot be used to smuggle one user's work into another's slot.
+   */
+  readonly onWorkspaceChange?: ((next: UserWorkspace) => void) | undefined;
   readonly onSelectLocale: (locale: Locale) => void;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
@@ -162,6 +188,121 @@ export default function App(props: AppProps): React.JSX.Element {
    * Tapping the open row closes it, which is the only way back out of a disclosure with no chrome.
    */
   const [rejectedDetailFor, setRejectedDetailFor] = useState<string | null>(null);
+
+  /**
+   * ── WORK RETENTION ACROSS A LOCK (SEC-AUTH-08; task 155) ──────────────────────────────────────
+   *
+   * THE ONE DISTINCTION THIS CODE EXISTS TO GET RIGHT, in task 130's words: a transient null identity
+   * is a LOCK, not a switch. `A → null → A` must return A's editor exactly as they left it (the
+   * switcher promises it in so many words — "Pekerjaanmu aman", SwitcherScreen.tsx:7-11), while
+   * `A → null → B` must land B on B's own home with none of A's work anywhere near the screen.
+   * Retention that restored A's draft into B's session would be a PRIVACY DEFECT, not a UX bug.
+   *
+   * HOW THE DISTINCTION IS ENFORCED, in three layers, none of which is a comment:
+   *   1. The KEY. `SessionManager` stores work under `userId` and hands back only that user's on
+   *      `switchTo` (task 14); `restoreWorkspace` re-checks `ownerUserId` at the boundary (task 133).
+   *      B's unlock therefore yields `emptyWorkspace(B)` — there is no path by which A's bytes are
+   *      handed to B in the first place. That is the load-bearing control and it is not mine.
+   *   2. NO SHELL-LOCAL COPY. `App` survives the lock (only the ZONE changes), so the obvious
+   *      implementation — remember the draft in `useState` here and hand it back on remount — leaks
+   *      A's work to B by construction. There is deliberately no such state: the ONLY draft this
+   *      component knows is derived, every render, from the workspace of whoever is signed in NOW.
+   *   3. The owner check below, which selects that workspace. Belt and braces over (1), in the same
+   *      spirit as `ShellSession.snapshot`'s own — it makes a future refactor that starts forwarding
+   *      a stale snapshot fail closed (empty screen) rather than open (B reads A's note).
+   */
+  const sessionUserId = props.session?.userId ?? null;
+  const retained = props.workspace ?? null;
+  const workspace =
+    retained !== null && sessionUserId !== null && retained.ownerUserId === sessionUserId
+      ? retained
+      : null;
+
+  /**
+   * THE ROUTE COMES BACK WITH THE USER — and only with the RIGHT user (task 155, consuming task 133's
+   * `withRoute`, which until now was a genuinely dead export).
+   *
+   * `route` is `App` state and `App` does not unmount across a lock, so without this the shell simply
+   * kept whatever route was showing: A locked on Sync Status and B unlocked onto Sync Status, A's
+   * position inherited by a different person. Adjusting state DURING render (React's documented
+   * alternative to a prop-change effect) rather than in a `useEffect` is what keeps B from rendering
+   * one frame of A's surface before the correction lands.
+   *
+   * `workspace` is null while locked and for a user with nothing retained, so the fallback is `home`
+   * — B's own landing surface, never the outgoing user's.
+   */
+  const [routeOwner, setRouteOwner] = useState<string | null>(sessionUserId);
+  if (routeOwner !== sessionUserId) {
+    setRouteOwner(sessionUserId);
+    setRoute(workspace?.route ?? 'home');
+  }
+
+  /**
+   * The freshest workspace, readable synchronously by the publishers below. A ref because two
+   * publishes can happen in the SAME commit (a keystroke that also moved the route): the second must
+   * compose onto the first's result, not onto the props of a render that has already been superseded.
+   */
+  const workspaceRef = useRef<UserWorkspace | null>(workspace);
+  workspaceRef.current = workspace;
+  const userIdRef = useRef<string | null>(sessionUserId);
+  userIdRef.current = sessionUserId;
+  const onWorkspaceChange = props.onWorkspaceChange;
+
+  /**
+   * Apply `mutate` to the ACTIVE user's workspace and write it through. No session ⇒ nothing is
+   * retained: a lock has already cleared the identity, and a write with no owner is exactly the
+   * cross-user smuggling the `ownerUserId` field exists to make impossible.
+   *
+   * A mutation that returns its own input publishes NOTHING — every write emits, and an emit
+   * re-renders this tree, so an unconditional publish would be an infinite loop rather than a
+   * write-through.
+   */
+  const publishWorkspace = useCallback(
+    (mutate: (base: UserWorkspace) => UserWorkspace): void => {
+      const userId = userIdRef.current;
+      if (userId === null || onWorkspaceChange === undefined) return;
+      const held = workspaceRef.current;
+      const base = held !== null && held.ownerUserId === userId ? held : emptyWorkspace(userId);
+      const next = mutate(base);
+      if (next === base) return;
+      workspaceRef.current = next;
+      onWorkspaceChange(next);
+    },
+    [onWorkspaceChange],
+  );
+
+  /** The notes module's retained draft, re-derived every render — see layer 2 above. */
+  const restoredNotesDraft = useMemo<NoteDraft | null>(
+    () => (workspace === null ? null : parseNoteDraft(workspace.drafts[NOTES_MODULE_ID])),
+    [workspace],
+  );
+
+  /**
+   * The notes surface's write-through. Stable, so the editor's publish effect does not re-fire on
+   * every render of this component — which is what stops the keystroke → publish → re-render →
+   * publish cycle from running away.
+   */
+  const publishNotesDraft = useCallback(
+    (draft: NoteDraft | null): void => {
+      publishWorkspace((base) => {
+        const current = base.drafts[NOTES_MODULE_ID] ?? null;
+        // STRUCTURAL, not identity. The editor builds a fresh draft object on the render its publish
+        // effect fires, so an identity check (`current === draft`) never matches an unchanged draft
+        // and every render would write a new object — a re-render-per-write feedback loop that OOMs
+        // the composed lane (observed). Comparing VALUES makes an equal re-publish a genuine no-op, so
+        // only a real edit moves retention.
+        if (sameNotesDraft(current, draft)) return base;
+        return withDraft(base, NOTES_MODULE_ID, draft);
+      });
+    },
+    [publishWorkspace],
+  );
+
+  // Record where this user is, continuously (never on a lock signal — by then the shell no longer
+  // knows whose route it was; `shell-session.ts`'s header states the race in full).
+  useEffect(() => {
+    publishWorkspace((base) => (base.route === route ? base : withRoute(base, route)));
+  }, [route, sessionUserId, publishWorkspace]);
 
   /**
    * Apply a notification-tap deep link (api/04-push §4). `Root` hands a FRESH `pushRoute` object per
@@ -503,6 +644,11 @@ export default function App(props: AppProps): React.JSX.Element {
               now={props.now}
               // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
               onRegisterSurfaceNav={registerSurfaceNav}
+              // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
+              // locked (owner-checked above, so it is theirs), and the write-back that keeps it
+              // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
+              restoredDraft={restoredNotesDraft}
+              onDraftChange={publishNotesDraft}
               onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
               syncChip={
                 <SyncChip
@@ -575,6 +721,31 @@ export default function App(props: AppProps): React.JSX.Element {
 
 function nameOf(users: readonly SwitcherUser[] | null, userId: string): string {
   return (users ?? []).find((user) => user.id === userId)?.name ?? '';
+}
+
+/**
+ * VALUE equality between a stored draft (opaque `unknown` off the workspace) and the editor's freshly
+ * built one (task 155). This is the guard that makes an unchanged re-publish a no-op — see
+ * `publishNotesDraft`. A media ref is identified by `mediaId` + `sha256` (its signed identity, 06 §6),
+ * so key-order or object-identity differences after a restore round-trip do not read as a change.
+ */
+function sameNotesDraft(stored: unknown, next: NoteDraft | null): boolean {
+  if (stored === null || stored === undefined) return next === null;
+  if (next === null) return false;
+  const a = stored as NoteDraft;
+  return (
+    a.mode === next.mode &&
+    a.noteId === next.noteId &&
+    a.title === next.title &&
+    a.body === next.body &&
+    sameMediaRef(a.mediaRef, next.mediaRef)
+  );
+}
+
+function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boolean {
+  if (a === null || a === undefined) return b === null || b === undefined;
+  if (b === null || b === undefined) return false;
+  return a.mediaId === b.mediaId && a.sha256 === b.sha256;
 }
 
 const FILL = { flex: 1 } as const;

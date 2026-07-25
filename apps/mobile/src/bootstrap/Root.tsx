@@ -38,7 +38,7 @@
  * capture wrapper resets the deadline on interaction so the lock fires on IDLE rather than on
  * elapsed time. The DECISION is still 14's — nothing here re-derives a deadline.
  */
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import App from '../../App.js';
@@ -66,6 +66,7 @@ import {
 import type { AppRuntime } from './runtime.js';
 import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
+import type { UserWorkspace } from '../state/user-workspaces.js';
 import {
   NO_SYNC_STATUS_READS,
   readSyncStatusRows,
@@ -518,6 +519,21 @@ export function Root({
   const sessionUserId = sessionSnapshot?.session?.userId ?? null;
 
   /**
+   * The retention write-back (SEC-AUTH-08; task 155), as a STABLE callback.
+   *
+   * Stability is not a nicety here — it is what keeps the write-through from running away. `App`'s
+   * draft/route publishers are `useCallback`s keyed off this prop, and the editor subscribes to them
+   * in an effect; a fresh arrow each render would re-fire that effect every render and re-publish an
+   * equal draft forever (an OOM, observed before this was memoized). Reads the LIVE controller through
+   * `sessionRef` rather than closing over `session`, so it stays identity-stable across a re-render
+   * while still writing to whatever controller is current. `updateWorkspace` itself is keyed by the
+   * signed-in user (bootstrap/session.ts), so a write for anyone else is ignored downstream.
+   */
+  const handleWorkspaceChange = useCallback((next: UserWorkspace): void => {
+    sessionRef.current?.updateWorkspace(next);
+  }, []);
+
+  /**
    * THE IN-APP CAMERA (06 §2.1; task 130) — the production consumer `MediaClient.capturePhoto()` and
    * `MediaClient.storageBand()` never had, and the owner tasks 18 and 82 left behind when both went
    * `done`.
@@ -749,6 +765,14 @@ export function Root({
         onRetryUsers={() => void session?.refresh()}
         // The in-app capture surface while one is running (06 §2.1), else null.
         capture={capture.surface}
+        // SEC-AUTH-08 work retention (task 155) — the READ and WRITE halves of task 133's path, which
+        // shipped with a producer (`updateWorkspace`) and NO consumer, so a half-typed note was still
+        // lost on a real device. `workspace` is the active user's retained work from the shell session
+        // snapshot (null while locked, `App` re-checks the owner); `onWorkspaceChange` is the
+        // controller's `updateWorkspace`, keyed by the SIGNED-IN user so a write for anyone else is
+        // ignored. Optional chaining because an unenrolled device has no controller to retain into.
+        workspace={sessionSnapshot?.workspace ?? null}
+        onWorkspaceChange={handleWorkspaceChange}
         // The PIN pad's one egress (task 24's PinPad contract), and — since task 133 — the UNLOCK
         // path too: the controller runs the REAL `verifyPin` and, on success, `ShellSession.unlock`,
         // which restores this user's retained workspace and clears the lock. The subscription above
