@@ -50,3 +50,12 @@ export function passed(
 export function failed(id: string, detail: string): HarnessGateResult {
   return { id, kind: 'correctness', status: 'fail', detail };
 }
+
+/**
+ * Build a SKIPPED correctness gate — an honest "no runner ran this" (§2.11), NEVER a silent pass. The
+ * driver treats `skipped` as not-`pass`, so it fails the lane on this id and names it: a first real run
+ * with unwired gate bodies is an honest partial, not a green-for-nothing.
+ */
+export function skipped(id: string, detail: string): HarnessGateResult {
+  return { id, kind: 'correctness', status: 'skipped', detail };
+}

@@ -22,7 +22,7 @@
       "extends": "preview",
       "channel": "test",
       "env": {
-        "BOLUSI_TEST_HARNESS": "1"
+        "EXPO_PUBLIC_BOLUSI_TEST_HARNESS": "1"
       }
     },
     "production": {

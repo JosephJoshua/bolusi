@@ -40,6 +40,10 @@ import { fileLocaleStore } from './src/ports/locale-store.js';
 import { expoLocationPort } from './src/ports/location.js';
 import { netInfoPort } from './src/ports/netinfo.js';
 import { systemTimer } from './src/ports/timer.js';
+// Side-effect import (task 27a/175): flag-gated `AppRegistry.registerComponent('BolusiHarness', …)`.
+// This bundle is loaded by BOTH MainActivity and the test-profile-only HarnessActivity, so the harness
+// root must be registered here; it is a no-op unless `EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1`.
+import './src/harness/register.js';
 
 /**
  * The registered root.

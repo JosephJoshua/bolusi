@@ -1,5 +1,5 @@
 // The flag-gated harness entry (testing-guide §2.6). `loadHarness()` is the ONE door to every Part C
-// runner, and it stays SHUT unless `BOLUSI_TEST_HARNESS=1` — so even though production code can
+// runner, and it stays SHUT unless `EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1` — so even though production code can
 // import this module, it can never reach a runner in a production build. `flag.test.ts` falsifies
 // the gate: with the flag unset the door is null; with it set the runners are reachable.
 //
@@ -12,20 +12,16 @@ import { generateSeed200k, SEED_200K, type Seed200kSpec } from '@bolusi/test-sup
 import { mulberry32, type ScriptOp } from '@bolusi/test-support';
 
 import { harnessEnabled } from './flag.js';
+import { EMULATOR_CORRECTNESS_GATE_IDS } from './gates.js';
 import { runAtRestGate, type AtRestDeviceEnv } from './part-c/at-rest-device-ctx.js';
 import type { HarnessGateResult } from './result.js';
 
-/** The correctness gates this emulator lane is responsible for (mirrors `EMULATOR_REQUIRED_GATES` in
- * scripts/harness-device.mjs; both are pinned to the D20 §1 correctness subset). */
-export const EMULATOR_CORRECTNESS_GATE_IDS: readonly string[] = Object.freeze([
-  'SEC-DEV-06-at-rest',
-  'SEC-AUTH-09-leg1',
-  'SEC-OPLOG-06-jcs',
-  'CHAOS-01',
-  'CHAOS-03',
-  'CHAOS-06',
-  'CHAOS-07',
-]);
+// The correctness gate ids live in the dependency-free `gates.js` (re-exported here for
+// `loadHarness().requiredGateIds`) so the device entry can name them WITHOUT importing this file — a
+// value-import of `registry.ts` pulls `@bolusi/test-support` → `node:crypto` into the release bundle and
+// breaks the APK assemble (task 177). This file, and everything it reaches (the SEED-200K builder, the
+// at-rest runner), stay Node-/test-only until 177 makes test-support device-bundle-safe.
+export { EMULATOR_CORRECTNESS_GATE_IDS };
 
 export interface HarnessRunners {
   /** The SEED-200K composition the rebuild/execute-latency runners replay. */

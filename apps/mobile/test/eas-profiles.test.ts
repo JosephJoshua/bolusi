@@ -50,12 +50,13 @@ describe('eas.json carries exactly 08 §5.5`s four profiles', () => {
     expect(profile?.channel).toBe('preview');
   });
 
-  test('`test`: preview`s settings + BOLUSI_TEST_HARNESS=1, channel `test`', () => {
+  test('`test`: preview`s settings + EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1, channel `test`', () => {
     const profile = eas.build['test'];
     // "preview settings + env" — expressed as `extends`, so the two cannot drift apart when the
-    // preview profile changes. This is what plumbs the flag through for tasks 26/27's L6 screen.
+    // preview profile changes. This is what plumbs the flag through for tasks 26/27's L6 screen. The
+    // EXPO_PUBLIC_ prefix is load-bearing (task 175 §D): only prefixed vars reach the release bundle.
     expect(profile?.extends).toBe('preview');
-    expect(profile?.env).toEqual({ BOLUSI_TEST_HARNESS: '1' });
+    expect(profile?.env).toEqual({ EXPO_PUBLIC_BOLUSI_TEST_HARNESS: '1' });
     expect(profile?.channel).toBe('test');
   });
 
@@ -63,7 +64,7 @@ describe('eas.json carries exactly 08 §5.5`s four profiles', () => {
     // The flag exposes in-app harness hooks (§5.5: "Never distributed to users"). A copy of it on
     // development/preview/production would hand those hooks to a real shop.
     for (const name of ['development', 'preview', 'production']) {
-      expect(eas.build[name]?.env?.['BOLUSI_TEST_HARNESS'], name).toBeUndefined();
+      expect(eas.build[name]?.env?.['EXPO_PUBLIC_BOLUSI_TEST_HARNESS'], name).toBeUndefined();
     }
   });
 

@@ -10,6 +10,11 @@ build/
 .expo-shared/
 android/
 ios/
+# Local Expo modules (task 175) ship HAND-WRITTEN native source. The app's GENERATED
+# apps/mobile/{android,ios} stay ignored above, but a modules/*/android/ dir is source that MUST be
+# committed (else autolinking never sees it — the module's Kotlin never compiles into the APK). Re-include
+# the DIRECTORY only (no `**`), so `build/` above still ignores any Gradle output inside it.
+!/apps/mobile/modules/*/android/
 *.orig.*
 
 # secrets / env — never commit

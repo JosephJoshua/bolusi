@@ -1,4 +1,4 @@
-// The harness is UNREACHABLE unless BOLUSI_TEST_HARNESS=1 (testing-guide §2.6). This falsifies the
+// The harness is UNREACHABLE unless EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1 (testing-guide §2.6). This falsifies the
 // runtime half of that gate: with the flag unset, `loadHarness()` hands back nothing, so production
 // wiring that imports the module still cannot reach a runner; with it set, the runners appear. The
 // build-time half (the flag lives ONLY in the `test` EAS profile) is test/harness-flag.test.ts.
@@ -8,7 +8,7 @@ import { HARNESS_RESULT_TAG, harnessEnabled } from './flag.js';
 import { loadHarness } from './registry.js';
 import { SEED_200K } from '@bolusi/test-support';
 
-const KEY = 'BOLUSI_TEST_HARNESS';
+const KEY = 'EXPO_PUBLIC_BOLUSI_TEST_HARNESS';
 let saved: string | undefined;
 
 beforeEach(() => {

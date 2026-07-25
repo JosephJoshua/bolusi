@@ -507,9 +507,13 @@ jobs:
       # `Android Bundling failed`. `tsc -b` is the same build every `test:*` script runs first.
       - name: build workspace packages (Metro resolves @bolusi/* through dist/)
         run: npx tsc -b
-      - name: prebuild + assemble release APK (BOLUSI_TEST_HARNESS=1)
+      - name: prebuild + assemble release APK (EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1)
         env:
-          BOLUSI_TEST_HARNESS: '1'
+          # EXPO_PUBLIC_-prefixed (task 175 §D): the prebuild reads it to inject HarnessActivity
+          # (withHarnessActivity), AND Expo/Metro inlines it into the release bundle so the runtime
+          # `harnessEnabled()` (src/harness/flag.ts) reads `'1'` — the unprefixed BOLUSI_TEST_HARNESS
+          # never reached the bundle, so the harness stayed shut on device.
+          EXPO_PUBLIC_BOLUSI_TEST_HARNESS: '1'
           EXPO_PUBLIC_API_URL: 'http://10.0.2.2:3000'
         run: |
           pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install

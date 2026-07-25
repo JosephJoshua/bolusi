@@ -1,6 +1,8 @@
-// The BUILD-time half of the harness flag gate (testing-guide §2.6, 08 §5.5). `BOLUSI_TEST_HARNESS`
-// must exist in the `test` EAS profile ONLY — never in production or preview, or the harness stack
-// (which its runtime `harnessEnabled()` gate keys on) could compile into a shipped build. This reads
+// The BUILD-time half of the harness flag gate (testing-guide §2.6, 08 §5.5).
+// `EXPO_PUBLIC_BOLUSI_TEST_HARNESS` must exist in the `test` EAS profile ONLY — never in production or
+// preview, or the harness stack (which its runtime `harnessEnabled()` gate keys on) could compile into a
+// shipped build. The EXPO_PUBLIC_ prefix is what lets the value reach the release bundle (task 175 §D).
+// This reads
 // the REAL eas.json and asserts exactly that placement, so moving the flag into another profile reds
 // this lane rather than quietly widening the harness's reach.
 import { readFileSync } from 'node:fs';
@@ -14,7 +16,7 @@ const eas = JSON.parse(readFileSync(join(HERE, '..', 'eas.json'), 'utf8')) as {
   build: Record<string, { env?: Record<string, string> }>;
 };
 
-const FLAG = 'BOLUSI_TEST_HARNESS';
+const FLAG = 'EXPO_PUBLIC_BOLUSI_TEST_HARNESS';
 
 describe('eas.json harness-flag placement (08 §5.5)', () => {
   test('the flag is set to "1" in the test profile', () => {
