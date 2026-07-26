@@ -16,3 +16,5 @@ export {
 } from './qctx.js';
 
 export { decodeCursor, encodeCursor, type CursorPosition } from './cursor.js';
+
+export { fetchKeysetPage, keysetPredicate, type KeysetPage } from './paginate.js';

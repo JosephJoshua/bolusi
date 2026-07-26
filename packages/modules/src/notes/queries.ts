@@ -17,7 +17,8 @@ import { z } from 'zod';
 import {
   decodeCursor,
   DomainError,
-  encodeCursor,
+  fetchKeysetPage,
+  keysetPredicate,
   type QueryContext,
   type QueryPage,
 } from '@bolusi/core';
@@ -148,29 +149,20 @@ export async function listNotesHandler(
 
   if (input.cursor !== undefined) {
     const position = decodeCursor(input.cursor, input.sort);
-    const [lastCreatedAt, lastId] = position.values as [number, string];
     query = query.where((eb) =>
-      eb.or([
-        eb('createdAt', descending ? '<' : '>', lastCreatedAt),
-        eb.and([eb('createdAt', '=', lastCreatedAt), eb('id', descending ? '<' : '>', lastId)]),
-      ]),
+      keysetPredicate(eb, { column: 'createdAt', idColumn: 'id', position, descending }),
     );
   }
 
-  // One MORE than asked: how "is there a next page?" is answered without a second COUNT, and what
-  // makes the last page's `nextCursor` null rather than a cursor that yields an empty page (04 §6).
-  const found = await query.limit(input.limit + 1).execute();
-  const hasMore = found.length > input.limit;
-  const page = hasMore ? found.slice(0, input.limit) : found;
+  // The "One MORE than asked" page contract lives in fetchKeysetPage (04 §6, CLAUDE.md §2.8).
+  const { rows: page, nextCursor } = await fetchKeysetPage({
+    fetch: (limitPlusOne) => query.limit(limitPlusOne).execute(),
+    limit: input.limit,
+    sort: input.sort,
+    cursorValues: (last) => [last.createdAt, last.id],
+  });
 
-  const rows = page.map(toRow);
-  const last = page[page.length - 1];
-  const nextCursor =
-    hasMore && last !== undefined
-      ? encodeCursor({ sort: input.sort, values: [last.createdAt, last.id] })
-      : null;
-
-  return { rows, nextCursor };
+  return { rows: page.map(toRow), nextCursor };
 }
 
 /**
