@@ -193,6 +193,7 @@ Scope: **v0 foundation** (decisions D1; exit criteria D4). Task detail in `NN-sl
 | 182 | the emulator gate artifact carries no self-declared build sha, so the SEC-AUTH-09 provenance guard binds to git history not the code it certifies; have the producer stamp the build sha inside the artifact to close the fabricated-artifact residual (from the 28 discharge review) | todo | 28 |
 | 183 | security-guide's SEC-AUTH-09 leg 3 names a statistical timing test; the shipped+accepted proof is the structural constant-time compare — reconcile the wording (spec edit; from the 28 discharge review) | todo | 28 |
 | 184 | the CI owed-SEC-id set is hand-copied in 3 places (ci-parity.mjs:902 + :971 + a stale SQLCipher note) and has drifted — still lists the discharged SEC-AUTH-09 while the allowlist lists only SEC-AUTH-10, so a resurgent 09 red is absorbed as OWED by the shared verify/ci:status oracle; DERIVE from the allowlist (§2.8), own review (from the 172 review) | in-progress | 28, 172 |
+| 185 | dedup extraction backlog from the 2026-07-26 duplication audit: createTriggerLoop (2 mobile copies), finalizeMediaCapture (capture vs signature), shared bytes/concatBytes home + AeadCipher framing, and the @bolusi/sqlite-test-driver package whose 08 §3.3 amendment must be its own spec task (5 driver copies, ~600 lines) | todo | — |
 
 **Status values:** `todo · in-progress · in-review · done · blocked`
 
