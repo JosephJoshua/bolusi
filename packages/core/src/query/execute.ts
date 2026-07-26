@@ -26,6 +26,7 @@
 // §9.2 forbids ("a gated field is ABSENT from the row object — never null, never masked").
 import type { Kysely } from 'kysely';
 
+import { describeParseFailure } from '../errors/describe-parse-failure.js';
 import { DomainError } from '../errors/domain-error.js';
 import type {
   CommandIdentity,
@@ -150,27 +151,4 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
         this.#enforcement.hasPermission(identity, permissionId),
     });
   }
-}
-
-/**
- * A compact, structured description of a parse failure (mirrors runtime/execute.ts).
- *
- * `path` and `code` ONLY. Zod's `message`/`keys` can quote caller-supplied text, and `details` is
- * surfaced to logs (03 §12) — this is how a rejected value ends up in a log file.
- */
-function describeParseFailure(cause: unknown): string {
-  const issues =
-    typeof cause === 'object' && cause !== null
-      ? (cause as { issues?: unknown }).issues
-      : undefined;
-  if (Array.isArray(issues)) {
-    return issues
-      .map((issue: unknown) => {
-        const { path, code } = (issue ?? {}) as { path?: unknown; code?: unknown };
-        const where = Array.isArray(path) && path.length > 0 ? path.join('.') : '(root)';
-        return `${where}: ${String(code ?? 'invalid')}`;
-      })
-      .join('; ');
-  }
-  return cause instanceof Error ? cause.name : 'parse failed';
 }

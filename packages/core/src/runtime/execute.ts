@@ -38,6 +38,7 @@ import {
   type DenialSurface,
 } from '../authz/denials.js';
 import type { PermissionEvaluator } from '../authz/memo.js';
+import { describeParseFailure } from '../errors/describe-parse-failure.js';
 import { DomainError } from '../errors/domain-error.js';
 // Type-only, and therefore erased: the module layer imports this file for `CommandHandlerResult`,
 // so a value import here would be a genuine ESM cycle. `import type` makes the edge disappear at
@@ -670,32 +671,4 @@ function isRestrictionDenial(cause: unknown): cause is DomainError {
     cause.code === 'PERMISSION_DENIED' &&
     (cause.details as { reason?: unknown } | undefined)?.reason === 'restriction_violated'
   );
-}
-
-/**
- * A compact, structured description of a parse failure for the `VALIDATION_FAILED` details.
- *
- * Zod's `ZodError` carries `issues`; anything else contributes its message. Deliberately does NOT
- * pass the raw error through: `details` is surfaced to logs/telemetry (03 §12), and a schema error
- * can quote the rejected input verbatim — which is how a mistyped PIN ends up in a log file.
- */
-function describeParseFailure(cause: unknown): string {
-  const issues =
-    typeof cause === 'object' && cause !== null
-      ? (cause as { issues?: unknown }).issues
-      : undefined;
-  if (Array.isArray(issues)) {
-    return issues
-      .map((issue: unknown) => {
-        // `path` and `code` ONLY. Zod's `message` and `keys` can quote caller-supplied text (a
-        // rejected value, an unrecognized key name); `path` is schema structure and `code` is a
-        // fixed enum, so neither can carry data. This is the whole reason the issue is
-        // reconstructed rather than passed through.
-        const { path, code } = (issue ?? {}) as { path?: unknown; code?: unknown };
-        const where = Array.isArray(path) && path.length > 0 ? path.join('.') : '(root)';
-        return `${where}: ${String(code ?? 'invalid')}`;
-      })
-      .join('; ');
-  }
-  return cause instanceof Error ? cause.name : 'parse failed';
 }
