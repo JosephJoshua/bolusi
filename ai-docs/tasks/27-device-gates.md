@@ -66,3 +66,19 @@ SEC-OPLOG-06-jcs all PASS** (real production-writer seed, T-14b positive control
 vectors on Hermes). CHAOS-01/03/06/07 honestly `skipped` — no on-device runner (task 181). The lane
 exits non-zero BECAUSE of the 4 honest skips (correct §2.11 outcome), not a gate failure. 27a's 3
 correctness/security legs are DONE; 27a goes fully GREEN when 181 lands the 4 chaos runners.
+
+## COUPLED WORK — re-land task 160 in THIS lane's next run (owner-ruled 2026-07-26: defer 160 to 27a)
+Task 160 (the boot key-tag self-heal) was built, reviewed, merged, then **reverted** on 2026-07-25
+because its probe exposes the column-cipher marker on `packages/db-client/src/connection.ts` — an
+`AT_REST_SURFACE` file — which correctly staled the SEC-AUTH-09 provenance (the `2026-07-25-emulator.json`
+artifact above certifies the PRE-160 at-rest code). The owner ruled to defer 160's re-land to this lane
+rather than dispatch a one-off emulator run. **So the NEXT time this emulator lane runs (e.g. for 181's
+chaos runners, or the api-level-36 raise in 167), do it over a tree that has re-landed 160**, and:
+1. Restore branch `task/160-boot-decrypt-probe` (commits `78edee6`+`af2210d`, reviewed) onto main first.
+2. The fresh emulator run then certifies SEC-AUTH-09-leg1 over 160's `connection.ts` — a NEW artifact.
+3. Commit the new artifact and **re-anchor** `packages/harness/src/security/device-gate-provenance.ts`
+   to the new artifact's commit (re-anchoring without a real run = §2.11 "move the yardstick").
+4. `pnpm verify:full` green (only SEC-AUTH-10 owed) before the ff. See task 160's re-land checklist and
+   task 182 (stamp a build-sha in the artifact — do it in the same schema touch if convenient).
+Ordering matters: 160 must be live before 27a enrolls on real hardware (a restored foreign DB is only
+reachable once a device DB exists — 27a is the first), so this is the natural place to land both.
