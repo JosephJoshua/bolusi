@@ -15,7 +15,8 @@
 // from the input or cursor), so a hand-crafted cursor can name a position but not a tenant/store.
 import { z } from 'zod';
 
-import { decodeCursor, encodeCursor } from '../query/cursor.js';
+import { decodeCursor } from '../query/cursor.js';
+import { fetchKeysetPage, keysetPredicate } from '../query/paginate.js';
 import type { QueryContext, QueryPage } from '../query/qctx.js';
 import { AUTH_PERMISSION } from './operations.js';
 import type { AuthDatabase } from './schema.js';
@@ -102,20 +103,18 @@ export async function listPermissionDenialsHandler(
 
   if (input.cursor !== undefined) {
     const position = decodeCursor(input.cursor, input.sort);
-    const [lastTimestamp, lastId] = position.values as [number, string];
     query = query.where((eb) =>
-      eb.or([
-        eb('timestampMs', descending ? '<' : '>', lastTimestamp),
-        eb.and([eb('timestampMs', '=', lastTimestamp), eb('id', descending ? '<' : '>', lastId)]),
-      ]),
+      keysetPredicate(eb, { column: 'timestampMs', idColumn: 'id', position, descending }),
     );
   }
 
-  // One MORE than asked: how "is there a next page?" is answered without a second COUNT, and what
-  // makes the last page's `nextCursor` null rather than a cursor yielding an empty page (04 §6).
-  const found = await query.limit(input.limit + 1).execute();
-  const hasMore = found.length > input.limit;
-  const page = hasMore ? found.slice(0, input.limit) : found;
+  // The "One MORE than asked" page contract lives in fetchKeysetPage (04 §6, CLAUDE.md §2.8).
+  const { rows: page, nextCursor } = await fetchKeysetPage({
+    fetch: (limitPlusOne) => query.limit(limitPlusOne).execute(),
+    limit: input.limit,
+    sort: input.sort,
+    cursorValues: (last) => [last.timestampMs, last.id],
+  });
 
   const rows: PermissionDenialRow[] = page.map((row) => ({
     id: row.id,
@@ -130,12 +129,6 @@ export async function listPermissionDenialsHandler(
     reason: row.reason,
     suppressedRepeats: row.suppressedRepeats,
   }));
-
-  const last = page[page.length - 1];
-  const nextCursor =
-    hasMore && last !== undefined
-      ? encodeCursor({ sort: input.sort, values: [last.timestampMs, last.id] })
-      : null;
 
   return { rows, nextCursor };
 }

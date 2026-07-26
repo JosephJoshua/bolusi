@@ -9,10 +9,10 @@ Never merge without a separate review pass.
 
 ## Process (use the Workflow tool for fan-out)
 
-1. **Dimensions** — spawn independent reviewers per lens: correctness, security, tests, spec-conformance, simplicity. Each is blind to the others.
+1. **Dimensions** — spawn independent reviewers per lens: correctness, security, tests, spec-conformance, simplicity, **duplication**. Each is blind to the others. The duplication lens asks exactly two questions: does this change hand-roll something that already exists in the repo (Grep for the obvious keyword before answering "no"), and does it copy a ≥20-line block from a sibling file? An "aware copy" — one that cites its twin in a comment — is a finding, not an excuse: the 2026-07-26 audit found the citing comment is how copies drift (`severity()` diverged between two Verdict enums that linked to each other).
 2. **Adversarially verify** each finding — a second agent tries to **refute** it, defaulting to "not a real bug" unless it can produce a concrete failing input/state. Kill findings that can't be reproduced.
 3. **Rank** survivors by severity; discard nits that don't change behavior.
-4. **Feed back** — confirmed non-trivial findings become task files (CLAUDE.md §2.7), not lost review comments.
+4. **Feed back** — confirmed non-trivial findings become task files (CLAUDE.md §2.7), not lost review comments. A confirmed duplication finding becomes an **extraction task** naming every copy by path.
 
 ## Rules
 
