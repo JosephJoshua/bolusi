@@ -1,6 +1,6 @@
 # TASK 184 — the CI "owed SEC id" set is hand-copied in THREE places and has already drifted: `ci-parity.mjs` still lists the discharged SEC-AUTH-09 while the allowlist lists only SEC-AUTH-10 — derive it from the one source
 
-**Status:** todo
+**Status:** in-progress
 **Priority:** MEDIUM — a resurgent (regressed) SEC-AUTH-09 red is currently absorbed as OWED by the very oracle `pnpm verify` and (post-172) `pnpm ci:status` use to classify a `security-sweep` red, so it would NOT surface as a regression. Not a live failure today (SEC-AUTH-09's tests pass), but it re-arms the §2.11 stale-exemption class at the next discharge. **Do NOT hand-tighten** — that fixes today and re-creates the class; derive from the single source.
 **Depends on:** 28 (which discharged SEC-AUTH-09 and updated the allowlist but not the two `ci-parity.mjs` copies), 172 (which wired the shared oracle into `ci:status`, making the drift reachable from the post-push command too)
 **Blocks:** —
