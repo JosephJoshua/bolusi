@@ -20,11 +20,12 @@
 // So the cases below are, in order: the real workflow is covered; the audit CAN fail (four distinct
 // ways, each provoked); and the parser REFUSES a degraded parse rather than shrinking quietly. The
 // mutation cases operate on the REAL ci.yml text, so they cannot drift from it.
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { expect, test } from 'vitest';
+import { afterAll, expect, test } from 'vitest';
 
 // @ts-expect-error — plain .mjs script without type declarations (mirrors task-status.test.ts).
 import * as ciParity from '../../../scripts/ci-parity.mjs';
@@ -82,7 +83,7 @@ interface ExpectedEntry {
   ids: string[];
   owner: string;
   note: string;
-  assert(output: string): { ok: boolean; detail: string };
+  assert(output: string, allowlistPath?: string): { ok: boolean; detail: string };
 }
 
 const parseWorkflow = ciParity.parseWorkflow as (text: string) => Workflow;
@@ -101,6 +102,8 @@ const evaluateEventGate = ciParity.evaluateEventGate as (
 ) => boolean;
 const STEP_POLICY = ciParity.STEP_POLICY as PolicyEntry[];
 const EXPECTED = ciParity.EXPECTED as Record<string, ExpectedEntry>;
+const readOwedSecIds = ciParity.readOwedSecIds as (allowlistPath?: string) => string[];
+const SEC_ALLOWLIST_PATH = ciParity.SEC_ALLOWLIST_PATH as string;
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const WORKFLOW_PATH = resolve(REPO_ROOT, '.github/workflows/ci.yml');
@@ -321,20 +324,25 @@ test('no fixed-then-recurred defect is hard-coded as owned (chaos-05 / task 127 
 // ── 5. the owed SEC exemption asserts its scope BETWEEN steps and WITHIN the inventory step ──────
 //
 // FIXTURE PROVENANCE (T-15/T-16 — a fixture nobody has traced to a producer is a hypothesis).
-// `sweepOutput()` below is a VERBATIM transcription of a real `pnpm sec:sweep`: GitHub Actions run
-// 29949061877, job 89021942509 (`security-sweep`), 2026-07-22, log lines 203-244, with the runner's
-// `<job>\tUNKNOWN STEP\t<timestamp>` column stripped. Every other fixture in this block is that text
+// `sweepOutput()` below transcribes a real `pnpm sec:sweep`: GitHub Actions run 29949061877, job
+// 89021942509 (`security-sweep`), 2026-07-22, log lines 203-244, with the runner's
+// `<job>\tUNKNOWN STEP\t<timestamp>` column stripped. That original run named BOTH SEC-AUTH-09 and
+// SEC-AUTH-10 inline; SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28, removed from the allowlist), so
+// the CURRENT real red names SEC-AUTH-10 alone — the default `fails` below is updated to that live
+// reality. Naming 09 here again would be the drift task 184 fixes: the owed set is now DERIVED from
+// the allowlist's live keys, and 09 is no longer among them, so a 09 red is a REGRESSION (UNEXPECTED),
+// pinned by 'a resurgent DISCHARGED SEC id …' below. Every other fixture in this block is this text
 // with ONE stated mutation.
 //
 // This replaced a hand-written fixture whose failure line read `FAIL SEC-AUTH-09 is pending`. The
-// real producer emits ONE line, `FAIL the SEC pending allowlist is NOT empty … : SEC-AUTH-09 → …,
-// SEC-AUTH-10 → …`, carrying BOTH ids INLINE. The difference is not cosmetic: a scope parser
-// anchored as `^FAIL (SEC-…)` — the shape this task was filed proposing — matches ZERO lines against
-// the real output, and an empty failing-id set is a subset of the owed set, so the gate returns OWED
-// while checking nothing. The tests would have agreed with it, because they and the producer
-// disagreed. Hence: the fixture is the producer's own bytes, and the `test.each` row
-// 'a FAIL line names no SEC id at all' (with its siblings 'the inventory is red but printed no FAIL
-// line' and 'the inventory step block is missing entirely') pins the empty-set branch as LOUD.
+// real producer emits ONE line, `FAIL the SEC pending allowlist is NOT empty … : <id> → …`, carrying
+// the owed ids INLINE. The difference is not cosmetic: a scope parser anchored as `^FAIL (SEC-…)` —
+// the shape this task was filed proposing — matches ZERO lines against the real output, and an empty
+// failing-id set is a subset of the owed set, so the gate returns OWED while checking nothing. The
+// tests would have agreed with it, because they and the producer disagreed. Hence: the fixture is the
+// producer's own bytes, and the `test.each` row 'a FAIL line names no SEC id at all' (with its
+// siblings 'the inventory is red but printed no FAIL line' and 'the inventory step block is missing
+// entirely') pins the empty-set branch as LOUD.
 
 /** The real run's steps, in order, with the SEC inventory step's detail parameterised. */
 function sweepOutput(
@@ -347,7 +355,7 @@ function sweepOutput(
 ): string {
   const {
     fails = [
-      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md, SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
     ],
     secretsExit = 0,
     inventoryHeader = '── SEC inventory (security-guide §2.1.4 / §12) — EXIT=1',
@@ -385,14 +393,32 @@ function sweepOutput(
   ].join('\n');
 }
 
-test('the real, current sec:sweep red is classified OWED and names the ids it was owed for', () => {
+test('the real, current sec:sweep red is classified OWED and names the id it was owed for', () => {
   // POSITIVE CONTROL, and the more important half of this task: if the scope check turns today's
   // legitimate owed-red into an UNEXPECTED, `pnpm verify` cries wolf on every run and gets ignored.
+  // Post-discharge (SEC-AUTH-09 gone from the allowlist), the sole owed id is SEC-AUTH-10.
   const owed = expected('SEC_OWED_D21');
   const result = owed.assert(sweepOutput());
   expect(result.ok).toBe(true);
-  expect(result.detail).toContain('SEC-AUTH-09');
   expect(result.detail).toContain('SEC-AUTH-10');
+});
+
+test('a resurgent DISCHARGED SEC id (SEC-AUTH-09) is UNEXPECTED — the drift task 184 closes', () => {
+  // BEFORE 184 the owed set was the hand-copied literal ['SEC-AUTH-09','SEC-AUTH-10'], so a red
+  // naming the ALREADY-DISCHARGED SEC-AUTH-09 was absorbed as OWED (⊆ the stale literal) and exited
+  // 0 in both `pnpm verify` and `pnpm ci:status` — a regressed discharged id hiding behind the
+  // permanent SEC red. The owed set is now DERIVED from the allowlist's live keys (SEC-AUTH-10 only),
+  // so SEC-AUTH-09 is a stranger and its red surfaces.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(
+    sweepOutput({
+      fails: [
+        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md',
+      ],
+    }),
+  );
+  expect(result.ok).toBe(false);
+  expect(result.detail).toContain('SEC-AUTH-09');
 });
 
 test('a red for an id OUTSIDE the owed set is UNEXPECTED and the reader is told which id', () => {
@@ -403,7 +429,7 @@ test('a red for an id OUTSIDE the owed set is UNEXPECTED and the reader is told 
     sweepOutput({
       fails: [
         'FAIL SEC-META-01 has no PASSING test in any swept lane (titles seen: none)',
-        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md, SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
       ],
     }),
   );
@@ -504,4 +530,108 @@ test.each([
   const result = owed.assert(makeOutput());
   expect(result.ok).toBe(false);
   expect(result.detail).toContain(expectedDetail);
+});
+
+// ── 7. the owed SEC id set is DERIVED from the allowlist, and the read fails CLOSED (task 184) ────
+//
+// The owed set used to be hand-copied into two `ci-parity.mjs` literals and had already drifted from
+// `packages/test-support/src/sec-pending-allowlist.json` — the file `pnpm sec:sweep` actually reads —
+// the day SEC-AUTH-09 discharged: the literals still listed 09, so a resurgent 09 red was absorbed as
+// OWED. These pin the fix: ONE source (the allowlist's live keys), consumed by both `.ids` and
+// `assert()`, and a missing/malformed/non-object allowlist is LOUD, never a silently-empty owed set
+// that would treat "could not read the source" as "nothing owed".
+
+const owedTmpDir = mkdtempSync(join(tmpdir(), 'ci-parity-owed-184-'));
+afterAll(() => rmSync(owedTmpDir, { recursive: true, force: true }));
+
+/** Write a throwaway allowlist; objects are JSON-encoded, a raw string is written verbatim (malformed cases). */
+function tmpAllowlist(name: string, contents: unknown): string {
+  const path = join(owedTmpDir, name);
+  writeFileSync(path, typeof contents === 'string' ? contents : JSON.stringify(contents));
+  return path;
+}
+
+test('the owed SEC ids are DERIVED from the pending allowlist — .ids, readOwedSecIds, and the file agree', () => {
+  const liveKeys = Object.keys(
+    JSON.parse(readFileSync(SEC_ALLOWLIST_PATH, 'utf8')) as Record<string, unknown>,
+  ).filter((key) => !key.startsWith('$'));
+  // Both the getter and the function read the one source — they cannot disagree with the file.
+  expect(readOwedSecIds()).toEqual(liveKeys);
+  expect(expected('SEC_OWED_D21').ids).toEqual(liveKeys);
+  // The 184 invariant: SEC-AUTH-09 was discharged (removed from the allowlist) and is no longer owed;
+  // SEC-AUTH-10 still is. A hand-copy that re-listed 09 would fail here.
+  expect(readOwedSecIds()).toContain('SEC-AUTH-10');
+  expect(readOwedSecIds()).not.toContain('SEC-AUTH-09');
+});
+
+test('the owed set is derived, not a hardcoded literal — a key added to the allowlist appears in it', () => {
+  // FALSIFICATION ANCHOR for the whole task: if readOwedSecIds ever returns a fixed list again, an id
+  // present ONLY in an injected allowlist would not appear, and this goes red.
+  const path = tmpAllowlist('added.json', {
+    $comment: 'doc key, filtered',
+    'SEC-AUTH-10': 'ai-docs/tasks/27-device-gates.md',
+    'SEC-XYZ-42': 'ai-docs/tasks/xyz.md',
+  });
+  expect(readOwedSecIds(path)).toEqual(['SEC-AUTH-10', 'SEC-XYZ-42']);
+});
+
+test('assert() reads the owed set from the allowlist it is given, not a literal', () => {
+  const owed = expected('SEC_OWED_D21');
+  const red = sweepOutput({
+    fails: [
+      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-XYZ-42 → ai-docs/tasks/xyz.md',
+    ],
+  });
+  // Against an allowlist that DOES list SEC-XYZ-42, its red is OWED …
+  const injected = tmpAllowlist('inj.json', {
+    $comment: 'c',
+    'SEC-XYZ-42': 'ai-docs/tasks/xyz.md',
+  });
+  expect(owed.assert(red, injected).ok).toBe(true);
+  // … and against the REAL allowlist (no SEC-XYZ-42) the SAME red is UNEXPECTED — proof assert read
+  // the file, not an in-code list.
+  const real = owed.assert(red);
+  expect(real.ok).toBe(false);
+  expect(real.detail).toContain('SEC-XYZ-42');
+});
+
+test('a structurally valid but EMPTY allowlist yields [] and makes every security-sweep red UNEXPECTED', () => {
+  // The legitimate "everything discharged" state: readOwedSecIds is [] with NO throw, and an empty
+  // owed set makes every red a stranger. sec:sweep reads the SAME file with the SAME
+  // `!key.startsWith('$')` filter, so when this is empty its inventory step goes green — the oracle
+  // and the gate agree nothing is owed (they never disagree by construction).
+  const owed = expected('SEC_OWED_D21');
+  const emptyPath = tmpAllowlist('empty.json', { $comment: 'all discharged' });
+  expect(readOwedSecIds(emptyPath)).toEqual([]);
+  const red = sweepOutput({
+    fails: [
+      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+    ],
+  });
+  expect(owed.assert(red, emptyPath).ok).toBe(false);
+});
+
+test.each([
+  ['a MISSING allowlist', (): string => join(owedTmpDir, 'nope.json'), /could not be read/],
+  [
+    'a MALFORMED allowlist',
+    (): string => tmpAllowlist('bad.json', '{ not json '),
+    /not valid JSON/,
+  ],
+  [
+    'a NON-OBJECT allowlist (array)',
+    (): string => tmpAllowlist('arr.json', ['SEC-AUTH-10']),
+    /must be a JSON object/,
+  ],
+])(
+  'fail-closed: %s THROWS from readOwedSecIds, never a silently-empty owed set',
+  (_name, makePath, pattern) => {
+    expect(() => readOwedSecIds(makePath())).toThrow(pattern);
+  },
+);
+
+test('assert() itself fails closed on a malformed allowlist — it throws rather than classifying a red', () => {
+  const owed = expected('SEC_OWED_D21');
+  const badPath = tmpAllowlist('bad-assert.json', '{ not json ');
+  expect(() => owed.assert(sweepOutput(), badPath)).toThrow(/not valid JSON/);
 });

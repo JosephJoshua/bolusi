@@ -53,6 +53,61 @@ import { resolve } from 'node:path';
 export const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 export const WORKFLOW_PATH = resolve(REPO_ROOT, '.github/workflows/ci.yml');
 
+// The SINGLE source of the owed-SEC id set (task 184). `pnpm sec:sweep` reads this file's live keys
+// to decide which ids may still be owed; `scripts/sec-sweep.mjs` filters exactly `!key.startsWith('$')`.
+// The owed set below DERIVES from the same file, so the release gate and its CI classifier cannot
+// drift: the day an id is discharged (removed from this allowlist), verify/ci:status follow with no
+// second edit. Before 184 the set was hand-copied in TWO literals here and had already drifted from
+// the allowlist the day SEC-AUTH-09 discharged — a resurgent discharged id was absorbed as OWED.
+export const SEC_ALLOWLIST_PATH = resolve(
+  REPO_ROOT,
+  'packages/test-support/src/sec-pending-allowlist.json',
+);
+
+/**
+ * The owed SEC ids, DERIVED from the SEC pending allowlist's live keys — never restated as a literal.
+ * This is the one place the set is defined; both `EXPECTED.SEC_OWED_D21.ids` and its `assert()`
+ * consume it, so removing an id from the allowlist propagates to `pnpm verify` and `pnpm ci:status`
+ * automatically.
+ *
+ * FAIL-CLOSED (task 184, §2.11). "Could not read the source" is NOT "nothing owed": a missing,
+ * unreadable, malformed, or non-object allowlist THROWS rather than yielding a silently-empty owed
+ * set — an empty set would classify every security-sweep red as UNEXPECTED (masking the real state)
+ * or, worse, let a stale exemption slip. A *structurally valid* allowlist with zero live keys is the
+ * legitimate "everything discharged" case and returns `[]` (sec:sweep goes green then too — the two
+ * agree). The `$`-prefixed doc key (`$comment`) is metadata, filtered exactly as sec-sweep.mjs does.
+ *
+ * @param {string} [allowlistPath] override only for tests that simulate a different allowlist state.
+ * @returns {string[]} the live SEC ids, in file order.
+ */
+export function readOwedSecIds(allowlistPath = SEC_ALLOWLIST_PATH) {
+  let raw;
+  try {
+    raw = readFileSync(allowlistPath, 'utf8');
+  } catch (err) {
+    throw new Error(
+      `owed-SEC source of truth ${allowlistPath} could not be read (${err instanceof Error ? err.message : String(err)}) — ` +
+        `"could not read the source" is NOT "nothing owed"; refusing to derive an empty owed set from an unreadable allowlist`,
+    );
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `owed-SEC source of truth ${allowlistPath} is not valid JSON (${err instanceof Error ? err.message : String(err)}) — ` +
+        `refusing to treat a malformed allowlist as an empty owed set`,
+    );
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(
+      `owed-SEC source of truth ${allowlistPath} must be a JSON object mapping SEC id -> owning task file, got ` +
+        `${Array.isArray(parsed) ? 'an array' : parsed === null ? 'null' : typeof parsed}`,
+    );
+  }
+  return Object.keys(parsed).filter((key) => !key.startsWith('$'));
+}
+
 /** Structural floors — a parse below these lost its place (T-14: assert the denominator). */
 const MIN_JOBS = 10;
 const MIN_STEPS = 40;
@@ -899,10 +954,16 @@ function sweepStepSection(body, stepName) {
 export const EXPECTED = {
   SEC_OWED_D21: {
     kind: 'owed',
-    ids: ['SEC-AUTH-09', 'SEC-AUTH-10'],
+    // DERIVED from the SEC pending allowlist's live keys (task 184) — the same file pnpm sec:sweep
+    // reads — so the owed set cannot drift from the gate. Not a literal: a getter over the single
+    // source, consumed identically by `assert()` below. The next discharge (an id removed from the
+    // allowlist) propagates here with no edit.
+    get ids() {
+      return readOwedSecIds();
+    },
     owner:
       'tasks 27 / 27a / 28, per ai-docs/decisions/2026-07-22-assume-device-performance-passes.md (D21)',
-    note: 'SEC-AUTH-09 leg 1 needs real SQLCipher (emulator lane only); SEC-AUTH-10 needs a physical-device benchmark artifact. Neither can be produced in Node. The pending allowlist is non-empty by design.',
+    note: 'The owed SEC ids are DERIVED from packages/test-support/src/sec-pending-allowlist.json (its live keys) — the same source pnpm sec:sweep reads — so this set cannot drift from the gate (task 184). Today it is SEC-AUTH-10 alone: it needs a physical-device benchmark artifact per D21, which Node/CI cannot produce, so the allowlist is non-empty by design. SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28) — its at-rest leg is proven on device and re-checked per push by the git-provenance/staleness guard (packages/harness/src/security/device-gate-provenance.ts), NOT by SQLCipher (removed in D22) — so a security-sweep red naming SEC-AUTH-09 is now a REGRESSION (UNEXPECTED), not owed.',
     /**
      * The sweep prints an `EXIT=<n>  <step>` roll-up. The owed reds must be confined to the SEC
      * INVENTORY step: any OTHER failing sweep step (secrets scan, dependency audit, a test lane, the
@@ -935,9 +996,16 @@ export const EXPECTED = {
      *     and the `ids.length === 0` branch fires: verified by mutation, it goes LOUDLY RED, not
      *     green. The empty-set branch is the load-bearing half; the unanchored pattern only keeps
      *     today's legitimate red from tripping it.
+     *
+     * The owed id set is DERIVED (task 184): `owedIds` reads the SEC pending allowlist's live keys via
+     * the same `readOwedSecIds()` that backs `.ids` — no restated literal, so a discharged id (removed
+     * from the allowlist) is no longer a subset member and its resurgent red classifies UNEXPECTED. A
+     * missing/malformed allowlist THROWS here (fail-closed) rather than yielding an empty owed set that
+     * would silently absorb — or wrongly reject — every red.
      * @param {string} output
+     * @param {string} [allowlistPath] override only for tests simulating a different allowlist state.
      */
-    assert(output) {
+    assert(output, allowlistPath = SEC_ALLOWLIST_PATH) {
       const marker = '═══ sec:sweep summary ═══';
       const summaryAt = output.lastIndexOf(marker);
       if (summaryAt === -1) {
@@ -968,7 +1036,10 @@ export const EXPECTED = {
       }
 
       // ── WITHIN the inventory step: which ids is it actually red for? ───────────────────────────
-      const owedIds = new Set(['SEC-AUTH-09', 'SEC-AUTH-10']);
+      // DERIVED, not hand-copied (task 184): the owed set is the SEC pending allowlist's live keys,
+      // the exact source pnpm sec:sweep reads. A discharged id is absent here the moment it leaves the
+      // allowlist, so its resurgent red is a stranger (UNEXPECTED). Fail-closed: a bad allowlist throws.
+      const owedIds = new Set(readOwedSecIds(allowlistPath));
       const seen = new Set();
       for (const name of allowed) {
         const section = sweepStepSection(body, name);
@@ -1006,8 +1077,7 @@ export const EXPECTED = {
       if (seen.size === 0) {
         return {
           ok: false,
-          detail:
-            'the SEC inventory is red but its FAIL lines name neither SEC-AUTH-09 nor SEC-AUTH-10 — a different id is owed than the one recorded here',
+          detail: `the SEC inventory is red but its FAIL lines name none of the owed ids (${[...owedIds].join(', ')}) — a different id is owed than the one derived from the allowlist`,
         };
       }
       return {
