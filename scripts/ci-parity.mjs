@@ -46,9 +46,22 @@
 // `uses:`, rejects an `if:` expression it cannot evaluate, and enforces floors. A parse that lost
 // its place throws; it never returns a small number quietly.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+
+// The owed-red exemption scopes by FAILURE MODE (task 166), and the mode tokens live once, in the
+// producer. Importing them here (rather than restating a string literal) is the §2.8 "one source"
+// rule. What ACTUALLY catches a producer-side rename — this file is a plain .mjs that no tsconfig
+// type-checks, so `SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY` would just read `undefined` after a
+// rename, NOT fail to compile — is two runtime guards, not the compiler: (1) the owed-red assert()
+// compares each FAIL line's code against this constant, so a renamed-away constant is `undefined`,
+// never equals the real red's code, and the legitimate owed red classifies UNEXPECTED (ok:false) —
+// verify:full goes red LOUD; (2) ci-parity.test.ts pins the literal '[PENDING_ALLOWLIST_NON_EMPTY]'
+// in its fixtures, so a producer rename reds the unit suite. sec-inventory.mjs imports only node:fs
+// and runs its CLI solely under an `import.meta.url` guard, so importing it for the constant has no
+// side effect.
+import { SEC_FAIL_CODES } from './sec-inventory.mjs';
 
 export const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 export const WORKFLOW_PATH = resolve(REPO_ROOT, '.github/workflows/ci.yml');
@@ -111,6 +124,11 @@ export function readOwedSecIds(allowlistPath = SEC_ALLOWLIST_PATH) {
 /** Structural floors — a parse below these lost its place (T-14: assert the denominator). */
 const MIN_JOBS = 10;
 const MIN_STEPS = 40;
+// The dispatch-only lanes (android-emulator + ios-simulator) hold 21 steps today. A bucket that
+// audits far fewer has lost its denominator — every "declared step exists" check would pass vacuously
+// over near-nothing (task 163 / T-14). Kept below the real count so a legitimate step removal is not a
+// false red, but high enough that a collapsed parse is.
+const MIN_DISPATCH_STEPS = 18;
 
 // ── YAML: the narrow reader ──────────────────────────────────────────────────────────────────────
 
@@ -883,6 +901,166 @@ export const STEP_POLICY = [
   },
 ];
 
+// ── The dispatch-only lanes (task 163) ─────────────────────────────────────────────────────────────
+//
+// `android-emulator` and `ios-simulator` are gated behind `schedule`/`workflow_dispatch`, so a push
+// never starts them and the push audit above never sees them. Excluding them ENTIRELY — the behaviour
+// before this task — meant nothing machine-checked their contents: a step pointing at a deleted script
+// survived (impl-162), and a whole NEW undeclared `- run: …` step passed the drift gate 16/16, EXIT=0
+// (the 162 reviewer). That is CLAUDE.md §2.11's "green because the lane is invisible to the gate".
+//
+// So these lanes get their OWN declared, audited bucket. It does NOT boot an emulator: it proves every
+// step is DECLARED (an undeclared step reds UNCOVERED), every declaration still maps to a real step (a
+// dangling one reds ORPHANED), a changed step forces a re-read (STALE — these lanes get no other fast
+// feedback), and any repo file a step invokes actually EXISTS (a typo'd `bash scripts/x.sh` reds
+// without a runner). `shellcheck`/`actionlint` are NOT installed on the dev host and are NOT run here;
+// that deeper lint is a CI-lane follow-up, called out honestly rather than claimed.
+//
+/**
+ * Why a dispatch-only step cannot run on the dev host or in push-CI. Unlike SKIP_REASONS (which are
+ * per-step "this provisions a runner"), the defining reason here is the JOB: the whole lane needs a
+ * native runner neither the dev host nor a push has.
+ */
+export const DISPATCH_REASONS = {
+  EMULATOR_LANE:
+    "runs only in the scheduled/dispatch `android-emulator` job — a KVM-accelerated Android AVD plus a native release build that neither the Linux dev host nor push-CI provides. The lane's Node-side legs (SEED-200K, the parser, flag-gating) DO run every PR via the `unit` job; see ci.yml's `on:` note.",
+  SIMULATOR_LANE:
+    'runs only in the scheduled/dispatch `ios-simulator` job — a macOS runner with Xcode and the iOS Simulator, which no Linux dev host or push-CI runner can build or boot. macOS minutes bill ~10× Linux, so it is on-demand (D18 §5).',
+};
+
+/**
+ * Repo files a workflow step invokes as `bash <path>` / `node <path>` / `sh <path>` (including inside
+ * an action's `script:` value). Runtime-generated paths (a prebuilt `./gradlew`, a `| bash` installer
+ * reading stdin) are deliberately NOT matched — only a checked-in file the step names directly, whose
+ * existence can be verified statically. Task 163's mutation (1): a step pointing at a nonexistent file.
+ * @param {string} body
+ * @returns {string[]}
+ */
+export function repoFileRefs(body) {
+  const refs = [];
+  for (const match of body.matchAll(/(?:^|\s)(?:bash|sh|node)\s+([^\s'"|;&]+)/g)) {
+    const ref = match[1];
+    if (ref.startsWith('scripts/') || /\.(?:sh|mjs|cjs|js|ts)$/.test(ref)) refs.push(ref);
+  }
+  return [...new Set(refs)];
+}
+
+/**
+ * ONE ENTRY PER DISPATCH-ONLY STEP (fingerprints from `fingerprint(step.body)`). `auditParity` proves
+ * this is a bijection with the two lanes' steps — an undeclared step or a dangling entry reds. `why`
+ * names a DISPATCH_REASONS category; `body` forces a re-read when the step's text changes.
+ */
+export const DISPATCH_STEP_POLICY = [
+  // ── android-emulator (11 steps) ────────────────────────────────────────────────────────────────
+  {
+    job: 'android-emulator',
+    key: 'uses actions/checkout@v4',
+    why: 'EMULATOR_LANE',
+    body: '6ed9be03e935',
+  },
+  { job: 'android-emulator', key: 'corepack enable', why: 'EMULATOR_LANE', body: '21fe765812d3' },
+  {
+    job: 'android-emulator',
+    key: 'uses actions/setup-node@v4',
+    why: 'EMULATOR_LANE',
+    body: '5fdd943008f1',
+  },
+  {
+    job: 'android-emulator',
+    key: 'uses actions/setup-java@v4',
+    why: 'EMULATOR_LANE',
+    body: 'ff8be2fc1f84',
+  },
+  {
+    job: 'android-emulator',
+    key: 'pnpm install --frozen-lockfile',
+    why: 'EMULATOR_LANE',
+    body: '96929d7007ed',
+  },
+  { job: 'android-emulator', key: 'enable KVM', why: 'EMULATOR_LANE', body: 'adc2ca0a90d8' },
+  {
+    job: 'android-emulator',
+    key: 'build workspace packages (Metro resolves @bolusi/* through dist/)',
+    why: 'EMULATOR_LANE',
+    body: '5d28dbdf7724',
+  },
+  {
+    job: 'android-emulator',
+    key: 'prebuild + assemble release APK (EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1)',
+    why: 'EMULATOR_LANE',
+    body: 'aecbf0e4ec34',
+  },
+  {
+    job: 'android-emulator',
+    key: 'install Maestro CLI (task 117)',
+    why: 'EMULATOR_LANE',
+    body: '47384d8fa2a0',
+  },
+  {
+    job: 'android-emulator',
+    key: 'harness correctness gates + Maestro native E2E on the emulator (every figure EMULATOR)',
+    why: 'EMULATOR_LANE',
+    body: '44d0f00a83d7',
+  },
+  {
+    job: 'android-emulator',
+    key: 'upload Maestro artifacts (task 117)',
+    why: 'EMULATOR_LANE',
+    body: '9bc0c63c9417',
+  },
+  // ── ios-simulator (10 steps) ───────────────────────────────────────────────────────────────────
+  {
+    job: 'ios-simulator',
+    key: 'uses actions/checkout@v4',
+    why: 'SIMULATOR_LANE',
+    body: '6ed9be03e935',
+  },
+  { job: 'ios-simulator', key: 'corepack enable', why: 'SIMULATOR_LANE', body: '21fe765812d3' },
+  {
+    job: 'ios-simulator',
+    key: 'uses actions/setup-node@v4',
+    why: 'SIMULATOR_LANE',
+    body: '5fdd943008f1',
+  },
+  {
+    job: 'ios-simulator',
+    key: 'pnpm install --frozen-lockfile',
+    why: 'SIMULATOR_LANE',
+    body: '96929d7007ed',
+  },
+  {
+    job: 'ios-simulator',
+    key: 'build workspace packages (Metro resolves @bolusi/* through dist/)',
+    why: 'SIMULATOR_LANE',
+    body: '5d28dbdf7724',
+  },
+  {
+    job: 'ios-simulator',
+    key: 'expo prebuild (iOS native project)',
+    why: 'SIMULATOR_LANE',
+    body: 'e4f9a63e03d5',
+  },
+  { job: 'ios-simulator', key: 'pod install', why: 'SIMULATOR_LANE', body: 'a81be350059f' },
+  {
+    job: 'ios-simulator',
+    key: 'xcodebuild — unsigned iOS Simulator build (Release)',
+    why: 'SIMULATOR_LANE',
+    body: '98bbb2c35603',
+  },
+  {
+    job: 'ios-simulator',
+    key: 'verify built Info.plist matches tasks 83/87',
+    why: 'SIMULATOR_LANE',
+    body: 'b96d7eb1864f',
+  },
+  {
+    job: 'ios-simulator',
+    key: 'boot Simulator, install + launch the app',
+    why: 'SIMULATOR_LANE',
+    body: 'd2af4120ad3e',
+  },
+];
+
 // ── Expected reds: OWED (a decision, by design) vs everything else (UNEXPECTED) ───────────────────
 
 /**
@@ -1057,11 +1235,31 @@ export const EXPECTED = {
           };
         }
         for (const line of failLines) {
+          // task 166: scope by FAILURE MODE, not only by which id the line names. Every inventory FAIL
+          // begins with a machine-readable `[CODE]` (scripts/sec-inventory.mjs SEC_FAIL_CODES). Only the
+          // PENDING_ALLOWLIST_NON_EMPTY mode is a standing owed red; a DIFFERENT mode that happens to
+          // name an owed id — e.g. an id that is BOTH allowlisted AND titled — is a real bookkeeping
+          // regression and must surface. A line with no code (a pre-166 or hand-rolled sweep) is
+          // UNEXPECTED, never a silent pass: §2.11's "matched no code is LOUD".
+          const codeMatch = line.match(/^FAIL \[([A-Z0-9_]+)\]/);
+          if (codeMatch === null) {
+            return {
+              ok: false,
+              detail: `"${name}" has a FAIL line with no machine-readable [CODE] — an unlabelled sweep output cannot be attributed to the owed set (${[...owedIds].join('/')}); treating it as owed would absorb an unknown failure. Offending line: ${line}`,
+            };
+          }
+          const code = codeMatch[1];
+          if (code !== SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY) {
+            return {
+              ok: false,
+              detail: `"${name}" is red in mode [${code}], which is NOT the owed reason (only [${SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY}] is a standing owed red) — a different SEC-inventory failure mode is a regression even when it names only owed ids. Offending line: ${line}`,
+            };
+          }
           const ids = secIdsIn(line);
           if (ids.length === 0) {
             return {
               ok: false,
-              detail: `"${name}" has a FAIL line naming NO SEC id, so it cannot be attributed to the owed ${[...owedIds].join('/')}: ${line}`,
+              detail: `"${name}" has a [${code}] FAIL line naming NO SEC id, so it cannot be attributed to the owed ${[...owedIds].join('/')}: ${line}`,
             };
           }
           const strangers = [...new Set(ids)].filter((id) => !owedIds.has(id));
@@ -1171,19 +1369,86 @@ export function auditParity(workflow, policy = STEP_POLICY) {
     }
   }
 
+  // ── (4) the dispatch-only lanes (task 163): a DECLARED, audited bucket, not an absent one ───────
+  // These never run on a push, so the loops above skip them. Audit them against DISPATCH_STEP_POLICY
+  // the same way — both directions, plus a static check that any repo file a step invokes exists.
+  const dispatchJobs = dispatchOnlyJobs(workflow);
+  /** @type {Map<string, {job: string, step: any}>} */
+  const dispatchCiSteps = new Map();
+  for (const job of dispatchJobs) {
+    for (const step of job.steps) {
+      dispatchCiSteps.set(`${job.id}\x00${stepKey(step)}`, { job: job.id, step });
+    }
+  }
+  /** @type {Map<string, typeof DISPATCH_STEP_POLICY[number]>} */
+  const dispatchById = new Map();
+  for (const entry of DISPATCH_STEP_POLICY) {
+    const id = `${entry.job}\x00${entry.key}`;
+    if (dispatchById.has(id)) {
+      failures.push(`DISPATCH_STEP_POLICY has two entries for ${entry.job} / ${entry.key}`);
+    }
+    dispatchById.set(id, entry);
+    if (DISPATCH_REASONS[entry.why] === undefined) {
+      failures.push(
+        `DISPATCH_STEP_POLICY ${entry.job} / ${entry.key}: reason ${JSON.stringify(entry.why)} is not a DISPATCH_REASONS category`,
+      );
+    }
+  }
+  for (const [id, { job, step }] of dispatchCiSteps) {
+    if (dispatchById.has(id)) continue;
+    failures.push(
+      `UNCOVERED (dispatch-only): ci.yml job "${job}" runs a step "${stepKey(step)}" that DISPATCH_STEP_POLICY does not declare. ` +
+        `A step in a dispatch/schedule lane is INVISIBLE to every push gate, so it must be declared here or it is checked by nothing (task 163). ` +
+        `Add {job:'${job}', key:${JSON.stringify(stepKey(step))}, why:'EMULATOR_LANE'|'SIMULATOR_LANE', body:'${fingerprint(step.body)}'}.`,
+    );
+  }
+  for (const [id, entry] of dispatchById) {
+    if (dispatchCiSteps.has(id)) continue;
+    failures.push(
+      `ORPHANED (dispatch-only): DISPATCH_STEP_POLICY declares "${entry.job} / ${entry.key}", which is no longer a step in that dispatch-only job (renamed, moved, or deleted). Delete the entry or fix the key.`,
+    );
+  }
+  for (const [id, entry] of dispatchById) {
+    const found = dispatchCiSteps.get(id);
+    if (found === undefined) continue;
+    const current = fingerprint(found.step.body);
+    if (entry.body !== current) {
+      failures.push(
+        `STALE (dispatch-only): "${entry.job} / ${entry.key}" changed body (${entry.body} -> ${current}). These lanes get no fast feedback — re-read the step, confirm it is still correct, then update body to '${current}'.`,
+      );
+    }
+  }
+  for (const [, { job, step }] of dispatchCiSteps) {
+    for (const ref of repoFileRefs(step.body)) {
+      if (!existsSync(resolve(REPO_ROOT, ref))) {
+        failures.push(
+          `MISSING SCRIPT (dispatch-only): ci.yml job "${job}" step "${stepKey(step)}" invokes "${ref}", which does not exist in the repo. ` +
+            `A dispatch lane never runs locally, so a typo'd path is otherwise found only by a human reading a scheduled job log (task 163, mutation 1).`,
+        );
+      }
+    }
+  }
+  if (dispatchCiSteps.size < MIN_DISPATCH_STEPS) {
+    failures.push(
+      `ci-parity: only ${dispatchCiSteps.size} dispatch-only steps parsed (floor ${MIN_DISPATCH_STEPS}) — the dispatch audit's denominator collapsed; a near-empty bucket passes every mutation above while checking almost nothing (task 163, T-14).`,
+    );
+  }
+
   const runEntries = policy.filter((entry) => entry.mode === 'run');
   return {
     ok: failures.length === 0,
     failures,
     checked: {
       pushJobs: jobs.map((job) => job.id),
-      dispatchOnlyJobs: dispatchOnlyJobs(workflow).map((job) => job.id),
+      dispatchOnlyJobs: dispatchJobs.map((job) => job.id),
       ciSteps: ciSteps.size,
       policyEntries: policy.length,
       run: runEntries.length,
       fast: runEntries.filter((entry) => entry.tier === 'fast').length,
       full: runEntries.filter((entry) => entry.tier === 'full').length,
       skipped: policy.filter((entry) => entry.mode === 'skip').length,
+      dispatchSteps: dispatchCiSteps.size,
+      dispatchPolicyEntries: DISPATCH_STEP_POLICY.length,
     },
   };
 }

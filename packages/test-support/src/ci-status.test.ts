@@ -73,7 +73,7 @@ function ghLog(rawLines: string[]): string {
 function rawSweep(options: { fails?: string[]; secretsExit?: number } = {}): string[] {
   const {
     fails = [
-      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
     ],
     secretsExit = 0,
   } = options;
@@ -142,8 +142,8 @@ test('a NEW SEC id inside the inventory step is NOT owed and names the intruding
     fetchOk(
       rawSweep({
         fails: [
-          'FAIL SEC-META-01 has no PASSING test in any swept lane (titles seen: none)',
-          'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+          'FAIL [NO_PASSING_TEST] SEC-META-01 has no PASSING test in any swept lane (titles seen: none)',
+          'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
         ],
       }),
     ),

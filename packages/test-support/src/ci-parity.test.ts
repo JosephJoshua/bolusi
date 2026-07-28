@@ -76,6 +76,8 @@ interface AuditResult {
     fast: number;
     full: number;
     skipped: number;
+    dispatchSteps: number;
+    dispatchPolicyEntries: number;
   };
 }
 interface ExpectedEntry {
@@ -104,6 +106,8 @@ const STEP_POLICY = ciParity.STEP_POLICY as PolicyEntry[];
 const EXPECTED = ciParity.EXPECTED as Record<string, ExpectedEntry>;
 const readOwedSecIds = ciParity.readOwedSecIds as (allowlistPath?: string) => string[];
 const SEC_ALLOWLIST_PATH = ciParity.SEC_ALLOWLIST_PATH as string;
+const DISPATCH_STEP_POLICY = ciParity.DISPATCH_STEP_POLICY as { job: string; key: string }[];
+const repoFileRefs = ciParity.repoFileRefs as (body: string) => string[];
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const WORKFLOW_PATH = resolve(REPO_ROOT, '.github/workflows/ci.yml');
@@ -270,6 +274,85 @@ test('the native lanes are classified dispatch-only and are NOT in any local pla
   }
 });
 
+// ── 4b. the dispatch-only lanes are a DECLARED, AUDITED bucket, not an absent one (task 163) ──────
+//
+// Before this task the two native lanes were excluded from the audit entirely, so any edit inside
+// them was invisible: impl-162 pointed a step at a deleted script and the 162 reviewer added a whole
+// new `- run:` step, and the drift gate stayed 16/16, EXIT=0. The mutations below are those exact two,
+// plus the inverse (an orphaned declaration) and the denominator floor (T-14).
+
+test('the dispatch bucket audits a non-zero, on-disk-matching number of steps (denominator floor)', () => {
+  // A bucket that silently audits ZERO steps passes every mutation below while checking nothing.
+  const result = audit();
+  expect(result.ok).toBe(true);
+  const onDisk = dispatchOnlyJobs(parseWorkflow(workflowText)).reduce(
+    (total, job) => total + job.steps.length,
+    0,
+  );
+  expect(result.checked.dispatchSteps).toBe(onDisk);
+  expect(result.checked.dispatchSteps).toBe(DISPATCH_STEP_POLICY.length);
+  expect(result.checked.dispatchSteps).toBeGreaterThanOrEqual(18);
+});
+
+test('a NEW undeclared step in a dispatch-only lane fails the audit (UNCOVERED dispatch)', () => {
+  // THE acceptance mutation (162 reviewer): a brand-new step nothing declares. Under the old blanket
+  // exclusion this passed 16/16.
+  const mutated = workflowText.replace(
+    '      - name: enable KVM\n',
+    '      - run: pnpm a-brand-new-uncovered-gate\n      - name: enable KVM\n',
+  );
+  expect(mutated).not.toBe(workflowText);
+  const result = audit(mutated);
+  expect(result.ok).toBe(false);
+  expect(result.failures.join('\n')).toContain('UNCOVERED (dispatch-only)');
+  expect(result.failures.join('\n')).toContain('pnpm a-brand-new-uncovered-gate');
+});
+
+test('a dispatch step pointing at a nonexistent repo file fails (MISSING SCRIPT)', () => {
+  // impl-162's mutation (1): the harness step's `script: bash scripts/emulator-gates.sh` → a file that
+  // does not exist. No emulator needed to catch it.
+  const mutated = workflowText.replace(
+    'bash scripts/emulator-gates.sh',
+    'bash scripts/THIS-DOES-NOT-EXIST.sh',
+  );
+  expect(mutated).not.toBe(workflowText);
+  const result = audit(mutated);
+  expect(result.ok).toBe(false);
+  expect(result.failures.join('\n')).toContain('MISSING SCRIPT (dispatch-only)');
+  expect(result.failures.join('\n')).toContain('scripts/THIS-DOES-NOT-EXIST.sh');
+});
+
+test('renaming a declared dispatch step orphans its policy entry (ORPHANED dispatch)', () => {
+  // The inverse: a bucket that only catches additions is half a gate. A declaration whose step is gone
+  // must red, or a stale entry silently "covers" nothing.
+  const mutated = workflowText.replace(
+    '      - name: enable KVM\n',
+    '      - name: enable KVM (renamed)\n',
+  );
+  expect(mutated).not.toBe(workflowText);
+  const result = audit(mutated);
+  expect(result.ok).toBe(false);
+  expect(result.failures.join('\n')).toContain('ORPHANED (dispatch-only)');
+  expect(result.failures.join('\n')).toContain('enable KVM');
+});
+
+test('the static repo-file check has a real, existing target (T-14: not vacuous)', () => {
+  // MISSING SCRIPT only means something if repoFileRefs actually FINDS a checked-in script to check.
+  // Prove it extracts scripts/emulator-gates.sh from the real harness step AND that every ref it finds
+  // across both lanes exists — and that it does NOT match the runtime-generated ./gradlew or the
+  // `| bash` installer (those are not checked-in files).
+  const workflow = parseWorkflow(workflowText);
+  const refs = new Set<string>();
+  for (const job of dispatchOnlyJobs(workflow)) {
+    for (const step of job.steps) for (const ref of repoFileRefs(step.body)) refs.add(ref);
+  }
+  expect(refs.has('scripts/emulator-gates.sh')).toBe(true);
+  expect([...refs].some((r) => r.includes('gradlew'))).toBe(false);
+  for (const ref of refs) {
+    expect(readFileSync(resolve(REPO_ROOT, ref), 'utf8').length).toBeGreaterThan(0);
+  }
+});
+
 test('the fast tier is a strict subset of the full tier, and the full tier is every run entry', () => {
   const workflow = parseWorkflow(workflowText);
   const fast = executionPlan(workflow, 'fast');
@@ -321,28 +404,54 @@ test('no fixed-then-recurred defect is hard-coded as owned (chaos-05 / task 127 
   expect(EXPECTED.CHAOS_05_TASK_127).toBeUndefined();
 });
 
+test("the security-sweep register's OWED line equals the derived owed set (task 164)", () => {
+  // 164: the human-readable "why is security-sweep red" register in ci.yml drifted TWICE — it listed
+  // reasons a real regression could hide behind (a SEC-TENANT-04 leg that PASSES; a §12 SEC-DEV-08
+  // "omission" the roll-up no longer has). The register now names its owed ids on ONE machine-checked
+  // line, so the human list and the release gate's own source cannot silently disagree (the §2.8/§2.11
+  // "one source" answer to prose drift). Extract that line and assert it equals the allowlist's live
+  // keys — the exact set scripts/ci-parity.mjs derives EXPECTED.SEC_OWED_D21 from.
+  const match = workflowText.match(/^\s*#\s+OWED \(do-not-hand-edit[^)]*\):\s*(.+)$/m);
+  if (match === null) {
+    throw new Error(
+      'the security-sweep header lost its machine-checked "OWED (do-not-hand-edit …): <ids>" line — ' +
+        'without it the register can drift from the allowlist again (task 164)',
+    );
+  }
+  const named = [...new Set((match[1] ?? '').match(/SEC-[A-Z]+-\d+/g) ?? [])].sort();
+  const owed = [...readOwedSecIds(SEC_ALLOWLIST_PATH)].sort();
+  // T-14 denominator floor: a blank OWED line naming zero ids would "equal" an empty owed set
+  // vacuously. While any id is owed the line must name it; when the allowlist empties the sweep goes
+  // green and this whole register is retired, so a non-empty OWED line is correct for its lifetime.
+  expect(named.length).toBeGreaterThan(0);
+  expect(named).toEqual(owed);
+});
+
 // ── 5. the owed SEC exemption asserts its scope BETWEEN steps and WITHIN the inventory step ──────
 //
 // FIXTURE PROVENANCE (T-15/T-16 — a fixture nobody has traced to a producer is a hypothesis).
-// `sweepOutput()` below transcribes a real `pnpm sec:sweep`: GitHub Actions run 29949061877, job
-// 89021942509 (`security-sweep`), 2026-07-22, log lines 203-244, with the runner's
-// `<job>\tUNKNOWN STEP\t<timestamp>` column stripped. That original run named BOTH SEC-AUTH-09 and
-// SEC-AUTH-10 inline; SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28, removed from the allowlist), so
-// the CURRENT real red names SEC-AUTH-10 alone — the default `fails` below is updated to that live
-// reality. Naming 09 here again would be the drift task 184 fixes: the owed set is now DERIVED from
-// the allowlist's live keys, and 09 is no longer among them, so a 09 red is a REGRESSION (UNEXPECTED),
-// pinned by 'a resurgent DISCHARGED SEC id …' below. Every other fixture in this block is this text
-// with ONE stated mutation.
+// `sweepOutput()` below transcribes a real `pnpm sec:sweep`: GitHub Actions run 30374276611, job
+// 90325923030 (`security-sweep`), 2026-07-28, headSha 8b1cf1f (main), with the runner's
+// `<job>\tSTEP\t<timestamp>` column stripped. That run's only failing step is `SEC inventory`, whose
+// sole FAIL line names SEC-AUTH-10 alone (SEC-AUTH-09 was DISCHARGED 2026-07-25 by task 28, removed
+// from the allowlist). Naming 09 here again would be the drift task 184 fixes: the owed set is DERIVED
+// from the allowlist's live keys, and 09 is no longer among them, so a 09 red is a REGRESSION
+// (UNEXPECTED), pinned by 'a resurgent DISCHARGED SEC id …' below. Every other fixture in this block
+// is this text with ONE stated mutation.
 //
-// This replaced a hand-written fixture whose failure line read `FAIL SEC-AUTH-09 is pending`. The
-// real producer emits ONE line, `FAIL the SEC pending allowlist is NOT empty … : <id> → …`, carrying
-// the owed ids INLINE. The difference is not cosmetic: a scope parser anchored as `^FAIL (SEC-…)` —
-// the shape this task was filed proposing — matches ZERO lines against the real output, and an empty
-// failing-id set is a subset of the owed set, so the gate returns OWED while checking nothing. The
-// tests would have agreed with it, because they and the producer disagreed. Hence: the fixture is the
-// producer's own bytes, and the `test.each` row 'a FAIL line names no SEC id at all' (with its
-// siblings 'the inventory is red but printed no FAIL line' and 'the inventory step block is missing
-// entirely') pins the empty-set branch as LOUD.
+// TASK 166 changed the producer's FAIL-line FORMAT: each line now begins with a machine-readable
+// `[CODE]` token (scripts/sec-inventory.mjs SEC_FAIL_CODES), so the owed-red assert can scope by
+// FAILURE MODE, not just by which id a line names. The real red is now
+// `FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty … : <id> → …`. Only that
+// code is owed-eligible; any other code (or none) is UNEXPECTED even when it names an owed id — pinned
+// by 'a different SEC-inventory failure mode on an owed id …' and 'a FAIL line with no code …' below.
+//
+// The earlier note (kept because the trap it records is live): the producer emits ONE pending line
+// carrying the owed ids INLINE, not `^FAIL (SEC-…)`. A scope parser anchored on the latter matches
+// ZERO real lines, and an empty failing-id set is a subset of the owed set, so the gate would return
+// OWED while checking nothing. Hence the fixture is the producer's own bytes, and the `test.each` row
+// 'a FAIL line names no SEC id at all' (with 'the inventory is red but printed no FAIL line' and 'the
+// inventory step block is missing entirely') pins the empty-set branch as LOUD.
 
 /** The real run's steps, in order, with the SEC inventory step's detail parameterised. */
 function sweepOutput(
@@ -355,7 +464,7 @@ function sweepOutput(
 ): string {
   const {
     fails = [
-      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
     ],
     secretsExit = 0,
     inventoryHeader = '── SEC inventory (security-guide §2.1.4 / §12) — EXIT=1',
@@ -413,7 +522,7 @@ test('a resurgent DISCHARGED SEC id (SEC-AUTH-09) is UNEXPECTED — the drift ta
   const result = owed.assert(
     sweepOutput({
       fails: [
-        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md',
+        'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-09 → ai-docs/tasks/28-security-sweep.md',
       ],
     }),
   );
@@ -428,8 +537,8 @@ test('a red for an id OUTSIDE the owed set is UNEXPECTED and the reader is told 
   const result = owed.assert(
     sweepOutput({
       fails: [
-        'FAIL SEC-META-01 has no PASSING test in any swept lane (titles seen: none)',
-        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+        'FAIL [NO_PASSING_TEST] SEC-META-01 has no PASSING test in any swept lane (titles seen: none)',
+        'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
       ],
     }),
   );
@@ -445,7 +554,7 @@ test('a STRICT subset of the owed ids is still OWED, so a partial discharge does
   const result = owed.assert(
     sweepOutput({
       fails: [
-        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+        'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
       ],
     }),
   );
@@ -478,6 +587,43 @@ test('the inventory FAIL lines are read from the inventory step, not from the wh
   expect(result.detail).not.toContain('SEC-MEDIA-03');
 });
 
+test('a DIFFERENT SEC-inventory failure mode on an OWED id is UNEXPECTED (task 166)', () => {
+  // 166's demonstrated hole: task 154/184 scoped the owed red by which IDS a FAIL line names, not by
+  // WHY it is red. If SEC-AUTH-10 (still owed) is red because a test now TITLES it while its allowlist
+  // row lingers — a real bookkeeping regression: the id should be DISCHARGED, not owed — the producer
+  // emits an [ALLOWLISTED_BUT_TITLED] line naming only SEC-AUTH-10. Scoping by id alone (⊆ owed) would
+  // absorb it as OWED. Scoping by mode surfaces it: only [PENDING_ALLOWLIST_NON_EMPTY] is owed.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(
+    sweepOutput({
+      fails: [
+        'FAIL [ALLOWLISTED_BUT_TITLED] SEC-AUTH-10 is on the pending allowlist (owed by ai-docs/tasks/27-device-gates.md) but a test titles it — the row and the title cannot both be true',
+        'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      ],
+    }),
+  );
+  expect(result.ok).toBe(false);
+  // The reader is told the MODE, not just the id — the id is owed, so an id-only message would read
+  // as "as expected" and send them away.
+  expect(result.detail).toContain('ALLOWLISTED_BUT_TITLED');
+});
+
+test('a FAIL line with no machine-readable code is UNEXPECTED, never a silent owed pass (task 166)', () => {
+  // A pre-166 sweep binary, or a hand-rolled failure someone forgot to code, prints an uncoded FAIL
+  // line. "Could not classify" must never be "as expected" (§2.11) — an uncoded line is UNEXPECTED
+  // even if it names only owed ids, because the classifier cannot prove WHY it is red.
+  const owed = expected('SEC_OWED_D21');
+  const result = owed.assert(
+    sweepOutput({
+      fails: [
+        'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      ],
+    }),
+  );
+  expect(result.ok).toBe(false);
+  expect(result.detail).toContain('no machine-readable [CODE]');
+});
+
 // ── 6. the scope parse is itself an oracle: every "found nothing" branch must be LOUD ────────────
 //
 // A parser whose failure mode is "matched nothing, all clear" is the exact class CLAUDE.md §2.11
@@ -502,11 +648,13 @@ test.each([
     'printed no FAIL line',
   ],
   [
-    'a FAIL line names no SEC id at all',
+    'an OWED-mode FAIL line names no SEC id at all',
     (): string =>
       sweepOutput({
+        // The owed code, but no id to attribute it to — the empty-failing-id-set trap, now reachable
+        // only via the PENDING code (a code-LESS line is caught earlier as "no machine-readable code").
         fails: [
-          'FAIL the vitest reports contained ZERO assertions — the lanes did not run, so every "passed" below would be vacuous',
+          'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty (owed ids omitted)',
         ],
       }),
     'naming NO SEC id',
@@ -579,7 +727,7 @@ test('assert() reads the owed set from the allowlist it is given, not a literal'
   const owed = expected('SEC_OWED_D21');
   const red = sweepOutput({
     fails: [
-      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-XYZ-42 → ai-docs/tasks/xyz.md',
+      'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-XYZ-42 → ai-docs/tasks/xyz.md',
     ],
   });
   // Against an allowlist that DOES list SEC-XYZ-42, its red is OWED …
@@ -605,7 +753,7 @@ test('a structurally valid but EMPTY allowlist yields [] and makes every securit
   expect(readOwedSecIds(emptyPath)).toEqual([]);
   const red = sweepOutput({
     fails: [
-      'FAIL the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
+      'FAIL [PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md',
     ],
   });
   expect(owed.assert(red, emptyPath).ok).toBe(false);

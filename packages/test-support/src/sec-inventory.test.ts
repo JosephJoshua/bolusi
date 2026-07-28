@@ -15,6 +15,8 @@ import { expect, test } from 'vitest';
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
 import { auditInventory, parseGuideIds, parseRollupIds } from '../../../scripts/sec-inventory.mjs';
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
+import { SEC_FAIL_CODES } from '../../../scripts/sec-inventory.mjs';
+// @ts-expect-error — plain .mjs script without type declarations (CI entry point)
 import { auditDependencies, parseCatalog } from '../../../scripts/dependency-audit.mjs';
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
 import { parseEnvExample } from '../../../scripts/secrets-scan.mjs';
@@ -194,6 +196,42 @@ test('inventory FAILS when an id is BOTH allowlisted and titled — the row and 
   expect(result.failures.join('\n')).toContain(
     'SEC-OPLOG-02 is on the pending allowlist (owed by ai-docs/tasks/27-device-gates.md) but a test titles it',
   );
+});
+
+test('every inventory FAIL line begins with a known machine-readable [CODE] (task 166)', () => {
+  // 166: the owed-red assert in ci-parity.mjs scopes by FAILURE MODE, so it depends on every FAIL line
+  // carrying exactly one bracketed code as its first token. Provoke several distinct modes at once and
+  // assert each failure is `[CODE] …` with CODE a member of SEC_FAIL_CODES — an uncoded line would be
+  // classified UNEXPECTED downstream, so a missing code is a real break, not cosmetics.
+  const result = auditInventory({
+    guideText: CONSISTENT_GUIDE,
+    allowlist: { 'SEC-OPLOG-02': 'ai-docs/tasks/27-device-gates.md' },
+    reports: [
+      {
+        lane: 'fixture',
+        report: report([
+          ['SEC-OPLOG-01 forged signature rejected', 'failed'], // -> TEST_NOT_PASSING
+          ['SEC-OPLOG-02 replayed op is inert', 'passed'], // titles an ALLOWLISTED id -> ALLOWLISTED_BUT_TITLED
+          // SEC-META-01 absent -> NO_PASSING_TEST; pending non-empty -> PENDING_ALLOWLIST_NON_EMPTY
+        ]),
+      },
+    ],
+  });
+  expect(result.failures.length).toBeGreaterThan(0);
+  const known = new Set(Object.values(SEC_FAIL_CODES) as string[]);
+  const seen = new Set<string>();
+  for (const failure of result.failures as string[]) {
+    const match = failure.match(/^\[([A-Z0-9_]+)\] /);
+    expect(match, `FAIL carries no [CODE]: ${failure}`).not.toBeNull();
+    const code = match?.[1] as string;
+    expect(known.has(code), `unknown code in: ${failure}`).toBe(true);
+    seen.add(code);
+  }
+  // T-14 denominator: the fixture must actually exercise several distinct modes, or "all coded" is
+  // vacuous. It provokes at least the pending, allowlisted-but-titled, failed-test and no-pass modes.
+  expect(seen.has(SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY)).toBe(true);
+  expect(seen.has(SEC_FAIL_CODES.ALLOWLISTED_BUT_TITLED)).toBe(true);
+  expect(seen.size).toBeGreaterThanOrEqual(3);
 });
 
 // ── the real guide ──────────────────────────────────────────────────────────────────────────────

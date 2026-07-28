@@ -20,6 +20,27 @@ import { readFileSync } from 'node:fs';
 
 export const SEC_ID_PATTERN = /SEC-[A-Z]+-[0-9]+/g;
 
+/**
+ * Machine-readable failure codes (task 166). Every FAIL string an inventory produces begins with
+ * exactly one `[CODE]` token, so a downstream reader — scripts/ci-parity.mjs's owed-red `assert()` —
+ * can scope the security-sweep exemption by FAILURE MODE, not merely by which id a FAIL line names.
+ * Only PENDING_ALLOWLIST_NON_EMPTY is owed-eligible: a DIFFERENT mode that happens to name an owed id
+ * (e.g. an id that is BOTH allowlisted AND titled — a real bookkeeping regression) must surface as
+ * UNEXPECTED rather than be absorbed by the standing SEC red. Keep these tokens stable and unique;
+ * ci-parity.mjs matches on them, and an unrecognised or absent code there is treated as UNEXPECTED.
+ */
+export const SEC_FAIL_CODES = Object.freeze({
+  ZERO_GUIDE_IDS: 'ZERO_GUIDE_IDS',
+  ZERO_ROLLUP_IDS: 'ZERO_ROLLUP_IDS',
+  ROLLUP_MISSING_ID: 'ROLLUP_MISSING_ID',
+  ROLLUP_EXTRA_ID: 'ROLLUP_EXTRA_ID',
+  ZERO_ASSERTIONS: 'ZERO_ASSERTIONS',
+  ALLOWLISTED_BUT_TITLED: 'ALLOWLISTED_BUT_TITLED',
+  TEST_NOT_PASSING: 'TEST_NOT_PASSING',
+  NO_PASSING_TEST: 'NO_PASSING_TEST',
+  PENDING_ALLOWLIST_NON_EMPTY: 'PENDING_ALLOWLIST_NON_EMPTY',
+});
+
 /** Every SEC id mentioned anywhere in the guide, sorted and deduped. */
 export function parseGuideIds(guideText) {
   return [...new Set(guideText.match(SEC_ID_PATTERN) ?? [])].sort();
@@ -101,12 +122,12 @@ export function auditInventory(input) {
   // ── denominator guards: the inventory must never check nothing ────────────────────────────────
   if (guideIds.length === 0) {
     failures.push(
-      'parsed ZERO SEC ids out of security-guide.md — the parse is broken, not the doc',
+      `[${SEC_FAIL_CODES.ZERO_GUIDE_IDS}] parsed ZERO SEC ids out of security-guide.md — the parse is broken, not the doc`,
     );
   }
   if (rollup.ids.length === 0) {
     failures.push(
-      'parsed ZERO ids out of the §12 "Roll-up:" line — the roll-up is missing or its grammar changed',
+      `[${SEC_FAIL_CODES.ZERO_ROLLUP_IDS}] parsed ZERO ids out of the §12 "Roll-up:" line — the roll-up is missing or its grammar changed`,
     );
   }
 
@@ -117,12 +138,12 @@ export function auditInventory(input) {
   const notInGuide = rollup.ids.filter((id) => !guideSet.has(id));
   for (const id of notInRollup) {
     failures.push(
-      `${id} appears in security-guide.md but NOT in the §12 roll-up — the roll-up is the sweep's declared denominator and must name every id`,
+      `[${SEC_FAIL_CODES.ROLLUP_MISSING_ID}] ${id} appears in security-guide.md but NOT in the §12 roll-up — the roll-up is the sweep's declared denominator and must name every id`,
     );
   }
   for (const id of notInGuide) {
     failures.push(
-      `${id} is declared by the §12 roll-up but appears nowhere else in security-guide.md — a rolled-up id with no surface table`,
+      `[${SEC_FAIL_CODES.ROLLUP_EXTRA_ID}] ${id} is declared by the §12 roll-up but appears nowhere else in security-guide.md — a rolled-up id with no surface table`,
     );
   }
 
@@ -130,7 +151,7 @@ export function auditInventory(input) {
   const { outcomes, assertions } = secOutcomes(input.reports, guideIds);
   if (assertions === 0) {
     failures.push(
-      'the vitest reports contained ZERO assertions — the lanes did not run, so every "passed" below would be vacuous',
+      `[${SEC_FAIL_CODES.ZERO_ASSERTIONS}] the vitest reports contained ZERO assertions — the lanes did not run, so every "passed" below would be vacuous`,
     );
   }
   const pending = [];
@@ -141,18 +162,20 @@ export function auditInventory(input) {
       pending.push(`${id} → ${owner}`);
       if (outcome.passed + outcome.failed + outcome.other > 0) {
         failures.push(
-          `${id} is on the pending allowlist (owed by ${owner}) but a test titles it — the row and the title cannot both be true`,
+          `[${SEC_FAIL_CODES.ALLOWLISTED_BUT_TITLED}] ${id} is on the pending allowlist (owed by ${owner}) but a test titles it — the row and the title cannot both be true`,
         );
       }
       continue;
     }
     if (outcome.failed > 0 || (outcome.passed === 0 && outcome.other > 0)) {
-      failures.push(`${id} has a SEC-titled test that did not pass: ${outcome.titles.join(' | ')}`);
+      failures.push(
+        `[${SEC_FAIL_CODES.TEST_NOT_PASSING}] ${id} has a SEC-titled test that did not pass: ${outcome.titles.join(' | ')}`,
+      );
       continue;
     }
     if (outcome.passed === 0) {
       failures.push(
-        `${id} has no PASSING test in any swept lane (titles seen: ${outcome.titles.length === 0 ? 'none' : outcome.titles.join(' | ')})`,
+        `[${SEC_FAIL_CODES.NO_PASSING_TEST}] ${id} has no PASSING test in any swept lane (titles seen: ${outcome.titles.length === 0 ? 'none' : outcome.titles.join(' | ')})`,
       );
     }
   }
@@ -160,7 +183,7 @@ export function auditInventory(input) {
   // ── the allowlist must be empty for a release (task 28's contract) ────────────────────────────
   if (pending.length > 0) {
     failures.push(
-      `the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: ${pending.join(', ')}`,
+      `[${SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY}] the SEC pending allowlist is NOT empty — the release gate cannot pass while ids are owed: ${pending.join(', ')}`,
     );
   }
 

@@ -416,18 +416,27 @@ jobs:
   # the only placeholder in this pipeline is stage 12 (device-lane), which belongs to task 27. So
   # this is a NEW job, and it is deliberately NOT a fail-safe stub: it runs the real sweep.
   #
-  # IT IS EXPECTED TO BE RED TODAY, AND THAT IS THE GATE WORKING (CLAUDE.md §2.11). Three things
-  # keep it red, all recorded rather than papered over:
-  #   1. the SEC pending allowlist is non-empty — SEC-AUTH-10 is owed by task 27 (device-blocked)
-  #      and SEC-AUTH-09's leg 1 needs real SQLCipher, which only task 27a's lane has;
-  #   2. `POST /v1/media/:id/init` answers 404 for a media id ANOTHER TENANT holds and 200 for a
-  #      globally-free one — an existence DIFFERENCE, not a crash. The `500` this line used to claim
-  #      was closed in d12face (the insert became ON CONFLICT DO NOTHING -> the same 404 as every
-  #      other denied leg; see apps/server/test/integration/media/init-cross-tenant.test.ts). What
-  #      SEC-TENANT-04 still weighs is the 404-vs-200 pair;
-  #   3. security-guide §12's roll-up line omits SEC-DEV-08, which task 58 shipped.
-  # Each has its own task file. Weakening a step to make this green would convert three known
-  # risks into one false assurance — the exact anti-pattern §2.11 names.
+  # IT IS EXPECTED TO BE RED TODAY, AND THAT IS THE GATE WORKING (CLAUDE.md §2.11). Exactly ONE thing
+  # keeps it red. It is NOT re-enumerated in prose here: this block twice grew stale entries a real
+  # regression could hide behind (task 164 — a SEC-TENANT-04 leg that PASSES was once listed as a red
+  # reason, and a §12 "SEC-DEV-08 omission" that the roll-up no longer has). A hand-written list of
+  # machine facts drifts by default, so the register points at its single source instead of restating
+  # it:
+  #
+  #   the SEC pending allowlist (packages/test-support/src/sec-pending-allowlist.json) is non-empty.
+  #   Its live keys ARE the owed ids, and scripts/ci-parity.mjs derives EXPECTED.SEC_OWED_D21 from that
+  #   same file (task 184) — so this human register and the machine oracle cannot disagree. The gate
+  #   self-retires the day the allowlist empties.
+  #
+  #   OWED (do-not-hand-edit; ci-parity.test.ts asserts this equals the allowlist live keys): SEC-AUTH-10
+  #   — a physical-device argon2id-p95 timing artifact (task 27) that Node/CI cannot produce (D21,
+  #   non-gating).
+  #
+  # SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28): its at-rest leg is proven on the emulator artifact
+  # and re-checked every push by the git-provenance/staleness guard (packages/harness/src/security/
+  # device-gate-provenance.ts), NOT by SQLCipher (removed in D22). A security-sweep red naming any id
+  # that is NOT a live allowlist key — SEC-AUTH-09 among them — is a REGRESSION (UNEXPECTED), not owed.
+  # Weakening a step to make this green converts a known risk into a false assurance (§2.11).
   #
   # It needs gitleaks (the history scan) and Docker (the repo suite's testcontainers lanes);
   # ubuntu-latest supplies Docker, and the gitleaks install below is the same checksum-pinned
