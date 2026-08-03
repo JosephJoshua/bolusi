@@ -144,11 +144,20 @@ export interface TenantSettings {
 /** An opaque server-assigned bundle id (§5.2 types these as bare `string`). Length-bounded only. */
 const zBundleId = z.string().min(1).max(64);
 
+/**
+ * The permission-id length cap (02-permissions §2). Exported so the SERVER permission registry
+ * (`@bolusi/core` `assemblePermissionRegistry`) enforces the SAME bound this client schema does —
+ * the two ends of the enrollment-bundle wire agree by construction, not by luck (task 180). Before
+ * this was shared, the server registry checked only the `<module>.<action>` shape (no length), so a
+ * >64-char id would pass server CI yet be REJECTED here at a real device's enrollment.
+ */
+export const PERMISSION_ID_MAX_LENGTH = 64;
+
 /** A permission id — the one bundle id with a spec-stated format (02-permissions §2, CI-enforced). */
 const zPermissionId = z
   .string()
   .min(1)
-  .max(64)
+  .max(PERMISSION_ID_MAX_LENGTH)
   .regex(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/, 'must be a <module>.<action> permission id');
 
 /** A free-form display name (store/tenant/role). No spec length bound → bounded generously. */

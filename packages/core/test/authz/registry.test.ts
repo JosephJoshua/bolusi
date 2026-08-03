@@ -6,11 +6,14 @@
 // stop, so every rule here is asserted to THROW — never to warn, never to skip the entry.
 import { describe, expect, test } from 'vitest';
 
+import { PERMISSION_ID_MAX_LENGTH as SCHEMA_PERMISSION_ID_MAX_LENGTH } from '@bolusi/schemas';
+
 import {
   assemblePermissionRegistry,
   collectPermissionReferences,
   PermissionRegistryError,
   PERMISSION_ID_PATTERN,
+  PERMISSION_ID_MAX_LENGTH,
   type ModulePermissionManifest,
 } from '../../src/index.js';
 import {
@@ -82,6 +85,41 @@ describe('assembly — startup failures (§3.2 rules 2–4)', () => {
     };
     expect(() => assemblePermissionRegistry([bogus])).toThrow(PermissionRegistryError);
     expect(() => assemblePermissionRegistry([bogus])).toThrow(/notes\.telepathy/);
+  });
+
+  // ── task 180: the id LENGTH cap agrees with the client DeviceBundleSchema by construction ────────
+  test('a permission id OVER the length cap fails assembly — the server no longer emits an id the client rejects', () => {
+    // Before task 180 the registry checked only the <module>.<action> SHAPE, so a >64-char id passed
+    // server CI and only broke at a real device's enrollment (the client `zPermissionId` caps at 64).
+    const action = 'a'.repeat(PERMISSION_ID_MAX_LENGTH - 'notes.'.length + 1); // id length = cap + 1
+    const overCap: ModulePermissionManifest = {
+      id: 'notes',
+      permissions: {
+        [`notes.${action}`]: { scope: 'store', isDangerous: false, description: 'x' },
+      },
+    };
+    expect(`notes.${action}`.length).toBe(PERMISSION_ID_MAX_LENGTH + 1);
+    expect(() => assemblePermissionRegistry([overCap])).toThrow(PermissionRegistryError);
+    expect(() => assemblePermissionRegistry([overCap])).toThrow(/over the 64-char cap/);
+  });
+
+  test('a permission id EXACTLY at the cap assembles (boundary — do not reject valid ids)', () => {
+    const action = 'a'.repeat(PERMISSION_ID_MAX_LENGTH - 'notes.'.length); // id length = cap exactly
+    const atCap: ModulePermissionManifest = {
+      id: 'notes',
+      permissions: {
+        [`notes.${action}`]: { scope: 'store', isDangerous: false, description: 'x' },
+      },
+    };
+    expect(`notes.${action}`.length).toBe(PERMISSION_ID_MAX_LENGTH);
+    expect(() => assemblePermissionRegistry([atCap])).not.toThrow();
+  });
+
+  test('the server cap is the SAME value the client DeviceBundleSchema enforces (§2.8 mirror, task 180)', () => {
+    // registry.ts is platform-free by contract (08 §3.3), so it cannot import the schemas constant;
+    // the two are pinned equal here instead — the ledger.ts↔task-status.mjs mirror pattern. If either
+    // side changes its cap, THIS reds rather than a bundle silently breaking a device enrollment.
+    expect(PERMISSION_ID_MAX_LENGTH).toBe(SCHEMA_PERMISSION_ID_MAX_LENGTH);
   });
 
   test('rule 3 applies to QUERIES identically (04 §6 — queries are checked like commands)', () => {

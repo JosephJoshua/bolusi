@@ -3,6 +3,8 @@
 // from the store-1 bundle is believed — an empty directory would pass vacuously.
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
+import { DeviceBundleSchema } from '@bolusi/schemas';
+
 import {
   makeIdentityHarness,
   provision,
@@ -177,3 +179,41 @@ async function writeVerifier(userId: string, tenantId: string): Promise<void> {
     })
     .execute();
 }
+
+// ── task 180: the server-emitted bundle round-trips through the CLIENT schema ──────────────────────
+// Task 161 made the CLIENT parse the bundle at applyBundle with DeviceBundleSchema (fail-closed), but
+// nothing asserted the SERVER emits a bundle that schema accepts. So a bundle the server considers
+// valid but the client rejects (a >64-char permission id; a new field; a tightened client bound)
+// would pass server CI and only fail at a real device's enrollment. This moves that DETECTION into
+// server CI. The emitted permissionsSnapshot carries EVERY permission id (bundle.ts PERMISSIONS.map),
+// so the round-trip exercises zPermissionId over the whole permission set — the maximal case.
+test('the server-emitted bundle satisfies the client DeviceBundleSchema (task 180)', async () => {
+  const { tenantId, s1 } = await twoStoreTenant();
+  const device = await seedDevice(h, { tenantId, storeId: s1 });
+  const res = await h.app.request('http://srv.test/v1/devices/me/bundle', {
+    headers: { Authorization: `Bearer ${device.token}` },
+  });
+  expect(res.status).toBe(200);
+  const { bundle } = (await res.json()) as { bundle: unknown };
+
+  // FIXTURE PRESENCE FIRST (T-14b): a bundle carrying zero permissions would round-trip vacuously.
+  const snapshot = (bundle as { permissionsSnapshot: Array<{ id: string }> }).permissionsSnapshot;
+  expect(
+    snapshot.length,
+    'bundle carries no permissions — the round-trip would be vacuous',
+  ).toBeGreaterThan(0);
+
+  const parsed = DeviceBundleSchema.safeParse(bundle);
+  expect(parsed.success, parsed.success ? '' : JSON.stringify(parsed.error.issues)).toBe(true);
+
+  // FALSIFY (§2.11): the assertion is load-bearing, not a tautology — a permission id one char over
+  // the client's 64-cap must make the SAME schema REJECT. This is exactly the drift the server-side
+  // length cap (registry.ts, task 180) now prevents from ever reaching a real bundle.
+  const drifted = structuredClone(bundle) as { permissionsSnapshot: Array<{ id: string }> };
+  const overCapId = `notes.${'a'.repeat(60)}`; // 66 chars > 64
+  expect(overCapId.length).toBeGreaterThan(64);
+  const firstPerm = drifted.permissionsSnapshot[0];
+  expect(firstPerm, 'no permission to mutate — falsify would be vacuous').toBeDefined();
+  firstPerm!.id = overCapId;
+  expect(DeviceBundleSchema.safeParse(drifted).success).toBe(false);
+});

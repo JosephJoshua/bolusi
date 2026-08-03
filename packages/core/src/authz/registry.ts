@@ -24,6 +24,16 @@ export type PermissionScope = 'tenant' | 'store';
  */
 export const PERMISSION_ID_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 
+/**
+ * Length cap for a permission id (task 180). This MUST equal `@bolusi/schemas`'
+ * `PERMISSION_ID_MAX_LENGTH`, which the client `DeviceBundleSchema` (`zPermissionId`) enforces —
+ * otherwise a >cap id passes server CI yet is rejected at a real device's enrollment. This file is
+ * platform-free by contract (see the header / 08 §3.3), so it does NOT import the schemas constant;
+ * the two are pinned equal by `registry.test.ts` instead — the ledger.ts↔task-status.mjs mirror
+ * pattern for a value shared across a boundary that forbids the import.
+ */
+export const PERMISSION_ID_MAX_LENGTH = 64;
+
 /** A registry entry (§3.1). `module`/`action` are DERIVED from the id — never declared twice. */
 export interface PermissionEntry {
   /** `<module>.<action>` (§2). Map key in the manifest. */
@@ -195,6 +205,15 @@ export function assemblePermissionRegistry(
       if (!PERMISSION_ID_PATTERN.test(id)) {
         throw new PermissionRegistryError(
           `permission id ${JSON.stringify(id)} (module ${module.id}) is not <module>.<action> per 02-permissions §2 (${String(PERMISSION_ID_PATTERN)})`,
+        );
+      }
+      // Length cap (task 180): the CLIENT's DeviceBundleSchema (`zPermissionId`) rejects ids over
+      // PERMISSION_ID_MAX_LENGTH, so an id the server accepts here but the client rejects would pass
+      // server CI and only break at a real device's enrollment. Enforcing the SHARED cap server-side
+      // makes the two ends of the enrollment-bundle wire agree by construction (§2.8).
+      if (id.length > PERMISSION_ID_MAX_LENGTH) {
+        throw new PermissionRegistryError(
+          `permission id ${JSON.stringify(id)} (module ${module.id}) is ${id.length} chars, over the ${PERMISSION_ID_MAX_LENGTH}-char cap the client DeviceBundleSchema enforces — the two enrollment-bundle boundaries must agree (task 180, 02-permissions §2)`,
         );
       }
       const separator = id.indexOf('.');

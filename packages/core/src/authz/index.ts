@@ -12,6 +12,7 @@ export {
   PermissionRegistry,
   PermissionRegistryError,
   PERMISSION_ID_PATTERN,
+  PERMISSION_ID_MAX_LENGTH,
   type ModulePermissionManifest,
   type PermissionDeclaration,
   type PermissionEntry,
