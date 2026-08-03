@@ -1,6 +1,6 @@
 # TASK 153 — the SEC list has no id for client-side pre-display media verification (a normative 06 §6 property), and the legacy v1/v2 render arm is an unclosable evidence-substitution vector until re-homed
 
-**Status:** todo
+**Status:** done
 
 > **OWNER RULING 2026-08-03: SEC-MEDIA-07 APPROVED** (add the new SEC control). **DONE 2026-08-03 — SEC-MEDIA-07 + SEC-MEDIA-08 both landed; Part B closed by the version floor.**
 >
