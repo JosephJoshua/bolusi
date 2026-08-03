@@ -1,11 +1,14 @@
 # TASK 163 — the dispatch-only CI lanes (`android-emulator`, `ios-simulator`) are invisible to every local gate: a step there can be nonsense and everything stays green
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM-HIGH process — this is the blind spot that let task 162 live. An emulator step that had **never executed a single assertion** survived authoring, review, and every `pnpm verify` / drift-gate run, and was only found by reading a dispatched job log by hand.
 **Depends on:** 142 (the parity model this extends), 162 (which demonstrated the gap)
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
 **Filed by:** impl-162, 2026-07-23, from the falsification of the 142 drift gate against the emulator lane.
+
+> **DONE (2026-07-28, co-landed with 164+166).** The structural hole is closed, not just the broken path. `scripts/ci-parity.mjs` now declares `DISPATCH_STEP_POLICY` (all 21 dispatch-lane steps: 11 android-emulator + 10 ios-simulator, each with a `DISPATCH_REASONS` category and a body fingerprint) and `auditParity` audits the dispatch bucket **both directions** — a step with no entry reds `UNCOVERED (dispatch-only)`, an entry with no step reds `ORPHANED (dispatch-only)`, a changed body reds `STALE`. Plus `repoFileRefs()` statically checks every `bash/node/sh <repo-file>` a step invokes actually EXISTS (`MISSING SCRIPT`), and a `MIN_DISPATCH_STEPS=18` denominator floor (T-14) so a collapsed bucket cannot pass vacuously. The blanket exclusion is gone.
+> **FALSIFIED (§2.11), all four required legs:** (1, the acceptance mutation) inserted `- run: pnpm a-brand-new-uncovered-gate` into `android-emulator` → `UNCOVERED (dispatch-only)`, RED; (2) pointed the harness `script:` at `scripts/THIS-DOES-NOT-EXIST.sh` → `MISSING SCRIPT`, RED; (3, inverse) renamed a declared step → `ORPHANED (dispatch-only)`, RED; (4) a denominator test asserts `dispatchSteps == 21 == policy entries`, and `repoFileRefs` provably finds the real `scripts/emulator-gates.sh` (not the runtime-generated `./gradlew`). Isolation check: neutralised the UNCOVERED-dispatch push (`|| true`) → the acceptance-mutation test flipped to green-passing-the-audit → its `expect(ok).toBe(false)` RED, EXIT=1; restored → green. **shellcheck/actionlint were NOT run — they are not installed on the dev host (stated plainly, not claimed); the deeper shell/workflow lint is a CI-lane follow-up.**
 
 ## The finding
 

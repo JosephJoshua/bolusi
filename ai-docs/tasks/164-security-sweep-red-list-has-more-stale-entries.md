@@ -1,11 +1,14 @@
 # TASK 164 — the `security-sweep` expected-red register has further stale entries: reason 3 describes an omission that no longer exists, and the "three things" count no longer matches the run
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM — this register is the list a human reads to decide "expected red, move on." Every wrong entry in it is a place a real regression can hide behind a known failure.
 **Depends on:** 154 (closing the machine-checked half of the same hole)
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
 **Filed by:** impl-162, 2026-07-23, while correcting reason 2 of the same comment block.
+
+> **DONE (2026-07-28, co-landed with 163+166).** Read the real run myself (§2.1 / T-16): **run 30374276611, job 90325923030, headSha `8b1cf1f` = main, 2026-07-28**. Its only failing step is `SEC inventory (EXIT=1)`, whose sole FAIL line is `[PENDING_ALLOWLIST_NON_EMPTY] the SEC pending allowlist is NOT empty … : SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md`; the security-sweep test lane (SEC-TENANT-04, SEC-SECRET-01, I-13) and every other step are EXIT=0. So **only ONE thing keeps it red today** — confirming both findings: reason 2 (SEC-TENANT-04 404-vs-200) describes a **passing** lane, not a red reason; reason 3 (§12 omits SEC-DEV-08) is dead — the run's own output prints `DEV 01-08` and `58 ids parsed == 58 rolled up`. Rewrote the `ci.yml` header (the §2.8 answer to prose drift): it no longer re-enumerates machine facts — it points at the single source (`sec-pending-allowlist.json`, from which `ci-parity.mjs` derives the owed set, task 184) and carries ONE machine-checked `OWED (do-not-hand-edit …): SEC-AUTH-10` line. Also dropped the doubly-stale SEC-AUTH-09/SQLCipher clause from reason 1 (09 discharged by task 28; SQLCipher gone D22).
+> **FALSIFIED (§2.11):** a new `ci-parity.test.ts` guard extracts the OWED line and asserts it `== readOwedSecIds()`. Pointed the line at `SEC-AUTH-09` → RED (`['SEC-AUTH-09'] ≠ ['SEC-AUTH-10']`, EXIT=1); restored → green. The human register and the release gate can no longer silently disagree.
 
 ## Context
 

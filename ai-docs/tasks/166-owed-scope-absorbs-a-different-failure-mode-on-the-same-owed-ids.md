@@ -1,11 +1,14 @@
 # TASK 166 — the OWED bucket now scopes by ID, but not by FAILURE MODE: a different SEC-inventory failure that happens to name only SEC-AUTH-09/10 is still absorbed as "expected"
 
-**Status:** todo
+**Status:** done
 **Priority:** LOW — narrower than 154 (it needs a new inventory failure that names ONLY the two owed ids and no others) and self-closing the day SEC-AUTH-09/10 discharge. Filed because it is the same class as 142 and 154, one level down again, and because the next person to read `assert()` should find it recorded rather than rediscover it.
 **Depends on:** 154
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
 **Filed by:** the task-154 implementer, 2026-07-23, by falsifying the tightened `EXPECTED.SEC_OWED_D21.assert()` immediately after building it.
+
+> **DONE (2026-07-28, co-landed with 163+164 as one commit — shared contended files `scripts/ci-parity.mjs` + `packages/test-support/src/ci-parity.test.ts`, §4).** Implemented the structural (not prose) discriminator the deliverable asked for: `scripts/sec-inventory.mjs` now exports `SEC_FAIL_CODES` and every FAIL line begins with exactly one `[CODE]` token (`[PENDING_ALLOWLIST_NON_EMPTY]`, `[ALLOWLISTED_BUT_TITLED]`, `[NO_PASSING_TEST]`, …). `assert()` in `ci-parity.mjs` imports that constant (one source, §2.8) and treats **only** `PENDING_ALLOWLIST_NON_EMPTY` as owed-eligible: a different mode naming an owed id, and any FAIL line with **no** code (a pre-166 sweep), are UNEXPECTED and name the mode. The shared oracle behind `pnpm verify` AND `pnpm ci:status` gets the fix; `ci-status.test.ts`'s fixture was updated to the coded format too.
+> **FALSIFIED (§2.11):** neutralised the mode branch (`if (false && code !== …)`) → the new test *"a DIFFERENT SEC-inventory failure mode on an OWED id is UNEXPECTED"* went RED (the ALLOWLISTED_BUT_TITLED-on-SEC-AUTH-10 red got absorbed as OWED — the exact bug), EXIT=1; restored → green. Traced to producer (T-16): ran `node scripts/sec-inventory.mjs` against the real guide+allowlist and confirmed it emits `FAIL [PENDING_ALLOWLIST_NON_EMPTY] … SEC-AUTH-10 → …` byte-for-byte matching the fixture. Note the SEC-AUTH-09 half of the original finding is now moot — 184 discharged it from the allowlist — but the class stands for SEC-AUTH-10 and any future owed id, which is what this closes.
 
 ## The finding (demonstrated, not hypothetical)
 Task 154 tightened `assert()` from "the only red STEP is `SEC inventory…`" to "…and every id in that step's `FAIL` lines is ⊆ {SEC-AUTH-09, SEC-AUTH-10}". That closes a new id appearing. It does **not** close a **new failure MODE on an id already in the owed set**.
