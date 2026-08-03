@@ -94,7 +94,12 @@ const MATRIX: readonly Row[] = [
 
   // Capture (media) — camera is a labelled placeholder, never a faked photo.
   { screen: 'capture', state: 'loading', testId: 'capture-loading' },
-  { screen: 'capture', state: 'unauthorized', testId: 'capture-unauthorized' },
+  {
+    screen: 'capture',
+    state: 'unauthorized',
+    testId: 'capture-unauthorized',
+    text: 'Kamera belum diizinkan',
+  },
   { screen: 'capture', state: 'ready', testId: 'capture-web-placeholder' },
   { screen: 'capture', state: 'error', testId: 'capture-failed' },
   { screen: 'capture', state: 'lowStorage', testId: 'capture-refused' },

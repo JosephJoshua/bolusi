@@ -444,6 +444,21 @@ describe('TextInput (§3.2)', () => {
     expect(r.styleOf('ui.textInput.field')['borderWidth']).toBe(border.focus);
   });
 
+  test('secureTextEntry forces single-line — the RN "no mask with multiline" footgun is unrepresentable (§2.5, task 146 item 8)', () => {
+    // RN 0.86 documents `secureTextEntry` as not working with `multiline={true}` — the combination
+    // yields a silently UNMASKED password field. The component must resolve it by construction, not
+    // leave it to a caller. A secure field asked for multiline stays masked (multiline forced false).
+    const secureMultiline = render(<TextInput {...base} secureTextEntry multiline />);
+    const field = secureMultiline.get('ui.textInput.field');
+    expect(field.props.secureTextEntry).toBe(true);
+    expect(field.props.multiline).toBe(false);
+
+    // Positive control: multiline WITHOUT secureTextEntry is still honoured — the fix does not break
+    // the note-body long-text field it exists for.
+    const plainMultiline = render(<TextInput {...base} multiline />);
+    expect(plainMultiline.get('ui.textInput.field').props.multiline).toBe(true);
+  });
+
   test('error outranks focus — a focused field with an error still reads as an error', () => {
     const r = render(<TextInput {...base} errorMessage="Wajib diisi" />);
     fire(r.get('ui.textInput.field'), 'onFocus');

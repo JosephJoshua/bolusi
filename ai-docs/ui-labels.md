@@ -217,6 +217,9 @@ States per `MediaItem.uploadStatus` machine: `pending → uploading → uploaded
 | `media.action.retake` | Foto Ulang | Retake |
 | `media.action.usePhoto` | Pakai Foto Ini | Use This Photo |
 | `media.action.retryUpload` | Kirim Ulang | Send Again |
+<!-- DO NOT delete `media.permission.camera` in an unused-key sweep (task 146 item 4): it has no `t()`
+     call site by design — its value is used VERBATIM as the iOS `cameraPermission` usage string in
+     apps/mobile/app.config.ts and is guarded by apps/mobile/test/ios-config.test.ts. -->
 | `media.permission.camera` | Izinkan aplikasi memakai kamera untuk ambil foto. | Allow the app to use the camera to take photos. |
 | `media.permission.cameraDeniedTitle` | Kamera belum diizinkan | Camera is not allowed |
 | `media.permission.cameraDeniedBody` | Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera. | Open your phone Settings, find this app, then turn on the Camera permission. |

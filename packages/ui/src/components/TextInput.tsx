@@ -97,6 +97,12 @@ export function TextInput({
   const hasError = errorMessage !== undefined;
   const [focused, setFocused] = useState(false);
 
+  // Fix by construction (CLAUDE.md §2.5; task 146 item 8): RN 0.86 documents `secureTextEntry` as
+  // "does not work with multiline={true}", so the combination yields a SILENTLY UNMASKED password
+  // field. A secure field is therefore never multiline — enforced here, not left to callers or a
+  // test that can only see today's call sites. The field-driven geometry below uses this same value.
+  const effectiveMultiline = multiline && !secureTextEntry;
+
   return (
     <View testID={testID}>
       <Text testID={`${testID}.label`} style={styles.label}>
@@ -115,12 +121,12 @@ export function TextInput({
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         autoFocus={autoFocus}
-        multiline={multiline}
+        multiline={effectiveMultiline}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={[
           styles.field,
-          multiline ? styles.multilineField : null,
+          effectiveMultiline ? styles.multilineField : null,
           {
             backgroundColor: disabled ? color.surface : color.surfaceAlt,
             // Error outranks focus (§3.2): a focused field with an error still reads as an error.

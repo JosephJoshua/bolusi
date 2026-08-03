@@ -1,6 +1,13 @@
 # TASK 146 — review-wave leftovers: three Unauthorized states with no guidance, an icon whitelist nothing checks against the real glyphmap, and two weak assertions
 
 **Status:** todo
+
+> **PARTIAL — items 2, 3, 4, 8 DONE 2026-07-28** (the load-bearing guard + the §2.5 footgun + two quick assertions):
+> - **Item 2** — `packages/ui/test/icon-glyphs.test.ts` resolves every `ICON_GLYPHS` role against the REAL MaterialCommunityIcons glyphmap (7448 entries, imported directly since the ui vitest env aliases the icon module to a render double). FALSIFIED: typo'd a glyph → RED naming the role; restored → 3/3. The "comment was the guard" hole is closed.
+> - **Item 8** — `TextInput.tsx` fix by construction (§2.5): `effectiveMultiline = multiline && !secureTextEntry`, so a secure field is never multiline (RN's silently-unmasked-password footgun is unrepresentable). New call-site-independent test; FALSIFIED (revert → RED), restored 68/68.
+> - **Item 3** — added `text: 'Kamera belum diizinkan'` to the `capture/unauthorized` visual-matrix row (was testID-only).
+> - **Item 4** — commented the `media.permission.camera` ui-labels row so an unused-key sweep won't delete it (used verbatim as the iOS usage string, guarded by ios-config.test.ts).
+> - **REMAINING:** item 1 (three Unauthorized states need §5 guidance body — contended modules/notes screens); items 5 + 7 (hitSlop overlap + §8.1 header diagram — tied to task 143); item 6 (App.tsx §0-citation comment — contended per 133/143); item 9 (tokens.ts comment mechanism); item 10 (import a token vs hardcoded `26` — needs a Node-safe `@bolusi/ui` tokens subpath first, a contended-package change disproportionate to a nit); item 11 (soften an unverified TextInput comment — needs device/RNW-doc verification).
 **Priority:** LOW-MEDIUM — none is a live user-facing break, but item 2 is a guard that cannot fail and item 1 is design-system §5 non-conformance repeated three times.
 **Depends on:** 124, 125, 96
 **Blocks:** —
