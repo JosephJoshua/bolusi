@@ -1,6 +1,13 @@
 # TASK 153 — the SEC list has no id for client-side pre-display media verification (a normative 06 §6 property), and the legacy v1/v2 render arm is an unclosable evidence-substitution vector until re-homed
 
 **Status:** todo
+
+> **OWNER RULING 2026-08-03: SEC-MEDIA-07 APPROVED** (add the new SEC control). BUT investigation surfaced a real sweep-architecture blocker that must be resolved first — recorded here so the next pass does not break main:
+> - The `sec:sweep` SEC inventory credits an id ONLY via a PASSING test whose `fullName` includes the id, read from its **swept lanes**: `scripts/sec-sweep.mjs` `LANES` = the repo suite (`unit, core, schemas, server, db-server, harness, i18n, ui`) + the security-sweep lane. **The `mobile` project is NOT swept.** SEC-MEDIA-01..06 are all server/wire-side (server lane). **SEC-MEDIA-07 is the first CLIENT-side SEC id**, and task 140's pre-display tests live in `apps/mobile/src/media/remote-cache.test.ts` (mobile project) — invisible to the inventory.
+> - So adding SEC-MEDIA-07 to the §12 roll-up (`MEDIA 01–06`) as-is makes the inventory red: "SEC-MEDIA-07 has no PASSING test in any swept lane" — a NEW unguarded-id sweep red on main, the exact §2.11 failure the 163/164/166/184 cluster exists to prevent.
+> - **The design decision to make first:** how does a client-side SEC property enter the swept inventory? Options: (a) add the `mobile` project to `sec-sweep.mjs`'s swept lanes (+ CI) so client SEC tests are enumerable — the cleanest, but a real infra change (mobile's test env must run headless in that lane); (b) home a swept-lane test that exercises the pre-display-verify PRIMITIVE where it can be reached (the sha256 compare is in `@bolusi/core`, swept — but the "before display" binding is mobile-specific). **SEC-MEDIA-08 (server binding in `scope.ts`) has NO such blocker — it is server-side, swept-lane-addable.** But a `MEDIA 01–08` range can't declare 08 without 07, so both land together once 07's lane question is decided.
+> - Part B (legacy v1/v2 arm) is unaffected — it is the `roadmap.md` version-floor close.
+
 **Priority:** MEDIUM — neither is live-exploitable today (task 140 Leg A closed the v3 client arm; no v1/v2 ref producer exists while `NOTE_CREATED_SCHEMA_VERSION = 3`), but both are named holes on the media-evidence security surface, and one is a SEC-inventory gap the release gate cannot see.
 **Depends on:** 140 (Leg A, merged 2026-07-22)
 **Blocks:** —
