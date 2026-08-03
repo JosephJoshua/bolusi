@@ -111,6 +111,7 @@ async function fixture(
   seed: number,
   keystore?: KeyStorePort,
   wrapDriver?: (driver: DbDriver) => DbDriver,
+  mutateBundle?: (bundle: DeviceBundle) => void,
 ): Promise<Fixture> {
   const { driver, db: freshDb } = await openFreshClientDb();
   // A driver wrapper (crash injection) must sit UNDER the whole enrollment path — `deps.db`, the
@@ -163,6 +164,8 @@ async function fixture(
     ],
     permissionsSnapshot: [],
   };
+  // Let a test perturb the bundle BEFORE the transport closes over it (task 179 falsification).
+  mutateBundle?.(bundle);
   const transport = new FakeEnrollTransport(fakeKeystore, (body) => ({
     deviceId: body.deviceId,
     deviceToken: 'bdt_secret_token',
@@ -203,6 +206,27 @@ async function fixture(
 
   const deps: EnrollmentDeps<ClientDatabase> = {
     db,
+    // A REAL driver transaction (task 179) — the SAME begin/run/commit/rollback-on-throw SEMANTICS the
+    // db-client's ClientDb.transaction runs (op-store.ts), adapted to EnrollmentDeps.transaction's
+    // ZERO-ARG contract: `applyBundle` writes through `deps.db` (the shared connection, transactional
+    // during begin..commit), so this runner does not surface the DbDriver ClientDb.transaction passes —
+    // exactly as the refresh path passes `config.db.db`, not the driver, to applyBundle. Backed by the
+    // fixture's real better-sqlite3 driver so the rollback is genuine, which the falsification needs.
+    transaction: async (fn) => {
+      await driver.begin();
+      try {
+        const result = await fn();
+        await driver.commit();
+        return result;
+      } catch (error) {
+        try {
+          await driver.rollback();
+        } catch {
+          /* preserve the original error */
+        }
+        throw error;
+      }
+    },
     crypto: noblePort,
     idSource,
     keystore: usedKeystore,
@@ -476,5 +500,38 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
 
     expect(await readStoreId(fx.db)).toBe(fx.params.storeId); // unchanged — the binding held
     expect(otherStore).not.toBe(fx.params.storeId); // control: the refresh really named a new store
+  });
+});
+
+describe('applyBundle atomicity on the enrollment path (task 179)', () => {
+  it('a mid-apply verifier-bounds throw rolls back ALL directory + meta writes — no partial state', async () => {
+    // `assertVerifierInBounds` (SEC-AUTH-01) runs LAST in applyBundle, AFTER the tenant/store/user/role
+    // rows are written. A shape-valid but OUT-OF-BOUNDS verifier (mKiB = 1 GiB, over the [19456,65536]
+    // ceiling) passes DeviceBundleSchema, then throws there. Before task 179 the enrollment caller ran
+    // applyBundle bare, so tenantId + the user row survived that throw (a partial directory). The
+    // transaction wrap must roll the whole apply back.
+    fx = await fixture(179, undefined, undefined, (bundle) => {
+      (bundle.users[0] as { pinVerifier: unknown }).pinVerifier = {
+        algorithm: 'argon2id',
+        saltB64: 'c2FsdHNhbHRzYWx0MTY=',
+        mKiB: 1_048_576, // 1 GiB — over the SEC-AUTH-01 ceiling: shape-valid, bounds-invalid
+        t: 3,
+        p: 1,
+        hashB64: 'aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaDMy',
+        asOf: { timestamp: 1, deviceId: '00000000-0000-0000-0000-000000000000', seq: 0 },
+      };
+    });
+
+    // The apply throws where the spec says it does — the DoS guard, mid-apply.
+    await expect(runEnrollment(fx.deps, fx.params)).rejects.toThrow();
+
+    // ROLLBACK, read through a FRESH handle (T-14b): nothing applyBundle wrote survives.
+    expect(await countUsers(fx.db)).toBe(0);
+    expect(await readTenantId(fx.db)).toBeNull();
+    // T-14 denominator: none of applyBundle's four meta keys is present — not just the tenant one.
+    const keys = await metaKeys(fx.db);
+    expect(keys).not.toContain(STORE_NAME_META_KEY);
+    expect(keys).not.toContain(TENANT_NAME_META_KEY);
+    expect(keys).not.toContain(IDLE_LOCK_SECONDS_META_KEY);
   });
 });

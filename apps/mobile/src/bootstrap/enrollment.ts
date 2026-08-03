@@ -128,6 +128,10 @@ export function createAppEnrollment(
       const result = await runEnrollment(
         {
           db: app.db.db,
+          // The SAME atomic bundle-apply mechanism the refresh path uses (bootstrap/bundle.ts): one
+          // driver transaction on this connection so a mid-apply verifier-bounds throw rolls back the
+          // partial directory (task 179). Wrapped in an arrow so `this` stays bound to `app.db`.
+          transaction: (fn) => app.db.transaction(fn),
           crypto: platform.crypto,
           idSource: platform.idSource,
           keystore: platform.keystore,

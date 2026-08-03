@@ -1,6 +1,6 @@
 # TASK 179 — `applyBundle` is atomic on the REFRESH path but not on ENROLLMENT: a mid-apply failure leaves partial directory rows
 
-**Status:** todo
+**Status:** done
 **Priority:** LOW — self-healing and fails closed overall, but an inconsistency worth closing. `applyBundle` writes several `meta_kv` keys and directory tables in sequence; the refresh caller wraps the whole thing in a transaction (`bootstrap/bundle.ts` → `config.db.transaction(...)`), but the enrollment caller does NOT (`packages/core/src/auth/enrollment.ts:105` calls `applyBundle(deps.db, response.bundle)` bare). So a failure *mid-apply* on the enrollment path — most plausibly `assertVerifierInBounds` throwing on a shape-valid-but-out-of-bounds PIN verifier (SEC-AUTH-01), which runs LAST in `applyBundle` after tenant/store/user/role rows are already written — leaves a partial directory.
 **Depends on:** —
 **Blocks:** —

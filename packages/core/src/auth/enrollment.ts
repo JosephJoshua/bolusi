@@ -46,6 +46,15 @@ interface EnrollmentDraft {
 
 export interface EnrollmentDeps<DB> {
   readonly db: Kysely<DB>;
+  /**
+   * Run `fn` inside ONE driver transaction on the same connection as `db`, rolling back on any throw
+   * (task 179). `applyBundle` writes six directory/meta rows and THEN re-checks the PIN verifier
+   * bounds (`assertVerifierInBounds`, SEC-AUTH-01) LAST — a mid-apply throw there would otherwise
+   * leave a partial directory. The refresh path (`bootstrap/bundle.ts`) already wraps its apply this
+   * way; this makes enrollment do the same. Wire it to the SAME `ClientDb.transaction` refresh uses,
+   * so a rollback is a real driver rollback (§2.8 — one transaction mechanism, both bundle paths).
+   */
+  readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
   readonly crypto: CryptoPort;
   readonly idSource: IdSource;
   readonly keystore: KeyStorePort;
@@ -100,9 +109,13 @@ export async function runEnrollment<DB>(
   });
 
   // Step 4 — token to SecureStore, THEN the bundle into the directory tables. The directory persist
-  // precedes any command, so the first evaluator read has rows (§6 bootstrap rule).
+  // precedes any command, so the first evaluator read has rows (§6 bootstrap rule). `applyBundle` is
+  // wrapped in one transaction (task 179): its last step re-checks the PIN verifier bounds and can
+  // throw AFTER the tenant/store/user/role rows are written, so a bare call would leave a partial
+  // directory. The token write stays OUTSIDE — it is a SecureStore write, not a DB row, and a resumed
+  // run reuses the same idempotency key so a persisted token is not a partial-state hazard.
   await deps.keystore.persistDeviceToken(response.deviceToken);
-  await applyBundle(deps.db, response.bundle);
+  await deps.transaction(() => applyBundle(deps.db, response.bundle));
 
   // Step 5 — the genesis op, ONLY after the directory persist. Guarded so a resumed run that already
   // appended it does not attempt a second seq 1 (which would fail the genesis rules, 05 §9.5).
