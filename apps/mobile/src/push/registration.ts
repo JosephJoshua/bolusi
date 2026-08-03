@@ -38,6 +38,17 @@ export async function acquireExpoPushToken(projectId: string): Promise<string> {
  * App-start trigger (api/04-push §2 (a)). Registers ONLY when the freshly-acquired token differs
  * from the last-registered value — an unchanged token issues no request. A failure (offline, no
  * token) is swallowed to `skipped`: push is best-effort and must never block startup (api/04-push §1).
+ *
+ * V0 DELTA — the diff-gate leaves `push_tokens.user_id` STALE on a PIN switch (task 156): user B
+ * switching in on a shared terminal with an UNCHANGED token issues no POST, so `user_id` keeps user
+ * A's id. Accepted — but NOT for the justification commonly stated. "§4 falls back to `id-ID`" is
+ * FALSE here: §4's `id-ID` fallback is for a NULL `user_id`; a stale one is a DIFFERENT REAL user's
+ * id, so a conflict push renders in the PREVIOUS user's locale, not `id-ID`. The reasons that hold:
+ * v0 addresses DEVICES, not users (api/04-push §1/§9 — per-user targeting is the v1 bucket, FR-1149);
+ * push is best-effort with a generic content ceiling, so the blast radius is one wrong-locale
+ * notification; and the diff-gate is DESIRABLE — re-POSTing on every PIN switch on a shared counter
+ * terminal would burn §2's 30-registrations/day/device budget. If per-user locale ever enters v0, the
+ * fix is to re-stamp `user_id` on session change, accounting for that budget.
  */
 export async function registerPushTokenOnAppStart(
   ports: PushRegistrationPorts,

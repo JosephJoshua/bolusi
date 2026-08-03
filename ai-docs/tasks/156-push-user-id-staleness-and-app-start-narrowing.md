@@ -1,6 +1,6 @@
 # TASK 156 — two spec-vs-code deltas the push client accepted for v0, recorded so the REASONS stay true: `push_tokens.user_id` goes stale on a PIN switch, and app-start registration narrows api/04-push §2(a)
 
-**Status:** todo
+**Status:** done
 **Priority:** LOW — both are deliberate, bounded v0 scope with the capability already built. Filed so the deltas are tracked rather than living in a commit message, and because one commonly-stated justification for them is **wrong** and must not be quoted later as settled.
 **Depends on:** 135 (merged 2026-07-22), 21 (EAS creds)
 **Blocks:** —
