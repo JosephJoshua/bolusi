@@ -3,8 +3,42 @@
 // These back the envelope's `hash` (hex) and `signature` (base64) fields, so a lenient
 // decoder is a security bug: if two different texts decode to the same bytes, a
 // signature becomes malleable — re-encodable and still valid.
-import { base64ToBytes, bytesToBase64, bytesToHex, hexToBytes, utf8ToBytes } from '@bolusi/core';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  bytesToHex,
+  concatBytes,
+  hexToBytes,
+  utf8ToBytes,
+} from '@bolusi/core';
 import { describe, expect, it } from 'vitest';
+
+describe('concatBytes (the shared bytes primitive, task 185)', () => {
+  it('concatenates in order and preserves every byte', () => {
+    expect(
+      concatBytes([new Uint8Array([1, 2]), new Uint8Array([3]), new Uint8Array([4, 5])]),
+    ).toEqual(new Uint8Array([1, 2, 3, 4, 5]));
+  });
+
+  it('returns a fresh empty array for no parts and for all-empty parts', () => {
+    expect(concatBytes([])).toEqual(new Uint8Array(0));
+    expect(concatBytes([new Uint8Array(0), new Uint8Array(0)])).toEqual(new Uint8Array(0));
+  });
+
+  it('handles a single part and does not alias the input', () => {
+    const part = new Uint8Array([7, 8, 9]);
+    const out = concatBytes([part]);
+    expect(out).toEqual(part);
+    out[0] = 0;
+    expect(part[0]).toBe(7); // a copy, not a view onto the caller's buffer
+  });
+
+  it('respects each part’s byteOffset (a subarray view, not its whole backing buffer)', () => {
+    const backing = new Uint8Array([0, 1, 2, 3, 4]);
+    const view = backing.subarray(1, 3); // [1, 2] over a 5-byte buffer
+    expect(concatBytes([view, new Uint8Array([9])])).toEqual(new Uint8Array([1, 2, 9]));
+  });
+});
 
 describe('hex', () => {
   it('round-trips every byte value', () => {

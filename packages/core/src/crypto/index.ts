@@ -4,6 +4,7 @@ export {
   base64ToBytes,
   bytesToHex,
   bytesToUtf8,
+  concatBytes,
   hexToBytes,
   utf8ToBytes,
 } from './bytes.js';

@@ -11,21 +11,11 @@
 // AEAD primitive it runs on.
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 
+import { concatBytes } from '@bolusi/core';
 import type { AeadCipher } from '@bolusi/db-client';
 
 const ALGORITHM = 'aes-256-gcm';
 const TAG_BYTES = 16;
-
-function concat(...parts: Uint8Array[]): Uint8Array {
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
-  return out;
-}
 
 function bytes(value: Buffer): Uint8Array {
   return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
@@ -35,8 +25,8 @@ function bytes(value: Buffer): Uint8Array {
 export const nodeColumnAead: AeadCipher = {
   seal(key, nonce, plaintext) {
     const cipher = createCipheriv(ALGORITHM, key, nonce);
-    const body = concat(bytes(cipher.update(plaintext)), bytes(cipher.final()));
-    return concat(body, bytes(cipher.getAuthTag()));
+    const body = concatBytes([bytes(cipher.update(plaintext)), bytes(cipher.final())]);
+    return concatBytes([body, bytes(cipher.getAuthTag())]);
   },
   open(key, nonce, sealed) {
     if (sealed.length < TAG_BYTES) throw new RangeError('AEAD blob shorter than the tag');
@@ -44,7 +34,10 @@ export const nodeColumnAead: AeadCipher = {
     const decipher = createDecipheriv(ALGORITHM, key, nonce);
     decipher.setAuthTag(sealed.subarray(split));
     // `final()` throws when the tag does not verify — the wrong-key / tamper signal (SEC-DEV-06).
-    return concat(bytes(decipher.update(sealed.subarray(0, split))), bytes(decipher.final()));
+    return concatBytes([
+      bytes(decipher.update(sealed.subarray(0, split))),
+      bytes(decipher.final()),
+    ]);
   },
   randomBytes: (length) => bytes(randomBytes(length)),
   hmacSha256: (key, data) => bytes(createHmac('sha256', key).update(data).digest()),

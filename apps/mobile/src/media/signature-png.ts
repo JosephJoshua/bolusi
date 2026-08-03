@@ -25,6 +25,8 @@
 // it passes through while the background stays white. That last assertion is the guard against the
 // failure this repo keeps shipping: an encoder that returns a valid, correctly-sized, entirely
 // BLANK PNG would satisfy every structural check and destroy every signature the shop collects.
+import { concatBytes } from '@bolusi/core';
+
 import { crc32, adler32 } from './checksums.js';
 
 /** §2.3: "Canvas | max 800 x 400 px". The maximum, and therefore the raster we emit. */
@@ -172,22 +174,11 @@ function be32(value: number): Uint8Array {
   ]);
 }
 
-function concat(parts: readonly Uint8Array[]): Uint8Array {
-  const total = parts.reduce((sum, part) => sum + part.length, 0);
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
-}
-
 /** One PNG chunk: length, type, data, CRC-32 over (type ++ data) — RFC 2083 §3.2. */
 function chunk(type: string, data: Uint8Array): Uint8Array {
   const typeBytes = Uint8Array.from([...type].map((c) => c.charCodeAt(0)));
-  const body = concat([typeBytes, data]);
-  return concat([be32(data.length), body, be32(crc32(body))]);
+  const body = concatBytes([typeBytes, data]);
+  return concatBytes([be32(data.length), body, be32(crc32(body))]);
 }
 
 /**
@@ -218,7 +209,7 @@ function zlibStored(raw: Uint8Array): Uint8Array {
     );
   }
   parts.push(be32(adler32(raw)));
-  return concat(parts);
+  return concatBytes(parts);
 }
 
 /**
@@ -243,7 +234,7 @@ export function encodeSignaturePng(bitmap: SignatureBitmap): Uint8Array {
     }
   }
 
-  const ihdr = concat([
+  const ihdr = concatBytes([
     be32(bitmap.width),
     be32(bitmap.height),
     // bit depth 1, colour type 3 (palette), compression 0, filter 0, interlace 0
@@ -252,7 +243,7 @@ export function encodeSignaturePng(bitmap: SignatureBitmap): Uint8Array {
   // White paper first so index 0 — the value an untouched buffer already holds — IS the background.
   const plte = Uint8Array.from([0xff, 0xff, 0xff, 0x00, 0x00, 0x00]);
 
-  return concat([
+  return concatBytes([
     PNG_MAGIC,
     chunk('IHDR', ihdr),
     chunk('PLTE', plte),

@@ -34,7 +34,7 @@ import { CamelCasePlugin, Kysely } from 'kysely';
 import { createClientDialect, runClientMigrations, type ClientDatabase } from '@bolusi/db-client';
 import { noblePort } from '@bolusi/test-support';
 
-import { bytesToHex } from '../../src/crypto/bytes.js';
+import { bytesToHex, concatBytes } from '../../src/crypto/bytes.js';
 import {
   MediaTransportError,
   type MediaChunkResponse,
@@ -287,7 +287,7 @@ export class FakeMediaServer implements MediaTransportPort {
     }
 
     // §3.4 step 2: assemble in index order, streaming SHA-256.
-    const assembled = concat(
+    const assembled = concatBytes(
       [...Array(m.totalChunks).keys()].map((i) => m.chunks.get(i) as Uint8Array),
     );
 
@@ -330,17 +330,6 @@ export class FakeMediaServer implements MediaTransportPort {
     }
     return sha256Hex(m.blob) === sha256;
   }
-}
-
-function concat(parts: readonly Uint8Array[]): Uint8Array {
-  const total = parts.reduce((n, p) => n + p.byteLength, 0);
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.byteLength;
-  }
-  return out;
 }
 
 /** api/03 §3.4 step 4's v0 allowlist, verbatim: jpeg `FF D8 FF`, png `89 50 4E 47 0D 0A 1A 0A`. */
