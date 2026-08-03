@@ -1,6 +1,6 @@
 # TASK 173 — task ids are allocated by hand-reading `_index.md`, so concurrent branches collide; add `pnpm task:new`
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM — not a product defect, but a recurring tax on the parallel-agent workflow that CLAUDE.md §4 is built around. It has already cost real time.
 **Depends on:** —
 **Blocks:** —

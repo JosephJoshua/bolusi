@@ -9,6 +9,7 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
+    "task:new": "node scripts/task-new.mjs",
     "task:status": "node scripts/task-status.mjs",
     "verify": "node scripts/verify.mjs",
     "verify:full": "node scripts/verify.mjs --full",
