@@ -3,7 +3,7 @@
   "command": "knip --production --include exports,files --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
-  "denominator": 140,
+  "denominator": 141,
   "fileDenominator": 15,
   "nonProductionRules": [
     "test-dir",
@@ -44,6 +44,7 @@
     "packages/core/src/auth/session.ts#createLockedOutEmitter",
     "packages/core/src/authz/directory.ts#createDirectorySource",
     "packages/core/src/authz/invalidation.ts#PermissionInvalidationRegistry",
+    "packages/core/src/crypto/bytes.ts#concatBytes",
     "packages/core/src/crypto/bytes.ts#hexToBytes",
     "packages/core/src/crypto/column-cipher.ts#registerColumnCipher",
     "packages/core/src/crypto/order.ts#sortCanonical",
