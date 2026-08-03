@@ -19,6 +19,7 @@ import {
   checkIcuSubset,
   checkKeyGrammar,
   checkParity,
+  checkSeedBlankValues,
   checkSeedKeyGrammar,
   SEED_MIN_ROWS,
 } from '../scripts/gates.mjs';
@@ -186,6 +187,48 @@ describe('seed-doc key-grammar gate (07-i18n §3.1 over ai-docs/ui-labels.md)', 
       expect.stringContaining('notes.badKey'),
     ]);
     expect(checkSeedKeyGrammar(bad, 0)).toEqual([expect.stringContaining("'notes.badKey'")]);
+  });
+});
+
+describe('seed-doc blank-value gate (task 165 — the value at the end of the chain is a usable label)', () => {
+  const realRows = () => parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
+  const row = (key: string, id: unknown, en: unknown) =>
+    ({ key, id, en }) as { key: string; id: string; en: string };
+
+  it('passes the real ui-labels.md seed (no blank label ships today)', () => {
+    expect(checkSeedBlankValues(realRows())).toEqual([]);
+  });
+
+  it('reads the whole doc — the denominator is the doc, not a subset (T-14)', () => {
+    expect(realRows().length).toBeGreaterThanOrEqual(SEED_MIN_ROWS);
+  });
+
+  it('fails loudly when the parse is starved instead of checking nothing (T-14)', () => {
+    const errors = checkSeedBlankValues([]);
+    expect(errors.some((e) => e.includes('parsed only 0 row(s)'))).toBe(true);
+  });
+
+  it('flags a blank id value, naming the ROW an author edits — not the catalog symptom', () => {
+    const errors = checkSeedBlankValues([row('role.main_owner.name', '', 'Main Owner')], 0);
+    expect(errors).toEqual([
+      expect.stringContaining("row 'role.main_owner.name' has a blank id value"),
+    ]);
+  });
+
+  it('flags a blank en value too (both locales are checked)', () => {
+    const errors = checkSeedBlankValues([row('sync.title', 'Sinkronisasi', '   ')], 0);
+    // trim(): a whitespace-only value renders as blank chrome exactly like '' (task 122).
+    expect(errors).toEqual([expect.stringContaining("row 'sync.title' has a blank en value")]);
+  });
+
+  it('flags a non-string leaf (a null/number a half-finished pass leaves behind)', () => {
+    const errors = checkSeedBlankValues([row('conflict.body', null, 'text')], 0);
+    expect(errors).toEqual([expect.stringContaining("row 'conflict.body' has a blank id value")]);
+  });
+
+  it('does NOT flag a legitimately short value — positive control (no false positive)', () => {
+    // The predicate is trim() !== '', not a length floor: 'OK'/'Ya' are real labels.
+    expect(checkSeedBlankValues([row('permission.granted', 'Ya', 'OK')], 0)).toEqual([]);
   });
 });
 

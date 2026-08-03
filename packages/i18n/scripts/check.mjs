@@ -11,6 +11,7 @@ import {
   checkKeyGrammar,
   flattenSource,
   checkParity,
+  checkSeedBlankValues,
   checkSeedKeyGrammar,
   SEED_MIN_ROWS,
 } from './gates.mjs';
@@ -228,6 +229,7 @@ async function main() {
   const results = [
     { name: 'seed parity (ui-labels.md → catalogs)', errors: checkSeedParity() },
     { name: 'key grammar (ui-labels.md rows)', errors: checkSeedKeyGrammar(seedRows) },
+    { name: 'blank values (ui-labels.md rows)', errors: checkSeedBlankValues(seedRows) },
     { name: 'key grammar (catalogs)', errors: checkKeyGrammar(sources) },
     { name: 'collision', errors: checkCollision(sources) },
     { name: 'parity (id ↔ en)', errors: checkParity(sources) },

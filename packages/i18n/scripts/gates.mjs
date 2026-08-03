@@ -164,6 +164,47 @@ export function checkSeedKeyGrammar(rows, minRows = SEED_MIN_ROWS) {
 }
 
 /**
+ * Gate: every ui-labels.md row's `id` AND `en` value is a NON-BLANK string (task 165).
+ *
+ * The other nine gates are all RELATIVE: seed parity proves the catalog REPRODUCES the doc, id↔en
+ * parity compares key SETS, the generated union is regenerated from the doc — not one asks whether the
+ * value at the end of that chain is a usable label. So a blank cell in ai-docs/ui-labels.md seeds a
+ * blank RESERVED-namespace label (`role.*`, `sync.*`, `permission.*` — the shared chrome of every
+ * screen) and every gate stays green. This is task 150's `blankCatalogValues` class one layer up: 150
+ * guards the module CATALOGS (the copy); this guards the DOC (the source the author edits), so the
+ * failure names the ROW to fix rather than the symptom, and it covers the reserved/seed leg 150 cannot
+ * reach. `trim()` — not `!== ''` — because `'   '` renders as blank chrome exactly like `''`; the
+ * non-string arm because a `null`/number leaf (a half-finished authoring pass) is no usable label
+ * either. It lints EVERY row whatever its namespace and asserts it saw the whole doc (T-14).
+ *
+ * @param {{ key: string, id: string, en: string }[]} rows every row parsed out of ai-docs/ui-labels.md
+ * @param {number} [minRows] denominator floor; override only in tests
+ * @returns {string[]}
+ */
+export function checkSeedBlankValues(rows, minRows = SEED_MIN_ROWS) {
+  const errors = [];
+  if (rows.length < minRows) {
+    errors.push(
+      `parsed only ${rows.length} row(s) out of ai-docs/ui-labels.md, expected >= ${minRows} — ` +
+        `the parse is starved, so this blank-value gate checked almost nothing (testing-guide T-14). ` +
+        `Fix the parse, or lower SEED_MIN_ROWS if the seed really did shrink.`,
+    );
+  }
+  for (const row of rows) {
+    for (const locale of /** @type {const} */ (['id', 'en'])) {
+      const value = row[locale];
+      if (typeof value !== 'string' || value.trim() === '') {
+        errors.push(
+          `ai-docs/ui-labels.md: row '${row.key}' has a blank ${locale} value — a blank label renders ` +
+            `as empty chrome on every screen its namespace touches (task 122 symptom, 07-i18n). Fill the cell.`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
  * Gate: collisions — the same key defined by two catalogs, or a module claiming a reserved
  * namespace (07-i18n §3.1, §7.3).
  * @param {CatalogSource[]} sources
