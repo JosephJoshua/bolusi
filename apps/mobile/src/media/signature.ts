@@ -24,7 +24,7 @@ import type { MediaRef } from '@bolusi/schemas';
 import type { Kysely } from 'kysely';
 
 import type { CaptureIdentity } from './capture.js';
-import { insertMediaItem } from './queue.js';
+import { finalizeMediaCapture } from './finalize.js';
 import { hasInk, renderSignaturePng, type PadSize, type SignatureStroke } from './signature-png.js';
 
 const SIGNATURE_EXTENSION = 'png';
@@ -81,49 +81,20 @@ export async function captureSignature<DB>(
   const mediaId = deps.newId();
   const png = renderSignaturePng(strokes, pad);
 
-  // Step 5 — the cache→document move, awaited, before anything references the file.
+  // The signature's only bespoke step: write the rendered PNG to cache. `png.length` is deliberately
+  // NOT used for `sizeBytes` downstream — the row records what is on disk, not what we meant to write.
   const cacheUri = deps.writeToCache(png, mediaId, SIGNATURE_EXTENSION);
-  const localPath = await deps.moveToDocuments(cacheUri, mediaId, SIGNATURE_EXTENSION);
 
-  // Step 6 — hash and size the file AT ITS FINAL PATH. `png.length` is deliberately not used for
-  // `sizeBytes`: it is what we intended to write, and the row must record what is on disk. If the
-  // write short-changed the file, the signed `mediaRef` has to say so at capture rather than let
-  // the server discover it at `complete` and report HASH_MISMATCH as "your evidence rotted".
-  const sha256 = await deps.files.hashFile(localPath);
-  const sizeBytes = await deps.files.sizeOf(localPath);
-
-  // Step 7 — the row.
-  await insertMediaItem(deps.db, {
-    id: mediaId,
-    tenantId: deps.identity.tenantId,
-    storeId: deps.identity.storeId,
-    userId: deps.identity.userId,
-    deviceId: deps.identity.deviceId,
+  // Steps 5–8 — the shared finalization tail (move → hash+size → row → onCaptured → signed ref).
+  const { localPath, ref } = await finalizeMediaCapture(deps, {
+    sourceUri: cacheUri,
+    mediaId,
+    extension: SIGNATURE_EXTENSION,
     type: 'signature',
     mime: 'image/png',
-    sizeBytes,
-    sha256,
     capturedAt,
     location,
-    localPath,
   });
 
-  deps.onCaptured();
-
-  // Step 8 — the ref.
-  return {
-    kind: 'captured',
-    localPath,
-    ref: {
-      mediaId,
-      sha256,
-      mime: 'image/png',
-      type: 'signature',
-      sizeBytes,
-      capturedAt,
-      location,
-      userId: deps.identity.userId,
-      deviceId: deps.identity.deviceId,
-    },
-  };
+  return { kind: 'captured', localPath, ref };
 }

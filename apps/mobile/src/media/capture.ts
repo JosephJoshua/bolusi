@@ -39,7 +39,7 @@ import {
   type CompressionResult,
   type ImageCompressorPort,
 } from './compression.js';
-import { insertMediaItem } from './queue.js';
+import { finalizeMediaCapture } from './finalize.js';
 
 /** JPEG extension for the document-dir filename (06 §2.2 step 5: `<documentDirectory>/media/<id>.jpg`). */
 const PHOTO_EXTENSION = 'jpg';
@@ -148,53 +148,19 @@ export async function capturePhoto<DB>(deps: CaptureDeps<DB>): Promise<CaptureOu
     { width: shot.width, height: shot.height },
   );
 
-  // Step 5 — cache → document dir, AWAITED, before anything references the file.
+  // Steps 5–8 — the shared finalization tail (move → hash+size → row → onCaptured → signed ref).
   const mediaId = deps.newId();
-  const localPath = await deps.moveToDocuments(compressed.uri, mediaId, PHOTO_EXTENSION);
-
-  // Step 6 — hash the FINAL bytes at their FINAL path. Both reads reject on a missing file, so a
-  // move that silently did nothing surfaces here as an error rather than as the empty-string
-  // SHA-256 the drain would later report as `HASH_MISMATCH` ("your evidence rotted").
-  const sha256 = await deps.files.hashFile(localPath);
-  const sizeBytes = await deps.files.sizeOf(localPath);
-
-  // Step 7 — the row.
-  await insertMediaItem(deps.db, {
-    id: mediaId,
-    tenantId: deps.identity.tenantId,
-    storeId: deps.identity.storeId,
-    userId: deps.identity.userId,
-    deviceId: deps.identity.deviceId,
+  const { localPath, ref } = await finalizeMediaCapture(deps, {
+    sourceUri: compressed.uri,
+    mediaId,
+    extension: PHOTO_EXTENSION,
     type: 'image',
     mime: 'image/jpeg',
-    sizeBytes,
-    sha256,
     capturedAt,
     location,
-    localPath,
   });
 
-  // 06 §5.2 (b). After the commit, so the pass it schedules can see the row.
-  deps.onCaptured();
-
-  // Step 8 — the ref the command embeds. `sizeBytes`/`sha256` are the MEASURED values, not the
-  // compressor's report: the op signature covers them, and they must describe the bytes on disk.
-  return {
-    kind: 'captured',
-    localPath,
-    passes: compressed.passes,
-    ref: {
-      mediaId,
-      sha256,
-      mime: 'image/jpeg',
-      type: 'image',
-      sizeBytes,
-      capturedAt,
-      location,
-      userId: deps.identity.userId,
-      deviceId: deps.identity.deviceId,
-    },
-  };
+  return { kind: 'captured', localPath, passes: compressed.passes, ref };
 }
 
 /**
