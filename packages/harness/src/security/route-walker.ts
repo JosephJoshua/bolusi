@@ -328,6 +328,16 @@ export interface ExistenceExceptionLeg {
  * cannot describe behaviour the server no longer has — the prose is a live claim.
  */
 export interface ExistenceException {
+  /**
+   * The security-guide §2.2 exception index this entry implements (task 171). This is the CITATION
+   * that binds the harness copy to its spec source: SEC-TENANT-04 resolves `(docExceptionIndex,
+   * endpoint)` against `parseDocumentedExistenceExceptions` and fails if it does not appear in §2.2,
+   * so a rationale that cites the wrong exception number, or a §2.2 renumbering the harness did not
+   * follow, is loud rather than silent (the §2.8 "one claim, two copies" shape — 141a's round-2
+   * drift). The suite also pins that this number equals the "§2.2 exception <n>" the `rationale`
+   * states, so the human-facing citation and the machine one cannot diverge.
+   */
+  readonly docExceptionIndex: number;
   readonly rationale: string;
   readonly indistinguishable: boolean;
   readonly legs: (ctx: ProbeContext) => readonly ExistenceExceptionLeg[];

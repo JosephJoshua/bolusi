@@ -274,6 +274,45 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
     }
   });
 
+  test('SEC-TENANT-04 each harness exception CITES the §2.2 exception it implements, and the citation resolves (task 171)', () => {
+    // 141a's round-2 defect: §2.2's justification was corrected, the harness `rationale` silently kept
+    // the refuted premise — in the string PRINTED as the assertion failure, i.e. handed to an engineer
+    // triaging a live tenant-isolation regression. The endpoint set was already pinned to §2.2 (above);
+    // what was uncoupled is the exception NUMBER the rationale cites. This binds it — the §2.8 "one
+    // claim, two copies" shape, closed by asserting the CITATION resolves (NOT by comparing prose,
+    // which the reviewer warned would rot into a deletable string-equality check).
+    const documented = parseDocumentedExistenceExceptions(SECURITY_GUIDE);
+    // Blind-parse control (T-14b): a §2.2 that parsed to nothing would let every resolution below
+    // "match" vacuously — assert there IS a subject to resolve against first.
+    expect(
+      documented.length,
+      'security-guide §2.2 parsed to no exceptions — the citation resolver has nothing to resolve against',
+    ).toBe(2);
+
+    const byPair = new Set(documented.map((entry) => `${entry.index} ${entry.endpoint}`));
+    let resolved = 0;
+    for (const [endpoint, exception] of Object.entries(DOCUMENTED_EXISTENCE_EXCEPTIONS)) {
+      // 1. The citation RESOLVES: the harness's (index, endpoint) pair is one §2.2 actually enumerates.
+      //    A rationale citing the wrong exception number, or a §2.2 renumbering the harness did not
+      //    follow, fails HERE rather than shipping a stale premise in the assertion message.
+      expect(
+        byPair.has(`${exception.docExceptionIndex} ${endpoint}`),
+        `${endpoint}: cites §2.2 exception ${exception.docExceptionIndex}, but §2.2 enumerates ` +
+          `${documented.map((e) => `${e.index}→${e.endpoint}`).join(', ')} — the citation does not resolve`,
+      ).toBe(true);
+      // 2. The printed rationale's own "§2.2 exception <n>" equals the machine index, so the human
+      //    citation an engineer reads and the machine one this test checks cannot drift apart.
+      expect(
+        exception.rationale,
+        `${endpoint}: rationale must open with "§2.2 exception ${exception.docExceptionIndex}"`,
+      ).toMatch(new RegExp(`^§2\\.2 exception ${exception.docExceptionIndex}\\b`));
+      resolved += 1;
+    }
+    // Denominator (T-14): the loop resolved EVERY harness entry, not zero.
+    expect(resolved).toBe(Object.keys(DOCUMENTED_EXISTENCE_EXCEPTIONS).length);
+    expect(resolved).toBeGreaterThanOrEqual(2);
+  });
+
   test('SEC-TENANT-04 each documented existence exception answers exactly as security-guide §2.2 records it', async () => {
     const fixture = await openTenantProbeFixture();
     try {
