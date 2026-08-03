@@ -2,6 +2,12 @@
 **Status:** todo
 **Depends on:** —
 
+> **LEGS 1–3 DONE (2026-07-28); LEG 4 remains (spec-gated).**
+> - **Leg 3** — `concatBytes` extracted to `packages/core/src/crypto/bytes.ts` (the platform-free home) and adopted at 3 of the 4 copies (test-support column-AEAD, mobile PNG signer, core media fixture). **The 4th copy — `packages/db-client/src/crypto/aead.ts` — was DELIBERATELY LEFT in place: aead.ts is an `AT_REST_SURFACE` file provenance-anchored to the SEC-AUTH-09 emulator artifact (`device-gate-provenance.ts`, commit 0e2096b), so ANY edit — even importing the shared fn or adding a comment — reds the security-sweep lane "Artifact STALE" and needs a fresh emulator re-run to re-anchor (verified 2026-07-28: re-applied the extraction → guard red with that exact message → reverted). Not worth coupling an emulator run to a dedup nicety; it re-homes for free the next time the emulator lane re-anchors.** Documented in the shared `concatBytes` docstring.
+> - **Leg 1** — `createTriggerLoop` extracted to a NEUTRAL `apps/mobile/src/bootstrap/trigger-loop.ts` (NOT the sync `triggers.ts`): FR-1138 (`media/sync-independence.test.ts`) forbids a media source file importing the sync loop's SCHEDULING, so the shared lifecycle lives in its own module both loops build on. Both `createSyncTriggers` + `createMediaTriggers` delegate; behavior-preserving (both trigger suites + the FR-1138 guard green).
+> - **Leg 2** — `finalizeMediaCapture` extracted to `apps/mobile/src/media/finalize.ts` (§2.2 steps 5–8: move → hash+size → 11-field row → onCaptured → signed ref); `capturePhoto` + `captureSignature` delegate. Behavior-preserving (capture + signature suites green).
+> - **Leg 4** — `@bolusi/sqlite-test-driver` STILL PENDING: it REQUIRES the 08 §3.3 matrix amendment first (its own spec task per §3.3 rule 5 / CLAUDE.md §4), so it is not part of this refactor.
+
 ## Goal
 Work through the remaining aware-copy duplications a repo-wide audit (jscpd + manual, 2026-07-26) confirmed. Two extractions already landed on `chore/dedup-audit-fixes` (`describeParseFailure` → `core/src/errors/`, keyset pagination → `core/src/query/paginate.ts`); this task carries the rest, each small and independently shippable:
 
