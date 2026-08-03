@@ -13,8 +13,10 @@ converge). It cannot answer *performance* (its CPU/storage/RAM are the host's, n
 So 27a wired the correctness subset and left the perf half to 27b:
 
 - **SEED-200K generator** (`packages/test-support/src/seed/seed-200k.ts`) — the year-equivalent local
-  history (200,000 ops, exactly 20,000 entities × 10 ops, 5,000 MediaItem rows, v1→v2 cutover at op
-  100,000) the on-device rebuild / execute-latency runners replay. Deterministic from seed 42.
+  history (200,000 ops, exactly 20,000 entities × 10 ops, 5,000 MediaItem rows) the on-device rebuild /
+  execute-latency runners replay. Deterministic from seed 42. (The v1→v2 generator cutover this line
+  once named was deleted in task 132 — it drove nothing; the schema-fold seam is covered by
+  `packages/modules/test/migration.test.ts`.)
 - **SEC-DEV-06 L6 at-rest leg with its T-14b POSITIVE CONTROL** (`driver-conformance/at-rest.ts` →
   `checkControlSeedIsWitnessed`; device ctx `apps/mobile/src/harness/part-c/at-rest-device-ctx.ts`).
   The device ctx seeds markers into an UNENCRYPTED control DB and asserts they ARE byte-present there

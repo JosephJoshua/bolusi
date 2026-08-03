@@ -1,6 +1,6 @@
 # TASK 183 — security-guide's SEC-AUTH-09 leg 3 names a "statistical timing test"; the shipped and accepted proof is the structural constant-time one — reconcile the wording
 
-**Status:** todo
+**Status:** done
 **Priority:** LOW — spec/doc reconciliation. The security property is proven and gated; only the guide's wording lags what actually gates.
 **Depends on:** 28 (the SEC-AUTH-09 discharge).
 **Blocks:** —

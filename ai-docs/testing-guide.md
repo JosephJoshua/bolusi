@@ -134,7 +134,7 @@ Devices are pre-enrolled in the server fixture (pubkeys registered, device token
 The `notes` module (`04 §8`) is the harness workload. Two testability requirements on its projection (additive to the `04 §8` checklist):
 
 1. The `notes` projection table shall include `edit_count` (integer, incremented by each `notes.note_body_edited` apply) — declared as a testability column in `01-domain-model` §9 and in both notes DDLs in `10-db-schema`. A last-write-wins-only projection cannot reveal double-application; `edit_count` makes any idempotency violation visible to the oracle.
-2. The op script generator must exercise the `schemaVersion: 2` migration seam: v1 payloads before a seeded cutover index, v2 after (per `04 §3`).
+2. The schema-migration seam (v1→v2→v3 payload fold, incremental apply AND full rebuild) is covered by `packages/modules/test/migration.test.ts`, which builds real signed ops per version. The op script generator does NOT carry a `schemaVersion`/cutover seam: a scripted op maps to a real `notes` command and the runtime stamps `schemaVersion` from the operation registry (`ctx.ts` `resolveSchemaVersion`, never caller-supplied), so a generator-side version descriptor was dropped at the command boundary and was deleted (task 132).
 
 ### 3.3 Determinism kit (`@bolusi/test-support`)
 
@@ -144,7 +144,7 @@ The `notes` module (`04 §8`) is the harness workload. Two testability requireme
 | FakeClock | `{ now(): number, advance(ms), set(ms) }` — injected into runtimes per T-6. One per device + one for the server. |
 | IdSource | UUIDv7 from FakeClock ms + PRNG random bits (T-6). |
 | Keypairs | Derived from seed (§3.1) via `@noble/curves` in CI, quick-crypto on device — identical keys per seed by RFC 8032 determinism. |
-| Op script generator | `generateScript(prng, {opsPerDevice, deviceCount, cutoverIndex})` → deterministic sequence of command invocations per device. Mix: 20% `createNote`, 60% `editNoteBody` (target = PRNG-chosen existing entity, biased 30% toward the 5 most recent — forces same-entity contention), 15% `archiveNote`, 5% media-attach command. Timestamps advance each device's FakeClock by PRNG-chosen 1–600 s per op. |
+| Op script generator | `generateScript(prng, {opsPerDevice, deviceCount})` → deterministic sequence of command invocations per device. Mix: 20% `createNote`, 60% `editNoteBody` (target = PRNG-chosen existing entity, biased 30% toward the 5 most recent — forces same-entity contention), 15% `archiveNote`, 5% media-attach command. Timestamps advance each device's FakeClock by PRNG-chosen 1–600 s per op. |
 | Seeds in CI | Every PR: fixed seeds **1–10** per scenario. Nightly: 100 PRNG-chosen seeds per scenario, each logged; a nightly failure is reproduced locally by seed. |
 
 ### 3.4 The convergence oracle (defined once; every convergence assertion uses it)
@@ -310,7 +310,7 @@ What lever 1 bounds is the seed dimension only; what lever 2 reduces is stated a
 
 ### 4.1 The seed: `SEED-200K` (year-equivalent history)
 
-**200,000 operations**, generated deterministically (seed 42) via the §3.3 generator scaled to ~20,000 entities × ~10 ops each, plus 5,000 MediaItem metadata rows, v1→v2 schema cutover at op 100,000.
+**200,000 operations**, generated deterministically (seed 42) via the §3.3 generator scaled to ~20,000 entities × ~10 ops each, plus 5,000 MediaItem metadata rows. (The generator carries no schema-version cutover — see §3.2.2; the v1→v2→v3 fold is covered by `packages/modules/test/migration.test.ts`.)
 
 *Justification:* one busy store's daily op volume, estimated from the v1 module PRDs — POS ~60 sales × 2 ops = 120; repairs ~12 × 8 lifecycle ops = 96; inventory movements ~40; finance ~30; attendance ~40; misc ~50 ⇒ ≈ 380–560 ops/day. At ~550/day × 360 days ≈ 198k. A device pulls its own store + tenant-scoped ops (`api/01 §4.1`), so 200k is a defensible upper bound for one device-year; at ~600 bytes/op it is ≈ 120 MB of log — realistic for the 32GB device. Gates hold at 200k or the gate fails — no "it was close".
 
