@@ -21,6 +21,9 @@ import {
   type AppStatePort,
   type NetInfoPort,
 } from '../bootstrap/triggers.js';
+// createTriggerLoop comes from the NEUTRAL trigger-loop module, not the sync triggers file — FR-1138
+// forbids a media source file importing the sync loop's scheduling (media/sync-independence.test.ts).
+import { createTriggerLoop } from '../bootstrap/trigger-loop.js';
 
 export interface MediaTriggerDeps {
   /** `MediaDrainLoop.requestDrain` — fire-and-forget; it never throws (drain.ts). */
@@ -66,80 +69,30 @@ export interface MediaTriggers {
  * an oversight instead of a decision.
  */
 export function createMediaTriggers(deps: MediaTriggerDeps): MediaTriggers {
-  let cancelDebounce: (() => void) | null = null;
-  let cancelInterval: (() => void) | null = null;
-  let unsubscribeApp: (() => void) | null = null;
-  let unsubscribeNet: (() => void) | null = null;
-  /** Last connectivity reading, so only a REGAIN fires (a) and NetInfo chatter is absorbed. */
-  let lastConnected: boolean | null = null;
-  let started = false;
-
-  function onConnectivity(connected: boolean): void {
-    const wasConnected = lastConnected;
-    lastConnected = connected;
-    // `null → true` is the boot case (the app opened online) and DOES fire — that is what drains a
-    // queue left over from yesterday. `true → true` is absorbed; `→ false` never drains.
-    if (connected && wasConnected !== true) {
+  const loop = createTriggerLoop({
+    timer: deps.timer,
+    appState: deps.appState,
+    netInfo: deps.netInfo,
+    intervalMs: FOREGROUND_INTERVAL_MS,
+    debounceMs: APPEND_DEBOUNCE_MS,
+    onInterval: () => deps.requestDrain('periodic'),
+    // 03 §4.1's reset: `onConnectivityRegained` first CLEARS backoff, so it is NOT
+    // `requestDrain('connectivity')`; it returns a promise this module never awaits (a trigger must
+    // not block the event that fired it), settling it via `onTriggerError` — the connectivity arm
+    // writes to the DB and CAN reject (a locked WAL), so a floating promise there would be an
+    // unhandled rejection in production and a lint error here.
+    onConnectivityRegain: () => {
       deps.onConnectivityRegained().catch(deps.onTriggerError);
-    }
-  }
-
-  function armInterval(): void {
-    if (cancelInterval !== null) return;
-    const tick = (): void => {
-      cancelInterval = deps.timer.schedule(FOREGROUND_INTERVAL_MS, tick);
-      // §5.2 (c) is "while online AND foregrounded". Foreground is checked; "online" is not — a
-      // wasted attempt on an offline device costs one failed fetch and a backoff tick, while
-      // suppressing on a GUESSED offline state costs an upload that should have happened.
-      if (deps.appState.current() === 'active') deps.requestDrain('periodic');
-    };
-    cancelInterval = deps.timer.schedule(FOREGROUND_INTERVAL_MS, tick);
-  }
-
-  function disarmInterval(): void {
-    cancelInterval?.();
-    cancelInterval = null;
-  }
+    },
+    // A debounce, not a queue: ten photos in a burst produce ONE drain pass, not ten. The drain
+    // loop's own single-flight flag is the second line of the same defence (drain.ts).
+    onDebounced: () => deps.requestDrain('capture'),
+  });
 
   return {
-    notifyCapture(): void {
-      // A debounce, not a queue: ten photos taken in a burst produce ONE drain pass, not ten. The
-      // loop's own single-flight flag is the second line of the same defence (drain.ts).
-      cancelDebounce?.();
-      cancelDebounce = deps.timer.schedule(APPEND_DEBOUNCE_MS, () => {
-        cancelDebounce = null;
-        deps.requestDrain('capture');
-      });
-    },
-
-    start(): void {
-      if (started) return;
-      started = true;
-      unsubscribeApp = deps.appState.subscribe((status) => {
-        if (status === 'active') armInterval();
-        // Backgrounded: stop the interval. An interval still firing in the background would be
-        // trigger (d) by accident, on a cadence the OS never agreed to, burning a metered
-        // connection and a battery 08 §2.2 budgets carefully.
-        else disarmInterval();
-      });
-      // NetInfo fires the listener IMMEDIATELY with the current state (12.0.1 contract), so an
-      // already-online boot drains at once via `onConnectivity` — no separate boot trigger needed.
-      unsubscribeNet = deps.netInfo.subscribe(onConnectivity);
-      if (deps.appState.current() === 'active') armInterval();
-    },
-
-    stop(): void {
-      started = false;
-      cancelDebounce?.();
-      cancelDebounce = null;
-      disarmInterval();
-      unsubscribeApp?.();
-      unsubscribeApp = null;
-      unsubscribeNet?.();
-      unsubscribeNet = null;
-      lastConnected = null;
-    },
-
+    notifyCapture: () => loop.scheduleDebounced(),
+    start: () => loop.start(),
+    stop: () => loop.stop(),
     requestManual(): void {
       deps.requestDrain('manual');
     },

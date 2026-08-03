@@ -32,6 +32,8 @@
 // background retries, never data — ops are durable locally the moment they commit (design-system §4).
 import type { SyncSchedulerPort, SyncTriggerReason, TimerPort } from '@bolusi/core';
 
+import { createTriggerLoop } from './trigger-loop.js';
+
 /** api/01-sync §5 (b): "debounced 3 s after any local append". */
 export const APPEND_DEBOUNCE_MS = 3_000;
 
@@ -94,92 +96,27 @@ export interface SyncTriggers {
 }
 
 /**
- * Wire §5's buildable triggers onto a loop.
- *
- * The debounce COALESCES rather than queues: N appends inside 3 s produce ONE sync, because the
- * pending timer is cancelled and re-armed. That is the point of a debounce here — a bulk edit
- * emitting 40 ops must not schedule 40 cycles — and the loop's own rerun flag is the second line of
- * the same defence (03 §10: "a flag is not a counter").
+ * Wire §5's buildable triggers onto a {@link createTriggerLoop} (which lives in the neutral
+ * `trigger-loop.ts`, not here — FR-1138 keeps the media loop from importing this sync module's
+ * scheduling). The debounce coalesces N appends inside 3 s into ONE sync; the loop's own rerun flag
+ * is the second line of that defence (03 §10).
  */
 export function createSyncTriggers(deps: SyncTriggerDeps): SyncTriggers {
-  let cancelDebounce: (() => void) | null = null;
-  let cancelInterval: (() => void) | null = null;
-  let unsubscribe: (() => void) | null = null;
-  let unsubscribeNet: (() => void) | null = null;
-  /** Last connectivity reading, so a repeated `connected` is absorbed and only a REGAIN fires (a). */
-  let lastConnected: boolean | null = null;
-  let started = false;
-
-  function onConnectivity(connected: boolean): void {
-    const wasConnected = lastConnected;
-    lastConnected = connected;
-    // §5 (a) "connectivity regained": fire on a transition INTO connectivity. `null → true` is the
-    // boot case (the app opened online) and DOES fire — the initial sync. `true → true` (a wifi
-    // detail change) is absorbed, so the loop is not spun by NetInfo chatter. `→ false` never syncs.
-    if (connected && wasConnected !== true) deps.requestSync('connectivity');
-  }
-
-  function armInterval(): void {
-    if (cancelInterval !== null) return;
-    // Re-arming one-shots rather than a real interval: `TimerPort` is core's one timer seam and a
-    // second `setInterval`-shaped port would be a second answer to "how does this app wait" (§2.8).
-    const tick = (): void => {
-      cancelInterval = deps.timer.schedule(FOREGROUND_INTERVAL_MS, tick);
-      // §5 (c) is "while online AND foregrounded". Foreground is checked here; "online" is NOT —
-      // there is no connectivity signal (see (a) above), and the loop is the right place to find
-      // out anyway. A wasted request on an offline device costs a failed fetch and a backoff tick;
-      // suppressing the tick on a *guessed* offline state would cost a sync that should have run.
-      if (deps.appState.current() === 'active') deps.requestSync('periodic');
-    };
-    cancelInterval = deps.timer.schedule(FOREGROUND_INTERVAL_MS, tick);
-  }
-
-  function disarmInterval(): void {
-    cancelInterval?.();
-    cancelInterval = null;
-  }
+  const loop = createTriggerLoop({
+    timer: deps.timer,
+    appState: deps.appState,
+    netInfo: deps.netInfo,
+    intervalMs: FOREGROUND_INTERVAL_MS,
+    debounceMs: APPEND_DEBOUNCE_MS,
+    onInterval: () => deps.requestSync('periodic'),
+    onConnectivityRegain: () => deps.requestSync('connectivity'),
+    onDebounced: () => deps.requestSync('append'),
+  });
 
   return {
-    scheduler: {
-      schedule(): void {
-        cancelDebounce?.();
-        cancelDebounce = deps.timer.schedule(APPEND_DEBOUNCE_MS, () => {
-          cancelDebounce = null;
-          deps.requestSync('append');
-        });
-      },
-    },
-
-    start(): void {
-      if (started) return;
-      started = true;
-      unsubscribe = deps.appState.subscribe((status) => {
-        if (status === 'active') armInterval();
-        // Backgrounded: stop the interval. An interval that kept firing in the background would be
-        // trigger (d) by accident — on a cadence the OS never agreed to, burning a metered
-        // connection and a battery that 08 §2.2 budgets carefully.
-        else disarmInterval();
-      });
-      // Trigger (a): subscribe connectivity. NetInfo fires the listener immediately with the current
-      // state (12.0.1 contract), so an already-online boot syncs at once via `onConnectivity`.
-      unsubscribeNet = deps.netInfo.subscribe(onConnectivity);
-      // Do not wait for a transition: a boot that is already foregrounded (the normal case) would
-      // otherwise never start its interval.
-      if (deps.appState.current() === 'active') armInterval();
-    },
-
-    stop(): void {
-      started = false;
-      cancelDebounce?.();
-      cancelDebounce = null;
-      disarmInterval();
-      unsubscribe?.();
-      unsubscribe = null;
-      unsubscribeNet?.();
-      unsubscribeNet = null;
-      lastConnected = null;
-    },
-
+    scheduler: { schedule: () => loop.scheduleDebounced() },
+    start: () => loop.start(),
+    stop: () => loop.stop(),
     requestManual(): void {
       deps.requestSync('manual');
     },
