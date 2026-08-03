@@ -284,6 +284,8 @@ Mechanism: 06-media-pipeline (client pipeline) + api/03-media (wire protocol —
 | SEC-MEDIA-04 | path/param fuzzing | `:id` values `../../etc/passwd`, `..%2f..`, absolute paths, non-UUID strings → `422 VALIDATION_FAILED` (param schema), nothing stored; `:index` of −1, `totalChunks`, 2^31 → `422 CHUNK_INDEX_INVALID`; blob files exist only under the server-generated storage root (fs assertion) |
 | SEC-MEDIA-05 | content validation at complete | Declared `image/jpeg` with non-JPEG magic bytes → `422 MIME_MISMATCH` at `complete`, chunks purged, media never `complete` (code owned by api/03-media §3.4); bit-flipped chunk → `422 HASH_MISMATCH`, stored chunks purged, blob store untouched; chunk byte count ±1 → `422 CHUNK_SIZE_INVALID`, nothing stored |
 | SEC-MEDIA-06 | cross-device chunk injection | Chunks `PUT` to another device's in-flight media id with a valid (different-device) token → `404 MEDIA_NOT_FOUND`; the real upload's `receivedChunks` unpolluted |
+| SEC-MEDIA-07 | client pre-display hash verification (06 §6) | The FIRST client-side SEC id. Media is verified against `mediaRef.sha256` **before display**: a server (or cache, or local file) returning bytes whose SHA-256 ≠ the signed `mediaRef.sha256` is REFUSED and never rendered, and a tampered cache entry is re-verified and evicted (task 140 Leg A; `apps/mobile/src/media/remote-cache.test.ts`). A mismatching LOCAL file is NOT deleted (it may be un-uploaded evidence, §7). Swept via the `mobile` project of the repo suite — see §12. |
+| SEC-MEDIA-08 | mediaRef bound to the envelope signer (05 §9) | At push, a v3 note op whose `mediaRef.deviceId` or `mediaRef.userId` is not the envelope signer's is rejected `SCOPE_VIOLATION` — not logged, not folded — closing the server-side evidence-substitution arm (task 140 Leg B; `apps/server/src/oplog/steps/scope.ts`, `test/integration/sync/notes-media-ref-binding.test.ts`). **v0-scope: this `deviceId` binding is correct for "capture+attach in one command"; a v1 attach-prior-media flow (06 §3.2) must relax it deliberately.** |
 
 ## 8. Surface: Tenant isolation
 
@@ -366,4 +368,4 @@ Mechanism: api/00-conventions §12 (realtime channel) + api/04-push (push catego
 
 ## 12. Test index
 
-Every `SEC-*` ID above is REQUIRED and enforced by SEC-META-01 (§2.1). Roll-up: OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–08 · MEDIA 01–06 · TENANT 01–06 · RT 01–05 · SECRET 01–02 · META 01. The chaos harness (testing-guide, decisions D4) covers correctness-under-disorder; this suite covers correctness-under-malice. Both gate v0 exit.
+Every `SEC-*` ID above is REQUIRED and enforced by SEC-META-01 (§2.1). Roll-up: OPLOG 01–09 · SYNC 01–10 · AUTH 01–11 · DEV 01–08 · MEDIA 01–08 · TENANT 01–06 · RT 01–05 · SECRET 01–02 · META 01. The chaos harness (testing-guide, decisions D4) covers correctness-under-disorder; this suite covers correctness-under-malice. Both gate v0 exit.

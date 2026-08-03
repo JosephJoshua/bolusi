@@ -108,7 +108,7 @@ describe('§6 — resolution order: local, then cache, then network', () => {
   });
 });
 
-describe('§6 — the verification IS the security property', () => {
+describe('SEC-MEDIA-07 client pre-display hash verification — §6 the verification IS the security property', () => {
   test('ADVERSARIAL: a server returning different bytes is refused, twice, and nothing is cached', async () => {
     // Two independent fetches disagreed with the signed hash. Either the server holds bytes that
     // were not signed, or something between us is rewriting them. Neither is renderable.

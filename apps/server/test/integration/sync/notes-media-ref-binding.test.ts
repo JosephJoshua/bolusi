@@ -142,7 +142,7 @@ async function seedAtGenesis(
  *  the whole point (media uploads independently, FR-1138) — see the residual in task 140. */
 const OTHER = makeWorld(9_140_140, serverCryptoPort);
 
-describe('mediaRef userId/deviceId are bound to the envelope signer at push (task 140 Leg B)', () => {
+describe('SEC-MEDIA-08 mediaRef userId/deviceId are bound to the envelope signer at push (task 140 server binding)', () => {
   test('provenance — the DB that answered (T-14d)', () => {
     console.log(`[task-140B] mediaRef binding gate — real PG16 database: ${h.provenance}`);
     expect(h.provenance).not.toBe('');

@@ -32,7 +32,7 @@ const workDir = mkdtempSync(join(tmpdir(), 'bolusi-sec-sweep-'));
 /** The test lanes the inventory reads. Each writes its own JSON report. */
 const LANES = [
   {
-    name: 'repo suite (all vitest projects: unit, core, schemas, server, db-server, harness, i18n, ui)',
+    name: 'repo suite (all vitest projects: unit, core, schemas, server, db-server, harness, i18n, ui, mobile)',
     args: ['vitest', 'run'],
   },
   {
