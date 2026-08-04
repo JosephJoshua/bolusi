@@ -86,9 +86,10 @@ function mediaClientServing(bytes: Uint8Array): MediaClient {
           writeCached: (id, ext, written) => {
             const path = `/c/${id}.${ext}`;
             cache.set(path, written);
-            return path;
+            return Promise.resolve(path);
           },
           evictCached: (id) => cache.delete(`/c/${id}.jpg`),
+          toRenderUri: (path) => Promise.resolve(path),
         },
         ref,
       ),

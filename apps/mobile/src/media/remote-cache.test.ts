@@ -52,11 +52,12 @@ function rig(options: {
       return fs.files.has(path) ? path : null;
     },
     writeCached: (mediaId, extension, bytes) =>
-      fs.write(`/cache/media/${mediaId}.${extension}`, bytes),
+      Promise.resolve(fs.write(`/cache/media/${mediaId}.${extension}`, bytes)),
     evictCached: (mediaId) => {
       evictions.push(mediaId);
       fs.files.delete(`/cache/media/${mediaId}.jpg`);
     },
+    toRenderUri: (path) => Promise.resolve(path),
   };
   return { deps, fs, evictions, downloads };
 }
@@ -232,6 +233,9 @@ describe('§6 — the LEGACY arm: what verification can mean when no signed hash
       deps: {
         files: fs.port,
         localPathFor: (): Promise<string | null> => Promise.resolve(seed?.path ?? null),
+        // Identity: fake files are not encrypted, so the render decrypt seam is a pass-through here
+        // (task 158). The point of this rig is still that NO cache/fetch dep is given.
+        toRenderUri: (path: string): Promise<string> => Promise.resolve(path),
       },
     };
   }

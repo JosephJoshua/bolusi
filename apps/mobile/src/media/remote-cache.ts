@@ -66,10 +66,18 @@ export interface RemoteMediaDeps {
   readonly localPathFor: (mediaId: string) => Promise<string | null>;
   /** `remoteMediaCache.find` (files.ts) — a uri only if the file is actually present. */
   readonly findCached: (mediaId: string, extension: string) => string | null;
-  /** `remoteMediaCache.write` (files.ts). Synchronous, like every `File#write`. */
-  readonly writeCached: (mediaId: string, extension: string, bytes: Uint8Array) => string;
+  /** `remoteMediaCache.write` (files.ts) — ENCRYPTS the verified bytes (task 158), hence async. */
+  readonly writeCached: (mediaId: string, extension: string, bytes: Uint8Array) => Promise<string>;
   /** `remoteMediaCache.evict` (files.ts) — used to discard a cache entry that failed re-verification. */
   readonly evictCached: (mediaId: string) => void;
+  /**
+   * Turn a verified media FILE path into a uri the OS image loader can render (task 158). Media files
+   * are AES-256-GCM ciphertext at rest (SEC-MEDIA-09), which `<Image>` cannot decode, so the device
+   * binding decrypts to a transient plaintext temp and returns ITS uri; the test binding is identity
+   * (fake files are not encrypted). Applied ONLY after the bytes have been hash-verified against the
+   * signed ref — decryption is never a substitute for verification, it follows it.
+   */
+  readonly toRenderUri: (path: string) => Promise<string>;
 }
 
 /** 06 §2.2 step 5 / §2.3: the extension follows the mime, and there are exactly two mimes in v0. */
@@ -126,7 +134,7 @@ export async function loadMediaForRender(
     // Verify against the SIGNED hash, exactly as the cache arm does — see the header for why the
     // document dir earns no exemption. A match is the offline-first fast path: `local`, no fetch.
     if ((await deps.files.hashFile(localPath)) === ref.sha256) {
-      return { kind: 'local', uri: localPath };
+      return { kind: 'local', uri: await deps.toRenderUri(localPath) };
     }
     // No match: these bytes are not the bytes the op signed, whatever put them here. Fall through
     // WITHOUT deleting the file (header) — the cache and the network are both verifying paths.
@@ -137,7 +145,7 @@ export async function loadMediaForRender(
   if (cached !== null) {
     // Re-verify what the cache holds against the SIGNED hash (see the header).
     const actual = await deps.files.hashFile(cached);
-    if (actual === ref.sha256) return { kind: 'cached', uri: cached };
+    if (actual === ref.sha256) return { kind: 'cached', uri: await deps.toRenderUri(cached) };
     // Discard and fall through to a refetch. §6's "discard + refetch once" is core's rule for the
     // NETWORK; a bad cache entry is not one of those two fetches, so evicting and continuing here
     // does not spend the retry budget on a local problem.
@@ -154,7 +162,10 @@ export async function loadMediaForRender(
       // Written ONLY after core returned `ok`, i.e. only after the bytes matched the signed hash.
       // Bytes that failed verification never reach the disk (core discards them) and never reach a
       // screen — which is the whole of §6's "verified before display".
-      return { kind: 'cached', uri: deps.writeCached(ref.mediaId, extension, outcome.bytes) };
+      return {
+        kind: 'cached',
+        uri: await deps.toRenderUri(await deps.writeCached(ref.mediaId, extension, outcome.bytes)),
+      };
     case 'unavailable':
       return { kind: 'unavailable', code: outcome.code };
     case 'mismatch':
@@ -198,12 +209,12 @@ export async function loadMediaForRender(
  * live — which is a reason to file it, not a reason to leave it undescribed.
  */
 export async function loadLocalMediaOnly(
-  deps: Pick<RemoteMediaDeps, 'files' | 'localPathFor'>,
+  deps: Pick<RemoteMediaDeps, 'files' | 'localPathFor' | 'toRenderUri'>,
   mediaId: string,
 ): Promise<RenderableMedia> {
   const localPath = await deps.localPathFor(mediaId);
   if (localPath !== null && (await deps.files.exists(localPath))) {
-    return { kind: 'local', uri: localPath };
+    return { kind: 'local', uri: await deps.toRenderUri(localPath) };
   }
   return { kind: 'unavailable', code: null };
 }

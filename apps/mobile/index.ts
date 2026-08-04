@@ -186,8 +186,13 @@ function createSync(
 function createMedia(app: Bootstrapped): MediaClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
+  // Reads (never mints) the at-rest DB key so the media-file cipher can derive its sibling key (task
+  // 158). It is the SAME `bolusi.db_encryption_key` bootstrap ensured; a media file op before boot
+  // completes would see `null` and fail closed rather than write plaintext.
+  const dbKeyStore = new SecureStoreDbKeyStore(quickCryptoPort);
   return createMediaClientForApp({
     db: app.db,
+    dbKeyHex: () => dbKeyStore.getDatabaseEncryptionKey(),
     transport: createFetchMediaTransport({
       baseUrl: apiBaseUrl(),
       deviceToken: () => keystore.loadDeviceToken(),

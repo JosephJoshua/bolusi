@@ -102,9 +102,10 @@ function buildRig(overrides: Partial<MediaClientDeps> = {}): Rig {
     writeToCache: fs.writeToCache,
     findCached: () => null,
     writeCached: (mediaId, extension, bytes) =>
-      fs.write(`/cache/media/${mediaId}.${extension}`, bytes),
+      Promise.resolve(fs.write(`/cache/media/${mediaId}.${extension}`, bytes)),
     evictCached: () => undefined,
     listRemoteCache: () => [],
+    toRenderUri: (path) => Promise.resolve(path),
     newId: createUuidV7Generator({ now: () => NOW, randomBytes: (n) => noblePort.randomBytes(n) }),
     location: { getBestFix: () => ({ lat: -6.2, lng: 106.8, accuracyMeters: 12 }) },
     background: null,

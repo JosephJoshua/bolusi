@@ -17,13 +17,7 @@ import * as TaskManager from 'expo-task-manager';
 
 import type { BackgroundTaskPlatform } from './background-task.js';
 import type { CompressedImage, ImageCompressorPort } from './compression.js';
-import {
-  availableDiskSpaceBytes,
-  expoMediaFilePort,
-  moveCaptureToDocumentDir,
-  remoteMediaCache,
-  writeCaptureToCache,
-} from './files.js';
+import { availableDiskSpaceBytes, createEncryptingMediaFileParts } from './files.js';
 import { createMediaClient, type MediaClient, type MediaClientDeps } from './client.js';
 
 /**
@@ -88,10 +82,16 @@ export type MediaClientForAppConfig = Omit<
   | 'writeCached'
   | 'evictCached'
   | 'listRemoteCache'
+  | 'toRenderUri'
   | 'background'
 > & {
   /** Pass `false` to compose without trigger (d) — an explicit choice, never a silent absence. */
   readonly registerBackgroundTask?: boolean;
+  /**
+   * Reads the 32-byte SecureStore DB key as hex (task 158). The media-file cipher derives a sibling
+   * key from it; `null` (never post-boot) fails media file ops closed rather than writing plaintext.
+   */
+  readonly dbKeyHex: () => Promise<string | null>;
 };
 
 /**
@@ -103,18 +103,22 @@ export type MediaClientForAppConfig = Omit<
  * being importable under Node.
  */
 export function createMediaClientForApp(config: MediaClientForAppConfig): MediaClient {
-  const { registerBackgroundTask = true, ...rest } = config;
+  const { registerBackgroundTask = true, dbKeyHex, ...rest } = config;
+  // The encrypting file parts (task 158): one cipher, lazily keyed from the DB key, behind every
+  // media file read/write. `client.ts` still names only interfaces — the expo + crypto binding is here.
+  const parts = createEncryptingMediaFileParts(dbKeyHex);
   return createMediaClient({
     ...rest,
-    files: expoMediaFilePort,
+    files: parts.port,
     compressor: expoImageCompressor,
     freeSpaceBytes: availableDiskSpaceBytes,
-    moveToDocuments: moveCaptureToDocumentDir,
-    writeToCache: writeCaptureToCache,
-    findCached: (mediaId, extension) => remoteMediaCache.find(mediaId, extension),
-    writeCached: (mediaId, extension, bytes) => remoteMediaCache.write(mediaId, extension, bytes),
-    evictCached: (mediaId) => remoteMediaCache.evict(mediaId),
-    listRemoteCache: () => remoteMediaCache.list(),
+    moveToDocuments: parts.moveToDocuments,
+    writeToCache: parts.writeToCache,
+    findCached: parts.findCached,
+    writeCached: parts.writeCached,
+    evictCached: parts.evictCached,
+    listRemoteCache: parts.listRemoteCache,
+    toRenderUri: parts.toRenderUri,
     background: registerBackgroundTask ? expoBackgroundTaskPlatform : null,
   });
 }

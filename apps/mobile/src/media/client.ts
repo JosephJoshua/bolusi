@@ -98,9 +98,11 @@ export interface MediaClientDeps {
   ) => Promise<string>;
   readonly writeToCache: (bytes: Uint8Array, mediaId: string, extension: string) => string;
   readonly findCached: (mediaId: string, extension: string) => string | null;
-  readonly writeCached: (mediaId: string, extension: string, bytes: Uint8Array) => string;
+  readonly writeCached: (mediaId: string, extension: string, bytes: Uint8Array) => Promise<string>;
   readonly evictCached: (mediaId: string) => void;
   readonly listRemoteCache: () => readonly RemoteCacheEntry[];
+  /** Decrypt a verified media file to a uri `<Image>` can render (task 158; identity in tests). */
+  readonly toRenderUri: (path: string) => Promise<string>;
   readonly newId: () => string;
   readonly location: { getBestFix(): { lat: number; lng: number; accuracyMeters: number } | null };
   /**
@@ -288,6 +290,7 @@ class MediaClientImpl implements MediaClient {
         findCached: this.deps.findCached,
         writeCached: this.deps.writeCached,
         evictCached: this.deps.evictCached,
+        toRenderUri: this.deps.toRenderUri,
       },
       ref,
     );
@@ -298,6 +301,7 @@ class MediaClientImpl implements MediaClient {
       {
         files: this.deps.files,
         localPathFor: async (id) => (await findMediaItem(this.deps.db.db, id))?.localPath ?? null,
+        toRenderUri: this.deps.toRenderUri,
       },
       mediaId,
     );
