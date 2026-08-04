@@ -39,10 +39,11 @@ Every op type the module emits is declared:
 ```ts
 operations: {
   'notes.note_created': {
-    schemaVersion: 2,
-    payload: z.object({ title: z.string().min(1), body: z.string(), mediaId: zUuidV7.nullable() }).strict(),
+    schemaVersion: 3,           // current head (task 120): the signed `mediaRef` replaced the bare `mediaId`
+    payload: z.object({ title: z.string().min(1), body: z.string(), mediaRef: zMediaRef.nullable() }).strict(),
     payloadByVersion: {         // MANDATORY when schemaVersion > 1 — every superseded version (below)
       1: z.object({ title: z.string().min(1), body: z.string() }).strict(),
+      2: z.object({ title: z.string().min(1), body: z.string(), mediaId: zUuidV7.nullable() }).strict(),
     },
     reversal: 'Reversed by notes.note_archived on the same entityId.',   // MANDATORY (05 §7)
     apply: notesApplier,        // §4

@@ -21,13 +21,13 @@
 //            `MediaFilePort`; crash recovery at start; §5.2 triggers (a)(b)(c)(e); the background
 //            task registration WITH its Restricted outcome reported; the pruning actor; the
 //            capture and signature pipelines; the render-time remote cache.
-//   NOT REAL YET: nothing in a shipping USER FLOW calls `capturePhoto`/`captureSignature` — the
-//            screens exist (`CaptureScreen.tsx`, `SignaturePadScreen.tsx`, both render-tested) but
-//            the navigation entry and the op that embeds the returned `mediaRef` belong to task 25
-//            (the notes module's attach). Until then `attach()` is the only thing that can make a
-//            captured row DRAINABLE, since the drain selects `attached_to_operation_id IS NOT NULL`.
-//            Said out loud because "the pipeline is wired" would otherwise read as "photos are
-//            reaching the server", and they will when 25 lands, not before.
+//   NOT REAL YET: photos still do not reach the server, but the reason has MOVED (task 25 landed).
+//            Task 25/96/119 built the notes editor's attach button — a real user-flow entry — but it is
+//            bound to `UNWIRED_NOTES_MEDIA.capturePhoto`, which REJECTS (see `CaptureHost.tsx`). So the
+//            nav entry EXISTS; what is still absent is the capture-host wiring that resolves a real
+//            `mediaRef` from the shutter. Until that lands, `attach()` is the only thing that can make a
+//            captured row DRAINABLE (the drain selects `attached_to_operation_id IS NOT NULL`). Said out
+//            loud because "the pipeline is wired" would otherwise read as "photos are reaching the server".
 //   NOT VERIFIABLE HERE: anything requiring hardware. No camera, no Android device, no iOS device
 //            (D12/D13). Every native call below is type-checked against the installed SDK 57
 //            declarations and unexecuted; the LOGIC around them runs in the test lane.

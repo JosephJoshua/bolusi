@@ -634,9 +634,11 @@ export default function App(props: AppProps): React.JSX.Element {
             );
           }
           // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
-          // available. Until the shell is session-wired (`props.notes` is `undefined` today), it stays
-          // the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly the
-          // copy the label catalog exists to prevent (07-i18n).
+          // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
+          // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
+          // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
+          // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
+          // the copy the label catalog exists to prevent (07-i18n).
           if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
           return (
             <NotesHome
