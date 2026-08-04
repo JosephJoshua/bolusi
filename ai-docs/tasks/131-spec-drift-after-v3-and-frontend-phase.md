@@ -1,6 +1,6 @@
 # TASK 131 — spec drift after the v3 payload and the frontend phase: docs and code comments describe a system that no longer exists
 
-**Status:** todo
+**Status:** done
 **Priority:** MEDIUM — a stale spec is a decoy, and this repo's §2.11 record shows decoys get trusted. Two of these are the "comment was the guard" shape on the very files whose correctness they describe.
 **Depends on:** 120, 119, 96, 118
 **Blocks:** —
