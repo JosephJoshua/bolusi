@@ -17,15 +17,13 @@
 // a transient plaintext temp `<Image>` can decode — returns the WHOLE plaintext; that is bounded by the
 // ≤ 300 KiB v0 photo cap, and a v1 video render must stream to the temp instead of buffering (06 §7).
 import {
-  MediaFileCipher,
   frameCountFor,
   MEDIA_FILE_FRAME_BYTES,
-  MEDIA_FILE_HEADER_BYTES,
   MEDIA_FILE_NONCE_BASE_BYTES,
-  MEDIA_FILE_ON_DISK_FRAME_BYTES,
   onDiskFrameLength,
   onDiskFrameOffset,
   plaintextSizeFromOnDisk,
+  type MediaFileCipher,
 } from '../crypto/media-file-cipher.js';
 
 /** A random-access read handle over the RAW (encrypted) on-disk bytes. Close releases the native fd. */
