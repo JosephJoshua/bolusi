@@ -21,16 +21,17 @@
 //            `MediaFilePort`; crash recovery at start; §5.2 triggers (a)(b)(c)(e); the background
 //            task registration WITH its Restricted outcome reported; the pruning actor; the
 //            capture and signature pipelines; the render-time remote cache.
-//   NOT REAL YET: photos still do not reach the server, but the reason has MOVED (task 25 landed).
-//            Task 25/96/119 built the notes editor's attach button — a real user-flow entry — but it is
-//            bound to `UNWIRED_NOTES_MEDIA.capturePhoto`, which REJECTS (see `CaptureHost.tsx`). So the
-//            nav entry EXISTS; what is still absent is the capture-host wiring that resolves a real
-//            `mediaRef` from the shutter. Until that lands, `attach()` is the only thing that can make a
-//            captured row DRAINABLE (the drain selects `attached_to_operation_id IS NOT NULL`). Said out
-//            loud because "the pipeline is wired" would otherwise read as "photos are reaching the server".
-//   NOT VERIFIABLE HERE: anything requiring hardware. No camera, no Android device, no iOS device
-//            (D12/D13). Every native call below is type-checked against the installed SDK 57
-//            declarations and unexecuted; the LOGIC around them runs in the test lane.
+//   WIRED END-TO-END NOW (task 130): the notes editor's attach button (`NoteEditor.tsx`) calls
+//            `runtime.capturePhoto`, which `Root` binds to the REAL `CaptureHost` seam over
+//            `createExpoCapturePlatform()` (`index.ts`), and `loadThumbnail` binds to
+//            `createNotesThumbnailLoader` (task 120). The attach button "opens a camera instead of
+//            throwing" (index.ts). `UNWIRED_NOTES_MEDIA.capturePhoto` (which REJECTS, never resolves a
+//            fake `null`) is the fallback ONLY for `media === null` / a build with no camera binding
+//            (`bootstrap/notes.ts`) — no longer the only value the app has.
+//   NOT VERIFIABLE HERE: anything requiring hardware EXECUTION. No camera, no Android device, no iOS
+//            device (D12/D13) — so "the shutter produces bytes that reach the server" is wired but
+//            unexecuted. Every native call below is type-checked against the installed SDK 57
+//            declarations and unrun; the LOGIC around them runs in the test lane.
 import {
   MediaDrainLoop,
   recoverInterruptedUploads,
