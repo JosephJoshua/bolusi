@@ -3,13 +3,11 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   categoryNameKey,
-  changeLocale,
   channelImportance,
   defaultMuteState,
   localeNameKey,
   localeOptions,
   MUTABLE_PUSH_CATEGORIES,
-  setMuted,
   type SettingsDeps,
 } from './model.js';
 
@@ -52,26 +50,12 @@ describe('the language toggle offers exactly id/en — `zh` is absent (07-i18n �
   });
 });
 
-describe('changing the language writes the DEVICE locale (07-i18n §1.2)', () => {
-  test('the device locale is written — plain local storage, never an op', () => {
-    const d = deps();
-    void changeLocale(d, 'en');
-    expect(d.setDeviceLocale).toHaveBeenCalledWith('en');
-    expect(d.setDeviceLocale).toHaveBeenCalledTimes(1);
-  });
-
-  test('SCOPE GUARD: the per-user platform.setLocale op is NOT emitted — task 25 wires it', async () => {
-    // This task's brief: "the op-emitting `platform.setLocale` per-user preference (25 wires it;
-    // leave a seam)". The seam is asserted as UNCALLED, which is what stops an op whose module is
-    // not registered yet from being emitted into an immutable, forever-replicated log.
-    const setLocalePreference = vi.fn(async () => undefined);
-    const d = deps({ setLocalePreference });
-    await changeLocale(d, 'en');
-    expect(setLocalePreference).not.toHaveBeenCalled();
-    expect(d.setDeviceLocale).toHaveBeenCalledWith('en');
-  });
-
-  test('the v0 wiring passes null for the seam — not a stub that could quietly become live', () => {
+describe('the settings deps seam (07-i18n §1.2)', () => {
+  // `changeLocale` was DELETED (task 138 item 2): device-locale writes happen inline in
+  // `Root`/`SettingsScreen`, and the per-user `setLocalePreference` seam is wired to the existing
+  // `platform.user_locale_changed` op separately (task 138 item 4 — this test's scope-guard on
+  // "no op emitted" moves there once the emit lands).
+  test('the v0 wiring passes null for the per-user seam until it is wired', () => {
     expect(deps().setLocalePreference).toBeNull();
   });
 });
@@ -96,14 +80,6 @@ describe('one mute toggle per api/04-push §3 VISIBLE category', () => {
     // who muted the noise but not the information.
     expect(channelImportance(true)).toBe('min');
     expect(channelImportance(false)).toBe('default');
-  });
-
-  test('toggling a category applies its importance', async () => {
-    const d = deps();
-    await setMuted(d, 'conflict', true);
-    expect(d.setChannelImportance).toHaveBeenCalledWith('conflict', 'min');
-    await setMuted(d, 'device', false);
-    expect(d.setChannelImportance).toHaveBeenCalledWith('device', 'default');
   });
 
   test('every category resolves a name key (T-14 denominator)', () => {

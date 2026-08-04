@@ -7,6 +7,13 @@
 **SEC ids owned by THIS task:** none.
 **Filed by:** QA test-honesty sweep, 2026-07-22.
 
+> **PROGRESS 2026-08-04 (verifying each premise first surfaced drift — T-11/T-16):**
+> - **Item 2 — DONE.** `changeLocale`/`setMuted` confirmed zero callers (excl. tests); deleted with their test cases. The still-LIVE `channelImportance`/`categoryNameKey` (boot channel setup, `notifications.ts`) stay — same distinction task 131 item 3 corrected.
+> - **Item 3 — DONE (already resolved).** `setIdleLockSeconds` is now LIVE: task 133 (done) wired the caller at `bootstrap/session.ts:224` (`manager.setIdleLockSeconds(await readIdleLockSeconds(db))`). The "moot while 133 stands" premise resolved when 133 landed. No action.
+> - **Item 5 — DONE.** `DEVICE_TOKEN_PREFIX`/`CONTROL_TOKEN_PREFIX`/`emptyTokenStore` confirmed dead; deleted. The false "carries one of two token kinds BY PREFIX" comment (`auth.ts:1`) corrected — `verify-token.ts` does a hash lookup (device store then control store), never reads the prefix; the prefixes are secret-scanner friendliness (api/02-auth §4), not a routing discriminator. knip baseline dropped the 5 resolved entries.
+> - **Item 4 — RE-SCOPED (owner ruled BUILD 2026-08-04).** The op type is NOT new: `platform.user_locale_changed` is **already fully implemented** in `@bolusi/core` (declaration + `userLocaleChangedPayload` + the emit command `setLocaleHandler` (`platform/commands.ts`) + `userLocaleChangedApplier` + the `user_prefs` projection), and spec'd in 05-operation-log §9 as the one tenant-scoped v0 op. What's missing is only the MOBILE emit wiring: `settings/model.ts`'s `SetLocalePreference` seam has no provider connecting it to `setLocaleHandler`. So this is a small client-wiring task, NOT a §6 op-type addition (the task's "no implementation" premise was stale). **PENDING.**
+> - **Item 1 — owner ruled BUILD 2026-08-04 (change-PIN / owner-reset / clear-lockout screens over the existing `pin-flows.ts`). PENDING** — a 3-screen security-surface build (design-system §5, i18n, §2.5 adversarial tests).
+
 ## Items
 1. **`pin-flows.ts#setFirstPin` / `changePin` / `resetPin` / `clearPinLockoutFlow` have no mobile callers.** `setFirstPin` is disclosed at `bootstrap/session.ts:22`; **change PIN, owner reset, and clear lockout have no UI and no disclosure anywhere.** Decide per flow: build the screen, or record the gap in `roadmap.md` as deferred with a reason. Do not leave an undisclosed dead security flow.
 2. **`screens/settings/model.ts#changeLocale` / `#setMuted` — zero callers**; `Root`/`SettingsScreen` do the equivalent inline. `setMuted` is dead by design after task 59's Android ruling. Delete both (and, per task 131 item 3, the superseded model + its green-guarding test) or state why they survive.

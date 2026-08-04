@@ -1,7 +1,10 @@
-// Bearer authentication (api/00 §3, §13 step 6). The bearer slot carries one of two token
-// kinds by prefix — `bdt_` device tokens, `bcs_` control-session tokens. `verifyToken` hashes
-// the presented token, looks up its record by hash (a DB dump yields no usable tokens —
-// SEC-DEV-02), constant-time-confirms the match, and sets the request principal (§3).
+// Bearer authentication (api/00 §3, §13 step 6). The bearer slot carries one of two token kinds —
+// `bdt_` device tokens or `bcs_` control-session tokens. The prefixes are for secret-scanner
+// friendliness (api/02-auth §4), NOT a routing discriminator: `verifyToken` (`auth/verify-token.ts`)
+// hashes the presented token and looks it up BY HASH — trying the device store, then the
+// control-session store — and never reads the prefix. A hash lookup cannot cross-match, and trusting
+// a client-supplied prefix would be strictly weaker. A DB dump yields no usable tokens (SEC-DEV-02);
+// the match is constant-time-confirmed and sets the request principal (§3).
 //
 // DEVIATION (flagged): api/00 §3/§13 name `bearerAuth` from `hono/bearer-auth`. The built-in
 // cannot serve this contract — it maps an unparseable header to 400 (§7 requires 401
@@ -16,8 +19,10 @@ import type { MiddlewareHandler } from 'hono';
 import { ApiError } from '../errors.js';
 import type { AppEnv, ControlPrincipal, DevicePrincipal } from '../env.js';
 
-export const DEVICE_TOKEN_PREFIX = 'bdt_';
-export const CONTROL_TOKEN_PREFIX = 'bcs_';
+// `DEVICE_TOKEN_PREFIX`/`CONTROL_TOKEN_PREFIX` constants were DELETED (task 138 item 5): referenced
+// nowhere. The format that ships is `mintToken(prefix: 'bdt_' | 'bcs_')` (`crypto/index.ts`), whose
+// call sites pass the literals — the union type is the load-bearing declaration; the constants were
+// decorative, and editing one changed nothing (the exact "silently checks nothing" trap).
 
 /** A stored token record, keyed at rest by the token's SHA-256 hash (SEC-DEV-02). */
 export type TokenRecord =
@@ -49,10 +54,8 @@ export interface TokenStore {
   findByTokenHash(tokenHashHex: string): Promise<TokenRecord | undefined>;
 }
 
-/** An empty store — no token authenticates. Default until task 13 wires the DB-backed store. */
-export const emptyTokenStore: TokenStore = {
-  findByTokenHash: async () => undefined,
-};
+// `emptyTokenStore` was DELETED (task 138 item 5): exported, referenced nowhere. The DB-backed store
+// (task 13) ships; the test-only in-memory seam (`InMemoryTokenStore`) stays where the tests use it.
 
 /** In-memory store for tests: register records by their plaintext token. */
 export class InMemoryTokenStore implements TokenStore {

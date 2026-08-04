@@ -105,19 +105,7 @@ export interface SettingsDeps {
   readonly setLocalePreference: SetLocalePreference | null;
 }
 
-/**
- * Change the language. Writes the DEVICE locale only (§1.2) and deliberately does not touch the
- * per-user preference — see `SetLocalePreference`.
- */
-export async function changeLocale(deps: SettingsDeps, locale: Locale): Promise<void> {
-  await deps.setDeviceLocale(locale);
-}
-
-/** Toggle a category's mute, expressed as channel importance (api/04-push §5). */
-export async function setMuted(
-  deps: SettingsDeps,
-  category: MutablePushCategory,
-  muted: boolean,
-): Promise<void> {
-  await deps.setChannelImportance(category, channelImportance(muted));
-}
+// `changeLocale`/`setMuted` were DELETED (task 138 item 2): both had zero callers — `Root`/
+// `SettingsScreen` do the device-locale write inline, and the app-controlled mute toggle was
+// superseded by task 59's OS-settings deep-link (D18). The still-LIVE `channelImportance`/
+// `categoryNameKey` (used by `bootstrap/notifications.ts` at boot) stay; only the dead setters go.
