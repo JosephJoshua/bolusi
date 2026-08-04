@@ -28,6 +28,13 @@ export {
   type VerifiedDownloadOptions,
 } from './download.js';
 export {
+  EncryptingMediaFile,
+  type RawMediaFileIo,
+  type RawReadHandle,
+  type RawWriteHandle,
+  type Sha256Hex,
+} from './encrypting-file.js';
+export {
   DRAIN_HALTING_CODES,
   LOCAL_CORRUPT_ERROR_CODE,
   MEDIA_ERROR_CODES,
