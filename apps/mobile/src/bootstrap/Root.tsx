@@ -51,6 +51,7 @@ import type { Locale } from '@bolusi/i18n';
 import type { Bootstrapped } from './bootstrap.js';
 import type { AppEnrollment, EnrollmentController } from './enrollment.js';
 import { readSessionIdentity } from './notes.js';
+import { createUserLocaleWriter } from './user-locale.js';
 import { createNotificationChannels } from './notifications.js';
 import {
   registerPushTokenOnAppStart,
@@ -289,6 +290,12 @@ export function Root({
      */
     readonly identity: CommandIdentity;
     readonly runtime: NotesRuntime;
+    /**
+     * Emit the acting user's locale preference as a `platform.user_locale_changed` op (task 138 item 4;
+     * 07-i18n §1.1). Session-scoped like the runtime — rebuilt on user switch so the op is signed by
+     * and attributed to the CURRENT user, never a carried-over identity.
+     */
+    readonly setUserLocale: (locale: Locale) => Promise<void>;
   } | null>(null);
   /**
    * §8.4's derived reads (01 §5.2), re-read on every projection write and every loop tick — see the
@@ -654,6 +661,7 @@ export function Root({
         // verify needs a real client — a stale null would silently downgrade every photo to
         // `unavailable`, the failure the `media` state comment describes).
         runtime: createNotes(app, enrollment.runtime, identity, media, capture.capturePhoto),
+        setUserLocale: createUserLocaleWriter(enrollment.runtime, identity),
       });
     });
     return () => {
@@ -795,6 +803,16 @@ export function Root({
         onSelectLocale={(next) => {
           void localeStore.write('bolusi.device_locale', next);
           setLocale(next);
+          // The DEVICE locale (above) applies immediately (07-i18n §1.2). The per-user PREFERENCE is a
+          // signed, replicated op (§1.1, task 138 item 4) — best-effort: a stuck op-append must not block
+          // the language switch the user just made, so a failure is surfaced to the diagnostics channel
+          // (§2.8) rather than thrown. `notes` is null on an unenrolled device — then there is no user to
+          // record a preference for, and only the device locale changes.
+          void notes?.setUserLocale(next).catch((error: unknown) =>
+            consoleDiagnostics.warn('per-user locale op failed', {
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
         }}
         locale={locale}
         deviceInfo={deviceInfo}
