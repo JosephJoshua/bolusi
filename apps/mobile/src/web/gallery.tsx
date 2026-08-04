@@ -34,7 +34,11 @@ import {
   type EnrollmentStep,
 } from '../screens/enrollment/model.js';
 import { EnrollmentScreen } from '../screens/enrollment/EnrollmentScreen.js';
+import { ChangePinScreen } from '../screens/pin/ChangePinScreen.js';
+import { ClearLockoutScreen } from '../screens/pin/ClearLockoutScreen.js';
+import type { PinTargetUser } from '../screens/pin/pin-target.js';
 import { PinScreen } from '../screens/pin/PinScreen.js';
+import { ResetPinScreen } from '../screens/pin/ResetPinScreen.js';
 import { SettingsScreen } from '../screens/settings/SettingsScreen.js';
 import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
@@ -380,6 +384,67 @@ function syncScreen(
   );
 }
 
+/** The acting owner for the PIN-management demos, excluded from reset targets. */
+const PIN_ADMIN_ACTOR = 'u-ocep';
+
+/** A store's directory for the owner PIN screens: the acting owner, a locked colleague, an open one. */
+const PIN_TARGETS: readonly PinTargetUser[] = [
+  { id: PIN_ADMIN_ACTOR, name: 'Ocep Wanggai', lockedOut: false },
+  { id: 'u-ani', name: 'Ani Koibur', lockedOut: true },
+  { id: 'u-budi', name: 'Budi Rumbewas', lockedOut: false },
+];
+
+/** A directory with nobody locked — the reassuring "no one is locked out" case. */
+const PIN_TARGETS_NONE_LOCKED: readonly PinTargetUser[] = PIN_TARGETS.map((user) => ({
+  ...user,
+  lockedOut: false,
+}));
+
+function changePinScreen(state: string): React.JSX.Element {
+  return (
+    <ApproxFrame screen="change-pin" state={state}>
+      <ChangePinScreen onChangePin={() => Promise.resolve()} onClose={noop} />
+    </ApproxFrame>
+  );
+}
+
+function resetPinScreen(
+  state: string,
+  opts: { canReset: boolean; users: readonly PinTargetUser[] },
+): React.JSX.Element {
+  return (
+    <ApproxFrame screen="reset-pin" state={state}>
+      <ResetPinScreen
+        canReset={opts.canReset}
+        loading={false}
+        error={null}
+        users={opts.users}
+        actorUserId={PIN_ADMIN_ACTOR}
+        onResetPin={() => Promise.resolve()}
+        onClose={noop}
+      />
+    </ApproxFrame>
+  );
+}
+
+function clearLockoutScreen(
+  state: string,
+  opts: { canUnlock: boolean; users: readonly PinTargetUser[] },
+): React.JSX.Element {
+  return (
+    <ApproxFrame screen="clear-lockout" state={state}>
+      <ClearLockoutScreen
+        canUnlock={opts.canUnlock}
+        loading={false}
+        error={null}
+        users={opts.users}
+        onClearLockout={() => Promise.resolve()}
+        onClose={noop}
+      />
+    </ApproxFrame>
+  );
+}
+
 export const ENTRIES: readonly HarnessEntry[] = [
   // Switcher — the four §5 states + the data-backed happy path.
   {
@@ -430,6 +495,50 @@ export const ENTRIES: readonly HarnessEntry[] = [
         <PinInteractive />
       </ApproxFrame>
     ),
+  },
+
+  // Change PIN — the interactive current → new → repeat → done flow (task 138 item 1).
+  { screen: 'change-pin', state: 'interactive', render: () => changePinScreen('interactive') },
+
+  // Reset PIN (owner) — the §5 list states. Unauthorized ≠ Empty: a non-owner sees the lock, not a
+  // blank list. Ready excludes the acting owner; Empty is a device with no other users.
+  {
+    screen: 'reset-pin',
+    state: 'unauthorized',
+    render: () => resetPinScreen('unauthorized', { canReset: false, users: PIN_TARGETS }),
+  },
+  {
+    screen: 'reset-pin',
+    state: 'empty',
+    render: () =>
+      resetPinScreen('empty', {
+        canReset: true,
+        users: PIN_TARGETS.filter((user) => user.id === PIN_ADMIN_ACTOR),
+      }),
+  },
+  {
+    screen: 'reset-pin',
+    state: 'ready',
+    render: () => resetPinScreen('ready', { canReset: true, users: PIN_TARGETS }),
+  },
+
+  // Clear lockout (owner) — the §5 list states. Ready lists only locked users; the empty list is the
+  // reassuring "no one is locked out"; a non-owner sees Unauthorized.
+  {
+    screen: 'clear-lockout',
+    state: 'unauthorized',
+    render: () => clearLockoutScreen('unauthorized', { canUnlock: false, users: PIN_TARGETS }),
+  },
+  {
+    screen: 'clear-lockout',
+    state: 'noneLocked',
+    render: () =>
+      clearLockoutScreen('noneLocked', { canUnlock: true, users: PIN_TARGETS_NONE_LOCKED }),
+  },
+  {
+    screen: 'clear-lockout',
+    state: 'ready',
+    render: () => clearLockoutScreen('ready', { canUnlock: true, users: PIN_TARGETS }),
   },
 
   // Settings — the live ID↔EN language toggle.

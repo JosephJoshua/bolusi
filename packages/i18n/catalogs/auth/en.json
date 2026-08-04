@@ -17,6 +17,32 @@
       "title": "Create a New PIN",
       "repeat": "Repeat the PIN",
       "mismatch": "The PINs don’t match. Try again."
+    },
+    "change": {
+      "title": "Change PIN",
+      "enterCurrent": "Enter your current PIN",
+      "wrongCurrent": "That current PIN is wrong. Try again.",
+      "done": "Your PIN has been changed."
+    },
+    "reset": {
+      "title": "Reset PIN",
+      "chooseUser": "Choose the user who forgot their PIN",
+      "noUsers": "There are no other users on this device.",
+      "handOver": "Hand the device to {name}. They type the new PIN — you won’t see it.",
+      "done": "{name}’s PIN has been reset.",
+      "denied": "Only a main owner can reset another main owner’s PIN."
+    },
+    "unlock": {
+      "title": "Unlock a PIN",
+      "chooseUser": "Choose the locked-out user",
+      "noneLocked": "No one is locked out.",
+      "confirm": "Unlock {name}’s PIN? They can try their PIN again right away.",
+      "done": "{name}’s PIN is unlocked.",
+      "notLocked": "{name}’s PIN is no longer locked."
+    },
+    "manage": {
+      "unauthorizedTitle": "Owner permission needed",
+      "unauthorizedBody": "Only the store owner can reset or unlock PINs. Ask the store owner."
     }
   },
   "enroll": {

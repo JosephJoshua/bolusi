@@ -12,12 +12,30 @@ export type TranslationKey =
   | 'auth.enroll.success'
   | 'auth.enroll.title'
   | 'auth.pin.attemptsLeft'
+  | 'auth.pin.change.done'
+  | 'auth.pin.change.enterCurrent'
+  | 'auth.pin.change.title'
+  | 'auth.pin.change.wrongCurrent'
   | 'auth.pin.forgot'
   | 'auth.pin.lockedOut'
+  | 'auth.pin.manage.unauthorizedBody'
+  | 'auth.pin.manage.unauthorizedTitle'
+  | 'auth.pin.reset.chooseUser'
+  | 'auth.pin.reset.denied'
+  | 'auth.pin.reset.done'
+  | 'auth.pin.reset.handOver'
+  | 'auth.pin.reset.noUsers'
+  | 'auth.pin.reset.title'
   | 'auth.pin.setup.mismatch'
   | 'auth.pin.setup.repeat'
   | 'auth.pin.setup.title'
   | 'auth.pin.title'
+  | 'auth.pin.unlock.chooseUser'
+  | 'auth.pin.unlock.confirm'
+  | 'auth.pin.unlock.done'
+  | 'auth.pin.unlock.noneLocked'
+  | 'auth.pin.unlock.notLocked'
+  | 'auth.pin.unlock.title'
   | 'auth.pin.wait'
   | 'auth.pin.wrong'
   | 'auth.revoked.body'
@@ -252,6 +270,32 @@ export interface TranslationResources {
         title: string;
         repeat: string;
         mismatch: string;
+      };
+      change: {
+        title: string;
+        enterCurrent: string;
+        wrongCurrent: string;
+        done: string;
+      };
+      reset: {
+        title: string;
+        chooseUser: string;
+        noUsers: string;
+        handOver: string;
+        done: string;
+        denied: string;
+      };
+      unlock: {
+        title: string;
+        chooseUser: string;
+        noneLocked: string;
+        confirm: string;
+        done: string;
+        notLocked: string;
+      };
+      manage: {
+        unauthorizedTitle: string;
+        unauthorizedBody: string;
       };
     };
     enroll: {

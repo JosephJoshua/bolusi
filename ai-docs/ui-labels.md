@@ -129,6 +129,24 @@ Surfaces per PRD-011 §6 (switcher, PIN pad, idle lock, enrollment, revocation, 
 | `auth.pin.setup.title` | Buat PIN Baru | Create a New PIN |
 | `auth.pin.setup.repeat` | Ulangi PIN | Repeat the PIN |
 | `auth.pin.setup.mismatch` | PIN tidak sama. Coba lagi. | The PINs don’t match. Try again. |
+| `auth.pin.change.title` | Ganti PIN | Change PIN |
+| `auth.pin.change.enterCurrent` | Masukkan PIN lama kamu | Enter your current PIN |
+| `auth.pin.change.wrongCurrent` | PIN lama salah. Coba lagi. | That current PIN is wrong. Try again. |
+| `auth.pin.change.done` | PIN kamu berhasil diganti. | Your PIN has been changed. |
+| `auth.pin.reset.title` | Atur Ulang PIN | Reset PIN |
+| `auth.pin.reset.chooseUser` | Pilih pengguna yang lupa PIN-nya | Choose the user who forgot their PIN |
+| `auth.pin.reset.noUsers` | Tidak ada pengguna lain di perangkat ini. | There are no other users on this device. |
+| `auth.pin.reset.handOver` | Serahkan perangkat ke {name}. Mereka yang mengetik PIN baru — kamu tidak akan melihatnya. | Hand the device to {name}. They type the new PIN — you won’t see it. |
+| `auth.pin.reset.done` | PIN {name} berhasil diatur ulang. | {name}’s PIN has been reset. |
+| `auth.pin.reset.denied` | Hanya pemilik utama yang bisa mengatur ulang PIN pemilik utama lain. | Only a main owner can reset another main owner’s PIN. |
+| `auth.pin.unlock.title` | Buka Kunci PIN | Unlock a PIN |
+| `auth.pin.unlock.chooseUser` | Pilih pengguna yang terkunci | Choose the locked-out user |
+| `auth.pin.unlock.noneLocked` | Tidak ada pengguna yang terkunci. | No one is locked out. |
+| `auth.pin.unlock.confirm` | Buka kunci PIN {name}? Mereka bisa langsung mencoba PIN lagi. | Unlock {name}’s PIN? They can try their PIN again right away. |
+| `auth.pin.unlock.done` | PIN {name} berhasil dibuka. | {name}’s PIN is unlocked. |
+| `auth.pin.unlock.notLocked` | PIN {name} sudah tidak terkunci. | {name}’s PIN is no longer locked. |
+| `auth.pin.manage.unauthorizedTitle` | Perlu izin pemilik | Owner permission needed |
+| `auth.pin.manage.unauthorizedBody` | Hanya pemilik toko yang bisa mengatur ulang atau membuka kunci PIN. Minta pemilik toko. | Only the store owner can reset or unlock PINs. Ask the store owner. |
 | `auth.enroll.title` | Daftarkan Perangkat Ini | Enroll This Device |
 | `auth.enroll.instruction` | Masuk dengan akun kamu. Perangkat ini akan terdaftar untuk toko kamu. | Sign in with your account. This device will be enrolled for your store. |
 | `auth.enroll.identifierField` | Nama akun | Account name |

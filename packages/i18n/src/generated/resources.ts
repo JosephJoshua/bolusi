@@ -128,6 +128,34 @@ export const resources: SeededResources = {
             repeat: 'Ulangi PIN',
             mismatch: 'PIN tidak sama. Coba lagi.',
           },
+          change: {
+            title: 'Ganti PIN',
+            enterCurrent: 'Masukkan PIN lama kamu',
+            wrongCurrent: 'PIN lama salah. Coba lagi.',
+            done: 'PIN kamu berhasil diganti.',
+          },
+          reset: {
+            title: 'Atur Ulang PIN',
+            chooseUser: 'Pilih pengguna yang lupa PIN-nya',
+            noUsers: 'Tidak ada pengguna lain di perangkat ini.',
+            handOver:
+              'Serahkan perangkat ke {name}. Mereka yang mengetik PIN baru — kamu tidak akan melihatnya.',
+            done: 'PIN {name} berhasil diatur ulang.',
+            denied: 'Hanya pemilik utama yang bisa mengatur ulang PIN pemilik utama lain.',
+          },
+          unlock: {
+            title: 'Buka Kunci PIN',
+            chooseUser: 'Pilih pengguna yang terkunci',
+            noneLocked: 'Tidak ada pengguna yang terkunci.',
+            confirm: 'Buka kunci PIN {name}? Mereka bisa langsung mencoba PIN lagi.',
+            done: 'PIN {name} berhasil dibuka.',
+            notLocked: 'PIN {name} sudah tidak terkunci.',
+          },
+          manage: {
+            unauthorizedTitle: 'Perlu izin pemilik',
+            unauthorizedBody:
+              'Hanya pemilik toko yang bisa mengatur ulang atau membuka kunci PIN. Minta pemilik toko.',
+          },
         },
         enroll: {
           title: 'Daftarkan Perangkat Ini',
@@ -379,6 +407,32 @@ export const resources: SeededResources = {
             title: 'Create a New PIN',
             repeat: 'Repeat the PIN',
             mismatch: 'The PINs don’t match. Try again.',
+          },
+          change: {
+            title: 'Change PIN',
+            enterCurrent: 'Enter your current PIN',
+            wrongCurrent: 'That current PIN is wrong. Try again.',
+            done: 'Your PIN has been changed.',
+          },
+          reset: {
+            title: 'Reset PIN',
+            chooseUser: 'Choose the user who forgot their PIN',
+            noUsers: 'There are no other users on this device.',
+            handOver: 'Hand the device to {name}. They type the new PIN — you won’t see it.',
+            done: '{name}’s PIN has been reset.',
+            denied: 'Only a main owner can reset another main owner’s PIN.',
+          },
+          unlock: {
+            title: 'Unlock a PIN',
+            chooseUser: 'Choose the locked-out user',
+            noneLocked: 'No one is locked out.',
+            confirm: 'Unlock {name}’s PIN? They can try their PIN again right away.',
+            done: '{name}’s PIN is unlocked.',
+            notLocked: '{name}’s PIN is no longer locked.',
+          },
+          manage: {
+            unauthorizedTitle: 'Owner permission needed',
+            unauthorizedBody: 'Only the store owner can reset or unlock PINs. Ask the store owner.',
           },
         },
         enroll: {

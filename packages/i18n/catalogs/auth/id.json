@@ -17,6 +17,32 @@
       "title": "Buat PIN Baru",
       "repeat": "Ulangi PIN",
       "mismatch": "PIN tidak sama. Coba lagi."
+    },
+    "change": {
+      "title": "Ganti PIN",
+      "enterCurrent": "Masukkan PIN lama kamu",
+      "wrongCurrent": "PIN lama salah. Coba lagi.",
+      "done": "PIN kamu berhasil diganti."
+    },
+    "reset": {
+      "title": "Atur Ulang PIN",
+      "chooseUser": "Pilih pengguna yang lupa PIN-nya",
+      "noUsers": "Tidak ada pengguna lain di perangkat ini.",
+      "handOver": "Serahkan perangkat ke {name}. Mereka yang mengetik PIN baru — kamu tidak akan melihatnya.",
+      "done": "PIN {name} berhasil diatur ulang.",
+      "denied": "Hanya pemilik utama yang bisa mengatur ulang PIN pemilik utama lain."
+    },
+    "unlock": {
+      "title": "Buka Kunci PIN",
+      "chooseUser": "Pilih pengguna yang terkunci",
+      "noneLocked": "Tidak ada pengguna yang terkunci.",
+      "confirm": "Buka kunci PIN {name}? Mereka bisa langsung mencoba PIN lagi.",
+      "done": "PIN {name} berhasil dibuka.",
+      "notLocked": "PIN {name} sudah tidak terkunci."
+    },
+    "manage": {
+      "unauthorizedTitle": "Perlu izin pemilik",
+      "unauthorizedBody": "Hanya pemilik toko yang bisa mengatur ulang atau membuka kunci PIN. Minta pemilik toko."
     }
   },
   "enroll": {
