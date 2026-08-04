@@ -142,11 +142,10 @@ export async function capturePhoto<DB>(deps: CaptureDeps<DB>): Promise<CaptureOu
   const location = deps.location.getBestFix();
 
   // Steps 3–4 — the two pinned passes.
-  const compressed = await compressCapture(
-    { compressor: deps.compressor, sizeOf: (path) => deps.files.sizeOf(path) },
-    shot.uri,
-    { width: shot.width, height: shot.height },
-  );
+  const compressed = await compressCapture({ compressor: deps.compressor }, shot.uri, {
+    width: shot.width,
+    height: shot.height,
+  });
 
   // Steps 5–8 — the shared finalization tail (move → hash+size → row → onCaptured → signed ref).
   const mediaId = deps.newId();

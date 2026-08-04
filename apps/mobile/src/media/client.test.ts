@@ -106,6 +106,7 @@ function buildRig(overrides: Partial<MediaClientDeps> = {}): Rig {
     evictCached: () => undefined,
     listRemoteCache: () => [],
     toRenderUri: (path) => Promise.resolve(path),
+    clearRenderTemps: () => undefined,
     newId: createUuidV7Generator({ now: () => NOW, randomBytes: (n) => noblePort.randomBytes(n) }),
     location: { getBestFix: () => ({ lat: -6.2, lng: 106.8, accuracyMeters: 12 }) },
     background: null,

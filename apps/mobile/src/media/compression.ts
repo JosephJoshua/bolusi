@@ -82,6 +82,13 @@ export interface CompressedImage {
   readonly uri: string;
   readonly width: number;
   readonly height: number;
+  /**
+   * Byte length of the encoded PLAINTEXT file, measured natively by the encoder that just wrote it
+   * (task 158). Sized here rather than via `MediaFilePort.sizeOf` because that port now reports the
+   * PLAINTEXT size of an ENCRYPTED file — applying its frame geometry to this un-encrypted compressor
+   * output would be off by the per-frame overhead and would throw on sizes just past a frame boundary.
+   */
+  readonly sizeBytes: number;
 }
 
 /** The image encoder seam (08 §3.2). The expo-image-manipulator binding lives in `native.ts`. */
@@ -109,8 +116,6 @@ export interface CompressionResult {
 
 export interface CompressionDeps {
   readonly compressor: ImageCompressorPort;
-  /** `MediaFilePort.sizeOf` — rejects on a missing file rather than reporting 0 (T-19). */
-  readonly sizeOf: (path: string) => Promise<number>;
 }
 
 /**
@@ -122,8 +127,10 @@ export interface CompressionDeps {
  * is to keep a serial number readable. The alternative (recompressing pass 1) would apply q0.7 then
  * q0.5 to the same pixels — visibly worse for identical bytes.
  *
- * THE SIZE IS MEASURED, NOT ESTIMATED: `sizeOf` stats the encoded file. An implementation that
- * guessed from dimensions would decide §2.2 step 4's branch on a number no user ever gets.
+ * THE SIZE IS MEASURED, NOT ESTIMATED: the encoder returns `sizeBytes` of the file it just wrote
+ * (task 158 — NOT via `MediaFilePort.sizeOf`, which now reports the plaintext size of an ENCRYPTED
+ * file). An implementation that guessed from dimensions would decide §2.2 step 4's branch on a number
+ * no user ever gets.
  */
 export async function compressCapture(
   deps: CompressionDeps,
@@ -135,7 +142,7 @@ export async function compressCapture(
     resizeTargetFor(dimensions, PASS_1_MAX_LONG_EDGE),
     PASS_1_COMPRESS,
   );
-  const firstBytes = await deps.sizeOf(first.uri);
+  const firstBytes = first.sizeBytes;
   if (firstBytes <= SIZE_BUDGET_BYTES) {
     return {
       uri: first.uri,
@@ -154,7 +161,7 @@ export async function compressCapture(
   // "accept the pass-2 result unconditionally. Capture never fails on size." (§2.2 step 4). A photo
   // that stays over budget still becomes evidence — refusing it would lose the repair record over a
   // transfer-cost heuristic, and the wire chunks anyway (api/03 §4).
-  const secondBytes = await deps.sizeOf(second.uri);
+  const secondBytes = second.sizeBytes;
   return {
     uri: second.uri,
     width: second.width,

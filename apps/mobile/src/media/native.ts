@@ -11,6 +11,7 @@
 // declarations and unexecuted. That is a statement about this file specifically — the pipeline's
 // decisions (the two compression passes, the capture ordering, the drain triggers, the pruning
 // rules, the background-registration outcome) all live behind these seams and DO run in the lane.
+import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
@@ -37,8 +38,14 @@ export const expoImageCompressor: ImageCompressorPort = {
     const image = await context.renderAsync();
     const saved = await image.saveAsync({ compress, format: SaveFormat.JPEG });
     // `saved.width`/`saved.height` are the ENCODER's numbers. Returning `target`'s instead would
-    // make every downstream dimension assertion a tautology about our own request.
-    return { uri: saved.uri, width: saved.width, height: saved.height };
+    // make every downstream dimension assertion a tautology about our own request. `sizeBytes` is the
+    // encoded PLAINTEXT file's length, measured here (task 158) — NOT via the encrypting `sizeOf`.
+    return {
+      uri: saved.uri,
+      width: saved.width,
+      height: saved.height,
+      sizeBytes: new File(saved.uri).size,
+    };
   },
 };
 
@@ -83,6 +90,7 @@ export type MediaClientForAppConfig = Omit<
   | 'evictCached'
   | 'listRemoteCache'
   | 'toRenderUri'
+  | 'clearRenderTemps'
   | 'background'
 > & {
   /** Pass `false` to compose without trigger (d) — an explicit choice, never a silent absence. */
@@ -119,6 +127,7 @@ export function createMediaClientForApp(config: MediaClientForAppConfig): MediaC
     evictCached: parts.evictCached,
     listRemoteCache: parts.listRemoteCache,
     toRenderUri: parts.toRenderUri,
+    clearRenderTemps: parts.clearRenderTemps,
     background: registerBackgroundTask ? expoBackgroundTaskPlatform : null,
   });
 }

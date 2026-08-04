@@ -25,6 +25,7 @@ import {
   type RawMediaFileIo,
   type RawReadHandle,
   type RawWriteHandle,
+  type Sha256Factory,
 } from '@bolusi/core';
 import { createHash } from 'react-native-quick-crypto';
 
@@ -65,10 +66,16 @@ export function availableDiskSpaceBytes(): number {
   return Paths.availableDiskSpace;
 }
 
-/** SHA-256 over PLAINTEXT via quick-crypto's sync digest — injected into `EncryptingMediaFile`. */
-function sha256Hex(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
+/** Incremental SHA-256 over PLAINTEXT via quick-crypto — injected so `hashFile` streams frame-by-frame. */
+const sha256Factory: Sha256Factory = () => {
+  const hash = createHash('sha256');
+  return {
+    update: (bytes) => {
+      hash.update(bytes);
+    },
+    digestHex: () => hash.digest('hex'),
+  };
+};
 
 /**
  * The raw byte seam over expo `FileHandle`. Every method is over the ENCRYPTED on-disk bytes — no
@@ -134,6 +141,8 @@ export interface EncryptingMediaFileParts {
   readonly evictCached: (mediaId: string) => void;
   readonly listRemoteCache: () => readonly RemoteCacheEntry[];
   readonly toRenderUri: (path: string) => Promise<string>;
+  /** Delete all transient render-decrypt temps (task 158) — plaintext, re-derivable, pruned wholesale. */
+  readonly clearRenderTemps: () => void;
 }
 
 /**
@@ -157,7 +166,7 @@ export function createEncryptingMediaFileParts(
       deriveMediaFileKey(deviceColumnAead, hexToBytes(hex)),
       deviceColumnAead,
     );
-    enc = new EncryptingMediaFile(cipher, rawMediaFileIo, sha256Hex);
+    enc = new EncryptingMediaFile(cipher, rawMediaFileIo, sha256Factory);
     return enc;
   }
 
@@ -270,6 +279,19 @@ export function createEncryptingMediaFileParts(
       if (!temp.exists) temp.create();
       temp.write(plaintext);
       return temp.uri;
+    },
+
+    /**
+     * Wholesale-delete the render-temp dir (task 158). These are transient PLAINTEXT decrypts of files
+     * that are ciphertext at rest; leaving them would let a lost device yield recently-VIEWED photos,
+     * defeating the point. They are re-derivable, so the pruning pass clears them all every run.
+     */
+    clearRenderTemps() {
+      const dir = renderTempDirectory();
+      if (!dir.exists) return;
+      for (const entry of dir.list()) {
+        if (entry instanceof File) entry.delete();
+      }
     },
   };
 }

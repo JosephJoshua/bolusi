@@ -74,6 +74,8 @@ export interface PruningDeps<DB> {
   /** The remote render cache's current contents (06 §6). */
   readonly listRemoteCache: () => readonly RemoteCacheEntry[];
   readonly evictRemoteCache: (id: string) => Promise<void>;
+  /** Delete the transient render-decrypt plaintext temps (task 158) — re-derivable, cleared each pass. */
+  readonly clearRenderTemps: () => void;
 }
 
 export interface PruningPass {
@@ -139,6 +141,10 @@ export function createPruningPass<DB>(deps: PruningDeps<DB>): PruningPass {
       // Core sorts and selects; this loop only deletes.
       const evictions = remoteCacheEvictions(deps.listRemoteCache(), freeBytes);
       for (const id of evictions) await deps.evictRemoteCache(id);
+
+      // The render-decrypt temps are transient plaintext (task 158) and always re-derivable; clear them
+      // every pass so a lost device holds no plaintext copies of recently-viewed encrypted media.
+      deps.clearRenderTemps();
 
       return {
         band: currentBand,

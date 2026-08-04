@@ -18,13 +18,16 @@ export {
 export { encryptColumnValue, registerColumnCipher, type ColumnCipher } from './column-cipher.js';
 export {
   deriveMediaFileKey,
+  frameCountFor,
   MediaFileCipher,
   onDiskFrameLength,
   onDiskFrameOffset,
   plaintextSizeFromOnDisk,
   MEDIA_FILE_FRAME_BYTES,
   MEDIA_FILE_FRAME_OVERHEAD,
+  MEDIA_FILE_HEADER_BYTES,
   MEDIA_FILE_KEY_BYTES,
+  MEDIA_FILE_NONCE_BASE_BYTES,
   MEDIA_FILE_NONCE_BYTES,
   MEDIA_FILE_ON_DISK_FRAME_BYTES,
   MEDIA_FILE_TAG_BYTES,

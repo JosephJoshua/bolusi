@@ -77,6 +77,7 @@ function buildPass(
   cache: readonly RemoteCacheEntry[] = [],
   evicted: string[] = [],
   now: () => number = () => NOW,
+  renderTempsCleared: { n: number } = { n: 0 },
 ) {
   return createPruningPass({
     db: db.db,
@@ -87,6 +88,9 @@ function buildPass(
     evictRemoteCache: (id) => {
       evicted.push(id);
       return Promise.resolve();
+    },
+    clearRenderTemps: () => {
+      renderTempsCleared.n += 1;
     },
   });
 }
@@ -110,6 +114,16 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await closeClientDb();
+});
+
+describe('task 158 — the render-decrypt plaintext temps are cleared every pass', () => {
+  test('a pruning pass clears the render temps (a lost device holds no viewed-photo plaintext)', async () => {
+    const fs = new FakeFs();
+    const counter = { n: 0 };
+    const report = await buildPass(fs, 10_000_000_000, [], [], () => NOW, counter).run('app_start');
+    expect(report).not.toBeNull(); // the pass ran (app_start is never throttled)
+    expect(counter.n).toBe(1);
+  });
 });
 
 describe('§7 — un-uploaded evidence is NEVER pruned, at any storage level', () => {

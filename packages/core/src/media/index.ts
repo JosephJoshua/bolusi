@@ -29,10 +29,11 @@ export {
 } from './download.js';
 export {
   EncryptingMediaFile,
+  type IncrementalSha256,
   type RawMediaFileIo,
   type RawReadHandle,
   type RawWriteHandle,
-  type Sha256Hex,
+  type Sha256Factory,
 } from './encrypting-file.js';
 export {
   DRAIN_HALTING_CODES,

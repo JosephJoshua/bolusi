@@ -120,7 +120,7 @@ export class ShrinkingCompressor implements ImageCompressorPort {
     const size = Math.max(1, Math.round(width * height * this.bytesPerPixel * compress));
     const out = `/cache/manipulated-${this.calls.length}.jpg`;
     this.fs.write(out, bytesOfLength(size, this.calls.length + 1));
-    return Promise.resolve({ uri: out, width, height });
+    return Promise.resolve({ uri: out, width, height, sizeBytes: size });
   }
 }
 

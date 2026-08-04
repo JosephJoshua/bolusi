@@ -103,6 +103,8 @@ export interface MediaClientDeps {
   readonly listRemoteCache: () => readonly RemoteCacheEntry[];
   /** Decrypt a verified media file to a uri `<Image>` can render (task 158; identity in tests). */
   readonly toRenderUri: (path: string) => Promise<string>;
+  /** Delete the transient render-decrypt plaintext temps (task 158) — called by the pruning pass. */
+  readonly clearRenderTemps: () => void;
   readonly newId: () => string;
   readonly location: { getBestFix(): { lat: number; lng: number; accuracyMeters: number } | null };
   /**
@@ -191,6 +193,7 @@ class MediaClientImpl implements MediaClient {
         deps.evictCached(id);
         return Promise.resolve();
       },
+      clearRenderTemps: deps.clearRenderTemps,
     });
 
     this.triggers = createMediaTriggers({

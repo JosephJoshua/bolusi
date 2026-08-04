@@ -56,7 +56,7 @@ describe('the two passes (06 §2.2 steps 3–4)', () => {
     const fs = new FakeFs();
     fs.write('/cache/shot.jpg', bytesOfLength(9_000_000));
     const compressor = new ShrinkingCompressor(source, fs, bytesPerPixel);
-    return { fs, compressor, deps: { compressor, sizeOf: fs.port.sizeOf } };
+    return { fs, compressor, deps: { compressor } };
   }
 
   test('a pass-1 output inside the budget STOPS — no second pass', async () => {
@@ -109,16 +109,16 @@ describe('the two passes (06 §2.2 steps 3–4)', () => {
     const fs = new FakeFs();
     fs.write('/cache/shot.jpg', bytesOfLength(9_000_000));
     const passthrough: ImageCompressorPort = {
-      // Ignores the resize target and the quality entirely — which is exactly the point.
+      // Ignores the resize target and the quality entirely — which is exactly the point. It returns the
+      // input file unchanged, so its byte size is the 9 MB source's.
       compress: (uri): Promise<CompressedImage> =>
-        Promise.resolve({ uri, width: 4000, height: 3000 }),
+        Promise.resolve({ uri, width: 4000, height: 3000, sizeBytes: 9_000_000 }),
     };
 
-    const result = await compressCapture(
-      { compressor: passthrough, sizeOf: fs.port.sizeOf },
-      '/cache/shot.jpg',
-      { width: 4000, height: 3000 },
-    );
+    const result = await compressCapture({ compressor: passthrough }, '/cache/shot.jpg', {
+      width: 4000,
+      height: 3000,
+    });
 
     // It still runs both passes (the size never drops), and every §2.2 guarantee is violated:
     expect(result.passes).toBe(2);
