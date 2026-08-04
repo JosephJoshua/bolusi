@@ -76,36 +76,12 @@ export interface DeviceInfo {
   readonly appVersion: string;
 }
 
-/**
- * The per-user locale preference — task 25's seam, NOT wired here.
- *
- * 07-i18n §1.1 gives each USER a locale preference carried by a `platform.setLocale` operation; §1.2
- * gives the DEVICE a plain-local-storage locale for the pre-login surfaces. This task ships the
- * device half only (its brief: "the op-emitting `platform.setLocale` per-user preference (25 wires
- * it; leave a seam)").
- *
- * The seam is a type and a null default rather than a TODO comment, so the scope guard is
- * assertable: `settings.test.ts` proves this is never invoked, which is what stops the op from being
- * emitted by accident before its module exists.
- */
-export type SetLocalePreference = (locale: Locale) => Promise<void>;
-
-export interface SettingsDeps {
-  /** Writes the device locale (07-i18n §1.2). Plain local storage — never an op, never synced. */
-  readonly setDeviceLocale: (locale: Locale) => Promise<void>;
-  /** Applies channel importance (api/04-push §5). */
-  readonly setChannelImportance: (
-    category: MutablePushCategory,
-    importance: ChannelImportance,
-  ) => Promise<void>;
-  /**
-   * Task 25 passes the real emitter. Null here on purpose — see above. A non-null value in v0 would
-   * mean an op type whose module is not registered yet.
-   */
-  readonly setLocalePreference: SetLocalePreference | null;
-}
-
-// `changeLocale`/`setMuted` were DELETED (task 138 item 2): both had zero callers — `Root`/
-// `SettingsScreen` do the device-locale write inline, and the app-controlled mute toggle was
+// `SetLocalePreference` / `SettingsDeps` / `changeLocale` / `setMuted` were all DELETED (task 138):
+// `SettingsDeps`'s only consumers were `changeLocale`/`setMuted` (dead — device-locale writes happen
+// inline in `Root`/`SettingsScreen`, and the app-controlled mute toggle was superseded by task 59's
+// OS-settings deep-link, D18). The `SetLocalePreference` seam this file used to hold as a null "task 25
+// wires it" placeholder is now LIVE via a different path: `Root` emits the per-user `platform.setLocale`
+// op through `bootstrap/user-locale.ts` (task 138 item 4). The still-LIVE `channelImportance`/
+// `categoryNameKey` (boot channel setup, `notifications.ts`) stay.
 // superseded by task 59's OS-settings deep-link (D18). The still-LIVE `channelImportance`/
 // `categoryNameKey` (used by `bootstrap/notifications.ts` at boot) stay; only the dead setters go.

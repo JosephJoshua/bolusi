@@ -1,5 +1,5 @@
 import { DEFAULT_LOCALE, LOCALES, SELECTABLE_LOCALES } from '@bolusi/i18n';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 import {
   categoryNameKey,
@@ -8,17 +8,7 @@ import {
   localeNameKey,
   localeOptions,
   MUTABLE_PUSH_CATEGORIES,
-  type SettingsDeps,
 } from './model.js';
-
-function deps(overrides: Partial<SettingsDeps> = {}): SettingsDeps {
-  return {
-    setDeviceLocale: vi.fn(async () => undefined),
-    setChannelImportance: vi.fn(async () => undefined),
-    setLocalePreference: null,
-    ...overrides,
-  };
-}
 
 describe('the language toggle offers exactly id/en — `zh` is absent (07-i18n §1)', () => {
   test('the options are id and en', () => {
@@ -47,16 +37,6 @@ describe('the language toggle offers exactly id/en — `zh` is absent (07-i18n �
   test('each option renders through a catalog key, never a hardcoded language name', () => {
     expect(localeNameKey('id')).toBe('core.language.id');
     expect(localeNameKey('en')).toBe('core.language.en');
-  });
-});
-
-describe('the settings deps seam (07-i18n §1.2)', () => {
-  // `changeLocale` was DELETED (task 138 item 2): device-locale writes happen inline in
-  // `Root`/`SettingsScreen`, and the per-user `setLocalePreference` seam is wired to the existing
-  // `platform.user_locale_changed` op separately (task 138 item 4 — this test's scope-guard on
-  // "no op emitted" moves there once the emit lands).
-  test('the v0 wiring passes null for the per-user seam until it is wired', () => {
-    expect(deps().setLocalePreference).toBeNull();
   });
 });
 
