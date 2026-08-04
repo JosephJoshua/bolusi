@@ -57,10 +57,11 @@ export interface NewMediaItem {
  *
  * AT REST (D22 addendum 2 #9): `location` is capture GPS — PII — and is sealed through
  * `encryptColumnValue`. `sha256` stays plaintext (it is a hash), and so does `local_path`: it is a
- * filesystem path the drain/prune passes filter on, and ENCRYPTING THE PATH WOULD NOT PROTECT THE
- * PHOTO ANYWAY — the image bytes sit unencrypted in the document directory. Media FILES at rest are
- * explicitly OUT of scope here and tracked as their own task (158); the accepted residual is recorded
- * in the threat model.
+ * filesystem path the drain/prune passes filter on, and encrypting the path would not protect the
+ * photo. The PHOTO ITSELF is now encrypted at rest as a FILE (task 158, SEC-MEDIA-09): the
+ * `MediaFilePort` seam (files.ts) writes the document-dir and render-cache files as AES-256-GCM
+ * ciphertext (06 §7), so `local_path` pointing at ciphertext is the closed state, not the residual it
+ * once was. What stays plaintext here is only the row's own columns per the rule above.
  */
 export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): Promise<void> {
   await sql`

@@ -4,7 +4,8 @@
 **Priority:** MEDIUM — the captured repair photos are core evidence, but they upload and are meant to be pruned, and the signed sha256 still detects tampering. Owner ruled (D22 addendum 2): file separately, do NOT block task 148's DB-column encryption.
 **Depends on:** 148 (the app-layer AEAD mechanism + the SecureStore DB key it establishes), 06 (media pipeline), 82 (capture)
 **Blocks:** —
-**SEC ids owned by THIS task:** check `security-guide.md` for a media-at-rest SEC id; if none covers *files on disk* (as opposed to the DB), that is a gap to note.
+**SEC ids owned by THIS task:** SEC-MEDIA-09
+SEC-MEDIA-09 (captured media FILES encrypted at rest) is the gap this task closes — none of SEC-MEDIA-01..08 covered files on disk (as opposed to the DB columns). The marker line above is a bare id list on purpose (`parseOwnedIds`, sec-meta.ts, rejects trailing prose). Node-lane falsified; on-device leg emulator-deferred (D21).
 **Filed by:** the orchestrator, 2026-07-22, from the D22 addendum-2 column-set sign-off.
 
 ## The finding
