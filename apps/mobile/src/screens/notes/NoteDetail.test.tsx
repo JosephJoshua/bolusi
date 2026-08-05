@@ -1,12 +1,13 @@
 // NoteDetail MOUNTED-screen tests (task 96 / §2.11). The four §5 states, the rejected-op DANGER
 // banner (the falsified deliverable), archive-through-ConfirmSheet, and the verified media thumbnail.
 import { DomainError } from '@bolusi/core';
-import { NoteDetail } from '@bolusi/modules/notes/screens';
+import { NoteDetail, NotesList } from '@bolusi/modules/notes/screens';
 import type { ArchiveNoteInput, NoteRow } from '@bolusi/modules/notes';
+import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { act } from 'react';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
-import { fakeRuntime, fire, page, renderNotes } from '../../../test/notes-support.js';
+import { fakeRuntime, fire, page, renderNotes, textsIn } from '../../../test/notes-support.js';
 
 const NOW = 1_726_000_600_000;
 
@@ -15,6 +16,36 @@ async function settle(): Promise<void> {
     for (let i = 0; i < 6; i += 1) await Promise.resolve();
   });
 }
+
+afterEach(() => setLocale(DEFAULT_LOCALE));
+
+describe('the detail screen title is distinct from the list title (129 item 4b)', () => {
+  test('the detail title uses its own key, so it can differ from the list where the copy does', async () => {
+    // `notes.detail.title`/`notes.list.title` render the SAME word in ID ("Catatan"); the keys diverge
+    // only where the copy does (EN: "Note" vs "Notes"). Compare the two REAL screen titles there — not
+    // a hardcoded string (T-4). Revert the AppShell title to `notes.list.title` and they re-equal → red.
+    setLocale('en');
+    const detailScreen = detail(fakeRuntime({ getNote: () => Promise.resolve(page([note()])) }));
+    await settle();
+    const listScreen = renderNotes(
+      fakeRuntime({ listNotes: () => Promise.resolve(page([])) }),
+      <NotesList
+        now={NOW}
+        syncChip={null}
+        avatar={null}
+        onOpenNote={vi.fn()}
+        onCreateNote={vi.fn()}
+        onOpenSyncStatus={vi.fn()}
+      />,
+    );
+    await settle();
+
+    const detailTitle = textsIn(detailScreen.get('notes.detail.title')).join('');
+    const listTitle = textsIn(listScreen.get('notes.list.title')).join('');
+    expect(detailTitle).not.toBe('');
+    expect(detailTitle).not.toBe(listTitle);
+  });
+});
 
 const note = (over: Partial<NoteRow> = {}): NoteRow => ({
   id: 'note-1',

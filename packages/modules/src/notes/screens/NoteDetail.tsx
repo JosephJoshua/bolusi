@@ -100,7 +100,7 @@ export function NoteDetail({
 
   return (
     <AppShell
-      title={tn('notes.list.title')}
+      title={tn('notes.detail.title')}
       titleVariant="detail"
       onBack={onBack}
       backLabel={t('core.action.back')}

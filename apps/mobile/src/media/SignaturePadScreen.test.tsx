@@ -13,7 +13,7 @@
 // FEELS — latency, sample rate, palm rejection are device properties and there is no device here
 // (D12/D13), on either platform.
 import { color } from '@bolusi/ui';
-import { t } from '@bolusi/i18n';
+import { t, translateErrorCode } from '@bolusi/i18n';
 import { act } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -113,8 +113,17 @@ describe('design-system §5 — all four states, and all four are real here', ()
     );
     expect(refused.query('signature-save')).toBeNull();
 
-    const failed = renderPad({ kind: 'failed', code: 'WRITE_FAILED' });
-    expect(failed.get('signature-failed.code').props['children']).toBe('WRITE_FAILED');
+    // A catalog-COVERED code reads its real message via `translateErrorCode`, not the generic
+    // "Terjadi kesalahan" (129 item 10). Revert the title to `t('core.errors.UNEXPECTED')` and the
+    // two title assertions red; the raw code still shows on its own row for support to quote.
+    const failed = renderPad({ kind: 'failed', code: 'LOCAL_CORRUPT' });
+    expect(failed.get('signature-failed.title').props['children']).toBe(
+      translateErrorCode('LOCAL_CORRUPT'),
+    );
+    expect(failed.get('signature-failed.title').props['children']).not.toBe(
+      t('core.errors.UNEXPECTED'),
+    );
+    expect(failed.get('signature-failed.code').props['children']).toBe('LOCAL_CORRUPT');
     expect(failed.get('signature-failed.retry').props['onPress']).toBeTypeOf('function');
   });
 });

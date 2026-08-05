@@ -19,6 +19,9 @@
     "showArchived": "Show archived",
     "hideArchived": "Hide archived"
   },
+  "detail": {
+    "title": "Note"
+  },
   "list": {
     "empty": "No notes yet. Tap “New Note” to start.",
     "emptyArchived": "No archived notes yet.",

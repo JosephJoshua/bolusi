@@ -21,6 +21,7 @@ import type { TranslationKey, TranslationValues } from '@bolusi/i18n';
  */
 export type NotesKey =
   | 'notes.list.title'
+  | 'notes.detail.title'
   | 'notes.list.empty'
   | 'notes.list.emptyArchived'
   | 'notes.action.new'
@@ -37,6 +38,7 @@ export type NotesKey =
 /** The runtime-checkable list — the single source `screens/i18n.test` reads as its denominator. */
 export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.list.title',
+  'notes.detail.title',
   'notes.list.empty',
   'notes.list.emptyArchived',
   'notes.action.new',

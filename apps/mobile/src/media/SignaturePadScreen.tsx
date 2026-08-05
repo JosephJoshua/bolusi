@@ -33,7 +33,7 @@
  *   unauthorized  — `unauthorized`: the signed-in user may not sign off this work (02-permissions).
  *                   Distinct from empty, with a back CTA, per §5.
  */
-import { t } from '@bolusi/i18n';
+import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Button,
@@ -233,7 +233,10 @@ function content(
     case 'failed':
       return (
         <ErrorState
-          title={t('core.errors.UNEXPECTED')}
+          // A code the catalog covers reads its real message, not "Terjadi kesalahan" (129 item 10;
+          // the same fix task 125 made in CaptureScreen). Uncovered codes still degrade to UNEXPECTED
+          // inside `translateErrorCode` (07-i18n §4.2).
+          title={translateErrorCode(state.code)}
           errorCode={state.code}
           retryLabel={t('core.action.retry')}
           onRetry={handlers.onRetry}

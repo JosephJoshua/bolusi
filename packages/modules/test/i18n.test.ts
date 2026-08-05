@@ -49,9 +49,10 @@ describe('notes i18n catalogs (04 §8 box 7)', () => {
 
   test('ui-labels.md carries the notes.* rows the harness expects (denominator, T-14)', () => {
     // A non-zero, exact count: if the parse read zero rows (a doc format change), every comparison
-    // below would trivially pass over empty sets. 13 notes.* rows ship today (ui-labels.md §notes)
-    // — 11 + `notes.list.emptyArchived` + `notes.filter.hideArchived` (task 129 items 2/3).
-    expect(seed.size).toBe(13);
+    // below would trivially pass over empty sets. 14 notes.* rows ship today (ui-labels.md §notes)
+    // — 11 + `notes.list.emptyArchived` + `notes.filter.hideArchived` (items 2/3) + `notes.detail.title`
+    // (item 4b).
+    expect(seed.size).toBe(14);
   });
 
   for (const locale of ['id', 'en'] as const) {

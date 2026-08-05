@@ -267,6 +267,7 @@ Surfaces per 04-module-contract §8 (create / edit body / archive, photo attachm
 | Key | id-ID | en |
 | --- | ----- | -- |
 | `notes.list.title` | Catatan | Notes |
+| `notes.detail.title` | Catatan | Note |
 | `notes.list.empty` | Belum ada catatan. Ketuk “Catatan Baru” untuk mulai. | No notes yet. Tap “New Note” to start. |
 | `notes.list.emptyArchived` | Belum ada catatan arsip. | No archived notes yet. |
 | `notes.action.new` | Catatan Baru | New Note |

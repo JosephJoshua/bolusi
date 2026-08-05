@@ -19,6 +19,9 @@
     "showArchived": "Tampilkan arsip",
     "hideArchived": "Sembunyikan arsip"
   },
+  "detail": {
+    "title": "Catatan"
+  },
   "list": {
     "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",
     "emptyArchived": "Belum ada catatan arsip.",
