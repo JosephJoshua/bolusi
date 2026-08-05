@@ -208,6 +208,8 @@ describe('NoteEditor — edit path ships the four §5 states', () => {
     );
     await settle();
     expect(screen.query('notes.editor.unauthorized')).not.toBeNull();
+    // §5 guidance body — drop the screen's `hint` prop and this goes null → red (129 item 9).
+    expect(screen.query('notes.editor.unauthorized.hint')).not.toBeNull();
     expect(screen.query('notes.editor.body')).toBeNull();
   });
 

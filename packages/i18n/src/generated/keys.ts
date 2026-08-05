@@ -118,6 +118,7 @@ export type TranslationKey =
   | 'core.time.hoursAgo'
   | 'core.time.justNow'
   | 'core.time.minutesAgo'
+  | 'core.unauthorized.askOwner'
   | 'media.action.retake'
   | 'media.action.retryUpload'
   | 'media.action.takePhoto'
@@ -206,6 +207,9 @@ export interface TranslationResources {
     language: {
       id: string;
       en: string;
+    };
+    unauthorized: {
+      askOwner: string;
     };
     errors: {
       INVALID_TRANSITION: string;

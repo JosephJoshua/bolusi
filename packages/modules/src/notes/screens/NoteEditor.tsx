@@ -204,6 +204,7 @@ function EditNoteLoader({
       return shell(
         <UnauthorizedState
           title={t('core.errors.PERMISSION_DENIED')}
+          hint={t('core.unauthorized.askOwner')}
           backLabel={t('core.action.back')}
           onBack={onCancel}
           testID={`${testID}.unauthorized`}

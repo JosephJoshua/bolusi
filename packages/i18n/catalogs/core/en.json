@@ -34,6 +34,9 @@
     "id": "Bahasa Indonesia",
     "en": "English"
   },
+  "unauthorized": {
+    "askOwner": "Ask your store owner for access."
+  },
   "errors": {
     "INVALID_TRANSITION": "This can’t be done anymore because the record changed. Check the record again.",
     "PERMISSION_DENIED": "Your account doesn’t have permission to do this.",

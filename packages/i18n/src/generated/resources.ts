@@ -52,6 +52,9 @@ export const resources: SeededResources = {
           id: 'Bahasa Indonesia',
           en: 'English',
         },
+        unauthorized: {
+          askOwner: 'Minta pemilik toko untuk memberi akses.',
+        },
         errors: {
           INVALID_TRANSITION:
             'Tindakan ini sudah tidak bisa dilakukan karena datanya berubah. Periksa lagi datanya.',
@@ -329,6 +332,9 @@ export const resources: SeededResources = {
         language: {
           id: 'Bahasa Indonesia',
           en: 'English',
+        },
+        unauthorized: {
+          askOwner: 'Ask your store owner for access.',
         },
         errors: {
           INVALID_TRANSITION:

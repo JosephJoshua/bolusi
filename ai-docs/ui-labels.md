@@ -54,6 +54,16 @@ Note: v0 has no hard delete anywhere (05-operation-log §1 — corrections are n
 
 Language names are endonyms — identical in every locale, deliberately.
 
+## core — unauthorized guidance (`core.unauthorized.*`)
+
+| Key | id-ID | en |
+| --- | ----- | -- |
+| `core.unauthorized.askOwner` | Minta pemilik toko untuk memberi akses. | Ask your store owner for access. |
+
+The design-system §5 Unauthorized state pairs the `core.errors.PERMISSION_DENIED` title with this
+body — what to do about the denial, never a bare fact. Screen-agnostic on purpose: the notes and
+signature denials (04-module-contract §8, 06-media-pipeline) all point the user at the same place.
+
 ## core — runtime errors (`core.errors.<CODE>`)
 
 Rendered via `t('core.errors.' + code)` for every `DomainError` (07-i18n §4.2). The canonical code list is the DomainError code registry in 04-module-contract §5.2; every code shipped must have a row here (CI-gated). Unknown codes render `UNEXPECTED`. `IDEMPOTENCY_CONFLICT` and `RATE_LIMITED` are transport error codes (api/00-conventions §8.2 / §11) surfaced through the same derivation.

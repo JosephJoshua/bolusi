@@ -2,6 +2,8 @@
 
 **Status:** todo
 **Priority:** MEDIUM — none is a crash; together they are what a shop owner actually sees. Every one is invisible to the current suite, which asserts testIDs exist rather than what is in them.
+
+> **PARTIAL — items 9 + 11 DONE 2026-08-05** (the §5 Unauthorized-guidance-body class, shared with task 146 item 1). All four Unauthorized states that shipped a title with no body now pass `hint={t('core.unauthorized.askOwner')}` — the one new shared key ("Minta pemilik toko untuk memberi akses." / "Ask your store owner for access.", `ui-labels.md` → catalogs → typed union, 10 gates green): `NotesList`/`NoteEditor`/`NoteDetail` (`@bolusi/modules`) + `SignaturePadScreen` (mobile). Each existing mobile render test (`{NotesList,NoteEditor,NoteDetail}.test.tsx`, `SignaturePadScreen.test.tsx`) now asserts the `.hint` node is PRESENT (structure, not copy — T-4); **§2.11-falsified: dropping the `hint` prop from each screen reds its assertion, restored → 44/44 green.** REMAINING: items 1–8, 10 (`SignaturePad` failed-branch `translateErrorCode` — a different class, error-code display), 12 (needs a design decision — read-only text treatment, §6 territory), 13 (contended `packages/ui` + no 1.3× render lane).
 **Depends on:** 96, 82, 24, 119
 **Blocks:** —
 **SEC ids owned by THIS task:** none.

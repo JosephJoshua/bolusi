@@ -101,6 +101,8 @@ describe('design-system §5 — all four states, and all four are real here', ()
       t('core.errors.PERMISSION_DENIED'),
     );
     expect(screen.query('signature-unauthorized.back')).not.toBeNull();
+    // §5 guidance body — drop the screen's `hint` prop and this goes null → red (129 item 11).
+    expect(screen.query('signature-unauthorized.hint')).not.toBeNull();
     expect(screen.query('signature-surface')).toBeNull();
   });
 

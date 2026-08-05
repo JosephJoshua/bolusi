@@ -34,6 +34,9 @@
     "id": "Bahasa Indonesia",
     "en": "English"
   },
+  "unauthorized": {
+    "askOwner": "Minta pemilik toko untuk memberi akses."
+  },
   "errors": {
     "INVALID_TRANSITION": "Tindakan ini sudah tidak bisa dilakukan karena datanya berubah. Periksa lagi datanya.",
     "PERMISSION_DENIED": "Akun kamu tidak punya izin untuk ini.",

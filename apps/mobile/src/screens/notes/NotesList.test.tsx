@@ -104,6 +104,11 @@ describe('NotesList — the four §5 states on a mounted screen', () => {
     await settle();
 
     expect(screen.query('notes.list.items.unauthorized')).not.toBeNull();
+    // design-system §5: an Unauthorized state carries the "ask your store owner" GUIDANCE body, not
+    // a bare title. The `List` gives its UnauthorizedState no explicit testID, so the hint is the
+    // component default `ui.unauthorizedState.hint`. Drop the screen's `hint` prop and it goes
+    // null → red (129 item 9); one denial state in this tree, so the id is unambiguous.
+    expect(screen.query('ui.unauthorizedState.hint')).not.toBeNull();
     // The falsified property: a denial is NEVER an empty list. Map denial→empty (the FR-1036 bug)
     // and the unauthorized assertion goes null while this one goes non-null → red.
     expect(screen.query('notes.list.items.empty')).toBeNull();
