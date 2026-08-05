@@ -244,4 +244,28 @@ describe('the chip and title are witnessed together on the pending-media screen 
     expect(renderedChip(over)).toEqual(['pending']);
     expect(titleOf(over)).toBe(t(SYNC_TITLE_KEY.pending));
   });
+
+  test('a manual-sync error renders the ACTUAL code, not a hardcoded NETWORK (task 144 item 2)', () => {
+    // The mandated positive control: two DIFFERENT failure codes must render DIFFERENT text, or the
+    // screen is ignoring the code (the pre-fix hardcode showed NETWORK for every failure). We compare
+    // the two real renders (T-4) rather than assert copy. Reverting to `t('core.errors.NETWORK')` makes
+    // both identical and reds the `not.toBe`; dropping the raw-code line reds the code-shown assertion.
+    const networkMsg = textsIn(
+      renderSync({ manualSyncError: 'NETWORK' }).get('sync-manual-error'),
+    ).join('');
+    const authMsg = textsIn(
+      renderSync({ manualSyncError: 'AUTH_TOKEN_INVALID' }).get('sync-manual-error'),
+    ).join('');
+    expect(networkMsg).not.toBe(authMsg);
+
+    // The raw code is shown for support (§5 Error state) — a shop owner has something to quote.
+    expect(
+      textsIn(
+        renderSync({ manualSyncError: 'AUTH_TOKEN_INVALID' }).get('sync-manual-error-code'),
+      ).join(''),
+    ).toBe('AUTH_TOKEN_INVALID');
+
+    // …and the whole block is absent when the last manual sync did not fail.
+    expect(renderSync().query('sync-manual-error')).toBeNull();
+  });
 });

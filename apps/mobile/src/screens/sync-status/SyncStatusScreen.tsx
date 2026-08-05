@@ -24,7 +24,7 @@
  * Perubahan tersimpan di perangkat ini." It is a statement about the network AND a reassurance about
  * the data, in that order, in one sentence. It is never red.
  */
-import { formatRelative, t, translateRejectionCode } from '@bolusi/i18n';
+import { formatRelative, t, translateErrorCode, translateRejectionCode } from '@bolusi/i18n';
 import {
   AppShell,
   AvatarButton,
@@ -207,10 +207,17 @@ export function SyncStatusScreen({
       ) : null}
 
       {input.manualSyncError !== null ? (
-        // §8.4 item 3: inline, never modal — the backoff continues in the background regardless.
-        <Text style={styles.inlineError} testID="sync-manual-error">
-          {t('core.errors.NETWORK')}
-        </Text>
+        // §8.4 item 3: inline, never modal — the backoff continues in the background regardless. The
+        // message translates the ACTUAL failure code (07-i18n §4.2), not a hardcoded NETWORK (task 144
+        // item 2 — the field used to be ignored, so every failure claimed a network problem); an
+        // unregistered code degrades to `core.errors.UNEXPECTED`. The raw code rides beneath the message
+        // so a shop owner has something to quote to support (§5 Error state).
+        <View testID="sync-manual-error">
+          <Text style={styles.inlineError}>{translateErrorCode(input.manualSyncError)}</Text>
+          <Text style={styles.meta} testID="sync-manual-error-code">
+            {input.manualSyncError}
+          </Text>
+        </View>
       ) : null}
 
       {/* 4 — PROBLEMS, only when real. */}

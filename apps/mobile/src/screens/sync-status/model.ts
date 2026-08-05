@@ -112,7 +112,12 @@ export interface SyncStatusInput {
   readonly isOffline: boolean;
   /** Is a manual sync in flight? Drives the button's `busy` (design-system §3.1). */
   readonly manualSyncBusy: boolean;
-  /** The last manual-sync failure, shown INLINE (§8.4 item 3 — "never modal"). */
+  /**
+   * The last manual-sync failure as a BARE `core.errors.*` code (e.g. `NETWORK`, `AUTH_TOKEN_INVALID`) —
+   * NOT a full catalog key — shown INLINE (§8.4 item 3 — "never modal"). The screen translates it via
+   * `translateErrorCode` (task 144 item 2) and shows the raw code for support (§5). `null` when the last
+   * manual sync did not fail.
+   */
   readonly manualSyncError: string | null;
   readonly now: number;
 }

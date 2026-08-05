@@ -437,8 +437,10 @@ describe('manual sync (§8.4 item 3)', () => {
   test('a manual-sync failure is carried as inline text, never as a modal (§8.4 item 3)', () => {
     // The model surfaces the error as a string the screen renders next to the button. There is no
     // modal affordance in the type at all — backoff continues in the background regardless.
-    const given = input({ manualSyncError: 'core.errors.NETWORK' });
-    expect(given.manualSyncError).toBe('core.errors.NETWORK');
+    // A BARE code (task 144 item 2), not a full catalog key — the screen resolves it via
+    // `translateErrorCode`, which keys `core.errors.<code>`.
+    const given = input({ manualSyncError: 'NETWORK' });
+    expect(given.manualSyncError).toBe('NETWORK');
     // A failed manual sync is NOT a problem with the data: nothing was lost, and the loop retries.
     expect(syncProblems(given)).toEqual([]);
     expect(manualSync(given)).toEqual({ kind: 'ready' });
