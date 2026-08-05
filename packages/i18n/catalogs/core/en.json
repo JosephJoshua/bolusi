@@ -29,6 +29,7 @@
   },
   "settings": {
     "title": "Settings",
+    "security": "Security",
     "notifications": "Notifications",
     "device": "This Device",
     "language": "Language"

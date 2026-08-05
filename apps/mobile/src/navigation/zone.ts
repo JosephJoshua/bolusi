@@ -25,7 +25,7 @@ export type DeviceStatus = 'unenrolled' | 'active' | 'revoked';
 export type SwitcherMode = 'lock' | 'choose';
 
 /** The in-shell surfaces this task ships. Module screens (task 25) extend this union. */
-export type ShellRoute = 'home' | 'syncStatus' | 'settings';
+export type ShellRoute = 'home' | 'syncStatus' | 'settings' | 'changePin';
 
 /**
  * The one surface the app is showing. A discriminated union so a renderer must handle every case —
@@ -129,6 +129,10 @@ export function backTarget(zone: Zone): BackTarget | null {
       // shared terminal is the likely mistake, and it must not cost a lockout attempt.
       return { kind: 'switcher' };
     case 'shell':
-      return zone.route === 'home' ? { kind: 'exitApp' } : { kind: 'shellRoute', route: 'home' };
+      // Home is the root — back EXITS the app. Change PIN is reached FROM Settings, so it backs THERE
+      // (task 186a); every other one-level-deep surface (Sync Status, Settings) backs to Home.
+      if (zone.route === 'home') return { kind: 'exitApp' };
+      if (zone.route === 'changePin') return { kind: 'shellRoute', route: 'settings' };
+      return { kind: 'shellRoute', route: 'home' };
   }
 }

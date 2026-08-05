@@ -55,6 +55,7 @@ function renderSettings(
       currentUser={{ id: 'user-1', initials: 'PO' }}
       onBack={vi.fn()}
       onOpenSwitcher={vi.fn()}
+      onOpenChangePin={vi.fn()}
       syncChip="synced"
       onOpenSync={vi.fn()}
     />,
@@ -120,6 +121,27 @@ describe('the screen title and section headers are distinct, correct labels (§1
     // Bug: the header reused `auth.enroll.title` ("Daftarkan Perangkat Ini") — an imperative CTA over
     // read-only info rows. Revert the site and this reds.
     expect(deviceHeader).not.toBe(t('auth.enroll.title'));
+  });
+
+  test('the Change PIN row opens the Change-PIN screen (task 186a)', () => {
+    const onOpenChangePin = vi.fn();
+    const screen = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={onOpenChangePin}
+        syncChip="synced"
+        onOpenSync={vi.fn()}
+      />,
+    );
+    // Point it at a no-op and this reds — the row is the only production caller of the change flow.
+    fire(screen.get('settings-change-pin'), 'onPress');
+    expect(onOpenChangePin).toHaveBeenCalledTimes(1);
   });
 
   test('the three section headers are mutually distinct (no two sections share a label)', () => {

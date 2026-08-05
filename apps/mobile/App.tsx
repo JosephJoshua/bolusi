@@ -47,6 +47,7 @@ import {
   type EnrollmentState,
 } from './src/screens/enrollment/model.js';
 import type { EnrollmentController } from './src/bootstrap/enrollment.js';
+import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
@@ -148,6 +149,11 @@ export interface AppProps {
    */
   readonly onWorkspaceChange?: ((next: UserWorkspace) => void) | undefined;
   readonly onSelectLocale: (locale: Locale) => void;
+  /**
+   * Change the signed-in user's PIN (api/02-auth §6.6; task 186a), driven by the session controller.
+   * Resolves on success; REJECTS with the flow's DomainError so `ChangePinScreen` maps it to the pad.
+   */
+  readonly onChangePin: (currentPin: string, newPin: string) => Promise<void>;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -628,8 +634,20 @@ export default function App(props: AppProps): React.JSX.Element {
                 currentUser={currentUser}
                 onBack={() => setRoute('home')}
                 onOpenSwitcher={() => setSwitching(true)}
+                onOpenChangePin={() => setRoute('changePin')}
                 syncChip={chip}
                 onOpenSync={() => setRoute('syncStatus')}
+              />
+            );
+          }
+          if (shellZone.route === 'changePin') {
+            // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
+            // through the session controller and REJECTS with its DomainError; the screen maps it.
+            // Back / done returns to Settings — the surface it was opened from (see `backTarget`).
+            return (
+              <ChangePinScreen
+                onChangePin={props.onChangePin}
+                onClose={() => setRoute('settings')}
               />
             );
           }

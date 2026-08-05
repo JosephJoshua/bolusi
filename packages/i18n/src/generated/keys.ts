@@ -111,6 +111,7 @@ export type TranslationKey =
   | 'core.settings.device'
   | 'core.settings.language'
   | 'core.settings.notifications'
+  | 'core.settings.security'
   | 'core.settings.title'
   | 'core.status.empty'
   | 'core.status.loading'
@@ -206,6 +207,7 @@ export interface TranslationResources {
     };
     settings: {
       title: string;
+      security: string;
       notifications: string;
       device: string;
       language: string;

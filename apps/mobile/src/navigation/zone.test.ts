@@ -148,7 +148,7 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
     const locks = [true, false];
     const pins = [null, 'user-b'];
     const switches = [true, false];
-    const routes: ShellRoute[] = ['home', 'syncStatus', 'settings'];
+    const routes: ShellRoute[] = ['home', 'syncStatus', 'settings', 'changePin'];
     const kinds = new Set<Zone['kind']>();
 
     let count = 0;
@@ -229,5 +229,14 @@ describe('backTarget — hardware back IS the header back (§8.1)', () => {
       route: 'home',
     });
     expect(backTarget({ kind: 'shell', route: 'home' })).toEqual({ kind: 'exitApp' });
+  });
+
+  test('Change PIN backs to Settings — the surface it is reached from, not Home (task 186a)', () => {
+    // Change PIN is one level deeper than the other shell sub-routes (Settings → Change PIN). Backing
+    // it to `home` (the else arm the other sub-routes take) would strand the user; map it to Settings.
+    expect(backTarget({ kind: 'shell', route: 'changePin' })).toEqual({
+      kind: 'shellRoute',
+      route: 'settings',
+    });
   });
 });

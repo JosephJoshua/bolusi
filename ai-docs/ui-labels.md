@@ -49,6 +49,7 @@ Note: v0 has no hard delete anywhere (05-operation-log §1 — corrections are n
 | Key | id-ID | en |
 | --- | ----- | -- |
 | `core.settings.title` | Pengaturan | Settings |
+| `core.settings.security` | Keamanan | Security |
 | `core.settings.notifications` | Notifikasi | Notifications |
 | `core.settings.device` | Perangkat Ini | This Device |
 | `core.settings.language` | Bahasa | Language |

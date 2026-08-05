@@ -142,6 +142,7 @@ function SettingsInteractive(): React.JSX.Element {
       currentUser={CURRENT_USER}
       onBack={noop}
       onOpenSwitcher={noop}
+      onOpenChangePin={noop}
       syncChip="synced"
       onOpenSync={noop}
     />
@@ -243,6 +244,7 @@ function AppMode({ session }: { readonly session: AppProps['session'] }): React.
       onRetryMedia={noop}
       onRetryUsers={noop}
       onSubmitPin={noop}
+      onChangePin={() => Promise.resolve()}
       onSelectLocale={(next) => {
         setLocale(next);
         force();

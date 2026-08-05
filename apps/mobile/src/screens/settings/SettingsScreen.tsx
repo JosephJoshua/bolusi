@@ -43,6 +43,8 @@ export interface SettingsScreenProps {
   readonly currentUser: { readonly id: string; readonly initials: string };
   readonly onBack: () => void;
   readonly onOpenSwitcher: () => void;
+  /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
+  readonly onOpenChangePin: () => void;
   readonly syncChip: SyncChipState;
   readonly onOpenSync: () => void;
 }
@@ -55,6 +57,7 @@ export function SettingsScreen({
   currentUser,
   onBack,
   onOpenSwitcher,
+  onOpenChangePin,
   syncChip,
   onOpenSync,
 }: SettingsScreenProps): React.JSX.Element {
@@ -106,6 +109,16 @@ export function SettingsScreen({
           }
         />
       ))}
+
+      <Text style={styles.section} testID="settings-section-security">
+        {t('core.settings.security')}
+      </Text>
+      <ListRow
+        primaryText={t('auth.pin.change.title')}
+        onPress={onOpenChangePin}
+        showChevron
+        testID="settings-change-pin"
+      />
 
       <Text style={styles.section} testID="settings-section-notifications">
         {t('core.settings.notifications')}

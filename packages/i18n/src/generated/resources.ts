@@ -47,6 +47,7 @@ export const resources: SeededResources = {
         },
         settings: {
           title: 'Pengaturan',
+          security: 'Keamanan',
           notifications: 'Notifikasi',
           device: 'Perangkat Ini',
           language: 'Bahasa',
@@ -331,6 +332,7 @@ export const resources: SeededResources = {
         },
         settings: {
           title: 'Settings',
+          security: 'Security',
           notifications: 'Notifications',
           device: 'This Device',
           language: 'Language',

@@ -800,6 +800,15 @@ export function Root({
                 .then((outcome) => outcome.kind === 'opened')
                 .catch(() => false)
         }
+        // Change PIN (api/02-auth §6.6; task 186a). Delegates to the session controller, which runs
+        // the real `auth.changePin` flow and REJECTS with its DomainError — propagated to the screen's
+        // mapper. `session === null` is unreachable here (Change PIN is a shell route, session-gated),
+        // so the null arm is a defensive reject rather than a live path.
+        onChangePin={(currentPin, newPin) =>
+          session === null
+            ? Promise.reject(new Error('changePin: no session controller (session-gated route)'))
+            : session.changePin(currentPin, newPin)
+        }
         onSelectLocale={(next) => {
           void localeStore.write('bolusi.device_locale', next);
           setLocale(next);

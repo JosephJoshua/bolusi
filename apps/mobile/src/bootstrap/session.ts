@@ -48,9 +48,11 @@
  * NODE-SAFE: core + types only. Ports arrive injected.
  */
 import {
+  changePin as changePinFlow,
   createLockedOutEmitter,
   DomainError,
   listSwitcherUsers,
+  PinVerifierQueue,
   readIdleLockSeconds,
   readPinAttempt,
   readVerifier,
@@ -115,6 +117,14 @@ export interface AppSessionController {
   pinRow(userId: string): PinAttemptRow | null;
   submitPin(userId: string, pin: string): Promise<PinOutcome>;
   /**
+   * Change the SIGNED-IN user's own PIN (api/02-auth §6.6). Runs core's `changePin` flow: it verifies
+   * the CURRENT PIN locally (gated by the lockout machine), computes + applies the new verifier at the
+   * op's `asOf`, emits `auth.pin_changed`, and queues the verifier for POST on next online contact.
+   * REJECTS with the flow's DomainError (`NOT_AUTHENTICATED` wrong current, `PIN_LOCKED`,
+   * `PIN_RATE_LIMITED`) so the screen maps it; resolves on success.
+   */
+  changePin(currentPin: string, newPin: string): Promise<void>;
+  /**
    * ONE idle check (api/02-auth §6.4). Driven by the platform ticker (`session/idle-ticker.ts`),
    * which owns the cadence; the DECISION is 14's `checkIdle()` and is not re-derived anywhere above
    * it. Resolves true iff this call locked the session.
@@ -172,6 +182,11 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     idleLockSeconds: await readIdleLockSeconds(db),
   });
   const lockedOut = createLockedOutEmitter(commands);
+  // The pending-verifier queue (api/02-auth §5.4): a PIN change computes the verifier offline and
+  // queues it here; it is POSTed to the server on next online contact so other devices pick up the
+  // new PIN via bundle refresh. Long-lived (one per session) so a queued verifier survives until a
+  // drain sends it. The drain wiring is task 186a-2; today the change is honored LOCALLY at once.
+  const verifierQueue = new PinVerifierQueue();
 
   let users: readonly SwitcherUser[] | null = null;
   let usersError: string | null = null;
@@ -305,6 +320,40 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       await loadRow(userId);
       emit();
       return outcome;
+    },
+
+    async changePin(currentPin, newPin): Promise<void> {
+      const session = manager.current;
+      if (session === null) {
+        // The Change PIN screen is only reachable behind an open session (the shell zone), so this is
+        // a defensive guard, not a user path — a change with no acting user has no `entityId = userId`.
+        throw new Error('changePin requires an open session (SessionManager.current is null)');
+      }
+      try {
+        await changePinFlow(
+          {
+            runtime: commands,
+            db,
+            crypto: deps.crypto,
+            clock: deps.clock,
+            idSource: deps.idSource,
+            deviceId: device.deviceId,
+            queue: verifierQueue,
+            emitter: lockedOut,
+          },
+          { userId: session.userId, currentPin, newPin },
+        );
+      } finally {
+        // A wrong current PIN burned a lockout attempt; a success cleared the counter (§6.5). Either
+        // way the cached row is now stale — refresh it so the LOGIN pad reflects it if the user backs
+        // out. `finally` never swallows the flow's DomainError: it propagates to the screen's mapper.
+        // The row re-read is `.catch`-swallowed: a read failing AFTER a SUCCESSFUL change must not turn
+        // that success into an error (which would then leave the user retrying on the already-changed
+        // "current" PIN) — the stale cached row only affects the login pad's view and the next refresh
+        // corrects it.
+        await loadRow(session.userId).catch(() => undefined);
+        emit();
+      }
     },
   };
 }

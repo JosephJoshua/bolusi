@@ -29,6 +29,7 @@
   },
   "settings": {
     "title": "Pengaturan",
+    "security": "Keamanan",
     "notifications": "Notifikasi",
     "device": "Perangkat Ini",
     "language": "Bahasa"
