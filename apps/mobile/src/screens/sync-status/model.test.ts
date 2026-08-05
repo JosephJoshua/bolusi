@@ -419,10 +419,11 @@ describe('manual sync (§8.4 item 3)', () => {
     const given = input({
       state: state({ syncDisabled: true, syncDisabledReason: 'device_revoked' }),
     });
-    // A disabled button with no reason is how a user concludes the app is broken.
+    // A disabled button with no reason is how a user concludes the app is broken. `reasonCode` is a BARE
+    // code the screen renders via `translateRejectionCode` (task 144 item 1 — no longer a full key).
     expect(manualSync(given)).toEqual({
       kind: 'disabled',
-      reasonKey: 'core.rejection.DEVICE_REVOKED',
+      reasonCode: 'DEVICE_REVOKED',
     });
   });
 

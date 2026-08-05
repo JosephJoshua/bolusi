@@ -12,7 +12,7 @@
 // The assertion reads the button's public `disabled` prop, never its label — T-4. This mirrors
 // `EnrollmentScreen.test.tsx`'s `enroll-bind` disabled check.
 import { type SyncLoopState, type SyncState } from '@bolusi/core';
-import { t } from '@bolusi/i18n';
+import { t, translateRejectionCode } from '@bolusi/i18n';
 import { describe, expect, test, vi } from 'vitest';
 
 import { render, textsIn } from '../../../../../packages/ui/test/render.js';
@@ -267,6 +267,19 @@ describe('the chip and title are witnessed together on the pending-media screen 
 
     // …and the whole block is absent when the last manual sync did not fail.
     expect(renderSync().query('sync-manual-error')).toBeNull();
+  });
+
+  test('the disabled-reason renders the MODELs reason code, not a screen literal (task 144 item 1)', () => {
+    // The decoy this kills: the screen hardcoded `DEVICE_REVOKED`, so `manualSync`'s reasonCode had zero
+    // consumers and a sound model test guarded a value nothing rendered. Now the screen reads it — pin
+    // the render to the model's code (T-14b). Breaking the screen to a DIFFERENT code reds this.
+    const sync = manualSync(input({ state: state(REVOKED) }));
+    expect(sync.kind).toBe('disabled');
+    const reasonCode = sync.kind === 'disabled' ? sync.reasonCode : '';
+    const screen = renderSync({ state: state(REVOKED) });
+    expect(textsIn(screen.get('sync-disabled-reason')).join('')).toBe(
+      translateRejectionCode(reasonCode),
+    );
   });
 
   test('the two pending counters each sit in a flex cell so they share the row (task 129 item 7)', () => {

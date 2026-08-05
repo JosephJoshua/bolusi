@@ -318,17 +318,19 @@ export const SYNC_TITLE_KEY = {
 
 /**
  * §8.4 item 3: manual sync is disabled, WITH an explanation, when the loop cannot run at all.
- * A disabled button with no reason is how a user concludes the app is broken; `reason` is the key
- * the screen renders beside it.
+ * A disabled button with no reason is how a user concludes the app is broken; `reasonCode` is the BARE
+ * `core.rejection.*` code the screen renders beside it via `translateRejectionCode` (the same shape the
+ * rejected rows use). It used to be `reasonKey` — a full catalog key the screen never read (it hardcoded
+ * the code instead), so the value had zero callers and a sound test guarded a decoy (task 144 item 1).
  */
 export type ManualSync =
   | { readonly kind: 'ready' }
   | { readonly kind: 'busy' }
-  | { readonly kind: 'disabled'; readonly reasonKey: string };
+  | { readonly kind: 'disabled'; readonly reasonCode: string };
 
 export function manualSync(input: SyncStatusInput): ManualSync {
   if (input.state.syncDisabled && input.state.syncDisabledReason === 'device_revoked') {
-    return { kind: 'disabled', reasonKey: 'core.rejection.DEVICE_REVOKED' };
+    return { kind: 'disabled', reasonCode: 'DEVICE_REVOKED' };
   }
   if (input.manualSyncBusy) return { kind: 'busy' };
   // Deliberately ENABLED while offline: pressing it is how a user finds out whether the connection

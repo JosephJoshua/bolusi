@@ -210,9 +210,11 @@ export function SyncStatusScreen({
       </View>
 
       {sync.kind === 'disabled' ? (
-        // A disabled button with no reason is how a user decides the app is broken.
+        // A disabled button with no reason is how a user decides the app is broken. The reason comes
+        // from the MODEL's `reasonCode` (task 144 item 1) — the screen used to hardcode the code, so the
+        // model value had zero callers; now a change to `manualSync`'s reason reaches the screen.
         <Text style={styles.disabledReason} testID="sync-disabled-reason">
-          {translateRejectionCode('DEVICE_REVOKED')}
+          {translateRejectionCode(sync.reasonCode)}
         </Text>
       ) : null}
 
