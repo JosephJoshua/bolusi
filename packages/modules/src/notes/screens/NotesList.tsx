@@ -117,6 +117,12 @@ export function NotesList({
         };
       case 'ready':
         if (query.data.rows.length === 0) {
+          // Archived-empty offers NO create CTA: "New Note" makes an ACTIVE note, which never appears
+          // in the archived view — a control that lies about its effect (§3.8, item 2). The
+          // active-empty state owns the one create primary (§3.1), gated on the create grant.
+          if (showArchived) {
+            return { kind: 'empty', empty: { title: tn('notes.list.emptyArchived') } };
+          }
           return {
             kind: 'empty',
             empty: {
@@ -132,6 +138,7 @@ export function NotesList({
   })();
 
   const loaded = query.status === 'ready' ? query.data : null;
+  const hasRows = loaded !== null && loaded.rows.length > 0;
 
   return (
     <AppShell
@@ -140,9 +147,11 @@ export function NotesList({
       syncChip={syncChip}
       avatar={avatar}
       bottomAction={
-        // The one primary action of the screen (§0, §8.1), in the thumb zone — shown only when the
-        // user can create (mirrors the empty-state CTA gate).
-        canCreate ? (
+        // §3.1: max ONE primary per screen. The persistent create button shows ONLY in the active
+        // view WITH rows — the active-empty state owns the create CTA instead (two here would be two
+        // primaries, item 2), and the archived view offers no create at all (you archive active notes;
+        // creating from there files an active note this view cannot show).
+        canCreate && !showArchived && hasRows ? (
           <Button
             label={tn('notes.action.new')}
             onPress={onCreateNote}
@@ -154,8 +163,10 @@ export function NotesList({
     >
       <View style={styles.toolbar}>
         <Button
-          label={tn('notes.filter.showArchived')}
-          variant={showArchived ? 'primary' : 'secondary'}
+          // §6.3: the toggle's state rides its LABEL, not its colour — "Show archived" ⇄ "Hide
+          // archived" — so it reads on a monochrome screen and is not a second primary when active.
+          label={showArchived ? tn('notes.filter.hideArchived') : tn('notes.filter.showArchived')}
+          variant="secondary"
           onPress={() => setShowArchived((current) => !current)}
           testID={`${testID}.archivedToggle`}
         />

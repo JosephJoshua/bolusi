@@ -23,7 +23,7 @@ import type { SignedOperation } from '@bolusi/schemas';
 import type { ReactElement } from 'react';
 
 import { openHarness, type Harness } from '../../../packages/modules/test/support/harness.js';
-import { fire, render, type RenderResult } from '../../../packages/ui/test/render.js';
+import { fire, render, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
 import { createNotesRuntime, readNoteSyncStatuses } from '../src/screens/notes/runtime-adapter.js';
 
 /** Merge the shipped notes catalog into the running i18n instance (idempotent). */
@@ -32,7 +32,7 @@ export function ensureNotesCatalog(): void {
 }
 
 export { openHarness, type Harness };
-export { render, fire, NotesRuntimeProvider };
+export { render, fire, textsIn, NotesRuntimeProvider };
 export type { RenderResult };
 
 /** One page result, the shape `listNotes`/`getNote` return (04 §6). */

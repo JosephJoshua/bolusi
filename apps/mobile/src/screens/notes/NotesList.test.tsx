@@ -11,6 +11,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   ensureNotesCatalog,
   fakeRuntime,
+  fire,
   harnessRuntime,
   NotesRuntimeProvider,
   openHarness,
@@ -18,6 +19,7 @@ import {
   remoteNoteCreated,
   render,
   renderNotes,
+  textsIn,
   type Harness,
   TEST_MEDIA_REF,
 } from '../../../test/notes-support.js';
@@ -72,15 +74,86 @@ describe('NotesList — the four §5 states on a mounted screen', () => {
     expect(screen.query('notes.list.items.unauthorized')).toBeNull();
   });
 
-  test('empty WITH create permission → EmptyState renders the create CTA', async () => {
+  test('empty WITH create permission → EXACTLY ONE create primary: the EmptyState CTA, not two (§3.1)', async () => {
     const screen = mount(
       fakeRuntime({ hasPermission: () => true, listNotes: () => Promise.resolve(page([])) }),
     );
     await settle();
 
     expect(screen.query('notes.list.items.empty')).not.toBeNull();
-    expect(screen.query('ui.emptyState.cta')).not.toBeNull(); // the create CTA
-    expect(screen.query('notes.list.create')).not.toBeNull(); // the bottom-action create button
+    expect(screen.query('ui.emptyState.cta')).not.toBeNull(); // the create CTA lives here on empty
+    // …and the persistent bottom-action create is SUPPRESSED, so there is ONE primary, not two
+    // (§3.1, item 2). Restore the old always-on `bottomAction` and this goes non-null → red.
+    expect(screen.query('notes.list.create')).toBeNull();
+  });
+
+  test('non-empty WITH create → the bottom-action create IS the one primary (empty CTA absent)', async () => {
+    // The other half of §3.1: with rows there is no EmptyState, so the persistent create button is
+    // the single primary. Real rows via the harness (a full NoteRow is 12 fields); gate the button
+    // off (the item-2 bug direction) and this goes null → red.
+    h = await openHarness(5);
+    const rt = harnessRuntime(h, h.notesUserId);
+    await rt.createNote({ title: 'Ada', body: '', mediaRef: null });
+
+    const screen = mount(rt);
+    await settle();
+
+    expect(screen.query('notes.list.create')).not.toBeNull();
+    expect(screen.query('ui.emptyState.cta')).toBeNull();
+  });
+
+  test('ARCHIVED-empty offers NO create CTA (a "new note" here would be an invisible active note, item 2)', async () => {
+    const screen = mount(
+      fakeRuntime({ hasPermission: () => true, listNotes: () => Promise.resolve(page([])) }),
+    );
+    await settle();
+    // Enter the archived view.
+    fire(screen.get('notes.list.archivedToggle'), 'onPress');
+    await settle();
+
+    expect(screen.query('notes.list.items.empty')).not.toBeNull();
+    // The LOAD-BEARING assertion here: remove the `if (showArchived)` archived-empty branch and the
+    // active-empty CTA reappears → non-null → red. (The `notes.list.create` check below is a belt:
+    // it is inert against the `!showArchived` bottomAction clause specifically, because `hasRows` is
+    // already false on empty — that clause is falsified by the archived-ROWS test that follows.)
+    expect(screen.query('ui.emptyState.cta')).toBeNull();
+    expect(screen.query('notes.list.create')).toBeNull();
+  });
+
+  test('ARCHIVED view WITH rows offers NO create — the `!showArchived` bottomAction clause (item 2)', async () => {
+    // The only state where `!showArchived` is load-bearing: with rows, `hasRows` is true, so ONLY the
+    // `!showArchived` clause keeps the create primary out of the archived view. Seed a real archived
+    // note (create → archive), toggle to archived, assert the row shows but create does not. Drop
+    // `!showArchived` from the bottomAction gate and `notes.list.create` goes non-null → red.
+    h = await openHarness(6);
+    const rt = harnessRuntime(h, h.notesUserId);
+    const { noteId } = await rt.createNote({ title: 'Lama', body: '', mediaRef: null });
+    await rt.archiveNote({ noteId });
+
+    const screen = mount(rt);
+    await settle();
+    fire(screen.get('notes.list.archivedToggle'), 'onPress');
+    await settle();
+
+    expect(screen.query(`notes.list.row.${noteId}`)).not.toBeNull(); // it IS an archived row
+    expect(screen.query('notes.list.create')).toBeNull(); // …and create is suppressed here
+  });
+
+  test('the archived toggle signals state by its LABEL, not colour only (§6.3, item 3)', async () => {
+    const screen = mount(
+      fakeRuntime({ hasPermission: () => true, listNotes: () => Promise.resolve(page([])) }),
+    );
+    await settle();
+
+    const before = textsIn(screen.get('notes.list.archivedToggle'));
+    fire(screen.get('notes.list.archivedToggle'), 'onPress');
+    await settle();
+    const after = textsIn(screen.get('notes.list.archivedToggle'));
+
+    // The label RESPONDS to state (structure, not a hardcoded copy string, T-4): a colour-only
+    // toggle renders the same word in both, so `before` would equal `after` → red.
+    expect(before).not.toEqual(after);
+    expect(before.join('')).not.toBe('');
   });
 
   test('create-CTA GATE: empty WITHOUT create permission → EmptyState, but NO create CTA', async () => {

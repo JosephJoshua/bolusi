@@ -265,6 +265,7 @@ Surfaces per 04-module-contract §8 (create / edit body / archive, photo attachm
 | --- | ----- | -- |
 | `notes.list.title` | Catatan | Notes |
 | `notes.list.empty` | Belum ada catatan. Ketuk “Catatan Baru” untuk mulai. | No notes yet. Tap “New Note” to start. |
+| `notes.list.emptyArchived` | Belum ada catatan arsip. | No archived notes yet. |
 | `notes.action.new` | Catatan Baru | New Note |
 | `notes.editor.titleField` | Judul | Title |
 | `notes.editor.bodyField` | Isi | Body |
@@ -273,6 +274,7 @@ Surfaces per 04-module-contract §8 (create / edit body / archive, photo attachm
 | `notes.confirm.archive` | Arsipkan catatan ini? Catatan tidak dihapus, hanya dipindah ke arsip. | Archive this note? It isn’t deleted — it moves to the archive. |
 | `notes.badge.archived` | Diarsipkan | Archived |
 | `notes.filter.showArchived` | Tampilkan arsip | Show archived |
+| `notes.filter.hideArchived` | Sembunyikan arsip | Hide archived |
 | `notes.action.attachPhoto` | Lampirkan Foto | Attach Photo |
 
 ## push — notification templates (`push.*`)

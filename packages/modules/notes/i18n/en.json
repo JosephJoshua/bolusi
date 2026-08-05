@@ -16,10 +16,12 @@
     "titleRequired": "Title is required"
   },
   "filter": {
-    "showArchived": "Show archived"
+    "showArchived": "Show archived",
+    "hideArchived": "Hide archived"
   },
   "list": {
     "empty": "No notes yet. Tap “New Note” to start.",
+    "emptyArchived": "No archived notes yet.",
     "title": "Notes"
   }
 }

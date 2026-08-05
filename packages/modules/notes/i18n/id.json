@@ -16,10 +16,12 @@
     "titleRequired": "Judul belum diisi"
   },
   "filter": {
-    "showArchived": "Tampilkan arsip"
+    "showArchived": "Tampilkan arsip",
+    "hideArchived": "Sembunyikan arsip"
   },
   "list": {
     "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",
+    "emptyArchived": "Belum ada catatan arsip.",
     "title": "Catatan"
   }
 }

@@ -22,6 +22,7 @@ import type { TranslationKey, TranslationValues } from '@bolusi/i18n';
 export type NotesKey =
   | 'notes.list.title'
   | 'notes.list.empty'
+  | 'notes.list.emptyArchived'
   | 'notes.action.new'
   | 'notes.action.archive'
   | 'notes.action.attachPhoto'
@@ -30,12 +31,14 @@ export type NotesKey =
   | 'notes.editor.titleRequired'
   | 'notes.confirm.archive'
   | 'notes.badge.archived'
-  | 'notes.filter.showArchived';
+  | 'notes.filter.showArchived'
+  | 'notes.filter.hideArchived';
 
 /** The runtime-checkable list — the single source `screens/i18n.test` reads as its denominator. */
 export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.list.title',
   'notes.list.empty',
+  'notes.list.emptyArchived',
   'notes.action.new',
   'notes.action.archive',
   'notes.action.attachPhoto',
@@ -45,6 +48,7 @@ export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.confirm.archive',
   'notes.badge.archived',
   'notes.filter.showArchived',
+  'notes.filter.hideArchived',
 ];
 
 /** A shipped catalog locale tree, as the module JSON carries it (nested, prefix added at merge). */
