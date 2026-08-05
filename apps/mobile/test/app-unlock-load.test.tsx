@@ -75,6 +75,8 @@ function props(extra: Partial<AppProps> = {}): AppProps {
     canUnlock: true,
     listPinTargets: () => listPinTargets(),
     onClearLockout: () => Promise.resolve(),
+    canReset: true,
+    onResetPin: () => Promise.resolve(),
     onSelectLocale: noop,
     locale: 'id',
     deviceInfo: DEMO_DEVICE_INFO,

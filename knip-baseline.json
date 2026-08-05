@@ -4,7 +4,7 @@
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
   "denominator": 138,
-  "fileDenominator": 17,
+  "fileDenominator": 15,
   "nonProductionRules": [
     "test-dir",
     "test-file",
@@ -158,8 +158,6 @@
     "apps/mobile/plugins/withHarnessActivity.ts",
     "apps/mobile/src/harness/part-c/budgets.ts",
     "apps/mobile/src/media/SignaturePadScreen.tsx",
-    "apps/mobile/src/screens/pin/ResetPinScreen.tsx",
-    "apps/mobile/src/screens/pin/reset-pin.model.ts",
     "apps/mobile/src/web/WebHarnessRoot.tsx",
     "apps/mobile/src/web/gallery.tsx",
     "apps/mobile/src/web/seed.ts",

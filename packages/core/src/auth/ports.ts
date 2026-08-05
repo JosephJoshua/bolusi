@@ -130,5 +130,13 @@ export interface PinVerifierUploadPort {
     userId: string,
     verifierRef: string,
     verifier: PinVerifier,
+    /**
+     * The user the POST ACTS AS — `X-Acting-User` (api/02-auth §6.6). For a self-change this is the
+     * target itself (no permission needed server-side); for an owner RESET it is the RESETTING OWNER,
+     * whom the server checks for `auth.user_reset_pin` before applying a verifier to another user.
+     * Sending the target here on a reset would bypass that check, so the queue carries the actor on the
+     * `PendingVerifier` and hands it in here (task 186b-2).
+     */
+    actingUserId: string,
   ): Promise<PinVerifierUploadResult>;
 }

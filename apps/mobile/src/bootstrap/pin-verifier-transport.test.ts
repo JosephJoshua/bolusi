@@ -32,12 +32,14 @@ function port(fetchImpl: typeof fetch, token: string | null = 'bdt_secret') {
 }
 
 describe('the pin-verifier wire (api/02-auth §5.4)', () => {
-  test('POSTs { verifierRef, verifier } to /v1/users/:id/pin-verifier with the device bearer + X-Acting-User', async () => {
+  test('POSTs { verifierRef, verifier } to /v1/users/:id/pin-verifier with the device bearer + X-Acting-User = the acting user', async () => {
     const doFetch = vi.fn(async () => jsonResponse(200, { userId: 'user-a', applied: true }));
+    // Self-change: the acting user IS the target.
     const result = await port(doFetch as unknown as typeof fetch).upload(
       'user-a',
       'ref-1',
       VERIFIER,
+      'user-a',
     );
 
     expect(doFetch).toHaveBeenCalledTimes(1);
@@ -55,28 +57,78 @@ describe('the pin-verifier wire (api/02-auth §5.4)', () => {
     expect(result).toStrictEqual({ userId: 'user-a', applied: true });
   });
 
+  test('an owner RESET carries the ACTING OWNER in X-Acting-User, POSTing to the TARGET path (§6.6, 186b-2)', async () => {
+    // The security property: a reset acts on user-b but the server must check the OWNER for
+    // `auth.user_reset_pin`. So the path is the target (user-b) and X-Acting-User is the owner (owner-a).
+    // Sending the target as the acting user here would bypass the server's reset-permission check.
+    const doFetch = vi.fn(async () => jsonResponse(200, { userId: 'user-b', applied: true }));
+    const result = await port(doFetch as unknown as typeof fetch).upload(
+      'user-b',
+      'ref-9',
+      VERIFIER,
+      'owner-a',
+    );
+    const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/v1/users/user-b/pin-verifier');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['X-Acting-User']).toBe('owner-a'); // the RESETTING OWNER, not the target
+    expect(result).toStrictEqual({ userId: 'user-b', applied: true });
+  });
+
   test('a 200 with applied:false is returned (the §5.3 stale-POST answer — terminal, not an error)', async () => {
     const doFetch = vi.fn(async () => jsonResponse(200, { userId: 'user-a', applied: false }));
     const result = await port(doFetch as unknown as typeof fetch).upload(
       'user-a',
       'ref-1',
       VERIFIER,
+      'user-a',
     );
     // Returned (not thrown) so the queue treats it as terminal and drops the item.
     expect(result.applied).toBe(false);
   });
 
-  test('a non-2xx THROWS so the queue keeps the item for the next online contact', async () => {
+  test('a non-2xx (5xx) THROWS so the queue keeps the item for the next online contact', async () => {
     const doFetch = vi.fn(async () => jsonResponse(503, { error: { code: 'UNAVAILABLE' } }));
     await expect(
-      port(doFetch as unknown as typeof fetch).upload('user-a', 'ref-1', VERIFIER),
+      port(doFetch as unknown as typeof fetch).upload('user-a', 'ref-1', VERIFIER, 'user-a'),
     ).rejects.toThrow(/HTTP 503/);
+  });
+
+  test('a 429 (users-quota, retryable) THROWS so the reset is retried on the next contact, not dropped', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(429, { error: { code: 'RATE_LIMITED' } }));
+    await expect(
+      port(doFetch as unknown as typeof fetch).upload('user-b', 'ref-9', VERIFIER, 'owner-a'),
+    ).rejects.toThrow(/HTTP 429/);
+  });
+
+  test('a 403 (owner not permitted) is TERMINAL — returned, not thrown, so a non-self reset is not re-queued forever (186b-2)', async () => {
+    // A permanent permission denial can never succeed on retry; the queue drops a RETURNED result, so
+    // this must return (applied:false), not throw. Throwing would re-queue the same doomed POST forever.
+    const doFetch = vi.fn(async () => jsonResponse(403, { error: { code: 'PERMISSION_DENIED' } }));
+    const result = await port(doFetch as unknown as typeof fetch).upload(
+      'user-b',
+      'ref-9',
+      VERIFIER,
+      'owner-a',
+    );
+    expect(result).toStrictEqual({ userId: 'user-b', applied: false });
+  });
+
+  test('a 404 (target not in the server directory) is TERMINAL — returned, not thrown (186b-2)', async () => {
+    const doFetch = vi.fn(async () => jsonResponse(404, { error: { code: 'ENTITY_NOT_FOUND' } }));
+    const result = await port(doFetch as unknown as typeof fetch).upload(
+      'user-b',
+      'ref-9',
+      VERIFIER,
+      'owner-a',
+    );
+    expect(result.applied).toBe(false);
   });
 
   test('a missing device token fails closed (throws) rather than POSTing anonymously', async () => {
     const doFetch = vi.fn(async () => jsonResponse(200, { userId: 'user-a', applied: true }));
     await expect(
-      port(doFetch as unknown as typeof fetch, null).upload('user-a', 'ref-1', VERIFIER),
+      port(doFetch as unknown as typeof fetch, null).upload('user-a', 'ref-1', VERIFIER, 'user-a'),
     ).rejects.toThrow(/device token/);
     expect(doFetch).not.toHaveBeenCalled();
   });

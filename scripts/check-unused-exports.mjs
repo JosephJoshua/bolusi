@@ -14,12 +14,11 @@
 //   1. POSITIVE CONTROL (denominator, T-14). One per half — see CANARIES below.
 //   2. FAIL ON ADDITIONS. The current tree carries a large accepted set of unused production
 //      exports (built-ahead-of-consumer orphans of 43/49/50, test-only helpers, the decoys
-//      tracked by 63/65) and unused production files (the dead modules tracked by 133/135, and
-//      the 11 PIN-management screen modules of task 138 item 1 — change/reset/unlock screens
-//      built + harness-rendered + unit-tested ahead of their production nav wiring, which is
-//      task 186; NOT dead, tracked, not gallery-only-forever) — too many to fix here. They are
-//      snapshotted in `knip-baseline.json`. Any NEW unused production export (a fresh
-//      `canAttempt`) or FILE is not in the baseline → FAIL.
+//      tracked by 63/65) and unused production files (the dead modules tracked by 133/135) —
+//      too many to fix here. (The 11 PIN-management screen modules of task 138 item 1 that used
+//      to live here left the baseline once task 186 wired change/unlock/reset into production
+//      nav — they are now reachable, not orphaned.) They are snapshotted in `knip-baseline.json`.
+//      Any NEW unused production export (a fresh `canAttempt`) or FILE is not in the baseline → FAIL.
 //   3. FAIL ON MASS DISAPPEARANCE. If most baselined findings vanish at once — knip scoped
 //      down to one workspace would still satisfy (1) and (2) and pass green — that is either
 //      blindness or a structural refactor; either way the denominator must be re-verified.

@@ -5,11 +5,11 @@
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
 
-**Filed by:** the task 186b-1 review-wave (duplication lens), 2026-08-05.
+**Filed by:** the task 186b-1 review-wave (duplication lens), 2026-08-05; extended by the 186b-2 review (legs 3–4).
 
 ## Goal
 
-Two small, independently-shippable extractions the 186b-1 review confirmed. Neither is a 186b-1 blocker (186b-1 added one more copy of each, which is what tripped the rule-of-three); both are behavior-preserving refactors.
+Four small, independently-shippable extractions the 186b-1 and 186b-2 reviews confirmed (rule-of-three, CLAUDE.md §2.8). None was a merge blocker — each slice added the copy that tripped the threshold; all are behavior-preserving refactors whose §2.11 guard is the unchanged test suite.
 
 ### 1. `DomainError → code | 'UNEXPECTED'` mapping — 4 byte-identical copies
 
@@ -31,6 +31,16 @@ The expression `error instanceof DomainError ? error.code : 'UNEXPECTED'` (map a
 - `seedOwnerAndLockedTarget` (~312-395) — owner role + plain role + a locked attempt row (added by 186b-1).
 
 The `verifierFor` closure is byte-identical (11 lines) across `seedTwoUsers` and `seedOwnerAndLockedTarget`; the bundle header (tenant/store/settings) is identical across all three; they differ only in the users array + rolesSnapshot. **Proposed home:** a single `seedBundle({ users, roles })` builder (+ a shared `verifierFor`) in `live-shell-support.tsx`, with the three public helpers reduced to their data. Test-fixture code, so the extraction is low-risk and stays inside the one support module.
+
+### 3. session.ts PIN-flow wrapper — 3 near-identical copies (from the 186b-2 review)
+
+`AppSessionController`'s three PIN-flow methods — `changePin`, `clearLockout`, `resetPin` (`apps/mobile/src/bootstrap/session.ts`) — share a ~22-line skeleton: the `manager.current === null` guard (identical `throw new Error('<method> requires an open session …')`), a `try { await <flow>(ctx, args) } finally { await loadRow(<id>).catch(() => undefined); emit(); }`, and — most conspicuously — the **10-line `ctx` literal `{ runtime: commands, db, crypto: deps.crypto, clock: deps.clock, idSource: deps.idSource, deviceId: device.deviceId, queue: verifierQueue, emitter: lockedOut }` appears verbatim 3×**. Only 4 lines vary: the method name in the throw, the `*Flow` callee, the flow-args object, and which userId `loadRow` re-reads. **Proposed home:** a private `runPinFlow(method, affected, run)` in session.ts owning the guard + the shared ctx literal + the try/finally; the three methods reduce to one line each. Behaviour-preserving; the unchanged core 1163 / mobile 817 suites are the §2.11 guard. (The permission check was already extracted this way in 186b-2 — `actingUserHolds(permissionId)`; this is the next copy of the same discipline.)
+
+### 4. App.tsx ref-stable-callback pattern — 3 copies → a `useLatestCallback` hook (from the 186b-2 review)
+
+The `const XRef = useRef(props.X); XRef.current = props.X; const wrap = useCallback((...a) => XRef.current(...a), [])` pattern (turn a fresh-arrow prop into a stable-identity latest-calling wrapper — the 186b-1 review fix) now appears at 3 callback sites in `apps/mobile/App.tsx`: `listPinTargetsRef→loadPinTargets`, `onClearLockoutRef→clearLockout`, `onResetPinRef→resetPin`. The underlying 2-line latest-ref idiom is at 5 sites (also `workspaceRef`, `userIdRef`). **Proposed home:** `apps/mobile/src/hooks/useLatestCallback.ts` — `function useLatestCallback<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R`. `clearLockout`/`resetPin` become one-liners; `loadPinTargets` builds on it. Centralizes the subtlety the three comments each re-explain. Behaviour-preserving; `test/app-unlock-load.test.tsx` (fires-once-per-entry) is the §2.11 guard.
+
+_(A NIT the 186b-2 review also flagged, not worth its own leg: `reset-pin.model.ts`'s `resetOutcome` maps a PLAIN `PERMISSION_DENIED` to the generic UNEXPECTED panel rather than the denial copy — but that path is unreachable via the UI, which gates the Reset screen on `canReset`, so only the §6.6 `restriction_violated` denial actually reaches it. Fix opportunistically if this model is touched.)_
 
 ## Acceptance
 

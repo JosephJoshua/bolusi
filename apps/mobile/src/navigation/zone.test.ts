@@ -148,7 +148,14 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
     const locks = [true, false];
     const pins = [null, 'user-b'];
     const switches = [true, false];
-    const routes: ShellRoute[] = ['home', 'syncStatus', 'settings', 'changePin', 'unlockPin'];
+    const routes: ShellRoute[] = [
+      'home',
+      'syncStatus',
+      'settings',
+      'changePin',
+      'unlockPin',
+      'resetPin',
+    ];
     const kinds = new Set<Zone['kind']>();
 
     let count = 0;
@@ -244,6 +251,13 @@ describe('backTarget — hardware back IS the header back (§8.1)', () => {
     // Same one-level-deeper shape as Change PIN (Settings → Unlock a PIN). The `else` arm would send it
     // home; the owner who opened it from Settings must land back on Settings.
     expect(backTarget({ kind: 'shell', route: 'unlockPin' })).toEqual({
+      kind: 'shellRoute',
+      route: 'settings',
+    });
+  });
+
+  test('Reset PIN backs to Settings — reached from the Settings owner row, not Home (task 186b-2)', () => {
+    expect(backTarget({ kind: 'shell', route: 'resetPin' })).toEqual({
       kind: 'shellRoute',
       route: 'settings',
     });

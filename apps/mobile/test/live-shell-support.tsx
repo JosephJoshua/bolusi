@@ -304,10 +304,11 @@ const OWNER_ROLE_ID = 'role-owner-live';
  * `fixture.userId` (signs in with `TEST_PIN`); the target is `SECOND_USER_ID`, whose `pin_attempt_state`
  * row is written at the hard-lock threshold so `derivePinAuthState` reads `locked_out`.
  *
- * Two distinct roles by design (02-permissions §5.4.6): the owner role carries `auth.pin_unlock`, the
- * target's plain notes role does NOT — so the `canUnlock` gate is a real grant, not a fixture that hands
- * everyone the permission. Both users get a REAL verifier through `applyBundle`, the same writer a real
- * enroll uses.
+ * Two distinct roles by design (02-permissions §5.4.6): the owner role carries the owner PIN
+ * permissions (`auth.pin_unlock` + `auth.user_reset_pin`), the target's plain notes role does NOT — so
+ * the `canUnlock`/`canReset` gates are real grants, not a fixture that hands everyone the permission.
+ * Both users get a REAL verifier through `applyBundle`, the same writer a real enroll uses. Reused by
+ * both the owner-Unlock (186b-1) and owner-Reset (186b-2) live-shell tests.
  */
 export async function seedOwnerAndLockedTarget(
   fixture: Fixture,
@@ -364,6 +365,7 @@ export async function seedOwnerAndLockedTarget(
           'notes.archive',
           'auth.pin_change',
           'auth.pin_unlock',
+          'auth.user_reset_pin',
         ],
       },
       {

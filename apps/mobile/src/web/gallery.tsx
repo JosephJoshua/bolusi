@@ -248,6 +248,8 @@ function AppMode({ session }: { readonly session: AppProps['session'] }): React.
       canUnlock
       listPinTargets={() => Promise.resolve([])}
       onClearLockout={() => Promise.resolve()}
+      canReset
+      onResetPin={() => Promise.resolve()}
       onSelectLocale={(next) => {
         setLocale(next);
         force();

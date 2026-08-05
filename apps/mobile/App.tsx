@@ -49,6 +49,7 @@ import {
 import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { ClearLockoutScreen } from './src/screens/pin/ClearLockoutScreen.js';
+import { ResetPinScreen } from './src/screens/pin/ResetPinScreen.js';
 import type { PinTargetUser } from './src/screens/pin/pin-target.js';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
@@ -176,6 +177,18 @@ export interface AppProps {
    * owner never learns the PIN — so unlike Change PIN there is nothing to drain afterward.
    */
   readonly onClearLockout: (targetUserId: string) => Promise<void>;
+  /**
+   * Does the signed-in user hold `auth.user_reset_pin` (task 186b-2)? Gates the Settings "Reset a PIN"
+   * row. From the session snapshot; core still enforces it, so this is a UX gate.
+   */
+  readonly canReset: boolean;
+  /**
+   * Reset a target user's PIN to the owner-typed `newPin` (api/02-auth §6.6; task 186b-2), driven by the
+   * session controller as the acting owner. Resolves on success; REJECTS with the flow's DomainError so
+   * `ResetPinScreen` maps it (the §6.6 privileged-target refusal). Enqueues a verifier carrying the OWNER
+   * as its actor, so the drain POSTs the owner in `X-Acting-User` (never the target).
+   */
+  readonly onResetPin: (targetUserId: string, newPin: string) => Promise<void>;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -383,15 +396,21 @@ export default function App(props: AppProps): React.JSX.Element {
     );
   }, []);
 
-  // Load the target list when the Unlock screen opens — not before, and fresh each open (a lockout
-  // could have landed since the last visit). `loadPinTargets` is stable, so this fires ONLY when `route`
-  // changes, keeping the read off unrelated renders. The cleanup resets to loading on leave, so a later
-  // re-entry starts clean — never a one-frame flash of the previous visit's (possibly stale) list.
+  // Load the target list when an owner picker (Unlock OR Reset) opens — both read the same directory —
+  // not before, and fresh on each ENTRY to a picker. `loadPinTargets` is stable and the effect keys on
+  // the derived `onOwnerPicker` flag, so it fires only when that flag TOGGLES (a non-picker↔picker
+  // transition), never on an unrelated Root bump that leaves the route put — keeping the read off those
+  // renders. The cleanup resets to loading when a picker closes, so a later re-entry starts clean, never
+  // a one-frame flash of the previous visit's (possibly stale) list. NOTE: a hypothetical direct
+  // picker→picker jump (unlockPin→resetPin) keeps the flag true and would NOT reload — harmless because
+  // the two share one directory, and in the real UI both pickers back to Settings between visits (so the
+  // flag always toggles false→true on entry); if a direct jump is ever added, key this on `route`.
+  const onOwnerPicker = route === 'unlockPin' || route === 'resetPin';
   useEffect(() => {
-    if (route !== 'unlockPin') return undefined;
+    if (!onOwnerPicker) return undefined;
     loadPinTargets();
     return () => setPinTargets({ loading: true, users: [], error: null });
-  }, [route, loadPinTargets]);
+  }, [onOwnerPicker, loadPinTargets]);
 
   // Stabilize the clear callback the same way: `ClearLockoutScreen`'s submit effect depends on it, so a
   // fresh arrow from `Root` mid-clear (its `finally` emits, which bumps Root) would re-fire that effect
@@ -402,6 +421,16 @@ export default function App(props: AppProps): React.JSX.Element {
   onClearLockoutRef.current = props.onClearLockout;
   const clearLockout = useCallback(
     (targetUserId: string) => onClearLockoutRef.current(targetUserId),
+    [],
+  );
+
+  // Same ref-stabilization for the reset callback — `ResetPinScreen`'s submit effect depends on it, and
+  // `resetPin`'s `finally` emits (bumping Root, minting a fresh arrow), which could otherwise re-fire the
+  // submit and reset the target a SECOND time.
+  const onResetPinRef = useRef(props.onResetPin);
+  onResetPinRef.current = props.onResetPin;
+  const resetPin = useCallback(
+    (targetUserId: string, newPin: string) => onResetPinRef.current(targetUserId, newPin),
     [],
   );
 
@@ -721,6 +750,8 @@ export default function App(props: AppProps): React.JSX.Element {
                 // Owner-only (task 186b): the row is offered ONLY when the acting user holds
                 // `auth.pin_unlock`. `undefined` for a non-owner ⇒ SettingsScreen omits the row.
                 onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
+                // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
+                onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
                 syncChip={chip}
                 onOpenSync={() => setRoute('syncStatus')}
               />
@@ -749,6 +780,24 @@ export default function App(props: AppProps): React.JSX.Element {
                 error={pinTargets.error}
                 users={pinTargets.users}
                 onClearLockout={clearLockout}
+                onReload={loadPinTargets}
+                onClose={() => setRoute('settings')}
+              />
+            );
+          }
+          if (shellZone.route === 'resetPin') {
+            // Owner Reset (api/02-auth §6.6; task 186b-2), reached from the Settings owner-only row.
+            // `canReset` drives the §5 Unauthorized state — a non-owner who reaches here fails closed
+            // (core enforces `auth.user_reset_pin` too). Shares the same loaded target list as Unlock;
+            // `actorUserId` excludes the owner from the picker (they change their own PIN via Change PIN).
+            return (
+              <ResetPinScreen
+                canReset={props.canReset}
+                loading={pinTargets.loading}
+                error={pinTargets.error}
+                users={pinTargets.users}
+                actorUserId={sessionUserId ?? ''}
+                onResetPin={resetPin}
                 onReload={loadPinTargets}
                 onClose={() => setRoute('settings')}
               />

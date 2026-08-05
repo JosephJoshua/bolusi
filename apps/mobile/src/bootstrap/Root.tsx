@@ -835,6 +835,16 @@ export function Root({
             ? Promise.reject(new Error('clearLockout: no session controller (session-gated route)'))
             : session.clearLockout(targetUserId)
         }
+        // Owner Reset (api/02-auth §6.6; task 186b-2). `canReset` gates the Settings entry; `onResetPin`
+        // runs the real `resetPin` flow as the acting owner — it enqueues a verifier carrying the owner
+        // as its actor, so the drain (already wired via `onBundleRefreshed`) POSTs the owner in
+        // `X-Acting-User`. `session === null` is unreachable (Reset is a session-gated shell route).
+        canReset={sessionSnapshot?.canReset ?? false}
+        onResetPin={(targetUserId, newPin) =>
+          session === null
+            ? Promise.reject(new Error('resetPin: no session controller (session-gated route)'))
+            : session.resetPin(targetUserId, newPin)
+        }
         onSelectLocale={(next) => {
           void localeStore.write('bolusi.device_locale', next);
           setLocale(next);

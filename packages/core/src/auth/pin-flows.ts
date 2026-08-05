@@ -165,7 +165,15 @@ function emitPinChanged(ctx: CommandContext, type: string, input: PinChangeInput
 
 /** A verifier awaiting `POST /v1/users/:userId/pin-verifier` on next online contact. */
 export interface PendingVerifier {
+  /** The TARGET whose verifier this is — the `:userId` in the POST path. */
   readonly userId: string;
+  /**
+   * The user the POST acts AS — `X-Acting-User` (api/02-auth §6.6). Equals `userId` for a self-change
+   * (`setFirstPin`/`changePin`), but is the RESETTING OWNER for an owner reset, whom the server checks
+   * for `auth.user_reset_pin`. Carried here so the drain sends the actor, not the target — sending the
+   * target on a reset would bypass the server's reset-permission check (task 186b-2).
+   */
+  readonly actorUserId: string;
   readonly verifierRef: string;
   readonly verifier: PinVerifier;
 }
@@ -205,7 +213,12 @@ export class PinVerifierQueue {
     const outcomes: DrainOutcome[] = [];
     for (const item of [...this.#pending.values()]) {
       try {
-        const result = await upload.upload(item.userId, item.verifierRef, item.verifier);
+        const result = await upload.upload(
+          item.userId,
+          item.verifierRef,
+          item.verifier,
+          item.actorUserId,
+        );
         this.#pending.delete(item.verifierRef); // terminal: applied true OR false (§5.4)
         outcomes.push({ verifierRef: item.verifierRef, sent: true, result });
       } catch (error) {
@@ -411,7 +424,12 @@ async function emitVerifierChange<DB>(
     writePinAttempt(deps.db, resetForNewVerifier(args.targetUserId, deps.deviceId)),
   );
 
-  const pending: PendingVerifier = { userId: args.targetUserId, verifierRef, verifier };
+  const pending: PendingVerifier = {
+    userId: args.targetUserId,
+    actorUserId: args.actorUserId,
+    verifierRef,
+    verifier,
+  };
   deps.queue.enqueue(pending);
   return pending;
 }

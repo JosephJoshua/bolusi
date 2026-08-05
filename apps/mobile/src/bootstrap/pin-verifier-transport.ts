@@ -30,6 +30,7 @@ export function createFetchPinVerifierUpload(
       userId: string,
       verifierRef: string,
       verifier: PinVerifier,
+      actingUserId: string,
     ): Promise<PinVerifierUploadResult> {
       const token = await config.deviceToken();
       if (token === null) {
@@ -42,18 +43,26 @@ export function createFetchPinVerifierUpload(
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          // Self-change (task 186a): the acting user IS the target, so the server's `targetUserId ===
-          // acting` check needs no permission (§6.6). An owner RESET (186b) acts on another user and
-          // must carry the resetting owner here instead — the queue does not yet distinguish the two,
-          // so this transport is self-change-only today (186b revisits the acting-user seam).
-          'X-Acting-User': userId,
+          // The user the POST ACTS AS (§6.6). For a self-change `actingUserId === userId` — the target
+          // is the acting user, so the server needs no permission. For an owner RESET the queue carries
+          // the RESETTING OWNER as `actorUserId` (core `PendingVerifier`), and it arrives here as
+          // `actingUserId`: the server checks THAT user for `auth.user_reset_pin` before applying a
+          // verifier to another user. Sending the target here on a reset would bypass that check (186b-2).
+          'X-Acting-User': actingUserId,
         },
         // The exact §5.4 body — strict on the server (an unknown key rejects), so send ONLY these two.
         body: JSON.stringify({ verifierRef, verifier }),
       });
       if (!response.ok) {
-        // A non-2xx is a transport/server fault, not the §5.3 "stale, not applied" answer (which is a
-        // 200 with `applied: false`). Throw so the queue keeps it for the next online contact.
+        // 403 (acting user not permitted) and 404 (target not in the server's directory) are PERMANENT
+        // for this (actingUser, target) pair — retrying the identical POST can never succeed, so DROP it
+        // (return a terminal result) rather than re-queue it forever. `applied: false` is how the queue
+        // reads "the server did not apply it": the drain drops a RETURNED result and only re-queues a
+        // THROWN one. Everything else — 429 (users-quota, retryable), 5xx, a 401 stale device token — is
+        // transient/recoverable, so throw to keep it queued for the next online contact (task 186b-2).
+        if (response.status === 403 || response.status === 404) {
+          return { userId, applied: false };
+        }
         throw new Error(`pin-verifier upload failed: HTTP ${String(response.status)}`);
       }
       const json = (await response.json()) as { readonly applied?: unknown };

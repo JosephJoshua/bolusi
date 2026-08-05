@@ -174,6 +174,33 @@ describe('the screen title and section headers are distinct, correct labels (§1
     expect(nonOwner.query('settings-unlock-pin')).toBeNull();
   });
 
+  test('the Reset-a-PIN row is shown and fires ONLY when the owner action is offered (task 186b-2)', () => {
+    const onOpenResetPin = vi.fn();
+    const owner = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={vi.fn()}
+        onOpenResetPin={onOpenResetPin}
+        syncChip="synced"
+        onOpenSync={vi.fn()}
+      />,
+    );
+    fire(owner.get('settings-reset-pin'), 'onPress');
+    expect(onOpenResetPin).toHaveBeenCalledTimes(1);
+  });
+
+  test('CONTROL: a non-owner (no reset callback) never sees the Reset row — it is gated (task 186b-2)', () => {
+    // `renderSettings` omits `onOpenResetPin` ⇒ a user WITHOUT `auth.user_reset_pin`; the row is absent.
+    const nonOwner = renderSettings(ENROLLED);
+    expect(nonOwner.query('settings-reset-pin')).toBeNull();
+  });
+
   test('the three section headers are mutually distinct (no two sections share a label)', () => {
     const screen = renderSettings(ENROLLED);
     const headers = [

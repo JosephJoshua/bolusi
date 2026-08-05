@@ -51,6 +51,11 @@ export interface SettingsScreenProps {
    * Optional, so a host that never grants the permission simply omits the action.
    */
   readonly onOpenUnlockPin?: (() => void) | undefined;
+  /**
+   * Open the owner "Reset a PIN" screen (api/02-auth §6.6; task 186b-2) — present ONLY when the acting
+   * user holds `auth.user_reset_pin`, so the row is absent for a non-owner. Optional, like the unlock row.
+   */
+  readonly onOpenResetPin?: (() => void) | undefined;
   readonly syncChip: SyncChipState;
   readonly onOpenSync: () => void;
 }
@@ -65,6 +70,7 @@ export function SettingsScreen({
   onOpenSwitcher,
   onOpenChangePin,
   onOpenUnlockPin,
+  onOpenResetPin,
   syncChip,
   onOpenSync,
 }: SettingsScreenProps): React.JSX.Element {
@@ -135,6 +141,16 @@ export function SettingsScreen({
           onPress={onOpenUnlockPin}
           showChevron
           testID="settings-unlock-pin"
+        />
+      ) : null}
+      {onOpenResetPin !== undefined ? (
+        // Owner-only (task 186b-2): shown only when the acting user holds `auth.user_reset_pin`. Same
+        // Security section; core still enforces the permission + the §6.6 privileged-target rule.
+        <ListRow
+          primaryText={t('auth.pin.reset.title')}
+          onPress={onOpenResetPin}
+          showChevron
+          testID="settings-reset-pin"
         />
       ) : null}
 

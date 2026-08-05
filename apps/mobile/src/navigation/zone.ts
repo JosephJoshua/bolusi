@@ -25,7 +25,8 @@ export type DeviceStatus = 'unenrolled' | 'active' | 'revoked';
 export type SwitcherMode = 'lock' | 'choose';
 
 /** The in-shell surfaces this task ships. Module screens (task 25) extend this union. */
-export type ShellRoute = 'home' | 'syncStatus' | 'settings' | 'changePin' | 'unlockPin';
+export type ShellRoute =
+  'home' | 'syncStatus' | 'settings' | 'changePin' | 'unlockPin' | 'resetPin';
 
 /**
  * The one surface the app is showing. A discriminated union so a renderer must handle every case —
@@ -134,6 +135,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'home') return { kind: 'exitApp' };
       if (zone.route === 'changePin') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'unlockPin') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'resetPin') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
   }
 }

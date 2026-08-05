@@ -53,6 +53,7 @@ import {
   clearPinLockoutFlow as clearLockoutFlow,
   createLockedOutEmitter,
   derivePinAuthState,
+  resetPin as resetPinFlow,
   DomainError,
   listSwitcherUsers,
   PinVerifierQueue,
@@ -117,6 +118,13 @@ export interface AppSessionSnapshot {
    * core's `clearPinLockoutFlow` still enforces the permission, so a wrongly-shown entry fails closed.
    */
   readonly canUnlock: boolean;
+  /**
+   * Does the ACTIVE user hold `auth.user_reset_pin` (02-permissions §5.4.6)? Gates the Settings "Reset a
+   * PIN" entry (task 186b-2). Same reactive derivation as {@link canUnlock}; false with no session. A UX
+   * gate — core's `resetPin` enforces the permission (and the §6.6 privileged-target rule), so a
+   * wrongly-shown entry fails closed.
+   */
+  readonly canReset: boolean;
 }
 
 export interface AppSessionController {
@@ -146,6 +154,18 @@ export interface AppSessionController {
    * resolves on success.
    */
   clearLockout(targetUserId: string): Promise<void>;
+  /**
+   * Reset another user's PIN to `newPin` (api/02-auth §6.6; 02-permissions §5.4.6) — the owner "Reset a
+   * PIN" action (task 186b-2). Runs core's `resetPin` as the SIGNED-IN owner: it checks
+   * `auth.user_reset_pin` (and the §6.6 privileged-target rule — only a main owner may reset a main
+   * owner), computes a new verifier for the target at the op's `asOf`, clears the target's lockout, and
+   * ENQUEUES the verifier for POST on next online contact. Unlike `changePin` the acting user ≠ the
+   * target, so the queued verifier carries the OWNER as its `actorUserId` and the drain sends the owner
+   * in `X-Acting-User` (the server checks THAT user for the reset permission). REJECTS with the flow's
+   * DomainError so `ResetPinScreen` maps it (`PERMISSION_DENIED`/`restriction_violated` → the §6.6
+   * privileged-target refusal); resolves on success.
+   */
+  resetPin(targetUserId: string, newPin: string): Promise<void>;
   /**
    * The device directory as owner-actionable targets (`PinTargetUser[]`) — each user plus a
    * caller-derived `lockedOut` flag from task 14's `derivePinAuthState` over their `pin_attempt_state`
@@ -251,18 +271,19 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   };
 
   /**
-   * Does the ACTIVE user hold `auth.pin_unlock`? Built from the SAME enforcement point every command
-   * goes through (`commands.enforcementPoint`) over the same identity shape `readSessionIdentity` uses
-   * (`{ ...device, userId }`, notes.ts) — so the Settings gate reads the exact grants that will decide
-   * the flow, not a second copy that could drift. Synchronous (the evaluator is memoized), false with
-   * no session. This only shows/hides the entry; core re-checks on `clearLockout`, so it fails closed.
+   * Does the ACTIVE user hold `permissionId`? Built from the SAME enforcement point every command goes
+   * through (`commands.enforcementPoint`) over the same identity shape `readSessionIdentity` uses
+   * (`{ ...device, userId }`, notes.ts) — so a Settings gate reads the exact grants that will decide the
+   * flow, not a second copy that could drift. Synchronous (the evaluator is memoized), false with no
+   * session. These only show/hide an entry; core re-checks in the flow, so a wrongly-shown entry fails
+   * closed. One helper for both owner gates (unlock / reset) — CLAUDE.md §2.8.
    */
-  const canActingUserUnlock = (): boolean => {
+  const actingUserHolds = (permissionId: string): boolean => {
     const active = manager.current;
     if (active === null) return false;
     return commands.enforcementPoint.hasPermission(
       { ...device, userId: active.userId },
-      AUTH_PERMISSION.pinUnlock,
+      permissionId,
     );
   };
 
@@ -276,7 +297,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         locked: shellState.locked,
         lockReason: shellState.lockReason,
         workspace: shellState.workspace,
-        canUnlock: canActingUserUnlock(),
+        canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
+        canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
       };
     },
 
@@ -438,6 +460,40 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         // login pad reflects it if the owner backs out to the switcher. `.catch`-swallowed so a read
         // failing AFTER a successful clear cannot surface the success as an error; `finally` never
         // swallows the flow's own DomainError — it propagates to `ClearLockoutScreen`'s mapper.
+        await loadRow(targetUserId).catch(() => undefined);
+        emit();
+      }
+    },
+
+    async resetPin(targetUserId, newPin): Promise<void> {
+      const session = manager.current;
+      if (session === null) {
+        // Reset is a shell route (session-gated), so this is a defensive guard: a reset needs an acting
+        // owner (`actorUserId = userId`), and core denies one lacking `auth.user_reset_pin`.
+        throw new Error('resetPin requires an open session (SessionManager.current is null)');
+      }
+      try {
+        // Enqueues the verifier on `verifierQueue` carrying THIS owner as `actorUserId`, so the drain
+        // (drainVerifiers, on next online contact) POSTs the owner in `X-Acting-User` — the server
+        // checks the owner for `auth.user_reset_pin`, not the target (task 186b-2).
+        await resetPinFlow(
+          {
+            runtime: commands,
+            db,
+            crypto: deps.crypto,
+            clock: deps.clock,
+            idSource: deps.idSource,
+            deviceId: device.deviceId,
+            queue: verifierQueue,
+            emitter: lockedOut,
+          },
+          { actorUserId: session.userId, targetUserId, newPin },
+        );
+      } finally {
+        // The reset wrote the TARGET a new verifier + cleared their attempt counter (§6.5); refresh that
+        // user's cached row so the login pad reflects it. `.catch`-swallowed so a read failing AFTER a
+        // successful reset cannot surface the success as an error; `finally` never swallows the flow's
+        // own DomainError — it propagates to `ResetPinScreen`'s mapper.
         await loadRow(targetUserId).catch(() => undefined);
         emit();
       }
