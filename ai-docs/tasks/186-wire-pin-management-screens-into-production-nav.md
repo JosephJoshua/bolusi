@@ -1,6 +1,6 @@
 # TASK 186 — wire the three PIN-management screens into production navigation + the verifier-POST queue
 
-**Status:** in-progress
+**Status:** done
 **Priority:** MEDIUM — the screens exist, are unit-tested and harness-rendered, but are not reachable from the running app; a shop cannot change/reset/unlock a PIN until this lands.
 **Depends on:** 138 item 1 (built the screens), 133 (session composition), 89 (sync client / online transitions)
 **Blocks:** —
