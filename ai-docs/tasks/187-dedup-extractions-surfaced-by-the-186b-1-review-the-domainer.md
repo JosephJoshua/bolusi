@@ -1,6 +1,6 @@
 # TASK 187 — dedup extractions surfaced by the 186b-1 review: the DomainError->code:'UNEXPECTED' mapping (4 copies) and the live-shell DeviceBundle seed scaffold (3 copies)
 
-**Status:** todo
+**Status:** done
 **Depends on:** —
 **Blocks:** —
 **SEC ids owned by THIS task:** none.
