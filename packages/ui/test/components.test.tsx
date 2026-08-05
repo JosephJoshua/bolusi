@@ -471,10 +471,29 @@ describe('TextInput (§3.2)', () => {
     expect(errorRow.queryAll((n) => n.type === 'MaterialCommunityIcons')).toHaveLength(1);
   });
 
-  test('disabled announces itself and stops editing (§6.4)', () => {
-    const r = render(<TextInput {...base} disabled />);
+  test('disabled announces itself, stops editing, and greys the value (§6.1 exemption)', () => {
+    const r = render(<TextInput {...base} value="Layar retak" disabled />);
     expect(r.get('ui.textInput.field').props['accessibilityState']).toEqual({ disabled: true });
     expect(r.get('ui.textInput.field').props['editable']).toBe(false);
+    // Disabled is the ONE contrast-floor exemption — its value is greyed.
+    expect(r.styleOf('ui.textInput.field')['color']).toBe(color.textDisabled);
+  });
+
+  test('readOnly stops editing but keeps the value at FULL contrast — not greyed (§3.2, item 12)', () => {
+    // The fix for a note title in edit mode reading as an unfilled placeholder: a read-only REAL value
+    // stays `color.text` (≥ 4.5:1), NOT `textDisabled`. Swap the source back to `disabled`-style greying
+    // and this reds; the not-disabled a11y state distinguishes it from a disabled control.
+    const r = render(<TextInput {...base} value="Layar retak" readOnly />);
+    expect(r.get('ui.textInput.field').props['editable']).toBe(false);
+    expect(r.styleOf('ui.textInput.field')['color']).toBe(color.text);
+    expect(r.styleOf('ui.textInput.field')['color']).not.toBe(color.textDisabled);
+    expect(r.get('ui.textInput.field').props['accessibilityState']).toEqual({ disabled: false });
+  });
+
+  test('disabled wins over readOnly — a control that is off is off, whatever its value', () => {
+    const r = render(<TextInput {...base} value="Layar retak" readOnly disabled />);
+    expect(r.get('ui.textInput.field').props['editable']).toBe(false);
+    expect(r.styleOf('ui.textInput.field')['color']).toBe(color.textDisabled);
   });
 
   test('min height meets the 56 dp primary target', () => {

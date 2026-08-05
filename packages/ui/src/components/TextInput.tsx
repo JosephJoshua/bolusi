@@ -42,6 +42,14 @@ export interface TextInputProps {
    */
   readonly errorMessage?: string | undefined;
   readonly disabled?: boolean | undefined;
+  /**
+   * A value that is fixed but must stay READABLE (§3.2 read-only state; e.g. a note's title in edit
+   * mode — 01 §9). Distinct from `disabled`: `disabled` greys the text (`textDisabled`, exempt from
+   * the 4.5:1 floor §6.1) to say "not usable now"; `readOnly` keeps FULL-CONTRAST `color.text` to say
+   * "this is the real value, you just can't change it". Non-editable, never focuses, calmer `surface`
+   * fill. `disabled` wins if both are set (a control that is off is off, whatever its value).
+   */
+  readonly readOnly?: boolean | undefined;
   /** §3.2: numeric fields open numeric keyboards. */
   readonly keyboardType?: KeyboardTypeOptions | undefined;
   readonly secureTextEntry?: boolean | undefined;
@@ -88,6 +96,7 @@ export function TextInput({
   placeholder,
   errorMessage,
   disabled = false,
+  readOnly = false,
   keyboardType,
   secureTextEntry = false,
   autoFocus = false,
@@ -96,6 +105,9 @@ export function TextInput({
 }: TextInputProps): React.JSX.Element {
   const hasError = errorMessage !== undefined;
   const [focused, setFocused] = useState(false);
+  // Both states are non-editable; only `disabled` greys the value (§6.1 exemption). A read-only field
+  // keeps full-contrast text — the fix for a note title that read as an unfilled placeholder (item 12).
+  const notEditable = disabled || readOnly;
 
   // Fix by construction (CLAUDE.md §2.5; task 146 item 8): RN 0.86 documents `secureTextEntry` as
   // "does not work with multiline={true}", so the combination yields a SILENTLY UNMASKED password
@@ -117,7 +129,7 @@ export function TextInput({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={color.textMuted}
-        editable={!disabled}
+        editable={!notEditable}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         autoFocus={autoFocus}
@@ -128,12 +140,17 @@ export function TextInput({
           styles.field,
           effectiveMultiline ? styles.multilineField : null,
           {
-            backgroundColor: disabled ? color.surface : color.surfaceAlt,
+            // A non-editable field (disabled OR read-only) gets the calmer `surface` fill; an editable
+            // field sits on `surfaceAlt` so it reads as a place to type.
+            backgroundColor: notEditable ? color.surface : color.surfaceAlt,
             // Error outranks focus (§3.2): a focused field with an error still reads as an error.
             // Both use `border.focus` width — only the colour distinguishes them, which is legal
-            // here because the error ALSO carries an icon + message below (§6.3).
+            // here because the error ALSO carries an icon + message below (§6.3). A read-only field
+            // never focuses (it is not editable), so it stays on the resting hairline border.
             borderColor: hasError ? color.danger : focused ? color.primary : color.border,
             borderWidth: hasError || focused ? border.focus : border.hairline,
+            // ONLY `disabled` greys the value (§6.1 exemption). `readOnly` keeps `color.text`, so the
+            // real value is legible at full contrast rather than reading as an unfilled placeholder.
             color: disabled ? color.textDisabled : color.text,
           },
         ]}

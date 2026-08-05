@@ -421,7 +421,10 @@ function EditorForm({
             if (titleMissing && next.trim() !== '') setTitleMissing(false);
           }}
           errorMessage={titleMissing ? tn('notes.editor.titleRequired') : undefined}
-          disabled={mode !== 'create'}
+          // The title is set once at creation and READ-ONLY in edit (01 §9). `readOnly`, not
+          // `disabled`: the title is the note's real value and must stay legible at full contrast
+          // (§3.2 / §6.1 / task 129 item 12), not greyed to an unfilled-placeholder look.
+          readOnly={mode !== 'create'}
           autoFocus={mode === 'create'}
           testID={`${testID}.title`}
         />

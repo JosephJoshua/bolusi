@@ -3,6 +3,7 @@
 import { DomainError } from '@bolusi/core';
 import { NoteEditor } from '@bolusi/modules/notes/screens';
 import type { CreateNoteInput, EditNoteBodyInput } from '@bolusi/modules/notes';
+import { color } from '@bolusi/ui';
 import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
@@ -101,8 +102,11 @@ describe('NoteEditor — optimistic save (the falsified deliverable)', () => {
     );
     await settle();
 
-    // The title is read-only in edit (01 §9): its field announces disabled.
+    // The title is read-only in edit (01 §9): non-editable, but its REAL value stays at full contrast
+    // (`color.text`), not greyed to an unfilled-placeholder look (task 129 item 12). Revert the screen
+    // to `disabled` and the colour drops to `textDisabled` → this reds.
     expect(screen.get('notes.editor.title.field').props['editable']).toBe(false);
+    expect(screen.styleOf('notes.editor.title.field')['color']).toBe(color.text);
 
     fire(screen.get('notes.editor.body.field'), 'onChangeText', 'Isi baru');
     fire(screen.get('notes.editor.save'), 'onPress');

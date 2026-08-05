@@ -148,7 +148,9 @@ Height `touch.primary` (56), radius `radius.md`, label `type.bodyBold`, full-wid
 
 ### 3.2 TextInput
 
-Filled style: `surfaceAlt` background, `border.hairline` outline, `radius.sm`, text `type.body`, min height 56. States: `default`, `focused` (`border.focus` in `color.primary`), `error` (`color.danger` outline + `type.bodySm` error text below in `color.danger` + error icon — never color-only, §6), `disabled`.
+Filled style: `surfaceAlt` background, `border.hairline` outline, `radius.sm`, text `type.body`, min height 56. States: `default`, `focused` (`border.focus` in `color.primary`), `error` (`color.danger` outline + `type.bodySm` error text below in `color.danger` + error icon — never color-only, §6), `disabled`, `readOnly`.
+
+**`disabled` vs `readOnly` — a value the user cannot change is not the same as a control they cannot use.** `disabled` greys the value (`textDisabled`, the one §6.1 contrast-floor exemption) + `surface` fill + non-editable: the control is off. `readOnly` keeps the value at FULL contrast (`color.text`, ≥ 4.5:1) + `surface` fill + non-editable + never focuses: the value is real and must stay legible, it just cannot be edited (e.g. a note title in edit mode — 01 §9). Rendering a read-only real value as `disabled` makes it read as an unfilled placeholder (the defect task 129 item 12 fixed); `readOnly` is not exempt from the §6.1 floor. If both are set, `disabled` wins.
 
 Rules: label always visible ABOVE the field (never placeholder-as-label — it vanishes on input, fatal for tech-inadept users). Placeholder = example content only, `textMuted`. Numeric fields open numeric keyboards (`keyboardType`). Minimize typing: prefer pickers/steppers/defaults wherever the domain allows.
 
