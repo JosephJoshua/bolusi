@@ -73,3 +73,15 @@ export class DomainError extends Error {
     if (details !== undefined) this.details = details;
   }
 }
+
+/**
+ * The one place a caught throwable becomes a closed CATALOG CODE (04 §5.3; 07-i18n §4.2). A
+ * `DomainError` contributes its `code`; anything else — a bug, a platform throw, a value crossing a
+ * package boundary — degrades to `UNEXPECTED`, the generic label every locale carries. Callers render
+ * it as `t('core.errors.' + code)`, so returning a non-registry string here would silently resolve to
+ * `core.errors.UNEXPECTED` anyway; keeping the mapping in one place stops four hand-rolled copies from
+ * drifting apart (a copy that forgot the `instanceof` would leak a raw `.message` to the UI).
+ */
+export function errorCodeOrUnexpected(error: unknown): string {
+  return error instanceof DomainError ? error.code : 'UNEXPECTED';
+}

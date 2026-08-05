@@ -17,7 +17,12 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { DOMAIN_ERROR_CODES, DomainError, isDomainErrorCode } from '../../src/index.js';
+import {
+  DOMAIN_ERROR_CODES,
+  DomainError,
+  errorCodeOrUnexpected,
+  isDomainErrorCode,
+} from '../../src/index.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
@@ -115,6 +120,30 @@ describe('DomainError construction', () => {
       // `UNEXPECTED` is a label-catalog fallback and `BAD_SIGNATURE` is a 05 §8 REJECTION code —
       // a separate namespace that must never be mixed with this one (03 §12).
       expect(isDomainErrorCode(near), `${near} must not be a DomainError code`).toBe(false);
+    }
+  });
+});
+
+describe('errorCodeOrUnexpected — the one caught-throwable → catalog CODE mapping (task 187)', () => {
+  it('returns a DomainError`s own code', () => {
+    expect(errorCodeOrUnexpected(new DomainError('PERMISSION_DENIED'))).toBe('PERMISSION_DENIED');
+    expect(errorCodeOrUnexpected(new DomainError('ENTITY_NOT_FOUND', { entityId: 'x' }))).toBe(
+      'ENTITY_NOT_FOUND',
+    );
+  });
+
+  it('degrades ANY non-DomainError throwable to UNEXPECTED — never a raw message reaches the UI', () => {
+    // A plain Error, a string, null, an object — none is a DomainError, so each renders as the generic
+    // `core.errors.UNEXPECTED` label rather than leaking a `.message` the catalog never registered.
+    for (const thrown of [
+      new Error('socket hung up'),
+      'boom',
+      null,
+      undefined,
+      { code: 'FAKE' },
+      42,
+    ]) {
+      expect(errorCodeOrUnexpected(thrown)).toBe('UNEXPECTED');
     }
   });
 });

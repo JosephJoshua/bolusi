@@ -17,7 +17,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { DomainError, type QueryPage } from '@bolusi/core';
+import { errorCodeOrUnexpected, type QueryPage } from '@bolusi/core';
 import type { MediaRef } from '@bolusi/schemas';
 import type { OperationSyncStatus } from '@bolusi/ui';
 
@@ -123,11 +123,6 @@ export type QueryState<TData> =
   | { readonly status: 'error'; readonly code: string }
   | { readonly status: 'ready'; readonly data: TData };
 
-function errorCode(error: unknown): string {
-  // 04 §5.3 closed code set; a denial is `PERMISSION_DENIED`. Anything else renders `UNEXPECTED`.
-  return error instanceof DomainError ? error.code : 'UNEXPECTED';
-}
-
 /**
  * Run a query and keep it LIVE (04 §7).
  *
@@ -158,7 +153,7 @@ export function useQuery<TData>(
         },
         (error: unknown) => {
           if (!active) return;
-          const code = errorCode(error);
+          const code = errorCodeOrUnexpected(error);
           setState(
             code === 'PERMISSION_DENIED' ? { status: 'unauthorized' } : { status: 'error', code },
           );

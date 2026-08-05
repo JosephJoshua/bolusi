@@ -55,6 +55,7 @@ import {
   derivePinAuthState,
   resetPin as resetPinFlow,
   DomainError,
+  errorCodeOrUnexpected,
   listSwitcherUsers,
   PinVerifierQueue,
   readIdleLockSeconds,
@@ -68,6 +69,7 @@ import {
   type IdSource,
   type PinAttemptRow,
   type PinAuthState,
+  type PinFlowDeps,
   type PinVerifierUploadPort,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
@@ -287,6 +289,42 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     );
   };
 
+  /**
+   * The shared shape of the three offline PIN-command wrappers (changePin / clearLockout / resetPin) —
+   * CLAUDE.md §2.8. Each: refuse when no session is open (a defensive guard — every screen is behind the
+   * shell zone), run the core flow over the ONE `PinFlowDeps` this session composes, then — REGARDLESS of
+   * outcome — re-read the affected user's cached attempt row so the login pad reflects it. The `finally`
+   * NEVER swallows the flow's DomainError (it propagates to the screen's mapper); the row re-read is
+   * `.catch`-swallowed so a read failing AFTER a successful command cannot surface that success as an
+   * error. `run` returns the flow's own result (a `PendingVerifier`/`CommandOutcome`), discarded here.
+   */
+  const pinFlowDeps: PinFlowDeps<ClientDatabase> = {
+    runtime: commands,
+    db,
+    crypto: deps.crypto,
+    clock: deps.clock,
+    idSource: deps.idSource,
+    deviceId: device.deviceId,
+    queue: verifierQueue,
+    emitter: lockedOut,
+  };
+  const runPinFlow = async (
+    method: string,
+    affectedUserId: (session: ActiveSession) => string,
+    run: (deps: PinFlowDeps<ClientDatabase>, session: ActiveSession) => Promise<unknown>,
+  ): Promise<void> => {
+    const session = manager.current;
+    if (session === null) {
+      throw new Error(`${method} requires an open session (SessionManager.current is null)`);
+    }
+    try {
+      await run(pinFlowDeps, session);
+    } finally {
+      await loadRow(affectedUserId(session)).catch(() => undefined);
+      emit();
+    }
+  };
+
   return {
     snapshot: () => {
       const shellState = shell.snapshot();
@@ -341,7 +379,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       } catch (error: unknown) {
         // The switcher's `error` state (design-system §5). A closed CODE, never a raw server string.
         users = null;
-        usersError = error instanceof DomainError ? error.code : 'UNEXPECTED';
+        usersError = errorCodeOrUnexpected(error);
       }
       emit();
     },
@@ -400,104 +438,34 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       return outcome;
     },
 
-    async changePin(currentPin, newPin): Promise<void> {
-      const session = manager.current;
-      if (session === null) {
-        // The Change PIN screen is only reachable behind an open session (the shell zone), so this is
-        // a defensive guard, not a user path — a change with no acting user has no `entityId = userId`.
-        throw new Error('changePin requires an open session (SessionManager.current is null)');
-      }
-      try {
-        await changePinFlow(
-          {
-            runtime: commands,
-            db,
-            crypto: deps.crypto,
-            clock: deps.clock,
-            idSource: deps.idSource,
-            deviceId: device.deviceId,
-            queue: verifierQueue,
-            emitter: lockedOut,
-          },
-          { userId: session.userId, currentPin, newPin },
-        );
-      } finally {
-        // A wrong current PIN burned a lockout attempt; a success cleared the counter (§6.5). Either
-        // way the cached row is now stale — refresh it so the LOGIN pad reflects it if the user backs
-        // out. `finally` never swallows the flow's DomainError: it propagates to the screen's mapper.
-        // The row re-read is `.catch`-swallowed: a read failing AFTER a SUCCESSFUL change must not turn
-        // that success into an error (which would then leave the user retrying on the already-changed
-        // "current" PIN) — the stale cached row only affects the login pad's view and the next refresh
-        // corrects it.
-        await loadRow(session.userId).catch(() => undefined);
-        emit();
-      }
-    },
+    // Change the signed-in user's OWN PIN. Affects the acting user's row; a wrong current PIN burns a
+    // lockout attempt, a success clears the counter (§6.5) — either way `runPinFlow` re-reads it.
+    changePin: (currentPin, newPin) =>
+      runPinFlow(
+        'changePin',
+        (session) => session.userId,
+        (flowDeps, session) =>
+          changePinFlow(flowDeps, { userId: session.userId, currentPin, newPin }),
+      ),
 
-    async clearLockout(targetUserId): Promise<void> {
-      const session = manager.current;
-      if (session === null) {
-        // Unlock is a shell route (session-gated), so this is a defensive guard, not a user path: a
-        // clear needs an acting owner (`actorUserId = userId`), and core denies one lacking pin_unlock.
-        throw new Error('clearLockout requires an open session (SessionManager.current is null)');
-      }
-      try {
-        await clearLockoutFlow(
-          {
-            runtime: commands,
-            db,
-            crypto: deps.crypto,
-            clock: deps.clock,
-            idSource: deps.idSource,
-            deviceId: device.deviceId,
-            queue: verifierQueue,
-            emitter: lockedOut,
-          },
-          { actorUserId: session.userId, targetUserId },
-        );
-      } finally {
-        // The clear reset the TARGET's attempt counter (§6.5); refresh that user's cached row so the
-        // login pad reflects it if the owner backs out to the switcher. `.catch`-swallowed so a read
-        // failing AFTER a successful clear cannot surface the success as an error; `finally` never
-        // swallows the flow's own DomainError — it propagates to `ClearLockoutScreen`'s mapper.
-        await loadRow(targetUserId).catch(() => undefined);
-        emit();
-      }
-    },
+    // Clear another user's lockout as the acting owner. Affects the TARGET's row (its counter was reset).
+    clearLockout: (targetUserId) =>
+      runPinFlow(
+        'clearLockout',
+        () => targetUserId,
+        (flowDeps, session) =>
+          clearLockoutFlow(flowDeps, { actorUserId: session.userId, targetUserId }),
+      ),
 
-    async resetPin(targetUserId, newPin): Promise<void> {
-      const session = manager.current;
-      if (session === null) {
-        // Reset is a shell route (session-gated), so this is a defensive guard: a reset needs an acting
-        // owner (`actorUserId = userId`), and core denies one lacking `auth.user_reset_pin`.
-        throw new Error('resetPin requires an open session (SessionManager.current is null)');
-      }
-      try {
-        // Enqueues the verifier on `verifierQueue` carrying THIS owner as `actorUserId`, so the drain
-        // (drainVerifiers, on next online contact) POSTs the owner in `X-Acting-User` — the server
-        // checks the owner for `auth.user_reset_pin`, not the target (task 186b-2).
-        await resetPinFlow(
-          {
-            runtime: commands,
-            db,
-            crypto: deps.crypto,
-            clock: deps.clock,
-            idSource: deps.idSource,
-            deviceId: device.deviceId,
-            queue: verifierQueue,
-            emitter: lockedOut,
-          },
-          { actorUserId: session.userId, targetUserId, newPin },
-        );
-      } finally {
-        // The reset wrote the TARGET a new verifier + cleared their attempt counter (§6.5); refresh that
-        // user's cached row so the login pad reflects it. `.catch`-swallowed so a read failing AFTER a
-        // successful reset cannot surface the success as an error; `finally` never swallows the flow's
-        // own DomainError — it propagates to `ResetPinScreen`'s mapper.
-        await loadRow(targetUserId).catch(() => undefined);
-        emit();
-      }
-    },
+    // Reset another user's PIN as the acting owner. Enqueues a verifier carrying THIS owner as
+    // `actorUserId`, so the drain POSTs the owner in `X-Acting-User` (task 186b-2). Affects the target.
+    resetPin: (targetUserId, newPin) =>
+      runPinFlow(
+        'resetPin',
+        () => targetUserId,
+        (flowDeps, session) =>
+          resetPinFlow(flowDeps, { actorUserId: session.userId, targetUserId, newPin }),
+      ),
 
     async listPinTargets(): Promise<readonly PinTargetUser[]> {
       const directory = await listSwitcherUsers(db);

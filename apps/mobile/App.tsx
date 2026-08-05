@@ -48,6 +48,7 @@ import {
 } from './src/screens/enrollment/model.js';
 import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
+import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { ClearLockoutScreen } from './src/screens/pin/ClearLockoutScreen.js';
 import { ResetPinScreen } from './src/screens/pin/ResetPinScreen.js';
 import type { PinTargetUser } from './src/screens/pin/pin-target.js';
@@ -68,7 +69,7 @@ import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/mod
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
-import { DomainError, type PinAttemptRow } from '@bolusi/core';
+import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
@@ -374,27 +375,19 @@ export default function App(props: AppProps): React.JSX.Element {
    * rows. The Unlock screen's `onReload` calls this directly (error retry); the effect below calls it
    * once on entry.
    */
-  // The loader reads the prop through a ref that is refreshed every render, so `loadPinTargets` keeps a
-  // STABLE identity (`[]` deps) even though `Root` hands a fresh inline `listPinTargets` arrow each
-  // render (it is not memoized, and `App` re-renders on every Root `bump()` — a sync tick, a pulled op,
-  // this screen's own `clearLockout` emit). Without the ref, the entry effect below re-fired on every
-  // such re-render, flashing the list back to its spinner and re-reading the DB (race: last write wins,
-  // so an older snapshot could overwrite a newer one). The stable identity is what makes "only on entry"
-  // — asserted in the effect's comment — actually true.
-  const listPinTargetsRef = useRef(props.listPinTargets);
-  listPinTargetsRef.current = props.listPinTargets;
+  // `useLatestCallback` gives the loader a STABLE identity even though `Root` hands a fresh inline
+  // `listPinTargets` arrow each render — without it the entry effect below re-fired on every unrelated
+  // Root bump, flashing the list to its spinner and re-reading the DB (task 186b-1 review). `loadPinTargets`
+  // depends only on that stable wrapper, so it too stays stable and the effect fires "only on entry".
+  const listPinTargets = useLatestCallback(props.listPinTargets);
   const loadPinTargets = useCallback(() => {
     setPinTargets({ loading: true, users: [], error: null });
-    void listPinTargetsRef.current().then(
+    void listPinTargets().then(
       (users) => setPinTargets({ loading: false, users, error: null }),
       (error: unknown) =>
-        setPinTargets({
-          loading: false,
-          users: [],
-          error: error instanceof DomainError ? error.code : 'UNEXPECTED',
-        }),
+        setPinTargets({ loading: false, users: [], error: errorCodeOrUnexpected(error) }),
     );
-  }, []);
+  }, [listPinTargets]);
 
   // Load the target list when an owner picker (Unlock OR Reset) opens — both read the same directory —
   // not before, and fresh on each ENTRY to a picker. `loadPinTargets` is stable and the effect keys on
@@ -412,27 +405,12 @@ export default function App(props: AppProps): React.JSX.Element {
     return () => setPinTargets({ loading: true, users: [], error: null });
   }, [onOwnerPicker, loadPinTargets]);
 
-  // Stabilize the clear callback the same way: `ClearLockoutScreen`'s submit effect depends on it, so a
-  // fresh arrow from `Root` mid-clear (its `finally` emits, which bumps Root) would re-fire that effect
-  // and run the flow a SECOND time on the just-cleared target — `clearPinLockoutFlow` then throws
-  // INVALID_TRANSITION and the screen would show a spurious "not locked out" over a real success. A
-  // ref-stable wrapper keeps the submit single-shot.
-  const onClearLockoutRef = useRef(props.onClearLockout);
-  onClearLockoutRef.current = props.onClearLockout;
-  const clearLockout = useCallback(
-    (targetUserId: string) => onClearLockoutRef.current(targetUserId),
-    [],
-  );
-
-  // Same ref-stabilization for the reset callback — `ResetPinScreen`'s submit effect depends on it, and
-  // `resetPin`'s `finally` emits (bumping Root, minting a fresh arrow), which could otherwise re-fire the
-  // submit and reset the target a SECOND time.
-  const onResetPinRef = useRef(props.onResetPin);
-  onResetPinRef.current = props.onResetPin;
-  const resetPin = useCallback(
-    (targetUserId: string, newPin: string) => onResetPinRef.current(targetUserId, newPin),
-    [],
-  );
+  // Stabilize the owner-flow callbacks the same way: each screen's submit effect depends on the callback,
+  // so a fresh Root arrow mid-flow (a `finally` emit bumps Root) would re-fire the submit and run the
+  // flow a SECOND time — `clearPinLockoutFlow`/`resetPin` then throw on the already-acted target and the
+  // screen shows a spurious failure over a real success. The stable wrapper keeps each submit single-shot.
+  const clearLockout = useLatestCallback(props.onClearLockout);
+  const resetPin = useLatestCallback(props.onResetPin);
 
   const zone = resolveZone({
     device: props.device,

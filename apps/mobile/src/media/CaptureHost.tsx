@@ -30,7 +30,7 @@
  * ceiling is stated: what the composed test proves is that the SHELL calls the pipeline and renders
  * its answers. That a real `CameraView` hands back a real JPEG is D12/D13's, not this lane's.
  */
-import { DomainError, type StorageBand } from '@bolusi/core';
+import { errorCodeOrUnexpected, type StorageBand } from '@bolusi/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -95,11 +95,6 @@ export interface CaptureHostDeps {
    * a signed, immutable `mediaRef` with no UPDATE path.
    */
   readonly identity: CaptureIdentity | null;
-}
-
-/** The one place a non-`DomainError` throw becomes a code the catalog can key off (07-i18n §4.2). */
-function codeOf(error: unknown): string {
-  return error instanceof DomainError ? error.code : 'UNEXPECTED';
 }
 
 export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
@@ -263,7 +258,7 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
       })
       .catch((error: unknown) => {
         if (settleRef.current === null) return;
-        setState({ kind: 'failed', code: codeOf(error) });
+        setState({ kind: 'failed', code: errorCodeOrUnexpected(error) });
       });
   }, []);
 

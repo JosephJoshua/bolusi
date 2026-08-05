@@ -165,65 +165,110 @@ export async function enrolledDevice(fixture: Fixture): Promise<void> {
 }
 
 /**
- * Seed the directory mirror + the PIN verifier THROUGH `applyBundle` — the exact writer a real
- * device's enroll response and every bundle refresh use (api/02-auth §5.2/§5.3).
- *
- * It used to call the four low-level directory writers instead. Going through `applyBundle` is
- * strictly more faithful and it is what lets this fixture carry `settings.idleLockSeconds`: that
- * value only reaches a device because `applyBundle` persists it, so a fixture that wrote the rows by
- * hand could never witness the §6.4 threading (task 133's second defect — `SessionManager` was
- * constructed without it and the tenant's setting stopped at the server).
- *
- * The verifier is a REAL argon2id derivation of `TEST_PIN`, so `verifyPin` genuinely has to match
- * it; a wrong PIN genuinely fails.
+ * The three seed helpers below all write a device bundle THROUGH `applyBundle` — the exact writer a real
+ * device's enroll response and every bundle refresh use (api/02-auth §5.2/§5.3), so what the app reads
+ * back at boot is what production would have written. Writing the rows by hand (the pre-task-133 way)
+ * could not carry `settings.idleLockSeconds`, which only reaches a device because `applyBundle` persists
+ * it (task 133's second defect — the tenant's lock setting stopped at the server). Verifiers are REAL
+ * argon2id derivations of `TEST_PIN` at the §5.3 KDF floor, so `verifyPin` genuinely has to match and a
+ * wrong PIN genuinely fails.
  */
-export async function seedDirectory(
+
+/** The §5.3 KDF floor — `assertVerifierInBounds` rejects anything cheaper; `verifyPin` re-derives with
+ *  these same stored params, so the KDF a seed builds is the one a device runs (`outputLength` 32 is the
+ *  bounds' required hash size). */
+const KDF_FLOOR = { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 } as const;
+
+/** The plain notes role's permissions (02-permissions §12 grants `auth.pin_change` to every role). */
+const NOTES_PERMISSIONS: readonly string[] = [
+  'notes.read',
+  'notes.create',
+  'notes.edit',
+  'notes.archive',
+  'auth.pin_change',
+];
+
+/** A REAL argon2id verifier of `TEST_PIN`. Distinct `saltBase`/`seq` give genuinely different rows for
+ *  the same PIN, so a wrong PIN still fails for each seeded user. */
+function verifierFor(
   fixture: Fixture,
-  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
-): Promise<void> {
-  const verifier = await buildPinVerifier(
+  seq: number,
+  saltBase: number,
+): Promise<Awaited<ReturnType<typeof buildPinVerifier>>> {
+  return buildPinVerifier(
     noblePort,
     new TextEncoder().encode(TEST_PIN),
-    // The §5.3 FLOOR, not a convenient shortcut: `assertVerifierInBounds` rejects anything cheaper,
-    // and `verifyPin` re-derives with these same stored params — so the KDF this test runs is the one
-    // a device runs. `outputLength` 32 is the bounds' required hash size.
-    { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 },
-    Uint8Array.from({ length: 16 }, (_, i) => i + 1),
-    { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq: 1 },
+    KDF_FLOOR,
+    Uint8Array.from({ length: 16 }, (_, i) => i + saltBase),
+    { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq },
   );
+}
 
+/** An `active` directory user holding one store-scoped role, with a real verifier. */
+function activeUser(
+  id: string,
+  name: string,
+  roleId: string,
+  storeId: string,
+  pinVerifier: Awaited<ReturnType<typeof buildPinVerifier>>,
+): DeviceBundle['users'][number] {
+  return {
+    id,
+    name,
+    photoMediaId: null,
+    status: 'active',
+    grants: [{ roleId, storeId }],
+    pinVerifier,
+  };
+}
+
+/** A store-scoped, non-default role carrying `permissionIds`. */
+function storeRole(
+  id: string,
+  name: string,
+  permissionIds: readonly string[],
+): DeviceBundle['rolesSnapshot'][number] {
+  return {
+    id,
+    name,
+    scopeType: 'store',
+    isSystemDefault: false,
+    permissionIds: [...permissionIds],
+  };
+}
+
+/** Write the tenant/store/settings envelope + `users`/`roles` through `applyBundle` (see the block
+ *  comment above). The one place the three seeds share. */
+async function seedBundle(
+  fixture: Fixture,
+  content: { users: DeviceBundle['users']; roles: DeviceBundle['rolesSnapshot'] },
+  idleLockSeconds: number,
+): Promise<void> {
   const bundle: DeviceBundle = {
     tenant: { id: fixture.tenantId, name: 'Maju Group' },
     store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
     settings: { idleLockSeconds },
-    users: [
-      {
-        id: fixture.userId,
-        name: 'Andi Pratama',
-        photoMediaId: null,
-        status: 'active',
-        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
-        pinVerifier: verifier,
-      },
-    ],
-    rolesSnapshot: [
-      {
-        id: ROLE_ID,
-        name: 'Notes',
-        scopeType: 'store',
-        isSystemDefault: false,
-        permissionIds: [
-          'notes.read',
-          'notes.create',
-          'notes.edit',
-          'notes.archive',
-          'auth.pin_change',
-        ],
-      },
-    ],
+    users: content.users,
+    rolesSnapshot: content.roles,
     permissionsSnapshot: [],
   };
   await applyBundle(fixture.app.db.db, bundle);
+}
+
+/** Seed a single active `Notes`-role user (`fixture.userId`), signable with `TEST_PIN`. */
+export async function seedDirectory(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifier = await verifierFor(fixture, 1, 1);
+  await seedBundle(
+    fixture,
+    {
+      users: [activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifier)],
+      roles: [storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS)],
+    },
+    idleLockSeconds,
+  );
 }
 
 /** A SECOND enrolled user on the same device — the incoming user in a switch/lock-unlock test. */
@@ -241,59 +286,21 @@ export async function seedTwoUsers(
   fixture: Fixture,
   idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
 ): Promise<void> {
-  const verifierFor = (
-    seq: number,
-    saltBase: number,
-  ): Promise<Awaited<ReturnType<typeof buildPinVerifier>>> =>
-    buildPinVerifier(
-      noblePort,
-      new TextEncoder().encode(TEST_PIN),
-      { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 },
-      Uint8Array.from({ length: 16 }, (_, i) => i + saltBase),
-      { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq },
-    );
-  const [verifierA, verifierB] = await Promise.all([verifierFor(1, 1), verifierFor(2, 100)]);
-
-  const bundle: DeviceBundle = {
-    tenant: { id: fixture.tenantId, name: 'Maju Group' },
-    store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
-    settings: { idleLockSeconds },
-    users: [
-      {
-        id: fixture.userId,
-        name: 'Andi Pratama',
-        photoMediaId: null,
-        status: 'active',
-        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
-        pinVerifier: verifierA,
-      },
-      {
-        id: SECOND_USER_ID,
-        name: 'Budi Santoso',
-        photoMediaId: null,
-        status: 'active',
-        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
-        pinVerifier: verifierB,
-      },
-    ],
-    rolesSnapshot: [
-      {
-        id: ROLE_ID,
-        name: 'Notes',
-        scopeType: 'store',
-        isSystemDefault: false,
-        permissionIds: [
-          'notes.read',
-          'notes.create',
-          'notes.edit',
-          'notes.archive',
-          'auth.pin_change',
-        ],
-      },
-    ],
-    permissionsSnapshot: [],
-  };
-  await applyBundle(fixture.app.db.db, bundle);
+  const [verifierA, verifierB] = await Promise.all([
+    verifierFor(fixture, 1, 1),
+    verifierFor(fixture, 2, 100),
+  ]);
+  await seedBundle(
+    fixture,
+    {
+      users: [
+        activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifierA),
+        activeUser(SECOND_USER_ID, 'Budi Santoso', ROLE_ID, fixture.storeId, verifierB),
+      ],
+      roles: [storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS)],
+    },
+    idleLockSeconds,
+  );
 }
 
 const OWNER_ROLE_ID = 'role-owner-live';
@@ -314,77 +321,29 @@ export async function seedOwnerAndLockedTarget(
   fixture: Fixture,
   idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
 ): Promise<void> {
-  const verifierFor = (
-    seq: number,
-    saltBase: number,
-  ): Promise<Awaited<ReturnType<typeof buildPinVerifier>>> =>
-    buildPinVerifier(
-      noblePort,
-      new TextEncoder().encode(TEST_PIN),
-      { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 },
-      Uint8Array.from({ length: 16 }, (_, i) => i + saltBase),
-      { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq },
-    );
   const [ownerVerifier, targetVerifier] = await Promise.all([
-    verifierFor(1, 1),
-    verifierFor(2, 100),
+    verifierFor(fixture, 1, 1),
+    verifierFor(fixture, 2, 100),
   ]);
-
-  const bundle: DeviceBundle = {
-    tenant: { id: fixture.tenantId, name: 'Maju Group' },
-    store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
-    settings: { idleLockSeconds },
-    users: [
-      {
-        id: fixture.userId,
-        name: 'Andi Pratama',
-        photoMediaId: null,
-        status: 'active',
-        grants: [{ roleId: OWNER_ROLE_ID, storeId: fixture.storeId }],
-        pinVerifier: ownerVerifier,
-      },
-      {
-        id: SECOND_USER_ID,
-        name: 'Budi Santoso',
-        photoMediaId: null,
-        status: 'active',
-        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
-        pinVerifier: targetVerifier,
-      },
-    ],
-    rolesSnapshot: [
-      {
-        id: OWNER_ROLE_ID,
-        name: 'Owner',
-        scopeType: 'store',
-        isSystemDefault: false,
-        permissionIds: [
-          'notes.read',
-          'notes.create',
-          'notes.edit',
-          'notes.archive',
-          'auth.pin_change',
+  await seedBundle(
+    fixture,
+    {
+      users: [
+        activeUser(fixture.userId, 'Andi Pratama', OWNER_ROLE_ID, fixture.storeId, ownerVerifier),
+        activeUser(SECOND_USER_ID, 'Budi Santoso', ROLE_ID, fixture.storeId, targetVerifier),
+      ],
+      // The owner role carries BOTH owner PIN permissions; the target's plain notes role carries neither.
+      roles: [
+        storeRole(OWNER_ROLE_ID, 'Owner', [
+          ...NOTES_PERMISSIONS,
           'auth.pin_unlock',
           'auth.user_reset_pin',
-        ],
-      },
-      {
-        id: ROLE_ID,
-        name: 'Notes',
-        scopeType: 'store',
-        isSystemDefault: false,
-        permissionIds: [
-          'notes.read',
-          'notes.create',
-          'notes.edit',
-          'notes.archive',
-          'auth.pin_change',
-        ],
-      },
-    ],
-    permissionsSnapshot: [],
-  };
-  await applyBundle(fixture.app.db.db, bundle);
+        ]),
+        storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS),
+      ],
+    },
+    idleLockSeconds,
+  );
 
   // Lock the TARGET on this device: a real `pin_attempt_state` row at the hard-lock threshold, so the
   // caller-derived `lockedOut` flag (session.listPinTargets → derivePinAuthState) reads locked and the

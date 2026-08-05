@@ -3,7 +3,7 @@
   "command": "knip --production --include exports,files --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
-  "denominator": 138,
+  "denominator": 139,
   "fileDenominator": 15,
   "nonProductionRules": [
     "test-dir",
@@ -45,6 +45,7 @@
     "packages/core/src/crypto/media-file-cipher.ts#deriveMediaFileKey",
     "packages/core/src/crypto/order.ts#sortCanonical",
     "packages/core/src/crypto/signed-core.ts#signOp",
+    "packages/core/src/errors/domain-error.ts#errorCodeOrUnexpected",
     "packages/core/src/ids/uuidv7.ts#createUuidV7Generator",
     "packages/core/src/index.ts#PACKAGE_NAME",
     "packages/core/src/media/download.ts#fetchAndVerifyMedia",
