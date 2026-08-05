@@ -159,6 +159,7 @@ export type TranslationKey =
   | 'sync.rejected.explain'
   | 'sync.rejected.technicalDetails'
   | 'sync.rejected.title'
+  | 'sync.status.attentionReassurance'
   | 'sync.status.lastSynced'
   | 'sync.status.offline'
   | 'sync.status.pending'
@@ -335,6 +336,7 @@ export interface TranslationResources {
       pending: string;
       pendingMedia: string;
       photosPending: string;
+      attentionReassurance: string;
       offline: string;
       reconnected: string;
       lastSynced: string;

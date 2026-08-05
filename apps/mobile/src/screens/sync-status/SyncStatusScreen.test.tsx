@@ -282,6 +282,17 @@ describe('the chip and title are witnessed together on the pending-media screen 
     );
   });
 
+  test('the attention reassurance is DISTINCT from the rejected banner — not the same line twice (task 144 item 3)', () => {
+    // The decoy this fixes: `REASSURANCE_KEY.attention` was `sync.rejected.banner`, so the tier-1
+    // reassurance and the banner rendered the SAME string ~40px apart. The reassurance answers "is my
+    // work safe?"; the banner says "tap to view". Compare the real render to the banner's own text —
+    // reverting the key back to the banner reds this `not.toBe`.
+    const attention = renderSync({ rejected: REJECTED });
+    const reassuranceText = textsIn(attention.get('sync-reassurance-text')).join('');
+    expect(reassuranceText).not.toBe(t('sync.rejected.banner', { count: REJECTED.length }));
+    expect(reassuranceText.length).toBeGreaterThan(0); // still says something reassuring
+  });
+
   test('the two pending counters each sit in a flex cell so they share the row (task 129 item 7)', () => {
     // There is no pixel lane in this harness; this guards the STRUCTURE that prevents the 360 dp
     // overflow — each counter is wrapped in a `flex: 1` cell, so the two split the row instead of sizing

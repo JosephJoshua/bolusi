@@ -200,7 +200,10 @@ export const REASSURANCE_KEY = {
   savedHere: 'sync.status.pending',
   photosPending: 'sync.status.photosPending',
   syncing: 'sync.status.syncing',
-  attention: 'sync.rejected.banner',
+  // NOT `sync.rejected.banner` (task 144 item 3): the banner already says "N rejected, tap to view",
+  // so keying the tier-1 reassurance to it showed the SAME line twice, ~40px apart. This is the
+  // data-safety answer ("the rejected changes are still saved here"), distinct from the count/tap prompt.
+  attention: 'sync.status.attentionReassurance',
 } as const satisfies Record<Reassurance['kind'], string>;
 
 /** The staleness tier the FreshnessCell and the banner both render (03 §8; design-system §3.11). */

@@ -264,7 +264,11 @@ describe('the reassurance line reads REASSURANCE_KEY — the map the screen rend
     ['photosPending', input({ pendingMediaCount: 3 }), 'sync.status.photosPending'],
     ['syncing', input({ loopState: 'pushing' }), 'sync.status.syncing'],
     ['syncing', input({ loopState: 'pulling' }), 'sync.status.syncing'],
-    ['attention', input({ rejected: [rejectedRow('BAD_SIGNATURE')] }), 'sync.rejected.banner'],
+    [
+      'attention',
+      input({ rejected: [rejectedRow('BAD_SIGNATURE')] }),
+      'sync.status.attentionReassurance',
+    ],
   ] as const)('%s renders %s', (kind, given, key) => {
     const answer = reassurance(given);
     expect(answer.kind).toBe(kind);

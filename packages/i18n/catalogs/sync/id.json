@@ -9,6 +9,7 @@
     "pending": "{count} perubahan belum terkirim",
     "pendingMedia": "{count} foto belum terkirim",
     "photosPending": "Perubahan terkirim. Foto belum terkirim.",
+    "attentionReassurance": "Perubahan yang ditolak tetap tersimpan di sini.",
     "offline": "Tidak ada koneksi. Perubahan tersimpan di perangkat ini.",
     "reconnected": "Terhubung kembali",
     "lastSynced": "Terakhir terhubung {relative}",

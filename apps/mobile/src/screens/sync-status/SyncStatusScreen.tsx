@@ -342,7 +342,8 @@ function reassuranceText(input: SyncStatusInput): string {
     case 'syncing':
       return t(REASSURANCE_KEY[answer.kind]);
     case 'attention':
-      return t(REASSURANCE_KEY[answer.kind], { count: input.rejected.length });
+      // The count lives on the banner + the section header, not the reassurance (task 144 item 3).
+      return t(REASSURANCE_KEY[answer.kind]);
   }
 }
 
