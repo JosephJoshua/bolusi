@@ -48,6 +48,8 @@ import {
 } from './src/screens/enrollment/model.js';
 import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
+import { ClearLockoutScreen } from './src/screens/pin/ClearLockoutScreen.js';
+import type { PinTargetUser } from './src/screens/pin/pin-target.js';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
@@ -65,7 +67,7 @@ import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/mod
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
-import type { PinAttemptRow } from '@bolusi/core';
+import { DomainError, type PinAttemptRow } from '@bolusi/core';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
@@ -154,6 +156,26 @@ export interface AppProps {
    * Resolves on success; REJECTS with the flow's DomainError so `ChangePinScreen` maps it to the pad.
    */
   readonly onChangePin: (currentPin: string, newPin: string) => Promise<void>;
+  /**
+   * Does the signed-in user hold `auth.pin_unlock` (task 186b)? Drives whether the Settings "Unlock a
+   * PIN" row is offered — the owner Unlock entry is absent for a non-owner. From the session snapshot,
+   * so it re-derives on a user switch. Core still enforces the permission, so this is a UX gate.
+   */
+  readonly canUnlock: boolean;
+  /**
+   * The device directory as owner-unlock targets (task 186b), each with a caller-derived `lockedOut`
+   * flag. Loaded on demand when the Unlock screen opens (the effect below), so the owner sees the
+   * current lockout state rather than a snapshot from an earlier refresh. Bound to
+   * `AppSessionController.listPinTargets`.
+   */
+  readonly listPinTargets: () => Promise<readonly PinTargetUser[]>;
+  /**
+   * Clear a target user's PIN lockout (api/02-auth §6.5.1; task 186b), driven by the session
+   * controller as the acting owner. Resolves on success; REJECTS with the flow's DomainError so
+   * `ClearLockoutScreen` maps it (`INVALID_TRANSITION → notLocked`). No verifier is computed — the
+   * owner never learns the PIN — so unlike Change PIN there is nothing to drain afterward.
+   */
+  readonly onClearLockout: (targetUserId: string) => Promise<void>;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -194,6 +216,17 @@ export default function App(props: AppProps): React.JSX.Element {
    * Tapping the open row closes it, which is the only way back out of a disclosure with no chrome.
    */
   const [rejectedDetailFor, setRejectedDetailFor] = useState<string | null>(null);
+  /**
+   * The owner-Unlock target list (task 186b), loaded ON DEMAND when the `unlockPin` route opens. The
+   * screen takes a caller-loaded list; loading it only while that screen shows keeps a directory +
+   * per-user lockout read off every other render. `loading` starts true so the screen shows its loading
+   * state until the first read resolves — never an empty "no one is locked out" flash before data.
+   */
+  const [pinTargets, setPinTargets] = useState<{
+    readonly loading: boolean;
+    readonly users: readonly PinTargetUser[];
+    readonly error: string | null;
+  }>({ loading: true, users: [], error: null });
 
   /**
    * ── WORK RETENTION ACROSS A LOCK (SEC-AUTH-08; task 155) ──────────────────────────────────────
@@ -321,6 +354,56 @@ export default function App(props: AppProps): React.JSX.Element {
   useEffect(() => {
     if (pushRoute !== undefined && pushRoute !== null) setRoute(pushRoute.route);
   }, [pushRoute]);
+
+  /**
+   * Load the owner-Unlock target list (task 186b). A closed CODE on failure, never a raw string — the
+   * screen renders §5 Error from it. `loading: true` up front so a re-read shows loading, not stale
+   * rows. The Unlock screen's `onReload` calls this directly (error retry); the effect below calls it
+   * once on entry.
+   */
+  // The loader reads the prop through a ref that is refreshed every render, so `loadPinTargets` keeps a
+  // STABLE identity (`[]` deps) even though `Root` hands a fresh inline `listPinTargets` arrow each
+  // render (it is not memoized, and `App` re-renders on every Root `bump()` — a sync tick, a pulled op,
+  // this screen's own `clearLockout` emit). Without the ref, the entry effect below re-fired on every
+  // such re-render, flashing the list back to its spinner and re-reading the DB (race: last write wins,
+  // so an older snapshot could overwrite a newer one). The stable identity is what makes "only on entry"
+  // — asserted in the effect's comment — actually true.
+  const listPinTargetsRef = useRef(props.listPinTargets);
+  listPinTargetsRef.current = props.listPinTargets;
+  const loadPinTargets = useCallback(() => {
+    setPinTargets({ loading: true, users: [], error: null });
+    void listPinTargetsRef.current().then(
+      (users) => setPinTargets({ loading: false, users, error: null }),
+      (error: unknown) =>
+        setPinTargets({
+          loading: false,
+          users: [],
+          error: error instanceof DomainError ? error.code : 'UNEXPECTED',
+        }),
+    );
+  }, []);
+
+  // Load the target list when the Unlock screen opens — not before, and fresh each open (a lockout
+  // could have landed since the last visit). `loadPinTargets` is stable, so this fires ONLY when `route`
+  // changes, keeping the read off unrelated renders. The cleanup resets to loading on leave, so a later
+  // re-entry starts clean — never a one-frame flash of the previous visit's (possibly stale) list.
+  useEffect(() => {
+    if (route !== 'unlockPin') return undefined;
+    loadPinTargets();
+    return () => setPinTargets({ loading: true, users: [], error: null });
+  }, [route, loadPinTargets]);
+
+  // Stabilize the clear callback the same way: `ClearLockoutScreen`'s submit effect depends on it, so a
+  // fresh arrow from `Root` mid-clear (its `finally` emits, which bumps Root) would re-fire that effect
+  // and run the flow a SECOND time on the just-cleared target — `clearPinLockoutFlow` then throws
+  // INVALID_TRANSITION and the screen would show a spurious "not locked out" over a real success. A
+  // ref-stable wrapper keeps the submit single-shot.
+  const onClearLockoutRef = useRef(props.onClearLockout);
+  onClearLockoutRef.current = props.onClearLockout;
+  const clearLockout = useCallback(
+    (targetUserId: string) => onClearLockoutRef.current(targetUserId),
+    [],
+  );
 
   const zone = resolveZone({
     device: props.device,
@@ -635,6 +718,9 @@ export default function App(props: AppProps): React.JSX.Element {
                 onBack={() => setRoute('home')}
                 onOpenSwitcher={() => setSwitching(true)}
                 onOpenChangePin={() => setRoute('changePin')}
+                // Owner-only (task 186b): the row is offered ONLY when the acting user holds
+                // `auth.pin_unlock`. `undefined` for a non-owner ⇒ SettingsScreen omits the row.
+                onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
                 syncChip={chip}
                 onOpenSync={() => setRoute('syncStatus')}
               />
@@ -647,6 +733,23 @@ export default function App(props: AppProps): React.JSX.Element {
             return (
               <ChangePinScreen
                 onChangePin={props.onChangePin}
+                onClose={() => setRoute('settings')}
+              />
+            );
+          }
+          if (shellZone.route === 'unlockPin') {
+            // Owner Unlock (api/02-auth §6.5.1; task 186b), reached from the Settings owner-only row.
+            // `canUnlock` drives the §5 Unauthorized state — a non-owner who somehow reaches here fails
+            // closed (core enforces `auth.pin_unlock` too). The target list was loaded on entry (the
+            // effect above); `onReload` re-reads after an error. Back / done returns to Settings.
+            return (
+              <ClearLockoutScreen
+                canUnlock={props.canUnlock}
+                loading={pinTargets.loading}
+                error={pinTargets.error}
+                users={pinTargets.users}
+                onClearLockout={clearLockout}
+                onReload={loadPinTargets}
                 onClose={() => setRoute('settings')}
               />
             );

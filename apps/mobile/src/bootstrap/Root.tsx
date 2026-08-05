@@ -823,6 +823,18 @@ export function Root({
             ? Promise.reject(new Error('changePin: no session controller (session-gated route)'))
             : session.changePin(currentPin, newPin)
         }
+        // Owner Unlock (api/02-auth §6.5.1; task 186b). `canUnlock` from the snapshot gates the Settings
+        // entry (re-derived on a user switch); `listPinTargets` loads the target directory + lockout
+        // flags on demand; `onClearLockout` runs the real `clearPinLockoutFlow` as the acting owner and
+        // REJECTS with its DomainError for the screen's mapper. `session === null` is unreachable (Unlock
+        // is a session-gated shell route); the null arms are defensive, not live paths.
+        canUnlock={sessionSnapshot?.canUnlock ?? false}
+        listPinTargets={() => session?.listPinTargets() ?? Promise.resolve([])}
+        onClearLockout={(targetUserId) =>
+          session === null
+            ? Promise.reject(new Error('clearLockout: no session controller (session-gated route)'))
+            : session.clearLockout(targetUserId)
+        }
         onSelectLocale={(next) => {
           void localeStore.write('bolusi.device_locale', next);
           setLocale(next);

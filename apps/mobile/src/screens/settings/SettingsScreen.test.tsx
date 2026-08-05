@@ -144,6 +144,36 @@ describe('the screen title and section headers are distinct, correct labels (§1
     expect(onOpenChangePin).toHaveBeenCalledTimes(1);
   });
 
+  test('the Unlock-a-PIN row is shown and fires ONLY when the owner action is offered (task 186b)', () => {
+    // `onOpenUnlockPin` present ⇒ the owner holds `auth.pin_unlock`, so the row renders and routes.
+    const onOpenUnlockPin = vi.fn();
+    const owner = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={vi.fn()}
+        onOpenUnlockPin={onOpenUnlockPin}
+        syncChip="synced"
+        onOpenSync={vi.fn()}
+      />,
+    );
+    fire(owner.get('settings-unlock-pin'), 'onPress');
+    expect(onOpenUnlockPin).toHaveBeenCalledTimes(1);
+  });
+
+  test('CONTROL: a non-owner (no unlock callback) never sees the Unlock row — it is gated, not always on', () => {
+    // `renderSettings` omits `onOpenUnlockPin`, standing for a user WITHOUT `auth.pin_unlock`. The row
+    // must be absent — a shown-then-denied entry would leak that the action exists. This is the
+    // falsification control for the test above: render the row unconditionally and this reds.
+    const nonOwner = renderSettings(ENROLLED);
+    expect(nonOwner.query('settings-unlock-pin')).toBeNull();
+  });
+
   test('the three section headers are mutually distinct (no two sections share a label)', () => {
     const screen = renderSettings(ENROLLED);
     const headers = [

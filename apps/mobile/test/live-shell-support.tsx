@@ -12,8 +12,10 @@ import {
   buildPinVerifier,
   createUuidV7Generator,
   IDLE_LOCK_DEFAULT_SECONDS,
+  PIN_HARD_LOCK_THRESHOLD,
   readPinAttempt,
   writeMeta,
+  writePinAttempt,
   DEVICE_ID_META_KEY,
   STORE_ID_META_KEY,
   type CancelTimer,
@@ -292,6 +294,106 @@ export async function seedTwoUsers(
     permissionsSnapshot: [],
   };
   await applyBundle(fixture.app.db.db, bundle);
+}
+
+const OWNER_ROLE_ID = 'role-owner-live';
+
+/**
+ * Seed an OWNER (holds `auth.pin_unlock`) plus a second user who is ALREADY LOCKED OUT on this device
+ * — the exact shape the owner-Unlock flow acts on (task 186b; api/02-auth §6.5.1). The owner is
+ * `fixture.userId` (signs in with `TEST_PIN`); the target is `SECOND_USER_ID`, whose `pin_attempt_state`
+ * row is written at the hard-lock threshold so `derivePinAuthState` reads `locked_out`.
+ *
+ * Two distinct roles by design (02-permissions §5.4.6): the owner role carries `auth.pin_unlock`, the
+ * target's plain notes role does NOT — so the `canUnlock` gate is a real grant, not a fixture that hands
+ * everyone the permission. Both users get a REAL verifier through `applyBundle`, the same writer a real
+ * enroll uses.
+ */
+export async function seedOwnerAndLockedTarget(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifierFor = (
+    seq: number,
+    saltBase: number,
+  ): Promise<Awaited<ReturnType<typeof buildPinVerifier>>> =>
+    buildPinVerifier(
+      noblePort,
+      new TextEncoder().encode(TEST_PIN),
+      { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 },
+      Uint8Array.from({ length: 16 }, (_, i) => i + saltBase),
+      { timestamp: FIXED_NOW, deviceId: fixture.deviceId, seq },
+    );
+  const [ownerVerifier, targetVerifier] = await Promise.all([
+    verifierFor(1, 1),
+    verifierFor(2, 100),
+  ]);
+
+  const bundle: DeviceBundle = {
+    tenant: { id: fixture.tenantId, name: 'Maju Group' },
+    store: { id: fixture.storeId, name: 'Servis Ponsel Maju' },
+    settings: { idleLockSeconds },
+    users: [
+      {
+        id: fixture.userId,
+        name: 'Andi Pratama',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: OWNER_ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: ownerVerifier,
+      },
+      {
+        id: SECOND_USER_ID,
+        name: 'Budi Santoso',
+        photoMediaId: null,
+        status: 'active',
+        grants: [{ roleId: ROLE_ID, storeId: fixture.storeId }],
+        pinVerifier: targetVerifier,
+      },
+    ],
+    rolesSnapshot: [
+      {
+        id: OWNER_ROLE_ID,
+        name: 'Owner',
+        scopeType: 'store',
+        isSystemDefault: false,
+        permissionIds: [
+          'notes.read',
+          'notes.create',
+          'notes.edit',
+          'notes.archive',
+          'auth.pin_change',
+          'auth.pin_unlock',
+        ],
+      },
+      {
+        id: ROLE_ID,
+        name: 'Notes',
+        scopeType: 'store',
+        isSystemDefault: false,
+        permissionIds: [
+          'notes.read',
+          'notes.create',
+          'notes.edit',
+          'notes.archive',
+          'auth.pin_change',
+        ],
+      },
+    ],
+    permissionsSnapshot: [],
+  };
+  await applyBundle(fixture.app.db.db, bundle);
+
+  // Lock the TARGET on this device: a real `pin_attempt_state` row at the hard-lock threshold, so the
+  // caller-derived `lockedOut` flag (session.listPinTargets → derivePinAuthState) reads locked and the
+  // clear flow's locked precondition is genuinely satisfied (not a no-op that never emits an op).
+  await writePinAttempt(fixture.app.db.db, {
+    userId: SECOND_USER_ID,
+    deviceId: fixture.deviceId,
+    consecutiveFailures: PIN_HARD_LOCK_THRESHOLD,
+    windowStartedAt: FIXED_NOW,
+    notBefore: null,
+  });
 }
 
 /**
@@ -633,6 +735,12 @@ export async function waitForFailedAttempt(fixture: Fixture): Promise<number> {
     return failures > 0;
   });
   return failures;
+}
+
+/** `consecutiveFailures` of ANY user's real attempt row on this device (0 when no row / cleared). */
+export async function pinFailuresFor(fixture: Fixture, userId: string): Promise<number> {
+  const row = await readPinAttempt(fixture.app.db.db, userId, fixture.deviceId);
+  return row?.consecutiveFailures ?? 0;
 }
 
 /**

@@ -245,6 +245,9 @@ function AppMode({ session }: { readonly session: AppProps['session'] }): React.
       onRetryUsers={noop}
       onSubmitPin={noop}
       onChangePin={() => Promise.resolve()}
+      canUnlock
+      listPinTargets={() => Promise.resolve([])}
+      onClearLockout={() => Promise.resolve()}
       onSelectLocale={(next) => {
         setLocale(next);
         force();

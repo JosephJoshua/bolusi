@@ -45,6 +45,12 @@ export interface SettingsScreenProps {
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
+  /**
+   * Open the owner "Unlock a PIN" screen (api/02-auth §6.5.1; task 186b) — present ONLY when the acting
+   * user holds `auth.pin_unlock`, so the row is absent for a non-owner rather than shown-and-denied.
+   * Optional, so a host that never grants the permission simply omits the action.
+   */
+  readonly onOpenUnlockPin?: (() => void) | undefined;
   readonly syncChip: SyncChipState;
   readonly onOpenSync: () => void;
 }
@@ -58,6 +64,7 @@ export function SettingsScreen({
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
+  onOpenUnlockPin,
   syncChip,
   onOpenSync,
 }: SettingsScreenProps): React.JSX.Element {
@@ -119,6 +126,17 @@ export function SettingsScreen({
         showChevron
         testID="settings-change-pin"
       />
+      {onOpenUnlockPin !== undefined ? (
+        // Owner-only (task 186b): shown only when the acting user holds `auth.pin_unlock`. A non-owner
+        // never sees the row; core still enforces the permission, so the entry is a UX gate, not the
+        // control. Same Security section as Change PIN.
+        <ListRow
+          primaryText={t('auth.pin.unlock.title')}
+          onPress={onOpenUnlockPin}
+          showChevron
+          testID="settings-unlock-pin"
+        />
+      ) : null}
 
       <Text style={styles.section} testID="settings-section-notifications">
         {t('core.settings.notifications')}

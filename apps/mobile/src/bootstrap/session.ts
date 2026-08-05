@@ -48,8 +48,11 @@
  * NODE-SAFE: core + types only. Ports arrive injected.
  */
 import {
+  AUTH_PERMISSION,
   changePin as changePinFlow,
+  clearPinLockoutFlow as clearLockoutFlow,
   createLockedOutEmitter,
+  derivePinAuthState,
   DomainError,
   listSwitcherUsers,
   PinVerifierQueue,
@@ -69,6 +72,7 @@ import {
 import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
 
+import type { PinTargetUser } from '../screens/pin/pin-target.js';
 import type { SwitcherUser } from '../screens/switcher/model.js';
 import { ShellSession, type LockReason } from '../session/shell-session.js';
 import type { UserWorkspace } from '../state/user-workspaces.js';
@@ -106,6 +110,13 @@ export interface AppSessionSnapshot {
   readonly lockReason: LockReason | null;
   /** The ACTIVE user's retained work (SEC-AUTH-08), or null at the switcher/lock. */
   readonly workspace: UserWorkspace | null;
+  /**
+   * Does the ACTIVE user hold `auth.pin_unlock` (02-permissions §5.4.6)? Gates the Settings "Unlock a
+   * PIN" entry (task 186b). Recomputed from the enforcement point each snapshot, so a user switch (which
+   * emits) re-derives it — never a stale literal. False when nobody is signed in. This is a UX gate;
+   * core's `clearPinLockoutFlow` still enforces the permission, so a wrongly-shown entry fails closed.
+   */
+  readonly canUnlock: boolean;
 }
 
 export interface AppSessionController {
@@ -125,6 +136,24 @@ export interface AppSessionController {
    * `PIN_RATE_LIMITED`) so the screen maps it; resolves on success.
    */
   changePin(currentPin: string, newPin: string): Promise<void>;
+  /**
+   * Clear another user's PIN lockout (api/02-auth §6.5.1; 02-permissions §5.4.6) — the owner "Unlock a
+   * PIN" action (task 186b). Runs core's `clearPinLockoutFlow` as the SIGNED-IN owner over the target:
+   * it checks `auth.pin_unlock`, requires the target actually locked (`INVALID_TRANSITION` otherwise),
+   * resets the attempt counter, and emits `auth.pin_lockout_cleared`. No verifier is computed — the
+   * owner never learns the PIN — so nothing is queued and no POST drains (contrast `changePin`). REJECTS
+   * with the flow's DomainError so `ClearLockoutScreen` maps it (`INVALID_TRANSITION → notLocked`);
+   * resolves on success.
+   */
+  clearLockout(targetUserId: string): Promise<void>;
+  /**
+   * The device directory as owner-actionable targets (`PinTargetUser[]`) — each user plus a
+   * caller-derived `lockedOut` flag from task 14's `derivePinAuthState` over their `pin_attempt_state`
+   * row ON THIS DEVICE. The owner unlock screen picks from this; the flag is derived HERE (once) so the
+   * screen never re-runs the lockout machine (a second copy could disagree with the one that gates
+   * entry). Reads fresh, so it reflects a lockout that landed after the last `refresh`.
+   */
+  listPinTargets(): Promise<readonly PinTargetUser[]>;
   /**
    * POST every queued PIN verifier to the server (api/02-auth §5.4; task 186a-2). Called on next
    * online contact (Root wires it to the sync client's `onBundleRefreshed`, which fires only online):
@@ -221,6 +250,22 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     rows.set(userId, await readPinAttempt(db, userId, device.deviceId));
   };
 
+  /**
+   * Does the ACTIVE user hold `auth.pin_unlock`? Built from the SAME enforcement point every command
+   * goes through (`commands.enforcementPoint`) over the same identity shape `readSessionIdentity` uses
+   * (`{ ...device, userId }`, notes.ts) — so the Settings gate reads the exact grants that will decide
+   * the flow, not a second copy that could drift. Synchronous (the evaluator is memoized), false with
+   * no session. This only shows/hides the entry; core re-checks on `clearLockout`, so it fails closed.
+   */
+  const canActingUserUnlock = (): boolean => {
+    const active = manager.current;
+    if (active === null) return false;
+    return commands.enforcementPoint.hasPermission(
+      { ...device, userId: active.userId },
+      AUTH_PERMISSION.pinUnlock,
+    );
+  };
+
   return {
     snapshot: () => {
       const shellState = shell.snapshot();
@@ -231,6 +276,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         locked: shellState.locked,
         lockReason: shellState.lockReason,
         workspace: shellState.workspace,
+        canUnlock: canActingUserUnlock(),
       };
     },
 
@@ -364,6 +410,52 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         await loadRow(session.userId).catch(() => undefined);
         emit();
       }
+    },
+
+    async clearLockout(targetUserId): Promise<void> {
+      const session = manager.current;
+      if (session === null) {
+        // Unlock is a shell route (session-gated), so this is a defensive guard, not a user path: a
+        // clear needs an acting owner (`actorUserId = userId`), and core denies one lacking pin_unlock.
+        throw new Error('clearLockout requires an open session (SessionManager.current is null)');
+      }
+      try {
+        await clearLockoutFlow(
+          {
+            runtime: commands,
+            db,
+            crypto: deps.crypto,
+            clock: deps.clock,
+            idSource: deps.idSource,
+            deviceId: device.deviceId,
+            queue: verifierQueue,
+            emitter: lockedOut,
+          },
+          { actorUserId: session.userId, targetUserId },
+        );
+      } finally {
+        // The clear reset the TARGET's attempt counter (§6.5); refresh that user's cached row so the
+        // login pad reflects it if the owner backs out to the switcher. `.catch`-swallowed so a read
+        // failing AFTER a successful clear cannot surface the success as an error; `finally` never
+        // swallows the flow's own DomainError — it propagates to `ClearLockoutScreen`'s mapper.
+        await loadRow(targetUserId).catch(() => undefined);
+        emit();
+      }
+    },
+
+    async listPinTargets(): Promise<readonly PinTargetUser[]> {
+      const directory = await listSwitcherUsers(db);
+      return Promise.all(
+        directory.map(async (user) => ({
+          id: user.id,
+          name: user.name,
+          // Caller-derived lockout (pin-target.ts's contract): the ONE lockout machine (task 14), read
+          // fresh here and never re-derived in the screen. Locked iff this device's attempt row for this
+          // user is at the hard-lock threshold.
+          lockedOut:
+            derivePinAuthState(await readPinAttempt(db, user.id, device.deviceId)) === 'locked_out',
+        })),
+      );
     },
 
     async drainVerifiers(port): Promise<void> {
