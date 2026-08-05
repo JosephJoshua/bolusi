@@ -268,4 +268,13 @@ describe('the chip and title are witnessed together on the pending-media screen 
     // …and the whole block is absent when the last manual sync did not fail.
     expect(renderSync().query('sync-manual-error')).toBeNull();
   });
+
+  test('the two pending counters each sit in a flex cell so they share the row (task 129 item 7)', () => {
+    // There is no pixel lane in this harness; this guards the STRUCTURE that prevents the 360 dp
+    // overflow — each counter is wrapped in a `flex: 1` cell, so the two split the row instead of sizing
+    // to content and pushing the right card off-screen. Dropping `flex: 1` from `counterCell` reds this.
+    const screen = renderSync({ pendingOperationCount: 3, pendingMediaCount: 2 });
+    expect(screen.styleOf('sync-counter-ops-cell').flex).toBe(1);
+    expect(screen.styleOf('sync-counter-media-cell').flex).toBe(1);
+  });
 });

@@ -185,18 +185,28 @@ export function SyncStatusScreen({
 
       {/* 3 — RECEIPTS. Neutral by construction: Chips, `textMuted`, no danger tone anywhere. */}
       <View style={styles.counters} testID="sync-counters">
-        <Card testID="sync-counter-ops">
-          <Text style={styles.count}>{String(input.pendingOperationCount)}</Text>
-          <Text style={styles.meta}>
-            {t('sync.status.pending', { count: input.pendingOperationCount })}
-          </Text>
-        </Card>
-        <Card testID="sync-counter-media">
-          <Text style={styles.count}>{String(input.pendingMediaCount)}</Text>
-          <Text style={styles.meta}>
-            {t('sync.status.pendingMedia', { count: input.pendingMediaCount })}
-          </Text>
-        </Card>
+        {/* Each card sits in a `flex: 1` cell so the two SHARE the row width (task 129 item 7). `Card`
+            carries no width of its own (design-system §3.4 forbids the ad-hoc style prop that would let
+            it flex directly), so without the cell the two cards size to their content and a wide
+            Indonesian label — the +30% expansion §0 requires us to survive — pushed the right card past
+            the 360 dp viewport and scrolled the screen horizontally. The cell constrains each to half the
+            row; the label wraps inside the card instead. */}
+        <View style={styles.counterCell} testID="sync-counter-ops-cell">
+          <Card testID="sync-counter-ops">
+            <Text style={styles.count}>{String(input.pendingOperationCount)}</Text>
+            <Text style={styles.meta}>
+              {t('sync.status.pending', { count: input.pendingOperationCount })}
+            </Text>
+          </Card>
+        </View>
+        <View style={styles.counterCell} testID="sync-counter-media-cell">
+          <Card testID="sync-counter-media">
+            <Text style={styles.count}>{String(input.pendingMediaCount)}</Text>
+            <Text style={styles.meta}>
+              {t('sync.status.pendingMedia', { count: input.pendingMediaCount })}
+            </Text>
+          </Card>
+        </View>
       </View>
 
       {sync.kind === 'disabled' ? (
@@ -348,6 +358,9 @@ const styles = StyleSheet.create({
   answerText: { ...type.heading, color: color.text, flex: 1 },
   meta: { ...type.caption, color: color.textMuted },
   counters: { flexDirection: 'row', gap: space.md, marginVertical: space.lg },
+  // Half the row each (task 129 item 7). A column wrapper's default `alignItems: 'stretch'` fills the
+  // enclosed card to the cell width, so the two counters are equal-width and neither overflows 360 dp.
+  counterCell: { flex: 1 },
   // design-system §2: tabular figures so a ticking count does not jitter as it ticks.
   //
   // The cast is a `@bolusi/ui` nit, not a token bypass: `numeric` is
