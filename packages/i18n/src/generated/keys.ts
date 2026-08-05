@@ -108,7 +108,10 @@ export type TranslationKey =
   | 'core.rejection.SCHEMA_INVALID'
   | 'core.rejection.SCOPE_VIOLATION'
   | 'core.rejection.UNKNOWN_TYPE'
+  | 'core.settings.device'
   | 'core.settings.language'
+  | 'core.settings.notifications'
+  | 'core.settings.title'
   | 'core.status.empty'
   | 'core.status.loading'
   | 'core.status.saved'
@@ -202,6 +205,9 @@ export interface TranslationResources {
       durationMinutes: string;
     };
     settings: {
+      title: string;
+      notifications: string;
+      device: string;
       language: string;
     };
     language: {

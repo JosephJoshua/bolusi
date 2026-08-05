@@ -44,10 +44,13 @@ Note: v0 has no hard delete anywhere (05-operation-log §1 — corrections are n
 | `core.time.durationSeconds` | {count} detik | {count, plural, one {# second} other {# seconds}} |
 | `core.time.durationMinutes` | {count} menit | {count, plural, one {# minute} other {# minutes}} |
 
-## core — language (`core.settings.*`, `core.language.*`)
+## core — settings & language (`core.settings.*`, `core.language.*`)
 
 | Key | id-ID | en |
 | --- | ----- | -- |
+| `core.settings.title` | Pengaturan | Settings |
+| `core.settings.notifications` | Notifikasi | Notifications |
+| `core.settings.device` | Perangkat Ini | This Device |
 | `core.settings.language` | Bahasa | Language |
 | `core.language.id` | Bahasa Indonesia | Bahasa Indonesia |
 | `core.language.en` | English | English |

@@ -28,6 +28,9 @@
     "durationMinutes": "{count, plural, one {# minute} other {# minutes}}"
   },
   "settings": {
+    "title": "Settings",
+    "notifications": "Notifications",
+    "device": "This Device",
     "language": "Language"
   },
   "language": {

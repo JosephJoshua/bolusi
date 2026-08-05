@@ -46,6 +46,9 @@ export const resources: SeededResources = {
           durationMinutes: '{count} menit',
         },
         settings: {
+          title: 'Pengaturan',
+          notifications: 'Notifikasi',
+          device: 'Perangkat Ini',
           language: 'Bahasa',
         },
         language: {
@@ -327,6 +330,9 @@ export const resources: SeededResources = {
           durationMinutes: '{count, plural, one {# minute} other {# minutes}}',
         },
         settings: {
+          title: 'Settings',
+          notifications: 'Notifications',
+          device: 'This Device',
           language: 'Language',
         },
         language: {

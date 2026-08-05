@@ -28,6 +28,9 @@
     "durationMinutes": "{count} menit"
   },
   "settings": {
+    "title": "Pengaturan",
+    "notifications": "Notifikasi",
+    "device": "Perangkat Ini",
     "language": "Bahasa"
   },
   "language": {

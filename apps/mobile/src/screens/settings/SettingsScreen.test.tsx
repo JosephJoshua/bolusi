@@ -17,6 +17,7 @@
 // The values asserted are runtime DATA (a device id, an owner-typed name, server-supplied store /
 // tenant names), NOT translatable copy — so reading them back is the never-blank check itself, not
 // the label-echo assertion testing-guide T-4 forbids.
+import { t } from '@bolusi/i18n';
 import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
 import { describe, expect, test, vi } from 'vitest';
 
@@ -88,6 +89,47 @@ describe('POSITIVE CONTROL: blank in ⇒ blank out (T-14b)', () => {
     expect(lineText(screen, 'settings-device-id.secondary')).toBe('');
     expect(lineText(screen, 'settings-device-store.primary')).toBe('');
     expect(lineText(screen, 'settings-device-store.secondary')).toBe('');
+  });
+});
+
+describe('the screen title and section headers are distinct, correct labels (§129 item 1)', () => {
+  // These compare each label against the WRONG key it used to reuse (not a hardcoded copy string) —
+  // the fix moved each OFF a collision, and reverting any one site re-equals its old key → red.
+  test('the screen title names the whole screen, not the language section it used to duplicate', () => {
+    const screen = renderSettings(ENROLLED);
+    const title = lineText(screen, 'settings-screen.title');
+    expect(title).not.toBe('');
+    // Bug: the AppShell title reused `core.settings.language`, duplicating the language section header.
+    expect(title).not.toBe(t('core.settings.language'));
+    expect(title).not.toBe(lineText(screen, 'settings-section-language'));
+  });
+
+  test('the notifications section header is not the device notification ROW it heads', () => {
+    const screen = renderSettings(ENROLLED);
+    const notifHeader = lineText(screen, 'settings-section-notifications');
+    expect(notifHeader).not.toBe('');
+    // Bug: the header reused `push.device.title` — the SAME string as the `device` category row below it.
+    expect(notifHeader).not.toBe(lineText(screen, 'settings-notifications-device.primary'));
+    expect(notifHeader).not.toBe(t('push.device.title'));
+  });
+
+  test('the device-info block is headed by a heading, not the enrollment CTA', () => {
+    const screen = renderSettings(ENROLLED);
+    const deviceHeader = lineText(screen, 'settings-section-device');
+    expect(deviceHeader).not.toBe('');
+    // Bug: the header reused `auth.enroll.title` ("Daftarkan Perangkat Ini") — an imperative CTA over
+    // read-only info rows. Revert the site and this reds.
+    expect(deviceHeader).not.toBe(t('auth.enroll.title'));
+  });
+
+  test('the three section headers are mutually distinct (no two sections share a label)', () => {
+    const screen = renderSettings(ENROLLED);
+    const headers = [
+      lineText(screen, 'settings-section-language'),
+      lineText(screen, 'settings-section-notifications'),
+      lineText(screen, 'settings-section-device'),
+    ];
+    expect(new Set(headers).size).toBe(3);
   });
 });
 

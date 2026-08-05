@@ -60,7 +60,9 @@ export function SettingsScreen({
 }: SettingsScreenProps): React.JSX.Element {
   return (
     <AppShell
-      title={t('core.settings.language')}
+      // The SCREEN title names the whole screen (language + notifications + device), not just the
+      // first section — `core.settings.language` was the language section's own header (§129 item 1).
+      title={t('core.settings.title')}
       titleVariant="detail"
       onBack={onBack}
       backLabel={t('core.action.back')}
@@ -81,7 +83,9 @@ export function SettingsScreen({
       }
       testID="settings-screen"
     >
-      <Text style={styles.section}>{t('core.settings.language')}</Text>
+      <Text style={styles.section} testID="settings-section-language">
+        {t('core.settings.language')}
+      </Text>
       {localeOptions.map((option) => (
         <ListRow
           key={option}
@@ -103,7 +107,9 @@ export function SettingsScreen({
         />
       ))}
 
-      <Text style={styles.section}>{t('push.device.title')}</Text>
+      <Text style={styles.section} testID="settings-section-notifications">
+        {t('core.settings.notifications')}
+      </Text>
       {MUTABLE_PUSH_CATEGORIES.map((category) => (
         // A row that OPENS the OS notification settings, not a mute switch (api/04-push §5; D18 §1):
         // Android forbids the app changing a channel's importance after creation and iOS has no
@@ -118,7 +124,9 @@ export function SettingsScreen({
         />
       ))}
 
-      <Text style={styles.section}>{t('auth.enroll.title')}</Text>
+      <Text style={styles.section} testID="settings-section-device">
+        {t('core.settings.device')}
+      </Text>
       <View testID="settings-device-info">
         <ListRow
           primaryText={device.deviceName}
