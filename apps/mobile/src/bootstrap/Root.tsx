@@ -79,7 +79,7 @@ import type { AppStatePort } from './triggers.js';
 import { createIdleTicker } from '../session/idle-ticker.js';
 import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { MediaClient } from '../media/client.js';
-import type { CommandIdentity, TimerPort } from '@bolusi/core';
+import type { CommandIdentity, PinVerifierUploadPort, TimerPort } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 /**
@@ -218,6 +218,13 @@ export interface RootProps {
    */
   readonly pushRouter?: PushRouterPort | undefined;
   /**
+   * The `POST /v1/users/:userId/pin-verifier` transport (api/02-auth §5.4; task 186a-2), injected for
+   * the same reason as `createSync`/`postToken`: it binds the fetch wire + the SecureStore device
+   * bearer, neither Node-safe. Drained on `onBundleRefreshed` (online-only) so a locally-applied PIN
+   * change reaches the server. Absent in tests that do not exercise the drain.
+   */
+  readonly uploadPinVerifier?: PinVerifierUploadPort | undefined;
+  /**
    * The in-app camera's native seams (06 §2.1; task 130) — `expo-camera`'s permission call, its
    * `CameraView`, and the still renderer. Injected for exactly the reason `createMedia` is: none of
    * them load under Node, and injecting them is what lets the composed test lane press a real
@@ -242,6 +249,7 @@ export function Root({
   timer,
   createPushRegistration,
   pushRouter,
+  uploadPinVerifier,
   capturePlatform,
 }: RootProps): React.JSX.Element | null {
   const [locale, setLocale] = useState<Locale | null>(null);
@@ -353,6 +361,12 @@ export function Root({
                 // refresh that landed a tighter timeout in the database while the session kept the
                 // old one is a setting that "took effect" nowhere the user could see.
                 await sessionRef.current?.refreshSettings();
+                // A bundle refresh means the device is online (§5.2), so this is the moment to POST any
+                // PIN verifier queued by a local change (§5.4; task 186a-2). `drainVerifiers` never
+                // throws — an unreachable server re-queues, it does not block the refresh.
+                if (uploadPinVerifier !== undefined) {
+                  await sessionRef.current?.drainVerifiers(uploadPinVerifier);
+                }
               },
         ) ?? null;
       if (client === null || disposed) {

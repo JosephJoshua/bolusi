@@ -469,6 +469,12 @@ export interface MountOptions {
    */
   readonly createSync?: RootProps['createSync'];
   /**
+   * The pin-verifier POST transport (api/02-auth §5.4; task 186a-2). Omitted by default — the drain test
+   * passes a fake that records `upload` calls and captures `onBundleRefreshed` (via `createSync`) to fire
+   * it, so the "a change POSTs on next online contact" wiring is observed rather than assumed.
+   */
+  readonly uploadPinVerifier?: RootProps['uploadPinVerifier'];
+  /**
    * The media-client factory (06; task 130). Omitted by default — every pre-130 test mounted with NO
    * `createMedia`, which is precisely why `MediaClient.requestManual()` had zero production callers
    * and nothing noticed: the composed lane never had a media client for `Root` to fail to call.
@@ -523,6 +529,9 @@ export async function mountRoot(
       // before — no loop, no triggers, no timers left running past the test. Spread rather than
       // passed as `undefined`: `exactOptionalPropertyTypes` distinguishes the two.
       {...(options.createSync === undefined ? {} : { createSync: options.createSync })}
+      {...(options.uploadPinVerifier === undefined
+        ? {}
+        : { uploadPinVerifier: options.uploadPinVerifier })}
       // The idle-lock platform inputs (task 133). Both are REQUIRED props on `Root`, so this fixture
       // cannot silently stop supplying them; the defaults above make every other test's behaviour
       // identical to before (a timer that never fires drives no tick).

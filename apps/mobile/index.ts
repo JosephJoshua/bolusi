@@ -20,6 +20,7 @@ import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
+import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
@@ -406,6 +407,14 @@ function Bootstrapped(): React.JSX.Element | null {
     // notification deep-links into the reachable shell route.
     createPushRegistration,
     pushRouter: expoPushRouter,
+    // THE PIN-VERIFIER POST TRANSPORT (api/02-auth §5.4; task 186a-2). Bound here for the same reason
+    // `postToken` is: the fetch wire + the SecureStore device bearer, neither Node-safe. `Root` drains
+    // it on `onBundleRefreshed` (online-only), so a locally-applied PIN change reaches the server and
+    // every other device (§5.2). A fresh keystore per call reads the bearer at call time (§7.3).
+    uploadPinVerifier: createFetchPinVerifierUpload({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+    }),
     // THE IDLE LOCK'S PLATFORM INPUTS (api/02-auth §6.4; task 133). `appStatePort` is the same native
     // `AppState` binding the sync triggers take (§2.8) and is bound here for the same reason NetInfo
     // is; `systemTimer` is the app's one `setTimeout`. Both are REQUIRED props on `Root`, so a build

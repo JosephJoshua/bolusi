@@ -137,6 +137,57 @@ describe('Change PIN reaches the screen and runs the real flow (task 186a)', () 
     expect(screen.query('change-pin-done')).not.toBeNull();
   });
 
+  test('a locally-applied change POSTs the queued verifier on the next online contact (§5.4, 186a-2)', async () => {
+    // The wiring this sub-slice adds: `changePin` queues the verifier locally; Root drains the queue
+    // on `onBundleRefreshed` (which fires only online). Capture that callback via `createSync` and fire
+    // it after a change; the fake transport records the POST. Remove the drain line from Root and the
+    // final assertion reds — the verifier would sit in the queue forever.
+    const uploads: Array<{ userId: string; verifierRef: string }> = [];
+    let onBundleRefreshed: (() => void | Promise<void>) | undefined;
+
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedDirectory(fixture);
+    const screen = await mountRoot(fixture, {
+      uploadPinVerifier: {
+        upload: (userId, verifierRef) => {
+          uploads.push({ userId, verifierRef });
+          return Promise.resolve({ userId, applied: true });
+        },
+      },
+      // Capture Root's online-only bundle-refresh callback; return no client (the drain does not need
+      // a running loop, only the callback Root wires the drain into).
+      createSync: (_booted, refresh) => {
+        onBundleRefreshed = refresh;
+        return null;
+      },
+    });
+    fireOn(screen, `switcher-user-${fixture.userId}`);
+    await settle();
+    expect(await submitPin(screen, TEST_PIN)).toBe(true);
+
+    await openChangePin(screen);
+    enterOnPad(screen, TEST_PIN);
+    await settle();
+    enterOnPad(screen, NEW_PIN);
+    await settle();
+    enterOnPad(screen, NEW_PIN);
+    await waitUntil(
+      () =>
+        screen.query('change-pin-done') !== null || screen.query('change-pin-pad.message') !== null,
+    );
+    expect(screen.query('change-pin-done')).not.toBeNull(); // the change applied + queued a verifier
+
+    // Nothing is POSTed until the device is next online (a bundle refresh) — not on the change itself.
+    expect(uploads).toHaveLength(0);
+    expect(onBundleRefreshed).toBeDefined();
+    await onBundleRefreshed?.();
+
+    // The queued verifier was POSTed for the acting (self) user.
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]?.userId).toBe(fixture.userId);
+  });
+
   test('a WRONG current PIN is refused — the flow verifies for real, so it never reaches done', async () => {
     const screen = await unlockedShell();
     await openChangePin(screen);

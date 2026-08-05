@@ -64,6 +64,7 @@ import {
   type IdSource,
   type PinAttemptRow,
   type PinAuthState,
+  type PinVerifierUploadPort,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
@@ -124,6 +125,15 @@ export interface AppSessionController {
    * `PIN_RATE_LIMITED`) so the screen maps it; resolves on success.
    */
   changePin(currentPin: string, newPin: string): Promise<void>;
+  /**
+   * POST every queued PIN verifier to the server (api/02-auth §5.4; task 186a-2). Called on next
+   * online contact (Root wires it to the sync client's `onBundleRefreshed`, which fires only online):
+   * a change applied LOCALLY at once (`changePin`) reaches the server here, and from there every other
+   * device via bundle refresh (§5.2). Idempotent — a stale POST is a no-op (§5.3); a network fault
+   * keeps the item queued for the next contact. Never throws: the drain swallows per-item transport
+   * errors (they re-queue), so a bundle refresh is never blocked by an unreachable verifier POST.
+   */
+  drainVerifiers(port: PinVerifierUploadPort): Promise<void>;
   /**
    * ONE idle check (api/02-auth §6.4). Driven by the platform ticker (`session/idle-ticker.ts`),
    * which owns the cadence; the DECISION is 14's `checkIdle()` and is not re-derived anywhere above
@@ -354,6 +364,13 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         await loadRow(session.userId).catch(() => undefined);
         emit();
       }
+    },
+
+    async drainVerifiers(port): Promise<void> {
+      // `PinVerifierQueue.drain` is itself total — it POSTs each pending verifier, drops the ones the
+      // server answered (applied true OR false), and re-queues the ones whose POST threw. It never
+      // rejects, so a bundle refresh is never blocked by an unreachable server.
+      await verifierQueue.drain(port);
     },
   };
 }
