@@ -566,6 +566,18 @@ export function fireOn(screen: RenderResult, testID: string): void {
 }
 
 /**
+ * Create a note through whichever create affordance the current NotesList state shows. Since task 129
+ * (§3.1 max-one-primary) the list renders EXACTLY ONE create primary per state: the persistent
+ * bottom-action button (`notes.list.create`) once rows exist, or the EmptyState CTA (`ui.emptyState.cta`)
+ * on an empty list. A live-shell test that always pressed `notes.list.create` broke the moment the
+ * first note is created from an empty home — this helper presses the one that is actually on screen.
+ */
+export function fireCreateNote(screen: RenderResult): void {
+  const bottom = screen.query('notes.list.create');
+  fire(bottom ?? screen.get('ui.emptyState.cta'), 'onPress');
+}
+
+/**
  * Tap the six digits on the REAL keypad — the pad buffers them and fires `onComplete` itself.
  *
  * Then WAIT ON A CONDITION rather than on a fixed number of microtask flushes. `verifyPin` runs

@@ -73,6 +73,7 @@ import {
   closeClientDb,
   enrolledDevice,
   fakeAppState,
+  fireCreateNote,
   fireOn,
   manualTimer,
   mountRoot,
@@ -159,7 +160,7 @@ async function unlockAs(harness: Harness, userId: string): Promise<boolean> {
 
 /** Open the create editor from the notes list. */
 async function openCreateEditor(harness: Harness): Promise<void> {
-  fireOn(harness.screen, 'notes.list.create');
+  fireCreateNote(harness.screen);
   await settle();
   expect(harness.screen.query('notes.editor.title')).not.toBeNull();
 }

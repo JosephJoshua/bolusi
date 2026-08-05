@@ -73,6 +73,7 @@ import {
   bootFixture,
   closeClientDb,
   enrolledDevice,
+  fireCreateNote,
   fireOn,
   mountRoot,
   seedDirectory,
@@ -331,7 +332,7 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
     await signIn(screen);
 
     // A REAL note, typed into the REAL editor — the op that is about to be refused.
-    fireOn(screen, 'notes.list.create');
+    fireCreateNote(screen);
     await settle();
     fire(screen.get('notes.editor.title.field'), 'onChangeText', 'Ganti LCD');
     await settle();
@@ -511,7 +512,7 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
       capturePlatform: fakeCapturePlatform(),
     });
     await signIn(screen);
-    fireOn(screen, 'notes.list.create');
+    fireCreateNote(screen);
     await settle();
     fireOn(screen, 'notes.editor.attach');
     await settle();
@@ -579,7 +580,7 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
       capturePlatform: fakeCapturePlatform(),
     });
     await signIn(screen);
-    fireOn(screen, 'notes.list.create');
+    fireCreateNote(screen);
     await settle();
     fireOn(screen, 'notes.editor.attach');
     await settle();
@@ -636,7 +637,7 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
     fireOn(screen, `switcher-user-${fixture.userId}`);
     await settle();
     expect(await submitPin(screen, TEST_PIN)).toBe(true);
-    fireOn(screen, 'notes.list.create');
+    fireCreateNote(screen);
     await settle();
     fireOn(screen, 'notes.editor.attach');
     await settle();

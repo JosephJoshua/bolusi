@@ -52,6 +52,7 @@ import {
   bootFixture,
   closeClientDb,
   enrolledDevice,
+  fireCreateNote,
   fireOn,
   mountRoot,
   seedDirectory,
@@ -111,7 +112,7 @@ async function unlockedShell(): Promise<RenderResult> {
 /** Land on the notes list, then open the create editor. */
 async function openEditor(): Promise<RenderResult> {
   const screen = await unlockedShell();
-  fireOn(screen, 'notes.list.create');
+  fireCreateNote(screen);
   await settle();
   // The editor is mounted and the list is gone — the denominator for every assertion below.
   expect(screen.query('notes.editor.title')).not.toBeNull();

@@ -80,6 +80,7 @@ import {
   closeClientDb,
   enrolledDevice,
   fakeAppState,
+  fireCreateNote,
   fireOn,
   mountRoot,
   seedDirectory,
@@ -206,7 +207,7 @@ async function createNoteThroughTheUI(
   title: string,
 ): Promise<void> {
   const before = await localOpCount(fixture);
-  fireOn(screen, 'notes.list.create');
+  fireCreateNote(screen);
   await settle();
   fire(screen.get('notes.editor.title.field'), 'onChangeText', title);
   fire(screen.get('notes.editor.save'), 'onPress');
