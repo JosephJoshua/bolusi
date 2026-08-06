@@ -15,7 +15,10 @@ import { Icon } from './Icon.js';
 export interface EmptyStateProps {
   /** Already-localized. */
   readonly title: string;
-  /** Already-localized, ≤ 2 lines (§3.8). */
+  /** Already-localized, ≤ 3 lines (§3.8). Widened 2→3 (task 129 item 13) for the same reason `Banner`
+   *  was (task 23): a compliant Indonesian empty-state hint overflows two `bodySm` lines at the 1.3×
+   *  font scale §6.5 requires — and a truncated "what to do next" is exactly what §5 forbids an empty
+   *  state to hide. */
   readonly hint?: string | undefined;
   /**
    * Already-localized CTA label. The CTA renders IFF `onCreate` is supplied — and supplying it is
@@ -49,7 +52,7 @@ export function EmptyState({
         {title}
       </Text>
       {hint === undefined ? null : (
-        <Text testID={`${testID}.hint`} numberOfLines={2} style={styles.hint}>
+        <Text testID={`${testID}.hint`} numberOfLines={3} style={styles.hint}>
           {hint}
         </Text>
       )}

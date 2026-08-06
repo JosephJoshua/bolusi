@@ -255,6 +255,18 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
     expect(withCta.query('ui.emptyState.cta')).not.toBeNull();
   });
 
+  test('the EmptyState hint holds 3 lines — a compliant Indonesian string survives 1.3× (task 129 item 13)', () => {
+    // §6.5: the hint must not truncate the "what to do next" sentence at the required font scale, the
+    // FR-1036 trap (§5). Widened 2→3, matching Banner (§3.6, task 23). Revert to 2 and this reds.
+    const r = render(
+      <EmptyState
+        title="Belum ada catatan"
+        hint="Ketuk tombol di bawah untuk membuat catatan pertama."
+      />,
+    );
+    expect(r.get('ui.emptyState.hint').props['numberOfLines']).toBe(3);
+  });
+
   test('ErrorState exposes retry and an error-code caption (§5: never a dead end)', () => {
     const onRetry = vi.fn();
     const r = render(

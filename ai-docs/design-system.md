@@ -233,7 +233,9 @@ Toasts never contain buttons other than an optional single "view" action; they a
 
 ### 3.8 EmptyState
 
-Centered in the content area: icon (48, `textMuted`) + title (`type.heading`, 1 line) + hint (`type.bodySm` `textMuted`, ≤ 2 lines) + optional primary Button when the user holds the create permission. Empty ≠ error ≠ unauthorized — three distinct components, never substituted (§5, FR-1036).
+Centered in the content area: icon (48, `textMuted`) + title (`type.heading`, 1 line) + hint (`type.bodySm` `textMuted`, ≤ 3 lines) + optional primary Button when the user holds the create permission. Empty ≠ error ≠ unauthorized — three distinct components, never substituted (§5, FR-1036).
+
+> **Changed 2026-08-05 (task 129 item 13): 2 lines → 3.** The same wall `Banner` hit (§3.6, task 23), now on this surface: a compliant Indonesian empty-state hint — one that satisfies §5's "say what happened AND what to do" and 07-i18n §7.2 — already fills two `bodySm` lines on a 360 dp screen and **overflows them at the 1.3× font scale §6.5 requires us to survive**. Two lines would truncate the "what to do next" sentence, which is exactly what §5 forbids an empty state to hide (a truncated instruction reads as "nothing here", the FR-1036 trap). Sized against the ID catalog, never English (ID runs longer here). Matches `Banner`'s 3-line cap, so the two ambient text surfaces share one line budget.
 
 ### 3.9 LoadingState — skeleton vs spinner policy
 
