@@ -364,9 +364,19 @@ export default function App(props: AppProps): React.JSX.Element {
    * — a tap while locked sets the route but `resolveZone` keeps the lock until a PIN unlock, then lands
    * on the requested surface. `null`/`undefined` (every non-tap render) is a no-op.
    */
+  // Leg B (task 159): a tap that lands mid-switch must not fold into the switcher's `origin` — the same
+  // drift `openSyncStatus` guards (task 145). Read `switching` through a ref so the effect stays keyed on
+  // the TAP alone: adding `switching` to its deps would re-run on a later switcher open/close and re-fire
+  // this stale `pushRoute` (a phantom navigation). The draft the tap would leave behind is already safe —
+  // task 155 writes it through to retention on every keystroke, so this navigates without destroying it
+  // (D23 §1: preserve-then-navigate; the "preserve" half is done by construction, no ConfirmSheet).
+  const switchingRef = useRef(switching);
+  switchingRef.current = switching;
   const pushRoute = props.pushRoute;
   useEffect(() => {
-    if (pushRoute !== undefined && pushRoute !== null) setRoute(pushRoute.route);
+    if (pushRoute !== undefined && pushRoute !== null && !switchingRef.current) {
+      setRoute(pushRoute.route);
+    }
   }, [pushRoute]);
 
   /**

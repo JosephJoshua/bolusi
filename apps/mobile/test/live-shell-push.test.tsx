@@ -88,6 +88,7 @@ import {
   bootFixture,
   closeClientDb,
   enrolledDevice,
+  fireCreateNote,
   fireOn,
   mountRoot,
   seedDirectory,
@@ -97,7 +98,8 @@ import {
   waitUntil,
   type Fixture,
 } from './live-shell-support.js';
-import type { RenderResult } from '../../../packages/ui/test/render.js';
+import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.js';
+import { fire, type RenderResult } from '../../../packages/ui/test/render.js';
 
 /** A `postToken` call the fake registration seam saw — the wire the server (task 134) would receive. */
 interface RecordedPost {
@@ -248,6 +250,7 @@ let fixture: Fixture | null = null;
 
 beforeEach(async () => {
   await closeClientDb();
+  __resetHardwareBack();
   tempDir = mkdtempSync(join(tmpdir(), 'bolusi-live-shell-push-'));
   secureStore = new Map<string, string>();
   vi.clearAllMocks();
@@ -266,7 +269,80 @@ afterEach(async () => {
   await fixture?.close();
   fixture = null;
   await closeClientDb();
+  __resetHardwareBack();
   rmSync(tempDir, { recursive: true, force: true });
+});
+
+/** Fire the REAL Android `BackHandler`; returns whether a listener consumed it (RN's own semantics). */
+async function pressHardwareBack(): Promise<boolean> {
+  let consumed = false;
+  await act(async () => {
+    consumed = __emitHardwareBack();
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+  });
+  return consumed;
+}
+
+/** Drive one warm tap and let its route application settle. */
+async function tapConflict(router: { emit(data: unknown): void }): Promise<void> {
+  await act(async () => {
+    router.emit({ category: 'conflict', route: 'conflicts', params: { conflictId: CONFLICT_ID } });
+    for (let i = 0; i < 12; i += 1) await Promise.resolve();
+  });
+}
+
+describe('a push tap preserves the draft and does not drift the switcher origin (task 159, D23 §1)', () => {
+  test('Leg A — a tap while a DIRTY editor is open navigates immediately, with NO discard ConfirmSheet', async () => {
+    // The draft-loss class task 145 closed, via the one producer it did not cover. D23 §1 ruled
+    // preserve-THEN-navigate: the tap must always route (a notification that "does nothing" is broken),
+    // and the draft must not be lost — task 155 writes it through to retention on every keystroke, so
+    // it is already safe when the tap arrives and there is NOTHING to prompt about (no ConfirmSheet).
+    fixture = await bootFixture();
+    const router = fakePushRouter();
+    const screen = await liveShellWithSession(fixture, { pushRouter: router.port });
+
+    fireCreateNote(screen);
+    await settle();
+    expect(screen.query('notes.editor.title')).not.toBeNull(); // denominator: the editor is open
+    fire(screen.get('notes.editor.body.field'), 'onChangeText', 'setengah tertulis');
+    await settle();
+    expect(screen.query('notes.editor.discard')).toBeNull(); // dirty, but no prompt yet
+
+    await tapConflict(router);
+
+    // Navigated at once (the tap is never gated), and the editor left WITHOUT raising the discard sheet
+    // — the D23 answer is retention, not a prompt. If the push path were routed through `leaveHome`
+    // (145's gate) a `notes.editor.discard` sheet would appear here instead of the sync-status screen.
+    expect(screen.query('sync-status-screen')).not.toBeNull();
+    expect(screen.query('notes.editor.discard')).toBeNull();
+    expect(screen.query('notes.editor.title')).toBeNull();
+  });
+
+  test('Leg B — a tap that lands WHILE the switcher is open does not drift its back-origin', async () => {
+    // The same tap that fixes Leg A must not fold into the switcher's `origin` (task 143/145). Open the
+    // switcher from home, tap a push: the guard drops it while `switching`, so `origin` stays `home` and
+    // a back returns THERE — not the pushed sync-status route. Remove the `!switchingRef` guard and the
+    // final assertion reds (back lands on sync-status).
+    fixture = await bootFixture();
+    const router = fakePushRouter();
+    const screen = await liveShellWithSession(fixture, { pushRouter: router.port });
+
+    fireOn(screen, 'ui.avatarButton'); // open the switcher (voluntary quick-switch) from home
+    await settle();
+    expect(screen.query('switcher-screen')).not.toBeNull();
+
+    await tapConflict(router);
+    // The gate still shows the switcher (a tap does not interrupt a switch in progress), and crucially
+    // the route underneath did NOT move to sync-status.
+    expect(screen.query('switcher-screen')).not.toBeNull();
+    expect(screen.query('sync-status-screen')).toBeNull();
+
+    // Abandon the switch. It returns to where the switch was opened — home — not the pushed route.
+    const consumed = await pressHardwareBack();
+    expect(consumed).toBe(true);
+    expect(screen.query('notes.list.title')).not.toBeNull();
+    expect(screen.query('sync-status-screen')).toBeNull();
+  });
 });
 
 /** Boot an enrolled device, mount the LIVE `Root` with the push seams, and sign in through the pad. */
