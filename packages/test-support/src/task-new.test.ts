@@ -2,7 +2,7 @@
 // id against origin/main ∪ the local tree and writes the file + `_index.md` row together. Same
 // fixture shape as task-status.test.ts; the REAL gate (`auditLedger`, task 66) is the oracle for
 // "the tool's output is a valid ledger", and the FALSIFY block proves the gate still reds when the
-// tool's both-locations atomicity is broken — so adding the tool did not weaken the backstop.
+// tool writes a row without its file — so adding the tool did not weaken the backstop.
 import { expect, test } from 'vitest';
 
 import { auditLedger } from './ledger.js';
@@ -50,21 +50,22 @@ test('creates the next id, writes the row + file, and the result passes auditLed
   expect(result.indexText.indexOf('| 50 |')).toBeLessThan(
     result.indexText.indexOf('**Status values:**'),
   );
-  // The generated file carries a matching **Status:** line.
+  // The generated file has NO **Status:** line — task 188 collapsed the dual store; status lives
+  // once, in the _index.md row asserted above.
   expect(result.fileText).toContain('# TASK 50 — A brand new thing');
-  expect(result.fileText).toContain('**Status:** todo');
+  expect(result.fileText).not.toContain('**Status:**');
 
-  // The tool's OUTPUT is a valid ledger by the actual gate — row and file agree, no orphan.
+  // The tool's OUTPUT is a valid ledger by the actual gate — every row resolves to a file, no orphan.
+  // Task-file bodies are arbitrary now: the gate reads only filenames (task 188).
   const audit = auditLedger({
     indexText: result.indexText,
     taskFiles: {
-      'ai-docs/tasks/01-scaffold.md': '**Status:** done\n',
-      'ai-docs/tasks/27-device-gates.md': '**Status:** todo\n',
-      'ai-docs/tasks/49-projections.md': '**Status:** done\n',
+      'ai-docs/tasks/01-scaffold.md': 'body\n',
+      'ai-docs/tasks/27-device-gates.md': 'body\n',
+      'ai-docs/tasks/49-projections.md': 'body\n',
       [result.filePath]: result.fileText,
     },
   });
-  expect(audit.statusMismatches).toEqual([]);
   expect(audit.orphanRows ?? []).toEqual([]);
   expect(audit.unparseable).toEqual([]);
 });
@@ -158,9 +159,9 @@ test('a row written WITHOUT its file is caught by auditLedger — the gate still
   const audit = auditLedger({
     indexText: result.indexText, // has the new row…
     taskFiles: {
-      'ai-docs/tasks/01-scaffold.md': '**Status:** done\n',
-      'ai-docs/tasks/27-device-gates.md': '**Status:** todo\n',
-      'ai-docs/tasks/49-projections.md': '**Status:** done\n',
+      'ai-docs/tasks/01-scaffold.md': 'body\n',
+      'ai-docs/tasks/27-device-gates.md': 'body\n',
+      'ai-docs/tasks/49-projections.md': 'body\n',
       // …but NO file for the new id.
     },
   });

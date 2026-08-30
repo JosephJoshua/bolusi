@@ -20,8 +20,22 @@
 // `**Invariants owned by THIS task:** I-13`. No second gate is built — only a second scheme.
 import { spawnSync } from 'node:child_process';
 
+import { doneTaskNumbers, TASK_FILE_BASENAME } from './ledger.js';
+
 export const SEC_ID_PATTERN = /SEC-[A-Z]+-[0-9]+/g;
 const OWNER_PATH_PATTERN = /^ai-docs\/tasks\/\d{2}-[\w-]+\.md$/;
+
+/**
+ * The task NUMBER an owner path names (`ai-docs/tasks/27-device-gates.md` → 27), or null if the
+ * basename is not a `NN-slug.md` task file. Uses the ledger's canonical filename grammar so the two
+ * gates read one grammar (§2.8). The staleAllowlist check keys on this number, not on the owner
+ * file's old `**Status:**` line — task 188 removed that line; done-ness now lives once, in the row.
+ */
+function ownerTaskNumber(ownerPath: string): number | null {
+  const basename = ownerPath.slice(ownerPath.lastIndexOf('/') + 1);
+  const match = basename.match(TASK_FILE_BASENAME);
+  return match ? Number(match[1]) : null;
+}
 // First string argument of test()/it()/describe() (incl. .only/.each modifiers — .each is
 // curried, so one optional argument group may sit before the title call — and
 // template-literal titles). Runs over comment-stripped source: prose such as
@@ -257,6 +271,9 @@ export interface CoverageAuditInput {
   testTitles: string[];
   /** Every committed task file: path → text. */
   taskFiles: Record<string, string>;
+  /** Task numbers that are DONE per the index (ledger.ts `doneTaskNumbers`). The staleAllowlist
+   *  check reads this instead of the owner file's old `**Status:**` line (task 188). */
+  doneTaskNumbers: ReadonlySet<number>;
 }
 
 export interface CoverageAuditResult {
@@ -283,6 +300,8 @@ export interface CoverageAuditResult {
     ids: number;
     titles: number;
     taskFiles: number;
+    /** Task numbers seen as DONE in the index — the denominator of the staleAllowlist check. */
+    doneTaskNumbers: number;
     declaredIds: number;
     /** Ids with ≥1 verbatim title. Zero ⇒ the title walk found nothing and every rule below is vacuous. */
     idsWithTitles: number;
@@ -393,8 +412,8 @@ export function auditCoverage(
       badOwners.push(`${id} → ${owner} (no "${scheme.markerLabel}:" marker declares the id)`);
       continue;
     }
-    const status = taskText.match(/\*\*Status:\*\*\s*(\S+)/)?.[1];
-    if (status === 'done') {
+    const ownerNumber = ownerTaskNumber(owner);
+    if (ownerNumber !== null && input.doneTaskNumbers.has(ownerNumber)) {
       staleAllowlist.push(`${id} → ${owner} (task is done but the test never shipped)`);
     }
   }
@@ -421,6 +440,7 @@ export function auditCoverage(
       ids: requiredIds.length,
       titles: input.testTitles.length,
       taskFiles: Object.keys(input.taskFiles).length,
+      doneTaskNumbers: input.doneTaskNumbers.size,
       declaredIds: declaredBy.size,
       idsWithTitles: [...titlesById.values()].filter((titles) => titles.length > 0).length,
       partialLegQualifiedTitles: [...titlesById.values()]
@@ -444,6 +464,8 @@ export interface SecAuditInput {
   testTitles: string[];
   /** Every committed task file: path → text. */
   taskFiles: Record<string, string>;
+  /** Full text of ai-docs/tasks/_index.md — the single source of task done-ness (task 188). */
+  indexText: string;
 }
 
 export function auditSecCoverage(input: SecAuditInput): SecAuditResult {
@@ -453,6 +475,7 @@ export function auditSecCoverage(input: SecAuditInput): SecAuditResult {
     allowlist: input.allowlist,
     testTitles: input.testTitles,
     taskFiles: input.taskFiles,
+    doneTaskNumbers: doneTaskNumbers(input.indexText),
   });
 }
 
@@ -503,6 +526,8 @@ export interface InvariantAuditInput {
   testTitles: string[];
   /** Every committed task file: path → text. */
   taskFiles: Record<string, string>;
+  /** Full text of ai-docs/tasks/_index.md — the single source of task done-ness (task 188). */
+  indexText: string;
 }
 
 export function auditInvariantCoverage(input: InvariantAuditInput): CoverageAuditResult {
@@ -511,5 +536,6 @@ export function auditInvariantCoverage(input: InvariantAuditInput): CoverageAudi
     allowlist: input.allowlist,
     testTitles: input.testTitles,
     taskFiles: input.taskFiles,
+    doneTaskNumbers: doneTaskNumbers(input.indexText),
   });
 }

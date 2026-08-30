@@ -39,12 +39,14 @@ test('SEC-META-01 every security-guide SEC id has a verbatim test title or a pen
       readFileSync(join(REPO_ROOT, path), 'utf8'),
     ]),
   );
+  const indexText = readFileSync(join(REPO_ROOT, 'ai-docs/tasks/_index.md'), 'utf8');
 
   const result = auditSecCoverage({
     guideText,
     allowlist: loadAllowlist(),
     testTitles,
     taskFiles,
+    indexText,
   });
 
   // T-14 — the gate states its own denominator and fails loudly on zero. A sweep that
@@ -52,6 +54,9 @@ test('SEC-META-01 every security-guide SEC id has a verbatim test title or a pen
   expect(result.checked.ids, 'SEC ids parsed from security-guide.md').toBeGreaterThan(50);
   expect(result.checked.titles, 'tracked test titles parsed').toBeGreaterThan(1000);
   expect(result.checked.taskFiles, 'tracked task files parsed').toBeGreaterThan(30);
+  // task 188: the staleAllowlist denominator. Zero would mean the index parse found no done tasks,
+  // so every allowlist row is trivially non-stale — the "silently checks nothing" mode (T-14).
+  expect(result.checked.doneTaskNumbers, 'task numbers seen done in the index').toBeGreaterThan(30);
   expect(testFiles.length, 'tracked test files walked').toBeGreaterThan(100);
   // The §2.1.6 rule's OWN denominator. `idsWithTitles` at zero would mean the title walk matched
   // nothing and every id-vs-title rule is vacuously green — the "silently checks nothing" mode.
@@ -100,6 +105,7 @@ test('a SEC id mentioned only in a comment or fixture string is NOT counted as t
     allowlist: {},
     testTitles: titles,
     taskFiles: {},
+    indexText: '',
   });
   expect(result.missing).toEqual(['SEC-FAKE-01']);
 });
@@ -139,7 +145,8 @@ test('allowlist entries with missing, malformed, or silent owner task files fail
       'SEC-FAKE-07': 'ai-docs/tasks/02-schemas.md',
     },
     testTitles: [],
-    taskFiles: { 'ai-docs/tasks/02-schemas.md': '**Status:** todo\nno id declared here' },
+    taskFiles: { 'ai-docs/tasks/02-schemas.md': 'no id declared here' },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([
     'SEC-FAKE-05 → ai-docs/tasks/99-nonexistent.md (task file does not exist)',
@@ -171,6 +178,7 @@ test('REPRODUCTION: an allowlist row whose owner file only DISCLAIMS the id fail
     allowlist: { 'SEC-OPLOG-01': 'ai-docs/tasks/03-crypto-canonical.md' },
     testTitles: [],
     taskFiles: { 'ai-docs/tasks/03-crypto-canonical.md': disclaimingTask },
+    indexText: '',
   });
 
   expect(result.badOwners).toEqual([
@@ -190,6 +198,7 @@ test('INVERSE: a task declaring its ids as a RANGE owns every id in the range', 
     allowlist: { 'SEC-SYNC-02': 'ai-docs/tasks/15-sync-client.md' },
     testTitles: [],
     taskFiles: { 'ai-docs/tasks/15-sync-client.md': rangeTask },
+    indexText: '',
   });
 
   expect(result.badOwners).toEqual([]);
@@ -208,6 +217,7 @@ test('a declared range does not spill past its own bounds', () => {
     },
     testTitles: [],
     taskFiles: { 'ai-docs/tasks/15-sync-client.md': rangeTask },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([
     'SEC-SYNC-04 → ai-docs/tasks/15-sync-client.md (no "SEC ids owned by THIS task:" marker declares the id)',
@@ -228,6 +238,7 @@ test('an id titled by a test AND still on the pending allowlist is a contradicti
         '**SEC ids owned by THIS task:** SEC-MEDIA-01',
       ].join('\n'),
     },
+    indexText: '',
   });
   expect(result.titledButPending).toEqual([
     'SEC-MEDIA-01 → ai-docs/tasks/18-media-client.md (a test titles the id, but the row still says it is owed)',
@@ -249,6 +260,7 @@ test('two task files declaring the same id is an ownership conflict', () => {
         '**SEC ids owned by THIS task:** SEC-OPLOG-07',
       ].join('\n'),
     },
+    indexText: '',
   });
   expect(result.ownershipConflicts).toEqual([
     'SEC-OPLOG-07 declared by ai-docs/tasks/05-db-server.md, ai-docs/tasks/07-oplog-server.md (exactly one task must own an id)',
@@ -267,6 +279,7 @@ test('a malformed ownership marker fails loudly instead of silently declaring no
         '**SEC ids owned by THIS task:** SEC-RT-01 and some prose the grammar forbids',
       ].join('\n'),
     },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([
     'SEC-RT-01 → ai-docs/tasks/20-realtime.md (malformed "SEC ids owned by THIS task:" marker: expected a comma-separated list of SEC ids/ranges or "none", got "SEC-RT-01 and some prose the grammar forbids")',
@@ -285,6 +298,7 @@ test('the ownership marker is read only from the marker line, never from surroun
     allowlist: { 'SEC-RT-05': 'ai-docs/tasks/20-realtime.md' },
     testTitles: [],
     taskFiles: { 'ai-docs/tasks/20-realtime.md': proseOnly },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([
     'SEC-RT-05 → ai-docs/tasks/20-realtime.md (no "SEC ids owned by THIS task:" marker declares the id)',
@@ -323,6 +337,7 @@ test('REPRODUCTION: a "(server leg)" title with no allowlist row no longer retir
       'SEC-DEV-04 (server leg) revoked-device 401: every identity endpoint returns DEVICE_REVOKED for the revoked token, incl. the /me confirm-then-wipe probe',
     ],
     taskFiles: {},
+    indexText: '',
   });
 
   expect(
@@ -351,6 +366,7 @@ test('an unqualified title completes an id, even when a partial-leg title also n
       'SEC-SYNC-02: ops pushed in the revocation window come back DEVICE_REVOKED and are kept client-side as rejected',
     ],
     taskFiles: {},
+    indexText: '',
   });
   expect(result.partialLegTitles).toEqual([]);
 });
@@ -368,6 +384,7 @@ test('a partial-leg title is legitimate once an allowlist row or a marker declar
         '**SEC ids owned by THIS task:** SEC-DEV-05',
       ].join('\n'),
     },
+    indexText: '',
   });
   expect(viaRow.partialLegTitles).toEqual([]);
 
@@ -381,6 +398,7 @@ test('a partial-leg title is legitimate once an allowlist row or a marker declar
         '**SEC ids owned by THIS task:** SEC-DEV-05',
       ].join('\n'),
     },
+    indexText: '',
   });
   expect(viaMarker.partialLegTitles).toEqual([]);
 });
@@ -403,17 +421,64 @@ test('the partial-leg vocabulary does not fire on words that merely contain it',
   ).toBe(true);
 });
 
-test('an allowlist entry whose owning task is done counts as stale', () => {
+test('an allowlist entry whose owning task is done (per the index row) counts as stale', () => {
+  // Task 188 proof: done-ness is read from the _index.md ROW, not the task file. The task file
+  // carries NO `**Status:**` line at all (that store was removed) — only its ownership marker — and
+  // the stale finding still fires, driven entirely by the `done` in the index row below.
   const result = auditSecCoverage({
     guideText: 'SEC-FAKE-08',
     allowlist: { 'SEC-FAKE-08': 'ai-docs/tasks/02-schemas.md' },
     testTitles: [],
     taskFiles: {
-      'ai-docs/tasks/02-schemas.md':
-        '**Status:** done\n**SEC ids owned by THIS task:** SEC-FAKE-08',
+      'ai-docs/tasks/02-schemas.md': '**SEC ids owned by THIS task:** SEC-FAKE-08',
     },
+    indexText: [
+      '| id | title | status | depends on |',
+      '| -- | ----- | ------ | ---------- |',
+      '| 02 | schemas | done | — |',
+    ].join('\n'),
   });
   expect(result.staleAllowlist).toEqual([
     'SEC-FAKE-08 → ai-docs/tasks/02-schemas.md (task is done but the test never shipped)',
+  ]);
+});
+
+// ── §2.5 adversarial: a split task (27a/27b → one file) drives done-ness by NUMBER ─────────────
+// A SEC id owned by task 27 is stale only when task 27 as a WHOLE is done — which, for a split task,
+// means EVERY row for number 27 (27a AND 27b) is done. These two prove the boundary: one row done is
+// not enough; both rows done is. This is the exact shape that lets SEC-AUTH-10 stay legitimately owed
+// while 27a ships and 27b is still blocked — a read of a single file `**Status:**` line could never
+// see it, because there is one file for two rows.
+test('a SEC id owned by a split task is NOT stale while any of its rows is unfinished', () => {
+  const result = auditSecCoverage({
+    guideText: 'SEC-DEV-04 offline revocation',
+    allowlist: { 'SEC-DEV-04': 'ai-docs/tasks/27-device-gates.md' },
+    testTitles: [],
+    taskFiles: { 'ai-docs/tasks/27-device-gates.md': '**SEC ids owned by THIS task:** SEC-DEV-04' },
+    indexText: [
+      '| id | title | status | depends on |',
+      '| -- | ----- | ------ | ---------- |',
+      '| 27a | emulator lane | done | 24 |',
+      '| 27b | physical lane | blocked | 27a |',
+    ].join('\n'),
+  });
+  expect(result.staleAllowlist).toEqual([]);
+});
+
+test('a SEC id owned by a split task IS stale once every row for that number is done', () => {
+  const result = auditSecCoverage({
+    guideText: 'SEC-DEV-04 offline revocation',
+    allowlist: { 'SEC-DEV-04': 'ai-docs/tasks/27-device-gates.md' },
+    testTitles: [],
+    taskFiles: { 'ai-docs/tasks/27-device-gates.md': '**SEC ids owned by THIS task:** SEC-DEV-04' },
+    indexText: [
+      '| id | title | status | depends on |',
+      '| -- | ----- | ------ | ---------- |',
+      '| 27a | emulator lane | done | 24 |',
+      '| 27b | physical lane | done | 27a |',
+    ].join('\n'),
+  });
+  expect(result.staleAllowlist).toEqual([
+    'SEC-DEV-04 → ai-docs/tasks/27-device-gates.md (task is done but the test never shipped)',
   ]);
 });

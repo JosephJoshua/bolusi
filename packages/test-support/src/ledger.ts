@@ -8,32 +8,34 @@
 //
 // This module rides the same rails as sec-meta.ts — it reuses `collectTrackedTaskFiles` (the
 // git-tracked task-file walk) rather than building a second parser (CLAUDE.md §2.8) — and adds
-// five checks:
+// four checks:
 //   1. two task files share a number (the collision git cannot see);
 //   2. an index row resolves to no task file;
 //   3. a task file is referenced by no index row;
-//   4. a row's Status disagrees with the file's `**Status:**` line;
 //   5. two index rows share an id.
+// (Leg 4 — "a row's Status disagrees with the file's `**Status:**` line" — was RETIRED by task 188,
+//  which collapsed the dual Status store. The file `**Status:**` line is gone; status lives once,
+//  in the row, so there is nothing left to drift. The surviving legs keep their original numbers
+//  because "leg 5" is a stable cross-file anchor cited by scripts/task-status.mjs + task-new.mjs.)
 //
 // Check 5 exists because the first cut of this gate did not have it, and review-66 found the hole:
 // both row checks keyed on the row's NUMBER, so a phantom `| 61 | … | todo |` row sitting beside
-// the real 61 resolved to the real 61's file and was exempt from BOTH the orphan and the Status
-// check — `_index.md` could permanently list a task that does not exist, and the suite stayed
-// green. That state is reachable by the repair this defect's own task file calls natural: "resolve
-// the loud index conflict, keep both rows". Note what the bug WAS: the comment below claimed "every
-// row resolves to exactly one existing file" while the code implemented "every row's number
-// resolves to >=1 file". The comment was the guard (CLAUDE.md §2.11) — inside the gate built to
-// close a sibling of that very class. Row ids are keyed by id, not number, so `27a` != `27b` and
-// the legitimate split cannot trip it.
+// the real 61 resolved to the real 61's file and was exempt from the orphan check — `_index.md`
+// could permanently list a task that does not exist, and the suite stayed green. That state is
+// reachable by the repair this defect's own task file calls natural: "resolve the loud index
+// conflict, keep both rows". Note what the bug WAS: the comment below claimed "every row resolves
+// to exactly one existing file" while the code implemented "every row's number resolves to >=1
+// file". The comment was the guard (CLAUDE.md §2.11) — inside the gate built to close a sibling of
+// that very class. Row ids are keyed by id, not number, so `27a` != `27b` and the legitimate split
+// cannot trip it.
 //
 // The invariant is deliberately NOT `rowcount == filecount` and NOT a bijection. Task 27 is split
 // into TWO rows (`27a`, `27b`) against ONE file (`27-device-gates.md`) — a legitimate 2-rows-to-
 // 1-file shape that a naive equality would red on day one, and the "fix" for that would be to
 // loosen the gate until it stops complaining (i.e. until it checks nothing). The invariant is:
 // each row has a UNIQUE id; every row resolves to exactly one existing file (check 2 catches zero,
-// check 1 catches two); every file is referenced by >=1 row; Statuses agree. On a Status disagreement the gate REPORTS both sides and never picks a winner — a file
-// marked `done` whose row says `in-progress` means something entirely different from the merge-
-// writeback drift (file lagging behind an advanced index) and must not be auto-flattened.
+// check 1 catches two); every file is referenced by >=1 row. Status is NOT a ledger concern — it
+// lives once, in the row (task 188).
 
 /** The ledger file itself. It lives in the same directory as the task files it indexes and MUST
  *  be excluded from the task-file list — counting it as a task file (or globbing a moving target
@@ -58,18 +60,10 @@ export const TASK_FILE_BASENAME = /^(\d+)-[\w-]+\.md$/;
  *  pinned mirror (see TASK_FILE_BASENAME). */
 export const ROW_ID_PATTERN = /^(\d+)([a-z]*)$/;
 
-/** The front-matter Status line — the SAME shape sec-meta.ts reads, so drift-detection agrees with
- *  the SEC-META staleAllowlist check that already depends on this field. `\S+` grabs only the
- *  status token, so a line like `**Status:** in-review — premise moved` yields `in-review`.
- *  Exported for the writer's pinned mirror (see TASK_FILE_BASENAME). */
-export const STATUS_LINE = /\*\*Status:\*\*\s*(\S+)/;
-
 interface TaskFileEntry {
   path: string;
   basename: string;
   number: number;
-  /** null when the file has no `**Status:**` line at all (reported via `unparseable`). */
-  status: string | null;
 }
 
 interface IndexRow {
@@ -95,10 +89,8 @@ export interface LedgerAuditResult {
   orphanRows: string[];
   /** Task files referenced by no index row. */
   orphanFiles: string[];
-  /** Files whose `**Status:**` matches none of their index row(s). Reports both sides, no winner. */
-  statusMismatches: string[];
-  /** Files/rows that could not be parsed: a bad filename, a missing Status line, an illegal Status
-   *  value. A ledger gate that silently skipped these would be checking less than it claims. */
+  /** Files/rows that could not be parsed: a bad task filename, or an illegal Status value in an
+   *  index row. A ledger gate that silently skipped these would be checking less than it claims. */
   unparseable: string[];
   /** What the audit actually compared. Zero anywhere means the gate looked at nothing (T-14). */
   checked: {
@@ -155,8 +147,11 @@ export function auditLedger(input: LedgerAuditInput): LedgerAuditResult {
   const unparseable: string[] = [];
 
   // ── task files on disk ───────────────────────────────────────────────────────────────────────
+  // Only the filename matters now: task 188 removed the file `**Status:**` line, so a task file's
+  // TEXT is no longer read here. The `taskFiles` value is kept in the input shape only so callers
+  // (the ledger CLI, the meta-tests) need not change how they gather files.
   const fileEntries: TaskFileEntry[] = [];
-  for (const [path, text] of Object.entries(input.taskFiles)) {
+  for (const path of Object.keys(input.taskFiles)) {
     const basename = path.slice(path.lastIndexOf('/') + 1);
     if (basename === INDEX_BASENAME) continue; // the ledger is never one of its own rows.
     const match = basename.match(TASK_FILE_BASENAME);
@@ -164,14 +159,7 @@ export function auditLedger(input: LedgerAuditInput): LedgerAuditResult {
       unparseable.push(`${path} is neither ${INDEX_BASENAME} nor a NN-slug.md task file`);
       continue;
     }
-    const statusMatch = text.match(STATUS_LINE);
-    const status = statusMatch ? (statusMatch[1] as string) : null;
-    if (status === null) {
-      unparseable.push(`${path} has no "**Status:**" line`);
-    } else if (!KNOWN_STATUS_SET.has(status)) {
-      unparseable.push(`${path} has status "${status}", not one of ${KNOWN_STATUSES.join(', ')}`);
-    }
-    fileEntries.push({ path, basename, number: Number(match[1]), status });
+    fileEntries.push({ path, basename, number: Number(match[1]) });
   }
 
   const rows = parseIndexRows(input.indexText, unparseable);
@@ -227,28 +215,11 @@ export function auditLedger(input: LedgerAuditInput): LedgerAuditResult {
     }
   }
 
-  // 4. a Status disagreement. A file referenced by one row must equal it; a legitimately split
-  //    file (27a/27b -> 27-device-gates.md) must match at least one of its rows. Report both
-  //    sides — never pick a winner (task 66: the two drift directions mean different things).
-  const statusMismatches: string[] = [];
-  for (const entry of fileEntries) {
-    if (entry.status === null) continue; // already flagged as unparseable.
-    const referencingRows = rowsByNumber.get(entry.number);
-    if (!referencingRows || referencingRows.length === 0) continue; // orphan file, reported above.
-    if (!referencingRows.some((row) => row.status === entry.status)) {
-      const rowsDesc = referencingRows.map((row) => `${row.id}=${row.status}`).join(', ');
-      statusMismatches.push(
-        `${entry.basename}: file says "${entry.status}", ${INDEX_BASENAME} row(s) say ${rowsDesc}`,
-      );
-    }
-  }
-
   return {
     duplicateNumbers: duplicateNumbers.sort(),
     duplicateRows: duplicateRows.sort(),
     orphanRows: orphanRows.sort(),
     orphanFiles: orphanFiles.sort(),
-    statusMismatches: statusMismatches.sort(),
     unparseable: unparseable.sort(),
     checked: {
       taskFiles: fileEntries.length,
@@ -256,4 +227,21 @@ export function auditLedger(input: LedgerAuditInput): LedgerAuditResult {
       numbers: filesByNumber.size,
     },
   };
+}
+
+/**
+ * The set of task NUMBERS that are DONE in the ledger. A number is done iff at least one index row
+ * names it AND every row that names it is `done` — so a split task (`27a`/`27b` → 27) counts as done
+ * only when BOTH legs are done (task 188). Exported for sec-meta.ts's staleAllowlist check, which
+ * used to read the owning task file's `**Status:**` line; that line no longer exists, so the single
+ * source — the index row — answers "is this owner's task done?" instead.
+ */
+export function doneTaskNumbers(indexText: string): Set<number> {
+  const byNumber = new Map<number, IndexRow[]>();
+  for (const row of parseIndexRows(indexText, [])) pushInto(byNumber, row.number, row);
+  const done = new Set<number>();
+  for (const [number, group] of byNumber) {
+    if (group.length > 0 && group.every((row) => row.status === 'done')) done.add(number);
+  }
+  return done;
 }

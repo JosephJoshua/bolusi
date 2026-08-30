@@ -2,7 +2,7 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// There is a `pnpm task:status` (writes both §2.6 locations atomically) but no `task:new`. To create a
+// There is a `pnpm task:status` (writes the §2.6 index-row Status) but no `task:new`. To create a
 // task an agent read the highest id in a PER-WORKTREE `_index.md` and picked the next — a read that is
 // stale the moment two agents file concurrently, which is the NORMAL case in a fan-out phase. That cost
 // three id collisions in one session (`162`/`165`, `163`/`166`, and a `>>`-append phantom-129), each a
@@ -167,10 +167,12 @@ export function computeNewTask(input) {
   );
 
   const depsLine = deps.length > 0 ? deps.join(', ') : '—';
+  // The file carries NO `**Status:**` line — task 188 collapsed the dual store, so status lives once,
+  // in the `_index.md` row written above. The file still MUST exist (the ledger's orphan checks pair
+  // every row with a file), it just no longer restates the status the row already holds.
   const fileText = [
     `# TASK ${id} — ${title.trim()}`,
     '',
-    `**Status:** ${status}`,
     `**Depends on:** ${depsLine}`,
     '**Blocks:** —',
     '**SEC ids owned by THIS task:** none.',
@@ -273,8 +275,9 @@ function runCli(argv) {
     return 1;
   }
   const indexPath = join(dir, INDEX_BASENAME);
-  // Write the file first, then the index; restore-by-delete-less (there was no file) on an index throw
-  // so the two locations never disagree — the same both-or-neither discipline as task:status.
+  // Write the file first, then the index; roll the file back on an index throw so a task is never
+  // half-created — a row without a file (or a file without a row) is exactly what the ledger's orphan
+  // checks (legs 2/3) exist to catch, so both must land or neither.
   writeFileSync(filePath, result.fileText);
   try {
     writeFileSync(indexPath, result.indexText);

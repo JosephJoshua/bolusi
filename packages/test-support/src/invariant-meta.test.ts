@@ -87,12 +87,14 @@ test('every LIVE invariant in 01-domain-model section 10 has a verbatim test tit
       readFileSync(join(REPO_ROOT, path), 'utf8'),
     ]),
   );
+  const indexText = readFileSync(join(REPO_ROOT, 'ai-docs/tasks/_index.md'), 'utf8');
 
   const result = auditInvariantCoverage({
     domainModelText,
     allowlist: loadAllowlist(),
     testTitles,
     taskFiles,
+    indexText,
   });
 
   // ORDER IS DELIBERATE, and was fixed by falsifying it. The named-content assertions come FIRST
@@ -125,6 +127,9 @@ test('every LIVE invariant in 01-domain-model section 10 has a verbatim test tit
   expect(result.checked.idsWithTitles, 'live invariants with at least one verbatim title').toBe(12);
   expect(result.checked.titles, 'tracked test titles parsed').toBeGreaterThan(1000);
   expect(result.checked.taskFiles, 'tracked task files parsed').toBeGreaterThan(30);
+  // task 188: the staleAllowlist denominator (same floor as sec-meta.test.ts). Zero would mean the
+  // index parse found no done tasks, so every allowlist row is trivially non-stale (T-14).
+  expect(result.checked.doneTaskNumbers, 'task numbers seen done in the index').toBeGreaterThan(30);
   expect(testFiles.length, 'tracked test files walked').toBeGreaterThan(100);
 });
 
@@ -153,6 +158,7 @@ test('a doc with no numbered-invariants section parses to ZERO invariants — th
     allowlist: {},
     testTitles: [],
     taskFiles: {},
+    indexText: '',
   });
   expect(result.checked.ids).toBe(0);
 });
@@ -165,6 +171,7 @@ test('a live invariant with no test title and no allowlist entry is reported mis
     allowlist: {},
     testTitles: [],
     taskFiles: {},
+    indexText: '',
   });
   expect(result.missing).toEqual(['I-91', 'I-913']);
 });
@@ -177,6 +184,7 @@ test('a title claiming the longer id does NOT satisfy the shorter id it textuall
     allowlist: {},
     testTitles: ['I-913 the longer fixture invariant holds'],
     taskFiles: {},
+    indexText: '',
   });
   // The longer id is titled; the shorter is NOT — a naive `includes` would wrongly retire it here.
   expect(result.missing).toEqual(['I-91']);
@@ -188,6 +196,7 @@ test('a title claiming the shorter id satisfies only the shorter id', () => {
     allowlist: {},
     testTitles: ['I-91 the shorter fixture invariant holds'],
     taskFiles: {},
+    indexText: '',
   });
   expect(result.missing).toEqual(['I-913']);
 });
@@ -211,6 +220,7 @@ test('an allowlist row whose owner file only MENTIONS the invariant fails the ga
       'ai-docs/tasks/05-db-server.md': '**Status:** todo\nno marker here either',
       'ai-docs/tasks/28-security-sweep.md': mentioningTask,
     },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([
     'I-91 → ai-docs/tasks/05-db-server.md (no "Invariants owned by THIS task:" marker declares the id)',
@@ -225,6 +235,7 @@ test('a declared "Invariants owned by THIS task" marker makes the allowlist owne
     allowlist: { 'I-913': 'ai-docs/tasks/28-security-sweep.md' },
     testTitles: ['I-91 the shorter fixture invariant holds'],
     taskFiles: { 'ai-docs/tasks/28-security-sweep.md': owningTask },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([]);
   expect(result.missing).toEqual([]);
@@ -241,6 +252,7 @@ test('a malformed ownership marker fails loudly instead of silently declaring no
         '**Invariants owned by THIS task:** I-913 and some prose the grammar forbids',
       ].join('\n'),
     },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([
     'I-913 → ai-docs/tasks/28-security-sweep.md (malformed "Invariants owned by THIS task:" marker: expected a comma-separated list of invariant ids/ranges or "none", got "I-913 and some prose the grammar forbids")',
@@ -257,6 +269,7 @@ test('an invariant range declaration expands and does not spill past its bounds'
     },
     testTitles: [],
     taskFiles: { 'ai-docs/tasks/05-db-server.md': rangeTask },
+    indexText: '',
   });
   expect(result.badOwners).toEqual([]);
   expect(result.missing).toEqual([]);
@@ -274,21 +287,29 @@ test('an invariant both titled by a test AND on the pending allowlist is a contr
       'I-91 the shorter fixture invariant holds',
     ],
     taskFiles: { 'ai-docs/tasks/28-security-sweep.md': owningTask },
+    indexText: '',
   });
   expect(result.titledButPending).toEqual([
     'I-913 → ai-docs/tasks/28-security-sweep.md (a test titles the id, but the row still says it is owed)',
   ]);
 });
 
-test('an allowlist entry whose owning task is done counts as stale', () => {
+test('an allowlist entry whose owning task is done (per the index row) counts as stale', () => {
+  // Task 188 proof, mirroring sec-meta.test.ts: done-ness is read from the _index.md ROW, not the
+  // task file. The owner file carries only its ownership marker — no `**Status:**` line — and the
+  // stale finding still fires, driven by the `done` in the index row below.
   const result = auditInvariantCoverage({
     domainModelText: FIXTURE_DOMAIN_MODEL,
     allowlist: { 'I-913': 'ai-docs/tasks/28-security-sweep.md' },
     testTitles: ['I-91 the shorter fixture invariant holds'],
     taskFiles: {
-      'ai-docs/tasks/28-security-sweep.md':
-        '**Status:** done\n**Invariants owned by THIS task:** I-913',
+      'ai-docs/tasks/28-security-sweep.md': '**Invariants owned by THIS task:** I-913',
     },
+    indexText: [
+      '| id | title | status | depends on |',
+      '| -- | ----- | ------ | ---------- |',
+      '| 28 | security sweep | done | — |',
+    ].join('\n'),
   });
   expect(result.staleAllowlist).toEqual([
     'I-913 → ai-docs/tasks/28-security-sweep.md (task is done but the test never shipped)',
