@@ -1,6 +1,5 @@
 # TASK 193 — add a type-only ui→schemas boundary exception; delete the forced enum mirror
 
-**Status:** todo
 **Depends on:** —
 **Blocks:** 190
 **SEC ids owned by THIS task:** none.

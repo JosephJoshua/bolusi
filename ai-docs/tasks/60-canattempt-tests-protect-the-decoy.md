@@ -1,6 +1,5 @@
 # TASK 60 — `canAttempt` has 11 tests, zero callers, and a comment pointing at it: the PIN lockout's test coverage protects the function that isn't the gate
 
-**Status:** done
 **Priority:** **MEDIUM** — **no live defect**: the affordance ships correctly via a different path (verified below). The defect is the *coverage*: 11 green tests sit on a decoy, and the code that actually keeps the keys dark has none of them.
 
 ## Resolution (implemented — premise confirmed, option 1 taken)

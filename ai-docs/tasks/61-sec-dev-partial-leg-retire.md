@@ -1,6 +1,5 @@
 # TASK 61 — SEC-DEV-04/05's client legs are retired by a "(server leg)" title: the same class task 54 was filed for, still open
 
-**Status:** done
 **Priority:** **HIGH** — these are **live holes with a green light over them**. Unlike task 54's ids (whose server legs turned out to be shipped — see 54's Outcome), the legs below are genuinely unshipped, unowned, and invisible to SEC-META-01.
 **Depends on:** 31
 **Blocks:** 28 (its roll-up assumes every SEC id is either titled or allowlisted)

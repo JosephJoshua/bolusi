@@ -1,6 +1,5 @@
 # TASK 178 — wire the 7 emulator gate RUNNERS on device now that `@bolusi/test-support` is device-bundle-safe (177): the at-rest `AtRestDeviceEnv` (real op-sqlite seed) + the JCS/chaos on-device runners
 
-**Status:** done
 **Priority:** HIGH — the remaining half of 27a's emulator correctness lane. Task 177 removed the structural blocker (test-support now has a `/device` subpath with no `node:crypto`, so the gate BODIES bundle into the release APK and the harness imports them). What is left is the on-device SEAMS each gate runs against — none of which is host-verifiable (no AVD on the dev host).
 **Depends on:** 177 (device-bundle-safe subpath + wired harness entry), 27a
 **Blocks:** 27a going GREEN (its gates stay `skipped` until their runners exist), 28 roll-up indirectly

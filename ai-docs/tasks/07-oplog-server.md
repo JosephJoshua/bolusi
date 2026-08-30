@@ -1,6 +1,5 @@
 # TASK 07 — oplog-server: push validation pipeline, serverSeq, anomalies
 
-**Status:** done
 **Depends on:** 02, 03, 05
 
 ## Goal

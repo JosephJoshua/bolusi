@@ -1,5 +1,4 @@
 # TASK 35 — the convergence property test is a P1 flake: 6.6s of real work against a 5s default timeout
-**Status:** done
 **Depends on:** 08
 
 ## Goal

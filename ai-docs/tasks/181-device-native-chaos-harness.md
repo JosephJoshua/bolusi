@@ -1,6 +1,5 @@
 # TASK 181 — the on-device CHAOS-01/03/06/07 runners need a device-native scenario rig: the existing scenarios live in `@bolusi/harness` (PGlite server + better-sqlite3 `VirtualDevice`), which `apps/mobile` may not import, and CHAOS-03/06/07 need a SERVER round-trip a single emulator does not have
 
-**Status:** todo
 **Priority:** MEDIUM — it is what remains between task 178 and a fully-GREEN 27a. Three of the seven emulator gates (SEC-DEV-06-at-rest, SEC-AUTH-09-leg1, SEC-OPLOG-06-jcs) are REAL after 178; the four chaos gates stay HONESTLY `skipped` (never faked — §2.11) until this rig exists. testing-guide §2.6 requires "CHAOS-01/03/06/07 at reduced volume" on the L6 device run for the exit line.
 **Depends on:** 178 (which wired the real at-rest + JCS runners and left the chaos ids skipped with the precise reason below), 177, 27a
 **Blocks:** 27a going FULLY green (its 4 chaos gates), 28 roll-up indirectly.

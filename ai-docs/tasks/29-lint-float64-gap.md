@@ -1,5 +1,4 @@
 # TASK 29 — close the `z.float64()` bypass in `bolusi/no-float-money`
-**Status:** done
 **Depends on:** 02
 
 ## Goal

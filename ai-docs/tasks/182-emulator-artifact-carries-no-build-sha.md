@@ -1,6 +1,5 @@
 # TASK 182 — the emulator gate artifact carries no self-declared build sha, so the SEC-AUTH-09 provenance guard binds to git history, not to the code it certifies
 
-**Status:** todo
 **Priority:** MEDIUM — hardening. The accidental-staleness case (a dev regresses the seal and forgets to re-run the emulator) IS closed by task 28's provenance guard (`AT_REST_SURFACE` freshness diff). This closes the residual it could not: a deliberately-committed FABRICATED artifact.
 **Depends on:** 28 (the SEC-AUTH-09 discharge + provenance guard), 175/178 (the emulator producer).
 **Blocks:** —

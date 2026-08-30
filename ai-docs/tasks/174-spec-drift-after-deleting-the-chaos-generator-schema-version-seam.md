@@ -1,6 +1,5 @@
 # TASK 174 — spec drift after task 132 deleted the chaos generator's dead schemaVersion / cutover seam
 
-**Status:** done
 **Priority:** LOW — doc-accuracy, not a product defect. But the live specs now describe a generator
 seam that no longer exists, and a "the generator must exercise the migration seam" line a reader would
 trust is now false, so the drift should be owned rather than rediscovered (CLAUDE.md §2.6/§7).

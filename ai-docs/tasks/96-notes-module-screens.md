@@ -1,6 +1,5 @@
 # TASK 96 — notes module screens (NotesList / NoteEditor / NoteDetail) — the frontend half of the reference module, carved from task 25
 
-**Status:** done
 **Depends on:** 25, 24, 18
 **Blocks:** —
 **SEC ids owned by THIS task:** none

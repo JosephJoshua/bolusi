@@ -1,6 +1,5 @@
 # TASK 138 — leftover uncalled symbols: three PIN flows with no UI and no disclosure, and two dead settings-model functions
 
-**Status:** done
 **Priority:** LOW — the cleanup tail of the 2026-07-22 sweep. Each is either dead-by-design (delete it, say so) or an undisclosed missing screen (disclose it or build it). Filed so the next sweep skips cleared ground.
 **Depends on:** 131 (item 3 covers the settings model overlap), 130
 **Blocks:** —

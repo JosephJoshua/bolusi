@@ -1,6 +1,5 @@
 # TASK 16 — sync-server (push/pull endpoints, devices sidecar, batching, gzip)
 
-**Status:** done
 **Depends on:** 07, 12, 13
 
 ## Goal

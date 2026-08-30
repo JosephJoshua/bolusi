@@ -1,5 +1,4 @@
 # TASK 55 — `test:rls` doesn't build: the project's ONLY real-Postgres lane cannot resolve `@bolusi/core` in CI
-**Status:** done
 **Priority:** **HIGH** — this lane carries every real-driver claim in the project, including task 46's guard for a class that had a *live production bug*. Third violation of the same normative rule.
 **Depends on:** 46
 

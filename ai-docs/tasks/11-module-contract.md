@@ -1,5 +1,4 @@
 # TASK 11 — module-contract (defineModule, queries layer, registration)
-**Status:** done
 **Depends on:** 08, 10
 
 ## Goal

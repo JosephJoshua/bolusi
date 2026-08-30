@@ -1,6 +1,5 @@
 # TASK 129 — design-system conformance batch on the new screens: wrong titles, missing required fields, two primaries, overflow, and a truncating unauthorized hint
 
-**Status:** todo
 **Priority:** MEDIUM — none is a crash; together they are what a shop owner actually sees. Every one is invisible to the current suite, which asserts testIDs exist rather than what is in them.
 
 > **ITEM 13 DONE 2026-08-05** (EmptyState 2-line cap). `EmptyState`'s hint `numberOfLines` widened 2→3 (contended `@bolusi/ui`), following `Banner`'s dated task-23 precedent (§3.6): a compliant Indonesian empty-state hint (§5 "what happened + what to do", 07-i18n §7.2) fills two `bodySm` lines at 360dp and overflows at the 1.3× scale §6.5 requires — a truncated "what to do" reads as "nothing here" (the FR-1036 trap). Owner-ruled: GROW, not a §6.5 exemption. design-system §3.8 documents the change (matches Banner's 3-line budget). **§2.11-falsified:** a `components.test` asserts the hint's `numberOfLines === 3`; reverting to 2 reds it. ui 68/68, mobile suite + lint green, ui dist rebuilt.

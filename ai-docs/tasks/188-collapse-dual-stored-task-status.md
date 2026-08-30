@@ -1,6 +1,5 @@
 # TASK 188 — collapse dual-stored task Status to a single source; delete the ledger drift-guard it necessitated
 
-**Status:** todo
 **Depends on:** —
 **Blocks:** —
 **SEC ids owned by THIS task:** none.

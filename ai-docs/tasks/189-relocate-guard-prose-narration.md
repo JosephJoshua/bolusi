@@ -1,6 +1,5 @@
 # TASK 189 — relocate guard-prose narration to a cited incident log; keep the normative rules, cut the essays
 
-**Status:** todo
 **Depends on:** —
 **Blocks:** —
 **SEC ids owned by THIS task:** none.

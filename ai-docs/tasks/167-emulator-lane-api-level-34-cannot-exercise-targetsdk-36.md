@@ -1,6 +1,5 @@
 # TASK 167 — raise the Android emulator lane to API 36 so it exercises the OS version we ship
 
-**Status:** todo
 **Priority:** MEDIUM — the lane answers correctness for a different Android version than we ship, which puts an unstated caveat on every claim it produces. Sharper now that task 162 has landed and those gates will execute for the first time.
 **Depends on:** 162 (merged — it is what made these gates executable at all; they had never run)
 **Relates to:** 27a (the device/emulator gates), 117

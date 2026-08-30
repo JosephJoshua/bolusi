@@ -1,6 +1,5 @@
 # TASK 192 — prune the near-empty partial-leg subsystem in sec-meta; keep SEC-META-01 intact
 
-**Status:** todo
 **Depends on:** 189
 **Blocks:** —
 **SEC ids owned by THIS task:** none (this task does not add or retitle a SEC id; it simplifies the parser that reads them).

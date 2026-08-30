@@ -1,6 +1,5 @@
 # TASK 169 — quarantined ops are surfaced by a screen that can never be given one: no client table persists a held-out pull batch
 
-**Status:** todo
 **Priority:** MEDIUM — a silent hole in the honesty surface. api/01-sync §4 holds a failing batch OUT of view on purpose; 05 §8's doctrine is that nothing is silent. Today the holding-out happens and the telling never can.
 **Depends on:** 15, 130
 **Blocks:** —

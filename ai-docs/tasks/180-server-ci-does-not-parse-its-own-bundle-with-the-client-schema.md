@@ -1,6 +1,5 @@
 # TASK 180 — the server never parses the bundle it emits with the client's `DeviceBundleSchema`, so a client-incompatible bundle passes server CI and breaks enrollment silently
 
-**Status:** done
 **Priority:** LOW — latent today (the divergence is not reachable with current data), but it is a cross-boundary CI blind spot on the server→client trust boundary, and the fix is one assertion.
 **Depends on:** 161 (which added `DeviceBundleSchema` and the client-side parse)
 **Blocks:** —

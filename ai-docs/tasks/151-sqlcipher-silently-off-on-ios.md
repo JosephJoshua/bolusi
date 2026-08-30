@@ -9,7 +9,6 @@
 > is a **performance/config** question (is `performanceMode: true` discovered on iOS?) that cannot be
 > worked until iOS is scaffolded (blocked behind 85), plus one **spec-drift** residual → rehomed to 131.
 
-**Status:** todo
 **Priority:** LOW — performance/config, iOS-only, **blocked behind task 85 (iOS not scaffolded)**. NOT a v0 blocker and NOT a security item; the HIGH-security framing was refuted by the D22 re-scope + the 2026-07-25 premise-check above.
 **Depends on:** 85 (iOS scaffold — cannot start before it), 148 (D22, which dissolved the security half)
 **Blocks:** — (the "iOS matches Android security posture" claim it used to block is now true by construction: platform-agnostic JS AEAD, no SQLCipher on either platform)

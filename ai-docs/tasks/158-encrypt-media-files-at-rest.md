@@ -1,6 +1,5 @@
 # TASK 158 — captured media FILES sit unencrypted on disk at rest (column encryption covers the DB, not the photos it points to)
 
-**Status:** done
 **Priority:** MEDIUM — the captured repair photos are core evidence, but they upload and are meant to be pruned, and the signed sha256 still detects tampering. Owner ruled (D22 addendum 2): file separately, do NOT block task 148's DB-column encryption.
 
 > **REVIEW FOUND REAL DEFECTS (review-wave 2026-08-04, 7 confirmed, all PoC-verified). REDESIGN DONE 2026-08-04 — findings 1, 2, 4, 6 FIXED; 3, 5, 7 addressed/documented (see per-item notes). Re-review before merge.** The tested cipher + `EncryptingMediaFile` + native wiring + SEC-MEDIA-09 declaration were committed, then reworked:

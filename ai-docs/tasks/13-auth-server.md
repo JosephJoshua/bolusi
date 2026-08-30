@@ -1,6 +1,5 @@
 # TASK 13 — auth-server (identity control plane)
 
-**Status:** done
 **Depends on:** 05, 12
 
 ## Goal

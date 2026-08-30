@@ -1,6 +1,5 @@
 # TASK 144 — the rest of the Sync Status screen: a green-guarded decoy, the same hardcode task 126 fixed still live on a second field, and a screen-reader label that never changes
 
-**Status:** todo
 **Priority:** MEDIUM — one live §2.11 decoy (a model value with zero callers, guarded by a sound test), one latent instance of task 126's exact bug, and two conformance defects. Filed by the task-126 implementer, who correctly refused to fold them in.
 **Depends on:** 126, 15
 **Blocks:** —

@@ -1,6 +1,5 @@
 # TASK 190 — shrink the enum-mirror-parity gate to the one mirror that is still forced
 
-**Status:** todo
 **Depends on:** 193
 **Blocks:** —
 **SEC ids owned by THIS task:** none.

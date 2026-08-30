@@ -1,6 +1,5 @@
 # TASK 166 — the OWED bucket now scopes by ID, but not by FAILURE MODE: a different SEC-inventory failure that happens to name only SEC-AUTH-09/10 is still absorbed as "expected"
 
-**Status:** done
 **Priority:** LOW — narrower than 154 (it needs a new inventory failure that names ONLY the two owed ids and no others) and self-closing the day SEC-AUTH-09/10 discharge. Filed because it is the same class as 142 and 154, one level down again, and because the next person to read `assert()` should find it recorded rather than rediscover it.
 **Depends on:** 154
 **Blocks:** —

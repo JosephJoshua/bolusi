@@ -1,5 +1,4 @@
 # TASK 47 — the server watermark store has no production caller and no real-PG16 coverage; three gates are blind to the same line
-**Status:** done
 **Priority:** P2 — **not a live bug** (the code is correct on PG16 today, probed). A coverage hole positioned exactly where task 17 will write the first real batch-apply.
 **Depends on:** 16
 **Blocks:** 17

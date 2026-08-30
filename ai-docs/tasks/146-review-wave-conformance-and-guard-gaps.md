@@ -1,6 +1,5 @@
 # TASK 146 — review-wave leftovers: three Unauthorized states with no guidance, an icon whitelist nothing checks against the real glyphmap, and two weak assertions
 
-**Status:** todo
 
 > **PARTIAL — items 2, 3, 4, 8 DONE 2026-07-28** (the load-bearing guard + the §2.5 footgun + two quick assertions):
 > - **Item 2** — `packages/ui/test/icon-glyphs.test.ts` resolves every `ICON_GLYPHS` role against the REAL MaterialCommunityIcons glyphmap (7448 entries, imported directly since the ui vitest env aliases the icon module to a render double). FALSIFIED: typo'd a glyph → RED naming the role; restored → 3/3. The "comment was the guard" hole is closed.

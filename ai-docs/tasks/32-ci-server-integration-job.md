@@ -1,5 +1,4 @@
 # TASK 32 — point the CI `server-integration` job at `pnpm test:server`
-**Status:** done
 **Depends on:** 12
 
 ## Goal

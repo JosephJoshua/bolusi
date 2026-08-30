@@ -1,6 +1,5 @@
 # TASK 28 — security-sweep (SEC inventory, cross-surface adversarial run, release gate)
 
-**Status:** done
 **Depends on:** 13, 14, 16, 17, 19, 20, 21, 25, 26, 43, 44
 
 ## Goal

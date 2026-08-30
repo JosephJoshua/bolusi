@@ -1,5 +1,4 @@
 # TASK 36 — three CI jobs are labelled *merge gate* while passing trivially
-**Status:** done
 **Depends on:** 11, 26
 
 ## Goal

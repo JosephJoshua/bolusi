@@ -1,5 +1,4 @@
 # TASK 12 — server-app (Hono skeleton, middleware chain, error envelope, RPC AppType)
-**Status:** done
 **Depends on:** 02, 05
 
 ## Goal

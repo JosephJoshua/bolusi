@@ -1,5 +1,4 @@
 # TASK 01 — repo-scaffold (pnpm monorepo, toolchain, CI, lint rules)
-**Status:** done
 **Depends on:** —
 
 ## Goal

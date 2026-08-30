@@ -1,6 +1,5 @@
 # TASK 163 — the dispatch-only CI lanes (`android-emulator`, `ios-simulator`) are invisible to every local gate: a step there can be nonsense and everything stays green
 
-**Status:** done
 **Priority:** MEDIUM-HIGH process — this is the blind spot that let task 162 live. An emulator step that had **never executed a single assertion** survived authoring, review, and every `pnpm verify` / drift-gate run, and was only found by reading a dispatched job log by hand.
 **Depends on:** 142 (the parity model this extends), 162 (which demonstrated the gap)
 **Blocks:** —

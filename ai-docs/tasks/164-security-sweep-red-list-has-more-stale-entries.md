@@ -1,6 +1,5 @@
 # TASK 164 — the `security-sweep` expected-red register has further stale entries: reason 3 describes an omission that no longer exists, and the "three things" count no longer matches the run
 
-**Status:** done
 **Priority:** MEDIUM — this register is the list a human reads to decide "expected red, move on." Every wrong entry in it is a place a real regression can hide behind a known failure.
 **Depends on:** 154 (closing the machine-checked half of the same hole)
 **Blocks:** —

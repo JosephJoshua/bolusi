@@ -1,5 +1,4 @@
 # TASK 10 — command-runtime (execute sequence, ctx, DomainError registry, runtime emissions)
-**Status:** done
 **Depends on:** 06, 08, 09
 
 ## Goal

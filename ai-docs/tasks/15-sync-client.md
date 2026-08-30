@@ -1,6 +1,5 @@
 # TASK 15 — sync-client (loop, triggers, backoff, SyncState, staleness, quarantine)
 
-**Status:** done
 **Depends on:** 06, 10
 
 ## Goal

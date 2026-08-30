@@ -1,6 +1,5 @@
 # TASK 168 — v1: re-enrolling an ACTIVE device from the empty roster (the flow D23 §3 ruled out of v0)
 
-**Status:** todo
 **Priority:** LOW for v0 (the v0 hole is closed — the affordance is gone, not inert), MEDIUM for v1: an enrolled device whose store has zero `active` users is currently a device the shop cannot recover from in-app at all.
 **Depends on:** 130
 **Blocks:** —

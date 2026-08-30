@@ -1,5 +1,4 @@
 # TASK 34 — the dev Postgres is a shared singleton; parallel worktrees silently share (and corrupt) one database
-**Status:** done
 **Depends on:** 05
 
 ## Goal

@@ -1,6 +1,5 @@
 # TASK 194 — split the owed-forever SEC red into its own job; delete the CI-oracle tower (GATED — owner sign-off)
 
-**Status:** blocked
 **Depends on:** —
 **Blocks:** —
 **SEC ids owned by THIS task:** none (this task does not change any SEC id's proof; it relocates where an already-owed red is reported).

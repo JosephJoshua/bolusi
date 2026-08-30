@@ -1,6 +1,5 @@
 # TASK 02 — schemas package (op envelope, API DTOs, error/WS schemas)
 
-**Status:** done
 **Depends on:** 01
 
 ## Goal

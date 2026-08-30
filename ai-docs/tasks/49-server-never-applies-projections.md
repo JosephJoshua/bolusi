@@ -1,5 +1,4 @@
 # TASK 49 — the server never applies projections; the push transaction drops a normative step and no task owns it
-**Status:** done
 **Priority:** **HIGH** — a normative stage of the push transaction, specified four times, implemented nowhere. Every server read model is permanently empty.
 **Depends on:** 16
 **Blocks:** 17, 21, 25, 43

@@ -1,6 +1,5 @@
 # TASK 191 — make one i18n representation canonical; retire the format-conversion gates
 
-**Status:** todo
 **Depends on:** —
 **Blocks:** —
 **SEC ids owned by THIS task:** none.

@@ -1,6 +1,5 @@
 # TASK 165 — a blank cell in `ui-labels.md` seeds a blank RESERVED-namespace label and all 9 i18n gates pass
 
-**Status:** done
 
 > **DONE 2026-07-28.** Added a **10th** gate `checkSeedBlankValues` (`packages/i18n/scripts/gates.mjs`, wired in `check.mjs`): every `ui-labels.md` row's `id` AND `en` is a non-blank string (`typeof value === 'string' && value.trim() !== ''`), asserted over the SAME `parseUiLabels` rows the key-grammar gate reads, with the `SEED_MIN_ROWS` denominator floor (T-14). It lints the DOC (the source an author edits) so the failure names the ROW, and covers the reserved/seed leg task 150's `blankCatalogValues` (module catalogs) cannot reach. **FALSIFIED (§2.11):** blanked `role.main_owner.name`'s id cell + reseeded (probe B exactly) → seed-parity, key-grammar and id↔en-parity all PASS while ONLY the new gate reds, naming `role.main_owner.name`; restored → all 10 green. Positive control: a legitimately short value (`OK`/`Ya`) does not red. 44/44 gate tests incl. 7 new blank-value fixtures (blank id, blank en, whitespace-only, non-string null, floor, real-doc-passes, short-value control).
 **Priority:** MEDIUM — same defect class as task 150 item 1, on the leg task 150 cannot reach. The blast radius is larger: reserved namespaces are the shared chrome of every screen, not one module's.

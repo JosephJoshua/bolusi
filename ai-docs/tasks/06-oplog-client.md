@@ -1,5 +1,4 @@
 # TASK 06 — oplog-client (client append path)
-**Status:** done
 **Depends on:** 02, 03, 04
 
 ## Goal

@@ -1,5 +1,4 @@
 # TASK 185 — dedup extraction backlog (2026-07-26 duplication audit)
-**Status:** todo
 **Depends on:** —
 
 > **LEGS 1–3 DONE (2026-07-28); LEG 4 remains (spec-gated).**
