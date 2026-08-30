@@ -44,7 +44,7 @@ Invariants, learned the hard way. They hold in every phase.
 3. **Worktree isolation.** Every spawned implementation agent's FIRST step is `git branch --show-current` / `pwd`; if on `main` (or not in its own worktree) it STOPS and reports — never branch/commit in the main checkout. After entering a worktree, absolute main-repo paths edit the MAIN checkout — use worktree paths.
 4. **Atomic commits.** Conventional Commits (`type(scope): subject`), **subject line only — no body, no attributions of any kind**. Each commit builds + passes. No `wip`/`fixes`; squash before merge.
 5. **Security is written, not reviewed in.** Any security surface (auth, tokens, upload/download, signed URLs, access control, rate limits) works through a checklist and ships adversarial tests BEFORE review. The review gate is the backstop, not the plan.
-6. **Canonical task index.** `ai-docs/tasks/_index.md` + per-task Status lines are the single source of truth for "what's left." Keep it current; answer status from it.
+6. **Canonical task index.** The `status` cell of each `ai-docs/tasks/_index.md` row is the single source of truth for "what's left" — task 188 removed the per-file `**Status:**` line, so there is one store, not two. Keep it current; answer status from it.
 7. **Continuous QA feeds back into tasks.** QA findings become task files, not lost notes — and QA runs *during* the build, not only at the end.
 8. **One implementation, not per-module copies.** Permissions / validation / shared logic live once, in shared packages.
 9. **Every task gets ≥1 separate review agent before merge** (`review-wave`).
@@ -99,7 +99,7 @@ One row per concern → the doc(s) to read (under `ai-docs/`). Load only what th
 - Conventional Commits, subject-only, no attributions (§2.4).
 - Branch per task; never commit on `main` directly.
 - Merge only after review (§2.9); prefer a clean integration worktree over merging in the main checkout.
-- **Change a task's Status with `pnpm task:status <id> <status>`, never by hand** — one action writes both §2.6 locations (the `_index.md` row cell **and** the file's `**Status:**` line), so they cannot drift. This is the writeback step on every state change, including at merge. Legal values: `todo · in-progress · in-review · done · blocked`; it refuses an unknown id or status. Task 66's ledger gate stays the backstop for any hand-edit that skips it.
+- **Change a task's Status with `pnpm task:status <id> <status>`, never by hand** — it writes the single source: the task's `_index.md` row `status` cell (task 188 collapsed the old dual store, so there is no separate file `**Status:**` line to keep in sync). This is the writeback step on every state change, including at merge. Legal values: `todo · in-progress · in-review · done · blocked`; it refuses an unknown id or status. Task 66's ledger gate stays the backstop for any hand-edit that skips it.
 
 ---
 

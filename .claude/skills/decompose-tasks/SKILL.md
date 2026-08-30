@@ -15,7 +15,7 @@ Turn specs into a dependency-ordered task list agents can pick up in parallel.
 - **Files / modules touched** — for parallel-safety planning.
 - **Acceptance** — the tests to add (permissions, state transitions valid + invalid, idempotency, soft-delete) and the observable done-condition.
 - **Depends on** — task ids.
-- **Status** — `todo | in-progress | in-review | done | blocked`.
+- **Status** lives in the `_index.md` row (below), not in the task file — task 188 collapsed the dual store to a single source. Legal values: `todo | in-progress | in-review | done | blocked`.
 
 ## The index — `ai-docs/tasks/_index.md`
 
