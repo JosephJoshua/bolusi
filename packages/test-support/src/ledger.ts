@@ -83,7 +83,7 @@ export interface LedgerAuditResult {
   /** Numbers claimed by more than one task file — the collision git auto-merges clean. */
   duplicateNumbers: string[];
   /** Ids claimed by more than one index row. A dupe hides behind its twin's file: it resolves, so
-   *  it is exempt from the orphan and Status checks, and the ledger lists a phantom task. */
+   *  it is exempt from the orphan check, and the ledger lists a phantom task. */
   duplicateRows: string[];
   /** Index rows that resolve to no task file. */
   orphanRows: string[];

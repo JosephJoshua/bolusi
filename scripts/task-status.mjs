@@ -11,8 +11,9 @@
 // and it is closed the same way: `packages/test-support/src/task-status.test.ts` PINS every value here
 // to the canonical export in `ledger.ts`, so the mirror fails CI if it ever drifts (T-11).
 //
-// SURGICAL, NEVER REGENERATED. It replaces the single status token in the matched row's `status` cell,
-// preserving every other byte — column padding, and trailing prose like `| … | in-review — moved |`.
+// SURGICAL, NEVER REGENERATED. It replaces the single status token in the matched row's `status` cell
+// (STATUS_CELL below — that cell holds ONE token), preserving every other byte: the padding around the
+// token, and every other cell verbatim, including prose in a title or deps cell like `| … | 41, 40 (moved) |`.
 // It never re-serialises the table: a full parse+print would reformat rows and defeat the point (the
 // prettier-reflow trap, §2.11). Validation is complete BEFORE the write, so a refused change computes
 // nothing and writes nothing.
