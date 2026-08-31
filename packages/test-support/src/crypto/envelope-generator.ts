@@ -91,7 +91,10 @@ const OP_TYPES = [
 // `z.*` calls make ANY import of it pull zod into that bundle. So this cannot be import-deduped
 // and re-declares the set locally; kept EQUAL to the canonical by the parity gate that reddens on
 // divergence (./enum-mirror-parity.test.ts, task 53 — a gated forced mirror is legitimate, §2.11).
-const SOURCES = ['ui', 'agent', 'api', 'system'] as const;
+// `export`ed solely so that gate can import the real runtime value and compare it directly (task
+// 190): the test runs in Node, not the Hermes bundle, so it may pull both this and zod-backed
+// `OP_SOURCES`. Exporting adds no import here, so the zod-free Hermes boundary is unchanged.
+export const SOURCES = ['ui', 'agent', 'api', 'system'] as const;
 
 /** A payload whose shape (nesting, key order, value types) varies with the seed. */
 function generatePayload(prng: Prng): Record<string, unknown> {
