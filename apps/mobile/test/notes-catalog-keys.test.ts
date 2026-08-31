@@ -15,19 +15,25 @@
 // they resolve to the shipped Indonesian strings at runtime; THIS test proves the KEY SET matches
 // the module's typed surface, in both locales.
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NOTES_KEYS } from '@bolusi/modules/notes/screens';
 import { describe, expect, test } from 'vitest';
 
-const CATALOG_DIR = fileURLToPath(
-  new URL('../../../packages/modules/notes/i18n/', import.meta.url),
+// Resolve the shipped catalog dir from THIS file's location. Pass the STRING `import.meta.url` to
+// fileURLToPath, never a `new URL(...)`: apps/mobile's DOM/RN lib types the global `URL`
+// incompatibly with node's `import("url").URL`, so a `URL` object fails `tsc --noEmit` in this
+// package (TS2345) even though it runs. String path math is lib-agnostic.
+const CATALOG_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../packages/modules/notes/i18n',
 );
 
 /** Flatten a nested catalog tree → the fully-qualified `notes.*` keys it ships (07-i18n §3.3 keeps
  *  the namespace prefix OUT of the file, so it is added here). */
 function catalogKeys(locale: 'id' | 'en'): string[] {
-  const tree = JSON.parse(readFileSync(`${CATALOG_DIR}${locale}.json`, 'utf8')) as unknown;
+  const tree = JSON.parse(readFileSync(join(CATALOG_DIR, `${locale}.json`), 'utf8')) as unknown;
   const out: string[] = [];
   const walk = (node: unknown, path: string): void => {
     if (typeof node === 'string') {
