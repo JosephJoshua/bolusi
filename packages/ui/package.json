@@ -35,6 +35,6 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -b tsconfig.build.json",
-    "test": "vitest run"
+    "test": "tsc -b ../schemas/tsconfig.build.json && vitest run"
   }
 }
