@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": true,
   "includeEntryExports": true,
-  "ignoreWorkspaces": ["packages/harness"],
+  "ignoreWorkspaces": ["packages/harness", "packages/sqlite-test-driver"],
   "workspaces": {
     "apps/server": {
       "entry": ["src/index.ts!", "src/client.ts!", "src/main.ts!", "src/cli/*.ts!"]

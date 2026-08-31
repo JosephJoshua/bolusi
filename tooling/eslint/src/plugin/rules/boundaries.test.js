@@ -111,6 +111,12 @@ tester.run('boundaries', rule, {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/db-client/scripts/codegen.ts',
     },
+    // the shared adapter home (08 §3.3 rule 9): @bolusi/sqlite-test-driver owns the driver body, so
+    // its src/ imports better-sqlite3 directly — an UNRESTRICTED owner like the harness (task 185).
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/sqlite-test-driver/src/index.ts',
+    },
     // better-sqlite3 remains the harness's simulated-device driver
     {
       code: `import Database from 'better-sqlite3';`,

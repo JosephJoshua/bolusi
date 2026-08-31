@@ -1,0 +1,28 @@
+{
+  "name": "@bolusi/sqlite-test-driver",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared better-sqlite3 DbDriver adapter — test-only tooling, runs on Node (testing-guide §2.3; 08 §3.3 rule 9)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@bolusi/db-client": "workspace:*",
+    "better-sqlite3": "catalog:"
+  },
+  "devDependencies": {
+    "@bolusi/tsconfig": "workspace:*",
+    "@types/better-sqlite3": "catalog:",
+    "@types/node": "catalog:"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

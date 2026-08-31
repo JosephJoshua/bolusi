@@ -95,6 +95,11 @@ const DB_DRIVER_OWNERS = new Map([
   [
     'better-sqlite3',
     [
+      // The shared adapter home (08 §3.3 rule 9): @bolusi/sqlite-test-driver owns `createDriver` +
+      // the value/row normalizers, extracted from the five byte-identical copies (task 185 leg 4).
+      // Unrestricted like the harness — the package IS test tooling, held out of shipping bundles by
+      // shipping-deps.test.ts (never a runtime dep of a shipping workspace), not by a testOnly gate.
+      { workspace: 'packages/sqlite-test-driver' },
       { workspace: 'packages/harness' },
       { workspace: 'packages/db-client', testOnly: true },
       // core's projection-engine tests (task 08) drive the shim dialect over better-sqlite3

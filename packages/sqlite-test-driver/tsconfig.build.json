@@ -1,0 +1,15 @@
+{
+  "extends": "@bolusi/tsconfig/node.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../db-client/tsconfig.build.json"
+    }
+  ]
+}

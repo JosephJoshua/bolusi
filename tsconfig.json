@@ -20,6 +20,9 @@
       "path": "packages/db-client/tsconfig.build.json"
     },
     {
+      "path": "packages/sqlite-test-driver/tsconfig.build.json"
+    },
+    {
       "path": "packages/db-server/tsconfig.build.json"
     },
     {
