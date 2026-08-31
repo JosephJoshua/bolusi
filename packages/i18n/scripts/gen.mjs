@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { format, resolveConfig } from 'prettier';
 
 import { SOURCE_LOCALE, flattenSource } from './gates.mjs';
-import { CATALOG_ROOT, PACKAGE_ROOT, RESERVED_NAMESPACES, SEEDED_LOCALES } from './seed.mjs';
+import { CATALOG_ROOT, PACKAGE_ROOT, RESERVED_NAMESPACES, SEEDED_LOCALES } from './catalog.mjs';
 
 const GENERATED_DIR = join(PACKAGE_ROOT, 'src', 'generated');
 export const KEYS_PATH = join(GENERATED_DIR, 'keys.ts');
@@ -85,7 +85,7 @@ function emitObject(node, depth, leaf, terminator) {
       );
       if (body === '') {
         // A namespace with no rows yet — `permission` is skeleton-only until the labels land
-        // with their registry PRs (ui-labels.md).
+        // with their registry PRs (07-i18n §3.1).
         //
         // `Record<never, never>` and not `Record<string, never>`: the latter carries an index
         // signature, so `keyof` is `string` and i18next's key-path derivation recurses on

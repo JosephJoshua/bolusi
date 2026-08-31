@@ -37,7 +37,7 @@ import type { SignedCore } from '@bolusi/schemas';
 import type { DeviceRegistryEntry } from './devices.js';
 import type { QuarantineReason } from './ports.js';
 
-/** Label key for quarantine surfacing (ui-labels §sync; api/01 §4.2 mandates `sync.quarantine.*`). */
+/** Label key for quarantine surfacing (07-i18n §10.3; api/01 §4.2 mandates `sync.quarantine.*`). */
 export const QUARANTINE_LABEL_KEY = 'sync.quarantine.title';
 
 /** Verification outcome for one pulled op. */

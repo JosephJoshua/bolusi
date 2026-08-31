@@ -3,7 +3,7 @@
 import { TYPE, parse } from '@formatjs/icu-messageformat-parser';
 
 import { ALL_ERROR_CODES, REJECTION_CODES } from './error-code-registry.mjs';
-import { RESERVED_NAMESPACES } from './seed.mjs';
+import { RESERVED_NAMESPACES } from './catalog.mjs';
 
 /**
  * A catalog source = one JSON file's worth of labels.
@@ -125,86 +125,6 @@ export function checkKeyGrammar(sources) {
 }
 
 /**
- * Denominator floor for the seed-doc grammar gate (testing-guide T-14). ai-docs/ui-labels.md
- * carries 126 rows today; this floor sits below that so growth never trips it, while a starved
- * parse — a changed table format, a broken ROW_RE — fails loudly instead of linting nothing and
- * reporting green. Lower it only alongside a real, deliberate shrink of the seed.
- */
-export const SEED_MIN_ROWS = 120;
-
-/**
- * Gate: key grammar over the seed DOC itself (07-i18n §3.1, §7.3).
- *
- * Why this is separate from checkKeyGrammar: that gate reads catalog sources, which are seed
- * *output*. buildCatalogs drops every row in a module-owned namespace (`notes.*` — each module
- * ships its own catalog files, 07-i18n §3.3), so those rows land in no catalog and reach no
- * gate; before task 30 a parked-key list dropped three more. A key that never reaches a catalog
- * was never grammar-checked, so ui-labels.md could ship a name the grammar forbids and every
- * gate stayed green — the gate's denominator was 113 of 127 keys. This gate lints every row in
- * the doc whatever its namespace, and asserts it saw the whole doc (CLAUDE.md §2.11, T-14).
- *
- * @param {{ key: string }[]} rows every row parsed out of ai-docs/ui-labels.md
- * @param {number} [minRows] denominator floor; override only in tests
- * @returns {string[]}
- */
-export function checkSeedKeyGrammar(rows, minRows = SEED_MIN_ROWS) {
-  const errors = [];
-  if (rows.length < minRows) {
-    errors.push(
-      `parsed only ${rows.length} row(s) out of ai-docs/ui-labels.md, expected >= ${minRows} — ` +
-        `the parse is starved, so this gate checked almost nothing (testing-guide T-14). Fix the ` +
-        `parse, or lower SEED_MIN_ROWS if the seed really did shrink.`,
-    );
-  }
-  for (const { key } of rows) {
-    const problem = keyGrammarError(key);
-    if (problem) errors.push(`ai-docs/ui-labels.md: key '${key}' ${problem}`);
-  }
-  return errors;
-}
-
-/**
- * Gate: every ui-labels.md row's `id` AND `en` value is a NON-BLANK string (task 165).
- *
- * The other nine gates are all RELATIVE: seed parity proves the catalog REPRODUCES the doc, id↔en
- * parity compares key SETS, the generated union is regenerated from the doc — not one asks whether the
- * value at the end of that chain is a usable label. So a blank cell in ai-docs/ui-labels.md seeds a
- * blank RESERVED-namespace label (`role.*`, `sync.*`, `permission.*` — the shared chrome of every
- * screen) and every gate stays green. This is task 150's `blankCatalogValues` class one layer up: 150
- * guards the module CATALOGS (the copy); this guards the DOC (the source the author edits), so the
- * failure names the ROW to fix rather than the symptom, and it covers the reserved/seed leg 150 cannot
- * reach. `trim()` — not `!== ''` — because `'   '` renders as blank chrome exactly like `''`; the
- * non-string arm because a `null`/number leaf (a half-finished authoring pass) is no usable label
- * either. It lints EVERY row whatever its namespace and asserts it saw the whole doc (T-14).
- *
- * @param {{ key: string, id: string, en: string }[]} rows every row parsed out of ai-docs/ui-labels.md
- * @param {number} [minRows] denominator floor; override only in tests
- * @returns {string[]}
- */
-export function checkSeedBlankValues(rows, minRows = SEED_MIN_ROWS) {
-  const errors = [];
-  if (rows.length < minRows) {
-    errors.push(
-      `parsed only ${rows.length} row(s) out of ai-docs/ui-labels.md, expected >= ${minRows} — ` +
-        `the parse is starved, so this blank-value gate checked almost nothing (testing-guide T-14). ` +
-        `Fix the parse, or lower SEED_MIN_ROWS if the seed really did shrink.`,
-    );
-  }
-  for (const row of rows) {
-    for (const locale of /** @type {const} */ (['id', 'en'])) {
-      const value = row[locale];
-      if (typeof value !== 'string' || value.trim() === '') {
-        errors.push(
-          `ai-docs/ui-labels.md: row '${row.key}' has a blank ${locale} value — a blank label renders ` +
-            `as empty chrome on every screen its namespace touches (task 122 symptom, 07-i18n). Fill the cell.`,
-        );
-      }
-    }
-  }
-  return errors;
-}
-
-/**
  * Gate: collisions — the same key defined by two catalogs, or a module claiming a reserved
  * namespace (07-i18n §3.1, §7.3).
  * @param {CatalogSource[]} sources
@@ -274,6 +194,27 @@ export function checkParity(sources) {
       for (const key of keys) {
         if (!sourceKeys.has(key))
           errors.push(`key '${key}' is in '${locale}' but missing from '${SOURCE_LOCALE}'`);
+      }
+    }
+  }
+  return errors;
+}
+
+/**
+ * Gate: no catalog leaf is blank (task 122, 165). A whitespace-only or empty value renders as
+ * blank chrome exactly like a missing key, yet is a valid string that clears codegen, typecheck
+ * and every structural gate — so the canonical JSON is checked directly. Names the file, key and
+ * locale an author edits. (Non-string leaves — a stray `null`/number — are caught upstream: the
+ * generated resources are typed against a `string`-leafed shape, so tsc reddens on them.)
+ * @param {CatalogSource[]} sources
+ * @returns {string[]}
+ */
+export function checkBlankValues(sources) {
+  const errors = [];
+  for (const source of sources) {
+    for (const { key, value } of flattenSource(source)) {
+      if (value.trim() === '') {
+        errors.push(`${source.id}: key '${key}' (${source.locale}) has a blank value`);
       }
     }
   }

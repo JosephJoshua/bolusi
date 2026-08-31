@@ -53,8 +53,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
-      # 07-i18n §7.3 catalog gates: seed parity vs ui-labels.md, key grammar, collision,
-      # id/en parity, ICU restricted subset, error-code coverage, extraction, codegen staleness.
+      # 07-i18n §7.3 catalog gates over the canonical catalog JSON: key grammar, collision,
+      # id/en parity, blank-value, ICU restricted subset, error-code coverage, extraction,
+      # codegen staleness.
       - run: pnpm i18n:check
 
   # Unused-export sweep (task 68; CLAUDE.md §2.11 / testing-guide T-14, T-16). Static — knip runs

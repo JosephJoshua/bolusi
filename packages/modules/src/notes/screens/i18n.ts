@@ -15,9 +15,10 @@ import { getI18nInstance, t } from '@bolusi/i18n';
 import type { TranslationKey, TranslationValues } from '@bolusi/i18n';
 
 /**
- * Every `notes.*` label key (ui-labels.md §notes; 07-i18n §3.1 grammar). Hand-declared because the
- * reserved-namespace generated union (07-i18n §3.4) does not include module namespaces — this is the
- * module's own typing, pinned to the shipped catalog by `screens/i18n.test`'s parity assertion.
+ * Every `notes.*` label key (07-i18n §3.1 grammar). Hand-declared because the reserved-namespace
+ * generated union (07-i18n §3.4) does not include module namespaces — this is the module's own
+ * typing, pinned to the shipped catalog by the parity assertion in
+ * `apps/mobile/test/notes-catalog-keys.test.ts`.
  */
 export type NotesKey =
   | 'notes.list.title'
@@ -35,7 +36,7 @@ export type NotesKey =
   | 'notes.filter.showArchived'
   | 'notes.filter.hideArchived';
 
-/** The runtime-checkable list — the single source `screens/i18n.test` reads as its denominator. */
+/** The runtime-checkable list `apps/mobile/test/notes-catalog-keys.test.ts` reads as its denominator. */
 export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.list.title',
   'notes.detail.title',

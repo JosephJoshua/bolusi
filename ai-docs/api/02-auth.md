@@ -446,7 +446,7 @@ Idempotent: revoking an already-revoked device returns the same body. Revoking t
 
 ### 7.3 Client wipe directive
 
-On receiving `DEVICE_REVOKED` from any endpoint, the client: (1) shows a blocking "device revoked" screen (label catalog keys `auth.revoked.title` / `auth.revoked.body` — ui-labels via 07-i18n), (2) **confirms** by calling `GET /v1/devices/me` once — only a second `DEVICE_REVOKED`/`status: 'revoked'` answer triggers the wipe (a single spurious 401 must never wipe a fleet), then executes, in this order:
+On receiving `DEVICE_REVOKED` from any endpoint, the client: (1) shows a blocking "device revoked" screen (label catalog keys `auth.revoked.title` / `auth.revoked.body` — the `auth` catalog via 07-i18n), (2) **confirms** by calling `GET /v1/devices/me` once — only a second `DEVICE_REVOKED`/`status: 'revoked'` answer triggers the wipe (a single spurious 401 must never wipe a fleet), then executes, in this order:
 
 1. Delete SecureStore keys: `bolusi.db_encryption_key` **first** (crypto-erase — the DB is unreadable ciphertext from this moment even if later steps are interrupted), then `bolusi.device_private_key`, `bolusi.device_token`.
 2. Delete the SQLite DB file(s) + WAL/SHM.

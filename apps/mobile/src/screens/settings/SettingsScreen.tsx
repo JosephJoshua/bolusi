@@ -4,7 +4,7 @@
  * The language rows are the reason this screen is not a list of switches: picking a language you
  * cannot read is the one setting change a tech-inadept user cannot undo by reading the screen. So
  * the options render as ENDONYMS ("Bahasa Indonesia", "English") — identical in every locale, by
- * design (ui-labels.md) — and the active one is marked with a check, not merely with a colour. Both
+ * design (07-i18n §10.1) — and the active one is marked with a check, not merely with a colour. Both
  * choices mean a user who lands in the wrong language can still see which row is theirs and tap back.
  */
 import { t } from '@bolusi/i18n';

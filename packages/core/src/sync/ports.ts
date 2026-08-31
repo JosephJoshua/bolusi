@@ -98,7 +98,7 @@ export type SyncSurfacing =
       /** The 05 §8 code, verbatim from the wire (may be unknown to this client — api/00 §4). */
       readonly code: string;
       readonly reason: string;
-      /** `core.rejection.<CODE>` (ui-labels §"one row per code in 05 §8's closed set"). */
+      /** `core.rejection.<CODE>` (07-i18n §10.2: one row per code in 05 §8's closed set). */
       readonly labelKey: string;
     }
   | {

@@ -28,7 +28,7 @@ import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status
  */
 const CATALOGS: readonly Locale[] = SELECTABLE_LOCALES;
 
-/** 05-operation-log §8's closed rejection-code set, as ui-labels.md seeds it. */
+/** 05-operation-log §8's closed rejection-code set, as the `core` catalog carries it (07-i18n §10.2). */
 const REJECTION_CODES = [
   'BAD_SIGNATURE',
   'CHAIN_BROKEN',

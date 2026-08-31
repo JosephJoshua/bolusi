@@ -57,7 +57,7 @@ export interface RejectedOpRow {
   readonly at: number;
   /** 05 §8's closed set. Drives the label key — never rendered raw. */
   readonly rejectionCode: string;
-  /** The server's technical detail — collapsed, never the primary message (ui-labels `sync.rejected.*`). */
+  /** The server's technical detail — collapsed, never the primary message (07-i18n §4.3; `sync.rejected.*`). */
   readonly rejectionReason: string | null;
 }
 

@@ -66,7 +66,7 @@ One row per concern → the doc(s) to read (under `ai-docs/`). Load only what th
 | Building/changing a module, commands, projections, queries | `04-module-contract.md` |
 | Op envelope, signing, hash chain, ordering, rejection codes | `05-operation-log.md` |
 | Media capture, compression, upload queue | `06-media-pipeline.md` + `api/03-media.md` |
-| UI strings, locales, label keys | `07-i18n.md` + `ui-labels.md` |
+| UI strings, locales, label keys | `07-i18n.md` |
 | Dependencies, versions, monorepo layout, toolchain, CI | `08-stack-and-repo.md` |
 | Deployment config / server env vars / `SYSTEM_KEY_DIR` (system-device keys) | `08-stack-and-repo.md` §8 |
 | DDL, migrations, indexes, RLS | `10-db-schema.md` |

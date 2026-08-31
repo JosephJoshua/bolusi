@@ -65,7 +65,7 @@ export async function readPushBatch<DB>(
 const KNOWN_CODES: ReadonlySet<string> = new Set(REJECTION_CODES);
 
 /**
- * Label key for a rejection code (ui-labels: one `core.rejection.*` row per 05 §8 code).
+ * Label key for a rejection code (07-i18n §10.2: one `core.rejection.*` row per 05 §8 code).
  *
  * An UNKNOWN code still surfaces — api/00 §4 says store and surface unknown codes, never drop them.
  * A newer server growing a code must not produce a SILENT rejection on an older client: that is the

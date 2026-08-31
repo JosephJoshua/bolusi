@@ -13,17 +13,15 @@ import {
   REJECTION_CODES,
 } from '../scripts/error-code-registry.mjs';
 import {
+  checkBlankValues,
   checkCollision,
   checkErrorCodeCoverage,
   checkExtraction,
   checkIcuSubset,
   checkKeyGrammar,
   checkParity,
-  checkSeedBlankValues,
-  checkSeedKeyGrammar,
-  SEED_MIN_ROWS,
 } from '../scripts/gates.mjs';
-import { REPO_ROOT, UI_LABELS_PATH, parseUiLabels, seedFromDoc } from '../scripts/seed.mjs';
+import { REPO_ROOT, loadReservedCatalogs } from '../scripts/catalog.mjs';
 
 type Tree = Record<string, unknown>;
 
@@ -48,16 +46,9 @@ const source = (
   ...extra,
 });
 
-/** The real, checked-in seed as gate input — the control for every fixture below. */
+/** The real, checked-in catalogs as gate input — the control for every fixture below. */
 function realSources(): Source[] {
-  const seeded = seedFromDoc();
-  const sources: Source[] = [];
-  for (const [namespace, byLocale] of Object.entries(seeded)) {
-    for (const [locale, tree] of Object.entries(byLocale as Record<string, Tree>)) {
-      sources.push(source(namespace, locale, tree));
-    }
-  }
-  return sources;
+  return loadReservedCatalogs();
 }
 
 describe('error-code coverage gate (07-i18n §7.3)', () => {
@@ -138,97 +129,29 @@ describe('key-grammar gate (07-i18n §3.1)', () => {
   it('passes the real seed', () => {
     expect(checkKeyGrammar(realSources())).toEqual([]);
   });
-});
 
-describe('seed-doc key-grammar gate (07-i18n §3.1 over ai-docs/ui-labels.md)', () => {
-  /** Every row the real doc ships — the same input check.mjs feeds the gate. */
-  const realRows = () => parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
-
-  it('passes the real ui-labels.md seed', () => {
-    expect(checkSeedKeyGrammar(realRows())).toEqual([]);
-  });
-
-  it('reads the whole doc — the denominator is the doc, not a subset (T-14)', () => {
-    const rows = realRows();
-    // The gate's reach must be the doc's full row count, and that count must clear the floor.
-    // A parse that silently degrades to a handful of rows fails here rather than passing green.
-    expect(rows.length).toBeGreaterThanOrEqual(SEED_MIN_ROWS);
-    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length); // no duplicate keys
-  });
-
-  it('fails loudly when the parse is starved instead of checking nothing (T-14, T-14b)', () => {
-    // The vacuity trap: zero rows means zero violations found, which must never read as PASS.
-    const errors = checkSeedKeyGrammar([]);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain('parsed only 0 row(s)');
+  it('lints module-owned catalog keys too — the reserved catalogs never carry them (§3.3)', () => {
+    // A module namespace (`notes.*`) reaches this gate only through its own catalog file
+    // (loadModuleCatalogs); the reserved catalogs never carry it. Since task 191 retired the
+    // seed-doc gates, this is the sole proof the grammar linter covers module namespaces.
+    expect(checkKeyGrammar([source('notes', 'id', { badKey: 'x' }, { isModule: true })])).toEqual([
+      expect.stringContaining('notes.badKey'),
+    ]);
   });
 
   it('flags the exact 2-segment keys task 30 renamed, whatever their namespace', () => {
-    // Regression: these three shipped in the doc while every gate stayed green, because a
-    // parked-key list dropped them before they ever reached a catalog (task 30).
-    const errors = checkSeedKeyGrammar(
-      [{ key: 'auth.switchStore' }, { key: 'sync.pullToRefresh' }, { key: 'conflict.banner' }] as {
-        key: string;
-      }[],
-      0,
-    );
+    // Regression: these three once shipped as 2-segment keys. The grammar gate rejects them
+    // wherever they live — a namespaced leaf must be at least 3 segments.
+    const errors = checkKeyGrammar([
+      source('auth', 'id', { switchStore: 'x' }),
+      source('sync', 'id', { pullToRefresh: 'x' }),
+      source('conflict', 'id', { banner: 'x' }),
+    ]);
     expect(errors).toHaveLength(3);
     expect(errors.join('\n')).toContain('auth.switchStore');
     expect(errors.join('\n')).toContain('sync.pullToRefresh');
     expect(errors.join('\n')).toContain('conflict.banner');
     for (const error of errors) expect(error).toContain('2 segment');
-  });
-
-  it('lints module-owned rows too — the catalogs gate never sees them', () => {
-    // `notes.*` rows are skipped by buildCatalogs (each module owns its catalog files, §3.3),
-    // so the catalog-side gate cannot check them. This gate must.
-    const bad = [{ key: 'notes.badKey' }] as { key: string }[];
-    expect(checkKeyGrammar([source('notes', 'id', { badKey: 'x' }, { isModule: true })])).toEqual([
-      expect.stringContaining('notes.badKey'),
-    ]);
-    expect(checkSeedKeyGrammar(bad, 0)).toEqual([expect.stringContaining("'notes.badKey'")]);
-  });
-});
-
-describe('seed-doc blank-value gate (task 165 — the value at the end of the chain is a usable label)', () => {
-  const realRows = () => parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
-  const row = (key: string, id: unknown, en: unknown) =>
-    ({ key, id, en }) as { key: string; id: string; en: string };
-
-  it('passes the real ui-labels.md seed (no blank label ships today)', () => {
-    expect(checkSeedBlankValues(realRows())).toEqual([]);
-  });
-
-  it('reads the whole doc — the denominator is the doc, not a subset (T-14)', () => {
-    expect(realRows().length).toBeGreaterThanOrEqual(SEED_MIN_ROWS);
-  });
-
-  it('fails loudly when the parse is starved instead of checking nothing (T-14)', () => {
-    const errors = checkSeedBlankValues([]);
-    expect(errors.some((e) => e.includes('parsed only 0 row(s)'))).toBe(true);
-  });
-
-  it('flags a blank id value, naming the ROW an author edits — not the catalog symptom', () => {
-    const errors = checkSeedBlankValues([row('role.main_owner.name', '', 'Main Owner')], 0);
-    expect(errors).toEqual([
-      expect.stringContaining("row 'role.main_owner.name' has a blank id value"),
-    ]);
-  });
-
-  it('flags a blank en value too (both locales are checked)', () => {
-    const errors = checkSeedBlankValues([row('sync.title', 'Sinkronisasi', '   ')], 0);
-    // trim(): a whitespace-only value renders as blank chrome exactly like '' (task 122).
-    expect(errors).toEqual([expect.stringContaining("row 'sync.title' has a blank en value")]);
-  });
-
-  it('flags a non-string leaf (a null/number a half-finished pass leaves behind)', () => {
-    const errors = checkSeedBlankValues([row('conflict.body', null, 'text')], 0);
-    expect(errors).toEqual([expect.stringContaining("row 'conflict.body' has a blank id value")]);
-  });
-
-  it('does NOT flag a legitimately short value — positive control (no false positive)', () => {
-    // The predicate is trim() !== '', not a length floor: 'OK'/'Ya' are real labels.
-    expect(checkSeedBlankValues([row('permission.granted', 'Ya', 'OK')], 0)).toEqual([]);
   });
 });
 
@@ -377,6 +300,28 @@ describe('parity gate (07-i18n §7.1, §7.3)', () => {
 
   it('passes the real seed', () => {
     expect(checkParity(realSources())).toEqual([]);
+  });
+});
+
+describe('blank-value gate (task 122, 165 — the leaf value is a usable label)', () => {
+  it('flags an empty value, naming the file + key an author edits', () => {
+    const errors = checkBlankValues([source('sync', 'id', { list: { title: '' } })]);
+    expect(errors).toEqual([expect.stringContaining("key 'sync.list.title'")]);
+  });
+
+  it('flags a whitespace-only value too — it renders as blank chrome exactly like `` (trim)', () => {
+    const errors = checkBlankValues([source('sync', 'en', { list: { title: '   ' } })]);
+    expect(errors).toEqual([expect.stringContaining("key 'sync.list.title'")]);
+    expect(errors[0]).toContain('(en)');
+  });
+
+  it('does NOT flag a legitimately short value — positive control (no false positive)', () => {
+    // The predicate is trim() !== '', not a length floor: 'Ya'/'OK' are real labels.
+    expect(checkBlankValues([source('core', 'id', { action: { ok: 'Ya' } })])).toEqual([]);
+  });
+
+  it('passes the real seed', () => {
+    expect(checkBlankValues(realSources())).toEqual([]);
   });
 });
 

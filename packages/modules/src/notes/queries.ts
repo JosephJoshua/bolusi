@@ -36,7 +36,7 @@ export type NoteSort = 'createdAt.desc' | 'createdAt.asc';
  * at execute step 1 and the handler never runs, so a caller cannot ask for 10,000 rows and have the
  * handler quietly clamp it.
  *
- * `filter.archived` is the "Show archived" toggle (ui-labels `notes.filter.showArchived`): absent or
+ * `filter.archived` is the "Show archived" toggle (`notes.filter.showArchived`): absent or
  * `false` ⇒ the active list (archived excluded); `true` ⇒ archived notes are included alongside
  * active ones. Archived notes are excluded by default and included with the filter (01 §9 / 04 §8).
  */

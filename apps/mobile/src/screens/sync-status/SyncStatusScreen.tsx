@@ -77,9 +77,9 @@ export interface SyncStatusScreenProps {
    *
    * §8.4 says "tap → detail with `rejectionCode`/`rejectionReason` … and label-catalog explanation +
    * prescribed next step per code". Three of those four are ALREADY on the row: `core.rejection.<CODE>`
-   * (ui-labels §rejection) is written as "what happened, then what to do", which is the explanation
+   * (07-i18n §10.2) is written as "what happened, then what to do", which is the explanation
    * AND the prescribed step, and the row renders it. The one thing a detail adds is the server's
-   * `rejectionReason`, and ui-labels states its treatment exactly — "the server's `rejectionReason`
+   * `rejectionReason`, and 07-i18n §4.3 states its treatment exactly — "the server's `rejectionReason`
    * shows only as **collapsed technical detail**" under `sync.rejected.technicalDetails`, a key that
    * shipped with zero consumers. So the detail is a DISCLOSURE on this screen rather than a new
    * route: a second screen would have to re-render the same sentence to justify existing, and §3.10's
@@ -263,7 +263,7 @@ export function SyncStatusScreen({
                       {row.rejectionCode}
                     </Text>
                     <Text style={styles.meta}>{t('sync.rejected.technicalDetails')}</Text>
-                    {/* The server's own words, and ONLY here: ui-labels §sync says the reason "shows
+                    {/* The server's own words, and ONLY here: 07-i18n §4.3 says the reason "shows
                         only as collapsed technical detail". A null reason renders the catalog's empty
                         marker rather than an empty box, so "the server sent no detail" is legible
                         instead of looking like a rendering bug. */}

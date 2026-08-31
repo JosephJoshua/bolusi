@@ -27,7 +27,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "i18n:seed": "node scripts/seed.mjs",
     "i18n:gen": "node scripts/gen.mjs",
     "i18n:check": "node scripts/check.mjs"
   }

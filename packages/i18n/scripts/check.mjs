@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 import {
+  checkBlankValues,
   checkCollision,
   checkErrorCodeCoverage,
   checkExtraction,
@@ -11,21 +12,9 @@ import {
   checkKeyGrammar,
   flattenSource,
   checkParity,
-  checkSeedBlankValues,
-  checkSeedKeyGrammar,
-  SEED_MIN_ROWS,
 } from './gates.mjs';
 import { KEYS_PATH, RESOURCES_PATH, renderAll } from './gen.mjs';
-import {
-  CATALOG_ROOT,
-  REPO_ROOT,
-  RESERVED_NAMESPACES,
-  SEEDED_LOCALES,
-  UI_LABELS_PATH,
-  parseUiLabels,
-  seedFromDoc,
-  serializeCatalog,
-} from './seed.mjs';
+import { REPO_ROOT, loadModuleCatalogs, loadReservedCatalogs } from './catalog.mjs';
 
 /** Directories scanned for `t()` call sites by the extraction gate. */
 const SOURCE_ROOTS = ['apps', 'packages/modules', 'packages/ui'];
@@ -66,54 +55,6 @@ const SKIP_TEST_FILE_RE = /\.test\.tsx?$/;
  * point of deriving them.
  */
 const T_CALL_RE = /\bt\(\s*'([a-zA-Z][\w.]*)'(?!\s*\+)/g;
-
-/** @returns {import('./gates.mjs').CatalogSource[]} */
-function loadReservedCatalogs() {
-  const sources = [];
-  for (const namespace of RESERVED_NAMESPACES) {
-    for (const locale of SEEDED_LOCALES) {
-      const path = join(CATALOG_ROOT, namespace, `${locale}.json`);
-      if (!existsSync(path)) continue;
-      sources.push({
-        id: relative(REPO_ROOT, path),
-        namespace,
-        locale,
-        isModule: false,
-        tree: JSON.parse(readFileSync(path, 'utf8')),
-      });
-    }
-  }
-  return sources;
-}
-
-/**
- * Module-owned catalogs (07-i18n §3.3): packages/modules/<id>/i18n/{id,en}.json. None exist
- * yet — the notes catalog lands with its module — but the collision gate must see them the
- * moment they do, which is exactly when a module could claim a reserved namespace.
- * @returns {import('./gates.mjs').CatalogSource[]}
- */
-function loadModuleCatalogs() {
-  const sources = [];
-  const modulesRoot = join(REPO_ROOT, 'packages', 'modules');
-  if (!existsSync(modulesRoot)) return sources;
-
-  for (const entry of readdirSync(modulesRoot)) {
-    const i18nDir = join(modulesRoot, entry, 'i18n');
-    if (!existsSync(i18nDir) || !statSync(i18nDir).isDirectory()) continue;
-    for (const file of readdirSync(i18nDir)) {
-      if (!file.endsWith('.json')) continue;
-      const path = join(i18nDir, file);
-      sources.push({
-        id: relative(REPO_ROOT, path),
-        namespace: entry,
-        locale: file.replace(/\.json$/, ''),
-        isModule: true,
-        tree: JSON.parse(readFileSync(path, 'utf8')),
-      });
-    }
-  }
-  return sources;
-}
 
 /**
  * @param {string} dir
@@ -160,32 +101,6 @@ function collectUsedKeys() {
 }
 
 /**
- * Gate: the checked-in catalogs still match ai-docs/ui-labels.md verbatim (07-i18n §7.1.5).
- * @returns {string[]}
- */
-function checkSeedParity() {
-  const expected = seedFromDoc();
-  const errors = [];
-  for (const [namespace, byLocale] of Object.entries(expected)) {
-    for (const [locale, tree] of Object.entries(byLocale)) {
-      const path = join(CATALOG_ROOT, namespace, `${locale}.json`);
-      if (!existsSync(path)) {
-        errors.push(
-          `catalogs/${namespace}/${locale}.json is missing; run \`pnpm --filter @bolusi/i18n i18n:seed\``,
-        );
-        continue;
-      }
-      if (readFileSync(path, 'utf8') !== serializeCatalog(tree)) {
-        errors.push(
-          `catalogs/${namespace}/${locale}.json has drifted from ai-docs/ui-labels.md — change the doc first, then run \`pnpm --filter @bolusi/i18n i18n:seed\` (07-i18n §7.1.5)`,
-        );
-      }
-    }
-  }
-  return errors;
-}
-
-/**
  * Gate: the generated key union and merged resources are in sync with the catalogs
  * (07-i18n §3.3, §3.4).
  * @returns {string[]}
@@ -223,16 +138,12 @@ async function main() {
       `the extraction gate found only ${used.keys.length} t() key(s) (floor ${EXTRACTION_KEY_FLOOR}) — T_CALL_RE is matching nothing; the gate would pass vacuously`,
     );
   }
-  const seedRows = parseUiLabels(readFileSync(UI_LABELS_PATH, 'utf8'));
-
   /** @type {{ name: string, errors: string[] }[]} */
   const results = [
-    { name: 'seed parity (ui-labels.md → catalogs)', errors: checkSeedParity() },
-    { name: 'key grammar (ui-labels.md rows)', errors: checkSeedKeyGrammar(seedRows) },
-    { name: 'blank values (ui-labels.md rows)', errors: checkSeedBlankValues(seedRows) },
     { name: 'key grammar (catalogs)', errors: checkKeyGrammar(sources) },
     { name: 'collision', errors: checkCollision(sources) },
     { name: 'parity (id ↔ en)', errors: checkParity(sources) },
+    { name: 'blank value', errors: checkBlankValues(sources) },
     { name: 'ICU restricted subset', errors: checkIcuSubset(sources) },
     { name: 'error-code coverage', errors: checkErrorCodeCoverage(sources) },
     { name: 'extraction', errors: extraction.errors },
@@ -261,9 +172,9 @@ async function main() {
   // State the denominator, don't just assert it (testing-guide T-14): a reader of this log can
   // see how many keys the grammar gate actually read, rather than trusting a bare PASS.
   console.log(
-    `i18n:check: grammar-linted ${seedRows.length} ui-labels.md row(s) and ` +
+    `i18n:check: grammar-linted ` +
       `${new Set(sources.flatMap((s) => flattenSource(s).map((e) => e.key))).size} catalog key(s) ` +
-      `(seed-row floor ${SEED_MIN_ROWS})`,
+      `from ${sources.length} catalog file(s)`,
   );
   console.log(
     `i18n:check: extracted ${used.keys.length} t() key(s) from ${used.fileCount} shipping source ` +

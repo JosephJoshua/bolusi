@@ -61,13 +61,17 @@ describe('the closed DomainError registry (04 §5.3)', () => {
     expect(new Set(DOMAIN_ERROR_CODES).size).toBe(DOMAIN_ERROR_CODES.length);
   });
 
-  it('every code has a core.errors.<CODE> row in the label seed (07-i18n §7.3)', () => {
-    // The 07-i18n §7.3 coverage gate runs in @bolusi/i18n against its catalogs. This is the
+  it('every code has a core.errors.<CODE> entry in the canonical catalog (07-i18n §7.3)', () => {
+    // The 07-i18n §7.3 coverage gate runs in @bolusi/i18n against the SAME catalog JSON. This is the
     // registry side of the same contract: a code shipped here with no UI copy renders
-    // `core.errors.UNEXPECTED` (§4.2) — a real error degraded into a shrug.
-    const labels = readFileSync(`${REPO_ROOT}ai-docs/ui-labels.md`, 'utf8');
-    const missing = DOMAIN_ERROR_CODES.filter((code) => !labels.includes(`core.errors.${code}`));
-    expect(missing, 'codes with no core.errors row').toEqual([]);
+    // `core.errors.UNEXPECTED` (§4.2) — a real error degraded into a shrug. Task 191 made the catalog
+    // JSON canonical (ui-labels.md retired), so the check reads `errors.<CODE>` structurally.
+    const catalog = JSON.parse(
+      readFileSync(`${REPO_ROOT}packages/i18n/catalogs/core/id.json`, 'utf8'),
+    ) as { errors?: Record<string, unknown> };
+    const errors = catalog.errors ?? {};
+    const missing = DOMAIN_ERROR_CODES.filter((code) => !(code in errors));
+    expect(missing, 'codes with no core.errors entry').toEqual([]);
   });
 });
 

@@ -2,7 +2,7 @@
 // the §4.2 unknown-code path.
 //
 // Asserting catalog copy here is deliberate: this package's public behavior IS the catalog, and
-// ui-labels.md is its change-control surface. Other packages' tests never assert UI copy.
+// the catalog JSON is its change-control surface. Other packages' tests never assert UI copy.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {

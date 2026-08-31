@@ -155,7 +155,7 @@ execute(command, rawInput, ctx):
 
 ### 5.3 DomainError code registry (closed set; extend here first)
 
-`INVALID_TRANSITION` · `PERMISSION_DENIED` · `VALIDATION_FAILED` · `ENTITY_NOT_FOUND` · `NOT_AUTHENTICATED` · `DEVICE_NOT_ENROLLED` · `USER_DEACTIVATED` · `PIN_RATE_LIMITED` · `PIN_LOCKED` · `LAST_ADMIN_PROTECTED` · `ROLE_IN_USE` · `NETWORK` (client transport only). Every code has a `core.errors.<CODE>` row in ui-labels (07-i18n CI gate).
+`INVALID_TRANSITION` · `PERMISSION_DENIED` · `VALIDATION_FAILED` · `ENTITY_NOT_FOUND` · `NOT_AUTHENTICATED` · `DEVICE_NOT_ENROLLED` · `USER_DEACTIVATED` · `PIN_RATE_LIMITED` · `PIN_LOCKED` · `LAST_ADMIN_PROTECTED` · `ROLE_IN_USE` · `NETWORK` (client transport only). Every code has a `core.errors.<CODE>` row in the `core` label catalog (07-i18n §7.3 CI gate).
 
 ## 6. Queries
 
