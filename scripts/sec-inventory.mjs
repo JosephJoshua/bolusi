@@ -280,16 +280,30 @@ export function classifyInventoryForGate(result, sanctioned = SANCTIONED_OWED_ID
   };
 }
 
+/**
+ * The two files every SEC entry point reads. Exported so the required gate and the non-required owed
+ * reporter (task 194) compute the owed set from the SAME inputs — a drift here would let the two jobs
+ * disagree about what is owed (task 184), the exact hazard the split exists to remove.
+ */
+export const SEC_GUIDE_PATH = 'ai-docs/security-guide.md';
+export const SEC_ALLOWLIST_PATH = 'packages/test-support/src/sec-pending-allowlist.json';
+
+/**
+ * Drop the `$`-prefixed documentation keys from a raw pending-allowlist object, leaving only owed ids.
+ * The allowlist stores its own prose under `$comment`-style keys; every reader must strip them the
+ * same way or the owed set silently gains a non-id member.
+ *
+ * @param {Record<string, unknown>} raw
+ * @returns {Record<string, string>}
+ */
+export function pendingAllowlistEntries(raw) {
+  return Object.fromEntries(Object.entries(raw).filter(([key]) => !key.startsWith('$')));
+}
+
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  const [
-    guidePath = 'ai-docs/security-guide.md',
-    allowlistPath = 'packages/test-support/src/sec-pending-allowlist.json',
-    ...reportPaths
-  ] = process.argv.slice(2);
-  const rawAllowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'));
-  const allowlist = Object.fromEntries(
-    Object.entries(rawAllowlist).filter(([key]) => !key.startsWith('$')),
-  );
+  const [guidePath = SEC_GUIDE_PATH, allowlistPath = SEC_ALLOWLIST_PATH, ...reportPaths] =
+    process.argv.slice(2);
+  const allowlist = pendingAllowlistEntries(JSON.parse(readFileSync(allowlistPath, 'utf8')));
   const reports = reportPaths.map((path) => ({
     lane: path,
     report: JSON.parse(readFileSync(path, 'utf8')),
