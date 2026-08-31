@@ -11,6 +11,9 @@
   "references": [
     {
       "path": "../i18n/tsconfig.build.json"
+    },
+    {
+      "path": "../schemas/tsconfig.build.json"
     }
   ]
 }

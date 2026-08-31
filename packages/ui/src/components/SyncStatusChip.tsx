@@ -8,24 +8,35 @@
  */
 import { useMemo } from 'react';
 
+import type { SyncStatus } from '@bolusi/schemas';
+
 import { Chip } from './Chip.js';
 
 /**
- * `Operation.syncStatus` (03-state-machines §2 enum registry — client-local bookkeeping).
- *
- * BOUNDARY-FORCED MIRROR of the canonical `SYNC_STATUSES` (packages/schemas/src/bookkeeping.ts).
- * `@bolusi/ui` may import `@bolusi/i18n` (key types only) + React Native + expo only (08 §3.3) —
- * never `@bolusi/schemas` — so this presentation layer cannot derive the set from its owner and
- * must re-declare it locally. Declared ONCE here (const array → type → runtime Set; CLAUDE.md §2.8,
- * collapsing what were two independent literals) and kept EQUAL to the canonical by an
- * out-of-package parity gate that reddens on divergence and asserts its own denominator
- * (packages/test-support/src/enum-mirror-parity.test.ts, task 53). This is the §2.11 answer for a
- * mirror the boundary requires: an UNGUARDED forced mirror is the defect; a gated one is legitimate.
+ * `Operation.syncStatus` (03-state-machines §2 enum registry — client-local bookkeeping):
+ * `local | synced | rejected`. Imported TYPE-ONLY from its canonical owner (`@bolusi/schemas`,
+ * `SyncStatus`) under the 08 §3.3 `uiSchemasTypeOnly` boundary exception. `verbatimModuleSyntax`
+ * elides an `import type` from the emit entirely, so ui pulls no zod and stays platform-free (the
+ * boundary's real intent) while the enum can no longer drift from its owner — a value import of
+ * `@bolusi/schemas` from ui stays a lint/hygiene error. Re-exported under the design-system name the
+ * screens already use.
  */
-const OPERATION_SYNC_STATUSES = ['local', 'synced', 'rejected'] as const;
-export type OperationSyncStatus = (typeof OPERATION_SYNC_STATUSES)[number];
+export type OperationSyncStatus = SyncStatus;
 
-const VALID: ReadonlySet<string> = new Set<OperationSyncStatus>(OPERATION_SYNC_STATUSES);
+/**
+ * Runtime membership for the throw-on-unknown guard in `resolveSyncChip`. Keyed EXHAUSTIVELY by the
+ * imported type: add or drop a status in `@bolusi/schemas` and this literal stops compiling until it
+ * matches (missing AND extra keys both caught), so the guard cannot silently diverge from the enum.
+ * That compile-time exhaustiveness is what let this task retire the cross-package parity gate's ui
+ * arm (task 53 → task 190) — carrying the type across the boundary makes the runtime mirror gate
+ * redundant.
+ */
+const VALID_STATUS: Record<OperationSyncStatus, true> = {
+  local: true,
+  synced: true,
+  rejected: true,
+};
+const VALID: ReadonlySet<string> = new Set(Object.keys(VALID_STATUS));
 
 /** What the §3.5 table resolves to; `null` = synced is the silent default (a checkmark on everything is noise). */
 export type SyncChipKind = 'pending' | 'rejected' | null;

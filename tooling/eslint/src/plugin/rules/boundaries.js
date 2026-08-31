@@ -24,6 +24,9 @@
 //      EXCEPT the test-only lane seam `@bolusi/db-server/testing[/budget]` from NON-shipping files
 //      (tests, harness helpers, vitest configs) — how apps/server's L3 suites reach real PG16 while
 //      `pg` stays locked to db-server (task 81). Shipping source stays fully banned.
+//   8. @bolusi/ui → @bolusi/schemas is TYPE-ONLY (sibling of rule 7): the design system reuses the
+//      canonical enum types but must stay platform-free and pull no zod, so only `import type` is
+//      allowed. Added task 193, which retired the forced literal mirror this exception replaced.
 // NOT YET IMPLEMENTED: the full §3.3 POSITIVE allow-matrix ("anything not listed is
 // forbidden" — e.g. schemas importing @bolusi/core would pass today). Owner: task 28
 // (security-sweep) hardens this rule to the full matrix, or earlier if a task adds a
@@ -252,6 +255,8 @@ export default {
         "'{{source}}': {{workspace}} is Hermes-only — Node builtins do not exist on device (08-stack-and-repo §3.2). Files under test/ and scripts/ may use them; shipping source may not.",
       dbClientTypeOnly:
         "'{{source}}': @bolusi/test-support may import @bolusi/db-client TYPE-ONLY (08-stack-and-repo §3.3 hard rule 7) — the conformance suite types against the one DbDriver interface, but must carry no runtime edge to it. Use `import type`, and let the runner inject the driver handle.",
+      uiSchemasTypeOnly:
+        "'{{source}}': @bolusi/ui may import @bolusi/schemas TYPE-ONLY (08-stack-and-repo §3.3 hard rule 8) — the design system reuses the canonical enum types (e.g. SyncStatus) but must stay platform-free and pull no zod. Use `import type`; a value import would put a runtime edge to schemas (and its zod) into ui's emit.",
       screensOutsideMobile:
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
       serverImport:
@@ -336,6 +341,21 @@ export default {
         importKind !== 'type'
       ) {
         context.report({ node, messageId: 'dbClientTypeOnly', data: { source } });
+        return;
+      }
+      // 2d. @bolusi/ui → @bolusi/schemas is TYPE-ONLY (08 §3.3 hard rule 8), the sibling of 2c.
+      // ui is NOT in PLATFORM_FREE (it is a React Native package), so prong 6 never fires for it;
+      // and now that @bolusi/schemas is a declared dep of ui (so the type resolves), pnpm strictness
+      // no longer blocks a value import either. This prong is the only thing keeping ui platform-free
+      // against schemas: `import type { SyncStatus }` erases under verbatimModuleSyntax, but a value
+      // `import { SYNC_STATUSES } from '@bolusi/schemas'` would emit a runtime require and drag zod
+      // into ui's Hermes bundle. Type imports fall through (allowed).
+      if (
+        workspace === 'packages/ui' &&
+        (source === '@bolusi/schemas' || source.startsWith('@bolusi/schemas/')) &&
+        importKind !== 'type'
+      ) {
+        context.report({ node, messageId: 'uiSchemasTypeOnly', data: { source } });
         return;
       }
       // 3. */screens subpaths only from apps/mobile.

@@ -250,6 +250,22 @@ tester.run('boundaries', rule, {
       code: `import { openClientDb } from '@bolusi/db-client';`,
       filename: '/repo/packages/harness/src/device.ts',
     },
+    // ui types against the canonical enums (type-only; verbatimModuleSyntax erases it, so no zod
+    // reaches ui's Hermes bundle — 08 §3.3 rule 8, the sibling of the test-support/db-client rule)
+    {
+      code: `import type { SyncStatus } from '@bolusi/schemas';`,
+      filename: '/repo/packages/ui/src/components/SyncStatusChip.tsx',
+    },
+    // a type-only re-export is still type-only
+    {
+      code: `export type { SyncStatus } from '@bolusi/schemas';`,
+      filename: '/repo/packages/ui/src/index.ts',
+    },
+    // the type-only lock is scoped to ui: a non-ui, non-platform-free package value-imports freely
+    {
+      code: `import { SYNC_STATUSES } from '@bolusi/schemas';`,
+      filename: '/repo/apps/server/src/routers/sync.ts',
+    },
     // the test-only lane seam (@bolusi/db-server/testing[/budget]) is importable from NON-shipping
     // files so apps/server's L3 suites reach real PG16 while `pg` stays locked to db-server (task
     // 81). Test helper, .test.ts, and vitest.config — all outside shipping source (invalid below).
@@ -557,6 +573,24 @@ tester.run('boundaries', rule, {
       code: `export { DbError } from '@bolusi/db-client';`,
       filename: '/repo/packages/test-support/src/index.ts',
       errors: [{ messageId: 'dbClientTypeOnly' }],
+    },
+    // @bolusi/ui may import @bolusi/schemas TYPE-ONLY (08 §3.3 rule 8) — a value import drags a
+    // runtime edge (and zod) into ui's platform-free Hermes bundle
+    {
+      code: `import { SYNC_STATUSES } from '@bolusi/schemas';`,
+      filename: '/repo/packages/ui/src/components/SyncStatusChip.tsx',
+      errors: [{ messageId: 'uiSchemasTypeOnly' }],
+    },
+    // ...including via a subpath, and via re-export
+    {
+      code: `import { zSyncStatus } from '@bolusi/schemas/bookkeeping';`,
+      filename: '/repo/packages/ui/src/components/SyncStatusChip.tsx',
+      errors: [{ messageId: 'uiSchemasTypeOnly' }],
+    },
+    {
+      code: `export { SYNC_STATUSES } from '@bolusi/schemas';`,
+      filename: '/repo/packages/ui/src/index.ts',
+      errors: [{ messageId: 'uiSchemasTypeOnly' }],
     },
     // deprecated @hono/node-ws is banned everywhere (08 §2.6)
     {

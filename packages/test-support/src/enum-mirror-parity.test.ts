@@ -1,14 +1,19 @@
 // Forced enum-mirror parity gate (task 53; CLAUDE.md §2.8/§2.11).
 //
-// Two closed sets from the enum registry (03-state-machines §2) are re-declared away from their
-// canonical home because an import boundary FORBIDS deriving them from the owner:
+// One closed set from the enum registry (03-state-machines §2) is re-declared away from its
+// canonical home because an import boundary FORBIDS deriving it from the owner:
 //
-//   - `@bolusi/ui`'s `OperationSyncStatus` mirrors `SYNC_STATUSES` — ui may import @bolusi/i18n +
-//     React Native + expo only (08 §3.3), never @bolusi/schemas.
 //   - this package's `envelope-generator.SOURCES` mirrors `OP_SOURCES` — the generator is bundled
 //     into the Hermes JCS-vector runner (scripts/hermes-vectors/runner.ts), whose bundle forbids
 //     zod (08 §5.6); `OP_SOURCES` lives in `envelope.ts`, whose top-level `z.*` calls pull zod into
 //     any importer, so it cannot be import-deduped.
+//
+// (Task 193 retired this gate's second arm: `@bolusi/ui`'s `OperationSyncStatus` used to mirror
+// `SYNC_STATUSES` here because ui was barred from importing @bolusi/schemas. ui now imports that
+// type directly under the 08 §3.3 `uiSchemasTypeOnly` exception, and an exhaustive
+// `Record<OperationSyncStatus, true>` in SyncStatusChip.tsx makes the COMPILER carry the anti-drift
+// — so a cross-package parity arm is no longer needed for it. The count below dropped 2→1 for that
+// reason, NOT because a forced mirror was left unguarded.)
 //
 // A forced mirror is legitimate; an UNGUARDED forced mirror is the defect (task 47's lesson: a copy
 // with no gate is a second implementation with a green light). This gate compares each mirror,
@@ -19,7 +24,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { OP_SOURCES, SYNC_STATUSES } from '@bolusi/schemas';
+import { OP_SOURCES } from '@bolusi/schemas';
 import { describe, expect, it } from 'vitest';
 
 /** Comments legitimately name the const the gate hunts for; strip them so they never false-match. */
@@ -68,13 +73,6 @@ interface MirrorSpec {
 
 const MIRRORS: readonly MirrorSpec[] = [
   {
-    name: '@bolusi/ui SyncStatusChip.OperationSyncStatus ↔ SYNC_STATUSES',
-    canonical: SYNC_STATUSES,
-    file: new URL('../../ui/src/components/SyncStatusChip.tsx', import.meta.url),
-    constName: 'OPERATION_SYNC_STATUSES',
-    boundary: '@bolusi/ui may not import @bolusi/schemas (08 §3.3)',
-  },
-  {
     name: 'envelope-generator.SOURCES ↔ OP_SOURCES',
     canonical: OP_SOURCES,
     file: new URL('./crypto/envelope-generator.ts', import.meta.url),
@@ -87,7 +85,7 @@ describe('forced enum mirrors stay equal to their canonical source (task 53)', (
   it('guards every known forced enum mirror — denominator (T-14)', () => {
     // A new forced mirror MUST be added to MIRRORS with its own case; this pins the count so one
     // cannot land unguarded. Update this number (and add the spec) when a mirror is added/removed.
-    expect(MIRRORS).toHaveLength(2);
+    expect(MIRRORS).toHaveLength(1);
   });
 
   it.each(MIRRORS)('$name — members identical, both sets non-empty', (spec) => {

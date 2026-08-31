@@ -636,6 +636,9 @@ importers:
       '@bolusi/i18n':
         specifier: workspace:*
         version: link:../i18n
+      '@bolusi/schemas':
+        specifier: workspace:*
+        version: link:../schemas
     devDependencies:
       '@bolusi/tsconfig':
         specifier: workspace:*

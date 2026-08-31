@@ -70,10 +70,83 @@ describe('dependencies (08-stack §3.2/§3.3)', () => {
   });
 
   test('the dependency surface stays within the 08 §3.3 allowance for @bolusi/ui', () => {
-    const allowed = ['@bolusi/i18n', 'react', 'react-native', 'expo-image', '@expo/vector-icons'];
+    // @bolusi/schemas is allowed as a TYPE-ONLY dep (08 §3.3 rule 8, uiSchemasTypeOnly): it must be
+    // declared so the canonical enum types resolve in ui's public .d.ts, but no ui source may
+    // value-import it (policed below + by the boundaries lint rule) so no zod reaches the bundle.
+    const allowed = [
+      '@bolusi/i18n',
+      '@bolusi/schemas',
+      'react',
+      'react-native',
+      'expo-image',
+      '@expo/vector-icons',
+    ];
     for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.peerDependencies })) {
       expect(allowed).toContain(dep);
     }
+  });
+});
+
+/**
+ * Every import/export STATEMENT that pulls from @bolusi/schemas must be type-only, and no dynamic
+ * `import()` / `require()` of it may exist. STATEMENT-based, not line-based: a growing
+ * `import type { … }` list wraps across lines at prettier's printWidth (100) as ui pulls more enum
+ * types from schemas — the invariant lives on the `import` keyword's clause, not on the closing
+ * `} from '@bolusi/schemas';` line. `[^;]` bounds each clause to a single statement so an earlier
+ * `import … from 'react';` cannot be spanned into and mis-judged. Returns one reason per violation;
+ * empty ⇒ clean. Sources are already comment-stripped by the caller.
+ */
+function schemasValueEdges(source: string): string[] {
+  const out: string[] = [];
+  const statement = /\b(import|export)\b([^;]*?)\bfrom\s*'@bolusi\/schemas(?:\/[^']*)?'/g;
+  for (const match of source.matchAll(statement)) {
+    if (!/^\s*type\b/.test(match[2] ?? '')) {
+      out.push(
+        `value ${match[1]} of @bolusi/schemas — use \`import type\`/\`export type\` (no zod in ui)`,
+      );
+    }
+  }
+  if (/(?:import|require)\s*\(\s*'@bolusi\/schemas/.test(source)) {
+    out.push('dynamic import()/require() of @bolusi/schemas is a runtime edge — forbidden in ui');
+  }
+  return out;
+}
+
+describe('@bolusi/schemas is type-only (08 §3.3 rule 8, uiSchemasTypeOnly)', () => {
+  // The vitest twin of the `bolusi/boundaries` lint prong: a VALUE import/export of @bolusi/schemas
+  // from any ui source would emit a runtime `require('@bolusi/schemas')` (verbatimModuleSyntax
+  // preserves what you write) and drag zod into ui's platform-free Hermes bundle. Only a top-level
+  // `import type` / `export type` is allowed — the same shape the boundaries rule enforces. Two
+  // guards, one boundary: the lint rule can be silenced per-file with an eslint-disable; this cannot.
+  test.each(sources)(
+    '%s imports @bolusi/schemas type-only, never as a value (no zod in ui)',
+    (file, source) => {
+      expect(schemasValueEdges(source), file).toEqual([]);
+    },
+  );
+
+  // Falsifies the detector itself (T-14: a guard that silently checks nothing is worse than none).
+  // `${pkg}` keeps these fixtures out of any repo-wide value-import grep; they are strings, not
+  // imports, so the AST boundaries rule never sees them either.
+  test('detector is statement-based: multi-line type import OK; value + dynamic caught', () => {
+    const pkg = ['@bolusi', 'schemas'].join('/');
+    // Valid, zod-free — must stay clean even wrapped across lines (the reported false-positive).
+    expect(
+      schemasValueEdges(`import type {\n  SyncStatus,\n  SyncChipKind,\n} from '${pkg}';`),
+    ).toEqual([]);
+    expect(schemasValueEdges(`export type { SyncStatus } from '${pkg}';`)).toEqual([]);
+    // An earlier unrelated import must not be spanned into and mis-flagged.
+    expect(
+      schemasValueEdges(
+        `import { useMemo } from 'react';\nimport type { SyncStatus } from '${pkg}';`,
+      ),
+    ).toEqual([]);
+    // Every value shape is a violation — single-line, multi-line, re-export, subpath, dynamic.
+    expect(schemasValueEdges(`import { SyncStatus } from '${pkg}';`)).toHaveLength(1);
+    expect(schemasValueEdges(`import {\n  SyncStatus,\n} from '${pkg}';`)).toHaveLength(1);
+    expect(schemasValueEdges(`export { SyncStatus } from '${pkg}';`)).toHaveLength(1);
+    expect(schemasValueEdges(`import { parse } from '${pkg}/bookkeeping';`)).toHaveLength(1);
+    expect(schemasValueEdges(`const x = await import('${pkg}');`)).toHaveLength(1);
   });
 });
 
