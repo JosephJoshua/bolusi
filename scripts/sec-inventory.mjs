@@ -201,6 +201,85 @@ export function auditInventory(input) {
   };
 }
 
+/**
+ * The sanctioned standing SEC red (D21 / D22). SEC-AUTH-10 is owed until task 27 commits the
+ * physical-device argon2id-p95 timing artifact; the assumption produces NO artifact, so it is
+ * allowlist-pending rather than a discharged test. It is the ONLY id whose owed red is expected.
+ *
+ * This constant is the native successor to the hand-tended owed exemption ci-parity.mjs carried
+ * (tasks 166/172/184): a discharge simply removes SEC-AUTH-10 from the pending allowlist, at which
+ * point `owedIds()` returns [] and `classifyInventoryForGate` is vacuously satisfied — nothing here
+ * is hand-edited to follow the allowlist.
+ */
+export const SANCTIONED_OWED_IDS = Object.freeze(['SEC-AUTH-10']);
+
+/**
+ * The ids the pending allowlist still owes: allowlist keys the guide actually defines. Pure — it
+ * needs no test reports, because it is exactly the set `auditInventory()` folds into `result.pending`
+ * (an id is pending iff it is a guide id with an allowlist row). Both the required gate (via the
+ * result's `pending`) and the non-required owed reporter derive the owed set from HERE, so there is
+ * ONE source (task 184), never a hand-copied list that can drift from the allowlist.
+ *
+ * @param {string} guideText
+ * @param {Record<string,string>} allowlist  keys already stripped of `$`-prefixed doc metadata
+ * @returns {string[]} the owed ids, sorted
+ */
+export function owedIds(guideText, allowlist) {
+  const guide = new Set(parseGuideIds(guideText));
+  return Object.keys(allowlist)
+    .filter((id) => guide.has(id))
+    .sort();
+}
+
+/**
+ * Split an `auditInventory()` result into the sanctioned standing red and everything a REQUIRED
+ * merge gate must block on. This is the in-process successor to ci-parity.mjs's SEC_OWED_D21
+ * CI-LOG assertion (D22): it reads the STRUCTURED result — `failures` (each `[CODE] …`) and
+ * `pending` (`<id> → <owner>`) — never a job's printed log, and it preserves the three orthogonal
+ * scopes the 166/172/184 patch chain forced. All three must hold for the owed red to be tolerated:
+ *
+ *   1. FAILURE-MODE scope (task 166): only `[PENDING_ALLOWLIST_NON_EMPTY]` is owed-eligible. Any
+ *      other SEC_FAIL_CODE — even one that NAMES an owed id, e.g. SEC-AUTH-10 both allowlisted AND
+ *      titled → `[ALLOWLISTED_BUT_TITLED]`, a real bookkeeping regression — stays real and blocks.
+ *   2. ID scope (task 184): the owed ids must be a SUBSET of the sanctioned set. A second owed id
+ *      (a stranger added to the allowlist) is NOT absorbed — it reds the gate. The owed set is read
+ *      from `result.pending`, never a hand-copied literal.
+ *   3. STEP scope (task 154): this classifies the INVENTORY result only. The gate RUNNER blocks on
+ *      any red from the other steps (build, lanes, secrets, deps, lockfile) unconditionally — those
+ *      never reach this function, so no non-inventory red can be mislabelled owed.
+ *
+ * @param {{ failures: readonly string[], pending: readonly string[] }} result  an `auditInventory()` return
+ * @param {readonly string[]} [sanctioned]  the ids whose owed red is expected (defaults to SANCTIONED_OWED_IDS)
+ * @returns {{ ok: boolean, realFailures: string[], owedFailures: string[], owedIds: string[], unsanctionedOwedIds: string[] }}
+ */
+export function classifyInventoryForGate(result, sanctioned = SANCTIONED_OWED_IDS) {
+  const sanctionedSet = new Set(sanctioned);
+  const owedToken = `[${SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY}]`;
+  const realFailures = [];
+  const owedFailures = [];
+  for (const failure of result.failures) {
+    // FAILURE-MODE scope: a FAIL line is owed-eligible ONLY when its leading `[CODE]` is the pending
+    // one. Every other code — including one that names SEC-AUTH-10 — is a real, blocking regression.
+    if (failure.startsWith(owedToken)) owedFailures.push(failure);
+    else realFailures.push(failure);
+  }
+  // ID scope: read the owed ids from the structured pending entries (`<id> → <owner>`), taking the id
+  // from BEFORE the arrow so an owner path can never contribute a stray id. Not a re-parse of prose.
+  const owed = result.pending
+    .map((entry) => String(entry).split('→')[0].match(SEC_ID_PATTERN)?.[0])
+    .filter((id) => id !== undefined);
+  const unsanctionedOwedIds = owed.filter((id) => !sanctionedSet.has(id));
+  return {
+    // The required gate is green IFF nothing real is red AND every owed id is sanctioned. A discharge
+    // (empty allowlist → owed = []) is vacuously ok; a stranger owed id or any real code blocks.
+    ok: realFailures.length === 0 && unsanctionedOwedIds.length === 0,
+    realFailures,
+    owedFailures,
+    owedIds: owed,
+    unsanctionedOwedIds,
+  };
+}
+
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   const [
     guidePath = 'ai-docs/security-guide.md',
