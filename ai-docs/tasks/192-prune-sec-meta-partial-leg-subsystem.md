@@ -43,3 +43,15 @@ Simplifying a SEC parser is a security surface → **ships adversarial tests bef
 3. An id that is **both titled and allowlisted** must still **red** (row and title cannot both be true).
 4. Leg / arm / precursor / partial **title words** must not sneak an untitled id past the gate.
 Break each, observe the specific red, restore, observe green — report the falsification, not "tests pass."
+
+## Disposition — investigated 2026-08-31: no safe cut, premise falsified (CLOSED as no-op)
+
+Ran the Option-B path (prove a real non-weakening cut before touching anything). Ground truth falsifies the item-5 premise for the `sec-meta.ts` half; **nothing was cut** — `sec-meta.ts` / `sec-meta.test.ts` are unchanged.
+
+- **The partial-leg subsystem is LIVE, not near-empty.** `sec-meta.test.ts` is green (20 tests) *including* `result.checked.partialLegQualifiedTitles > 0`, and ~15+ committed test titles carry an id with a leg/arm/precursor/partial qualifier (`SEC-RT-03 (push leg)`, `SEC-SYNC-02 (client leg)`, `SEC-AUTH-06/11 client arm`, `SEC-AUTH-01 server-leg`, `I-13 leg 2`, …). It is task 61's partial-coverage guard, and this file's own **Falsification #4 requires it to keep firing** — which is incompatible with "prune the branches for an empty set" (§37). Cutting it weakens SEC-META-01 §2.1.6 (a §2.5 control → §6).
+- **The "near-empty denominator" is the allowlist (1 entry)** — a *different* mechanism the task lists under **Must preserve** — not the partial-leg trap, whose denominator is `idsWithTitles` (>40).
+- **`SEC_SCHEME`/`INVARIANT_SCHEME` is already the consolidated "one implementation, two configs" form** (§2.8): `auditCoverage` is one shared loop with two live callers — `auditSecCoverage` (`sec-meta.test.ts`) and `auditInvariantCoverage` (`invariant-meta.test.ts`, gating the 12 live invariants). Collapsing it would *duplicate* the loop, not shrink it.
+- **The genuine "two parallel SEC parsers"** the audit names are the sec-meta owner-side parser vs. the owed-id set in `ci-parity.mjs` / `sec-sweep.mjs` — **task 194's scope**, fenced out of 192 by the Scope boundary above.
+- No dead exports (`unused-exports` / knip CI green). Only residue is the 2-line `SecAuditResult` back-compat alias (an internal return annotation) — cosmetic, not a subsystem.
+
+Closed as a no-op per owner disposition (2026-08-31): the sec-meta half of audit item 5 is void; the real consolidation lives in task 194. Recorded, not lost (CLAUDE.md §2.7). See memory `bolusi-false-claim-review-class` — the premise was a confident claim that failed checking at the producer.
