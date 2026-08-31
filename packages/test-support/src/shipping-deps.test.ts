@@ -68,11 +68,15 @@ test('db-client keeps better-sqlite3 as a devDependency only', () => {
   expect(Object.keys(pkg.dependencies ?? {})).toContain('@op-engineering/op-sqlite');
 });
 
-test('@bolusi/test-support is never a runtime dependency of shipping code', () => {
-  // 08 §3.3 hard rule 6: test-support and harness appear only in test files.
+test('@bolusi test-tooling workspaces are never runtime dependencies of shipping code', () => {
+  // 08 §3.3 hard rule 6: test-support, harness, and sqlite-test-driver are test-only machinery
+  // and appear only in test files. sqlite-test-driver joined with task 185 leg 4 — it wraps
+  // better-sqlite3 (a Node addon), so a shipping `dependencies` entry would drag that addon into
+  // the device bundle. core/db-client/modules/apps-mobile carry it as a devDependency only.
   for (const workspace of SHIPPING_WORKSPACES) {
     const dependencies = Object.keys(readPackageJson(workspace).dependencies ?? {});
     expect(dependencies).not.toContain('@bolusi/test-support');
     expect(dependencies).not.toContain('@bolusi/harness');
+    expect(dependencies).not.toContain('@bolusi/sqlite-test-driver');
   }
 });

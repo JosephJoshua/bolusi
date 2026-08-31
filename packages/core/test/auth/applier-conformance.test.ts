@@ -28,7 +28,7 @@ import { noblePort, runApplierConformance } from '@bolusi/test-support';
 
 import { authModule } from '../../src/auth/index.js';
 import type { AnyModuleDefinition } from '../../src/index.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 async function createTables(db: Kysely<never>): Promise<void> {
   await db.schema

@@ -41,11 +41,10 @@
     "@bolusi/test-support": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "@bolusi/ui": "workspace:*",
+    "@bolusi/sqlite-test-driver": "workspace:*",
     "@electric-sql/pglite": "catalog:",
-    "@types/better-sqlite3": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "19.2.17",
-    "better-sqlite3": "catalog:",
     "expo-image": "57.0.0",
     "kysely": "catalog:",
     "react": "19.2.3",
@@ -53,6 +52,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json ../i18n/tsconfig.build.json ../ui/tsconfig.build.json && vitest run"
+    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json ../i18n/tsconfig.build.json ../ui/tsconfig.build.json ../sqlite-test-driver/tsconfig.build.json && vitest run"
   }
 }

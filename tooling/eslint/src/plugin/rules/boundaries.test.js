@@ -112,27 +112,18 @@ tester.run('boundaries', rule, {
       filename: '/repo/packages/db-client/scripts/codegen.ts',
     },
     // the shared adapter home (08 §3.3 rule 9): @bolusi/sqlite-test-driver owns the driver body, so
-    // its src/ imports better-sqlite3 directly — an UNRESTRICTED owner like the harness (task 185).
+    // its src/ imports better-sqlite3 directly — an UNRESTRICTED owner like the harness was (task 185).
     {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/sqlite-test-driver/src/index.ts',
     },
-    // better-sqlite3 remains the harness's simulated-device driver
+    // ...and apps/mobile's bootstrap suite keeps its key-recording OPENER (`new Database`), so it
+    // stays a testOnly owner: better-sqlite3 in its test/ files is clean (task 185 leg 4). The three
+    // FORMER owners — harness, core, modules — dropped their direct edge when the five copies
+    // collapsed into the shared package, and are now BARRED even in test/ (falsification cases below).
     {
       code: `import Database from 'better-sqlite3';`,
-      filename: '/repo/packages/harness/src/device.ts',
-    },
-    // ...and core's projection-engine tests drive the shim over better-sqlite3 (task 08,
-    // testing-guide §2.3): test/ files only, never shipping source (invalid case below).
-    {
-      code: `import Database from 'better-sqlite3';`,
-      filename: '/repo/packages/core/test/projection/better-sqlite3-driver.ts',
-    },
-    // ...and packages/modules (task 25 — `notes`, the first module outside core) drives the shim in
-    // its T-8 conformance suite: test/ files only, never shipping source (invalid case below).
-    {
-      code: `import Database from 'better-sqlite3';`,
-      filename: '/repo/packages/modules/test/support/better-sqlite3-driver.ts',
+      filename: '/repo/apps/mobile/test/better-sqlite3-driver.ts',
     },
     // @electric-sql/pglite is the harness's OWN shipping driver (a runtime dep — the harness IS test
     // tooling), so like better-sqlite3's harness row it is unrestricted here. This is the positive
@@ -453,18 +444,40 @@ tester.run('boundaries', rule, {
       filename: '/repo/packages/db-client/src/adapters/better-sqlite3.ts',
       errors: [{ messageId: 'dbDriverTestOnly' }],
     },
-    // ...same for core: a test-only owner, so its SHIPPING source is still barred (task 08).
+    // core and modules DROPPED their direct better-sqlite3 edge in task 185 leg 4 (their driver
+    // copies collapsed into @bolusi/sqlite-test-driver). No longer owners → better-sqlite3 gets the
+    // OWNERLESS message (`dbDriver`) from ANYWHERE in them, not the testOnly message that applied
+    // while they owned it. Shipping source:
     {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/core/src/projection/engine.ts',
-      errors: [{ messageId: 'dbDriverTestOnly' }],
+      errors: [{ messageId: 'dbDriver' }],
     },
-    // ...and packages/modules is a test-only owner too (task 25): its SHIPPING source (the manifest
-    // that ships in dist/) is still barred — the drivers belong to its test/ suites only.
     {
       code: `import Database from 'better-sqlite3';`,
       filename: '/repo/packages/modules/src/notes/applier.ts',
-      errors: [{ messageId: 'dbDriverTestOnly' }],
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // ...and — the falsification that proves the owner-set actually shrank — their TEST files are
+    // barred too now, where before task 185 they were the CLEAN valid cases above. A non-owner has no
+    // test/ exemption; only the three surviving owners (sqlite-test-driver, db-client, apps/mobile)
+    // may touch the raw driver. If a stray owner entry ever crept back, one of these would go green.
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/core/test/projection/db.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/modules/test/support/harness.ts',
+      errors: [{ messageId: 'dbDriver' }],
+    },
+    // ...and harness — an UNRESTRICTED owner until task 185 — is barred in its own src/ now: its
+    // simulated devices reach the driver through @bolusi/sqlite-test-driver, never a raw import.
+    {
+      code: `import Database from 'better-sqlite3';`,
+      filename: '/repo/packages/harness/src/device.ts',
+      errors: [{ messageId: 'dbDriver' }],
     },
     // @electric-sql/pglite is the SAME class as better-sqlite3, and until task 42 the lock did not
     // name it — so a real Postgres engine reached shipping source uncaught (review-03's positive

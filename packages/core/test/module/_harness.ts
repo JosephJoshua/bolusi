@@ -52,7 +52,7 @@ import {
 // loaded with `permissionIdsJson: undefined`, so every user held nothing and the whole suite failed
 // closed. Reusing the real builder is what stops a fixture from quietly disagreeing with the type.
 import { role } from '../authz/_fixtures.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /** The fixture module's tables live alongside the client schema in one database. */
 export type HarnessDatabase = ClientDatabase & FixtureDatabase;

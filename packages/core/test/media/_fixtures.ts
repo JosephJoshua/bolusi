@@ -46,7 +46,7 @@ import {
   type MediaTransportPort,
   type MediaWireStatus,
 } from '../../src/media/ports.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /** api/03-media §4 — pinned, server-dictated. The client must never assume it; the fake dictates it. */
 export const WIRE_CHUNK_SIZE = 262_144;

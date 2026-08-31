@@ -21,7 +21,7 @@ import {
   PermissionEvaluator,
   TENANT_ID_META_KEY,
 } from '../../src/index.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import {
   MAIN_OWNER_IDS,
   ROLE_MAIN_OWNER,

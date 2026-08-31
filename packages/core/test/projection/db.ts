@@ -21,7 +21,7 @@ import {
   type ModuleProjectionManifest,
   type ProjectionEngine,
 } from '../../src/index.js';
-import { openMemoryDriver } from './better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import { notesModule, type GeneratedOp } from './notes-fixture.js';
 
 /** The oracle's SHA-256 (real crypto via the noble CryptoPort — testing-guide §2.1 L1/L2). */

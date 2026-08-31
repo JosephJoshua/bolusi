@@ -18,7 +18,7 @@ import {
 import { createClientDialect, runClientMigrations, type DbDriver } from '@bolusi/db-client';
 
 import { notesModule, notesTable } from '../src/notes/index.js';
-import { openMemoryDriver } from './support/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /** 10-db `notes` columns in DDL order (Postgres §8 / SQLite §9.6) — the oracle's digest order. */
 const DDL_ORDER = [

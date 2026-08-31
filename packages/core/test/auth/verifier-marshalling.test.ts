@@ -33,7 +33,7 @@ import {
   writeVerifier,
   type PinVerifier,
 } from '../../src/index.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 const SHARED_TS = 1_726_000_000_000;

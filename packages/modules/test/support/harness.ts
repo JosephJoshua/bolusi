@@ -34,7 +34,7 @@ import {
 } from '@bolusi/core';
 
 import { notesModule } from '../../src/notes/index.js';
-import { openMemoryDriver } from './better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /** The op store over the REAL driver: one driver-level transaction per command, shared with the
  *  Kysely handle the projection engine writes through — what makes append+project atomic (04 §5.1).

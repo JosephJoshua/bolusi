@@ -45,7 +45,7 @@ import {
   type SigningKeyPort,
 } from '../../src/index.js';
 import { MAIN_OWNER_IDS, STAFF_IDS, STORE_OWNER_IDS, V0_MODULES } from '../authz/_fixtures.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import { makeFakeClock, type FakeClock } from '../oplog/_fixtures.js';
 
 export { makeFakeClock, type FakeClock };

@@ -52,7 +52,7 @@ import {
 import { noteBodyEditedApplier } from '@bolusi/modules/notes';
 import { nodeColumnAead } from '@bolusi/test-support';
 
-import { openFileDriver } from '../src/driver.js';
+import { openFileDriver } from '@bolusi/sqlite-test-driver';
 
 /** 32 bytes as 64 hex chars — the shape `SecureStoreDbKeyStore` mints (10-db §12). Obviously fake. */
 const DB_KEY = 'a'.repeat(64);

@@ -23,7 +23,7 @@ import {
 } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
 
-import { openMemoryDriver } from './driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 export interface ClientDbHandle {
   readonly driver: DbDriver;

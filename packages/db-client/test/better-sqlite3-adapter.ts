@@ -12,110 +12,11 @@
 import * as nodeCrypto from 'node:crypto';
 
 import Database from 'better-sqlite3';
-import type { Database as BetterSqlite3Database, Statement } from 'better-sqlite3';
+
+import { createDriver } from '@bolusi/sqlite-test-driver';
 
 import { createNodeCompatibleAead } from '../src/crypto/aead.js';
-import {
-  toDbError,
-  type DbBatchCommand,
-  type DbBatchResult,
-  type DbDriver,
-  type DbDriverOpenParams,
-  type DbPreparedStatement,
-  type DbQueryResult,
-  type DbRow,
-  type DbValue,
-} from '../src/driver.js';
-
-/** better-sqlite3 returns blobs as `Buffer`; op-sqlite returns `ArrayBuffer`. Both adapters
- * normalize to a plain `Uint8Array` so conformance compares identical values. */
-function normalizeValue(value: unknown): DbValue {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string' || typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  if (value instanceof Uint8Array) return new Uint8Array(value);
-  return String(value);
-}
-
-function normalizeRow(row: Record<string, unknown>): DbRow {
-  const normalized: DbRow = {};
-  for (const [key, value] of Object.entries(row)) {
-    normalized[key] = normalizeValue(value);
-  }
-  return normalized;
-}
-
-function runStatement(statement: Statement, params: readonly DbValue[]): DbQueryResult {
-  // `reader` tells us whether the statement yields rows. better-sqlite3 throws if we call
-  // all() on a non-reader (e.g. `PRAGMA foreign_keys = ON`) or run() expecting rows, and
-  // which PRAGMAs read vs. write is not guessable from the SQL text — ask the statement.
-  if (statement.reader) {
-    const rows = statement.all(...(params as unknown[])) as Record<string, unknown>[];
-    return { rows: rows.map(normalizeRow), rowsAffected: 0, insertId: null };
-  }
-  const info = statement.run(...(params as unknown[]));
-  return {
-    rows: [],
-    rowsAffected: info.changes,
-    insertId: info.lastInsertRowid === undefined ? null : Number(info.lastInsertRowid),
-  };
-}
-
-function createDriver(db: BetterSqlite3Database): DbDriver {
-  const driver: DbDriver = {
-    execute(sql: string, params?: readonly DbValue[]): Promise<DbQueryResult> {
-      try {
-        return Promise.resolve(runStatement(db.prepare(sql), params ?? []));
-      } catch (error) {
-        return Promise.reject(toDbError(error));
-      }
-    },
-    executeBatch(commands: readonly DbBatchCommand[]): Promise<DbBatchResult> {
-      // op-sqlite's executeBatch is atomic; better-sqlite3's transaction() gives the same
-      // all-or-nothing semantics, so the conformance suite sees one behaviour.
-      try {
-        let rowsAffected = 0;
-        db.transaction(() => {
-          for (const [sql, params] of commands) {
-            rowsAffected += runStatement(db.prepare(sql), params ?? []).rowsAffected;
-          }
-        })();
-        return Promise.resolve({ rowsAffected });
-      } catch (error) {
-        return Promise.reject(toDbError(error));
-      }
-    },
-    prepare(sql: string): DbPreparedStatement {
-      const statement = db.prepare(sql);
-      return {
-        execute(params?: readonly DbValue[]): Promise<DbQueryResult> {
-          try {
-            return Promise.resolve(runStatement(statement, params ?? []));
-          } catch (error) {
-            return Promise.reject(toDbError(error));
-          }
-        },
-        finalize(): Promise<void> {
-          return Promise.resolve();
-        },
-      };
-    },
-    async begin(): Promise<void> {
-      await driver.execute('BEGIN');
-    },
-    async commit(): Promise<void> {
-      await driver.execute('COMMIT');
-    },
-    async rollback(): Promise<void> {
-      await driver.execute('ROLLBACK');
-    },
-    close(): Promise<void> {
-      db.close();
-      return Promise.resolve();
-    },
-  };
-  return driver;
-}
+import type { DbDriver, DbDriverOpenParams } from '../src/driver.js';
 
 /**
  * Opens a database. `:memory:` (or no location) opens in-memory; any other location is treated as a

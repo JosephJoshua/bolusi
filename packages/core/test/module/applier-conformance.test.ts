@@ -36,7 +36,7 @@ import {
   encodeCursor,
   type AnyModuleDefinition,
 } from '../../src/index.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /**
  * The MINIMAL op-log + watermark DDL the projection engine reads (04 §4.2/§4.3).

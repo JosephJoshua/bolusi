@@ -20,7 +20,7 @@ import { SELECTABLE_LOCALES, type SignedOperation } from '@bolusi/schemas';
 
 import { userLocaleChangedApplier } from '../../src/platform/projections/user-prefs.js';
 import type { PlatformDatabase } from '../../src/platform/schema.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /** `INTL_LOCALE_TAG.id` (07-i18n §5) — a formatting tag, NEVER a `Locale`. The value the fold must
  *  never write and no fixture must seed. */

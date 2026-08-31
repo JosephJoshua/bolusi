@@ -33,7 +33,7 @@ import {
   type SyncSurfacing,
 } from '../../src/index.js';
 import type { PullRequest, PushRequest } from '@bolusi/schemas';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import { notesModule } from '../projection/notes-fixture.js';
 
 /** Deterministic ms-epoch clock (testing-guide §3.3). The ONLY time source the loop sees. */

@@ -51,6 +51,7 @@
   "devDependencies": {
     "@bolusi/test-support": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
+    "@bolusi/sqlite-test-driver": "workspace:*",
     "@playwright/test": "1.56.1",
     "@types/better-sqlite3": "catalog:",
     "@types/react": "19.2.17",

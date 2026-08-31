@@ -96,31 +96,26 @@ const DB_DRIVER_OWNERS = new Map([
     'better-sqlite3',
     [
       // The shared adapter home (08 §3.3 rule 9): @bolusi/sqlite-test-driver owns `createDriver` +
-      // the value/row normalizers, extracted from the five byte-identical copies (task 185 leg 4).
-      // Unrestricted like the harness — the package IS test tooling, held out of shipping bundles by
-      // shipping-deps.test.ts (never a runtime dep of a shipping workspace), not by a testOnly gate.
+      // the value/row normalizers, extracted from the five byte-identical copies the 2026-07-26 audit
+      // found (task 185 leg 4). UNRESTRICTED — the package IS test tooling, held out of shipping
+      // bundles by shipping-deps.test.ts (never a runtime dep of a shipping workspace), not a testOnly
+      // gate. The three former owners (harness, core, modules) no longer import the raw driver at all:
+      // they reach it through this package, so their direct edge is GONE, not merely test-scoped —
+      // which is why they are absent below and the boundary.test.js falsification cases assert a
+      // better-sqlite3 import from any of them (even test/) now goes RED.
       { workspace: 'packages/sqlite-test-driver' },
-      { workspace: 'packages/harness' },
+      // db-client keeps the raw driver for the two OPENERS the shared body cannot own: the keyed CI
+      // conformance adapter (SQLCipher-key path, test/) and the codegen scratch DB (scripts/). Still
+      // testOnly — db-client is Hermes-only, so a Node addon must never reach its shipping source.
       { workspace: 'packages/db-client', testOnly: true },
-      // core's projection-engine tests (task 08) drive the shim dialect over better-sqlite3
-      // :memory: (testing-guide §2.3); test/tooling files only — shipping core stays clean.
-      { workspace: 'packages/core', testOnly: true },
-      // apps/mobile's bootstrap suite (task 50) drives the REAL `bootstrap()` — open, migrate,
-      // register — over better-sqlite3 :memory:, for the same reason and under the same rule as
-      // core's entry above: op-sqlite is a JSI native module that cannot load under Node
-      // (testing-guide §2.3), so the CI adapter is the only way to run the real migrations against
-      // a real SQLite engine. Shipping mobile source stays clean — `testOnly` is what enforces
-      // that, and it matters more here than anywhere: apps/mobile is the DEVICE BUNDLE, so a
-      // better-sqlite3 import reaching shipping source would try to bundle a Node addon into an
-      // APK. The `dependencies` half of the same lock is `shipping-deps.test.ts`, which asserts
-      // apps/mobile declares no test-only driver as a runtime dep (devDependencies is where it
-      // belongs — the db-client shape).
+      // apps/mobile keeps the raw driver for its key-recording bootstrap opener (task 50): op-sqlite
+      // is a JSI native module that cannot load under Node (testing-guide §2.3), so CI drives the REAL
+      // `bootstrap()` — open, migrate, register — over better-sqlite3. `testOnly` matters most here:
+      // apps/mobile is the DEVICE BUNDLE, so a better-sqlite3 import in shipping source would try to
+      // bundle a Node addon into an APK. The `dependencies` half is shipping-deps.test.ts, which
+      // asserts apps/mobile declares no test-only driver as a runtime dep (devDependencies is the
+      // right home — the db-client shape).
       { workspace: 'apps/mobile', testOnly: true },
-      // packages/modules is the FIRST module package outside core (task 25 — `notes`). Its T-8
-      // applier-conformance + engine suites drive the shim over better-sqlite3 :memory(testing-guide
-      // §2.3), for the same reason and under the same rule as core's entry above. test/tooling files
-      // ONLY — shipping the module manifest (dist/) stays driver-free; the drivers are devDeps.
-      { workspace: 'packages/modules', testOnly: true },
     ],
   ],
   [

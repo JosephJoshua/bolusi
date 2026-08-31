@@ -35,7 +35,7 @@ import { noblePort, runApplierConformance } from '@bolusi/test-support';
 
 import { platformModule } from '../../src/platform/index.js';
 import type { AnyModuleDefinition } from '../../src/index.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /**
  * The op-log + watermark DDL the engine reads, plus the two platform projection tables.

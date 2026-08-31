@@ -59,7 +59,7 @@ import type { AppendedOp } from '../../src/oplog/append.js';
 import { beforeEach, describe, expect, test } from 'vitest';
 
 import { InMemoryOpStore, makeRuntimeFixture, type RuntimeFixture } from '../runtime/_fixtures.js';
-import { openMemoryDriver } from '../projection/better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 /**
  * The REAL platform registry — `registerModules` over the shipped manifest.

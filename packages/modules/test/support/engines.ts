@@ -25,7 +25,7 @@ import {
 } from '@bolusi/core';
 
 import { notesModule } from '../../src/notes/index.js';
-import { openMemoryDriver } from './better-sqlite3-driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 // All ids are valid UUIDv7 hex (10-db §2 makes v7 the id format system-wide). This matters beyond
 // tidiness: the real server DDL types `id`/`tenant_id`/`store_id`/`media_id`/`created_by`/

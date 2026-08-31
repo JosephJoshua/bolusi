@@ -44,7 +44,7 @@ import {
   type Prng,
 } from '@bolusi/test-support';
 
-import { openMemoryDriver } from './driver.js';
+import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import { buildGrantAllEvaluator } from './permissions.js';
 
 const CLOCK_BASE = 1_726_100_000_000;

@@ -23,12 +23,11 @@
     "@bolusi/db-client": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "@bolusi/test-support": "workspace:*",
-    "@electric-sql/pglite": "catalog:",
-    "@types/better-sqlite3": "catalog:",
-    "better-sqlite3": "catalog:"
+    "@bolusi/sqlite-test-driver": "workspace:*",
+    "@electric-sql/pglite": "catalog:"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json && vitest run"
+    "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json ../sqlite-test-driver/tsconfig.build.json && vitest run"
   }
 }
