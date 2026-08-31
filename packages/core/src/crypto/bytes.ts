@@ -220,7 +220,7 @@ export function bytesToUtf8(bytes: Uint8Array): string {
  * fixture. The FOURTH — `packages/db-client/src/crypto/aead.ts`'s local copy — is DELIBERATELY left in
  * place: aead.ts is an `AT_REST_SURFACE` file whose bytes are provenance-anchored to the SEC-AUTH-09
  * emulator artifact (`device-gate-provenance.ts`, commit 0e2096b), so ANY edit to it — even importing
- * this function or adding a comment — reds the security-sweep lane "Artifact STALE" and requires a
+ * this function or adding a comment — reds the security gate's "Artifact STALE" check and requires a
  * fresh emulator re-run to re-anchor (verified 2026-07-28). Collapsing that last copy is not worth
  * coupling an emulator run to a dedup refactor; it re-homes for free the next time the emulator lane
  * re-anchors. Takes an array (not variadic) so a caller with a computed list needs no spread.

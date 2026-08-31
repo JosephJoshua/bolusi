@@ -296,6 +296,10 @@ Do NOT instead add `unit needs: [typecheck]`: GitHub jobs run on separate runner
 
 Security-surface tasks additionally ship adversarial tests BEFORE review (CLAUDE.md §2.5) — the gzip-decompression middleware (malformed gzip, truncated stream, bomb), RLS probes, and signature/chain tampering all have named suites; the testing guide owns their contents.
 
+**Stage 13 — security gate + owed reporter (task 28 / task 194; D22).** The merge gate is the **required** `security-gate` job (`pnpm sec:gate`: build + repo suite + security lane + SEC inventory + secrets scan + dependency audit), which is GREEN today. The owed-forever SEC-AUTH-10 red (D21) lives in its OWN **non-required** `security-owed` job (`pnpm sec:owed`), excluded from branch-protection required checks so a debt Node/CI cannot discharge never blocks a merge — and never hides behind a shared job conclusion (§2.11). Both jobs derive the owed set from the one pending allowlist (task 184), so they cannot disagree.
+
+**Local CI repro (normative).** There is **no bespoke CI-emulation script** — the `verify.mjs` / `ci-parity.mjs` / `ci-status.mjs` tower was deleted (D22). To reproduce a CI result locally, **push the branch and read the per-job conclusions** (`gh run list`, then `gh run view <id> --log-failed`): the top-line `ci` conclusion is expected-red while `security-owed` is red (the owed SEC-AUTH-10, D21) and the dispatch-only Android/iOS lanes are skipped, so the verdict is **per-job** — `security-gate` and the other required jobs must be GREEN. A Docker-capable developer MAY optionally run the real workflow locally with `nektos/act` against `.github/workflows/ci.yml`; it is a convenience, not a gate, and the testcontainers / EAS lanes will not run under it.
+
 ## 6. Dev environment
 
 ### 6.1 Services

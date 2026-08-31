@@ -27,7 +27,7 @@ const CONSISTENT_GUIDE = [
 
 // ── the sanctioned set is a hard singleton, not a growable list ───────────────────────────────────
 
-test('SANCTIONED_OWED_IDS is exactly {SEC-AUTH-10} — the sole owed exemption (D21/D22)', () => {
+test('SANCTIONED_OWED_IDS is exactly the single device-benchmark owed id — the sole exemption (D21/D22)', () => {
   // Falsification #2's "SEC-AUTH-10 is the ONLY id with the exemption": if a well-meaning edit ever
   // widened this set, a second permanent red could hide behind it. Pin the membership by value.
   expect([...SANCTIONED_OWED_IDS]).toEqual(['SEC-AUTH-10']);
@@ -112,7 +112,7 @@ test('a clean result (no failures, no pending) is vacuously OK — the discharge
   expect(result.owedFailures).toEqual([]);
 });
 
-test('a DISCHARGED SEC-AUTH-10 (dropped from the allowlist) still passes — no hand-edit to follow', () => {
+test('a DISCHARGED owed id (dropped from the allowlist) still passes — no hand-edit to follow', () => {
   // When task 27 lands the artifact, SEC-AUTH-10 leaves the allowlist and gains a titled test. The
   // gate must go green through the SAME code path, with nothing sanctioned-but-absent tripping it.
   const result = classifyInventoryForGate({
@@ -139,7 +139,7 @@ test('owedIds is the intersection of the allowlist keys and the guide ids, sorte
 
 // ── integration: the real auditInventory result flows through the classifier ──────────────────────
 
-test('production shape: SEC-AUTH-10 allowlisted + everything else passing → gate GREEN, owed reports it', () => {
+test('production shape: the owed id allowlisted + everything else passing → gate GREEN, owed reports it', () => {
   const result = auditInventory({
     guideText: CONSISTENT_GUIDE,
     allowlist: { 'SEC-AUTH-10': 'ai-docs/tasks/27-device-gates.md' },

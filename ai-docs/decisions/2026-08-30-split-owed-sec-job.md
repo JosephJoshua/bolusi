@@ -34,4 +34,12 @@ SEC-AUTH-10's permanent expected-red **shares one GitHub job conclusion** (`secu
 
 ## Why this is safe to land in stages
 
-The `ci.yml` split + oracle deletion + `act` swap change *how the red is reported and how merges are gated in principle*, but the branch-protection wiring (step 3) is the only outward-facing, hard-to-reverse action — it is deferred to a separate owner go, so nothing about repo settings changes without a second confirmation.
+The `ci.yml` split + oracle deletion change *how the red is reported and how merges are gated in principle*, but the branch-protection wiring (step 3) is the only outward-facing, hard-to-reverse action — it is deferred to a separate owner go, so nothing about repo settings changes without a second confirmation.
+
+## Addendum — 2026-09-01 (implementation refinements, task 194)
+
+Two refinements settled during implementation. They change the *mechanics* above, not the ruling.
+
+- **The required job is named `security-gate`, not `security-sweep`.** The design (§ The design, 1/3) kept the old key; implementation renamed the real-checks job to `security-gate` (runs `pnpm sec:gate`) to pair cleanly with `security-owed` (runs `pnpm sec:owed`) and to stop overloading the retired "sweep" word. Branch protection's required set is therefore **`security-gate` (+ the other real jobs), excluding `security-owed`** — read every "`security-sweep`" in §The design / §Non-negotiable / §Falsifications as `security-gate`.
+- **Item 4 (`verify.mjs` → `act`) was dropped: `verify.mjs` is deleted and NO `act` wrapper ships.** Owner chose *"Drop it; CI is the gate"* (structured sign-off) over swapping the bespoke emulation for `act`. The local story is now **push the branch and read CI per-job** (`gh run list` → per-job conclusions); `act` is documented only as an optional manual repro a Docker-capable dev may run against the real `ci.yml`. The `verify` / `verify:full` / `verify:list` / `ci:parity` / `ci:status` / `sec:sweep` package scripts are removed with the tower.
+- **Falsification #4 (`act` reproduces a known red) is dropped** with the `act` swap. #2 and #3 are discharged in-process by `packages/test-support/src/sec-gate.test.ts` over `classifyInventoryForGate` (the native successor to the oracle's `SEC_OWED_D21` assertion). #1 stays branch-protection-dependent and runs after the paused outward-facing go.

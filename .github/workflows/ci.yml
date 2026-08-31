@@ -406,43 +406,38 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm chaos
 
-  # Stage 13 — SECURITY SWEEP / release gate (task 28; 08 §5.6, security-guide §12). MERGE GATE.
+  # Stage 13 — SECURITY GATE + owed reporter (task 28 / task 194; 08 §5.6, security-guide §12). The
+  # REQUIRED merge gate is `security-gate`; the standing owed SEC red lives in its OWN non-required
+  # job, `security-owed`, so a debt Node/CI cannot discharge never shares a conclusion with the real
+  # checks (D22 — this split replaced the bespoke ci-parity/ci-status/verify CI-log oracle, deleted
+  # with it: the owed-vs-real distinction now lives in classifyInventoryForGate over the STRUCTURED
+  # inventory result, not a printed-log parser).
   #
-  # `pnpm sec:sweep` is one command with one report: it builds, runs the repo suite AND the
-  # security-sweep lane (packages/harness/vitest.security.config.ts) with a JSON reporter, then
-  # runs the SEC inventory over those reports, the repo secrets scan (working tree + FULL git
-  # history + .env discipline), and the dependency pin/lockfile audit against 08 §2.
+  # security-gate (REQUIRED, GREEN today) — `pnpm sec:gate` is one command with one report: it builds,
+  # runs the repo suite AND the security-sweep lane (packages/harness/vitest.security.config.ts) with a
+  # JSON reporter, then runs the SEC inventory over those reports, the repo secrets scan (working tree
+  # + FULL git history + .env discipline), and the dependency pin/lockfile audit against 08 §2. Its
+  # inventory step tolerates ONLY the sanctioned owed red via classifyInventoryForGate (scripts/
+  # sec-inventory.mjs): a real regression — a new inventory red, an UNSANCTIONED owed id, or any
+  # non-inventory step going red — still fails the gate. Weakening a step to make this green converts a
+  # known risk into a false assurance (§2.11). It needs gitleaks (the history scan) and Docker (the
+  # repo suite's testcontainers lanes); ubuntu-latest supplies Docker, and the gitleaks install below
+  # is the same checksum-pinned release the `unit` job uses.
   #
-  # THERE WAS NO RELEASE-GATE PLACEHOLDER TO REPLACE. Task 28's file says this stage replaces one;
-  # the only placeholder in this pipeline is stage 12 (device-lane), which belongs to task 27. So
-  # this is a NEW job, and it is deliberately NOT a fail-safe stub: it runs the real sweep.
+  # security-owed (NON-REQUIRED, RED today) — `pnpm sec:owed` reports the owed-forever SEC red without
+  # gating a merge (branch protection excludes this job). It self-retires the day the SEC pending
+  # allowlist (packages/test-support/src/sec-pending-allowlist.json) empties: its live keys ARE the
+  # owed ids, and BOTH jobs derive the owed set from that one file (owedIds in sec-inventory.mjs), so
+  # they cannot disagree (task 184). RED here is the gate working, not a regression (§2.11):
   #
-  # IT IS EXPECTED TO BE RED TODAY, AND THAT IS THE GATE WORKING (CLAUDE.md §2.11). Exactly ONE thing
-  # keeps it red. It is NOT re-enumerated in prose here: this block twice grew stale entries a real
-  # regression could hide behind (task 164 — a SEC-TENANT-04 leg that PASSES was once listed as a red
-  # reason, and a §12 "SEC-DEV-08 omission" that the roll-up no longer has). A hand-written list of
-  # machine facts drifts by default, so the register points at its single source instead of restating
-  # it:
-  #
-  #   the SEC pending allowlist (packages/test-support/src/sec-pending-allowlist.json) is non-empty.
-  #   Its live keys ARE the owed ids, and scripts/ci-parity.mjs derives EXPECTED.SEC_OWED_D21 from that
-  #   same file (task 184) — so this human register and the machine oracle cannot disagree. The gate
-  #   self-retires the day the allowlist empties.
-  #
-  #   OWED (do-not-hand-edit; ci-parity.test.ts asserts this equals the allowlist live keys): SEC-AUTH-10
-  #   — a physical-device argon2id-p95 timing artifact (task 27) that Node/CI cannot produce (D21,
-  #   non-gating).
+  #   OWED (self-retiring; do NOT hand-green): SEC-AUTH-10 — a physical-device argon2id-p95 timing
+  #   artifact (task 27) that Node/CI cannot produce (D21, non-gating).
   #
   # SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28): its at-rest leg is proven on the emulator artifact
   # and re-checked every push by the git-provenance/staleness guard (packages/harness/src/security/
-  # device-gate-provenance.ts), NOT by SQLCipher (removed in D22). A security-sweep red naming any id
+  # device-gate-provenance.ts), NOT by SQLCipher (removed in D22). A security-gate red naming any id
   # that is NOT a live allowlist key — SEC-AUTH-09 among them — is a REGRESSION (UNEXPECTED), not owed.
-  # Weakening a step to make this green converts a known risk into a false assurance (§2.11).
-  #
-  # It needs gitleaks (the history scan) and Docker (the repo suite's testcontainers lanes);
-  # ubuntu-latest supplies Docker, and the gitleaks install below is the same checksum-pinned
-  # release the `unit` job uses.
-  security-sweep:
+  security-gate:
     runs-on: ubuntu-latest
     needs: install
     steps:
@@ -464,8 +459,26 @@ jobs:
           tar xzf gitleaks.tgz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
           rm gitleaks.tgz
-      - name: security sweep (SEC inventory + SEC-TENANT-04 walk + secrets + dependency audit)
-        run: pnpm sec:sweep
+      - name: security gate (SEC inventory + SEC-TENANT-04 walk + secrets + dependency audit)
+        run: pnpm sec:gate
+
+  # Non-required companion to security-gate — reports the owed SEC red (SEC-AUTH-10) in its OWN job so
+  # it never shares a conclusion with the real checks. EXCLUDE this job from branch-protection required
+  # checks. `pnpm sec:owed` only reads two files in the tree (no git history, no gitleaks, no
+  # testcontainers, no node_modules — its whole import graph is node built-ins), so this job is
+  # deliberately minimal: it does not even install dependencies.
+  security-owed:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: security owed (standing SEC red — non-blocking)
+        run: pnpm sec:owed
 
   # Stage 12 — Android EMULATOR CORRECTNESS lane (task 27a; D20 §1, 08 §5.6 stage 12). REPLACES the
   # task-36 fail-safe `device-lane` stub. Scheduled / on-demand, NOT per-PR (see the `on:` note).

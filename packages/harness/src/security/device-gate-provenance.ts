@@ -3,7 +3,7 @@
 //
 // ── THE PROBLEM THIS FILE EXISTS TO STOP ────────────────────────────────────────────────────────
 // SEC-AUTH-09 leg 1 ("the PIN-verifier salt/hash/params are ciphertext at rest") can only be settled
-// on real hardware (an assembled APK + the emulator), so the per-push release gate (`pnpm sec:sweep`)
+// on real hardware (an assembled APK + the emulator), so the per-push release gate (`pnpm sec:gate`)
 // cannot run it. Its evidence is therefore the COMMITTED artifact `reports/device-gates/*.json`, emitted
 // by the emulator lane (task 27a/178). A gate that reads that JSON and asserts `SEC-AUTH-09-leg1 == pass`
 // WITHOUT checking the artifact's provenance is exactly the failure §2.11 names: a stale artifact from an

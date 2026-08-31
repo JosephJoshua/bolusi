@@ -15,16 +15,16 @@ branch **`task/160-boot-decrypt-probe`** — do not re-implement; re-land it.
 **Why it was reverted (not a defect in the fix):** the boot key-tag probe MUST read the column-cipher
 marker, which required exposing it on `packages/db-client/src/connection.ts` — an `AT_REST_SURFACE` file
 watched by the **SEC-AUTH-09 provenance guard** (task 28). On merge the guard correctly RED'd the
-`security-sweep` lane: *"Artifact STALE: connection.ts changed since the emulator artifact's commit
+`security-gate` job: *"Artifact STALE: connection.ts changed since the emulator artifact's commit
 0e2096b"*. That is the guard **working as designed** — 160's at-rest-surface change means the committed
 on-device SEC-AUTH-09 leg-1 evidence no longer covers the shipped code. (Task 172's new oracle is what
 surfaced it: "the failure does not match the owed id.") Reverting restores `connection.ts` to pre-160, so
 SEC-AUTH-09 stays legitimately discharged and the honest floor (only SEC-AUTH-10 owed) is restored.
 
 **Also confirmed by this episode:** the fix originally shipped through an INCOMPLETE local gate (`tsc -b` +
-targeted tests, not `pnpm verify:full`) — `tsc -b` skips test-file tsconfigs (missed a double-`Promise`
+targeted tests, not the full CI suite) — `tsc -b` skips test-file tsconfigs (missed a double-`Promise`
 type error in `boot-decrypt-probe.test.ts`) and the targeted run missed the full `unit` lane. **Re-land
-MUST pass `pnpm verify:full` before the ff.**
+MUST pass CI (push the branch, read per-job conclusions) before the ff.**
 
 **Re-land checklist (do NOT skip, do NOT hack the guard):**
 1. Restore branch `task/160-boot-decrypt-probe` (or cherry-pick `78edee6`+`af2210d`) onto current main.
@@ -33,7 +33,8 @@ MUST pass `pnpm verify:full` before the ff.**
 3. Commit that artifact and **re-anchor** `device-gate-provenance.ts` to the new artifact's commit.
    Re-anchoring WITHOUT a real re-run is the §2.11 "move the yardstick" anti-pattern the guard exists to
    prevent — the whole point of task 28.
-4. `pnpm verify:full` green (only SEC-AUTH-10 owed) before the ff.
+4. Push the branch and read CI per-job: `security-gate` green, only `security-owed` red (SEC-AUTH-10
+   owed), before the ff.
 The bug 160 fixes is unreachable today (no client DB has ever existed on any device; 160 blocks 27a, the
 first hardware DB), so deferral is safe. Natural sequence: **re-land 160 + emulator re-run together, before
 27a enrolls on hardware.** See also task 182 (stamp a build-sha in the artifact).

@@ -1,4 +1,4 @@
-// Unit tests for the sec:sweep entry scripts (task 28): the SEC inventory, the dependency pin
+// Unit tests for the sec:gate entry scripts (task 28): the SEC inventory, the dependency pin
 // audit, and the `.env.example` parser. Same shape as `lockfile-checks.test.ts` — the scripts are
 // plain `.mjs` CI entry points, imported here so their NEGATIVE CONTROLS run against fixtures
 // instead of against a deliberately broken repo.
@@ -199,7 +199,7 @@ test('inventory FAILS when an id is BOTH allowlisted and titled — the row and 
 });
 
 test('every inventory FAIL line begins with a known machine-readable [CODE] (task 166)', () => {
-  // 166: the owed-red assert in ci-parity.mjs scopes by FAILURE MODE, so it depends on every FAIL line
+  // 166: classifyInventoryForGate scopes the owed red by FAILURE MODE, so it depends on every FAIL line
   // carrying exactly one bracketed code as its first token. Provoke several distinct modes at once and
   // assert each failure is `[CODE] …` with CODE a member of SEC_FAIL_CODES — an uncoded line would be
   // classified UNEXPECTED downstream, so a missing code is a real break, not cosmetics.

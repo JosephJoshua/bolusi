@@ -77,7 +77,8 @@ chaos runners, or the api-level-36 raise in 167), do it over a tree that has re-
 2. The fresh emulator run then certifies SEC-AUTH-09-leg1 over 160's `connection.ts` — a NEW artifact.
 3. Commit the new artifact and **re-anchor** `packages/harness/src/security/device-gate-provenance.ts`
    to the new artifact's commit (re-anchoring without a real run = §2.11 "move the yardstick").
-4. `pnpm verify:full` green (only SEC-AUTH-10 owed) before the ff. See task 160's re-land checklist and
+4. Push the branch and read CI per-job (`gh run list` → per-job conclusions): `security-gate` green,
+   only `security-owed` red (SEC-AUTH-10 owed), before the ff. See task 160's re-land checklist and
    task 182 (stamp a build-sha in the artifact — do it in the same schema touch if convenient).
 Ordering matters: 160 must be live before 27a enrolls on real hardware (a restored foreign DB is only
 reachable once a device DB exists — 27a is the first), so this is the natural place to land both.
