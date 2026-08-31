@@ -8,12 +8,12 @@
 
 ## Goal
 
-`packages/test-support/src/enum-mirror-parity.test.ts` (107 lines) guards **two** mirrors via source-text regex extraction plus `toHaveLength(2)` denominator bookkeeping (T-14):
+`packages/test-support/src/enum-mirror-parity.test.ts` historically guarded **two** mirrors via source-text regex extraction plus `toHaveLength(N)` denominator bookkeeping (T-14):
 
-- **Arm (a): ui ↔ schemas** — `OPERATION_SYNC_STATUSES` re-declared in `packages/ui/src/components/SyncStatusChip.tsx` because ui may not import schemas.
+- **Arm (a): ui ↔ schemas** — `OPERATION_SYNC_STATUSES` re-declared in `packages/ui/src/components/SyncStatusChip.tsx` because ui may not import schemas. **Already removed by task 193** (both the literal mirror and this gate arm), which let ui import `type OperationSyncStatus` from schemas. The file arrives here at **one** mirror (`toHaveLength(1)`).
 - **Arm (b): the Hermes/zod-bundle mirror** in test-support — genuinely forced (test-support must not drag zod into the RN bundle).
 
-Once **task 193** lets ui import `type OperationSyncStatus` from schemas, arm (a)'s literal mirror is **gone** — delete arm (a). Reduce the file to **one real parity check** for arm (b) (~15 lines), and drop the source-regex + denominator ceremony where a direct import/assert will do.
+This task reduces the surviving single-mirror gate to **one real parity check** for arm (b) (~15 lines), dropping the source-regex + `MIRRORS`/`toHaveLength` ceremony in favour of a direct runtime-value comparison — enabled by `export`ing the previously-private `SOURCES` so the Node-side test can import it (the module loader then guards non-vacuity, T-14).
 
 ## Must preserve (do NOT cut)
 
@@ -25,8 +25,9 @@ Once **task 193** lets ui import `type OperationSyncStatus` from schemas, arm (a
 
 ## Files / modules touched
 
-- `packages/test-support/src/enum-mirror-parity.test.ts` (shrink 107 → ~15).
-- `packages/ui/src/components/SyncStatusChip.tsx` — arm (a)'s mirror is removed by task 193; this task removes the corresponding gate arm.
+- `packages/test-support/src/enum-mirror-parity.test.ts` (shrink 105 → ~15).
+- `packages/test-support/src/crypto/envelope-generator.ts` — `export` the previously-private `SOURCES` const so the gate can import the real runtime value directly (no zod/boundary impact: exporting adds no import, and the test runs in Node, not the Hermes bundle).
+- `packages/ui/src/components/SyncStatusChip.tsx` — **not touched here**; arm (a)'s mirror *and* its gate arm were both removed by task 193.
 
 ## Acceptance
 
