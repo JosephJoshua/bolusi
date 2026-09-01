@@ -64,6 +64,7 @@ function renderPin(over: { row: PinAttemptRow | null; now?: number }) {
       onSubmit={vi.fn()}
       onSwitchUser={vi.fn()}
       syncChip="synced"
+      pendingCount={0}
       onOpenSync={vi.fn()}
     />,
   );

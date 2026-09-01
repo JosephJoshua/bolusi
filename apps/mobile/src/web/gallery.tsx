@@ -114,6 +114,7 @@ function PinInteractive(): React.JSX.Element {
         onSubmit={() => setSubmitted(true)}
         onSwitchUser={noop}
         syncChip="synced"
+        pendingCount={0}
         onOpenSync={noop}
       />
       {submitted ? <Text testID="pin-submitted">PIN submitted (value never rendered)</Text> : null}
@@ -144,6 +145,7 @@ function SettingsInteractive(): React.JSX.Element {
       onOpenSwitcher={noop}
       onOpenChangePin={noop}
       syncChip="synced"
+      pendingCount={0}
       onOpenSync={noop}
     />
   );
@@ -294,6 +296,7 @@ function pinScreen(
         onSubmit={noop}
         onSwitchUser={noop}
         syncChip="synced"
+        pendingCount={0}
         onOpenSync={noop}
       />
     </ApproxFrame>
@@ -363,6 +366,7 @@ function switcherScreen(
         onRetry={noop}
         onUnauthorizedBack={noop}
         syncChip="synced"
+        pendingCount={0}
         onOpenSync={noop}
       />
     </ApproxFrame>

@@ -63,6 +63,8 @@ export interface PinScreenProps {
   readonly onSubmit: (pin: string) => void;
   readonly onSwitchUser: () => void;
   readonly syncChip: SyncChipState;
+  /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
+  readonly pendingCount: number;
   readonly onOpenSync: () => void;
 }
 
@@ -75,6 +77,7 @@ export function PinScreen({
   onSubmit,
   onSwitchUser,
   syncChip,
+  pendingCount,
   onOpenSync,
 }: PinScreenProps): React.JSX.Element {
   const view = pinView(row, now, lastAttempt);
@@ -88,7 +91,8 @@ export function PinScreen({
       syncChip={
         <SyncChip
           state={syncChip}
-          accessibilityLabels={syncChipAccessibilityLabels()}
+          pendingCount={pendingCount}
+          accessibilityLabels={syncChipAccessibilityLabels({ pendingCount })}
           onPress={onOpenSync}
         />
       }

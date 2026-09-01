@@ -78,9 +78,10 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
           state="offline"
           // The chip announces only its own state (`offline`), so the bespoke enrollment copy — "you
           // need a connection to enroll", not a sync recap — overrides just that entry; the rest of
-          // the map is inert here but the prop requires every state.
+          // the map is inert here but the prop requires every state. `pendingCount` is 0 because this
+          // chip is never `pending`, so its (never-announced) count is immaterial.
           accessibilityLabels={{
-            ...syncChipAccessibilityLabels(),
+            ...syncChipAccessibilityLabels({ pendingCount: 0 }),
             offline: t('auth.enroll.needsConnection'),
           }}
           onPress={noop}

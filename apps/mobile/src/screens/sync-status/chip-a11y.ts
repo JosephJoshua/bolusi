@@ -20,8 +20,16 @@ import type { SyncChipState } from './model.js';
 export interface SyncChipLabelInput {
   /** `synced` only — the humanized "last connected" relative time. Empty ⇒ no suffix. */
   readonly relative?: string;
-  /** `pending` only — the count of `local` ops the chip also shows numerically. */
-  readonly pendingCount?: number;
+  /**
+   * The count of `local` ops the `pending` chip also shows numerically. REQUIRED, never defaulted: a
+   * missing count used to fall back to 0, so a caller that forgot to thread it announced "0 perubahan
+   * belum terkirim" (0 unsent) on a chip that is `pending` precisely because ops ARE unsent — a false
+   * statement on the one channel §6.3/§6.4 says must carry the state (the task-144 review found three
+   * screens doing exactly this). Requiring it turns that silent 0 into a compile error at every call
+   * site. A caller whose chip can never be `pending` (the enrollment chip is always `offline`) passes
+   * 0 explicitly; its inert `pending` entry is built but never announced.
+   */
+  readonly pendingCount: number;
 }
 
 /**
@@ -30,11 +38,11 @@ export interface SyncChipLabelInput {
  * matches what the icon/dot shows — never the state-invariant "last connected" of the old single prop.
  */
 export function syncChipAccessibilityLabels(
-  input: SyncChipLabelInput = {},
+  input: SyncChipLabelInput,
 ): Record<SyncChipState, string> {
   return {
     synced: t('sync.status.lastSynced', { relative: input.relative ?? '' }),
-    pending: t('sync.status.pending', { count: input.pendingCount ?? 0 }),
+    pending: t('sync.status.pending', { count: input.pendingCount }),
     syncing: t('sync.status.syncing'),
     offline: t('sync.status.offline'),
     attention: t('sync.chip.rejected'),

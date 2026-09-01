@@ -27,7 +27,10 @@ const USER: SwitcherUser = {
 
 const READY: SwitcherState = { kind: 'ready', users: [USER] };
 
-function renderSwitcher(mode: 'lock' | 'choose') {
+function renderSwitcher(
+  mode: 'lock' | 'choose',
+  chip: { readonly syncChip?: 'synced' | 'pending'; readonly pendingCount?: number } = {},
+) {
   return render(
     <SwitcherScreen
       state={READY}
@@ -37,7 +40,8 @@ function renderSwitcher(mode: 'lock' | 'choose') {
       onSelect={vi.fn()}
       onRetry={vi.fn()}
       onUnauthorizedBack={vi.fn()}
-      syncChip="synced"
+      syncChip={chip.syncChip ?? 'synced'}
+      pendingCount={chip.pendingCount ?? 0}
       onOpenSync={vi.fn()}
     />,
   );
@@ -54,5 +58,22 @@ describe('the idle-lock banner is wired to `mode` (design-system §8.2 / SEC-AUT
     // alarming every ordinary user-switch with a lock explanation that does not apply.
     const screen = renderSwitcher('choose');
     expect(screen.query('switcher-lock-banner')).toBeNull();
+  });
+});
+
+describe("the pending chip announces THIS screen's unsent-op count (task 144 review)", () => {
+  // The `pending` a11y label interpolates the count of unsent ops. This screen takes `syncChip` as a
+  // bare state and builds the label map itself, so it must thread its own `pendingCount` into the
+  // builder. A screen that dropped that prop would announce a CONSTANT — the old `?? 0` default,
+  // "0 perubahan belum terkirim" (0 unsent) — on a chip that is `pending` precisely because ops ARE
+  // unsent, the one channel §6.3/§6.4 says must carry the state. The regression was exactly this:
+  // three screens called the builder with no count. Copy is never asserted (T-4) — only that two
+  // different counts yield two different announcements, which a constant can never do.
+  test('a different count changes the announcement — the prop reaches the label, not a constant', () => {
+    const few = renderSwitcher('choose', { syncChip: 'pending', pendingCount: 3 });
+    const many = renderSwitcher('choose', { syncChip: 'pending', pendingCount: 9 });
+    const fewLabel = few.get('ui.syncChip').props['accessibilityLabel'];
+    const manyLabel = many.get('ui.syncChip').props['accessibilityLabel'];
+    expect(fewLabel).not.toBe(manyLabel);
   });
 });

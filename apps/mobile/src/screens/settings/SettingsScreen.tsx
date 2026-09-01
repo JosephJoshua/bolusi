@@ -59,6 +59,8 @@ export interface SettingsScreenProps {
    */
   readonly onOpenResetPin?: (() => void) | undefined;
   readonly syncChip: SyncChipState;
+  /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
+  readonly pendingCount: number;
   readonly onOpenSync: () => void;
 }
 
@@ -74,6 +76,7 @@ export function SettingsScreen({
   onOpenUnlockPin,
   onOpenResetPin,
   syncChip,
+  pendingCount,
   onOpenSync,
 }: SettingsScreenProps): React.JSX.Element {
   return (
@@ -87,7 +90,8 @@ export function SettingsScreen({
       syncChip={
         <SyncChip
           state={syncChip}
-          accessibilityLabels={syncChipAccessibilityLabels()}
+          pendingCount={pendingCount}
+          accessibilityLabels={syncChipAccessibilityLabels({ pendingCount })}
           onPress={onOpenSync}
         />
       }

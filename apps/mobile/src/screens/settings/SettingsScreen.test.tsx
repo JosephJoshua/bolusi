@@ -57,6 +57,7 @@ function renderSettings(
       onOpenSwitcher={vi.fn()}
       onOpenChangePin={vi.fn()}
       syncChip="synced"
+      pendingCount={0}
       onOpenSync={vi.fn()}
     />,
   );
@@ -136,6 +137,7 @@ describe('the screen title and section headers are distinct, correct labels (§1
         onOpenSwitcher={vi.fn()}
         onOpenChangePin={onOpenChangePin}
         syncChip="synced"
+        pendingCount={0}
         onOpenSync={vi.fn()}
       />,
     );
@@ -159,6 +161,7 @@ describe('the screen title and section headers are distinct, correct labels (§1
         onOpenChangePin={vi.fn()}
         onOpenUnlockPin={onOpenUnlockPin}
         syncChip="synced"
+        pendingCount={0}
         onOpenSync={vi.fn()}
       />,
     );
@@ -188,6 +191,7 @@ describe('the screen title and section headers are distinct, correct labels (§1
         onOpenChangePin={vi.fn()}
         onOpenResetPin={onOpenResetPin}
         syncChip="synced"
+        pendingCount={0}
         onOpenSync={vi.fn()}
       />,
     );

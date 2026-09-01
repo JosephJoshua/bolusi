@@ -666,6 +666,7 @@ export default function App(props: AppProps): React.JSX.Element {
             // walking into the previous user's session.
             onUnauthorizedBack={goBack}
             syncChip={chip}
+            pendingCount={props.sync.pendingOperationCount}
             onOpenSync={openSyncStatus}
           />
         ),
@@ -696,6 +697,7 @@ export default function App(props: AppProps): React.JSX.Element {
             }}
             onSwitchUser={() => setPinFor(null)}
             syncChip={chip}
+            pendingCount={props.sync.pendingOperationCount}
             onOpenSync={openSyncStatus}
           />
         ),
@@ -744,6 +746,7 @@ export default function App(props: AppProps): React.JSX.Element {
                 // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
                 onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
                 syncChip={chip}
+                pendingCount={props.sync.pendingOperationCount}
                 onOpenSync={() => setRoute('syncStatus')}
               />
             );

@@ -65,6 +65,8 @@ export interface SwitcherScreenProps {
    */
   readonly onUnauthorizedBack: () => void;
   readonly syncChip: SyncChipState;
+  /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
+  readonly pendingCount: number;
   readonly onOpenSync: () => void;
 }
 
@@ -76,6 +78,7 @@ export function SwitcherScreen({
   onRetry,
   onUnauthorizedBack,
   syncChip,
+  pendingCount,
   onOpenSync,
 }: SwitcherScreenProps): React.JSX.Element {
   const listState: ListState<SwitcherGridRow> =
@@ -126,7 +129,8 @@ export function SwitcherScreen({
       syncChip={
         <SyncChip
           state={syncChip}
-          accessibilityLabels={syncChipAccessibilityLabels()}
+          pendingCount={pendingCount}
+          accessibilityLabels={syncChipAccessibilityLabels({ pendingCount })}
           onPress={onOpenSync}
         />
       }
