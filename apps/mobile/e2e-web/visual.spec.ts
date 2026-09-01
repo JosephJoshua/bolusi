@@ -63,7 +63,7 @@ const MATRIX: readonly Row[] = [
   // Settings — the language surface (interaction covered separately).
   { screen: 'settings', state: 'ready', testId: 'settings-screen', text: 'Bahasa' },
 
-  // Sync-status — healthy / saved-here / photos-pending / offline / needs-attention.
+  // Sync-status — healthy / saved-here / photos-pending / offline / actively-syncing / needs-attention.
   { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
   // task 147: ops sent, 3 photos queued. The headline reads "Foto Belum Terkirim" (Photos Not Sent
@@ -75,6 +75,15 @@ const MATRIX: readonly Row[] = [
     text: 'Foto Belum Terkirim',
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
+  // task 144 item 5: the loop actively pushing — the fifth chip state, previously never screenshotted.
+  // Keyed on the syncing-specific header title ("Sedang Mengirim"), so a title regression (the 126/147
+  // bug class) reds this row rather than passing on a bare testID.
+  {
+    screen: 'sync-status',
+    state: 'syncing',
+    testId: 'sync-reassurance',
+    text: 'Sedang Mengirim',
+  },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
   // The §8.4-item-4 disclosure (task 130). Probed on the REASON node, not the section: the section
   // is already visible in `attention`, so keying this row on it would pass with the detail collapsed

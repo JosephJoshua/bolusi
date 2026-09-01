@@ -148,13 +148,18 @@ const DEMO_REJECTED: readonly RejectedOpRow[] = [
 
 /**
  * The meaningful sync-status shapes: healthy-and-synced, saved-here (ops pending), photos-pending
- * (ops sent but media still draining, FR-1138 — task 147), offline-but-safe, needs-attention.
+ * (ops sent but media still draining, FR-1138 — task 147), offline-but-safe, actively-syncing (the
+ * loop pushing, task 144 item 5), needs-attention.
  */
 export const SYNC_STATUS_STATES = {
   allSent: () => demoSyncInput(),
   savedHere: () => demoSyncInput({ pendingOperationCount: 3, loopState: 'idle' }),
   photosPending: () => demoSyncInput({ pendingMediaCount: 3, pendingOperationCount: 0 }),
   offline: () => demoSyncInput({ isOffline: true, pendingOperationCount: 2 }),
+  // The live loop actively pushing (03 §10's in-memory loop state) with nothing wrong: `syncChipState`
+  // ranks `syncing` above the pending count, so the chip reads "Mengirim…" and the header title
+  // "Sedang Mengirim". This is the one chip state the visual matrix had never screenshotted (item 5).
+  syncing: () => demoSyncInput({ loopState: 'pushing' }),
   attention: () => demoSyncInput({ rejected: DEMO_REJECTED }),
 } as const;
 

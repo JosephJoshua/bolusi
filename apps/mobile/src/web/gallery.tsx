@@ -559,7 +559,7 @@ export const ENTRIES: readonly HarnessEntry[] = [
     ),
   },
 
-  // Sync-status — healthy, offline-but-safe, saved-here, needs-attention.
+  // Sync-status — healthy, offline-but-safe, saved-here, actively-syncing, needs-attention.
   {
     screen: 'sync-status',
     state: 'allSent',
@@ -579,6 +579,11 @@ export const ENTRIES: readonly HarnessEntry[] = [
     screen: 'sync-status',
     state: 'offline',
     render: () => syncScreen('offline', SYNC_STATUS_STATES.offline()),
+  },
+  {
+    screen: 'sync-status',
+    state: 'syncing',
+    render: () => syncScreen('syncing', SYNC_STATUS_STATES.syncing()),
   },
   {
     screen: 'sync-status',
