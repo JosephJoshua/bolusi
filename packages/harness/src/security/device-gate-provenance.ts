@@ -46,8 +46,8 @@ export const HARNESS_RESULT_SCHEMA = 'bolusi-harness-result/1';
 /** The on-device gate id carrying SEC-AUTH-09 leg 1 (the PIN-verifier-material-at-rest leg). */
 export const VERIFIER_AT_REST_GATE_ID = 'SEC-AUTH-09-leg1';
 
-/** The pinned artifact whose committed emulator run is leg 1's evidence (task 27a run 30153400999). */
-export const DEVICE_GATE_ARTIFACT = 'reports/device-gates/2026-07-25-emulator.json';
+/** The pinned artifact whose committed emulator run is leg 1's evidence (task 160 reland, CI run 33530599150). */
+export const DEVICE_GATE_ARTIFACT = 'reports/device-gates/2026-09-01-emulator.json';
 
 /**
  * The AT-REST SURFACE — the files whose change invalidates the leg-1 claim "the PIN-verifier bytes are
