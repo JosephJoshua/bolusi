@@ -63,6 +63,7 @@ import {
 } from './src/screens/switcher/model.js';
 import { SyncStatusScreen } from './src/screens/sync-status/SyncStatusScreen.js';
 import { syncChipState, type SyncStatusInput } from './src/screens/sync-status/model.js';
+import { syncChipAccessibilityLabels } from './src/screens/sync-status/chip-a11y.js';
 import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
 import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
@@ -599,7 +600,9 @@ export default function App(props: AppProps): React.JSX.Element {
             <SyncChip
               state={chip}
               pendingCount={props.sync.pendingOperationCount}
-              accessibilityLabel={t('sync.status.lastSynced', { relative: '' })}
+              accessibilityLabels={syncChipAccessibilityLabels({
+                pendingCount: props.sync.pendingOperationCount,
+              })}
               onPress={openSyncStatus}
             />
           }
@@ -814,11 +817,12 @@ export default function App(props: AppProps): React.JSX.Element {
                 <SyncChip
                   state={chip}
                   pendingCount={props.sync.pendingOperationCount}
-                  accessibilityLabel={t('sync.status.lastSynced', {
+                  accessibilityLabels={syncChipAccessibilityLabels({
                     relative:
                       props.sync.state.lastSuccessfulSyncAt === null
                         ? t('core.status.empty')
                         : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                    pendingCount: props.sync.pendingOperationCount,
                   })}
                   onPress={() => leaveHome(() => setRoute('syncStatus'))}
                 />

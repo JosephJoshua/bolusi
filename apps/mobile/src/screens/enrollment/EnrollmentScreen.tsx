@@ -31,6 +31,8 @@ import {
 } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
+
 import {
   bindingSummary,
   canSubmitConfirm,
@@ -74,7 +76,13 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
       syncChip={
         <SyncChip
           state="offline"
-          accessibilityLabel={t('auth.enroll.needsConnection')}
+          // The chip announces only its own state (`offline`), so the bespoke enrollment copy — "you
+          // need a connection to enroll", not a sync recap — overrides just that entry; the rest of
+          // the map is inert here but the prop requires every state.
+          accessibilityLabels={{
+            ...syncChipAccessibilityLabels(),
+            offline: t('auth.enroll.needsConnection'),
+          }}
           onPress={noop}
         />
       }

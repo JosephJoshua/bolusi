@@ -20,8 +20,14 @@ export interface SyncChipProps {
   readonly state: SyncChipState;
   /** Count of `local` ops — rendered in the `pending` state only (§8.1). */
   readonly pendingCount?: number | undefined;
-  /** Already-localized accessibility label describing the current state. */
-  readonly accessibilityLabel: string;
+  /**
+   * Already-localized accessibility label PER state. The chip announces the entry for its own
+   * `state`, so a screen-reader user hears what the icon/dot shows — not one state-invariant string
+   * (§6.3: colour is never the only signal). A single label cannot do this: `synced` and `attention`
+   * look different but sound identical unless the label is chosen by `state` here. `t()` stays out of
+   * `@bolusi/ui` (08-stack §3.3) — callers build the map (see `syncChipAccessibilityLabels`).
+   */
+  readonly accessibilityLabels: Readonly<Record<SyncChipState, string>>;
   /** §8.1: tap → Sync Status screen. */
   readonly onPress: () => void;
   readonly testID?: string | undefined;
@@ -67,7 +73,7 @@ const styles = StyleSheet.create({
 export function SyncChip({
   state,
   pendingCount,
-  accessibilityLabel,
+  accessibilityLabels,
   onPress,
   testID = 'ui.syncChip',
 }: SyncChipProps): React.JSX.Element {
@@ -79,7 +85,7 @@ export function SyncChip({
       // The state is in the testID so a screen test can assert WHICH state is showing without
       // reading copy (testing-guide T-4).
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={accessibilityLabels[state]}
       onPress={onPress}
       style={styles.base}
     >

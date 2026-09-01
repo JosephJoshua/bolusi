@@ -22,6 +22,8 @@ import {
 } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
+
 import {
   categoryNameKey,
   localeNameKey,
@@ -85,7 +87,7 @@ export function SettingsScreen({
       syncChip={
         <SyncChip
           state={syncChip}
-          accessibilityLabel={t('sync.status.lastSynced', { relative: '' })}
+          accessibilityLabels={syncChipAccessibilityLabels()}
           onPress={onOpenSync}
         />
       }

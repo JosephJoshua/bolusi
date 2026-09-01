@@ -28,6 +28,20 @@ const SYNC_STATES: readonly SyncChipState[] = [
   'attention',
 ];
 
+/**
+ * A full per-state label map answering the SAME string for every state. Enough for the touch / role
+ * / colour-channel assertions in THIS file, none of which inspect the announced text — they check
+ * geometry, `accessibilityRole`, and the icon/dot channels. State→label SELECTION (the point of the
+ * per-state prop) is proven in `sync-chip.test.tsx`, where the labels are deliberately distinct.
+ */
+const uniformLabels = (label: string): Record<SyncChipState, string> => ({
+  synced: label,
+  pending: label,
+  syncing: label,
+  offline: label,
+  attention: label,
+});
+
 /** Effective touch extent of a node: its own dimension plus any compensating hitSlop (§1.4). */
 function extent(r: RenderResult, testID: string, axis: 'height' | 'width'): number {
   const style = r.styleOf(testID);
@@ -63,7 +77,9 @@ describe('touch targets (§1.4, §6.2)', () => {
   });
 
   test.each(SYNC_STATES)('SyncChip (%s) meets the 48 dp floor', (state) => {
-    const r = render(<SyncChip state={state} accessibilityLabel="sinkron" onPress={vi.fn()} />);
+    const r = render(
+      <SyncChip state={state} accessibilityLabels={uniformLabels('sinkron')} onPress={vi.fn()} />,
+    );
     expect(extent(r, 'ui.syncChip', 'height')).toBeGreaterThanOrEqual(touch.min);
     expect(extent(r, 'ui.syncChip', 'width')).toBeGreaterThanOrEqual(touch.min);
   });
@@ -96,7 +112,15 @@ describe('roles and states (§6.4)', () => {
         {null}
       </Card>,
     ],
-    ['SyncChip', <SyncChip testID="t" state="synced" accessibilityLabel="x" onPress={vi.fn()} />],
+    [
+      'SyncChip',
+      <SyncChip
+        testID="t"
+        state="synced"
+        accessibilityLabels={uniformLabels('x')}
+        onPress={vi.fn()}
+      />,
+    ],
     [
       'AvatarButton',
       <AvatarButton testID="t" userId="u" initials="SW" accessibilityLabel="x" onPress={vi.fn()} />,
@@ -109,7 +133,15 @@ describe('roles and states (§6.4)', () => {
   test.each([
     ['Button', <Button testID="t" label="x" onPress={vi.fn()} />],
     ['tappable Chip', <Chip testID="t" label="x" icon="pending" onPress={vi.fn()} />],
-    ['SyncChip', <SyncChip testID="t" state="offline" accessibilityLabel="x" onPress={vi.fn()} />],
+    [
+      'SyncChip',
+      <SyncChip
+        testID="t"
+        state="offline"
+        accessibilityLabels={uniformLabels('x')}
+        onPress={vi.fn()}
+      />,
+    ],
   ])('%s carries an accessibilityLabel', (_name, element) => {
     const r = render(element);
     expect(typeof r.get('t').props['accessibilityLabel']).toBe('string');
@@ -123,17 +155,23 @@ describe('roles and states (§6.4)', () => {
 
 describe('no colour-only signalling (§6.3)', () => {
   test.each(SYNC_STATES)('SyncChip (%s) carries an icon, not just a tint', (state) => {
-    const r = render(<SyncChip state={state} accessibilityLabel="x" onPress={vi.fn()} />);
+    const r = render(
+      <SyncChip state={state} accessibilityLabels={uniformLabels('x')} onPress={vi.fn()} />,
+    );
     expect(r.query(`ui.syncChip.icon.${state}`)).not.toBeNull();
   });
 
   test('SyncChip attention adds a dot on top of the icon — a second non-colour channel', () => {
-    const r = render(<SyncChip state="attention" accessibilityLabel="x" onPress={vi.fn()} />);
+    const r = render(
+      <SyncChip state="attention" accessibilityLabels={uniformLabels('x')} onPress={vi.fn()} />,
+    );
     expect(r.query('ui.syncChip.dot')).not.toBeNull();
   });
 
   test('offline is neutral, never red — offline is a normal operating mode (§4.6)', () => {
-    const r = render(<SyncChip state="offline" accessibilityLabel="x" onPress={vi.fn()} />);
+    const r = render(
+      <SyncChip state="offline" accessibilityLabels={uniformLabels('x')} onPress={vi.fn()} />,
+    );
     const icon = r.get('ui.syncChip.icon.offline');
     expect(icon.props['color']).toBe(color.textMuted);
     expect(icon.props['color']).not.toBe(color.danger);

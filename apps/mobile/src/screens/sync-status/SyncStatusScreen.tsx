@@ -45,6 +45,7 @@ import {
 } from '@bolusi/ui';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 
+import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {
   bannerCauses,
   isOfflineButHealthy,
@@ -127,7 +128,10 @@ export function SyncStatusScreen({
         <SyncChip
           state={chip}
           pendingCount={input.pendingOperationCount}
-          accessibilityLabel={t('sync.status.lastSynced', { relative: relativeLabel(input) })}
+          accessibilityLabels={syncChipAccessibilityLabels({
+            relative: relativeLabel(input),
+            pendingCount: input.pendingOperationCount,
+          })}
           onPress={onBack}
         />
       }

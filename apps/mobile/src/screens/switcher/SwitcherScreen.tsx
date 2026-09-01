@@ -30,6 +30,7 @@ import {
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { SwitcherMode } from '../../navigation/zone.js';
+import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
   initialsOf,
@@ -125,7 +126,7 @@ export function SwitcherScreen({
       syncChip={
         <SyncChip
           state={syncChip}
-          accessibilityLabel={t('sync.status.lastSynced', { relative: '' })}
+          accessibilityLabels={syncChipAccessibilityLabels()}
           onPress={onOpenSync}
         />
       }

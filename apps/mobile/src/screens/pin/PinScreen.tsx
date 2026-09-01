@@ -30,6 +30,7 @@ import {
 import { StyleSheet, Text, View } from 'react-native';
 
 import { initialsOf } from '../switcher/model.js';
+import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
   attemptsLeft,
@@ -87,7 +88,7 @@ export function PinScreen({
       syncChip={
         <SyncChip
           state={syncChip}
-          accessibilityLabel={t('sync.status.lastSynced', { relative: '' })}
+          accessibilityLabels={syncChipAccessibilityLabels()}
           onPress={onOpenSync}
         />
       }

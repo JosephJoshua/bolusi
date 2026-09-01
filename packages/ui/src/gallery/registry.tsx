@@ -22,7 +22,22 @@ import { Text } from 'react-native';
 
 import * as componentInventory from '../components/index.js';
 import * as shellInventory from '../shell/index.js';
+import type { SyncChipState } from '../shell/SyncChip.js';
 import { color, size } from '../tokens.js';
+
+/**
+ * Uniform per-state accessibility labels for the Gallery. Every SyncChip card renders exactly ONE
+ * state, so the chip announces only that state's entry — the demo copy (`l.syncChip`) is the same
+ * across states here. State→label SELECTION (the reason the prop is a map) is proven in
+ * `test/sync-chip.test.tsx`, with deliberately distinct labels; the Gallery only needs to render.
+ */
+const chipLabelsFor = (label: string): Record<SyncChipState, string> => ({
+  synced: label,
+  pending: label,
+  syncing: label,
+  offline: label,
+  attention: label,
+});
 
 /** Every value exported by the two barrels. `export type` members are absent from `typeof`. */
 export type InventoryName = keyof typeof componentInventory | keyof typeof shellInventory;
@@ -576,7 +591,7 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
       <shellInventory.SyncChip
         state={state}
         pendingCount={state === 'pending' ? 3 : undefined}
-        accessibilityLabel={l.syncChip}
+        accessibilityLabels={chipLabelsFor(l.syncChip)}
         onPress={noop}
       />
     ),
@@ -605,7 +620,7 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           syncChip={
             <shellInventory.SyncChip
               state="synced"
-              accessibilityLabel={l.syncChip}
+              accessibilityLabels={chipLabelsFor(l.syncChip)}
               onPress={noop}
             />
           }
@@ -633,7 +648,7 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           syncChip={
             <shellInventory.SyncChip
               state="attention"
-              accessibilityLabel={l.syncChip}
+              accessibilityLabels={chipLabelsFor(l.syncChip)}
               onPress={noop}
             />
           }
