@@ -242,3 +242,35 @@ describe('the notification rows open the OS notification settings (api/04-push �
     expect(screen.query('settings-notifications-sync')).toBeNull();
   });
 });
+
+describe("the pending chip announces THIS screen's unsent-op count (task 144 review)", () => {
+  // The mirror of the SwitcherScreen guard: SettingsScreen also takes `syncChip` as a bare state and
+  // builds the a11y label map itself, so it must thread its own `pendingCount` into the builder. A
+  // screen that dropped that prop would announce a CONSTANT — the old `?? 0` default, "0 perubahan
+  // belum terkirim" (0 unsent) — on a chip that is `pending` precisely because ops ARE unsent
+  // (§6.3/§6.4). Copy is never asserted (T-4): only that two different counts yield two different
+  // announcements, which a constant can never do. Hardcoding `{ pendingCount: 0 }` at
+  // SettingsScreen.tsx:94 reds this.
+  function pendingLabel(pendingCount: number): string {
+    const screen = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={vi.fn()}
+        syncChip="pending"
+        pendingCount={pendingCount}
+        onOpenSync={vi.fn()}
+      />,
+    );
+    return screen.get('ui.syncChip').props['accessibilityLabel'];
+  }
+
+  test('a different count changes the announcement — the prop reaches the label, not a constant', () => {
+    expect(pendingLabel(3)).not.toBe(pendingLabel(9));
+  });
+});

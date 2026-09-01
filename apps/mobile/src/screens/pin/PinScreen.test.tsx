@@ -123,3 +123,33 @@ describe('PinScreen wires the pad state through — the keys are dead inside a l
     }
   });
 });
+
+describe("the pending chip announces THIS screen's unsent-op count (task 144 review)", () => {
+  // The mirror of the SwitcherScreen guard: PinScreen also takes `syncChip` as a bare state and builds
+  // the a11y label map itself, so it must thread its own `pendingCount` into the builder. A screen that
+  // dropped that prop would announce a CONSTANT — the old `?? 0` default, "0 perubahan belum terkirim"
+  // (0 unsent) — on a chip that is `pending` precisely because ops ARE unsent (§6.3/§6.4). Copy is
+  // never asserted (T-4): only that two different counts yield two different announcements, which a
+  // constant can never do. Hardcoding `{ pendingCount: 0 }` at PinScreen.tsx:95 reds this.
+  function pendingLabel(pendingCount: number): string {
+    const screen = render(
+      <PinScreen
+        userId={USER}
+        userName="Kasir 1"
+        row={null}
+        now={NOW}
+        lastAttempt="none"
+        onSubmit={vi.fn()}
+        onSwitchUser={vi.fn()}
+        syncChip="pending"
+        pendingCount={pendingCount}
+        onOpenSync={vi.fn()}
+      />,
+    );
+    return screen.get('ui.syncChip').props['accessibilityLabel'];
+  }
+
+  test('a different count changes the announcement — the prop reaches the label, not a constant', () => {
+    expect(pendingLabel(3)).not.toBe(pendingLabel(9));
+  });
+});
