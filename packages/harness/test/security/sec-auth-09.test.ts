@@ -3,8 +3,8 @@
 // ALL THREE legs together (security-guide §165 / §5.4), each traced to its real producer (T-16):
 //
 //   • LEG 1 — the PIN-verifier salt/hash/params are ciphertext AT REST on real hardware. Emulator-only,
-//     so its evidence is the COMMITTED artifact `reports/device-gates/2026-07-25-emulator.json` (task
-//     27a run 30153400999, driven through the production `writeVerifier`). Trusting that JSON without
+//     so its evidence is the COMMITTED artifact `reports/device-gates/2026-09-01-emulator.json` (task
+//     160 reland run 33530599150, driven through the production `writeVerifier`). Trusting that JSON without
 //     provenance is the "real number with fictional provenance" trap (§2.11); `assessDeviceGateDischarge`
 //     is the freshness/provenance guard that stops it — the load-bearing part of this file.
 //   • LEG 2 — no pushed op payload carries verifier material (I-13). The universal cycle scan ships in
