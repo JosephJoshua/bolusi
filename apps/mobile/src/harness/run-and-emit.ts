@@ -5,7 +5,8 @@
 // ── THIS IS THE HARNESS'S ONE NATIVE-BINDING SITE (task 178) ────────────────────────────────────
 // Like `apps/mobile/index.ts` is for the app, this is the ONE file in the harness that binds the native
 // modules the on-device gate runners need — op-sqlite (via `@bolusi/db-client/op-sqlite`), the AES-256-GCM
-// AEAD (`deviceColumnAead`), and expo-file-system — and injects them DOWN into the pure runners. It pulls
+// AEAD (`deviceColumnAead`), and expo-file-system — and injects them DOWN into the pure runners (the
+// at-rest seed, the JCS runner, and CHAOS-01's convergence DB seam — task 181). It pulls
 // in emit.ts (the native tagged emitter) and RN's `__DEV__`/`HermesInternal` globals, none of which exist
 // in Node, so no Node test imports it (the pure pieces it calls ARE Node-tested: run.ts in
 // harness-producer.test.ts, the at-rest env in at-rest-device-env.test.ts, the JCS runner in
@@ -30,6 +31,11 @@ import {
   VERIFIER_AT_REST_GATE_ID,
 } from './part-c/at-rest-device-ctx.js';
 import { createAtRestDeviceEnv, type AtRestDeviceSeams } from './part-c/at-rest-device-env.js';
+import {
+  CHAOS01_GATE_ID,
+  runChaos01Gate,
+  type ChaosDbSeams,
+} from './part-c/chaos-01-device-env.js';
 import { JCS_GATE_ID, runJcsGate } from './part-c/jcs-device-runner.js';
 
 declare const __DEV__: boolean;
@@ -61,6 +67,11 @@ function runtimeFacts(): HarnessRuntimeFacts {
 /** `<documentDirectory>/bolusi-harness-atrest/` — a throwaway directory the at-rest seed owns. Never the
  * production `bolusi.db` area, so it cannot collide with anything (HarnessActivity never boots the app). */
 const HARNESS_DIR = 'bolusi-harness-atrest';
+
+/** `<documentDirectory>/bolusi-harness-chaos/` — the throwaway area CHAOS-01's convergence DBs live in.
+ * Separate from the at-rest dir so the two device runners never share a file; both are outside the app's
+ * production `bolusi.db` area (HarnessActivity never boots the app). */
+const HARNESS_CHAOS_DIR = 'bolusi-harness-chaos';
 
 /** op-sqlite's `location` is a plain absolute directory path; expo-file-system speaks `file://` URIs.
  * Strip the scheme so the driver and the byte reader address the SAME physical directory. */
@@ -106,9 +117,30 @@ function deviceAtRestSeams(): AtRestDeviceSeams {
 }
 
 /**
+ * Bind the CHAOS-01 convergence DB seam to op-sqlite, the ONLY dependency its pure runner needs. Mirrors
+ * `deviceAtRestSeams` but driver-only — no AEAD or file bytes, since convergence is a digest-only property
+ * over the projection tables. `location` is the same `location`/`file://` coupling the at-rest seam uses,
+ * so the op-sqlite driver and `deleteOpSqliteDatabase` address the SAME physical directory.
+ */
+function deviceChaosSeams(): ChaosDbSeams {
+  const dir = new Directory(Paths.document, HARNESS_CHAOS_DIR);
+  if (!dir.exists) dir.create({ intermediates: true });
+  const location = stripFileScheme(dir.uri);
+  return {
+    driverFactory: openOpSqliteDriver,
+    location,
+    removeDb(name) {
+      deleteOpSqliteDatabase({ name, location });
+      return Promise.resolve();
+    },
+  };
+}
+
+/**
  * Build the on-device gate runners from the loaded harness. Each entry produces a REAL `passed`/`failed`
- * (§2.11); the four chaos ids deliberately have NO entry, so run.ts skips them honestly (they need a
- * device-native scenario rig apps/mobile may not reach — see run.ts and task 181).
+ * (§2.11). CHAOS-01 is wired here (its client-only convergence needs only op-sqlite — task 181); the
+ * remaining chaos ids (CHAOS-03/06/07) deliberately have NO entry, so run.ts skips them honestly — they
+ * need a real SERVER round-trip a single emulator cannot host (D24 option C, see run.ts).
  */
 function buildDeviceRunners(harness: HarnessRunners): DeviceGateRunners {
   const env = createAtRestDeviceEnv(deviceAtRestSeams());
@@ -119,6 +151,8 @@ function buildDeviceRunners(harness: HarnessRunners): DeviceGateRunners {
     [VERIFIER_AT_REST_GATE_ID]: () => runVerifierAtRestGate(env),
     // SEC-OPLOG-06 — the shared RFC 8785 JCS vectors, replayed on Hermes.
     [JCS_GATE_ID]: runJcsGate,
+    // CHAOS-01 — multi-device projection convergence over op-sqlite (client-only, no server; task 181).
+    [CHAOS01_GATE_ID]: () => runChaos01Gate(deviceChaosSeams()),
   };
 }
 
@@ -130,8 +164,9 @@ function buildDeviceRunners(harness: HarnessRunners): DeviceGateRunners {
  *
  * `loadHarness()` returning null (flag off) yields no runners and an all-skipped honest partial. With
  * the flag on, `buildDeviceRunners` binds op-sqlite + `deviceColumnAead` + expo-file-system and the
- * at-rest / SEC-AUTH-09 / JCS gates produce real verdicts; the chaos gates stay honestly skipped
- * (task 181). A runner that throws on device becomes a red naming its id (resolveGateResults), never a gap.
+ * at-rest / SEC-AUTH-09 / JCS / CHAOS-01 gates produce real verdicts; the server-round-trip chaos gates
+ * (CHAOS-03/06/07) stay honestly skipped (task 181, D24 option C). A runner that throws on device becomes
+ * a red naming its id (resolveGateResults), never a gap.
  */
 export async function runAndEmitHarness(runId: string): Promise<void> {
   const harness = loadHarness();

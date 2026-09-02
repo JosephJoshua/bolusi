@@ -6,10 +6,10 @@
 //
 // TASK 177 (done): `@bolusi/test-support` is device-bundle-safe now — its `/device` subpath carries no
 // `node:crypto`, so `registry.ts` (and the at-rest gate body it reaches) bundle into the release APK.
-// run-and-emit.ts calls `loadHarness()` and hands the runners here. The gate BODIES are importable; what
-// stays unbuilt is the on-device SEAMS each runner needs (the at-rest `AtRestDeviceEnv` real op-sqlite
-// seed; the on-device JCS/chaos scenario runners) — 27a Part C, filed as task 178 — so every gate is an
-// HONEST skip (§2.11) with a corrected reason (bundle-safety is fixed; the seams are not), never a pass.
+// run-and-emit.ts calls `loadHarness()` and hands the runners here. The gate BODIES are importable; each
+// runner's on-device SEAM is bound in run-and-emit.ts as it lands (at-rest + JCS in task 178; CHAOS-01's
+// op-sqlite convergence in task 181). A gate whose seam is NOT yet wired is an HONEST skip (§2.11) with a
+// reason naming why (the CHAOS-03/06/07 server round-trip), never a fabricated pass.
 import type { HarnessRunners } from './registry.js';
 import { HARNESS_RESULT_SCHEMA } from './flag.js';
 import { EMULATOR_CORRECTNESS_GATE_IDS } from './gates.js';
@@ -66,15 +66,11 @@ export async function resolveGateResults(
   return results;
 }
 
-/** The chaos ids whose on-device runners are HONESTLY skipped (task 178): they cannot run on a single
- * emulator without a device-native scenario harness (a server-equivalent + op-sqlite fold rig) that
- * apps/mobile is forbidden to reach — see the per-id reason below and task 181. */
-const CHAOS_GATE_IDS: ReadonlySet<string> = new Set([
-  'CHAOS-01',
-  'CHAOS-03',
-  'CHAOS-06',
-  'CHAOS-07',
-]);
+/** The chaos ids whose on-device runners are HONESTLY skipped: CHAOS-03/06/07 need a real SERVER
+ * round-trip (the app's sync client against a live @bolusi/server) that a single emulator does not have
+ * (D24 option C). CHAOS-01 is NOT here — its client-only convergence now runs on-device over op-sqlite
+ * (task 181), so it is wired in run-and-emit.ts and never reaches this skip set. */
+const CHAOS_GATE_IDS: ReadonlySet<string> = new Set(['CHAOS-03', 'CHAOS-06', 'CHAOS-07']);
 
 /** The per-gate skip reason. Deliberately avoids the driver's shape-error words (schema/variant/target/
  * run id) so a real capture's ONLY failures are the honest skips, not a false shape complaint. */
@@ -87,11 +83,10 @@ function skipDetailFor(id: string, harness: HarnessRunners | null): string {
   }
   if (CHAOS_GATE_IDS.has(id)) {
     return (
-      `${id} has no on-device runner: the chaos scenarios live in @bolusi/harness (PGlite server + ` +
-      `better-sqlite3 VirtualDevice), which apps/mobile may not depend on at runtime (shipping-deps + ` +
-      `boundaries), and CHAOS-03/06/07 additionally need a real SERVER round-trip that a single emulator ` +
-      `does not have. Running reduced chaos on op-sqlite needs a device-native scenario rig that does not ` +
-      `exist yet (filed as task 181). Honest skip (§2.11): the lane reds on this id, never a fabricated green.`
+      `${id} has no on-device runner: CHAOS-03/06/07 need a real SERVER round-trip — the app's sync ` +
+      `client against a live @bolusi/server — that a single emulator does not have (D24 option C). ` +
+      `CHAOS-01's client-only convergence already runs on-device over op-sqlite (task 181); these three ` +
+      `are its follow-on. Honest skip (§2.11): the lane reds on this id, never a fabricated green.`
     );
   }
   return (
