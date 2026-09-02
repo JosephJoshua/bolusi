@@ -147,4 +147,20 @@ describe('resolveGateResults — the injected-runner seam (task 178)', () => {
     });
     expect(gates.every((g) => g.status === 'skipped')).toBe(true);
   });
+
+  test('every non-null-harness skip detail avoids the driver shape-error words (both branches load-bearing)', async () => {
+    // Companion to the null-branch guard (the "honest partial" test above). That one drives
+    // resolveGateResults(null), which returns skipDetailFor()'s harness===null text and RETURNS before the
+    // CHAOS and generic branches ever run — so those two non-null branches shipped with their shape-word
+    // promise UNTESTED (review finding on commit 5f3bdfc). With a non-null harness and NO runners every
+    // required gate skips: CHAOS-03/06/07 flow through the CHAOS branch, the rest through the generic one,
+    // so joining all details exercises BOTH. A shape word here (schema/variant/target/run id) would make the
+    // driver misreport a document-SHAPE error on an honest skip; run.ts:79 promises the details avoid them,
+    // and this makes that promise load-bearing for the non-null branches too (§2.11 — a guard is only
+    // load-bearing once a real violation has been watched red).
+    const gates = await resolveGateResults(nonNullHarness, {});
+    expect(gates.every((g) => g.status === 'skipped')).toBe(true);
+    const joined = gates.map((g) => g.detail).join('\n');
+    expect(joined).not.toMatch(/schema|variant|target|run id/i);
+  });
 });
