@@ -2,10 +2,13 @@
  * Chip (design-system §3.5). Icon + label, always — never colour alone (§6.3): a colourblind
  * cashier in a bright shop must lose nothing.
  *
- * The chip is 28 dp tall, below the 48 dp floor, so a tappable chip compensates with `hitSlop`
- * (§1.4: "a visual element may be smaller than 48 dp only if its pressable hit area still meets
- * `touch.min`"). That padding is computed from the tokens, not hand-tuned, so it stays correct if
- * either number ever moves.
+ * The chip is 28 dp tall, below the 48 dp floor, so a tappable chip compensates its HEIGHT with
+ * `hitSlop` (§1.4: "a visual element may be smaller than 48 dp only if its pressable hit area still
+ * meets `touch.min`"). The slop is VERTICAL ONLY: height is the deficient axis, while width is
+ * icon+label-driven and already clears the floor. Horizontal slop is deliberately omitted — it
+ * would push the hit area into the header's `touch.gap` (§1.4's 8 dp minimum spacing between
+ * adjacent targets) and overlap the neighbouring avatar. The padding is computed from the tokens,
+ * not hand-tuned, so it stays correct if either number ever moves.
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -32,7 +35,7 @@ const TONE = {
   success: { bg: color.successBg, fg: color.onSuccessBg },
 } as const;
 
-/** Grows the 28 dp chip's touch area to the §1.4 floor of 48 dp. */
+/** Grows the 28 dp chip's touch HEIGHT to the §1.4 48 dp floor. Vertical only — see the docblock. */
 const HIT_SLOP_Y = (touch.min - size.chip) / 2;
 
 const styles = StyleSheet.create({
@@ -85,7 +88,7 @@ export function Chip({
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      hitSlop={{ top: HIT_SLOP_Y, bottom: HIT_SLOP_Y, left: HIT_SLOP_Y, right: HIT_SLOP_Y }}
+      hitSlop={{ top: HIT_SLOP_Y, bottom: HIT_SLOP_Y }}
       style={[styles.base, { backgroundColor: bg }]}
     >
       {content}

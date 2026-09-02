@@ -76,6 +76,18 @@ describe('touch targets (§1.4, §6.2)', () => {
     expect(extent(r, 'c', 'height')).toBeGreaterThanOrEqual(touch.min);
   });
 
+  test('a tappable Chip claims no horizontal hitSlop, so an adjacent target keeps its §1.4 gap', () => {
+    const r = render(<Chip testID="c" label="x" icon="pending" onPress={vi.fn()} />);
+    const slop = (r.get('c').props['hitSlop'] ?? {}) as Record<string, number | undefined>;
+    // Height is the deficient axis and IS padded (test above); width is not, so horizontal slop
+    // stays 0. Any left/right slop would extend the hit area into the header gap (touch.gap = 8) and
+    // overlap the avatar — the −2 dp defect this guards (§1.4 minimum spacing between adjacent targets).
+    expect(slop['left'] ?? 0).toBe(0);
+    expect(slop['right'] ?? 0).toBe(0);
+    // The vertical compensation must remain, or the chip drops below the 48 dp floor.
+    expect(extent(r, 'c', 'height')).toBeGreaterThanOrEqual(touch.min);
+  });
+
   test.each(SYNC_STATES)('SyncChip (%s) meets the 48 dp floor', (state) => {
     const r = render(
       <SyncChip state={state} accessibilityLabels={uniformLabels('sinkron')} onPress={vi.fn()} />,
