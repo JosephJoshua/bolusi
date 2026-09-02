@@ -13,6 +13,10 @@
       "types": "./dist/device.d.ts",
       "default": "./dist/device.js"
     },
+    "./chaos": {
+      "types": "./dist/chaos/index.d.ts",
+      "default": "./dist/chaos/index.js"
+    },
     "./vectors/ed25519.json": "./vectors/ed25519.json"
   },
   "files": [

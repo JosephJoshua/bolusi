@@ -1,26 +1,13 @@
-// The notes projection manifest, extracted from the REAL `@bolusi/modules` module definition — the
-// `ModuleProjectionManifest` the digest oracle (§3.4) and the projection engine consume. This is
-// the same projection-facing slice `registerModules` derives internally (04 §4); the harness owns
-// no second copy of the notes schema (§2.8) — it reads `notesModule.projections.tables` and the
-// declared appliers straight off the shipped module.
-import type {
-  AnyModuleDefinition,
-  ModuleProjectionManifest,
-  ProjectionApplier,
-} from '@bolusi/core';
+// The notes projection manifest for the NODE harness. The generic `toProjectionManifest` extractor
+// now lives in the platform-free shared rig (@bolusi/test-support/chaos, task 181); this file binds
+// it to the real `@bolusi/modules` notes definition. `notesProjectionManifest` is what the harness's
+// `NODE_SEAMS` hands the shared oracle + engine (§2.8 — no second copy of the notes schema).
+import type { AnyModuleDefinition, ModuleProjectionManifest } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import { notesModule } from '@bolusi/modules/notes';
+import { toProjectionManifest } from '@bolusi/test-support/chaos';
 
-/** The projection-facing slice of a module (04 §4) — id, tables, and op-type → applier. */
-export function toProjectionManifest<DB>(
-  module: AnyModuleDefinition<DB>,
-): ModuleProjectionManifest<DB> {
-  const appliers: Record<string, ProjectionApplier<DB>> = {};
-  for (const [type, declaration] of Object.entries(module.operations)) {
-    appliers[type] = declaration.apply;
-  }
-  return { id: module.id, tables: module.projections.tables, appliers };
-}
+export { toProjectionManifest } from '@bolusi/test-support/chaos';
 
 /** The notes projection manifest over the client schema — the oracle + engine input. */
 export const notesProjectionManifest: ModuleProjectionManifest<ClientDatabase> =
