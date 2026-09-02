@@ -20,7 +20,8 @@
     "hideArchived": "Sembunyikan arsip"
   },
   "detail": {
-    "title": "Catatan"
+    "title": "Catatan",
+    "meta": "oleh {author} · {time}"
   },
   "list": {
     "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",

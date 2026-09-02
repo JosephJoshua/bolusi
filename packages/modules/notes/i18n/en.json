@@ -20,7 +20,8 @@
     "hideArchived": "Hide archived"
   },
   "detail": {
-    "title": "Note"
+    "title": "Note",
+    "meta": "by {author} · {time}"
   },
   "list": {
     "empty": "No notes yet. Tap “New Note” to start.",

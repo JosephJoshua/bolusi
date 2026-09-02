@@ -202,8 +202,15 @@ export function NoteDetail({
               {renderThumbnail()}
             </View>
           )}
+          {/* §8.6 meta line: author · time. `createdByName` is denormalized onto the getNote row
+              (queries.ts); when it is null (author not in the directory) the time stands alone. */}
           <Text style={styles.meta} testID={`${testID}.meta`}>
-            {formatRelative(now - row.lastEditedAt)}
+            {row.createdByName === null
+              ? formatRelative(now - row.lastEditedAt)
+              : tn('notes.detail.meta', {
+                  author: row.createdByName,
+                  time: formatRelative(now - row.lastEditedAt),
+                })}
           </Text>
         </Card>
 

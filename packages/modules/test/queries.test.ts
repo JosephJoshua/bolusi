@@ -122,6 +122,31 @@ describe('getNote (04 §8 box 5)', () => {
       'ENTITY_NOT_FOUND',
     );
   });
+
+  test('denormalizes the author display name from users_directory; null when no directory row (129 item 4a)', async () => {
+    // Proves the getExecutor-SAFE path: getNote resolves the name through the read-only qctx.db via a
+    // typed `usersDirectory` builder (queries.ts). Raw `sql` there would throw ReadOnlyDbError — this
+    // real-DB read is the boundary a model test can't see (memory: falsify-at-the-boundary).
+    h = await openHarness(7);
+    const [id] = await seedNotes(h, 1); // createdBy = notesUserId
+
+    // No directory row yet → the author name is null (graceful: the meta line shows the time alone).
+    const before = await h.runtime.queries.execute(GET, { noteId: id }, h.identity(h.notesUserId));
+    expect(before.rows[0]!.createdByName).toBeNull();
+
+    // Seed the author's directory row (client-only `users_directory`, plaintext in L2 — no encryption
+    // plugin) and the same read now carries the denormalized name.
+    await h.db
+      .insertInto('usersDirectory')
+      .values({ id: h.notesUserId, name: 'Andi', status: 'active', photoMediaId: null })
+      .execute();
+    const after = await h.runtime.queries.execute(GET, { noteId: id }, h.identity(h.notesUserId));
+    expect(after.rows[0]!.createdByName).toBe('Andi');
+
+    // listNotes carries null regardless — the list card shows no author (queries.ts toRow).
+    const listed = await list(h, { limit: 50 });
+    expect(listed.rows.find((r) => r.id === id)?.createdByName).toBeNull();
+  });
 });
 
 describe('query permission-denial floor (04 §8 box 2 — never {rows: []})', () => {

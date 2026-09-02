@@ -12,6 +12,7 @@
 // These run on the CLIENT (SQLite), which is where the v0 query layer drives the UI (04 §2). The
 // `archived` column is `0/1` there (schema.ts); a v1 server-reporting reader would be a separate
 // concern (04 §2 — "future reporting").
+import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -67,6 +68,12 @@ export interface NoteRow {
   readonly archived: boolean;
   readonly editCount: number;
   readonly createdBy: string;
+  /**
+   * The author's display name, denormalized onto the row by `getNote` (design-system §8.6 meta
+   * line). `null` on `listNotes` rows (the list card shows no author) and whenever `createdBy` has
+   * no `users_directory` entry — the meta line then shows the time alone.
+   */
+  readonly createdByName: string | null;
   readonly createdAt: number;
   readonly lastEditedBy: string;
   readonly lastEditedAt: number;
@@ -116,6 +123,9 @@ function toRow(row: {
     archived: toBool(row.archived),
     editCount: row.editCount,
     createdBy: row.createdBy,
+    // Resolved only by `getNote` (which overrides this); `listNotes` rows carry null — the list
+    // card shows no author, so per-row name resolution there would be wasted work.
+    createdByName: null,
     createdAt: row.createdAt,
     lastEditedBy: row.lastEditedBy,
     lastEditedAt: row.lastEditedAt,
@@ -186,6 +196,19 @@ export const getNoteInput = z.object({ noteId: z.string().min(1) }).strict();
 export type GetNoteInput = z.infer<typeof getNoteInput>;
 
 /**
+ * The client-only users directory (`users_directory`, db-client generated) as reached by the
+ * note-detail read to denormalize the author's name. It is DELIBERATELY not part of the neutral
+ * `NotesDatabase`: that type is cast `as DB` onto BOTH the server and client connections at
+ * registration (apps/server deps.ts / apps/mobile bootstrap), and the server has no
+ * `users_directory` table, so widening the shared type would break the server cast. `getNote` runs
+ * on the CLIENT only (04 §2), so reaching a client table here is sound — declared locally and
+ * reached through the narrow cast in `getNoteHandler`.
+ */
+interface NotesAuthorLookup {
+  readonly usersDirectory: { readonly id: string; readonly name: string };
+}
+
+/**
  * Read one note (04 §6). Returns the row as a single-element page, or throws `ENTITY_NOT_FOUND` —
  * "getNote returns the row or ENTITY_NOT_FOUND" (04 §8). It is the read seam the `editNoteBody` /
  * `archiveNote` commands use (04 §5.2: reads only via `ctx.query`), so a nonexistent note surfaces
@@ -213,7 +236,20 @@ export async function getNoteHandler(
     );
   }
 
-  return { rows: [toRow(row)], nextCursor: null };
+  // Denormalize the author's display NAME onto the row (design-system §8.6 meta line). This uses a
+  // typed client builder — NOT core's `resolveUserName`, which is raw `sql` and would hit the
+  // read-only projection Proxy's blocked `getExecutor` (query/qctx.ts) and throw `ReadOnlyDbError`.
+  // The builder runs on the same client connection `notes` already reads, so the column-encryption
+  // plugin decrypts `name` transparently in production (db-client); the L2 harness reads plaintext.
+  // A note whose author has no `users_directory` row resolves to null, and the meta line falls back
+  // to the time alone.
+  const author = await (qctx.db as unknown as Pick<Kysely<NotesAuthorLookup>, 'selectFrom'>)
+    .selectFrom('usersDirectory')
+    .select('name')
+    .where('id', '=', row.createdBy)
+    .executeTakeFirst();
+
+  return { rows: [{ ...toRow(row), createdByName: author?.name ?? null }], nextCursor: null };
 }
 
 /**

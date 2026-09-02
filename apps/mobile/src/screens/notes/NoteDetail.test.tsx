@@ -57,6 +57,7 @@ const note = (over: Partial<NoteRow> = {}): NoteRow => ({
   archived: false,
   editCount: 0,
   createdBy: 'user-1',
+  createdByName: null,
   createdAt: 1,
   lastEditedBy: 'user-1',
   lastEditedAt: 1,
@@ -124,6 +125,28 @@ describe('NoteDetail — the four §5 states', () => {
     expect(screen.query('notes.detail.archivedBadge')).not.toBeNull();
     expect(screen.query('notes.detail.edit')).toBeNull();
     expect(screen.query('notes.detail.archive')).toBeNull();
+  });
+});
+
+describe('NoteDetail — author on the meta line (129 item 4a)', () => {
+  test('renders the denormalized author name; a null name falls back to the time alone', async () => {
+    // The author path (createdByName resolved) must ADD the name to the meta line; the null path
+    // (no directory row) must NOT. Compare the two REAL renders rather than a hardcoded string (T-4);
+    // drop the createdByName branch in NoteDetail and the two renders re-equal → red.
+    const withAuthor = detail(
+      fakeRuntime({ getNote: () => Promise.resolve(page([note({ createdByName: 'Andi' })])) }),
+    );
+    await settle();
+    const withAuthorMeta = textsIn(withAuthor.get('notes.detail.meta')).join('');
+    expect(withAuthorMeta).toContain('Andi');
+
+    const noAuthor = detail(
+      fakeRuntime({ getNote: () => Promise.resolve(page([note({ createdByName: null })])) }),
+    );
+    await settle();
+    const noAuthorMeta = textsIn(noAuthor.get('notes.detail.meta')).join('');
+    expect(noAuthorMeta).not.toContain('Andi');
+    expect(withAuthorMeta).not.toBe(noAuthorMeta);
   });
 });
 

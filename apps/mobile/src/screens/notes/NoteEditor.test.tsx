@@ -32,6 +32,7 @@ const note = (over: Partial<NoteRow> = {}): NoteRow => ({
   archived: false,
   editCount: 0,
   createdBy: 'user-1',
+  createdByName: null,
   createdAt: 1,
   lastEditedBy: 'user-1',
   lastEditedAt: 1,

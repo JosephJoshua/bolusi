@@ -23,6 +23,7 @@ import type { TranslationKey, TranslationValues } from '@bolusi/i18n';
 export type NotesKey =
   | 'notes.list.title'
   | 'notes.detail.title'
+  | 'notes.detail.meta'
   | 'notes.list.empty'
   | 'notes.list.emptyArchived'
   | 'notes.action.new'
@@ -40,6 +41,7 @@ export type NotesKey =
 export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.list.title',
   'notes.detail.title',
+  'notes.detail.meta',
   'notes.list.empty',
   'notes.list.emptyArchived',
   'notes.action.new',
