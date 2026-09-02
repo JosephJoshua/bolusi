@@ -16,6 +16,8 @@ import path from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import * as tokens from '@bolusi/ui/tokens';
+
 const ARTIFACTS = path.join(__dirname, 'artifacts');
 const APPROX_LABEL = 'RNW browser approximation — NOT device-verified';
 
@@ -268,13 +270,15 @@ test('the note editor body wraps a long note instead of clipping it to one line'
   await body.fill(longNote);
   await expect(body).toHaveValue(longNote);
 
-  // MEASURED, not declared: the box is several lines of `type.body` (lineHeight 26) tall. The
-  // defect rendered this whole note inside one 56 dp strip, so a >= 2-line box is the separation.
+  // MEASURED, not declared: the box is several lines of `type.body` tall. The defect rendered this
+  // whole note inside one 56 dp strip, so a >= 2-line box is the separation. The threshold reads the
+  // token, so it tracks the type scale instead of a hardcoded lineHeight (task 146 item 10).
   const box = await body.boundingBox();
   expect(box).not.toBeNull();
-  expect(box!.height).toBeGreaterThan(2 * 26);
+  const twoLines = 2 * tokens.type.body.lineHeight;
+  expect(box!.height).toBeGreaterThan(twoLines);
   // And the text genuinely occupies more than one line inside it (scrollHeight tracks wrapped rows).
-  expect(await body.evaluate((el) => el.scrollHeight)).toBeGreaterThan(2 * 26);
+  expect(await body.evaluate((el) => el.scrollHeight)).toBeGreaterThan(twoLines);
 
   await shoot(page, 'notes-editor-long-body');
 });
