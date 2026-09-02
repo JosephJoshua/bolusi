@@ -12,7 +12,7 @@
 // The assertion reads the button's public `disabled` prop, never its label — T-4. This mirrors
 // `EnrollmentScreen.test.tsx`'s `enroll-bind` disabled check.
 import { type SyncLoopState, type SyncState } from '@bolusi/core';
-import { t, translateRejectionCode } from '@bolusi/i18n';
+import { formatRelative, getI18nInstance, t, translateRejectionCode } from '@bolusi/i18n';
 import { describe, expect, test, vi } from 'vitest';
 
 import { render, textsIn } from '../../../../../packages/ui/test/render.js';
@@ -300,5 +300,66 @@ describe('the chip and title are witnessed together on the pending-media screen 
     const screen = renderSync({ pendingOperationCount: 3, pendingMediaCount: 2 });
     expect(screen.styleOf('sync-counter-ops-cell').flex).toBe(1);
     expect(screen.styleOf('sync-counter-media-cell').flex).toBe(1);
+  });
+});
+
+// ── TASK 129 ITEM 5: the rejected row names WHICH change was rejected ──────────────────────────────
+//
+// The rejection code ("BAD_SIGNATURE") names the server's verdict; alone it cannot tell a shop owner
+// which of their changes it landed on. Item 5 adds the op-type to the row's secondary line
+// (`sync.rejected.opMeta` = "{opType} · {time}"), resolved through `translateOpType` — the label is
+// MODULE-PROVIDED (07-i18n §4.4), not a table on the screen. This render guard proves the wire: two
+// rows with the SAME code and SAME timestamp, differing only in op type, must render DIFFERENT
+// secondary lines. A time-only line (the pre-item-5 render) makes them identical and reds the test.
+describe('the rejected row names which change was rejected, not only when (task 129 item 5)', () => {
+  // A synthetic `demo` module label stands in so the guard does not depend on whether the notes
+  // catalog happens to be registered in this harness — translateOpType resolves any registered module.
+  const registerDemoOpLabel = () =>
+    getI18nInstance().addResourceBundle(
+      'id',
+      'translation',
+      { demo: { opType: { thingDone: 'Hal terjadi' } } },
+      true,
+      true,
+    );
+
+  const OP_META_ROWS: readonly RejectedOpRow[] = [
+    {
+      opId: 'op-known',
+      type: 'demo.thing_done',
+      at: NOW - 60_000,
+      rejectionCode: 'BAD_SIGNATURE',
+      rejectionReason: null,
+    },
+    {
+      opId: 'op-unknown',
+      type: 'demo.never_registered',
+      at: NOW - 60_000,
+      rejectionCode: 'BAD_SIGNATURE',
+      rejectionReason: null,
+    },
+  ];
+
+  test('two rows, same code + same time, different op type → different secondary lines', () => {
+    registerDemoOpLabel();
+    const screen = renderSync({ rejected: OP_META_ROWS });
+
+    const knownRow = textsIn(screen.get('sync-rejected-op-known')).join('');
+    const unknownRow = textsIn(screen.get('sync-rejected-op-unknown')).join('');
+
+    // Same rejection code + same timestamp: the op-type label is the ONLY thing that can differ, so a
+    // time-only secondary line (the render before item 5) collapses these to equal and reds this.
+    expect(knownRow).not.toBe(unknownRow);
+
+    // The known row carries the module's resolved label; the unknown one degrades to the fallback and
+    // never leaks the raw `demo.never_registered` id.
+    expect(knownRow).toContain('Hal terjadi');
+    expect(unknownRow).toContain(t('core.opType.unknown'));
+    expect(unknownRow).not.toContain('never_registered');
+
+    // The op type is ADDED to the meta line, not swapped for the time — both rows still carry when.
+    const when = formatRelative(NOW - (NOW - 60_000));
+    expect(knownRow).toContain(when);
+    expect(unknownRow).toContain(when);
   });
 });

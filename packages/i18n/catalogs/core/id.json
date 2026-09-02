@@ -41,6 +41,9 @@
   "unauthorized": {
     "askOwner": "Minta pemilik toko untuk memberi akses."
   },
+  "opType": {
+    "unknown": "Perubahan"
+  },
   "errors": {
     "INVALID_TRANSITION": "Tindakan ini sudah tidak bisa dilakukan karena datanya berubah. Periksa lagi datanya.",
     "PERMISSION_DENIED": "Akun kamu tidak punya izin untuk ini.",

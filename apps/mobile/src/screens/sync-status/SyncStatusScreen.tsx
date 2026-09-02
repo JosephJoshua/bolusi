@@ -24,7 +24,13 @@
  * Perubahan tersimpan di perangkat ini." It is a statement about the network AND a reassurance about
  * the data, in that order, in one sentence. It is never red.
  */
-import { formatRelative, t, translateErrorCode, translateRejectionCode } from '@bolusi/i18n';
+import {
+  formatRelative,
+  t,
+  translateErrorCode,
+  translateOpType,
+  translateRejectionCode,
+} from '@bolusi/i18n';
 import {
   AppShell,
   AvatarButton,
@@ -255,7 +261,14 @@ export function SyncStatusScreen({
               <View>
                 <ListRow
                   primaryText={translateRejectionCode(row.rejectionCode)}
-                  secondaryText={formatRelative(input.now - row.at)}
+                  // The op type answers "which change was rejected?" — the rejection code alone
+                  // ("SCHEMA_VERSION_UNSUPPORTED") names the verdict, not the change. `translateOpType`
+                  // resolves the module's own label (07-i18n §4.4); an unregistered/unknown type
+                  // degrades to "Change" rather than leaking the raw `notes.note_created` id.
+                  secondaryText={t('sync.rejected.opMeta', {
+                    opType: translateOpType(row.type),
+                    time: formatRelative(input.now - row.at),
+                  })}
                   onPress={() => onOpenRejected(row)}
                   showChevron
                   testID={`sync-rejected-${row.opId}`}

@@ -35,7 +35,14 @@ export type NotesKey =
   | 'notes.confirm.archive'
   | 'notes.badge.archived'
   | 'notes.filter.showArchived'
-  | 'notes.filter.hideArchived';
+  | 'notes.filter.hideArchived'
+  // Op-type labels (design-system §8.4 item 4). NOT reached through `tn()` — the Sync Status screen
+  // resolves them via `@bolusi/i18n`'s `translateOpType`, which derives `notes.opType.<camelVerb>`
+  // from the op type (`NOTES_OP`, e.g. `notes.note_created` → `noteCreated`). They live here so the
+  // catalog-parity pin (notes-catalog-keys.test.ts) keeps the shipped labels typed.
+  | 'notes.opType.noteCreated'
+  | 'notes.opType.noteBodyEdited'
+  | 'notes.opType.noteArchived';
 
 /** The runtime-checkable list `apps/mobile/test/notes-catalog-keys.test.ts` reads as its denominator. */
 export const NOTES_KEYS: readonly NotesKey[] = [
@@ -54,6 +61,9 @@ export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.badge.archived',
   'notes.filter.showArchived',
   'notes.filter.hideArchived',
+  'notes.opType.noteCreated',
+  'notes.opType.noteBodyEdited',
+  'notes.opType.noteArchived',
 ];
 
 /** A shipped catalog locale tree, as the module JSON carries it (nested, prefix added at merge). */

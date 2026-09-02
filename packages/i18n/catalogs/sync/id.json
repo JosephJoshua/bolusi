@@ -28,6 +28,7 @@
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
     "title": "Perubahan Ditolak",
     "explain": "Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.",
+    "opMeta": "{opType} · {time}",
     "technicalDetails": "Detail teknis"
   },
   "quarantine": {

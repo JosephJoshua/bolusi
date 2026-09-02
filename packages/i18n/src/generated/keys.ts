@@ -100,6 +100,7 @@ export type TranslationKey =
   | 'core.errors.VALIDATION_FAILED'
   | 'core.language.en'
   | 'core.language.id'
+  | 'core.opType.unknown'
   | 'core.rejection.BAD_SIGNATURE'
   | 'core.rejection.CHAIN_BROKEN'
   | 'core.rejection.CHAIN_GAP'
@@ -157,6 +158,7 @@ export type TranslationKey =
   | 'sync.quarantine.title'
   | 'sync.rejected.banner'
   | 'sync.rejected.explain'
+  | 'sync.rejected.opMeta'
   | 'sync.rejected.technicalDetails'
   | 'sync.rejected.title'
   | 'sync.status.attentionReassurance'
@@ -219,6 +221,9 @@ export interface TranslationResources {
     };
     unauthorized: {
       askOwner: string;
+    };
+    opType: {
+      unknown: string;
     };
     errors: {
       INVALID_TRANSITION: string;
@@ -355,6 +360,7 @@ export interface TranslationResources {
       banner: string;
       title: string;
       explain: string;
+      opMeta: string;
       technicalDetails: string;
     };
     quarantine: {

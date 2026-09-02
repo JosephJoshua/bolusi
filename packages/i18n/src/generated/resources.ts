@@ -59,6 +59,9 @@ export const resources: SeededResources = {
         unauthorized: {
           askOwner: 'Minta pemilik toko untuk memberi akses.',
         },
+        opType: {
+          unknown: 'Perubahan',
+        },
         errors: {
           INVALID_TRANSITION:
             'Tindakan ini sudah tidak bisa dilakukan karena datanya berubah. Periksa lagi datanya.',
@@ -209,6 +212,7 @@ export const resources: SeededResources = {
           title: 'Perubahan Ditolak',
           explain:
             'Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.',
+          opMeta: '{opType} · {time}',
           technicalDetails: 'Detail teknis',
         },
         quarantine: {
@@ -344,6 +348,9 @@ export const resources: SeededResources = {
         },
         unauthorized: {
           askOwner: 'Ask your store owner for access.',
+        },
+        opType: {
+          unknown: 'Change',
         },
         errors: {
           INVALID_TRANSITION:
@@ -496,6 +503,7 @@ export const resources: SeededResources = {
           title: 'Rejected Changes',
           explain:
             'The changes below were rejected by the server and will not be sent. They stay saved on this device as a record.',
+          opMeta: '{opType} · {time}',
           technicalDetails: 'Technical details',
         },
         quarantine: {

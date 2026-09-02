@@ -8,11 +8,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatDuration,
   formatRelative,
+  getI18nInstance,
   humanizeKey,
   initI18n,
   setLocale,
   t,
   translateErrorCode,
+  translateOpType,
   translateRejectionCode,
   translateRoleKey,
   type I18nLogger,
@@ -149,6 +151,54 @@ describe('derived error and rejection copy (07-i18n §4.2, §4.3)', () => {
     );
     setLocale('id');
     expect(translateErrorCode('PIN_LOCKED')).toContain('PIN terkunci.');
+  });
+});
+
+describe('derived op-type copy (07-i18n §4.4; sync rejected-changes list, task 129 item 5)', () => {
+  // A module owns its op-type labels under its own namespace (§3.3); i18n derives the key, it does
+  // not carry a table. A synthetic `demo` module stands in so the guard does not couple to notes.
+  const registerDemo = () =>
+    getI18nInstance().addResourceBundle(
+      'id',
+      'translation',
+      { demo: { opType: { thingDone: 'Hal terjadi' } } },
+      true,
+      true,
+    );
+
+  it('derives <module>.opType.<camelVerb> from the op type — snake verb camelCased, no table', () => {
+    initI18n({ locale: 'id' });
+    registerDemo();
+    expect(translateOpType('demo.thing_done')).toBe('Hal terjadi');
+    // Identical to the hand-built key: proves the derived path resolved it, not a coincidence.
+    expect(translateOpType('demo.thing_done')).toBe(t('demo.opType.thingDone' as never));
+  });
+
+  it('renders core.opType.unknown and logs for a registered module missing that verb', () => {
+    const warn = withSpyLogger('id');
+    registerDemo();
+    expect(translateOpType('demo.never_registered')).toBe(t('core.opType.unknown'));
+    expect(translateOpType('demo.never_registered')).toBe('Perubahan');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('demo.never_registered');
+  });
+
+  it('renders the fallback for an op type from an entirely unregistered module', () => {
+    const warn = withSpyLogger('id');
+    expect(translateOpType('ghost.something_happened')).toBe(t('core.opType.unknown'));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the fallback for a malformed op type with no module segment', () => {
+    const warn = withSpyLogger('id');
+    expect(translateOpType('nodots')).toBe(t('core.opType.unknown'));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes a resolved label from the unknown fallback (positive control)', () => {
+    initI18n({ locale: 'id' });
+    registerDemo();
+    expect(translateOpType('demo.thing_done')).not.toBe(translateOpType('demo.never_registered'));
   });
 });
 

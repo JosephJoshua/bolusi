@@ -23,6 +23,11 @@
     "title": "Note",
     "meta": "by {author} · {time}"
   },
+  "opType": {
+    "noteCreated": "Note created",
+    "noteBodyEdited": "Note edited",
+    "noteArchived": "Note archived"
+  },
   "list": {
     "empty": "No notes yet. Tap “New Note” to start.",
     "emptyArchived": "No archived notes yet.",

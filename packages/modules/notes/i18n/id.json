@@ -23,6 +23,11 @@
     "title": "Catatan",
     "meta": "oleh {author} · {time}"
   },
+  "opType": {
+    "noteCreated": "Catatan dibuat",
+    "noteBodyEdited": "Isi catatan diubah",
+    "noteArchived": "Catatan diarsipkan"
+  },
   "list": {
     "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",
     "emptyArchived": "Belum ada catatan arsip.",

@@ -28,6 +28,7 @@
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
     "title": "Rejected Changes",
     "explain": "The changes below were rejected by the server and will not be sent. They stay saved on this device as a record.",
+    "opMeta": "{opType} · {time}",
     "technicalDetails": "Technical details"
   },
   "quarantine": {
