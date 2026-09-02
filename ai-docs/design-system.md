@@ -351,7 +351,7 @@ Every screen (including every future module screen) ships **loading / empty / er
 ```
 ┌──────────────────────────────┐
 │ Header (56): [back 48] Title │  Title type.title (list roots) / type.heading (details)
-│           [SyncChip][Avatar] │  ← both always present, both 48dp targets
+│     [SyncChip][Lang][Avatar] │  ← SyncChip + Avatar always present (48dp); Lang chip app-composed
 ├──────────────────────────────┤
 │ Banner slot (§3.6, max one)  │
 ├──────────────────────────────┤
@@ -363,6 +363,7 @@ Every screen (including every future module screen) ships **loading / empty / er
 
 - **SyncChip** (header, ambient): states `synced` (subtle cloud-check, `textMuted`), `pending` (clock + count of `local` ops), `syncing` (small spinner), `offline` (neutral cloud-off glyph — NOT red), `attention` (`danger` dot — any rejected op or revocation). Tap → Sync Status screen. This chip is the only permanent network affordance (§4 rule 6).
 - **Avatar button**: current user's initials on `surfaceAlt` disc; tap → User Switcher. Reinforces attribution on shared devices (PRD-011 §2).
+- **Language chip**: a `Chip` (§3.5, icon+label) that opens Settings, where the locale is chosen. It is **app-composed into the avatar-side chrome** — the shell exposes a single avatar slot and the app fills it with `[language chip][avatar]` — so the shell's contract stays the two always-present controls above while the notes root header carries three. Every header-chrome tap (sync chip, language chip, avatar) routes through the surface leave-delegate (below).
 - Android hardware back always equals the header back action. Wizard flows confirm via ConfirmSheet before discarding non-empty input.
 - **A module surface mounted at a shell route owns its own internal navigation** (NotesList → NoteDetail → NoteEditor), which the shell's gate deliberately cannot see. So while such a surface is off its root it **publishes a back/leave delegate to the shell** (`navigation/surface.ts`), and the shell routes BOTH hardware back and every header-chrome tap (sync chip, language chip, avatar) through it rather than unmounting the surface. This is what makes the two rules above hold across module screens: hardware back runs the surface's own back instead of exiting the app, and a chrome tap on an editor with unsaved input raises that editor's discard ConfirmSheet instead of silently destroying the draft. A leave proceeds only on confirm; a clean surface leaves immediately.
 

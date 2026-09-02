@@ -40,7 +40,11 @@ export interface AppShellProps {
   readonly backLabel?: string | undefined;
   /** §8.1: always present. Supply a `<SyncChip />`. */
   readonly syncChip: ReactNode;
-  /** §8.1: always present. Supply an `<AvatarButton />`. */
+  /**
+   * §8.1: always present. Supply an `<AvatarButton />`. Apps may compose additional header-right
+   * chrome into this slot (the notes root fills it with `[language chip][avatar]`); the shell keeps
+   * one opaque slot and forms no opinion about its contents.
+   */
   readonly avatar: ReactNode;
   /** §3.6 banner slot — at most one, already selected via `selectBanner`. */
   readonly banner?: ReactNode;
