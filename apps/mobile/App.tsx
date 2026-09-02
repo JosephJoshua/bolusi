@@ -857,8 +857,9 @@ export default function App(props: AppProps): React.JSX.Element {
                   //
                   // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
                   // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
-                  // users this product is for) and pads its 28 dp body to the §1.4 48 dp floor. It
-                  // rides the header-right group beside the avatar, in reach of the same thumb (§0).
+                  // users this product is for) and pads its 28 dp height to the §1.4 48 dp floor. It
+                  // sits in the §8.1 header chrome beside the avatar; §0 only bottom-anchors the
+                  // primary action, so this placement rests on §8.1 (header-right is not a §0 claim).
                   // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
                   // outright, taking an open editor's title/body/mediaRef with it and showing no
                   // confirm — the §8.1 discard gate the editor's own header back has always run.

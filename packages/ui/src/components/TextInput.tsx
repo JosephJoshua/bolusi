@@ -18,9 +18,13 @@
  *   - `minHeight`/`maxHeight` instead of `numberOfLines` — in RN 0.86 `numberOfLines` sets the
  *     MAXIMUM number of lines a `TextInput` accepts, which would cap how much a mechanic can write.
  *     Heights size the box without limiting the text.
- *   - Scrolling past `maxHeight` is the platform's own: Android's EditText scrolls its content
- *     natively. `scrollEnabled` is deliberately NOT used — RN documents it as iOS only, so citing
- *     it here would be an iOS switch standing in for an Android guarantee (CLAUDE.md §2.11).
+ *   - Scrolling past `maxHeight`: `scrollEnabled` is deliberately NOT used — RN documents it as
+ *     iOS-only, so citing it here would be an iOS switch standing in for an Android guarantee
+ *     (CLAUDE.md §2.11). The standing ASSUMPTION is that Android's native EditText scrolls a
+ *     capped-height field's overflow on its own — plausible, and consistent with RN scoping
+ *     `scrollEnabled` to iOS — but UNVERIFIED: it appears nowhere in the RN 0.86 docs and no test
+ *     lane exercises it. Confirm on a device (L6, blocked by task 148's missing APK) before
+ *     trusting `maxHeight` not to clip an 8-line body.
  */
 import { useState } from 'react';
 import { TextInput as RNTextInput, StyleSheet, Text, View } from 'react-native';
