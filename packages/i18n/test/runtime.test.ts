@@ -14,6 +14,7 @@ import {
   t,
   translateErrorCode,
   translateRejectionCode,
+  translateRoleKey,
   type I18nLogger,
 } from '../src/index.js';
 import { resetWarnOnceState } from '../src/logger.js';
@@ -148,6 +149,24 @@ describe('derived error and rejection copy (07-i18n §4.2, §4.3)', () => {
     );
     setLocale('id');
     expect(translateErrorCode('PIN_LOCKED')).toContain('PIN terkunci.');
+  });
+});
+
+describe('derived role copy (07-i18n §7; switcher role line, task 129 item 6)', () => {
+  it('derives role.<roleKey>.name from the key — no mapping table', () => {
+    initI18n({ locale: 'en' });
+    expect(translateRoleKey('store_owner')).toBe(t('role.store_owner.name'));
+    expect(translateRoleKey('main_owner')).toBe(t('role.main_owner.name'));
+    expect(translateRoleKey('staff')).toBe(t('role.staff.name'));
+  });
+
+  it('returns null and logs for a roleKey with no catalog row (a future custom role)', () => {
+    // null, NOT the UNEXPECTED fallback the error path uses: an unknown role must leave the card's
+    // role line ABSENT, never print "Something went wrong" under a name.
+    const warn = withSpyLogger('id');
+    expect(translateRoleKey('regional_manager')).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('regional_manager');
   });
 });
 

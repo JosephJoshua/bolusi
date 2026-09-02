@@ -379,6 +379,8 @@ Every screen (including every future module screen) ships **loading / empty / er
 - Tap card → PIN pad (§8.3). Whole switch ≤ 5 s budget (NFR-1003) — no animations, no confirmation screens.
 - Deactivated users never appear. Mandatory states: loading (skeleton cards), empty (no enrolled users → CTA to Device Enrollment §8.5), error, unauthorized (n/a — pre-auth surface renders error instead).
 
+> **Clarified 2026-08-05 (task 129 item 6): which role the card's role line shows.** A user can hold more than one role (02-permissions §12), so "role name" needs a rule. The card shows the user's **top-privilege** role, and privilege is measured **structurally** — the breadth of the role's `permission_ids` set — not a hardcoded key ranking. The §12 matrix is a strict superset chain (main_owner ⊃ store_owner ⊃ staff), so a broader permission set is unambiguously more privileged, and a future custom role ranks itself by its own breadth without a spec edit. Two roles that **tie** at the top are **all** listed (the owner ruling's "parallel at the top rank ⇒ list all"); one role held across several stores is de-duplicated to a single label. A user with **no** role grant shows **no** role line — the muted line is omitted, never rendered empty. The roleKey is localized via `role.<roleKey>.name` (07-i18n §7); an unknown roleKey with no catalog row omits the line rather than printing a raw key. Selection lives in core (`resolveDisplayRoleKeys`); the screen only localizes and concatenates, so the model stays copy-free.
+
 ### 8.3 PIN Pad screen
 
 - Selected user's avatar + name on top (confirms WHO is entering), PinPad component (§3.3) centered in the thumb zone, "switch user" secondary action beneath.

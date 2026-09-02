@@ -33,6 +33,13 @@ export interface SwitcherUser {
   readonly lastActiveAt: number | null;
   /** True when the bundle row has `pinVerifier: null` — the §6.6 first-PIN flow. */
   readonly needsFirstPin: boolean;
+  /**
+   * The user's TOP-PRIVILEGE role(s) as roleKeys (design-system §8.2), from 14's
+   * `resolveDisplayRoleKeys`. Usually one; more than one only when roles tie on privilege (the
+   * owner ruling's "parallel at the top ⇒ list all"). Empty ⇒ no role grant, so the card shows no
+   * role line. The card localizes each key via `role.<roleKey>.name` — the model stays copy-free.
+   */
+  readonly roleKeys: readonly string[];
 }
 
 /**

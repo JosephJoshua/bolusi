@@ -23,6 +23,7 @@ const USER: SwitcherUser = {
   photoMediaId: null,
   lastActiveAt: 3_000,
   needsFirstPin: false,
+  roleKeys: ['store_owner'],
 };
 
 const READY: SwitcherState = { kind: 'ready', users: [USER] };
@@ -75,5 +76,41 @@ describe("the pending chip announces THIS screen's unsent-op count (task 144 rev
     const fewLabel = few.get('ui.syncChip').props['accessibilityLabel'];
     const manyLabel = many.get('ui.syncChip').props['accessibilityLabel'];
     expect(fewLabel).not.toBe(manyLabel);
+  });
+});
+
+describe("the card shows the user's role line, driven by roleKeys (design-system §8.2, item 6)", () => {
+  // The role name lives ONLY here — model.ts stays copy-free — so this is the only place the wiring
+  // `roleKeys → <Text testID=switcher-user-role-*>` is observable. Precedence (store_owner over
+  // staff) is proven at the core layer (`resolveDisplayRoleKeys`); this file proves the field is
+  // rendered when present and OMITTED when empty. Copy is never asserted (T-4) — only the testID's
+  // presence/absence, which a hardcoded label could not make conditional.
+  function renderUser(roleKeys: readonly string[]) {
+    const user: SwitcherUser = { ...USER, roleKeys };
+    return render(
+      <SwitcherScreen
+        state={{ kind: 'ready', users: [user] }}
+        mode="choose"
+        onBack={vi.fn()}
+        onSelect={vi.fn()}
+        onRetry={vi.fn()}
+        onUnauthorizedBack={vi.fn()}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={vi.fn()}
+      />,
+    );
+  }
+
+  test('a user with a role renders the role line', () => {
+    const screen = renderUser(['store_owner']);
+    expect(screen.query(`switcher-user-role-${USER.id}`)).not.toBeNull();
+  });
+
+  test('POSITIVE CONTROL: a user with no role grant renders NO role line', () => {
+    // Without this, the test above would pass on a screen that printed a role line unconditionally —
+    // an empty muted line under every unroled name, and a raw key for any role with no catalog row.
+    const screen = renderUser([]);
+    expect(screen.query(`switcher-user-role-${USER.id}`)).toBeNull();
   });
 });

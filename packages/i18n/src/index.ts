@@ -24,6 +24,8 @@ export { hasKey, t } from './t.js';
 
 export { translateErrorCode, translateRejectionCode } from './errors.js';
 
+export { translateRoleKey } from './role.js';
+
 export {
   formatDate,
   formatDateTime,

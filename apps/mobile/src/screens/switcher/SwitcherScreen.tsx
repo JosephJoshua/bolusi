@@ -13,7 +13,7 @@
  *  - The grid rides `List` via `toGridRows` (see model.ts) — virtualized, because a shop with 30
  *    staff must not mount 30 avatars.
  */
-import { t } from '@bolusi/i18n';
+import { t, translateRoleKey } from '@bolusi/i18n';
 import {
   AppShell,
   Avatar,
@@ -180,6 +180,13 @@ function UserCard({
   readonly user: SwitcherUser;
   readonly onSelect: (user: SwitcherUser) => void;
 }): React.JSX.Element {
+  // design-system §8.2: the top-privilege role name(s) sit UNDER the name in muted bodySm. A future
+  // custom role with no catalog row resolves to null (translateRoleKey), so it drops out here rather
+  // than printing a raw key; ties on privilege list all, joined — the model already de-duplicated.
+  const roleLabel = user.roleKeys
+    .map((key) => translateRoleKey(key))
+    .filter((label): label is string => label !== null)
+    .join(', ');
   return (
     <Pressable
       style={styles.cardSlot}
@@ -194,6 +201,11 @@ function UserCard({
         <Text style={styles.name} numberOfLines={2} testID={`switcher-user-name-${user.id}`}>
           {user.name}
         </Text>
+        {roleLabel === '' ? null : (
+          <Text style={styles.role} numberOfLines={1} testID={`switcher-user-role-${user.id}`}>
+            {roleLabel}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -224,6 +236,11 @@ const styles = StyleSheet.create({
   name: {
     ...type.body,
     color: color.text,
+    textAlign: 'center',
+  },
+  role: {
+    ...type.bodySm,
+    color: color.textMuted,
     textAlign: 'center',
   },
 });

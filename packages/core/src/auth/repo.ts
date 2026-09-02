@@ -453,3 +453,44 @@ export async function resolveUserName<DB>(db: Kysely<DB>, userId: string): Promi
   `.execute(db);
   return rows.rows[0]?.name ?? null;
 }
+
+/** The stored `permission_ids` array length — a role's privilege breadth; 0 for a malformed value. */
+function permissionBreadth(value: string | readonly unknown[]): number {
+  const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value;
+  return Array.isArray(parsed) ? parsed.length : 0;
+}
+
+/**
+ * The role name(s) to show on `userId`'s switcher card (design-system §8.2): their TOP-PRIVILEGE
+ * role(s), returned as roleKeys for `role.<roleKey>.name` (07-i18n §7; the roleKey is the plaintext
+ * `roles_directory.name`, an English internal enum per 02-permissions §12, NOT the opaque `id` FK —
+ * `provision-tenant` seeds `name: role.key`).
+ *
+ * Privilege is measured STRUCTURALLY as the breadth of a role's permission set — the §12 matrix is a
+ * strict superset chain (main_owner ⊃ store_owner ⊃ staff), so a larger `permission_ids` is
+ * unambiguously more privileged. We never name a roleKey here (mirroring `holdsMainOwnerRole`'s
+ * structural test), so a future custom role ranks itself by its own breadth. Ties at the maximum are
+ * ALL returned — the owner ruling's "parallel at the top rank ⇒ list all"; two distinct roles of
+ * equal breadth are genuinely co-equal, which a hardcoded key ranking could not express.
+ *
+ * `DISTINCT`: a store_owner holding grants in three stores is one role, shown once. Returns `[]` when
+ * the user holds no grant, so the card renders no role line rather than an empty label.
+ */
+export async function resolveDisplayRoleKeys<DB>(
+  db: Kysely<DB>,
+  userId: string,
+): Promise<string[]> {
+  const rows = await sql<{ roleKey: string; permissionIds: string | readonly unknown[] }>`
+    SELECT DISTINCT rd.name AS "roleKey", rd.permission_ids AS "permissionIds"
+    FROM user_roles_directory urd
+    JOIN roles_directory rd ON rd.id = urd.role_id
+    WHERE urd.user_id = ${userId}
+  `.execute(db);
+  if (rows.rows.length === 0) return [];
+  const ranked = rows.rows.map((r) => ({
+    roleKey: r.roleKey,
+    breadth: permissionBreadth(r.permissionIds),
+  }));
+  const top = Math.max(...ranked.map((r) => r.breadth));
+  return ranked.filter((r) => r.breadth === top).map((r) => r.roleKey);
+}

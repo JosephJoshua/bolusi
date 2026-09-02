@@ -57,6 +57,7 @@ import {
   DomainError,
   errorCodeOrUnexpected,
   listSwitcherUsers,
+  resolveDisplayRoleKeys,
   PinVerifierQueue,
   readIdleLockSeconds,
   readPinAttempt,
@@ -360,9 +361,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         const directory = await listSwitcherUsers(db);
         users = await Promise.all(
           directory.map(async (user) => {
-            const [verifier, lastActiveAt] = await Promise.all([
+            const [verifier, lastActiveAt, roleKeys] = await Promise.all([
               readVerifier(db, user.id),
               lastActiveOnThisDevice(db, user.id, device.deviceId),
+              resolveDisplayRoleKeys(db, user.id),
             ]);
             return {
               id: user.id,
@@ -371,6 +373,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
               lastActiveAt,
               // §6.6: a bundle row with no verifier is a user who has never set a PIN here.
               needsFirstPin: verifier === null,
+              // design-system §8.2: the top-privilege role name(s); empty ⇒ no role line.
+              roleKeys,
             } satisfies SwitcherUser;
           }),
         );

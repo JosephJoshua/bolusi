@@ -11,7 +11,13 @@ import {
 } from './model.js';
 
 function user(overrides: Partial<SwitcherUser> & { id: string; name: string }): SwitcherUser {
-  return { photoMediaId: null, lastActiveAt: null, needsFirstPin: false, ...overrides };
+  return {
+    photoMediaId: null,
+    lastActiveAt: null,
+    needsFirstPin: false,
+    roleKeys: [],
+    ...overrides,
+  };
 }
 
 const SITI = user({ id: 'u-siti', name: 'Siti Rahayu', lastActiveAt: 3_000 });

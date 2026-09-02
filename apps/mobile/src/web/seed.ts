@@ -57,6 +57,7 @@ export const DEMO_USERS: readonly SwitcherUser[] = [
     photoMediaId: null,
     lastActiveAt: HARNESS_NOW - 2 * MINUTE,
     needsFirstPin: false,
+    roleKeys: ['main_owner'],
   },
   {
     id: 'u-siti',
@@ -64,6 +65,7 @@ export const DEMO_USERS: readonly SwitcherUser[] = [
     photoMediaId: null,
     lastActiveAt: HARNESS_NOW - 45 * MINUTE,
     needsFirstPin: false,
+    roleKeys: ['store_owner'],
   },
   {
     id: 'u-budi',
@@ -71,6 +73,7 @@ export const DEMO_USERS: readonly SwitcherUser[] = [
     photoMediaId: null,
     lastActiveAt: null,
     needsFirstPin: true,
+    roleKeys: ['staff'],
   },
 ];
 
