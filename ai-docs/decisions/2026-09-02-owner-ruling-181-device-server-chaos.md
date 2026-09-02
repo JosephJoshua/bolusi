@@ -1,3 +1,5 @@
+> **⚠ SUPERSEDED IN PART (2026-09-03) — see `2026-09-03-defer-device-host-network-chaos-to-198.md`.** This ruling's factual premise — "the device already reaches a host-run `@bolusi/server`; the P-3 perf gate already hits it over Wi-Fi" (lines 13, 17–18) — was **falsified at the producer**: the harness server is an in-process `app.request` handler with no socket, no listener binds it to a port, no device→host mapping exists, no synthetic-device HTTP enrollment exists, and P-3 has never run. The device→host Wi-Fi sync path is spec intent with no producer. Owner ruled (2026-09-03): CHAOS-03/06/07 are **deferred to task 198** (build that host-network transport first); task 181 keeps only CHAOS-01 (shipped). D24's *rejection of options A and B still stands* — only the premise is retracted. Read the body below as the original ruling, not current truth.
+
 # D24 — Owner ruling: task 181 CHAOS-03/06/07 run on-device against the REAL server (option C)
 
 **Date:** 2026-09-02

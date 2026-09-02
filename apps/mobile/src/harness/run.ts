@@ -66,10 +66,14 @@ export async function resolveGateResults(
   return results;
 }
 
-/** The chaos ids whose on-device runners are HONESTLY skipped: CHAOS-03/06/07 need a real SERVER
- * round-trip (the app's sync client against a live @bolusi/server) that a single emulator does not have
- * (D24 option C). CHAOS-01 is NOT here — its client-only convergence now runs on-device over op-sqlite
- * (task 181), so it is wired in run-and-emit.ts and never reaches this skip set. */
+/** The chaos ids whose on-device runners are HONESTLY skipped: CHAOS-03/06/07 need a device→host
+ * `@bolusi/server` round-trip that has NO producer yet — the harness server is an in-process
+ * `app.request` handler (no socket), nothing binds it to a port, no device→host mapping exists, and a
+ * synthetic device has no HTTP self-enrollment. Building that host-network transport + the three runners
+ * is task 198 (D24 option C's "the device already reaches the host server" premise was falsified at the
+ * producer, 2026-09-03). They already PASS on Node against @bolusi/harness. CHAOS-01 is NOT here — its
+ * client-only convergence now runs on-device over op-sqlite (task 181), so it is wired in run-and-emit.ts
+ * and never reaches this skip set. */
 const CHAOS_GATE_IDS: ReadonlySet<string> = new Set(['CHAOS-03', 'CHAOS-06', 'CHAOS-07']);
 
 /** The per-gate skip reason. Deliberately avoids the driver's shape-error words (schema/variant/target/
@@ -83,10 +87,12 @@ function skipDetailFor(id: string, harness: HarnessRunners | null): string {
   }
   if (CHAOS_GATE_IDS.has(id)) {
     return (
-      `${id} has no on-device runner: CHAOS-03/06/07 need a real SERVER round-trip — the app's sync ` +
-      `client against a live @bolusi/server — that a single emulator does not have (D24 option C). ` +
-      `CHAOS-01's client-only convergence already runs on-device over op-sqlite (task 181); these three ` +
-      `are its follow-on. Honest skip (§2.11): the lane reds on this id, never a fabricated green.`
+      `${id} has no on-device runner: CHAOS-03/06/07 need a device→host @bolusi/server round-trip that ` +
+      `has no producer yet — the harness server is an in-process app.request handler (no socket), nothing ` +
+      `binds it to a port, no device→host mapping exists, and a synthetic device has no HTTP enrollment. ` +
+      `Building that host-network transport + these three runners is task 198 (CHAOS-01's client-only ` +
+      `convergence already runs on-device over op-sqlite, task 181). They already PASS on Node. Honest ` +
+      `skip (§2.11): the lane reds on this id, never a fabricated green.`
     );
   }
   return (
