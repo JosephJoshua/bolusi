@@ -292,6 +292,22 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
     );
     expect(r.query('ui.unauthorizedState.retry')).toBeNull();
   });
+
+  test('the UnauthorizedState hint holds 3 lines — a compliant Indonesian body survives 1.3× (task 129 item 8)', () => {
+    // §5's Unauthorized body is "what happened + what to do" (07-i18n §7.2) — two ID sentences that
+    // fill two `bodySm` lines at 360 dp and overflow at the required 1.3× scale, truncating the
+    // instruction into the FR-1036 "nothing here" trap. Widened 2→3, matching EmptyState + Banner.
+    // Revert to 2 and this reds.
+    const r = render(
+      <UnauthorizedState
+        title="Tidak diizinkan"
+        hint="Kamu tidak punya akses ke catatan ini. Minta pemilik toko untuk memberi akses."
+        backLabel="Kembali"
+        onBack={vi.fn()}
+      />,
+    );
+    expect(r.get('ui.unauthorizedState.hint').props['numberOfLines']).toBe(3);
+  });
 });
 
 describe('FreshnessCell (§3.11) — the signature', () => {

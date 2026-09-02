@@ -324,6 +324,8 @@ Every screen (including every future module screen) ships **loading / empty / er
 | **Error** | What failed (label-catalog message keyed by `DomainError.code`), retry action, error code (`type.caption`) for support | Show raw exception text; blame the network for a local failure; dead-end without retry/back |
 | **Unauthorized** | Explicit permission-denied title + body ("ask your store owner" guidance), back CTA. Distinct from Empty — a denied query returns a permission error, not an empty list (FR-1036); denial is logged at the command/query layer (FR-1045) | Masquerade as Empty; leak data about what exists; hide the fact of denial |
 
+> **Changed 2026-08-05 (task 129 item 8): the Unauthorized body wraps to 3 lines, not 2.** Same wall as `EmptyState` (§3.8 item 13) and `Banner` (§3.6, task 23): the guidance body must say "what happened AND what to do" (§5; 07-i18n §7.2) — two Indonesian sentences that fill two `type.bodySm` lines at 360 dp and **overflow at the 1.3× font scale §6.5 requires us to survive**. Two lines truncate the "what to do" sentence, which reads as "nothing here" — the FR-1036 trap this state exists to prevent. `UnauthorizedState`'s hint is capped at 3 lines, sharing the one ambient-text line budget with `Banner`/`EmptyState`. Sized against the ID catalog (ID runs longer here), never English.
+
 ## 6. Accessibility floor (hard gates)
 
 1. **Contrast ≥ 4.5:1** for all text and meaningful icons against their actual background (§1.1 pairs are pre-validated; new pairs must be checked). Disabled-state text is the only exemption.

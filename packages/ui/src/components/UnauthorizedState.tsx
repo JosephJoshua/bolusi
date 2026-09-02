@@ -48,7 +48,11 @@ export function UnauthorizedState({
         {title}
       </Text>
       {hint === undefined ? null : (
-        <Text testID={`${testID}.hint`} numberOfLines={2} style={styles.hint}>
+        // 3 lines, not 2 (task 129 item 8): the §5 guidance body is "what happened + what to do"
+        // (07-i18n §7.2), two Indonesian sentences that fill two `bodySm` lines at 360 dp and overflow
+        // at the 1.3× scale §6.5 requires — truncating the "what to do" reads as "nothing here", the
+        // FR-1036 trap. Matches EmptyState (item 13) and Banner (§3.6, task 23): one shared line budget.
+        <Text testID={`${testID}.hint`} numberOfLines={3} style={styles.hint}>
           {hint}
         </Text>
       )}
