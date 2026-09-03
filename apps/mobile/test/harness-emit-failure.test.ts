@@ -23,6 +23,7 @@ const result: HarnessResult = {
   variant: 'release',
   target: 'emulator',
   hermesVersion: '0.17.0',
+  buildSha: '1111111111111111111111111111111111111111',
   gates: [],
 };
 

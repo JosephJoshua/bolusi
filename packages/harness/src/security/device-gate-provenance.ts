@@ -10,32 +10,38 @@
 // old passing run would keep the gate GREEN after the column cipher regressed. The developer who edits
 // the seal and forgets to re-run the device lane must be caught here, not by review alone.
 //
-// ── THE MECHANISM, AND WHY GIT AND NOT A SELF-DECLARED FIELD ─────────────────────────────────────
-// The `bolusi-harness-result/1` schema records NO build commit (its `runId` is a timestamp, not a sha),
-// so the artifact cannot self-report the code it exercised. The one tamper-evident binding available is
-// WHERE THE ARTIFACT SITS IN GIT HISTORY: the commit that INTRODUCED the pinned artifact file. That
-// commit's tree is the code state whose emulator run produced the JSON. So the gate:
+// ── THE MECHANISM: THE SELF-DECLARED BUILD SHA (PRIMARY), GIT ANCHOR (CROSS-CHECK) ────────────────
+// Task 182 bumped the producer so the `bolusi-harness-result/1` document now STAMPS the git sha the APK
+// was built from (`buildSha`, inlined from `EXPO_PUBLIC_BOLUSI_BUILD_SHA` at build time) INTO the
+// tamper-evident artifact. That is the code state whose emulator run produced the JSON, declared by the
+// producer itself — so it is the PRIMARY freshness binding. Before 182 the schema self-reported nothing
+// (its `runId` is a timestamp, not a sha), and the only binding was WHERE THE ARTIFACT SITS IN GIT
+// HISTORY (its introducing commit); that anchor is KEPT as a belt-and-braces cross-check. So the gate:
 //
-//   1. anchors on the artifact's INTRODUCING commit (`git log --diff-filter=A -- <artifact>`),
-//   2. requires that commit to have introduced NO at-rest surface change (the artifact is committed
-//      CLEANLY, separate from code — else its freshness cannot be trusted),
-//   3. diffs the AT-REST SURFACE (the column cipher, `writeVerifier`, the on-device gate body, the seed,
-//      the probe) between that commit and the WORKING TREE — ANY change ⇒ STALE ⇒ RED, demanding a
-//      fresh emulator run,
-//   4. requires the working-tree artifact to be BYTE-IDENTICAL to its committed form (a hand-edit that
-//      flips `skipped`/`fail` → `pass` is a change since the provenance commit ⇒ RED),
-//   5. reads the verdict from the COMMITTED bytes (provenance), not merely the on-disk status string,
-//   6. and asserts each declared surface path actually EXISTS at the anchor and on disk (T-14: a surface
-//      entry pointing at a moved file would make the diff vacuously empty — a guard that checks nothing).
+//   1. requires the committed artifact to DECLARE a buildSha (absent ⇒ RED — a build that did not stamp
+//      its commit cannot discharge the leg; an omitted sha can never masquerade as fresh — this is what
+//      closes the pre-182 downgrade-by-omission / fabricated-artifact residual),
+//   2. requires that declared sha to be a REAL commit in this repo (`git cat-file -e <sha>^{commit}`) —
+//      "unknown" (env unset), a forged hex, or an unreachable sha ⇒ RED (fail CLOSED),
+//   3. diffs the AT-REST SURFACE between THAT BUILD COMMIT and the WORKING TREE — ANY change ⇒ STALE ⇒
+//      RED: a fabricated artifact must now name a sha whose tree still matches, not just re-commit an
+//      old pass at a fresh path,
+//   4. ALSO anchors on the introducing commit (`git log --diff-filter=A -- <artifact>`) and diffs the
+//      surface against IT (cross-check), requires that commit to have introduced NO at-rest surface
+//      change (the artifact is committed CLEANLY, separate from code), and requires the surface paths to
+//      exist at the anchor (T-14: a moved surface entry would diff nothing — a guard that checks nothing),
+//   5. requires the working-tree artifact to be BYTE-IDENTICAL to its committed form (a hand-edit that
+//      flips `skipped`/`fail` → `pass`, or that rewrites `buildSha`, is a change since the provenance
+//      commit ⇒ RED),
+//   6. reads the verdict AND the buildSha from the COMMITTED bytes (provenance), not the mutable on-disk copy.
 //
-// KNOWN RESIDUAL (surfaced to the owner as a freshness-policy question, not silently accepted): because
-// the artifact carries no build-sha, an adversary who deliberately COMMITS a doctored artifact at a
-// later commit can move the *last-touching* commit forward. This gate anchors on the INTRODUCING commit
-// (immutable for a given file path) precisely to blunt that: a later in-place edit does not move the
-// anchor and is caught by the byte-integrity check (4). A fully fabricated NEW artifact file committed by
-// a malicious insider is a higher threat class that no git-only scheme closes — the durable fix is for
-// the emulator producer to record the build sha INSIDE the artifact (an immutable binding the gate would
-// then prefer). See the task-28 report + `sec-pending-allowlist.json` $comment.
+// KNOWN RESIDUAL (the honest limit, §2.11 — a self-declared field cannot out-trust its own author): a
+// brazen insider who rewrites `buildSha` to the CURRENT HEAD and fabricates the leg-1 `pass` WITHOUT ever
+// running the emulator names a sha whose surface legitimately matches HEAD, so no git diff reds it — they
+// control both the field and the file. No git-only or self-declared-field scheme closes that; only a
+// signed producer attestation (a device-held key over the artifact bytes) would. What 182 DID close is the
+// laundering class: re-committing an old passing artifact (its buildSha's surface ≠ HEAD ⇒ RED) and
+// downgrade-by-omission (no buildSha ⇒ RED). See the task-28/182 reports + `sec-pending-allowlist.json`.
 //
 // Pure by construction: every git/fs fact is gathered by the caller and passed in, so each RED path is
 // unit-testable against synthetic facts (T-11 — a guard nobody has watched go red is not believed).
@@ -137,6 +143,24 @@ export interface DeviceGateFacts {
   readonly surfaceChangedInAnchorCommit: readonly string[];
   /** Surface paths missing at the anchor OR on disk (T-14: a surface entry checking nothing). */
   readonly missingSurfacePaths: readonly string[];
+  /**
+   * The `buildSha` the COMMITTED artifact declares (task 182), or `null` when the field is absent or not
+   * a string. `null` ⇒ RED (downgrade-by-omission): a build that did not stamp its commit cannot discharge
+   * the leg, and an omitted sha can never masquerade as fresh.
+   */
+  readonly declaredBuildSha: string | null;
+  /**
+   * Whether {@link declaredBuildSha} resolves to a real commit object in THIS repo
+   * (`git cat-file -e <sha>^{commit}`). `false` when the sha is null, `"unknown"` (env unset), a forged
+   * hex, or unreachable ⇒ RED (fail CLOSED — an unverifiable sha is not a freshness binding).
+   */
+  readonly declaredBuildShaKnown: boolean;
+  /**
+   * Surface paths that CHANGED between {@link declaredBuildSha} (the ACTUAL build commit) and the working
+   * tree — the PRIMARY freshness diff (STALE if non-empty). Left empty by the gatherer when the sha is
+   * not known; the {@link declaredBuildShaKnown} guard reds that case instead.
+   */
+  readonly surfaceChangedSinceBuildSha: readonly string[];
 }
 
 export interface DischargeVerdict {
@@ -156,7 +180,9 @@ function findGate(result: HarnessResultLike, id: string): HarnessGateLike | unde
  * The whole discharge verdict for one on-device gate artifact. Reads leg 1 from the COMMITTED bytes and
  * fails RED (never silently green) on: no git provenance, an unreadable/absent/hand-edited artifact, a
  * malformed run, a leg-1 gate that is absent or not `pass`, a surface path that checks nothing, an
- * artifact commit that smuggled a code change, or ANY at-rest surface change since the anchor (STALE).
+ * artifact commit that smuggled a code change, a MISSING or UNKNOWN declared buildSha (task 182 —
+ * fail-closed downgrade-by-omission), or ANY at-rest surface change since the build sha OR the git anchor
+ * (STALE). The build sha is the primary freshness binding; the git anchor is the belt-and-braces cross-check.
  */
 export function assessDeviceGateDischarge(
   facts: DeviceGateFacts,
@@ -278,7 +304,35 @@ export function assessDeviceGateDischarge(
     );
   }
 
-  // ── THE STALENESS GATE: any at-rest surface change since the anchor ⇒ RED ──────────────────────
+  // ── BUILD-SHA PROVENANCE (task 182): the PRIMARY freshness binding, self-declared by the producer ─
+  // Preferred over the introducing-commit anchor because the producer stamps the ACTUAL build commit into
+  // the artifact. REQUIRED and fail-closed: a missing sha (downgrade-by-omission) or an unverifiable one
+  // (unset "unknown", forged, unreachable) reds — an omitted/unknowable sha can never masquerade as fresh.
+  if (facts.declaredBuildSha === null) {
+    failures.push(
+      `${facts.artifactPath} declares no buildSha — the emulator build did not stamp its commit (task ` +
+        `182), so the leg-1 result cannot be bound to a code state. An omitted sha is not a fresh one: ` +
+        `re-run the emulator lane on a build that sets EXPO_PUBLIC_BOLUSI_BUILD_SHA (§2.11).`,
+    );
+  } else if (!facts.declaredBuildShaKnown) {
+    failures.push(
+      `${facts.artifactPath}'s declared buildSha ${JSON.stringify(facts.declaredBuildSha)} is not a ` +
+        `commit in this repo — it is "unknown" (env unset), forged, or unreachable. Fail closed: an ` +
+        `unverifiable build sha is not a freshness binding.`,
+    );
+  } else {
+    for (const changed of facts.surfaceChangedSinceBuildSha) {
+      failures.push(
+        `at-rest surface file ${changed} changed since the artifact's DECLARED build commit ` +
+          `${facts.declaredBuildSha} — the committed leg-1 result no longer reflects the code. Artifact ` +
+          `STALE: re-run the emulator lane before discharging SEC-AUTH-09.`,
+      );
+    }
+  }
+
+  // ── STALENESS CROSS-CHECK: any at-rest surface change since the introducing anchor ⇒ RED ──────────
+  // Belt-and-braces alongside the build-sha diff above: it also catches the task-28 accidental case (a
+  // dev edits the seal and forgets to re-run the lane) even for an artifact predating the buildSha field.
   for (const changed of facts.surfaceChangedSinceAnchor) {
     failures.push(
       `at-rest surface file ${changed} changed since the emulator artifact's provenance commit ` +

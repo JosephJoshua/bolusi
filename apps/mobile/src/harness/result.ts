@@ -34,6 +34,15 @@ export interface HarnessResult {
   readonly target: 'emulator' | 'device';
   /** The Hermes engine the shipping APK bundles — 0.17 on RN 0.86 (D13). */
   readonly hermesVersion: string;
+  /**
+   * The git sha the APK was BUILT from — stamped INTO this document by the producer (from
+   * `EXPO_PUBLIC_BOLUSI_BUILD_SHA`, inlined at build time), so it is part of the tamper-evident
+   * artifact, not attached afterward. `device-gate-provenance.ts` prefers this over the file's
+   * introducing commit when diffing the at-rest surface for freshness (task 182): a fabricated
+   * artifact must now name a real sha whose tree still matches, not just re-commit an old pass.
+   * `'unknown'` when the env was unset — the guard treats that as fail-closed, never a pass.
+   */
+  readonly buildSha: string;
   readonly gates: readonly HarnessGateResult[];
 }
 

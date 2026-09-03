@@ -105,6 +105,25 @@ function gatherDeviceGateFacts(
     return !onDisk || !atAnchor;
   });
 
+  // task 182: the producer stamps the ACTUAL build sha INTO the artifact. Parse it from the COMMITTED
+  // bytes (the same provenance source as the verdict), then derive the git-freshness facts against it:
+  // is it a real commit here (fail-closed if not), and did the at-rest surface move since it (STALE).
+  let declaredBuildSha: string | null = null;
+  if (committedArtifactText !== null) {
+    try {
+      const parsed = JSON.parse(committedArtifactText) as { buildSha?: unknown };
+      declaredBuildSha = typeof parsed.buildSha === 'string' ? parsed.buildSha : null;
+    } catch {
+      declaredBuildSha = null;
+    }
+  }
+  const declaredBuildShaKnown =
+    declaredBuildSha !== null && git(root, ['cat-file', '-e', `${declaredBuildSha}^{commit}`]).ok;
+  const surfaceChangedSinceBuildSha =
+    declaredBuildSha !== null && declaredBuildShaKnown
+      ? linesOf(git(root, ['diff', '--name-only', declaredBuildSha, '--', ...surface]).stdout)
+      : [];
+
   return {
     artifactPath,
     surface,
@@ -115,6 +134,9 @@ function gatherDeviceGateFacts(
     surfaceChangedSinceAnchor,
     surfaceChangedInAnchorCommit,
     missingSurfacePaths,
+    declaredBuildSha,
+    declaredBuildShaKnown,
+    surfaceChangedSinceBuildSha,
   };
 }
 
@@ -239,6 +261,7 @@ describe('device-gate discharge guard — every failure mode goes red', () => {
     runId: 'run-2026-07-25T10-10-50-919Z-741874',
     variant: 'release',
     target: 'emulator',
+    buildSha: 'b'.repeat(40),
     gates: [{ id: VERIFIER_AT_REST_GATE_ID, status: 'pass', detail: 'sealed' }],
   });
 
@@ -252,6 +275,10 @@ describe('device-gate discharge guard — every failure mode goes red', () => {
     surfaceChangedSinceAnchor: [],
     surfaceChangedInAnchorCommit: [],
     missingSurfacePaths: [],
+    // task 182: a known build sha whose at-rest surface is unchanged is the happy path.
+    declaredBuildSha: 'b'.repeat(40),
+    declaredBuildShaKnown: true,
+    surfaceChangedSinceBuildSha: [],
   });
 
   it('the happy path is green (so the red assertions below mean something)', () => {
@@ -323,5 +350,58 @@ describe('device-gate discharge guard — every failure mode goes red', () => {
     const v = assessDeviceGateDischarge({ ...baseFacts(), surface: [] });
     expect(v.ok).toBe(false);
     expect(v.failures.join('\n')).toMatch(/at-rest surface is EMPTY/);
+  });
+
+  // ── task 182: the self-declared build sha is the PRIMARY freshness binding (falsified all three ways) ─
+  it('RED (task 182): a fabricated artifact names a build sha whose at-rest surface differs from HEAD ⇒ STALE', () => {
+    // The laundering attack 182 closes: re-commit an old passing artifact at a fresh path. Its buildSha is
+    // a REAL commit (so it is "known"), but the at-rest surface moved between that commit and the working
+    // tree — the primary build-sha diff reds it even though the introducing-commit anchor here is clean.
+    const v = assessDeviceGateDischarge({
+      ...baseFacts(),
+      declaredBuildShaKnown: true,
+      surfaceChangedSinceBuildSha: ['a.ts'],
+    });
+    expect(v.ok).toBe(false);
+    expect(v.failures.join('\n')).toMatch(
+      /a\.ts changed since the artifact's DECLARED build commit/,
+    );
+    expect(v.failures.join('\n')).toMatch(/STALE/);
+  });
+
+  it('RED (task 182): the artifact declares no buildSha ⇒ downgrade-by-omission', () => {
+    // An insider who simply omits the field must not fall back to the weaker anchor-only check.
+    const v = assessDeviceGateDischarge({
+      ...baseFacts(),
+      declaredBuildSha: null,
+      declaredBuildShaKnown: false,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.failures.join('\n')).toMatch(/declares no buildSha/);
+  });
+
+  it('RED (task 182): a declared buildSha that is not a commit in this repo ⇒ fail closed', () => {
+    // "unknown" (EXPO_PUBLIC_BOLUSI_BUILD_SHA unset), a forged hex, or an unreachable sha all land here.
+    const v = assessDeviceGateDischarge({
+      ...baseFacts(),
+      declaredBuildSha: 'unknown',
+      declaredBuildShaKnown: false,
+    });
+    expect(v.ok).toBe(false);
+    expect(v.failures.join('\n')).toMatch(/is not a commit in this repo/);
+    expect(v.failures.join('\n')).toMatch(/Fail closed/);
+  });
+
+  it('POSITIVE CONTROL (task 182): a known build sha with an unchanged surface is GREEN', () => {
+    // Pairs with the three reds above — proves they are the buildSha checks, not a latent shape bug: a
+    // real matching sha discharges cleanly. This is the state a fresh emulator re-anchor produces.
+    const v = assessDeviceGateDischarge({
+      ...baseFacts(),
+      declaredBuildSha: 'c'.repeat(40),
+      declaredBuildShaKnown: true,
+      surfaceChangedSinceBuildSha: [],
+    });
+    expect(v.failures, v.failures.join('\n')).toEqual([]);
+    expect(v.ok).toBe(true);
   });
 });

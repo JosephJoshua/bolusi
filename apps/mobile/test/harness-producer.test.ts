@@ -66,6 +66,7 @@ describe('producer ↔ driver wire contract', () => {
       variant: 'release',
       target: 'emulator',
       hermesVersion: '0.17.0',
+      buildSha: '1111111111111111111111111111111111111111',
     });
     const verdict = driver.parseHarnessResult(nativeLogLine(doc), { expectedRunId: RUN_ID });
 
@@ -94,6 +95,7 @@ describe('producer ↔ driver wire contract', () => {
       variant: 'release',
       target: 'emulator',
       hermesVersion: '0.17.0',
+      buildSha: '1111111111111111111111111111111111111111',
     });
     const verdict = driver.parseHarnessResult(nativeLogLine(doc), { expectedRunId: RUN_ID });
     expect(verdict.errors).toEqual([]);

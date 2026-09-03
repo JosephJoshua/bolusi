@@ -525,6 +525,11 @@ jobs:
           # never reached the bundle, so the harness stayed shut on device.
           EXPO_PUBLIC_BOLUSI_TEST_HARNESS: '1'
           EXPO_PUBLIC_API_URL: 'http://10.0.2.2:3000'
+          # Task 182: EXPO_PUBLIC_-prefixed so babel-preset-expo inlines it into the release bundle; the
+          # producer (run-and-emit.ts) stamps it into the harness artifact as `buildSha`. That self-declared
+          # sha is the PRIMARY freshness binding device-gate-provenance.ts diffs the at-rest surface against
+          # (git introducing-commit anchor stays the cross-check). Unset ⇒ 'unknown' ⇒ the gate fails closed.
+          EXPO_PUBLIC_BOLUSI_BUILD_SHA: ${{ github.sha }}
         run: |
           pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
           # `expo prebuild` writes the Gradle wrapper into apps/mobile/android — there is no

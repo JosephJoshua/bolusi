@@ -988,7 +988,7 @@ export const DISPATCH_STEP_POLICY = [
     job: 'android-emulator',
     key: 'prebuild + assemble release APK (EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1)',
     why: 'EMULATOR_LANE',
-    body: 'aecbf0e4ec34',
+    body: '4a9c563fa681',
   },
   {
     job: 'android-emulator',

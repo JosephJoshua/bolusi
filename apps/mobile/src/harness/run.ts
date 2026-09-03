@@ -21,6 +21,10 @@ export interface HarnessRuntimeFacts {
   readonly variant: 'release' | 'debug';
   readonly target: 'emulator' | 'device';
   readonly hermesVersion: string;
+  /** The git sha the APK was built from (run-and-emit.ts reads EXPO_PUBLIC_BOLUSI_BUILD_SHA). Stamped
+   * into the result so the provenance gate can diff the at-rest surface against the ACTUAL build
+   * commit, not just the artifact's introducing commit (task 182). `'unknown'` if the env was unset. */
+  readonly buildSha: string;
 }
 
 /** One on-device gate runner. Returns a real `passed`/`failed` (never `skipped` — an absent runner is
@@ -114,6 +118,7 @@ export function buildHarnessResult(
     variant: facts.variant,
     target: facts.target,
     hermesVersion: facts.hermesVersion,
+    buildSha: facts.buildSha,
     gates,
   };
 }

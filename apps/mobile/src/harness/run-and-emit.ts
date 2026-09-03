@@ -50,6 +50,17 @@ function hermesVersion(): string {
   return hermes?.getRuntimeProperties?.()['OSS Release Version'] ?? 'unknown';
 }
 
+/**
+ * The git sha the APK was BUILT from — stamped into the artifact for the provenance gate (task 182).
+ * `EXPO_PUBLIC_BOLUSI_BUILD_SHA` is set to `${{ github.sha }}` by the CI prebuild+assemble step and
+ * inlined into the release bundle by babel-preset-expo (only `EXPO_PUBLIC_`-prefixed reads reach the
+ * bundle). Unset → `'unknown'`, which the provenance gate fails CLOSED on: a build that forgot to stamp
+ * its sha cannot discharge the leg, and an omitted sha can never masquerade as a fresh one (§2.11).
+ */
+function buildSha(): string {
+  return process.env['EXPO_PUBLIC_BOLUSI_BUILD_SHA'] ?? 'unknown';
+}
+
 function runtimeFacts(): HarnessRuntimeFacts {
   return {
     profile: 'test',
@@ -61,6 +72,7 @@ function runtimeFacts(): HarnessRuntimeFacts {
     // device number (D12/D20 §1).
     target: 'emulator',
     hermesVersion: hermesVersion(),
+    buildSha: buildSha(),
   };
 }
 
