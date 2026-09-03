@@ -31,10 +31,11 @@ import type { SyncClient } from './sync-client.js';
  * any state — and the two controls on those rows (`onOpenRejected`, `onRetryMedia`) were therefore
  * unpressable as well as unwired. `reads` closes that (task 130); `sync-status-reads.ts` owns the SQL.
  *
- * `quarantined` STAYS `[]`, and that is a different fact rather than the same one unfixed: nothing on
- * this client persists a held-out pull batch (api/01-sync §4 quarantine has no client table — grep
- * `quarantin` across `packages/db-client` finds no column). An empty list is what this device
- * genuinely knows. Filed as its own finding rather than papered over here.
+ * `quarantined` is now a READ too (task 169). It USED to be a hardcoded `[]` justified by "no client
+ * table persists a held-out pull batch" — true when written, false now: the client `quarantined_ops`
+ * table and the pull phase's `insertQuarantinedOp` writer both landed, so a bad-signer/bad-signature op
+ * is held out into a row this device can read. Passing `reads.quarantined` is what lets §8.4's
+ * quarantine section reflect an actual attack instead of the one value the old literal could ever hold.
  */
 export function syncInput(
   state: SyncState,
@@ -49,7 +50,7 @@ export function syncInput(
     pendingOperationCount: reads.pendingOperationCount,
     pendingMediaCount: reads.pendingMediaCount,
     rejected: reads.rejected,
-    quarantined: [],
+    quarantined: reads.quarantined,
     media: reads.media,
     isOffline,
     manualSyncBusy: false,

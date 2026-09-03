@@ -59,6 +59,7 @@ import type {
   PullResponse,
   PushRequest,
   PushResponse,
+  SignedOperation,
 } from '@bolusi/schemas';
 import { sql } from 'kysely';
 import { act } from 'react';
@@ -368,6 +369,123 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
     fireOn(screen, `sync-rejected-${opId}`);
     await settle();
     expect(screen.query(`sync-rejected-detail-${opId}`)).toBeNull();
+  });
+});
+
+/**
+ * A device this client has NEVER enrolled — its ops must be held out, not applied (api/01-sync §4.2).
+ *
+ * `enrolledDevice`/`seedDirectory` (beforeEach) put only `fixture.deviceId` in the device registry, so
+ * this id is genuinely unknown. The op is otherwise well-formed: it PARSES the strict `zSignedOperation`
+ * the pull phase runs, which is the whole point — an op that fails to parse takes the "unparseable"
+ * branch and is surfaced but NEVER written to `quarantined_ops` (pull.ts), so it could not prove the
+ * read. This op reaches `verifyPulledOp`, fails `unknown_pubkey`, and lands a real row.
+ */
+const FOREIGN_DEVICE_ID = '01920000-0000-7000-8000-0000001690f0';
+
+function foreignOp(fixture: Fixture): SignedOperation {
+  return {
+    id: '01920000-0000-7000-8000-0000001690a1',
+    tenantId: fixture.tenantId,
+    storeId: fixture.storeId,
+    userId: '01920000-0000-7000-8000-0000001690e0',
+    deviceId: FOREIGN_DEVICE_ID,
+    seq: 1,
+    type: 'notes.note_created',
+    entityType: 'note',
+    entityId: '01920000-0000-7000-8000-0000001690e1',
+    schemaVersion: 1,
+    payload: { title: 'Dari perangkat asing', body: 'held out', mediaId: null },
+    timestamp: SERVER_TIME,
+    location: null,
+    source: 'ui',
+    agentInitiated: false,
+    agentConversationId: null,
+    previousHash: '0'.repeat(64),
+    hash: '1'.repeat(64),
+    // A well-formed base64 signature (64 zero bytes) — it parses `zBase64`, which is all the
+    // `unknown_pubkey` path needs: verification short-circuits on the absent key BEFORE the signature
+    // is ever checked, so the crypto need not be valid, only the SHAPE.
+    signature: Buffer.from(new Uint8Array(64)).toString('base64'),
+  } satisfies SignedOperation;
+}
+
+/**
+ * A server that serves one op signed by an unenrolled device, on EVERY pull.
+ *
+ * Serving it on every pull is deliberate and safe: the pull phase pulls once, sees `unknown_pubkey`,
+ * and forces ONE sidecar refetch at the SAME cursor (which delivers nothing — `bundle.refresh` is
+ * `'unchanged'`), so `pull()` is called twice per cycle and both must carry the op. `insertQuarantinedOp`
+ * is `INSERT OR IGNORE` (idempotent on id), so a repeat — including across a second sync tick — is a
+ * no-op, never a PK collision that would fail the batch. Push accepts, because there is nothing to push.
+ */
+class QuarantiningTransport {
+  push(request: PushRequest): Promise<PushResponse> {
+    return Promise.resolve({
+      results: request.ops.map((op) => ({ id: op.id, status: 'accepted' as const, serverSeq: 1 })),
+      serverTime: SERVER_TIME,
+    });
+  }
+
+  pull(request: PullRequest): Promise<PullResponse> {
+    return Promise.resolve({
+      ops: [foreignOp(fixture)],
+      // Echo the cursor unchanged, as `RejectingTransport` does: `hasMore: false` breaks the pull loop
+      // after this one batch, and the quarantine row is written whatever the cursor reads.
+      nextCursor: request.cursor,
+      hasMore: false,
+      serverTime: SERVER_TIME,
+    });
+  }
+}
+
+describe('quarantined ops (api/01-sync §4.2) — a held-out pull batch reaches the screen', () => {
+  test('an op from an unenrolled device is quarantined and §8.4 renders the quarantine section', async () => {
+    const timer = virtualTimer();
+    let client: SyncClient | null = null;
+    const createSync: RootProps['createSync'] = (booted) => {
+      if (booted.deviceId === null) return null;
+      client = createSyncClient({
+        db: booted.db,
+        deviceId: booted.deviceId,
+        transport: new QuarantiningTransport(),
+        bundle: { refresh: () => Promise.resolve('unchanged') },
+        applyPulledOp: (op) => booted.engine.applyPulledOp(op),
+        crypto: noblePort,
+        clock: { now: () => SERVER_TIME },
+        timer,
+        appState: fakeAppState(),
+        netInfo: offlineNetInfo,
+        initialSyncState: booted.syncState,
+      });
+      return client;
+    };
+
+    const screen = await mountRoot(fixture, { createSync });
+    await signIn(screen);
+    await openSyncStatus(screen);
+
+    // The section must NOT be up before the pull — otherwise a section that renders unconditionally
+    // would pass this test with the read wire cut. This is the denominator (T-14).
+    expect(screen.query('sync-quarantine')).toBeNull();
+
+    // Drive one real cycle from the screen's own manual-sync button: push (nothing), then pull, which
+    // hands over the foreign op and holds it aside.
+    fireOn(screen, 'sync-now');
+    await drainSync(client, timer);
+
+    // The row exists in the table the screen reads — the producer, checked directly (not the input).
+    const held = await waitUntil(async () => {
+      const rows = await fixture.app.db.db.selectFrom('quarantinedOps').select('id').execute();
+      return rows.length > 0;
+    });
+    expect(held, 'the pull leg never wrote a quarantined_ops row').toBe(true);
+
+    // And the shell re-read and rendered the section. `SyncStatusInput.quarantined` was the hardcoded
+    // `[]` until task 169, so this node could not exist on any device that had ever held an op out —
+    // FALSIFIED by reverting `quarantined: reads.quarantined` to `[]` in shell-inputs.ts: this goes red.
+    const shown = await waitUntil(() => screen.query('sync-quarantine') !== null);
+    expect(shown, 'the quarantine section never reached the sync-status screen').toBe(true);
   });
 });
 

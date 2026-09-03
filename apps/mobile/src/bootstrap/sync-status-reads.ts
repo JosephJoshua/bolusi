@@ -21,7 +21,12 @@ import { pendingMediaCount, pendingOperationCount } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import type { Kysely } from 'kysely';
 
-import type { MediaRow, MediaUploadStatus, RejectedOpRow } from '../screens/sync-status/model.js';
+import type {
+  MediaRow,
+  MediaUploadStatus,
+  QuarantinedOpRow,
+  RejectedOpRow,
+} from '../screens/sync-status/model.js';
 
 /**
  * Cap on the rejected list. §8.4 item 4 renders one `ListRow` per rejected op, and 05 §8 makes a
@@ -45,6 +50,7 @@ export interface SyncStatusReads {
   readonly pendingMediaCount: number;
   readonly rejected: readonly RejectedOpRow[];
   readonly media: readonly MediaRow[];
+  readonly quarantined: readonly QuarantinedOpRow[];
 }
 
 /** A device with nothing read yet — the honest pre-first-read value, never a fabricated zero state. */
@@ -53,10 +59,11 @@ export const NO_SYNC_STATUS_READS: SyncStatusReads = {
   pendingMediaCount: 0,
   rejected: [],
   media: [],
+  quarantined: [],
 };
 
 /**
- * Read the four derived values §8.4 renders, from the op log and the media queue.
+ * Read the values §8.4 renders, from the op log, the media queue, and the quarantine table.
  *
  * DERIVED, NEVER STORED (01 §5.2): every number below is a `COUNT`/`SELECT` at read time. There is
  * no counter column to drift, which is the property that doc is protecting.
@@ -72,7 +79,7 @@ export const NO_SYNC_STATUS_READS: SyncStatusReads = {
  * duplicate of this.
  */
 export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<SyncStatusReads> {
-  const [operationCount, mediaCount, mediaRows, rejectedRows] = await Promise.all([
+  const [operationCount, mediaCount, mediaRows, rejectedRows, quarantinedRows] = await Promise.all([
     // ── THE COUNTERS ARE CORE'S, NOT THIS FILE'S (CLAUDE.md §2.8) ────────────────────────────────
     // 06 §4 calls `pendingMediaCount`'s predicate CANONICAL and 01 §5.2 restates it verbatim, and
     // core already implements both (`packages/core/src/sync/state.ts:143,155`). This file re-derived
@@ -110,6 +117,28 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
       .orderBy('timestampMs', 'desc')
       .limit(REJECTED_LIST_LIMIT)
       .execute(),
+    // ── THE QUARANTINE LIST (api/01-sync §4.2; §8.4 quarantine section) ──────────────────────────
+    // A held-out pull batch: an op whose signer is unknown or whose signature is bad, inserted into
+    // `quarantined_ops` by the pull phase (`packages/core/src/sync/pull.ts` → `insertQuarantinedOp`)
+    // and NEVER applied to a projection. Because it writes no projection, the count is not derivable
+    // any other way — reading this table is the only honest source for the section.
+    //
+    // ONLY `id, deviceId` — the two non-payload identifiers `QuarantinedOpRow` is built from — NOT
+    // core's `readQuarantinedOps`, which decrypts `signed_core_jcs` back into the full forged op. The
+    // section surfaces only THAT a batch was held out: §8.4 renders a fixed title/body gated on the
+    // count and shows no per-op detail (neither id nor device reaches the UI). So decrypting the
+    // payload into a read path would reconstruct attacker-controlled bytes for nothing (§2.5) and drag
+    // an aead port into this Node-safe file for data the screen never renders.
+    //
+    // UNCAPPED, unlike the two lists above. Those cap because they grow in normal operation;
+    // quarantine is exceptional (a bad-signature / unknown-signer op is an attack or a bug), the two
+    // columns are tiny, and the model derives its count from `.length` — so a `LIMIT` here would
+    // silently under-report the exact thing the section exists to surface loudly.
+    db
+      .selectFrom('quarantinedOps')
+      .select(['id', 'deviceId'])
+      .orderBy('serverSeq', 'asc')
+      .execute(),
   ]);
 
   const media: MediaRow[] = [];
@@ -144,6 +173,12 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
     });
   }
 
+  const quarantined: QuarantinedOpRow[] = [];
+  for (const row of quarantinedRows) {
+    if (row.id === null) continue; // A PK is never null in practice; the generated type says it can be.
+    quarantined.push({ opId: row.id, deviceId: row.deviceId });
+  }
+
   return {
     // NOT `media.length` — that was the same bug one layer up. The list is CAPPED
     // (`MEDIA_LIST_LIMIT`) and the counter is not, so a device with 60 queued photos must report 60
@@ -154,5 +189,6 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
     pendingMediaCount: mediaCount,
     rejected,
     media,
+    quarantined,
   };
 }
