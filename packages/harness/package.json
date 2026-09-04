@@ -22,6 +22,7 @@
     "@bolusi/server": "workspace:*",
     "@bolusi/db-server": "workspace:*",
     "@bolusi/db-client": "workspace:*",
+    "@hono/node-server": "catalog:",
     "kysely": "catalog:",
     "@electric-sql/pglite": "catalog:"
   },

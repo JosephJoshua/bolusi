@@ -9,7 +9,10 @@
 // `verifyToken` (a test token map). Everything else defaults: `opRegistry`/`projections` are derived
 // from SERVER_MODULES, which registers notes (deps.ts), and the pokeHub/rate stores are in-memory.
 // The harness owns NO protocol logic (T-7) — it wires production `createApp`.
+import type { AddressInfo } from 'node:net';
+
 import { PGlite } from '@electric-sql/pglite';
+import { serve, type ServerType } from '@hono/node-server';
 import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
 import { migrateToLatest, type DB } from '@bolusi/db-server';
@@ -71,6 +74,25 @@ interface DevicePrincipal {
   readonly storeId: string | null;
 }
 
+/**
+ * A {@link HarnessServer} exposed over a REAL loopback TCP socket (task 198 step 1). `url` is the
+ * bound origin (`http://127.0.0.1:<ephemeral-port>` by default); `server` is the same booted instance,
+ * so a test can still `seedDevice` after listening. `close()` shuts the socket AND destroys the PGlite
+ * handle — call it once, in a `finally`.
+ */
+export interface RunningHarnessServer {
+  readonly url: string;
+  readonly address: string;
+  readonly port: number;
+  readonly server: HarnessServer;
+  close(): Promise<void>;
+}
+
+/** Bracket an IPv6 host for a URL authority (`::1` → `[::1]`); pass IPv4/hostnames through. */
+function formatHost(address: string): string {
+  return address.includes(':') ? `[${address}]` : address;
+}
+
 export class HarnessServer {
   readonly accessLogs: string[] = [];
   #tokenCounter = 0;
@@ -88,6 +110,13 @@ export class HarnessServer {
      * path (05 §8, api/01 §2) — the harness forges no 401 (T-7). `undefined` on every other boot.
      */
     private readonly authStore: InMemoryTokenStore | undefined,
+    /**
+     * The production Hono app this server wraps — retained so {@link listen} can serve its `app.fetch`
+     * over a REAL socket (task 198). The in-process `fetch` above is `app.request` (path-routed); the
+     * socket serves the SAME `app.fetch` production `main.ts` serves, so there is exactly one handler
+     * and one protocol (T-7), reached two ways.
+     */
+    private readonly app: ReturnType<typeof createApp>,
   ) {}
 
   /**
@@ -187,6 +216,7 @@ export class HarnessServer {
       (input, init) => Promise.resolve(app.request(input, init)),
       tokens,
       authStore,
+      app,
     );
     (server as { accessLogs: string[] }).accessLogs = accessLogs;
     return server;
@@ -262,9 +292,65 @@ export class HarnessServer {
               ON CONFLICT (tenant_id) DO NOTHING`.execute(this.db);
   }
 
+  /**
+   * Open a REAL `@hono/node-server` TCP socket serving this booted app's `app.fetch` (task 198 step 1)
+   * so an on-device CHAOS runner (CHAOS-03/06/07) drives the production sync pipeline over the network,
+   * not just in-process. The harness adds NO protocol (T-7) — it serves the SAME handler `main.ts`
+   * does; it only opens a port.
+   *
+   * Binds host LOOPBACK ONLY (`127.0.0.1`) by default: this server mints valid `bdt_harness_*` bearer
+   * tokens, so it MUST NOT listen on the LAN (§2.5). The Android emulator still reaches it — `10.0.2.2`
+   * aliases the host loopback, and `adb reverse tcp:P tcp:P` maps device `127.0.0.1:P` to the host —
+   * so loopback is both sufficient and safe. Port `0` ⇒ an ephemeral port, so parallel test servers
+   * never collide.
+   */
+  async listen(options?: { readonly hostname?: string }): Promise<RunningHarnessServer> {
+    const hostname = options?.hostname ?? '127.0.0.1';
+    const server = this;
+    const { node, info } = await new Promise<{ node: ServerType; info: AddressInfo }>((resolve) => {
+      let node_: ServerType;
+      node_ = serve({ fetch: server.app.fetch, hostname, port: 0 }, (i) =>
+        resolve({ node: node_, info: i }),
+      );
+    });
+    const url = `http://${formatHost(info.address)}:${info.port}`;
+    return {
+      url,
+      address: info.address,
+      port: info.port,
+      server,
+      close: async () => {
+        // Drop keep-alive sockets first so `close()` (which waits for idle) resolves promptly instead
+        // of hanging the vitest worker on a lingering undici keep-alive connection; then destroy
+        // PGlite. `closeAllConnections` is a `net.Server` runtime method that `@types/node` declares
+        // only on the http arm of `ServerType` (not the http2 arms we never create), so reach it
+        // through an optional cast rather than widening the type.
+        (node as { closeAllConnections?: () => void }).closeAllConnections?.();
+        await new Promise<void>((resolve, reject) => {
+          node.close((err) => (err === undefined || err === null ? resolve() : reject(err)));
+        });
+        await server.close();
+      },
+    };
+  }
+
   async close(): Promise<void> {
     // Destroying the Kysely handle closes the PGlite instance the dialect owns; closing it again
     // throws "PGlite is closed", so the single destroy is the whole teardown.
     await this.db.destroy();
   }
+}
+
+/**
+ * Boot a {@link HarnessServer} and immediately {@link HarnessServer.listen | listen} on a loopback
+ * socket (task 198). The convenience entry the device CHAOS runners and the host adversarial tests
+ * use: `const running = await startHarnessServer(); …; await running.close()`. Forwards every `boot`
+ * option (e.g. `testAuthSeam`) plus an optional `hostname` override.
+ */
+export async function startHarnessServer(
+  options?: NonNullable<Parameters<typeof HarnessServer.boot>[0]> & { readonly hostname?: string },
+): Promise<RunningHarnessServer> {
+  const { hostname, ...bootOptions } = options ?? {};
+  const server = await HarnessServer.boot(bootOptions);
+  return server.listen(hostname === undefined ? undefined : { hostname });
 }

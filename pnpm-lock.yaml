@@ -496,6 +496,9 @@ importers:
       '@electric-sql/pglite':
         specifier: 'catalog:'
         version: 0.5.4
+      '@hono/node-server':
+        specifier: 'catalog:'
+        version: 2.0.8(hono@4.12.30)
       kysely:
         specifier: 'catalog:'
         version: 0.29.3

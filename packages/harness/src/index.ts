@@ -40,12 +40,15 @@ export { runConvergence, type ConvergenceOptions, type ConvergenceResult } from 
 export { toProjectionManifest, notesProjectionManifest } from './manifest.js';
 export {
   HarnessServer,
+  startHarnessServer,
   type HarnessSurfacedConflict,
   type HarnessSystemKeyStore,
   type HarnessSystemSigner,
+  type RunningHarnessServer,
   type SeededServerDevice,
   type SystemDeviceSeed,
 } from './server.js';
+export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './net-server.js';
 export {
   FaultFetch,
   NetworkDroppedError,
