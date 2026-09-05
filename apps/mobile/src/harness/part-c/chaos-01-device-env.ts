@@ -17,54 +17,26 @@
 // its two positive controls (a dropped op → divergence; in-order arrival → INCONCLUSIVE). The only
 // emulator-only residual is Hermes-vs-V8 engine behaviour, which the emulator lane exercises.
 //
-// ── WHY `openDb` MIRRORS packages/harness/src/client-db.ts, NOT the at-rest env ──────────────────
-// It opens a BARE client DB (driver → migrations → Kysely → bound `OpAppendStore`), the proven
-// convergence setup — deliberately WITHOUT `CLIENT_PRAGMAS`. Convergence is a single-connection,
-// digest-only property that does not need WAL or FK enforcement; turning `foreign_keys = ON` would route
-// the fold through a path the Node CHAOS-01 suite never exercises. The ~8-line construction is copied
-// per-binding ON PURPOSE: `@bolusi/test-support/chaos` is type-only on `@bolusi/db-client` (08 §3.3 — no
-// DB *values* in that package), so "open a real driver + bind the store" cannot be hoisted into the
-// shared rig; the seam boundary is what keeps the rig platform-free.
-import { CamelCasePlugin, Kysely } from 'kysely';
-
-import type { AnyModuleDefinition } from '@bolusi/core';
-import {
-  createClientDialect,
-  createClientOpStore,
-  runClientMigrations,
-  type ClientDatabase,
-  type DbDriverFactory,
-} from '@bolusi/db-client';
-import { notesModule, notesModuleManifest } from '@bolusi/modules/notes';
+// The bare-client-DB `openDb` + notes trio construction is `buildConvergenceSeams` in
+// `./convergence-seams.ts` — shared with the CHAOS-03 runner, so it lives ONCE (§2.8). This file owns
+// only the CHAOS-01 verdict (both-fold-paths + convergence), not the DB binding.
 import {
   assertBothFoldPaths,
   assertConvergence,
   runConvergence,
-  toProjectionManifest,
-  type ClientDbHandle,
   type ConvergenceOptions,
   type ConvergenceResult,
-  type ConvergenceSeams,
 } from '@bolusi/test-support/chaos';
 
 import { failed, passed, type HarnessGateResult } from '../result.js';
+import { buildConvergenceSeams, type ChaosDbSeams } from './convergence-seams.js';
 
 /** The gate id this runner reports under — the CHAOS-01 slot in `EMULATOR_CORRECTNESS_GATE_IDS`. */
 export const CHAOS01_GATE_ID = 'CHAOS-01';
 
-/**
- * The op-sqlite-free DB seam for the CHAOS-01 runner. On device run-and-emit.ts binds op-sqlite; the
- * host test binds better-sqlite3 (`:memory:`) — same env, two bindings (§2.8). Everything is keyed by
- * the DB's LOGICAL name so this orchestration never touches a raw path (the seam owns path semantics).
- */
-export interface ChaosDbSeams {
-  /** Opens a DB driver for `{ name, location }` — op-sqlite on device, better-sqlite3 in CI. */
-  readonly driverFactory: DbDriverFactory;
-  /** The directory handed to `driverFactory` (a dir on device; `undefined` → `:memory:` in CI). */
-  readonly location: string | undefined;
-  /** Best-effort delete of the DB file `name` + its WAL/SHM sidecars, so each device DB starts clean. */
-  removeDb(name: string): Promise<void>;
-}
+// The device DB seam (`ChaosDbSeams`) is defined with its builder in `./convergence-seams.ts`; re-exported
+// here so run-and-emit.ts's existing binding import (`./chaos-01-device-env.js`) keeps resolving.
+export type { ChaosDbSeams };
 
 /**
  * CHAOS-01's device workload. Smaller than the Node CI scale (500 ops/device, §3.6) so a single low-end
@@ -97,47 +69,6 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Build the `ConvergenceSeams` for a device run: a fresh, uniquely-named client DB per `openDb` call
- * (the rig opens one per device plus the canonical-fold reference), and the real `@bolusi/modules` notes
- * trio. A per-run counter names the DBs; `removeDb` runs before open AND on close, so a stale file can
- * never masquerade as this run's replica.
- */
-function buildConvergenceSeams(dbSeams: ChaosDbSeams): ConvergenceSeams {
-  let dbCounter = 0;
-  const notes = notesModule as unknown as AnyModuleDefinition<ClientDatabase>;
-
-  const openDb = async (): Promise<ClientDbHandle> => {
-    const name = `bolusi-harness-chaos01-${dbCounter}.db`;
-    dbCounter += 1;
-    await dbSeams.removeDb(name);
-    const driver = await dbSeams.driverFactory({ name, location: dbSeams.location });
-    await runClientMigrations(driver, { now: () => 1 });
-    const db = new Kysely<ClientDatabase>({
-      dialect: createClientDialect(driver),
-      plugins: [new CamelCasePlugin({ underscoreBetweenUppercaseLetters: true })],
-    });
-    const store = createClientOpStore({ db, driver });
-    return {
-      driver,
-      db,
-      store,
-      close: async () => {
-        await db.destroy();
-        await driver.close();
-        await dbSeams.removeDb(name);
-      },
-    };
-  };
-
-  return {
-    openDb,
-    module: notes,
-    moduleManifest: notesModuleManifest,
-    projectionManifest: toProjectionManifest(notes),
-  };
-}
-
-/**
  * Run the CHAOS-01 convergence workload and return a real verdict (§2.11 — never a silent pass).
  *
  * PASS requires TWO independent guards, exactly as the Node scenario:
@@ -154,7 +85,7 @@ export async function runChaos01Gate(
   options: ConvergenceOptions = DEFAULT_CHAOS01_OPTIONS,
   seed: number = DEFAULT_CHAOS01_SEED,
 ): Promise<HarnessGateResult> {
-  const seams = buildConvergenceSeams(dbSeams);
+  const seams = buildConvergenceSeams(dbSeams, 'chaos01');
 
   let result: ConvergenceResult;
   try {
