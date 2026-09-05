@@ -6,7 +6,15 @@
 // `device-runner-chaos-07.test.ts`'s `mintSystemDevice` minted it inline byte-for-byte, and the chaos-net
 // child server (scripts/harness-chaos-server.mjs) needs a THIRD caller — the rule-of-three trigger (§2.8).
 import { bytesToBase64 } from '@bolusi/core';
-import { deriveDeviceKeypair, FakeClock, makeIdSource, mulberry32 } from '@bolusi/test-support';
+import {
+  deriveDeviceKeypair,
+  FakeClock,
+  makeIdSource,
+  mulberry32,
+  noblePort,
+} from '@bolusi/test-support';
+
+import type { HarnessSystemKeyStore } from './server.js';
 
 /** The system device's id-minting clock base — matches the harness genesis clock base (T-6), so a system
  *  device minted here lines up with the members minted from the same seed. */
@@ -44,5 +52,29 @@ export function mintSystemDevice(tenantSeed: number, tenantId: string): SystemDe
     deviceId,
     publicKeyBase64: bytesToBase64(keypair.publicKey),
     secret: keypair.seed,
+  };
+}
+
+/**
+ * Build the {@link HarnessSystemKeyStore} a detection-ON `startHarnessServer`/`HarnessServer.boot` needs,
+ * backed by a caller-owned `tenantId → secret` map. The server calls `getSystemSigner(tenantId)` when it
+ * mints a `platform.conflict_detected` op; this returns a signer that signs the op hash with that tenant's
+ * system secret (the `secret` from {@link mintSystemDevice}) via `noblePort`, or `undefined` when the
+ * tenant has no registered secret (detection then no-ops for it). The map is read at SIGN time, so a
+ * caller may `.set(tenantId, secret)` any time before the first conflict is detected.
+ *
+ * The extraction (task 198): `chaos-07-conflicts.test.ts`, its host binding `device-runner-chaos-07.test.ts`,
+ * and the chaos-net child server (scripts/harness-chaos-server.mjs) all built this signer closure
+ * byte-for-byte — the rule-of-three trigger (§2.8). One home keeps the security-relevant signer wiring from
+ * drifting between the scenario, its socket dual, and the on-device lane's server.
+ */
+export function systemSignerKeyStore(
+  systemSecrets: ReadonlyMap<string, Uint8Array>,
+): HarnessSystemKeyStore {
+  return {
+    getSystemSigner: (tenantId) => {
+      const secret = systemSecrets.get(tenantId);
+      return secret === undefined ? undefined : (hash) => noblePort.sign(hash, secret);
+    },
   };
 }

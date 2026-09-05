@@ -15,7 +15,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
-import type { Chaos03Net } from '@bolusi/test-support/chaos';
 
 import { deviceColumnAead } from '../ports/aead.js';
 import { HARNESS_RUN_ID_EXTRA, type HarnessLaunchProps } from './contract.js';
@@ -39,7 +38,9 @@ import {
   type ChaosDbSeams,
 } from './part-c/chaos-01-device-env.js';
 import { CHAOS03_GATE_ID, runChaos03Gate } from './part-c/chaos-03-device-env.js';
-import { parseChaosNet } from './part-c/chaos-net.js';
+import { CHAOS06_GATE_ID, runChaos06Gate } from './part-c/chaos-06-device-env.js';
+import { CHAOS07_GATE_ID, runChaos07Gate } from './part-c/chaos-07-device-env.js';
+import { parseChaosNet, type ChaosNets } from './part-c/chaos-net.js';
 import { JCS_GATE_ID, runJcsGate } from './part-c/jcs-device-runner.js';
 
 declare const __DEV__: boolean;
@@ -155,16 +156,15 @@ function deviceChaosSeams(): ChaosDbSeams {
 /**
  * Build the on-device gate runners from the loaded harness. Each entry produces a REAL `passed`/`failed`
  * (§2.11). CHAOS-01 is wired unconditionally (its client-only convergence needs only op-sqlite — task
- * 181). CHAOS-03 is wired ONLY when the driver handed off a net (`chaosNet` non-null): its runner drives
- * the REAL host `@bolusi/server` over the wire, so with no handoff it stays absent and run.ts skips it
- * honestly. CHAOS-06/07 still have NO entry — their host-network runners are owed (task 198), so run.ts
- * skips them too. A skip reds the emulator lane; it never fabricates a pass.
+ * 181). CHAOS-03/06/07 are each wired ONLY when the driver handed off that scenario's net (its slot in
+ * `nets` non-null): their runners drive the REAL host `@bolusi/server` over the wire, so with no handoff a
+ * scenario stays absent and run.ts skips it honestly. A skip reds the emulator lane; it never fabricates a
+ * pass. Each net is destructured into a `const` local first so its non-null narrowing survives into the
+ * runner closure (a `nets.chaos0N` property access would NOT narrow inside the arrow).
  */
-function buildDeviceRunners(
-  harness: HarnessRunners,
-  chaosNet: Chaos03Net | null,
-): DeviceGateRunners {
+function buildDeviceRunners(harness: HarnessRunners, nets: ChaosNets): DeviceGateRunners {
   const env = createAtRestDeviceEnv(deviceAtRestSeams());
+  const { chaos03, chaos06, chaos07 } = nets;
   return {
     // SEC-DEV-06 L6 — all 11 signed-off columns are ciphertext at rest (the priority, deliverable 1).
     [AT_REST_GATE_ID]: () => harness.runAtRest(env),
@@ -174,11 +174,18 @@ function buildDeviceRunners(
     [JCS_GATE_ID]: runJcsGate,
     // CHAOS-01 — multi-device projection convergence over op-sqlite (client-only, no server; task 181).
     [CHAOS01_GATE_ID]: () => runChaos01Gate(deviceChaosSeams()),
-    // CHAOS-03 — multi-device convergence over the REAL host server round-trip. Wired only when the driver
-    // handed off a net (base URL + per-device bearers via intent extras); absent → honest skip (task 198).
-    ...(chaosNet === null
+    // CHAOS-03/06/07 — multi-device workloads over the REAL host server round-trip. Each is wired only when
+    // the driver handed off that scenario's net (base URL + per-device bearers in the `bolusiHarnessChaosNets`
+    // extra); an absent scenario → honest skip (task 198).
+    ...(chaos03 === null
       ? {}
-      : { [CHAOS03_GATE_ID]: () => runChaos03Gate(deviceChaosSeams(), chaosNet) }),
+      : { [CHAOS03_GATE_ID]: () => runChaos03Gate(deviceChaosSeams(), chaos03) }),
+    ...(chaos06 === null
+      ? {}
+      : { [CHAOS06_GATE_ID]: () => runChaos06Gate(deviceChaosSeams(), chaos06) }),
+    ...(chaos07 === null
+      ? {}
+      : { [CHAOS07_GATE_ID]: () => runChaos07Gate(deviceChaosSeams(), chaos07) }),
   };
 }
 
@@ -190,16 +197,16 @@ function buildDeviceRunners(
  *
  * `loadHarness()` returning null (flag off) yields no runners and an all-skipped honest partial. With the
  * flag on, `buildDeviceRunners` binds op-sqlite + `deviceColumnAead` + expo-file-system and the at-rest /
- * SEC-AUTH-09 / JCS / CHAOS-01 gates produce real verdicts. CHAOS-03 additionally runs when the driver
- * handed off a net (`parseChaosNet` reads the base URL + per-device bearers from the extras); with no
- * handoff — and CHAOS-06/07 always, until their runners land — those gates stay honestly skipped (task
- * 198). A runner that throws on device becomes a red naming its id (resolveGateResults), never a gap.
+ * SEC-AUTH-09 / JCS / CHAOS-01 gates produce real verdicts. CHAOS-03/06/07 additionally run when the driver
+ * handed off their nets (`parseChaosNet` reads each scenario's base URL + per-device bearers from the one
+ * `bolusiHarnessChaosNets` extra); a scenario with no handoff stays honestly skipped (task 198). A runner
+ * that throws on device becomes a red naming its id (resolveGateResults), never a gap.
  */
 export async function runAndEmitHarness(props: HarnessLaunchProps): Promise<void> {
   const runId = props[HARNESS_RUN_ID_EXTRA] ?? '';
   const harness = loadHarness();
-  const chaosNet = parseChaosNet(props);
-  const runners: DeviceGateRunners = harness === null ? {} : buildDeviceRunners(harness, chaosNet);
+  const nets = parseChaosNet(props);
+  const runners: DeviceGateRunners = harness === null ? {} : buildDeviceRunners(harness, nets);
   const gates = await resolveGateResults(harness, runners);
   emitHarnessResult(buildHarnessResult(runId, gates, runtimeFacts()));
 }

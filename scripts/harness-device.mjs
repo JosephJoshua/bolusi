@@ -37,51 +37,60 @@ export const EMULATOR_REQUIRED_GATES = Object.freeze([
   'CHAOS-07',
 ]);
 
-// ── CHAOS-03 device→host net handoff (task 198 step 4) ──────────────────────────────────────────────
-// CHAOS-03 is the one emulator gate that needs the REAL host `@bolusi/server` over the wire. The driver
-// starts a SEPARATE child server (harness-chaos-server.mjs), reads its one handshake line for the bound
-// port + per-device bearers, `adb reverse`s the port, and hands the base URL + bearers to the APK as adb
-// intent extras. The device's `parseChaosNet` (apps/mobile src/harness/part-c/chaos-net.ts) reads these
-// two extras back. THESE KEYS ARE THE WIRE: they MUST equal apps/mobile src/harness/contract.ts, or the
-// device silently skips CHAOS-03 (a handoff it cannot read is no handoff) — so they are pinned equal in
-// apps/mobile/test/harness-producer.test.ts, exactly as HARNESS_RESULT_TAG is pinned to the emitter.
+// ── CHAOS-03/06/07 device→host net handoff (task 198 step 4) ────────────────────────────────────────
+// CHAOS-03/06/07 are the emulator gates that each need the REAL host `@bolusi/server` over the wire. The
+// driver starts a SEPARATE child server (harness-chaos-server.mjs) that boots one server PER scenario
+// (03/06 plain, 07 with conflict detection ON), reads its one handshake line for each scenario's bound
+// port + per-device bearers, `adb reverse`s every port, and hands the base URLs + bearers to the APK as
+// ONE adb intent extra (a per-scenario JSON map). The device's `parseChaosNet` (apps/mobile
+// src/harness/part-c/chaos-net.ts) reads that one extra back. THIS KEY IS THE WIRE: it MUST equal
+// apps/mobile src/harness/contract.ts, or the device silently skips the net gates (a handoff it cannot
+// read is no handoff) — so it is pinned equal in apps/mobile/test/harness-producer.test.ts, exactly as
+// HARNESS_RESULT_TAG is pinned to the emitter.
 
-/** Intent-extra key carrying the emulator-reachable base URL (contract.ts HARNESS_CHAOS_NET_BASE_URL_EXTRA). */
-export const HARNESS_CHAOS_NET_BASE_URL_EXTRA = 'bolusiHarnessChaosBaseUrl';
+/** The scenario ids the net handoff carries, in a fixed order — the child seeds each, the driver reverses
+ * each port, and the device builds one net per id. The single source both sides iterate. */
+export const CHAOS_NET_SCENARIO_IDS = Object.freeze(['chaos03', 'chaos06', 'chaos07']);
 
-/** Intent-extra key carrying the per-device bearers as a JSON array of RAW tokens (contract.ts
- * HARNESS_CHAOS_NET_BEARERS_EXTRA). The device's `parseChaosNet` JSON-parses this and re-prefixes each
- * with `Bearer `; the raw token never carries the prefix over the wire. */
-export const HARNESS_CHAOS_NET_BEARERS_EXTRA = 'bolusiHarnessChaosBearers';
+/** The ONE intent-extra key carrying every scenario's net handoff as a JSON map
+ * `{"chaos03":{"baseUrl":…,"bearers":[…]},"chaos06":{…},"chaos07":{…}}` (contract.ts
+ * HARNESS_CHAOS_NET_EXTRA). Bearers are RAW tokens (no `Bearer ` prefix); the device's `parseChaosNet`
+ * JSON-parses this and re-prefixes each. One extra, not one-per-scenario, so the intent surface stays a
+ * fixed width as scenarios grow. */
+export const HARNESS_CHAOS_NET_EXTRA = 'bolusiHarnessChaosNets';
 
-/** The stdout marker the child server prints ONCE it is listening + seeded, so the driver learns the
- * bound port + bearers WITHOUT a second server or a race on the socket. One line, marker-prefixed JSON. */
+/** The stdout marker the child server prints ONCE all scenarios are listening + seeded, so the driver
+ * learns each scenario's bound port + bearers WITHOUT a second server or a race on the socket. One line,
+ * marker-prefixed JSON. */
 export const HARNESS_CHAOS_NET_HANDSHAKE_MARKER = 'BOLUSI_HARNESS_CHAOS_NET';
 
 /**
- * Render the child server's one handshake line: `${MARKER}: {"port":…,"baseUrl":…,"bearers":[…]}`.
+ * Render the child server's one handshake line:
+ * `${MARKER}: {"scenarios":{"chaos03":{"port":…,"baseUrl":…,"bearers":[…]},"chaos06":{…},"chaos07":{…}}}`.
  * Pure — the child prints exactly this and the driver parses exactly this, so the two agree by
- * construction (the round-trip is pinned in harness-producer.test.ts).
- * @param {{ port: number, baseUrl: string, bearers: readonly string[] }} handoff
+ * construction (the round-trip is pinned in chaos-net-server-child.test.ts).
+ * @param {{ scenarios: Record<string, { port: number, baseUrl: string, bearers: readonly string[] }> }} handoff
  * @returns {string}
  */
 export function formatChaosNetHandshake(handoff) {
-  return `${HARNESS_CHAOS_NET_HANDSHAKE_MARKER}: ${JSON.stringify({
-    port: handoff.port,
-    baseUrl: handoff.baseUrl,
-    bearers: handoff.bearers,
-  })}`;
+  const scenarios = {};
+  for (const id of CHAOS_NET_SCENARIO_IDS) {
+    const entry = handoff.scenarios[id];
+    scenarios[id] = { port: entry.port, baseUrl: entry.baseUrl, bearers: entry.bearers };
+  }
+  return `${HARNESS_CHAOS_NET_HANDSHAKE_MARKER}: ${JSON.stringify({ scenarios })}`;
 }
 
 /**
  * Parse the child server's handshake out of its stdout — the LAST marker line wins (a prior line can
- * never mask a fresher one), and every field is validated. Returns `null` on ANY of: no marker,
- * unparseable JSON, a non-positive/non-integer port, an empty base URL, or a bearers list that is not a
- * non-empty array of non-empty strings. FAIL-SAFE (§2.1): a broken/absent handshake is null, which the
- * driver turns into a non-zero exit — never a net built from garbage that would read as a server auth
- * failure on-device. Total: never throws.
+ * never mask a fresher one), and EVERY scenario's every field is validated. Returns `null` on ANY of: no
+ * marker, unparseable JSON, a missing `scenarios` object, a missing scenario, a non-positive/non-integer
+ * port, an empty base URL, or a bearers list that is not a non-empty array of non-empty strings — ALL
+ * THREE scenarios must validate or the whole handshake is null. FAIL-SAFE (§2.1): a broken/absent
+ * handshake is null, which the driver turns into a non-zero exit — never a net built from garbage that
+ * would read as a server auth failure on-device. Total: never throws.
  * @param {string} childStdout
- * @returns {{ port: number, baseUrl: string, bearers: string[] } | null}
+ * @returns {{ scenarios: Record<string, { port: number, baseUrl: string, bearers: string[] }> } | null}
  */
 export function parseChaosNetHandshake(childStdout) {
   const marker = `${HARNESS_CHAOS_NET_HANDSHAKE_MARKER}:`;
@@ -99,31 +108,38 @@ export function parseChaosNetHandshake(childStdout) {
     return null;
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
+  const { scenarios } = parsed;
+  if (typeof scenarios !== 'object' || scenarios === null) return null;
 
-  const { port, baseUrl, bearers } = parsed;
-  if (!Number.isInteger(port) || port <= 0) return null;
-  if (typeof baseUrl !== 'string' || baseUrl === '') return null;
-  if (!Array.isArray(bearers) || bearers.length === 0) return null;
-  if (!bearers.every((token) => typeof token === 'string' && token !== '')) return null;
-  return { port, baseUrl, bearers };
+  const validated = {};
+  for (const id of CHAOS_NET_SCENARIO_IDS) {
+    const entry = scenarios[id];
+    if (typeof entry !== 'object' || entry === null) return null;
+    const { port, baseUrl, bearers } = entry;
+    if (!Number.isInteger(port) || port <= 0) return null;
+    if (typeof baseUrl !== 'string' || baseUrl === '') return null;
+    if (!Array.isArray(bearers) || bearers.length === 0) return null;
+    if (!bearers.every((token) => typeof token === 'string' && token !== '')) return null;
+    validated[id] = { port, baseUrl, bearers };
+  }
+  return { scenarios: validated };
 }
 
 /**
- * The `am start … --es` argv fragment that hands the net off to the APK. Bearers travel as a JSON
- * string of RAW tokens under the bearers key; the device's `parseChaosNet` JSON-parses them and
- * re-prefixes each `Bearer `. Pure — the exact triples the intent forwards to RN initialProps.
- * @param {{ baseUrl: string, bearers: readonly string[] }} handoff
+ * The `am start … --es` argv fragment that hands every scenario's net off to the APK as ONE JSON extra:
+ * `{"chaos03":{"baseUrl":…,"bearers":[…]},…}` — bearers as RAW tokens (the device re-prefixes `Bearer `),
+ * the port dropped (the device reaches the reversed port via the base URL, it never needs the number).
+ * Pure — the exact triple the intent forwards to an RN initialProp.
+ * @param {{ scenarios: Record<string, { baseUrl: string, bearers: readonly string[] }> }} handshake
  * @returns {string[]}
  */
-export function chaosNetExtras(handoff) {
-  return [
-    '--es',
-    HARNESS_CHAOS_NET_BASE_URL_EXTRA,
-    handoff.baseUrl,
-    '--es',
-    HARNESS_CHAOS_NET_BEARERS_EXTRA,
-    JSON.stringify(handoff.bearers),
-  ];
+export function chaosNetExtras(handshake) {
+  const nets = {};
+  for (const id of CHAOS_NET_SCENARIO_IDS) {
+    const entry = handshake.scenarios[id];
+    nets[id] = { baseUrl: entry.baseUrl, bearers: entry.bearers };
+  }
+  return ['--es', HARNESS_CHAOS_NET_EXTRA, JSON.stringify(nets)];
 }
 
 /**
@@ -348,9 +364,10 @@ function dumpFailureDiagnostics() {
 }
 
 /**
- * Start the CHAOS-03 child server and wait (bounded) for its one handshake line. The child is a
- * SEPARATE Node process (harness-chaos-server.mjs) so its socket + PGlite handle outlive the driver's
- * spawnSync calls — a server must stay up during the 20-minute logcat poll. Its stdout is read via
+ * Start the chaos-net child server and wait (bounded) for its one handshake line. The child is a
+ * SEPARATE Node process (harness-chaos-server.mjs) that boots one server per scenario (CHAOS-03/06/07),
+ * so its sockets + PGlite handles outlive the driver's spawnSync calls — a server must stay up during
+ * the 20-minute logcat poll. Its stdout is read via
  * async data events, which is precisely WHY runCli is async: a spawnSync busy-wait would block the
  * event loop and never see the child's output. Returns the live child + a promise of the parsed
  * handshake, `null` on timeout OR early child exit (the caller fails the lane — never a silent skip).
@@ -399,15 +416,15 @@ async function runCli(argv) {
     .toString(16)
     .slice(2, 8)}`;
 
-  // CHAOS-03 child server + `adb reverse` TEARDOWN — registered ONCE, fires on EVERY exit path (fail()
+  // Chaos-net child server + `adb reverse` TEARDOWN — registered ONCE, fires on EVERY exit path (fail()
   // exits 1, the success path exits 0, an unhandled throw exits non-zero; 'exit' catches all). The
-  // handler is synchronous by necessity (Node runs 'exit' listeners sync): `kill` is a signal and
-  // `adb reverse --remove` is spawnSync, both legal here — leaving neither a stray forward nor a
-  // zombie server behind on the CI host.
+  // handler is synchronous by necessity (Node runs 'exit' listeners sync): `kill` is a signal and each
+  // `adb reverse --remove` is spawnSync, both legal here — leaving neither a stray forward (one per
+  // scenario port) nor a zombie server behind on the CI host.
   let chaosChild = null;
-  let reversedPort = null;
+  const reversedPorts = [];
   process.on('exit', () => {
-    if (reversedPort !== null) sh('adb', ['reverse', '--remove', `tcp:${reversedPort}`]);
+    for (const port of reversedPorts) sh('adb', ['reverse', '--remove', `tcp:${port}`]);
     if (chaosChild !== null) chaosChild.kill('SIGTERM');
   });
 
@@ -430,16 +447,17 @@ async function runCli(argv) {
     }
   }
 
-  // Stand up the CHAOS-03 host server + wire `adb reverse` BEFORE `am start`, so the base URL + bearers
-  // ride the launch intent. CHAOS-03 is a REQUIRED gate (EMULATOR_REQUIRED_GATES), so a net that never
-  // materialises must RED the lane, never skip it — hence every branch below fails non-zero.
+  // Stand up the CHAOS-03/06/07 host servers + wire `adb reverse` (one per scenario) BEFORE `am start`,
+  // so the base URLs + bearers ride the launch intent. These are REQUIRED gates (EMULATOR_REQUIRED_GATES),
+  // so a net that never materialises must RED the lane, never skip it — hence every branch below fails
+  // non-zero.
   const chaos = startChaosNetServer(60 * 1000);
   chaosChild = chaos.child;
   const handshake = await chaos.handshake;
   if (handshake === null) {
     fail(
-      'CHAOS-03 net child server never produced a handshake — cannot hand its base URL + bearers to ' +
-        'the APK, so CHAOS-03 could not run (a required gate cannot skip, §2.11)',
+      'chaos-net child server never produced a handshake — cannot hand the base URLs + bearers to ' +
+        'the APK, so the net gates (CHAOS-03/06/07) could not run (required gates cannot skip, §2.11)',
       [
         formatCapture('harness-chaos-server.mjs (child)', {
           status: chaos.child.exitCode,
@@ -450,22 +468,25 @@ async function runCli(argv) {
       ],
     );
   }
-  // Reverse the bound port so the device reaches the host as `127.0.0.1:<port>` (identical for the
-  // emulator and a future physical device — task 27b — unlike the emulator-only `10.0.2.2`).
-  const reverse = sh('adb', ['reverse', `tcp:${handshake.port}`, `tcp:${handshake.port}`]);
-  if (reverse.status !== 0) {
-    fail(
-      `adb reverse tcp:${handshake.port} failed — the device cannot reach the CHAOS-03 host server`,
-      [formatCapture(`adb reverse tcp:${handshake.port} tcp:${handshake.port}`, reverse)],
-    );
+  // Reverse EACH scenario's bound port so the device reaches every host server as `127.0.0.1:<port>`
+  // (identical for the emulator and a future physical device — task 27b — unlike the emulator-only
+  // `10.0.2.2`). A single failed reverse reds the lane: a net gate cannot skip (§2.11).
+  for (const id of CHAOS_NET_SCENARIO_IDS) {
+    const { port } = handshake.scenarios[id];
+    const reverse = sh('adb', ['reverse', `tcp:${port}`, `tcp:${port}`]);
+    if (reverse.status !== 0) {
+      fail(`adb reverse tcp:${port} failed — the device cannot reach the ${id} host server`, [
+        formatCapture(`adb reverse tcp:${port} tcp:${port}`, reverse),
+      ]);
+    }
+    reversedPorts.push(port);
   }
-  reversedPort = handshake.port;
 
   // Clear logcat so a prior run's result cannot be read (belt to the run-id braces).
   const clear = sh('adb', ['logcat', '-c']);
   if (clear.status !== 0) fail('adb logcat -c failed', [formatCapture('adb logcat -c', clear)]);
-  // Launch the harness with the fresh run id + the CHAOS-03 net handoff; the app echoes the run id back
-  // inside the result JSON and reads the net extras via `parseChaosNet`.
+  // Launch the harness with the fresh run id + the CHAOS-03/06/07 net handoff; the app echoes the run id
+  // back inside the result JSON and reads the net extra via `parseChaosNet`.
   const launch = sh('adb', [
     'shell',
     'am',
@@ -476,7 +497,7 @@ async function runCli(argv) {
     '--es',
     'bolusiHarnessRunId',
     runId,
-    ...chaosNetExtras({ baseUrl: handshake.baseUrl, bearers: handshake.bearers }),
+    ...chaosNetExtras(handshake),
   ]);
   // FAIL FAST on a launch that did not launch. `am start` EXITS 0 for a component that does not
   // exist and says so only on stdout, so the exit status alone is not a check (see

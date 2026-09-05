@@ -46,14 +46,10 @@ import type { SignedOperation } from '@bolusi/schemas';
 import { VirtualDevice, type DeviceIdentity, type ExtraModule } from '../src/device.js';
 import { mintIdentities } from '../src/identities.js';
 import { assertConvergence, canonicalFold, notesRows } from '../src/oracle.js';
-import {
-  HarnessServer,
-  type HarnessSurfacedConflict,
-  type HarnessSystemKeyStore,
-} from '../src/server.js';
+import { HarnessServer, type HarnessSurfacedConflict } from '../src/server.js';
 import { HttpTransport } from '../src/transport.js';
 import { resolveSeeds, withSeed } from '../src/index.js';
-import { mintSystemDevice } from '../src/system-identity.js';
+import { mintSystemDevice, systemSignerKeyStore } from '../src/system-identity.js';
 
 const GENESIS_CLOCK = 1_726_000_000_000;
 const NOTE_CREATED = 'notes.note_created';
@@ -618,12 +614,7 @@ describe('CHAOS-07 concurrent same-entity edits', () => {
         async () => {
           const systemSecrets = new Map<string, Uint8Array>();
           const surfaced: HarnessSurfacedConflict[] = [];
-          const keyStore: HarnessSystemKeyStore = {
-            getSystemSigner: (tenantId) => {
-              const secret = systemSecrets.get(tenantId);
-              return secret === undefined ? undefined : (hash) => noblePort.sign(hash, secret);
-            },
-          };
+          const keyStore = systemSignerKeyStore(systemSecrets);
           const server = await HarnessServer.boot({
             systemKeyStore: keyStore,
             onConflictSurfaced: async (c) => {

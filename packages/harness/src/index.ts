@@ -52,7 +52,11 @@ export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './ne
 // A tenant's system actor + device — HOST-ONLY setup the chaos-net child seeds so CHAOS-07's real
 // conflict-detection pipeline has a signer whose key matches `devices.signing_key_public`. It lives
 // here (not the bundle-safe rig) because the device never mints or sees the system key (§2.8).
-export { mintSystemDevice, type SystemDeviceIdentity } from './system-identity.js';
+export {
+  mintSystemDevice,
+  systemSignerKeyStore,
+  type SystemDeviceIdentity,
+} from './system-identity.js';
 // The canonical CHAOS-03/06/07 run parameters (seed + volume + device count), surfaced on the Node
 // aggregator so the chaos-net child server (scripts/harness-chaos-server.mjs) seeds the SAME
 // identities each on-device runner derives from the SAME seed (§2.8 / T-6: one source, two

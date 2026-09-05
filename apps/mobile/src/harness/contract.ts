@@ -19,23 +19,20 @@ export const HARNESS_COMPONENT_NAME = 'BolusiHarness';
 export const HARNESS_RUN_ID_EXTRA = 'bolusiHarnessRunId';
 
 /**
- * The intent-extra key carrying the emulator-reachable base URL of the host `@bolusi/server`
- * (`http://10.0.2.2:<port>` or `http://127.0.0.1:<port>` after `adb reverse`) for the CHAOS-03 device
- * runner (task 198). The driver mints it OUT OF BAND (`am start … --es bolusiHarnessChaosBaseUrl <url>`)
- * — NEVER over the sync protocol under test. Absent (with its bearers sibling) → CHAOS-03 skips honestly;
- * a token-minting server URL is a test-only handoff, never baked into a shipping bundle.
+ * The ONE intent-extra key carrying every net-backed chaos scenario's host handoff as a JSON map, one
+ * entry per scenario (task 198):
+ *   `{"chaos03":{"baseUrl":"http://127.0.0.1:<p>","bearers":["bdt_harness_…",…]},"chaos06":{…},"chaos07":{…}}`
+ * The base URL is the emulator-reachable origin of that scenario's host `@bolusi/server`
+ * (`http://10.0.2.2:<port>` or `http://127.0.0.1:<port>` after `adb reverse`); `bearers` are the per-device
+ * raw tokens in device order (no `Bearer ` prefix — `parseChaosNet` rebuilds the header). The driver mints
+ * this OUT OF BAND (`am start … --es bolusiHarnessChaosNets <json>`) — NEVER over the sync protocol under
+ * test. A scenario absent/malformed in the map → that gate skips honestly (a token-minting server URL is a
+ * test-only handoff, never baked into a shipping bundle). One extra, not one-per-scenario, so the intent
+ * surface stays a fixed width as scenarios grow.
  */
-export const HARNESS_CHAOS_NET_BASE_URL_EXTRA = 'bolusiHarnessChaosBaseUrl';
-
-/**
- * The intent-extra key carrying the per-device raw bearer tokens for CHAOS-03 as a JSON string array
- * (`["bdt_harness_…", …]`, one per synthetic device, in device order — no `Bearer ` prefix; the runner
- * rebuilds the header). Minted host-side by `seedDevice` and delivered OUT OF BAND with the base URL
- * above; the two extras travel together (both present → run CHAOS-03, both absent → honest skip).
- */
-export const HARNESS_CHAOS_NET_BEARERS_EXTRA = 'bolusiHarnessChaosBearers';
+export const HARNESS_CHAOS_NET_EXTRA = 'bolusiHarnessChaosNets';
 
 /** initialProps as HarnessActivity delivers them — the launching intent's extras, a string bag keyed by
  * the extra literals above. The single source for the props shape HarnessApp renders with and
- * run-and-emit.ts reads the run id + CHAOS-03 net handoff out of. */
+ * run-and-emit.ts reads the run id + CHAOS-03/06/07 net handoff out of. */
 export type HarnessLaunchProps = Readonly<Record<string, string | undefined>>;

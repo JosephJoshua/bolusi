@@ -18,11 +18,7 @@ import { HARNESS_RESULT_SCHEMA, HARNESS_RESULT_TAG } from '../src/harness/flag.j
 import { EMULATOR_CORRECTNESS_GATE_IDS } from '../src/harness/gates.js';
 import { failed, passed, type HarnessGateResult } from '../src/harness/result.js';
 import { buildHarnessResult, resolveGateResults } from '../src/harness/run.js';
-import {
-  HARNESS_CHAOS_NET_BASE_URL_EXTRA,
-  HARNESS_CHAOS_NET_BEARERS_EXTRA,
-  type HarnessLaunchProps,
-} from '../src/harness/contract.js';
+import { HARNESS_CHAOS_NET_EXTRA, type HarnessLaunchProps } from '../src/harness/contract.js';
 import { parseChaosNet } from '../src/harness/part-c/chaos-net.js';
 
 // Plain .mjs CLI — resolved as JS under this package's `allowJs` (types are inferred, not declared).
@@ -156,16 +152,16 @@ describe('resolveGateResults — the injected-runner seam (task 178)', () => {
     expect(gates.every((g) => g.status === 'skipped')).toBe(true);
   });
 
-  test('every non-null-harness skip detail avoids the driver shape-error words (all three branches load-bearing)', async () => {
+  test('every non-null-harness skip detail avoids the driver shape-error words (both non-null branches load-bearing)', async () => {
     // Companion to the null-branch guard (the "honest partial" test above). That one drives
     // resolveGateResults(null), which returns skipDetailFor()'s harness===null text and RETURNS before the
-    // three non-null branches ever run — so they shipped with their shape-word promise UNTESTED (review
-    // finding on commit 5f3bdfc). With a non-null harness and NO runners every required gate skips:
-    // CHAOS-03 flows through its dedicated branch, CHAOS-06/07 through the owed-runner branch, the rest
-    // through the generic one, so joining all details exercises ALL THREE. A shape word here
-    // (schema/variant/target/run id) would make the driver misreport a document-SHAPE error on an honest
-    // skip; run.ts promises the details avoid them, and this makes that promise load-bearing for every
-    // non-null branch (§2.11 — a guard is only load-bearing once a real violation has been watched red).
+    // non-null branches ever run — so they shipped with their shape-word promise UNTESTED (review finding
+    // on commit 5f3bdfc). With a non-null harness and NO runners every required gate skips: CHAOS-03/06/07
+    // flow through the shared net-handoff branch (CHAOS_NET_GATE_IDS), the rest through the generic one, so
+    // joining all details exercises BOTH non-null branches. A shape word here (schema/variant/target/run
+    // id) would make the driver misreport a document-SHAPE error on an honest skip; run.ts promises the
+    // details avoid them, and this makes that promise load-bearing for both non-null branches (§2.11 — a
+    // guard is only load-bearing once a real violation has been watched red).
     const gates = await resolveGateResults(nonNullHarness, {});
     expect(gates.every((g) => g.status === 'skipped')).toBe(true);
     const joined = gates.map((g) => g.detail).join('\n');
@@ -173,44 +169,66 @@ describe('resolveGateResults — the injected-runner seam (task 178)', () => {
   });
 });
 
-// The CHAOS-03 net handoff wire (task 198 step 4). The driver (`scripts/harness-device.mjs`) writes the
-// intent extras; the device (`src/harness/part-c/chaos-net.ts`) reads them. The two files never import
-// each other, so a drift in the extra KEYS would make the device silently skip CHAOS-03 — a required gate
-// reading a handoff it cannot find is no handoff. These tests pin the keys equal (exactly as
+// The CHAOS-03/06/07 net handoff wire (task 198 step 4). The driver (`scripts/harness-device.mjs`) writes
+// the intent extra; the device (`src/harness/part-c/chaos-net.ts`) reads it. The two files never import
+// each other, so a drift in the extra KEY would make the device silently skip the net gates — a required
+// gate reading a handoff it cannot find is no handoff. These tests pin the ONE key equal (exactly as
 // HARNESS_RESULT_TAG is pinned to the emitter above) and drive the WHOLE wire end to end: the driver's
 // `chaosNetExtras` → HarnessActivity's generic extra→initialProp forwarding → the device's `parseChaosNet`.
-describe('CHAOS-03 net handoff wire (driver ↔ device, task 198)', () => {
-  test('the intent-extra keys are IDENTICAL on both sides of the wire', () => {
-    // If either key drifts, the driver writes an extra the device never reads: CHAOS-03 skips and the
-    // emulator lane reds with a "gate skipped" it cannot explain. Pin them, so a drift is a red HERE.
-    expect(HARNESS_CHAOS_NET_BASE_URL_EXTRA).toBe(driver.HARNESS_CHAOS_NET_BASE_URL_EXTRA);
-    expect(HARNESS_CHAOS_NET_BEARERS_EXTRA).toBe(driver.HARNESS_CHAOS_NET_BEARERS_EXTRA);
+describe('CHAOS-03/06/07 net handoff wire (driver ↔ device, task 198)', () => {
+  test('the ONE intent-extra key is IDENTICAL on both sides of the wire', () => {
+    // If the key drifts, the driver writes an extra the device never reads: every net gate skips and the
+    // emulator lane reds with a "gate skipped" it cannot explain. Pin it, so a drift is a red HERE. One
+    // key, not one-per-scenario, so the intent surface stays a fixed width as scenarios grow.
+    expect(HARNESS_CHAOS_NET_EXTRA).toBe(driver.HARNESS_CHAOS_NET_EXTRA);
   });
 
-  test('the driver argv flows through intent forwarding into a Chaos03Net with the bearers in device order', () => {
+  test('the driver argv flows through intent forwarding into a per-scenario net with bearers in device order', () => {
     // HarnessActivity forwards each `--es KEY VALUE` intent extra generically as an RN initialProp
-    // (props[KEY] = VALUE). Replaying that forwarding on the driver's own argv is the whole wire: what
-    // the driver writes is exactly what the device parses, with no shared import to keep them honest.
-    const bearers = ['bdt_harness_dev0', 'bdt_harness_dev1', 'bdt_harness_dev2'];
-    const baseUrl = 'http://127.0.0.1:53187';
-    const extras = driver.chaosNetExtras({ baseUrl, bearers }) as string[];
+    // (props[KEY] = VALUE). Replaying that forwarding on the driver's own argv is the whole wire: what the
+    // driver writes is exactly what the device parses, with no shared import to keep them honest. Distinct
+    // base URLs + distinct bearer sets per scenario, so an assertion on one scenario cannot pass on
+    // another's data by coincidence. The handshake mirrors what the child server prints (port included);
+    // `chaosNetExtras` drops the port (the device reaches the reversed port via the base URL).
+    const handshake = {
+      scenarios: {
+        chaos03: {
+          port: 53187,
+          baseUrl: 'http://127.0.0.1:53187',
+          bearers: ['bdt_harness_a0', 'bdt_harness_a1'],
+        },
+        chaos06: {
+          port: 53188,
+          baseUrl: 'http://127.0.0.1:53188',
+          bearers: ['bdt_harness_b0', 'bdt_harness_b1', 'bdt_harness_b2'],
+        },
+        chaos07: {
+          port: 53189,
+          baseUrl: 'http://127.0.0.1:53189',
+          bearers: ['bdt_harness_c0', 'bdt_harness_c1'],
+        },
+      },
+    };
+    const extras = driver.chaosNetExtras(handshake) as string[];
 
+    // Exactly one `--es KEY VALUE` triple — the fixed-width intent surface. HarnessActivity forwards each
+    // extra generically as key→value; replaying that here is the whole wire.
     const props: Record<string, string> = {};
     for (let i = 0; i < extras.length; i += 3) {
-      // The driver emits `--es`, then the key, then the value; HarnessActivity forwards key→value.
       expect(extras[i]).toBe('--es');
       props[extras[i + 1] as string] = extras[i + 2] as string;
     }
 
-    const net = parseChaosNet(props as HarnessLaunchProps);
-    expect(net).not.toBeNull();
-    // The raw tokens crossed the wire prefix-less; the device re-adds `Bearer ` and preserves device
-    // order, so `net.auth[i]` is the header for mint-order device i. (net.fetch is NOT invoked here — it
-    // binds the global fetch; the base-URL rewrite it wraps is proven in chaos-net.test.ts.)
-    expect(net?.auth).toEqual([
-      'Bearer bdt_harness_dev0',
-      'Bearer bdt_harness_dev1',
-      'Bearer bdt_harness_dev2',
+    const nets = parseChaosNet(props as HarnessLaunchProps);
+    // The raw tokens crossed the wire prefix-less; the device re-adds `Bearer ` and preserves device order
+    // per scenario, so `net.auth[i]` is the header for mint-order device i. (net.fetch is NOT invoked here
+    // — it binds the global fetch; the per-scenario base-URL rewrite it wraps is proven in chaos-net.test.ts.)
+    expect(nets.chaos03?.auth).toEqual(['Bearer bdt_harness_a0', 'Bearer bdt_harness_a1']);
+    expect(nets.chaos06?.auth).toEqual([
+      'Bearer bdt_harness_b0',
+      'Bearer bdt_harness_b1',
+      'Bearer bdt_harness_b2',
     ]);
+    expect(nets.chaos07?.auth).toEqual(['Bearer bdt_harness_c0', 'Bearer bdt_harness_c1']);
   });
 });

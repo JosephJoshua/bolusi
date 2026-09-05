@@ -57,13 +57,12 @@ import {
   CHAOS07_DEVICE_COUNT,
   type Chaos07Options,
 } from '@bolusi/test-support/chaos';
-import { noblePort } from '@bolusi/test-support';
 
 import { mintIdentities } from '../src/identities.js';
 import { socketBaseFetch } from '../src/net-server.js';
 import { NODE_SEAMS } from '../src/seams-node.js';
-import { startHarnessServer, type HarnessSystemKeyStore } from '../src/server.js';
-import { mintSystemDevice } from '../src/system-identity.js';
+import { startHarnessServer } from '../src/server.js';
+import { mintSystemDevice, systemSignerKeyStore } from '../src/system-identity.js';
 
 /** A fixed run seed for this host binding (independent of the device runner's `DEFAULT_CHAOS07_SEED` — the
  *  verdict must hold for any fully-seeded run, so a distinct seed here is a second sample). */
@@ -87,12 +86,7 @@ const RUN_TIMEOUT = 120_000;
 async function driveRun(options: Chaos07Options, config?: { detection?: boolean }) {
   const detection = config?.detection ?? true;
   const systemSecrets = new Map<string, Uint8Array>();
-  const keyStore: HarnessSystemKeyStore = {
-    getSystemSigner: (tenantId) => {
-      const secret = systemSecrets.get(tenantId);
-      return secret === undefined ? undefined : (hash) => noblePort.sign(hash, secret);
-    },
-  };
+  const keyStore = systemSignerKeyStore(systemSecrets);
   const running = await startHarnessServer(detection ? { systemKeyStore: keyStore } : undefined);
   try {
     const ids = mintIdentities(HOST_SEED, CHAOS07_DEVICE_COUNT);
