@@ -30,3 +30,14 @@ export {
   SILENT_SURFACE,
   type FetchLike,
 } from './transport.js';
+export {
+  runChaos03,
+  evaluateChaos03,
+  DEFAULT_CHAOS03_OPTIONS,
+  DEFAULT_CHAOS03_SEED,
+  type Chaos03Options,
+  type Chaos03Net,
+  type Chaos03Result,
+  type Chaos03Verdict,
+  type Chaos03DeviceObs,
+} from './chaos03.js';
