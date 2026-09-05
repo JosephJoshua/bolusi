@@ -54,3 +54,15 @@ export {
   type Chaos06Verdict,
   type Chaos06Obs,
 } from './chaos06.js';
+export {
+  runChaos07,
+  evaluateChaos07,
+  CHAOS07_DEVICE_COUNT,
+  DEFAULT_CHAOS07_OPTIONS,
+  DEFAULT_CHAOS07_SEED,
+  type Chaos07Options,
+  type Chaos07Net,
+  type Chaos07Result,
+  type Chaos07Verdict,
+  type Chaos07Obs,
+} from './chaos07.js';
