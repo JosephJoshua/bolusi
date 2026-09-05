@@ -42,3 +42,15 @@ export {
   type Chaos03Verdict,
   type Chaos03DeviceObs,
 } from './chaos03.js';
+export {
+  runChaos06,
+  evaluateChaos06,
+  CHAOS06_DEVICE_COUNT,
+  DEFAULT_CHAOS06_OPTIONS,
+  DEFAULT_CHAOS06_SEED,
+  type Chaos06Options,
+  type Chaos06Net,
+  type Chaos06Result,
+  type Chaos06Verdict,
+  type Chaos06Obs,
+} from './chaos06.js';
