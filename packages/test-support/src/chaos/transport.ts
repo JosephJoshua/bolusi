@@ -114,6 +114,43 @@ export class HttpTransport implements SyncTransportPort {
 export const SILENT_SURFACE: SyncSurfacePort = { emit: () => undefined };
 
 /**
+ * A `SyncTransportPort` decorator that RECORDS the per-request wire op counts and delegates verbatim —
+ * NO protocol logic of its own (T-7). It is the witness the wire-level properties rest on: CHAOS-03's
+ * incremental-pull ("a redundant sync pulls an EMPTY page", `pulledSinceReset()` after `reset()`), and
+ * CHAOS-06's non-vacuity ("the held-op pull actually RECEIVED ops to dedup", `pullOpCounts`). Both the
+ * days-offline rig (chaos03.ts) and the replay rig (chaos06.ts) drive it, so it lives here in the shared
+ * transport home rather than as a private twin in each (§2.8 rule-of-three: chaos03 + chaos06 were the
+ * 2nd and 3rd copies; the Node harness scenario keeps its own pre-existing twin the task leaves
+ * untouched, the next refactor's target).
+ */
+export class CountingTransport implements SyncTransportPort {
+  readonly pushOpCounts: number[] = [];
+  readonly pullOpCounts: number[] = [];
+  constructor(private readonly inner: SyncTransportPort) {}
+
+  push(request: PushRequest): Promise<PushResponse> {
+    this.pushOpCounts.push(request.ops.length);
+    return this.inner.push(request);
+  }
+
+  async pull(request: PullRequest): Promise<PullResponse> {
+    const response = await this.inner.pull(request);
+    this.pullOpCounts.push(response.ops.length);
+    return response;
+  }
+
+  /** Total ops pulled since the last {@link reset} (the empty-page / received-count witness). */
+  pulledSinceReset(): number {
+    return this.pullOpCounts.reduce((a, b) => a + b, 0);
+  }
+
+  reset(): void {
+    this.pushOpCounts.length = 0;
+    this.pullOpCounts.length = 0;
+  }
+}
+
+/**
  * Run the REAL push phase (sync/push.ts) for one device against a transport: read the device's
  * `local` ops verbatim from `signed_core_jcs`, batch at the api/01 §3 cap, mark each by its result.
  * `onChainBroken` is a no-op sink by default (the harness owns no `SyncState`); scenarios that assert

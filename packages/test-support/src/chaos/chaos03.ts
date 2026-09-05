@@ -48,7 +48,13 @@ import { VirtualDevice } from './device.js';
 import { mintIdentities } from './identities.js';
 import { canonicalFold, notesRows, type NotesRow } from './oracle.js';
 import type { ConvergenceSeams } from './seams.js';
-import { HttpTransport, pullDevice, pushDevice, type FetchLike } from './transport.js';
+import {
+  CountingTransport,
+  HttpTransport,
+  pullDevice,
+  pushDevice,
+  type FetchLike,
+} from './transport.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -140,38 +146,6 @@ function dedupeById(ops: readonly SignedOperation[]): SignedOperation[] {
   const byId = new Map<string, SignedOperation>();
   for (const op of ops) if (!byId.has(op.id)) byId.set(op.id, op);
   return [...byId.values()];
-}
-
-/**
- * A `SyncTransportPort` wrapping the production `HttpTransport` to record the wire counts the
- * incremental-pull property is witnessed by: every pull response's op count (and every push's, for
- * symmetry). Adds NO protocol logic (T-7) — counts + delegates. (The Node scenario keeps a private
- * twin; this is the shared home a future refactor can dedupe it against — the task keeps that scenario
- * untouched, so the 2nd copy is deliberate, not drift.)
- */
-class CountingTransport implements SyncTransportPort {
-  readonly pushOpCounts: number[] = [];
-  readonly pullOpCounts: number[] = [];
-  constructor(private readonly inner: SyncTransportPort) {}
-
-  push(request: PushRequest): Promise<PushResponse> {
-    this.pushOpCounts.push(request.ops.length);
-    return this.inner.push(request);
-  }
-
-  async pull(request: PullRequest): Promise<PullResponse> {
-    const response = await this.inner.pull(request);
-    this.pullOpCounts.push(response.ops.length);
-    return response;
-  }
-
-  pulledSinceReset(): number {
-    return this.pullOpCounts.reduce((a, b) => a + b, 0);
-  }
-  reset(): void {
-    this.pushOpCounts.length = 0;
-    this.pullOpCounts.length = 0;
-  }
 }
 
 /**
