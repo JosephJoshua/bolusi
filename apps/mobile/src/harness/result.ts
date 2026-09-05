@@ -68,3 +68,12 @@ export function failed(id: string, detail: string): HarnessGateResult {
 export function skipped(id: string, detail: string): HarnessGateResult {
   return { id, kind: 'correctness', status: 'skipped', detail };
 }
+
+/**
+ * Render an unknown thrown value as a stable one-line gate `detail` — `name: message` for a real Error,
+ * else its string form. Shared so every runner turns a crash into the SAME red text (§2.8): the gate
+ * orchestrator (run.ts) and each part-c chaos runner all describe a caught throw through this.
+ */
+export function describeError(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}

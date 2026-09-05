@@ -13,7 +13,13 @@
 import type { HarnessRunners } from './registry.js';
 import { HARNESS_RESULT_SCHEMA } from './flag.js';
 import { EMULATOR_CORRECTNESS_GATE_IDS } from './gates.js';
-import { failed, skipped, type HarnessGateResult, type HarnessResult } from './result.js';
+import {
+  describeError,
+  failed,
+  skipped,
+  type HarnessGateResult,
+  type HarnessResult,
+} from './result.js';
 
 export interface HarnessRuntimeFacts {
   readonly profile: string;
@@ -62,7 +68,7 @@ export async function resolveGateResults(
         failed(
           id,
           `${id} on-device runner THREW instead of returning a verdict — a crash, not a gap (§2.11): ` +
-            (error instanceof Error ? `${error.name}: ${error.message}` : String(error)),
+            describeError(error),
         ),
       );
     }

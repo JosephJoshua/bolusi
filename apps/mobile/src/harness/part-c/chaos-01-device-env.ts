@@ -28,7 +28,7 @@ import {
   type ConvergenceResult,
 } from '@bolusi/test-support/chaos';
 
-import { failed, passed, type HarnessGateResult } from '../result.js';
+import { describeError, failed, passed, type HarnessGateResult } from '../result.js';
 import { buildConvergenceSeams, type ChaosDbSeams } from './convergence-seams.js';
 
 /** The gate id this runner reports under — the CHAOS-01 slot in `EMULATOR_CORRECTNESS_GATE_IDS`. */
@@ -64,10 +64,6 @@ const EMPTY_STATS_BASE = {
   rebuildApplies: 0,
 } as const;
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-}
-
 /**
  * Run the CHAOS-01 convergence workload and return a real verdict (§2.11 — never a silent pass).
  *
@@ -93,7 +89,7 @@ export async function runChaos01Gate(
   } catch (error) {
     return failed(
       CHAOS01_GATE_ID,
-      `CHAOS-01 convergence run threw before producing a verdict — a crash, not a gap (§2.11): ${messageOf(error)}`,
+      `CHAOS-01 convergence run threw before producing a verdict — a crash, not a gap (§2.11): ${describeError(error)}`,
     );
   }
 
@@ -107,7 +103,7 @@ export async function runChaos01Gate(
     }
     assertConvergence(result.reference, result.replicas);
   } catch (error) {
-    return failed(CHAOS01_GATE_ID, messageOf(error));
+    return failed(CHAOS01_GATE_ID, describeError(error));
   } finally {
     await result.close();
   }
