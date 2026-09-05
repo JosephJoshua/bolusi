@@ -4,7 +4,7 @@
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
   "denominator": 142,
-  "fileDenominator": 24,
+  "fileDenominator": 28,
   "nonProductionRules": [
     "test-dir",
     "test-file",
@@ -170,6 +170,9 @@
     "packages/db-server/src/schema/security.ts",
     "packages/db-server/src/testing/budget.ts",
     "packages/db-server/src/testing/pg-container.ts",
+    "packages/test-support/src/chaos/chaos03.ts",
+    "packages/test-support/src/chaos/chaos06.ts",
+    "packages/test-support/src/chaos/chaos07.ts",
     "packages/test-support/src/chaos/client-db.ts",
     "packages/test-support/src/chaos/convergence.ts",
     "packages/test-support/src/chaos/device.ts",
@@ -179,6 +182,7 @@
     "packages/test-support/src/chaos/oracle.ts",
     "packages/test-support/src/chaos/permissions.ts",
     "packages/test-support/src/chaos/seams.ts",
+    "packages/test-support/src/chaos/transport.ts",
     "packages/test-support/src/knip-file-canary.ts",
     "packages/test-support/src/ledger.ts",
     "packages/test-support/src/sec-meta.ts"
