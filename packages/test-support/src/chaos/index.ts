@@ -23,3 +23,10 @@ export {
   type Replica,
 } from './oracle.js';
 export { runConvergence, type ConvergenceOptions, type ConvergenceResult } from './convergence.js';
+export {
+  HttpTransport,
+  pullDevice,
+  pushDevice,
+  SILENT_SURFACE,
+  type FetchLike,
+} from './transport.js';

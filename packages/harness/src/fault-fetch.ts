@@ -9,7 +9,12 @@
 // boundary. F3/F4/F5 are client-CRASH semantics (in-memory-state discard, cursor-vs-apply timing,
 // mid-transaction rollback) that the DEVICE models — a fetch wrapper cannot express them — so this
 // file schedules them and exposes the trigger; the device consumes it.
-export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
+//
+// `FetchLike` is single-sourced in the bundle-safe shared rig (task 198) — the on-device HttpTransport
+// consumes the same shape — so it is imported + re-exported here, never redefined (§2.8).
+import type { FetchLike } from '@bolusi/test-support/chaos';
+
+export type { FetchLike };
 
 /** A §3.5 fault point. */
 export type FaultPoint = 'F1' | 'F2' | 'F3' | 'F4' | 'F5';

@@ -107,6 +107,7 @@ describe('@bolusi/test-support/chaos is device-bundle-safe (task 181)', () => {
     for (const expected of [
       'chaos/index.ts',
       'chaos/device.ts',
+      'chaos/transport.ts',
       'chaos/oracle.ts',
       'chaos/convergence.ts',
       'chaos/client-db.ts',
