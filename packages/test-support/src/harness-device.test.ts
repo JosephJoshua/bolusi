@@ -237,3 +237,92 @@ describe('tailLines — the failure dump is bounded so one red run stays a reada
     expect(driver.tailLines(input, 400)).toBe(input);
   });
 });
+
+// Task 198 step 4 — the CHAOS-03 net handshake the driver reads off the child server's stdout, and the
+// `am start --es` argv it hands to the APK. The child prints `formatChaosNetHandshake`; the driver reads
+// it back with `parseChaosNetHandshake` and forwards it with `chaosNetExtras`. All three are PURE, so the
+// whole driver↔child wire is falsified here without a server or an emulator. `parseChaosNetHandshake` is
+// the fail-safe twin of `parseHarnessResult`: a broken/absent handshake must be `null` (→ a non-zero lane
+// exit), NEVER a net built from garbage that would read on-device as a server auth failure (§2.1).
+describe('CHAOS-03 net handshake — the driver↔child wire (task 198)', () => {
+  const HANDSHAKE = {
+    port: 41234,
+    baseUrl: 'http://127.0.0.1:41234',
+    bearers: ['bdt_harness_aaa', 'bdt_harness_bbb', 'bdt_harness_ccc'],
+  };
+
+  test('format → parse round-trips the handshake exactly (the child and driver agree by construction)', () => {
+    const line = driver.formatChaosNetHandshake(HANDSHAKE) as string;
+    // The marker is present so the driver can find the line amid the child's other stdout.
+    expect(line).toContain(driver.HARNESS_CHAOS_NET_HANDSHAKE_MARKER as string);
+    expect(driver.parseChaosNetHandshake(line)).toEqual(HANDSHAKE);
+  });
+
+  test('parses the handshake even when the marker line is buried in other child stdout', () => {
+    const text = [
+      'harness-chaos-server: booting PGlite',
+      driver.formatChaosNetHandshake(HANDSHAKE),
+      'harness-chaos-server: listening',
+    ].join('\n');
+    expect(driver.parseChaosNetHandshake(text)).toEqual(HANDSHAKE);
+  });
+
+  test('chaosNetExtras yields the two --es triples the launch intent forwards to the APK', () => {
+    // The EXACT argv the driver appends to `am start`: base URL under one key, bearers as a JSON string
+    // of RAW tokens under the other. The device's parseChaosNet reads these two keys back (pinned equal
+    // to contract.ts in apps/mobile/test/harness-producer.test.ts).
+    expect(driver.chaosNetExtras(HANDSHAKE)).toEqual([
+      '--es',
+      driver.HARNESS_CHAOS_NET_BASE_URL_EXTRA,
+      HANDSHAKE.baseUrl,
+      '--es',
+      driver.HARNESS_CHAOS_NET_BEARERS_EXTRA,
+      JSON.stringify(HANDSHAKE.bearers),
+    ]);
+  });
+
+  test('the LAST marker line wins — a stale earlier handshake can never mask a fresher one', () => {
+    const stale = driver.formatChaosNetHandshake({
+      ...HANDSHAKE,
+      port: 1,
+      baseUrl: 'http://127.0.0.1:1',
+    });
+    const fresh = driver.formatChaosNetHandshake(HANDSHAKE);
+    expect(driver.parseChaosNetHandshake([stale, fresh].join('\n'))).toEqual(HANDSHAKE);
+  });
+
+  // ── FAIL-SAFE: every malformed handshake is `null`, never a partial net (§2.1) ────────────────────
+  test('null when no marker line is present (the child never announced a server)', () => {
+    expect(
+      driver.parseChaosNetHandshake('harness-chaos-server: booting\n(no handshake)'),
+    ).toBeNull();
+  });
+
+  test('null on unparseable JSON after the marker (a truncated line is not a net)', () => {
+    const text = `${driver.HARNESS_CHAOS_NET_HANDSHAKE_MARKER}: {"port":41234,"baseUrl": TRUNCATED`;
+    expect(driver.parseChaosNetHandshake(text)).toBeNull();
+  });
+
+  test('null on a non-integer or non-positive port', () => {
+    for (const port of [1.5, 0, -3, '41234']) {
+      const text = `${driver.HARNESS_CHAOS_NET_HANDSHAKE_MARKER}: ${JSON.stringify({ ...HANDSHAKE, port })}`;
+      expect(driver.parseChaosNetHandshake(text), `port=${JSON.stringify(port)}`).toBeNull();
+    }
+  });
+
+  test('null on an empty or non-string base URL', () => {
+    for (const baseUrl of ['', 123, null]) {
+      const text = `${driver.HARNESS_CHAOS_NET_HANDSHAKE_MARKER}: ${JSON.stringify({ ...HANDSHAKE, baseUrl })}`;
+      expect(driver.parseChaosNetHandshake(text), `baseUrl=${JSON.stringify(baseUrl)}`).toBeNull();
+    }
+  });
+
+  test('null when bearers is not a non-empty array of non-empty strings', () => {
+    // A malformed bearers list must not build a net with blank/undefined Authorization headers (which
+    // would read as a spurious server auth failure, not the honest "no net" that reds the lane).
+    for (const bearers of [[], 'bdt_harness_aaa', [123], [''], ['bdt_harness_aaa', '']]) {
+      const text = `${driver.HARNESS_CHAOS_NET_HANDSHAKE_MARKER}: ${JSON.stringify({ ...HANDSHAKE, bearers })}`;
+      expect(driver.parseChaosNetHandshake(text), `bearers=${JSON.stringify(bearers)}`).toBeNull();
+    }
+  });
+});

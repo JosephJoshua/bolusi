@@ -18,6 +18,12 @@ import { HARNESS_RESULT_SCHEMA, HARNESS_RESULT_TAG } from '../src/harness/flag.j
 import { EMULATOR_CORRECTNESS_GATE_IDS } from '../src/harness/gates.js';
 import { failed, passed, type HarnessGateResult } from '../src/harness/result.js';
 import { buildHarnessResult, resolveGateResults } from '../src/harness/run.js';
+import {
+  HARNESS_CHAOS_NET_BASE_URL_EXTRA,
+  HARNESS_CHAOS_NET_BEARERS_EXTRA,
+  type HarnessLaunchProps,
+} from '../src/harness/contract.js';
+import { parseChaosNet } from '../src/harness/part-c/chaos-net.js';
 
 // Plain .mjs CLI — resolved as JS under this package's `allowJs` (types are inferred, not declared).
 import * as driver from '../../../scripts/harness-device.mjs';
@@ -164,5 +170,47 @@ describe('resolveGateResults — the injected-runner seam (task 178)', () => {
     expect(gates.every((g) => g.status === 'skipped')).toBe(true);
     const joined = gates.map((g) => g.detail).join('\n');
     expect(joined).not.toMatch(/schema|variant|target|run id/i);
+  });
+});
+
+// The CHAOS-03 net handoff wire (task 198 step 4). The driver (`scripts/harness-device.mjs`) writes the
+// intent extras; the device (`src/harness/part-c/chaos-net.ts`) reads them. The two files never import
+// each other, so a drift in the extra KEYS would make the device silently skip CHAOS-03 — a required gate
+// reading a handoff it cannot find is no handoff. These tests pin the keys equal (exactly as
+// HARNESS_RESULT_TAG is pinned to the emitter above) and drive the WHOLE wire end to end: the driver's
+// `chaosNetExtras` → HarnessActivity's generic extra→initialProp forwarding → the device's `parseChaosNet`.
+describe('CHAOS-03 net handoff wire (driver ↔ device, task 198)', () => {
+  test('the intent-extra keys are IDENTICAL on both sides of the wire', () => {
+    // If either key drifts, the driver writes an extra the device never reads: CHAOS-03 skips and the
+    // emulator lane reds with a "gate skipped" it cannot explain. Pin them, so a drift is a red HERE.
+    expect(HARNESS_CHAOS_NET_BASE_URL_EXTRA).toBe(driver.HARNESS_CHAOS_NET_BASE_URL_EXTRA);
+    expect(HARNESS_CHAOS_NET_BEARERS_EXTRA).toBe(driver.HARNESS_CHAOS_NET_BEARERS_EXTRA);
+  });
+
+  test('the driver argv flows through intent forwarding into a Chaos03Net with the bearers in device order', () => {
+    // HarnessActivity forwards each `--es KEY VALUE` intent extra generically as an RN initialProp
+    // (props[KEY] = VALUE). Replaying that forwarding on the driver's own argv is the whole wire: what
+    // the driver writes is exactly what the device parses, with no shared import to keep them honest.
+    const bearers = ['bdt_harness_dev0', 'bdt_harness_dev1', 'bdt_harness_dev2'];
+    const baseUrl = 'http://127.0.0.1:53187';
+    const extras = driver.chaosNetExtras({ baseUrl, bearers }) as string[];
+
+    const props: Record<string, string> = {};
+    for (let i = 0; i < extras.length; i += 3) {
+      // The driver emits `--es`, then the key, then the value; HarnessActivity forwards key→value.
+      expect(extras[i]).toBe('--es');
+      props[extras[i + 1] as string] = extras[i + 2] as string;
+    }
+
+    const net = parseChaosNet(props as HarnessLaunchProps);
+    expect(net).not.toBeNull();
+    // The raw tokens crossed the wire prefix-less; the device re-adds `Bearer ` and preserves device
+    // order, so `net.auth[i]` is the header for mint-order device i. (net.fetch is NOT invoked here — it
+    // binds the global fetch; the base-URL rewrite it wraps is proven in chaos-net.test.ts.)
+    expect(net?.auth).toEqual([
+      'Bearer bdt_harness_dev0',
+      'Bearer bdt_harness_dev1',
+      'Bearer bdt_harness_dev2',
+    ]);
   });
 });

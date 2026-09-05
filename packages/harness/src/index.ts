@@ -49,6 +49,11 @@ export {
   type SystemDeviceSeed,
 } from './server.js';
 export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './net-server.js';
+// The canonical CHAOS-03 run parameters (seed + volume), surfaced on the Node aggregator so the
+// chaos-net child server (scripts/harness-chaos-server.mjs) seeds the SAME identities the on-device
+// runner derives from the SAME seed (§2.8 / T-6: one source, two bindings). They still LIVE in the
+// bundle-safe rig — this only re-exports, it does not redefine.
+export { DEFAULT_CHAOS03_OPTIONS, DEFAULT_CHAOS03_SEED } from '@bolusi/test-support/chaos';
 export {
   FaultFetch,
   NetworkDroppedError,

@@ -63,6 +63,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "esbuild": "catalog:",
+    "tsx": "catalog:",
     "hermes-compiler": "250829098.0.14"
   },
   "pnpm": {
