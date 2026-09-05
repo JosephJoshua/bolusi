@@ -25,6 +25,7 @@ export {
 export { runConvergence, type ConvergenceOptions, type ConvergenceResult } from './convergence.js';
 export {
   HttpTransport,
+  baseUrlFetch,
   pullDevice,
   pushDevice,
   SILENT_SURFACE,

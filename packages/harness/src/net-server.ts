@@ -3,23 +3,21 @@
 // to the fixed absolute `http://harness.test/...` URL — drive the REAL socket `startHarnessServer`
 // opens, and (b) describe the OUT-OF-BAND device handoff (the emulator-reachable URL + the raw bearer
 // an adb intent extra carries). Owns NO protocol logic (T-7): URL rewriting + record assembly only.
-import type { FetchLike } from './fault-fetch.js';
+import { baseUrlFetch, type FetchLike } from '@bolusi/test-support/chaos';
+
 import type { RunningHarnessServer, SeededServerDevice } from './server.js';
 
 /**
- * A {@link FetchLike} that rewrites the transports' fixed `http://harness.test/<path>` origin to a REAL
- * base URL and delegates to the Node global `fetch` over the socket. The in-process transports ignore
- * the origin (Hono routes on the path via `app.request`); a real socket cannot — `harness.test` has no
- * DNS — so this swaps the origin for `baseUrl` while preserving the path + query. This is what turns
- * `new HttpTransport(socketBaseFetch(running.url), auth)` into a genuine over-the-wire client of the
- * production sync routes, reusing the production push/pull phases unchanged (T-7).
+ * A {@link FetchLike} that points the in-process transports at the REAL socket `startHarnessServer`
+ * opens. It delegates to the shared {@link baseUrlFetch} (test-support/chaos), which rewrites the
+ * transports' fixed `http://harness.test/<path>` origin to `baseUrl` (preserving path + query) and
+ * calls the Node global `fetch`. The rewrite lives ONCE in the bundle-safe rig so the on-device
+ * CHAOS-03 net binding shares the same impl (§2.8); this wrapper is only the Node-side name the harness
+ * scenarios use to turn `new HttpTransport(socketBaseFetch(running.url), auth)` into a genuine
+ * over-the-wire client of the production sync routes (T-7).
  */
 export function socketBaseFetch(baseUrl: string): FetchLike {
-  const base = baseUrl.replace(/\/+$/, '');
-  return (input, init) => {
-    const requested = new URL(input);
-    return fetch(`${base}${requested.pathname}${requested.search}`, init);
-  };
+  return baseUrlFetch(baseUrl);
 }
 
 /**

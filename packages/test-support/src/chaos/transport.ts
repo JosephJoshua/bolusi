@@ -40,6 +40,25 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 const PUSH_URL = 'http://harness.test/v1/sync/push';
 const PULL_URL = 'http://harness.test/v1/sync/pull';
 
+/**
+ * Wrap a `fetch` so the transports' fixed `harness.test` origin ({@link HttpTransport} POSTs to
+ * {@link PUSH_URL}/{@link PULL_URL} above) is rewritten to a REAL base URL, preserving the path +
+ * query. An in-process binding ignores the origin (Hono routes on the path via `app.request`); a real
+ * socket cannot — `harness.test` has no DNS — so this swaps the origin for `baseUrl`. A trailing slash
+ * on `baseUrl` is stripped so `${base}${path}` never doubles the separator. `fetchImpl` defaults to the
+ * global `fetch` (Node's built-in on the host, the RN global reaching `10.0.2.2` / `adb reverse` on
+ * device); a test injects a spy to read the URL the wrapper actually calls. This is the ONE origin
+ * rewrite the Node `socketBaseFetch` (packages/harness/src/net-server.ts delegates here) and the
+ * on-device CHAOS-03 net binding (apps/mobile) share, so it lives once (§2.8).
+ */
+export function baseUrlFetch(baseUrl: string, fetchImpl: FetchLike = fetch): FetchLike {
+  const base = baseUrl.replace(/\/+$/, '');
+  return (input, init) => {
+    const requested = new URL(input);
+    return fetchImpl(`${base}${requested.pathname}${requested.search}`, init);
+  };
+}
+
 /** The api/00 §7 error envelope a failed request carries. */
 interface ErrorEnvelope {
   readonly error?: { readonly code?: string };
