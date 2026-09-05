@@ -30,13 +30,11 @@
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 
-import { bytesToBase64, PLATFORM_OP, platformModule, platformModuleManifest } from '@bolusi/core';
+import { PLATFORM_OP, platformModule, platformModuleManifest } from '@bolusi/core';
 import {
   chaos07Cases,
   ChainBuilder,
-  deriveDeviceKeypair,
   FakeClock,
-  makeIdSource,
   makeWorld,
   mulberry32,
   noblePort,
@@ -55,6 +53,7 @@ import {
 } from '../src/server.js';
 import { HttpTransport } from '../src/transport.js';
 import { resolveSeeds, withSeed } from '../src/index.js';
+import { mintSystemDevice } from '../src/system-identity.js';
 
 const GENESIS_CLOCK = 1_726_000_000_000;
 const NOTE_CREATED = 'notes.note_created';
@@ -68,30 +67,9 @@ const platformExtra = {
 } as unknown as ExtraModule;
 
 // ── system identity (the actor for platform.conflict_detected, 01 §3.6) ──────────────────────────
-
-interface SystemIdentity {
-  readonly tenantId: string;
-  readonly userId: string;
-  readonly deviceId: string;
-  readonly publicKeyBase64: string;
-  readonly secret: Uint8Array;
-}
-
-/** Mint a tenant's system actor + device deterministically (T-6). Index 99 keeps its keypair clear
- *  of the member device indices (0/1/2). */
-function mintSystem(tenantSeed: number, tenantId: string): SystemIdentity {
-  const ids = makeIdSource(new FakeClock(GENESIS_CLOCK), mulberry32((tenantSeed ^ 0x5157) >>> 0));
-  const userId = ids();
-  const deviceId = ids();
-  const keypair = deriveDeviceKeypair(tenantSeed, 99);
-  return {
-    tenantId,
-    userId,
-    deviceId,
-    publicKeyBase64: bytesToBase64(keypair.publicKey),
-    secret: keypair.seed,
-  };
-}
+// Minted by the shared host-only `mintSystemDevice` (@bolusi/harness/system-identity). Its internal
+// `SYSTEM_CLOCK_BASE` equals this file's `GENESIS_CLOCK`, so the identity is byte-identical to the old
+// inline `mintSystem` this replaced (task 198 rule-of-three extraction).
 
 // ── one tenant's devices, opened + seeded, keyed by fixture device name (A/B/C) ──────────────────
 
@@ -112,7 +90,7 @@ async function setupTenant(
   deviceNames: readonly string[],
 ): Promise<{ byName: Map<string, Participant>; tenantId: string; close: () => Promise<void> }> {
   const run = mintIdentities(tenantSeed, deviceNames.length);
-  const system = mintSystem(tenantSeed, run.tenantId);
+  const system = mintSystemDevice(tenantSeed, run.tenantId);
 
   const byName = new Map<string, Participant>();
   for (let i = 0; i < deviceNames.length; i += 1) {

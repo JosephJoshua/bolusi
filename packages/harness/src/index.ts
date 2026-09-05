@@ -49,11 +49,26 @@ export {
   type SystemDeviceSeed,
 } from './server.js';
 export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './net-server.js';
-// The canonical CHAOS-03 run parameters (seed + volume), surfaced on the Node aggregator so the
-// chaos-net child server (scripts/harness-chaos-server.mjs) seeds the SAME identities the on-device
-// runner derives from the SAME seed (§2.8 / T-6: one source, two bindings). They still LIVE in the
-// bundle-safe rig — this only re-exports, it does not redefine.
-export { DEFAULT_CHAOS03_OPTIONS, DEFAULT_CHAOS03_SEED } from '@bolusi/test-support/chaos';
+// A tenant's system actor + device — HOST-ONLY setup the chaos-net child seeds so CHAOS-07's real
+// conflict-detection pipeline has a signer whose key matches `devices.signing_key_public`. It lives
+// here (not the bundle-safe rig) because the device never mints or sees the system key (§2.8).
+export { mintSystemDevice, type SystemDeviceIdentity } from './system-identity.js';
+// The canonical CHAOS-03/06/07 run parameters (seed + volume + device count), surfaced on the Node
+// aggregator so the chaos-net child server (scripts/harness-chaos-server.mjs) seeds the SAME
+// identities each on-device runner derives from the SAME seed (§2.8 / T-6: one source, two
+// bindings). They still LIVE in the bundle-safe rig — this only re-exports, it does not redefine.
+// CHAOS-06/07 carry their device counts as SEPARATE constants (not on the options object, unlike
+// CHAOS-03's `DEFAULT_CHAOS03_OPTIONS.deviceCount`), so the child must mint those counts.
+export {
+  DEFAULT_CHAOS03_OPTIONS,
+  DEFAULT_CHAOS03_SEED,
+  DEFAULT_CHAOS06_OPTIONS,
+  DEFAULT_CHAOS06_SEED,
+  CHAOS06_DEVICE_COUNT,
+  DEFAULT_CHAOS07_OPTIONS,
+  DEFAULT_CHAOS07_SEED,
+  CHAOS07_DEVICE_COUNT,
+} from '@bolusi/test-support/chaos';
 export {
   FaultFetch,
   NetworkDroppedError,

@@ -51,25 +51,19 @@
 //     the run goes green.
 import { describe, expect, test } from 'vitest';
 
-import { bytesToBase64 } from '@bolusi/core';
 import {
   runChaos07,
   evaluateChaos07,
   CHAOS07_DEVICE_COUNT,
   type Chaos07Options,
 } from '@bolusi/test-support/chaos';
-import {
-  deriveDeviceKeypair,
-  FakeClock,
-  makeIdSource,
-  mulberry32,
-  noblePort,
-} from '@bolusi/test-support';
+import { noblePort } from '@bolusi/test-support';
 
 import { mintIdentities } from '../src/identities.js';
 import { socketBaseFetch } from '../src/net-server.js';
 import { NODE_SEAMS } from '../src/seams-node.js';
 import { startHarnessServer, type HarnessSystemKeyStore } from '../src/server.js';
+import { mintSystemDevice } from '../src/system-identity.js';
 
 /** A fixed run seed for this host binding (independent of the device runner's `DEFAULT_CHAOS07_SEED` — the
  *  verdict must hold for any fully-seeded run, so a distinct seed here is a second sample). */
@@ -80,42 +74,6 @@ const HOST_SEED = 7107;
 const HOST_OPTIONS: Chaos07Options = { pushBatch: 20 };
 
 const RUN_TIMEOUT = 120_000;
-
-/** The system device's id-minting clock base (matches the Node scenario's genesis base, T-6). */
-const SYSTEM_CLOCK_BASE = 1_726_000_000_000;
-
-/**
- * The tenant's system actor + device (01 §3.6): the identity the conflict-detection pipeline emits
- * `platform.conflict_detected` through. Mirrors chaos-07-conflicts.test.ts's `mintSystem` — a distinct prng
- * (`^ 0x5157`) and keypair index 99 keep its user/device ids and key clear of the members' (indices 0/1/2).
- * `publicKeyBase64` is seeded into `devices.signing_key_public`; `secret` feeds the `systemKeyStore` signer,
- * so the two match and `appendSystemOp`'s self-verify (05 §2.2) — and B's pull-path verify — both pass.
- */
-function mintSystemDevice(
-  tenantSeed: number,
-  tenantId: string,
-): {
-  tenantId: string;
-  userId: string;
-  deviceId: string;
-  publicKeyBase64: string;
-  secret: Uint8Array;
-} {
-  const ids = makeIdSource(
-    new FakeClock(SYSTEM_CLOCK_BASE),
-    mulberry32((tenantSeed ^ 0x5157) >>> 0),
-  );
-  const userId = ids();
-  const deviceId = ids();
-  const keypair = deriveDeviceKeypair(tenantSeed, 99);
-  return {
-    tenantId,
-    userId,
-    deviceId,
-    publicKeyBase64: bytesToBase64(keypair.publicKey),
-    secret: keypair.seed,
-  };
-}
 
 /**
  * Drive one CHAOS-07 run end to end over a real loopback socket, exactly as the device runner does except
