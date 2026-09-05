@@ -8,24 +8,25 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { View } from 'react-native';
 
-import { HARNESS_RUN_ID_EXTRA } from './contract.js';
+import type { HarnessLaunchProps } from './contract.js';
 import { HARNESS_EMIT_FAILED_MARKER } from './emit.js';
 import { runAndEmitHarness } from './run-and-emit.js';
 
 /** initialProps are the launching intent's extras (a string bag), delivered by HarnessActivity's
- * `getLaunchOptions()`. The run id is read by the contract key, not a magic name. */
-export type HarnessAppProps = Readonly<Record<string, string | undefined>>;
+ * `getLaunchOptions()`. run-and-emit.ts reads the run id + CHAOS-03 net handoff out of it by the contract
+ * keys, never a magic name — see contract.ts. */
+export type HarnessAppProps = HarnessLaunchProps;
 
 export function HarnessApp(props: HarnessAppProps): ReactElement {
-  const runId = props[HARNESS_RUN_ID_EXTRA] ?? '';
-  // A guard ref, not state: the run must fire EXACTLY once even under a double-invoke, so a second
-  // mount cannot emit a second (duplicate-run-id) result line.
+  // A guard ref, not state: the run must fire EXACTLY once even under a double-invoke, so a second mount
+  // cannot emit a second (duplicate-run-id) result line. `props` is set once by the launching activity
+  // (getLaunchOptions), so listing it in deps cannot re-fire the guarded run.
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    runAndEmitHarness(runId).catch((error: unknown) => {
+    runAndEmitHarness(props).catch((error: unknown) => {
       // NOT a silent swallow (§2.11 — the catch-that-hid-the-missing-producer class). emit.ts already
       // logged the distinct `BOLUSI_HARNESS_EMIT_FAILED` marker into the unfiltered logcat; this catch
       // keeps a failed emit from surfacing as an unhandled rejection and logs the marker ONCE more so the
@@ -34,7 +35,7 @@ export function HarnessApp(props: HarnessAppProps): ReactElement {
         `${HARNESS_EMIT_FAILED_MARKER}: harness aborted without emitting a result: ${String(error)}`,
       );
     });
-  }, [runId]);
+  }, [props]);
 
   return <View testID="bolusi-harness" />;
 }

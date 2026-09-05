@@ -8,8 +8,9 @@
 // `node:crypto`, so `registry.ts` (and the at-rest gate body it reaches) bundle into the release APK.
 // run-and-emit.ts calls `loadHarness()` and hands the runners here. The gate BODIES are importable; each
 // runner's on-device SEAM is bound in run-and-emit.ts as it lands (at-rest + JCS in task 178; CHAOS-01's
-// op-sqlite convergence in task 181). A gate whose seam is NOT yet wired is an HONEST skip (§2.11) with a
-// reason naming why (the CHAOS-03/06/07 server round-trip), never a fabricated pass.
+// op-sqlite convergence in task 181; CHAOS-03's host-network round-trip in task 198). A gate whose seam is
+// NOT yet wired is an HONEST skip (§2.11) with a reason naming why (the CHAOS-06/07 server round-trip,
+// still owed; CHAOS-03 when the driver hands off no net), never a fabricated pass.
 import type { HarnessRunners } from './registry.js';
 import { HARNESS_RESULT_SCHEMA } from './flag.js';
 import { EMULATOR_CORRECTNESS_GATE_IDS } from './gates.js';
@@ -76,15 +77,14 @@ export async function resolveGateResults(
   return results;
 }
 
-/** The chaos ids whose on-device runners are HONESTLY skipped: CHAOS-03/06/07 need a device→host
- * `@bolusi/server` round-trip that has NO producer yet — the harness server is an in-process
- * `app.request` handler (no socket), nothing binds it to a port, no device→host mapping exists, and a
- * synthetic device has no HTTP self-enrollment. Building that host-network transport + the three runners
- * is task 198 (D24 option C's "the device already reaches the host server" premise was falsified at the
- * producer, 2026-09-03). They already PASS on Node against @bolusi/harness. CHAOS-01 is NOT here — its
- * client-only convergence now runs on-device over op-sqlite (task 181), so it is wired in run-and-emit.ts
- * and never reaches this skip set. */
-const CHAOS_GATE_IDS: ReadonlySet<string> = new Set(['CHAOS-03', 'CHAOS-06', 'CHAOS-07']);
+/** The chaos ids whose on-device runners are still OWED: CHAOS-06/07 need the device→host
+ * `@bolusi/server` round-trip whose host-network transport landed in task 198 (steps 1-3), but their
+ * on-device runners have not yet been wired — so run-and-emit.ts binds no entry and they skip honestly.
+ * CHAOS-03 is NOT here — its runner HAS landed (task 198) and is wired in run-and-emit.ts whenever the
+ * driver hands off a net, so with no handoff it takes the dedicated CHAOS-03 skip below, not this one.
+ * CHAOS-01 is also absent — its client-only convergence runs on-device over op-sqlite (task 181). The
+ * owed pair already PASS on Node against @bolusi/harness. */
+const CHAOS_GATE_IDS: ReadonlySet<string> = new Set(['CHAOS-06', 'CHAOS-07']);
 
 /** The per-gate skip reason. Deliberately avoids the driver's shape-error words (schema/variant/target/
  * run id) so a real capture's ONLY failures are the honest skips, not a false shape complaint. */
@@ -95,14 +95,22 @@ function skipDetailFor(id: string, harness: HarnessRunners | null): string {
       `on-device runner is reachable in this build. Honest skip (§2.11) — the flag-off path never fabricates a pass.`
     );
   }
+  if (id === 'CHAOS-03') {
+    return (
+      `CHAOS-03 was not run: its device→host @bolusi/server round-trip needs the driver's out-of-band net ` +
+      `handoff — the base URL + per-device bearers passed as adb intent extras — which this run did not ` +
+      `provide, so run-and-emit.ts wired no runner. Its runner HAS landed (task 198); the emulator lane's ` +
+      `driver hands off a net. Honest skip (§2.11): CHAOS-03 reds the lane until the handoff arrives, ` +
+      `never a fabricated green.`
+    );
+  }
   if (CHAOS_GATE_IDS.has(id)) {
     return (
-      `${id} has no on-device runner: CHAOS-03/06/07 need a device→host @bolusi/server round-trip that ` +
-      `has no producer yet — the harness server is an in-process app.request handler (no socket), nothing ` +
-      `binds it to a port, no device→host mapping exists, and a synthetic device has no HTTP enrollment. ` +
-      `Building that host-network transport + these three runners is task 198 (CHAOS-01's client-only ` +
-      `convergence already runs on-device over op-sqlite, task 181). They already PASS on Node. Honest ` +
-      `skip (§2.11): the lane reds on this id, never a fabricated green.`
+      `${id} has no on-device runner: CHAOS-06/07 need a device→host @bolusi/server round-trip whose ` +
+      `host-network transport landed in task 198 (steps 1-3), but their on-device runners are not yet ` +
+      `wired — so run-and-emit.ts binds no entry (CHAOS-01's client-only convergence already runs ` +
+      `on-device over op-sqlite, task 181). They already PASS on Node. Honest skip (§2.11): the lane reds ` +
+      `on this id, never a fabricated green.`
     );
   }
   return (
