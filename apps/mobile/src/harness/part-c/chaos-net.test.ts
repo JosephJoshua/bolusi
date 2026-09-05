@@ -3,7 +3,7 @@
 // `Chaos03Net` whose Authorization headers and base-URL rewrite are correct, and that any absent/malformed
 // handoff is null (an honest skip, §2.11), never a net with blank/undefined auth that would read as a
 // spurious server auth failure. The real device→server round trip lives where the server does
-// (packages/harness/scenarios/chaos-03-device-runner.test.ts).
+// (packages/harness/scenarios/device-runner-chaos-03.test.ts).
 //
 // ── FALSIFICATION (§2.11) ──────────────────────────────────────────────────────────────────────────
 // Each guard was watched red before shipping:

@@ -17,7 +17,7 @@
 //
 // ── WHAT PROVES THIS RUNNER, AND WHERE (§2.11 — no false "full integration" claim) ─────────────────
 // The real device→server round trip + the verdict flip on a lost op are proven over a REAL loopback
-// socket to the production `@bolusi/server` in packages/harness/scenarios/chaos-03-device-runner.test.ts
+// socket to the production `@bolusi/server` in packages/harness/scenarios/device-runner-chaos-03.test.ts
 // (the host binding: NODE_SEAMS + socketBaseFetch, watched RED on the drop control). This file's OWN
 // tests do NOT stand up a server — apps/mobile carries no `@bolusi/harness`/`@bolusi/server` dependency
 // by design (a token-minting server must not be able to bundle onto the device — a STRUCTURAL guarantee,

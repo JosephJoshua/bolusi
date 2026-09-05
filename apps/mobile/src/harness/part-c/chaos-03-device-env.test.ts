@@ -2,7 +2,7 @@
 // does NOT stand up a server: apps/mobile carries no `@bolusi/harness`/`@bolusi/server` dependency by
 // design (a token-minting server must not be able to bundle onto the device — a STRUCTURAL guarantee),
 // so the real device→server round trip + the verdict flip on a lost op are proven WHERE the server lives:
-// packages/harness/scenarios/chaos-03-device-runner.test.ts (a real loopback socket to `@bolusi/server`,
+// packages/harness/scenarios/device-runner-chaos-03.test.ts (a real loopback socket to `@bolusi/server`,
 // watched RED on the drop control). This file proves the two things that are the mobile wrapper's own:
 //   1. `gateFromVerdict` — the pure verdict→gate mapping, both branches, against synthetic verdicts.
 //   2. `runChaos03Gate` catches a crash — a run that throws before a verdict is a RED naming the id
