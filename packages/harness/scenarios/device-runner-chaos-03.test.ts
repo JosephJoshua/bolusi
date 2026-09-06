@@ -32,10 +32,7 @@ import { describe, expect, test } from 'vitest';
 
 import { runChaos03, evaluateChaos03, type Chaos03Options } from '@bolusi/test-support/chaos';
 
-import { mintIdentities } from '../src/identities.js';
-import { NODE_SEAMS } from '../src/seams-node.js';
-import { socketBaseFetch } from '../src/net-server.js';
-import { startHarnessServer } from '../src/server.js';
+import { driveDeviceRun } from './device-runner-harness.js';
 
 /** A fixed run seed for this host binding (independent of the device runner's `DEFAULT_CHAOS03_SEED` —
  *  the verdict must hold for any fully-seeded run, so a distinct seed here is a second sample). */
@@ -50,23 +47,18 @@ const HOST_OPTIONS: Chaos03Options = { deviceCount: 3, opsPerDevice: 60, sharedN
 const RUN_TIMEOUT = 120_000;
 
 /**
- * Drive one CHAOS-03 run end to end over a real loopback socket, exactly as the device runner does
- * except the client DB is better-sqlite3 (NODE_SEAMS) instead of op-sqlite. Seeds the minted public
- * keys server-side, hands the bearers back in mint order, runs, evaluates, and tears BOTH the devices
- * and the socket/PGlite down in `finally`.
+ * Drive one CHAOS-03 run over the shared {@link driveDeviceRun} host fixture (which owns the socket, the
+ * identity seeding, the `net` seam, and teardown) and project the drop/replica figures this scenario asserts
+ * on. The verdict is single-sourced (`evaluateChaos03`); its `metrics` already carries the foreign-fold and
+ * converged-replica counts, so the projection reads those rather than re-deriving them from the raw result
+ * (one source of truth for the numbers, §2.8).
  */
 async function driveRun(options: Chaos03Options) {
-  const running = await startHarnessServer();
-  try {
-    const ids = mintIdentities(HOST_SEED, options.deviceCount);
-    const seeded = await Promise.all(ids.devices.map((id) => running.server.seedDevice(id)));
-    const net = { fetch: socketBaseFetch(running.url), auth: seeded.map((s) => s.auth) };
-
-    const result = await runChaos03(HOST_SEED, options, NODE_SEAMS, net);
-    try {
-      // The verdict is single-sourced (`evaluateChaos03`); its `metrics` already carries the
-      // foreign-fold and converged-replica counts, so the test asserts on those rather than
-      // re-deriving them from the raw result (one source of truth for the numbers, §2.8).
+  return driveDeviceRun({
+    seed: HOST_SEED,
+    deviceCount: options.deviceCount,
+    run: (seed, seams, net) => runChaos03(seed, options, seams, net),
+    project: (result) => {
       const verdict = evaluateChaos03(result, options);
       return {
         verdict,
@@ -75,12 +67,8 @@ async function driveRun(options: Chaos03Options) {
         converged: verdict.metrics.converged,
         foreignApplied: verdict.metrics.foreignApplied,
       };
-    } finally {
-      await result.close();
-    }
-  } finally {
-    await running.close();
-  }
+    },
+  });
 }
 
 describe('CHAOS-03 device runner (host binding over a real socket)', () => {

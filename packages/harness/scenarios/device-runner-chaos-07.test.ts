@@ -58,11 +58,8 @@ import {
   type Chaos07Options,
 } from '@bolusi/test-support/chaos';
 
-import { mintIdentities } from '../src/identities.js';
-import { socketBaseFetch } from '../src/net-server.js';
-import { NODE_SEAMS } from '../src/seams-node.js';
-import { startHarnessServer } from '../src/server.js';
 import { mintSystemDevice, systemSignerKeyStore } from '../src/system-identity.js';
+import { driveDeviceRun } from './device-runner-harness.js';
 
 /** A fixed run seed for this host binding (independent of the device runner's `DEFAULT_CHAOS07_SEED` — the
  *  verdict must hold for any fully-seeded run, so a distinct seed here is a second sample). */
@@ -75,51 +72,44 @@ const HOST_OPTIONS: Chaos07Options = { pushBatch: 20 };
 const RUN_TIMEOUT = 120_000;
 
 /**
- * Drive one CHAOS-07 run end to end over a real loopback socket, exactly as the device runner does except
- * the client DB is better-sqlite3 (NODE_SEAMS) instead of op-sqlite. When `detection` is on (the default),
- * boots the server with the tenant's `systemKeyStore` and seeds the matching system device, so the real
- * conflict-detection pipeline mints + signs the `platform.conflict_detected` op B pulls. Seeds the minted
- * member pubkeys, hands the bearers back in mint order, runs, evaluates, and tears BOTH the devices and the
- * socket/PGlite down in `finally`. Returns the verdict AND the raw observations, so the test can assert the
- * premise/non-vacuity denominators the verdict's `metrics` doesn't carry (`note1Edits`, `iiiDetectedApplied`).
+ * Drive one CHAOS-07 run over the shared {@link driveDeviceRun} host fixture (which owns the socket, the
+ * member seeding, the `net` seam, and teardown), adding the two CHAOS-07-only knobs: when `detection` is on
+ * (the default) the server boots with the tenant's `systemKeyStore` and an `afterSeed` step seeds the matching
+ * system device, so the real conflict-detection pipeline mints + signs the `platform.conflict_detected` op B
+ * pulls. Returns the verdict AND the raw observations, so the test can assert the premise/non-vacuity
+ * denominators the verdict's `metrics` doesn't carry (`note1Edits`, `iiiDetectedApplied`).
  */
 async function driveRun(options: Chaos07Options, config?: { detection?: boolean }) {
   const detection = config?.detection ?? true;
   const systemSecrets = new Map<string, Uint8Array>();
   const keyStore = systemSignerKeyStore(systemSecrets);
-  const running = await startHarnessServer(detection ? { systemKeyStore: keyStore } : undefined);
-  try {
-    const ids = mintIdentities(HOST_SEED, CHAOS07_DEVICE_COUNT);
-    const seeded = await Promise.all(ids.devices.map((id) => running.server.seedDevice(id)));
-
-    // Detection ON: seed the tenant's system device + register its signing secret so the pipeline can
-    // sign `platform.conflict_detected` with a key B will verify over the pull path. Detection OFF: no
-    // system device / key — the detector never runs, so none is needed (the INCONCLUSIVE control).
-    if (detection) {
-      const system = mintSystemDevice(HOST_SEED, ids.tenantId);
-      await running.server.seedSystemDevice({
-        tenantId: system.tenantId,
-        userId: system.userId,
-        deviceId: system.deviceId,
-        publicKeyBase64: system.publicKeyBase64,
-      });
-      systemSecrets.set(ids.tenantId, system.secret);
-    }
-
-    const net = { fetch: socketBaseFetch(running.url), auth: seeded.map((s) => s.auth) };
-    const result = await runChaos07(HOST_SEED, options, NODE_SEAMS, net);
-    try {
-      // The verdict is single-sourced (`evaluateChaos07`); its `metrics` carries convergence/surfacing, so
-      // the test asserts on those. The premise witness (`note1Edits`) and the leg-2 non-vacuity witness
-      // (`iiiDetectedApplied` — the system op actually reached B) are NOT in `metrics`, so they come off
-      // the raw `obs`.
-      return { verdict: evaluateChaos07(result), obs: result.obs };
-    } finally {
-      await result.close();
-    }
-  } finally {
-    await running.close();
-  }
+  return driveDeviceRun({
+    seed: HOST_SEED,
+    deviceCount: CHAOS07_DEVICE_COUNT,
+    // Detection ON: boot with the tenant's `systemKeyStore` so `resolveDeps` wires `detectConflicts`.
+    // OFF: no key store ⇒ detection stays undefined and no op is minted (the INCONCLUSIVE control).
+    boot: detection ? { systemKeyStore: keyStore } : undefined,
+    // Detection ON: seed the tenant's system device + register its signing secret (AFTER the members, BEFORE
+    // the run) so the pipeline signs `platform.conflict_detected` with a key B verifies over the pull path
+    // against the seeded `devices.signing_key_public`. OFF: none needed — the detector never runs.
+    afterSeed: detection
+      ? async ({ server, ids }) => {
+          const system = mintSystemDevice(HOST_SEED, ids.tenantId);
+          await server.seedSystemDevice({
+            tenantId: system.tenantId,
+            userId: system.userId,
+            deviceId: system.deviceId,
+            publicKeyBase64: system.publicKeyBase64,
+          });
+          systemSecrets.set(ids.tenantId, system.secret);
+        }
+      : undefined,
+    run: (seed, seams, net) => runChaos07(seed, options, seams, net),
+    // The verdict is single-sourced (`evaluateChaos07`); its `metrics` carries convergence/surfacing, so the
+    // test asserts on those. The premise witness (`note1Edits`) and the leg-2 non-vacuity witness
+    // (`iiiDetectedApplied` — the system op actually reached B) are NOT in `metrics`, so they come off `obs`.
+    project: (result) => ({ verdict: evaluateChaos07(result), obs: result.obs }),
+  });
 }
 
 describe('CHAOS-07 device runner (host binding over a real socket)', () => {

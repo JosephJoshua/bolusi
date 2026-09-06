@@ -42,10 +42,7 @@ import {
   type Chaos06Options,
 } from '@bolusi/test-support/chaos';
 
-import { mintIdentities } from '../src/identities.js';
-import { NODE_SEAMS } from '../src/seams-node.js';
-import { socketBaseFetch } from '../src/net-server.js';
-import { startHarnessServer } from '../src/server.js';
+import { driveDeviceRun } from './device-runner-harness.js';
 
 /** A fixed run seed for this host binding (independent of the device runner's `DEFAULT_CHAOS06_SEED` —
  *  the verdict must hold for any fully-seeded run, so a distinct seed here is a second sample). */
@@ -60,33 +57,20 @@ const HOST_OPTIONS: Chaos06Options = { creates: 10, edits: 40, pushBatch: 20, re
 const RUN_TIMEOUT = 120_000;
 
 /**
- * Drive one CHAOS-06 run end to end over a real loopback socket, exactly as the device runner does
- * except the client DB is better-sqlite3 (NODE_SEAMS) instead of op-sqlite. Seeds the minted public
- * keys server-side, hands the bearers back in mint order, runs, evaluates, and tears BOTH the devices
- * and the socket/PGlite down in `finally`. Returns the verdict AND the raw observations, so the test can
- * assert the premise/non-vacuity denominators the verdict's `metrics` doesn't carry.
+ * Drive one CHAOS-06 run over the shared {@link driveDeviceRun} host fixture (which owns the socket, the
+ * identity seeding, the `net` seam, and teardown) and return the verdict AND the raw observations, so the
+ * test can assert the premise/non-vacuity denominators the verdict's `metrics` doesn't carry. The verdict is
+ * single-sourced (`evaluateChaos06`); its `metrics` carries the replay/dedup/pull counts, so the test asserts
+ * on those rather than re-deriving them (one source, §2.8), while the premise witness (firstDelivery*) and
+ * the non-vacuity witness (heldPullReceived) come straight off the raw `obs`.
  */
 async function driveRun(options: Chaos06Options) {
-  const running = await startHarnessServer();
-  try {
-    const ids = mintIdentities(HOST_SEED, CHAOS06_DEVICE_COUNT);
-    const seeded = await Promise.all(ids.devices.map((id) => running.server.seedDevice(id)));
-    const net = { fetch: socketBaseFetch(running.url), auth: seeded.map((s) => s.auth) };
-
-    const result = await runChaos06(HOST_SEED, options, NODE_SEAMS, net);
-    try {
-      // The verdict is single-sourced (`evaluateChaos06`); its `metrics` carries the replay/dedup/pull
-      // counts, so the test asserts on those rather than re-deriving them (one source, §2.8). The premise
-      // witness (firstDelivery*) and the non-vacuity witness (heldPullReceived) are NOT in `metrics`, so
-      // those come straight off the raw `obs`.
-      const verdict = evaluateChaos06(result);
-      return { verdict, obs: result.obs };
-    } finally {
-      await result.close();
-    }
-  } finally {
-    await running.close();
-  }
+  return driveDeviceRun({
+    seed: HOST_SEED,
+    deviceCount: CHAOS06_DEVICE_COUNT,
+    run: (seed, seams, net) => runChaos06(seed, options, seams, net),
+    project: (result) => ({ verdict: evaluateChaos06(result), obs: result.obs }),
+  });
 }
 
 describe('CHAOS-06 device runner (host binding over a real socket)', () => {
