@@ -161,6 +161,54 @@ describe('parseHarnessResult — the harness:device fail-safe', () => {
   });
 });
 
+// The SUCCESS-path artifact echo (`formatResultArtifactLine`). A GREEN emulator run must surface the
+// device's exact result JSON on the driver's OWN stdout, so a SEC-AUTH-09 re-anchor can harvest the
+// buildSha-stamped at-rest artifact from the job log — until this, only the FAILURE path dumped the
+// payload and a passing run tore the emulator (and its logcat buffer) down with the only copy. The
+// load-bearing invariant is that the SAME parser recovers the echoed line byte-for-byte: one
+// serialization, no drift. These are pure, so the whole harvest wire is proven without an emulator.
+describe('formatResultArtifactLine — the success-path artifact echo (SEC-AUTH-09 harvest)', () => {
+  // A realistic single-line result JSON as adb logcat presents it: buildSha-stamped (task 182), which
+  // is the field the SEC-AUTH-09 provenance gate reads — an artifact that fails to carry it is red.
+  const PAYLOAD = JSON.stringify({
+    schema: 'bolusi-harness-result/1',
+    runId: RUN_ID,
+    variant: 'release',
+    target: 'emulator',
+    buildSha: 'dabdaafc72bc298746c0bcdc13e9d805bffcdf72',
+    gates: [{ id: 'SEC-DEV-06-at-rest', kind: 'correctness', status: 'pass', detail: '' }],
+  });
+
+  test('round-trips through extractResultPayload byte-for-byte (one parser, no second format)', () => {
+    const line = driver.formatResultArtifactLine(PAYLOAD) as string;
+    // The marker is present so a harvester can find the line amid the driver's other stdout.
+    expect(line).toContain(driver.HARNESS_RESULT_TAG as string);
+    expect(driver.extractResultPayload(line)).toBe(PAYLOAD);
+  });
+
+  test('the harvested artifact JSON-parses back to the buildSha the re-anchor needs', () => {
+    const recovered = driver.extractResultPayload(
+      driver.formatResultArtifactLine(PAYLOAD),
+    ) as string;
+    const parsed = JSON.parse(recovered) as { buildSha?: string; target?: string };
+    // Not just any string survives — the exact stamped commit does, so the harvest is USABLE, not
+    // merely non-empty (§2.11: a harvest that dropped the buildSha would be a silent no-op).
+    expect(parsed.buildSha).toBe('dabdaafc72bc298746c0bcdc13e9d805bffcdf72');
+    expect(parsed.target).toBe('emulator');
+  });
+
+  test('recovers the payload even when the echoed line is buried in other driver stdout', () => {
+    // The real success path prints a human summary line right before the artifact line; the harvest
+    // must still pull the payload out of the surrounding console noise.
+    const stdout = [
+      'harness:device: EMULATOR correctness gates PASS (7 gates, target=emulator, hermes=0.17.0).',
+      driver.formatResultArtifactLine(PAYLOAD),
+      'harness:device: done',
+    ].join('\n');
+    expect(driver.extractResultPayload(stdout)).toBe(PAYLOAD);
+  });
+});
+
 // Task 176 — the OBSERVABILITY half. The lane's 20-minute red run (CI 29990800850) produced exactly
 // one line of diagnosis because the launch check read only the exit status and every adb buffer was
 // captured then discarded. These two pure functions are the parts of the fix that can be proven

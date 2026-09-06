@@ -168,6 +168,24 @@ export function extractResultPayload(logcatText) {
 }
 
 /**
+ * Re-emit the device's EXACT result JSON to the DRIVER's stdout on the SUCCESS path, so a GREEN CI run
+ * carries the buildSha-stamped at-rest artifact in its own console log for a SEC-AUTH-09 re-anchor
+ * harvest (task 27/160 §3). Until now only the FAILURE path dumped raw logcat (`dumpFailureDiagnostics`):
+ * a passing run printed a one-line summary and then the emulator — holding the sole copy of the JSON in
+ * its logcat buffer — was torn down, so the artifact a re-anchor needs was recoverable from every run
+ * EXCEPT the green ones that actually produce a valid one.
+ *
+ * Re-uses the device's own `BOLUSI_HARNESS_RESULT:` marker so the SAME `extractResultPayload` recovers
+ * the payload byte-for-byte from the harvested driver line — the invariant
+ * `extractResultPayload(formatResultArtifactLine(p)) === p` is pinned by a unit test (one parser, no
+ * second serialization to drift). Purely additive observability: it echoes what the poll already parsed
+ * and changes NO pass/fail decision (§2.1).
+ */
+export function formatResultArtifactLine(rawPayload) {
+  return `harness:device: ${HARNESS_RESULT_TAG}: ${rawPayload}`;
+}
+
+/**
  * Decide pass/fail for a captured harness run. NON-ZERO (ok:false) on ANY of: no result captured,
  * unparseable JSON, non-release build, a target label missing, a run-id mismatch (stale capture),
  * a missing required gate, or any gate not `pass`. An empty/broken capture is NEVER an empty pass
@@ -566,6 +584,12 @@ async function runCli(argv) {
       `target=${verdict.result.target}, hermes=${verdict.result.hermesVersion}). ` +
       `Every figure is EMULATOR — perf gates (P-1..P-6) + SEC-AUTH-10 are task 27b (physical device).`,
   );
+  // Surface the device's exact result JSON on the SUCCESS path too, so a GREEN run is harvestable for a
+  // SEC-AUTH-09 re-anchor (the emulator + its logcat buffer are torn down right after this). `logcatText`
+  // is what the poll parsed; on this path extractResultPayload is guaranteed non-null (verdict.ok
+  // required a payload) — the guard is belt-and-braces, never a silent skip.
+  const artifactPayload = extractResultPayload(logcatText);
+  if (artifactPayload !== null) console.log(formatResultArtifactLine(artifactPayload));
   process.exit(0);
 }
 
