@@ -1,0 +1,82 @@
+{
+  "schema": "bolusi-harness-result/1",
+  "runId": "run-2026-09-06T18-50-57-757Z-3f07dd",
+  "profile": "test",
+  "variant": "release",
+  "target": "emulator",
+  "hermesVersion": "250829098.0.14",
+  "buildSha": "85d685fbf18bd785a5e02ef7ff2e8699e58c3ac3",
+  "gates": [
+    {
+      "id": "SEC-DEV-06-at-rest",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "protected columns at rest are ciphertext: every signed-off column was observed and carries the cipher marker, no seeded plaintext survives in the file bytes — and the positive control witnessed the seed in a cipher-disabled control DB. The FILE itself is plain SQLite by design (D22): only the sensitive columns are sealed."
+    },
+    {
+      "id": "SEC-AUTH-09-leg1",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "the SEC-AUTH-09 PIN-verifier material (salt, hash, params) is sealed at rest: every user_pin_verifiers column was observed with a non-null value carrying the cipher marker, so the verifier bytes exist on disk only as ciphertext (SEC-AUTH-09 leg 1, on the post-D22 column cipher)."
+    },
+    {
+      "id": "SEC-OPLOG-06-jcs",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "Hermes canonicalizeJcs matches the shared RFC 8785 golden vectors byte-for-byte: 26 number, 1 canonicalization (text + §3.2.4 UTF-8 bytes), and the property-sort (UTF-16 code-unit order) vectors all agree — the on-device hash preimage is identical to the Node engine's (SEC-OPLOG-06).",
+      "figures": {
+        "numberVectors": 26,
+        "canonicalizationVectors": 1,
+        "propertyVectors": 1
+      }
+    },
+    {
+      "id": "CHAOS-01",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "3 devices converged to the canonical-fold reference under shuffled arrival (3 replicas, 100 ops/device); both §4.2 fold paths fired on every device (502 head-applies, 458 re-folds).",
+      "figures": {
+        "devices": 3,
+        "opsPerDevice": 100,
+        "headApplies": 502,
+        "refolds": 458
+      }
+    },
+    {
+      "id": "CHAOS-03",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "3 devices authored 120 ops offline, reconnected one at a time, and converged to the canonical fold over the wire (3/3 replicas; 686 foreign ops folded, empty redundant pull).",
+      "figures": {
+        "devices": 3,
+        "opsPerDevice": 120,
+        "foreignApplied": 686,
+        "converged": 3
+      }
+    },
+    {
+      "id": "CHAOS-06",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "device A delivered 121 ops (all accepted), replayed 61 verbatim (all duplicate), a held-op pull applied 0 with digest + edit_count unchanged, and a novel foreign op still applied (edit_count 100→101) — replay is idempotent (§3.6).",
+      "figures": {
+        "replayed": 61,
+        "duplicate": 61,
+        "heldPullApplied": 0,
+        "novelPullApplied": 3
+      }
+    },
+    {
+      "id": "CHAOS-07",
+      "kind": "correctness",
+      "status": "pass",
+      "detail": "3/3 devices converged on the shared note; the LWW winner \"body-207-C-1\" is the canonical (timestamp,deviceId,seq) last edit; and edit-after-archive surfaced a significant conflict on device B (note stays archived, the edit stands) — concurrent-edit resolution is correct (§3.6).",
+      "figures": {
+        "deviceCount": 3,
+        "converged": 3,
+        "foreignApplied": 29,
+        "surfacedOnDevice": 1
+      }
+    }
+  ]
+}
