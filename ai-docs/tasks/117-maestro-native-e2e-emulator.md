@@ -35,3 +35,11 @@ Depends on 27a's lane landing — do NOT start until `.github/workflows/ci.yml` 
 
 ## Note
 Complements task 116: 116 gives fast browser-approximation screenshots in any environment; 117 gives true native rendering + gesture behaviour, but only where an emulator runs (27a's CI lane, or a device). Together they cover visual iteration AND native fidelity. Stays `blocked` until 27a lands the emulator lane.
+
+## Current state (2026-09-06) — 1/6 flows live, 5 blocked on task 201
+
+Delivered and proven on the emulator lane: the native-E2E harness itself (install Maestro → `adb install` the test APK → `maestro test .maestro/` → artifacts → non-zero on a red flow, no `|| true`) and the one serverlessly-reachable journey, `01-launch-enrollment` — `[Passed] (22s)`, `1/1 Flow Passed`, on run 34036548031.
+
+The other 5 authored flows (`.maestro/pending-119/02..06`: pin-entry, shell-nav, note-create, archive-ConfirmSheet, i18n-toggle) remain parked and are **not** promotable yet. Their `.maestro/README.md` promotion plan assumed task 119 would make the switcher/PIN/shell reachable on the lane. Ground-truth check on 2026-09-06: **119 is `done` but delivered the composition-root wiring** (Root constructs a session-scoped `NotesRuntime` *after* enrollment+PIN unlock), **not** an emulator seeding harness. The lane runs no server and has no enrolled-state producer, so promoting the pending flows today reds them on the first `assertVisible: switcher-screen`.
+
+The missing producer is filed as **task 201** (an enrollment-seed / device-fixture seam, or standing up `@bolusi/server` on the lane; option A is a §2.5 security surface). 117 is `blocked` on 201. Do **not** flip 117 `done` while 5/6 of its authored suite cannot run — and do not silently shrink this task's Acceptance to launch-only; that re-scope is the owner's call (§4) and is offered as the alternative disposition in task 201.
