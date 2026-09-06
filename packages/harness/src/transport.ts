@@ -14,7 +14,13 @@
 import type { SyncSurfacePort, SyncSurfacing, SyncTransportPort } from '@bolusi/core';
 import type { PullRequest, PullResponse, PushRequest, PushResponse } from '@bolusi/schemas';
 
-export { HttpTransport, pullDevice, pushDevice, SILENT_SURFACE } from '@bolusi/test-support/chaos';
+export {
+  HttpTransport,
+  CountingTransport,
+  pullDevice,
+  pushDevice,
+  SILENT_SURFACE,
+} from '@bolusi/test-support/chaos';
 
 /**
  * A scripted `SyncTransportPort` (CHAOS-12): each `pull` shifts the next scripted `PullResponse`,

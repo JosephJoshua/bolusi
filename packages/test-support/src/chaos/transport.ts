@@ -117,11 +117,11 @@ export const SILENT_SURFACE: SyncSurfacePort = { emit: () => undefined };
  * A `SyncTransportPort` decorator that RECORDS the per-request wire op counts and delegates verbatim —
  * NO protocol logic of its own (T-7). It is the witness the wire-level properties rest on: CHAOS-03's
  * incremental-pull ("a redundant sync pulls an EMPTY page", `pulledSinceReset()` after `reset()`), and
- * CHAOS-06's non-vacuity ("the held-op pull actually RECEIVED ops to dedup", `pullOpCounts`). Both the
- * days-offline rig (chaos03.ts) and the replay rig (chaos06.ts) drive it, so it lives here in the shared
- * transport home rather than as a private twin in each (§2.8 rule-of-three: chaos03 + chaos06 were the
- * 2nd and 3rd copies; the Node harness scenario keeps its own pre-existing twin the task leaves
- * untouched, the next refactor's target).
+ * CHAOS-06's non-vacuity ("the held-op pull actually RECEIVED ops to dedup", `pullOpCounts`). The
+ * days-offline rig (chaos03.ts), the replay rig (chaos06.ts), AND the Node harness days-offline scenario
+ * (chaos-03-days-offline.test.ts, whose private twin task 200 retired) all drive it, so it lives here in
+ * the shared transport home rather than as a per-file copy (§2.8 rule-of-three: chaos03 + chaos06 were
+ * the 2nd and 3rd copies, the Node scenario the 4th).
  */
 export class CountingTransport implements SyncTransportPort {
   readonly pushOpCounts: number[] = [];

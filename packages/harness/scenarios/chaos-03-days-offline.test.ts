@@ -49,7 +49,7 @@ import { VirtualDevice, type DeviceIdentity } from '../src/device.js';
 import { HarnessServer } from '../src/server.js';
 import { mintIdentities } from '../src/identities.js';
 import { assertConvergence, canonicalFold, notesRows } from '../src/oracle.js';
-import { HttpTransport, pullDevice, pushDevice } from '../src/transport.js';
+import { CountingTransport, HttpTransport, pullDevice, pushDevice } from '../src/transport.js';
 import { activeVolumes, nightlyX4Seeds, resolveSeeds, withSeed } from '../src/index.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
@@ -64,37 +64,6 @@ const SHARED_POOL = 300;
 /** Fraction of a device's ops authored as edits on the shared pool (the rest own-note creates) —
  *  enough cross-device same-entity contention to make the merge real, low enough to bound re-fold. */
 const EDIT_FRACTION = 0.15;
-
-/**
- * A `SyncTransportPort` that WRAPS the production `HttpTransport` and records the wire-level counts
- * the two §3.6 wire properties assert: every push request's op count (≤ 500/batch) and every pull
- * response's op count (the incrementality witness). It adds NO protocol logic (T-7) — counts + delegates.
- */
-class CountingTransport implements SyncTransportPort {
-  readonly pushOpCounts: number[] = [];
-  readonly pullOpCounts: number[] = [];
-  constructor(private readonly inner: HttpTransport) {}
-
-  push(request: PushRequest): Promise<PushResponse> {
-    this.pushOpCounts.push(request.ops.length);
-    return this.inner.push(request);
-  }
-
-  async pull(request: PullRequest): Promise<PullResponse> {
-    const response = await this.inner.pull(request);
-    this.pullOpCounts.push(response.ops.length);
-    return response;
-  }
-
-  /** Ops delivered over the wire in pull responses since the last reset — the re-download witness. */
-  pulledSinceReset(): number {
-    return this.pullOpCounts.reduce((a, b) => a + b, 0);
-  }
-  reset(): void {
-    this.pushOpCounts.length = 0;
-    this.pullOpCounts.length = 0;
-  }
-}
 
 /** Only notes ops fold into the projection; the per-device genesis enroll op is not folded. */
 function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
