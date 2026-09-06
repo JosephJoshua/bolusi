@@ -302,17 +302,20 @@ describe('CHAOS-03/06/07 net handshake — the driver↔child wire (task 198)', 
   test('chaosNetExtras yields the ONE --es triple the launch intent forwards to the APK', () => {
     // The EXACT argv the driver appends to `am start`: a single fixed-width extra whose value is the
     // per-scenario JSON map of {baseUrl, bearers} — RAW tokens, the port dropped (the device reaches the
-    // reversed port via the base URL, it never needs the number). The device's parseChaosNet reads this
-    // ONE key back (pinned equal to contract.ts in apps/mobile/test/harness-producer.test.ts).
+    // reversed port via the base URL, it never needs the number). The value is SINGLE-QUOTED so the
+    // device shell (mksh) forwards it to `am` verbatim instead of brace-expanding the bare `{…}` (see
+    // chaosNetExtras; the survives-a-real-shell proof is the wire test in harness-producer.test.ts). The
+    // device's parseChaosNet reads this ONE key back (pinned equal to contract.ts in that same file).
     const { chaos03, chaos06, chaos07 } = HANDSHAKE.scenarios;
+    const json = JSON.stringify({
+      chaos03: { baseUrl: chaos03.baseUrl, bearers: chaos03.bearers },
+      chaos06: { baseUrl: chaos06.baseUrl, bearers: chaos06.bearers },
+      chaos07: { baseUrl: chaos07.baseUrl, bearers: chaos07.bearers },
+    });
     expect(driver.chaosNetExtras(HANDSHAKE)).toEqual([
       '--es',
       driver.HARNESS_CHAOS_NET_EXTRA,
-      JSON.stringify({
-        chaos03: { baseUrl: chaos03.baseUrl, bearers: chaos03.bearers },
-        chaos06: { baseUrl: chaos06.baseUrl, bearers: chaos06.bearers },
-        chaos07: { baseUrl: chaos07.baseUrl, bearers: chaos07.bearers },
-      }),
+      `'${json}'`,
     ]);
   });
 

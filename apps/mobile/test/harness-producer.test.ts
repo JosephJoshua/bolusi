@@ -12,6 +12,8 @@
 // It imports the producer's PURE pieces (run.ts/flag.ts/registry.ts — no RN, no native module) and the
 // real driver `.mjs`, so the only thing left unproven is the on-device wire itself (native `Log.i` and
 // the APK boot), which is the CI runner's job.
+import { execFileSync } from 'node:child_process';
+
 import { describe, expect, test } from 'vitest';
 
 import { HARNESS_RESULT_SCHEMA, HARNESS_RESULT_TAG } from '../src/harness/flag.js';
@@ -175,6 +177,29 @@ describe('resolveGateResults — the injected-runner seam (task 178)', () => {
 // gate reading a handoff it cannot find is no handoff. These tests pin the ONE key equal (exactly as
 // HARNESS_RESULT_TAG is pinned to the emitter above) and drive the WHOLE wire end to end: the driver's
 // `chaosNetExtras` → HarnessActivity's generic extra→initialProp forwarding → the device's `parseChaosNet`.
+//
+// Replay the adb-shell → device-mksh → `am` hop the real device performs on the launch argv. `adb shell`
+// joins its argv with spaces and the device runs the join through mksh, which brace-EXPANDS an unquoted
+// `{…,…,…}` and strips its `"`s BEFORE `am` parses the `--es` value — the transform that shipped a broken
+// handoff (bare JSON → `am` read `chaos03:…` as the intent DATA uri, every net gate skipped, CI run
+// 34024711426). A JS assignment `props[key] = value` models the initialProp forwarding but SKIPS this hop,
+// so it cannot see the mangling. Run the argv through a REAL brace-expanding shell — bash, the same class
+// as Android's mksh; NOT /bin/sh→dash, which does not brace-expand and would give a false green — and take
+// the token `am` receives after `--es KEY`. `printf '%s\0'` NUL-separates the dumped argv, and a value can
+// never contain a NUL, so the split is unambiguous even when a mangled bare value explodes into many words.
+// `chaosNetExtras` single-quotes the value, so it must arrive intact; drop the quoting and this reds locally
+// on the exact CI failure — the falsification the device-less pass-through could not do.
+function forwardThroughDeviceShell(extras: readonly string[]): Record<string, string> {
+  const dumped = execFileSync('bash', ['-c', `printf '%s\\0' ${extras.join(' ')}`], {
+    encoding: 'utf8',
+  });
+  const [flag, key, value] = dumped.split('\0');
+  expect(flag).toBe('--es');
+  const props: Record<string, string> = {};
+  if (key !== undefined && value !== undefined) props[key] = value;
+  return props;
+}
+
 describe('CHAOS-03/06/07 net handoff wire (driver ↔ device, task 198)', () => {
   test('the ONE intent-extra key is IDENTICAL on both sides of the wire', () => {
     // If the key drifts, the driver writes an extra the device never reads: every net gate skips and the
@@ -211,13 +236,10 @@ describe('CHAOS-03/06/07 net handoff wire (driver ↔ device, task 198)', () => 
     };
     const extras = driver.chaosNetExtras(handshake) as string[];
 
-    // Exactly one `--es KEY VALUE` triple — the fixed-width intent surface. HarnessActivity forwards each
-    // extra generically as key→value; replaying that here is the whole wire.
-    const props: Record<string, string> = {};
-    for (let i = 0; i < extras.length; i += 3) {
-      expect(extras[i]).toBe('--es');
-      props[extras[i + 1] as string] = extras[i + 2] as string;
-    }
+    // Cross the device shell for real (see forwardThroughDeviceShell above): what parseChaosNet sees is the
+    // token `am` receives after the single `--es KEY` triple — the fixed-width intent surface — not the raw
+    // string the driver wrote. This is where a bare (unquoted) value would be brace-mangled into garbage.
+    const props = forwardThroughDeviceShell(extras);
 
     const nets = parseChaosNet(props as HarnessLaunchProps);
     // The raw tokens crossed the wire prefix-less; the device re-adds `Bearer ` and preserves device order

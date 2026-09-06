@@ -127,9 +127,17 @@ export function parseChaosNetHandshake(childStdout) {
 
 /**
  * The `am start … --es` argv fragment that hands every scenario's net off to the APK as ONE JSON extra:
- * `{"chaos03":{"baseUrl":…,"bearers":[…]},…}` — bearers as RAW tokens (the device re-prefixes `Bearer `),
+ * `'{"chaos03":{"baseUrl":…,"bearers":[…]},…}'` — bearers as RAW tokens (the device re-prefixes `Bearer `),
  * the port dropped (the device reaches the reversed port via the base URL, it never needs the number).
- * Pure — the exact triple the intent forwards to an RN initialProp.
+ *
+ * The JSON value is SINGLE-QUOTED for the device shell. `adb shell` joins its argv with spaces and the
+ * device runs the join through `/system/bin/sh` (mksh), which BRACE-EXPANDS an unquoted `{…,…,…}` and
+ * strips its `"`s before `am` ever sees it — so a bare `{"chaos03":…}` reached `am` split into words
+ * whose first was `chaos03:…`, which `am` then read as the intent DATA uri (`dat=chaos03:`, CI run
+ * 34024711426) instead of the `--es` value: every net gate skipped and the lane red. A single-quoted
+ * value is a POSIX literal — no brace expansion, no quote removal, no word splitting — and JSON never
+ * emits a `'`, so the wrap is total and the device shell forwards the exact bytes to `am`, which strips
+ * the quotes. Pure — the exact triple the intent forwards to an RN initialProp.
  * @param {{ scenarios: Record<string, { baseUrl: string, bearers: readonly string[] }> }} handshake
  * @returns {string[]}
  */
@@ -139,7 +147,7 @@ export function chaosNetExtras(handshake) {
     const entry = handshake.scenarios[id];
     nets[id] = { baseUrl: entry.baseUrl, bearers: entry.bearers };
   }
-  return ['--es', HARNESS_CHAOS_NET_EXTRA, JSON.stringify(nets)];
+  return ['--es', HARNESS_CHAOS_NET_EXTRA, `'${JSON.stringify(nets)}'`];
 }
 
 /**
