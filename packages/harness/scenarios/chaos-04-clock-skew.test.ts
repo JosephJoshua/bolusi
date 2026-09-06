@@ -16,6 +16,7 @@ import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 
 import { FakeClock, mulberry32 } from '@bolusi/test-support';
+import { notesOnly } from '@bolusi/test-support/chaos';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { VirtualDevice } from '../src/device.js';
@@ -64,10 +65,6 @@ async function flagsByDevice(server: HarnessServer): Promise<Map<string, boolean
     byDevice.set(row.deviceId, list);
   }
   return byDevice;
-}
-
-function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
-  return ops.filter((op) => op.type.startsWith('notes.'));
 }
 
 describe('CHAOS-04 clock skew (flag, never reject)', () => {

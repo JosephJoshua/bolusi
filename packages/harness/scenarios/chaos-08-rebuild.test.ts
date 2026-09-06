@@ -25,6 +25,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { FakeClock, mulberry32, type Prng } from '@bolusi/test-support';
+import { notesOnly } from '@bolusi/test-support/chaos';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { VirtualDevice, type DeviceIdentity } from '../src/device.js';
@@ -93,10 +94,6 @@ async function loadLogOnly(
     await insertPulledOp(device.db, op, seq, op.timestamp);
   }
   return seq;
-}
-
-function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
-  return ops.filter((op) => op.type.startsWith('notes.'));
 }
 
 describe('CHAOS-08 projection rebuild mid-stream', () => {

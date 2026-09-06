@@ -67,3 +67,6 @@ export {
   type Chaos07Verdict,
   type Chaos07Obs,
 } from './chaos07.js';
+// The tiny platform/domain-free wire helpers (wire-helpers.ts) — barrel-exported for the Node
+// @bolusi/harness scenarios, which held byte-identical copies before task 202 (§2.8).
+export { notesOnly, deviceSeed, dedupeById } from './wire-helpers.js';

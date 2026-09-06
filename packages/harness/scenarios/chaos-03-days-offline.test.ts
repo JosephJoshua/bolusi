@@ -36,6 +36,7 @@
 // arrived, not that the oracle is blind. Both controls were watched red before this shipped.
 import type { SyncTransportPort } from '@bolusi/core';
 import { FakeClock, mulberry32, randomInt, type Prng } from '@bolusi/test-support';
+import { notesOnly, deviceSeed, dedupeById } from '@bolusi/test-support/chaos';
 import type {
   PullRequest,
   PullResponse,
@@ -64,16 +65,6 @@ const SHARED_POOL = 300;
 /** Fraction of a device's ops authored as edits on the shared pool (the rest own-note creates) —
  *  enough cross-device same-entity contention to make the merge real, low enough to bound re-fold. */
 const EDIT_FRACTION = 0.15;
-
-/** Only notes ops fold into the projection; the per-device genesis enroll op is not folded. */
-function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
-  return ops.filter((op) => op.type.startsWith('notes.'));
-}
-
-/** A per-device authoring PRNG, distinct per (run seed, device index). */
-function deviceSeed(seed: number, index: number): number {
-  return (Math.imul(seed + 1, 0x9e37_79b1) ^ Math.imul(index + 1, 0x85eb_ca77)) >>> 0;
-}
 
 /**
  * Author exactly `count` LOCAL ops on `device`, advancing the FakeClock by ~`stepMs` per op so a
@@ -221,12 +212,6 @@ async function buildWorld(
       await server.close();
     },
   };
-}
-
-function dedupeById(ops: readonly SignedOperation[]): SignedOperation[] {
-  const byId = new Map<string, SignedOperation>();
-  for (const op of ops) if (!byId.has(op.id)) byId.set(op.id, op);
-  return [...byId.values()];
 }
 
 /** A full sync = the REAL push phase then the REAL pull-until-drained phase (transport.ts, T-7). */
