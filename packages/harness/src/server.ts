@@ -306,10 +306,8 @@ export class HarnessServer {
    */
   async listen(options?: { readonly hostname?: string }): Promise<RunningHarnessServer> {
     const hostname = options?.hostname ?? '127.0.0.1';
-    const server = this;
     const { node, info } = await new Promise<{ node: ServerType; info: AddressInfo }>((resolve) => {
-      let node_: ServerType;
-      node_ = serve({ fetch: server.app.fetch, hostname, port: 0 }, (i) =>
+      const node_ = serve({ fetch: this.app.fetch, hostname, port: 0 }, (i) =>
         resolve({ node: node_, info: i }),
       );
     });
@@ -318,7 +316,7 @@ export class HarnessServer {
       url,
       address: info.address,
       port: info.port,
-      server,
+      server: this,
       close: async () => {
         // Drop keep-alive sockets first so `close()` (which waits for idle) resolves promptly instead
         // of hanging the vitest worker on a lingering undici keep-alive connection; then destroy
@@ -329,7 +327,7 @@ export class HarnessServer {
         await new Promise<void>((resolve, reject) => {
           node.close((err) => (err === undefined || err === null ? resolve() : reject(err)));
         });
-        await server.close();
+        await this.close();
       },
     };
   }
