@@ -444,7 +444,16 @@ export function Root({
       const booted = await bootstrapI18n(localeStore);
       setLocale(booted);
       await createNotificationChannels(defaultMuteState());
-      await startLocationWatcher();
+      // Fire-and-forget: the watcher is telemetry (PRD-009 FR-802) and its port is NON-BLOCKING by
+      // contract (ports/location.ts), so its START must never gate the shell. `await`-ing it here made
+      // boot hostage to the location provider: on a device with no/ wedged Google fused provider (the
+      // AOSP CI emulator, a de-Googled or location-off phone) `watchPositionAsync` never resolves and
+      // the app hangs on a white screen forever (task 199). `getBestFix()` already returns `null` until
+      // a fix lands — a late fix stamps the next op, a fix that never arrives is a supported state. The
+      // `.catch` swallows a native rejection (a throwing permission request or a rejecting
+      // `watchPositionAsync`) so a failed start never surfaces as an unhandled rejection; a denied
+      // permission just resolves and takes the port's `if (!granted) return` fast path.
+      void startLocationWatcher().catch(() => {});
 
       // The data layer. Deliberately NOT wrapped in a try/catch that renders the shell anyway: a
       // failure here means the app has no database, and booting the screens over that would be the
