@@ -39,18 +39,18 @@ import {
   DEFAULT_CHAOS07_SEED,
   type Chaos07Net,
   type Chaos07Options,
-  type Chaos07Result,
   type Chaos07Verdict,
 } from '@bolusi/test-support/chaos';
 
-import { describeError, failed, passed, type HarnessGateResult } from '../result.js';
-import { buildConvergenceSeams, type ChaosDbSeams } from './convergence-seams.js';
+import { type HarnessGateResult } from '../result.js';
+import { gateFromChaosVerdict, runChaosNetGate } from './chaos-net-gate.js';
+import { type ChaosDbSeams } from './convergence-seams.js';
 
 /** The gate id this runner reports under — the CHAOS-07 slot in `EMULATOR_CORRECTNESS_GATE_IDS`. */
 export const CHAOS07_GATE_ID = 'CHAOS-07';
 
 /**
- * Map the shared verdict onto a gate result — the ONE place the CHAOS-07 verdict becomes pass/fail, so
+ * Map the shared verdict onto a gate result — delegates to the shared `gateFromChaosVerdict` (task 200) so
  * device and host agree by construction. `ok` is the only branch: a wrong-winner RED, a
  * detected-but-not-surfaced RED, and an INCONCLUSIVE run (dead pull path, or (iii) never surfaced) are ALL
  * `ok: false` in the rig, so all become a RED carrying the verdict's own reason (§2.11 — an inconclusive
@@ -58,42 +58,33 @@ export const CHAOS07_GATE_ID = 'CHAOS-07';
  * number, D12/D20).
  */
 export function gateFromVerdict(verdict: Chaos07Verdict): HarnessGateResult {
-  if (!verdict.ok) return failed(CHAOS07_GATE_ID, verdict.reason);
-  return passed(CHAOS07_GATE_ID, verdict.reason, {
-    deviceCount: verdict.metrics.deviceCount,
-    converged: verdict.metrics.converged,
-    foreignApplied: verdict.metrics.foreignApplied,
-    surfacedOnDevice: verdict.metrics.surfacedOnDevice,
-  });
+  return gateFromChaosVerdict(CHAOS07_GATE_ID, verdict);
 }
 
 /**
  * Run the CHAOS-07 concurrent-edit / edit-after-archive workload over the injected `net` (a real device→
  * host `@bolusi/server` round trip, detection ON) and return a real verdict (§2.11 — never a silent pass).
- * A throw from the run itself — before any verdict exists — becomes a RED naming the crash, never a gap;
- * the run's devices are always torn down in `finally`.
+ * The shared `runChaosNetGate` builds the seams, runs the rig, maps the verdict, turns a pre-verdict throw
+ * into a named RED, and tears the devices down in `finally`.
  */
-export async function runChaos07Gate(
+export function runChaos07Gate(
   dbSeams: ChaosDbSeams,
   net: Chaos07Net,
   options: Chaos07Options = DEFAULT_CHAOS07_OPTIONS,
   seed: number = DEFAULT_CHAOS07_SEED,
 ): Promise<HarnessGateResult> {
-  const seams = buildConvergenceSeams(dbSeams, 'chaos07');
-
-  let result: Chaos07Result;
-  try {
-    result = await runChaos07(seed, options, seams, net);
-  } catch (error) {
-    return failed(
-      CHAOS07_GATE_ID,
-      `CHAOS-07 conflict run threw before producing a verdict — a crash, not a gap (§2.11): ${describeError(error)}`,
-    );
-  }
-
-  try {
-    return gateFromVerdict(evaluateChaos07(result));
-  } finally {
-    await result.close();
-  }
+  return runChaosNetGate(
+    {
+      gateId: CHAOS07_GATE_ID,
+      seamsTag: 'chaos07',
+      crashPhrase: 'conflict run',
+      run: runChaos07,
+      evaluate: evaluateChaos07,
+      gateFromVerdict,
+    },
+    dbSeams,
+    net,
+    options,
+    seed,
+  );
 }
