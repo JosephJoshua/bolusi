@@ -7,11 +7,15 @@ import { describe, expect, test } from 'vitest';
 
 import withHarnessActivity, {
   HARNESS_ACTIVITY_NAME,
+  HARNESS_CLEARTEXT_HOSTS,
   HARNESS_COMPONENT_NAME as PLUGIN_COMPONENT_NAME,
+  HARNESS_NETWORK_SECURITY_CONFIG_RESOURCE,
   HARNESS_RUN_ID_EXTRA as PLUGIN_RUN_ID_EXTRA,
   addHarnessActivityToManifest,
   harnessActivityKotlin,
   harnessBuildEnabled,
+  harnessNetworkSecurityConfigXml,
+  setHarnessNetworkSecurityConfig,
 } from '../plugins/withHarnessActivity.js';
 import { HARNESS_COMPONENT_NAME, HARNESS_RUN_ID_EXTRA } from '../src/harness/contract.js';
 
@@ -60,6 +64,43 @@ describe('withHarnessActivity — manifest mod', () => {
       (a) => a.$['android:name'] === `.${HARNESS_ACTIVITY_NAME}`,
     ).length;
     expect(count).toBe(1);
+  });
+});
+
+describe('withHarnessActivity — cleartext network security config (harness build only)', () => {
+  const xml = harnessNetworkSecurityConfigXml();
+
+  test('permits cleartext ONLY inside a domain-config, never the base-config', () => {
+    // The carve-out lives in <domain-config cleartextTrafficPermitted="true">; the base-config is left to
+    // the platform default (cleartext DENIED on API 28+). If the permit ever migrated to a base-config it
+    // would open the whole harness app to cleartext — assert it never does.
+    expect(xml).toContain('<domain-config cleartextTrafficPermitted="true">');
+    expect(xml).not.toMatch(/<base-config[^>]*cleartextTrafficPermitted="true"/);
+  });
+
+  test('lists EXACTLY the two local test hosts — no third cleartext domain slips in', () => {
+    // Every <domain> in the config, in file order.
+    const domains = [...xml.matchAll(/<domain[^>]*>([^<]+)<\/domain>/g)].map((m) => m[1]);
+    expect(domains).toEqual([...HARNESS_CLEARTEXT_HOSTS]);
+    // The two we depend on are present…
+    expect(domains).toContain('127.0.0.1'); // CHAOS nets via adb reverse
+    expect(domains).toContain('10.0.2.2'); // emulator host alias (EXPO_PUBLIC_API_URL)
+    // …and an arbitrary remote host is NOT — so cleartext to it stays denied by the default base-config.
+    expect(domains).not.toContain('8.8.8.8');
+    expect(xml).not.toContain('example.com');
+  });
+
+  test('the manifest mod points <application> at the harness @xml resource, idempotently', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the fake matches the mod's shape
+    const once = setHarnessNetworkSecurityConfig(fakeManifest() as any);
+    const attr = once.manifest.application?.[0]?.$['android:networkSecurityConfig'];
+    expect(attr).toBe(`@xml/${HARNESS_NETWORK_SECURITY_CONFIG_RESOURCE}`);
+    // A second pass writes the same value, not a duplicate/garbled attribute.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reuse the mutated manifest
+    const twice = setHarnessNetworkSecurityConfig(once as any);
+    expect(twice.manifest.application?.[0]?.$['android:networkSecurityConfig']).toBe(
+      `@xml/${HARNESS_NETWORK_SECURITY_CONFIG_RESOURCE}`,
+    );
   });
 });
 

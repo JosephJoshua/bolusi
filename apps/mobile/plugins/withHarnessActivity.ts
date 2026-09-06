@@ -53,6 +53,18 @@ export function harnessBuildEnabled(): boolean {
 }
 
 /**
+ * The ONLY hosts the harness build may reach over cleartext (HTTP). Both are local test endpoints, never
+ * a real server: `127.0.0.1` is the loopback the CHAOS-03/06/07 net handoff reaches the host `@bolusi/server`
+ * on via `adb reverse` (the driver's per-scenario baseUrls), and `10.0.2.2` is the emulator's alias for the
+ * host loopback that `EXPO_PUBLIC_API_URL` (`http://10.0.2.2:3000`) points the normal sync client at. The
+ * single source for both the generated XML and the plugin test — a drift here silently re-bricks the round trip.
+ */
+export const HARNESS_CLEARTEXT_HOSTS = ['127.0.0.1', '10.0.2.2'] as const;
+
+/** The `res/xml/<name>.xml` resource the harness manifest points `android:networkSecurityConfig` at. */
+export const HARNESS_NETWORK_SECURITY_CONFIG_RESOURCE = 'network_security_config';
+
+/**
  * The `HarnessActivity.kt` source. Mirrors the prebuild-generated `MainActivity.kt` (New Architecture:
  * `ReactActivityDelegateWrapper` + `DefaultReactActivityDelegate`, `BuildConfig.IS_NEW_ARCHITECTURE_ENABLED`)
  * and changes exactly two things: `getMainComponentName()` returns the `BolusiHarness` JS key, and the
@@ -133,6 +145,46 @@ export function addHarnessActivityToManifest(
   return androidManifest;
 }
 
+/**
+ * The `res/xml/network_security_config.xml` body for the harness build. Permits cleartext ONLY to the
+ * local test hosts (HARNESS_CLEARTEXT_HOSTS); every other domain falls through to the platform default
+ * `base-config`, which since API 28 is `cleartextTrafficPermitted="false"` — so this does NOT open the app
+ * to cleartext generally, it carves out exactly the loopback + emulator-host test endpoints. Needed because
+ * an Android release build blocks cleartext by default, so the on-device CHAOS runners' `fetch` to
+ * `http://127.0.0.1:<port>` threw `UnknownServiceException: CLEARTEXT communication … not permitted` and
+ * every net gate crashed before a verdict (emulator run 34026908808). Pure so the exact host set is
+ * unit-asserted (test/harness-activity-plugin.test.ts). Injected ONLY into the flag-gated harness build.
+ */
+export function harnessNetworkSecurityConfigXml(): string {
+  const domains = HARNESS_CLEARTEXT_HOSTS.map(
+    (host) => `    <domain includeSubdomains="false">${host}</domain>`,
+  ).join('\n');
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!-- Harness build only (EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1). Cleartext is permitted ONLY to the local
+     test hosts below; all other domains inherit the platform default base-config (cleartext DENIED on
+     API 28+). Never injected into a production/preview build — see withHarnessActivity. -->
+<network-security-config>
+  <domain-config cleartextTrafficPermitted="true">
+${domains}
+  </domain-config>
+</network-security-config>
+`;
+}
+
+/**
+ * Point `<application android:networkSecurityConfig>` at the harness `@xml/network_security_config` resource,
+ * idempotently. Pure so it is unit-testable against a fake manifest. A sibling of the backup attributes
+ * expo-secure-store sets on the same `<application>` (app.config.ts) — different attribute, no interaction.
+ */
+export function setHarnessNetworkSecurityConfig(
+  androidManifest: AndroidConfig.Manifest.AndroidManifest,
+): AndroidConfig.Manifest.AndroidManifest {
+  const application = AndroidConfig.Manifest.getMainApplicationOrThrow(androidManifest);
+  application.$['android:networkSecurityConfig'] =
+    `@xml/${HARNESS_NETWORK_SECURITY_CONFIG_RESOURCE}`;
+  return androidManifest;
+}
+
 const withHarnessActivity: ConfigPlugin = (config) => {
   if (!harnessBuildEnabled()) return config;
 
@@ -155,8 +207,23 @@ const withHarnessActivity: ConfigPlugin = (config) => {
     },
   ]);
 
+  config = withDangerousMod(config, [
+    'android',
+    async (config) => {
+      const xmlDir = path.join(config.modRequest.platformProjectRoot, 'app/src/main/res/xml');
+      await fs.mkdir(xmlDir, { recursive: true });
+      await fs.writeFile(
+        path.join(xmlDir, `${HARNESS_NETWORK_SECURITY_CONFIG_RESOURCE}.xml`),
+        harnessNetworkSecurityConfigXml(),
+        'utf8',
+      );
+      return config;
+    },
+  ]);
+
   config = withAndroidManifest(config, (config) => {
     config.modResults = addHarnessActivityToManifest(config.modResults);
+    config.modResults = setHarnessNetworkSecurityConfig(config.modResults);
     return config;
   });
 
