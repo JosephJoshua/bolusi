@@ -33,13 +33,7 @@
 // PLATFORM/DOMAIN-FREE (task 181): reaches no `node:` builtin — `noblePort` arrives through the sibling
 // transport.js, the determinism leaves through `../determinism/*`. `chaos-bundle-safe.test.ts` guards it.
 import type { SyncTransportPort } from '@bolusi/core';
-import type {
-  PullRequest,
-  PullResponse,
-  PushRequest,
-  PushResponse,
-  SignedOperation,
-} from '@bolusi/schemas';
+import type { PullRequest, PullResponse, PushRequest, PushResponse } from '@bolusi/schemas';
 
 import { FakeClock } from '../determinism/clock.js';
 import { mulberry32, randomInt, type Prng } from '../determinism/prng.js';
@@ -55,6 +49,7 @@ import {
   pushDevice,
   type FetchLike,
 } from './transport.js';
+import { dedupeById, deviceSeed, notesOnly } from './wire-helpers.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -130,22 +125,6 @@ export interface Chaos03Result {
    *  broken control that dropped nothing, which the host test asserts against). */
   readonly droppedOpId: string | null;
   close(): Promise<void>;
-}
-
-/** A per-device authoring PRNG, distinct per (run seed, device index). Mirrors the Node scenario. */
-function deviceSeed(seed: number, index: number): number {
-  return (Math.imul(seed + 1, 0x9e37_79b1) ^ Math.imul(index + 1, 0x85eb_ca77)) >>> 0;
-}
-
-/** Only notes ops fold into the projection; the per-device genesis enroll op is not folded. */
-function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
-  return ops.filter((op) => op.type.startsWith('notes.'));
-}
-
-function dedupeById(ops: readonly SignedOperation[]): SignedOperation[] {
-  const byId = new Map<string, SignedOperation>();
-  for (const op of ops) if (!byId.has(op.id)) byId.set(op.id, op);
-  return [...byId.values()];
 }
 
 /**

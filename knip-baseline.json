@@ -4,7 +4,7 @@
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
   "denominator": 142,
-  "fileDenominator": 28,
+  "fileDenominator": 29,
   "nonProductionRules": [
     "test-dir",
     "test-file",
@@ -183,6 +183,7 @@
     "packages/test-support/src/chaos/permissions.ts",
     "packages/test-support/src/chaos/seams.ts",
     "packages/test-support/src/chaos/transport.ts",
+    "packages/test-support/src/chaos/wire-helpers.ts",
     "packages/test-support/src/knip-file-canary.ts",
     "packages/test-support/src/ledger.ts",
     "packages/test-support/src/sec-meta.ts"

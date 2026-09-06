@@ -56,6 +56,7 @@ import { mintIdentities } from './identities.js';
 import { notesRows, type NotesRow } from './oracle.js';
 import type { ConvergenceSeams } from './seams.js';
 import { HttpTransport, pullDevice, pushDevice, type FetchLike } from './transport.js';
+import { deviceSeed } from './wire-helpers.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const DEFAULT_PUSH_BATCH = 60; // well under the api/01 §3 cap of 500.
@@ -133,12 +134,6 @@ export interface Chaos07Obs {
 export interface Chaos07Result {
   readonly obs: Chaos07Obs;
   close(): Promise<void>;
-}
-
-/** A per-device authoring PRNG offset (unused for values here — bodies are seed-derived — but keeps each
- *  device's id source distinct, mirroring chaos03/06). */
-function deviceSeed(seed: number, index: number): number {
-  return (Math.imul(seed + 1, 0x9e37_79b1) ^ Math.imul(index + 1, 0x85eb_ca77)) >>> 0;
 }
 
 /** A per-seed-unique body (T-3): a body that survived to a projection NAMES which op won. */

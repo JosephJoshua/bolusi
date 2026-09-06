@@ -21,19 +21,10 @@ import { VirtualDevice } from './device.js';
 import { mintIdentities } from './identities.js';
 import { canonicalFold, notesRows, type NotesRow } from './oracle.js';
 import type { ConvergenceSeams } from './seams.js';
+import { dedupeById, deviceSeed, notesOnly } from './wire-helpers.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const NOTES_CREATED = 'notes.note_created';
-
-/** Only the notes ops matter to the projection; genesis enroll ops are per-device and not folded. */
-function notesOnly(ops: readonly SignedOperation[]): SignedOperation[] {
-  return ops.filter((op) => op.type.startsWith('notes.'));
-}
-
-/** A per-device PRNG seed, distinct per (run seed, device). */
-function deviceSeed(seed: number, index: number): number {
-  return (Math.imul(seed + 1, 0x9e3779b1) ^ Math.imul(index + 1, 0x85ebca77)) >>> 0;
-}
 
 export interface ConvergenceOptions {
   readonly opsPerDevice: number;
@@ -163,12 +154,6 @@ function pickTarget(prng: Prng, ids: readonly string[]): string {
   // re-fold cost (04 §4.2 deletes + re-folds an entity's whole history) — bounded. A recency clump
   // onto a handful of notes made the re-fold quadratic without adding convergence signal.
   return ids[randomInt(prng, 0, ids.length - 1)]!;
-}
-
-function dedupeById(ops: readonly SignedOperation[]): SignedOperation[] {
-  const byId = new Map<string, SignedOperation>();
-  for (const op of ops) if (!byId.has(op.id)) byId.set(op.id, op);
-  return [...byId.values()];
 }
 
 function sortByCanonical(ops: readonly SignedOperation[]): SignedOperation[] {

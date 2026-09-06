@@ -54,6 +54,7 @@ import {
   pushDevice,
   type FetchLike,
 } from './transport.js';
+import { deviceSeed } from './wire-helpers.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const DEFAULT_PUSH_BATCH = 60; // well under the api/01 §3 cap of 500; sized so a device run spans ≥2 batches.
@@ -134,11 +135,6 @@ export interface Chaos06Obs {
 export interface Chaos06Result {
   readonly obs: Chaos06Obs;
   close(): Promise<void>;
-}
-
-/** A per-device authoring PRNG, distinct per (run seed, device index). Mirrors chaos03.ts. */
-function deviceSeed(seed: number, index: number): number {
-  return (Math.imul(seed + 1, 0x9e37_79b1) ^ Math.imul(index + 1, 0x85eb_ca77)) >>> 0;
 }
 
 /** Split `ops` into ≤`size` slices, order-preserving (push batches ascend by per-device seq). */
