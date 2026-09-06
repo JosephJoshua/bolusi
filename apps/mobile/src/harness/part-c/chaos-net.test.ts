@@ -7,7 +7,9 @@
 // round trips live where the server does (packages/harness/scenarios/device-runner-chaos-0{3,6,7}.test.ts).
 //
 // ── FALSIFICATION (§2.11) ──────────────────────────────────────────────────────────────────────────
-// Each guard was watched red before shipping:
+// Each guard below was watched red before shipping — except the `typeof`-primitive half of the top-level
+// guard, which is un-producible-red defense-in-depth (its own bullet flags this). This stays a record of
+// reds, not hypotheses (§2.11 / T-16):
 //   • Drop the `Bearer ` prefix in buildNet (`auth: validated.map((t) => t)`) → the happy-path auth
 //     assertions go red (`['bdt_a',…]` ≠ `['Bearer bdt_a',…]`). Restoring the prefix returns them to green —
 //     a raw token cannot reach the transport as a valid header.
@@ -16,9 +18,11 @@
 //     turns it back into the honest per-scenario null (skip).
 //   • Delete the base-URL presence guard in buildNet → a baseUrl-less scenario builds `baseUrlFetch(undefined)`
 //     instead of nulling; its null-slot case goes red (a net, not null). Restoring it fixes it.
-//   • Delete the top-level `typeof parsed !== 'object'` guard → a JSON-primitive extra reaches the per-scenario
-//     reads on a non-object; the all-null fail-safe still holds by accident but the intent (a broken extra is
-//     EMPTY, not a lookup on a primitive) is lost — kept explicit so the fail-safe is a decision, not luck.
+//   • The top-level `typeof parsed !== 'object' || parsed === null` guard is two halves. Deleting the WHOLE
+//     guard reds the `'null'` case: `JSON null` → `null.chaos03` throws — so the `=== null` half IS watched
+//     red. Deleting ONLY the `typeof` half leaves the suite GREEN — the `'42'` primitive case still nulls every
+//     slot via `buildNet(undefined)` → null — so that half is explicit defense-in-depth with no producible red,
+//     kept so the fail-safe is a decision, not luck (a broken extra is EMPTY, never a lookup on a primitive).
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { HARNESS_CHAOS_NET_EXTRA } from '../contract.js';
