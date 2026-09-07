@@ -46,6 +46,7 @@ import { bootstrapI18n, type LocaleStorePort } from '../i18n.js';
 import { defaultMuteState, type DeviceInfo } from '../screens/settings/model.js';
 import { systemClock } from '../ports/clock.js';
 import { startLocationWatcher } from '../ports/location.js';
+import { useLatestCallback } from '../hooks/useLatestCallback.js';
 import type { Locale } from '@bolusi/i18n';
 
 import type { Bootstrapped } from './bootstrap.js';
@@ -341,6 +342,16 @@ export function Root({
   const sessionRef = useRef<AppSession | null>(null);
   const sessionUnsubRef = useRef<(() => void) | null>(null);
 
+  /**
+   * A `[]`-stable identity for `readDeviceInfo`. In production `index.ts` calls `Root({...})` as a
+   * function and rebuilds this arrow on every render, so threading the raw prop into the boot effect's
+   * deps below re-fires the effect on unrelated renders — each `setState` here rebuilds the arrow,
+   * disposes the in-flight boot before it commits `deviceInfo`, and the `deviceInfo === null` gate
+   * blanks the tree forever (task 201). The wrapper dispatches to the latest prop, so the effect keys
+   * on a value that never churns. `test/live-shell-boot-once.test.tsx` guards it.
+   */
+  const readDeviceInfoStable = useLatestCallback(readDeviceInfo);
+
   useEffect(() => {
     let disposed = false;
 
@@ -481,7 +492,7 @@ export function Root({
         `session-open: [${via}] session settled — starting deviceInfo/sync/media`,
       );
       try {
-        const info = await readDeviceInfo(booted);
+        const info = await readDeviceInfoStable(booted);
         if (!disposed) setDeviceInfo(info);
         consoleDiagnostics.warn(`session-open: [${via}] readDeviceInfo done`);
         await startSyncIfEnrolled(booted, enroll);
@@ -589,7 +600,7 @@ export function Root({
     createEnrollment,
     createMedia,
     createSession,
-    readDeviceInfo,
+    readDeviceInfoStable,
     createPushRegistration,
   ]);
 
