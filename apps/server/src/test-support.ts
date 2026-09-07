@@ -38,3 +38,17 @@ export {
   type TokenStore,
   type VerifyToken,
 } from './middleware/auth.js';
+
+// v0 provisioning (api/02-auth §2; 01-domain-model §3.1) — the REAL `provisionTenant` CLI code path,
+// re-exported so the boundary-legal `@bolusi/harness` (the only workspace that may value-import
+// `@bolusi/server`) can stand up a genuine tenant + main-owner over PGlite for the emulator
+// enrollment lane (task 201). NOT a bypass: it is the exact single transaction production
+// provisioning runs — same argon2id password verifier, same roles/grants, same forTenant injection.
+export {
+  provisionTenant,
+  defaultProvisionDeps,
+  OwnerLoginExistsError,
+  type ProvisionOpts,
+  type ProvisionDeps,
+  type ProvisionResult,
+} from './cli/provision-tenant.js';
