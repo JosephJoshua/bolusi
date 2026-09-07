@@ -43,34 +43,29 @@ export interface ClientDiagnostics {
  * `console.warn` to logcat (proven empirically: android-emulator lane run 34153987393 captured ZERO
  * `[bolusi]` lines while the a061555 session-open instrumentation was live), so those boundary logs
  * were invisible on device. Every diagnostic is ALSO mirrored to Android logcat via the `HarnessNative`
- * local Expo module's `logResult(tag, …)` → `android.util.Log.i`, the one channel that survives release
- * (the same one `src/harness/emit.ts` relies on). Maestro's `device-logcat.txt` is unfiltered, so a
- * line tagged `BOLUSI_DIAG` is captured in the run's artifact.
+ * local Expo module (`android.util.Log.i`), the one channel that survives release — the same one
+ * `src/harness/emit.ts` relies on. Maestro's `device-logcat.txt` is unfiltered, so a `BOLUSI_DIAG` line
+ * is captured in the run's artifact.
  *
- * `expo` is imported DYNAMICALLY, never statically: this file is in the Node import graph of dozens of
- * un-mocking tests (i18n, runtime, session, notes), and `expo`'s entry runs `async-require/setup` which
- * reads the Metro-only `__DEV__` global → `ReferenceError: __DEV__ is not defined` at collection. A
- * `import('expo')` keeps the static graph clean; on device it resolves to the real module, in Node it
- * rejects and the `.catch` keeps `console.warn` the sole sink. The mirror is fire-and-forget, but every
- * session-open log is immediately followed by an awaited DB op, so the microtask flushes the native
- * `Log.i` before the chain proceeds or hangs — order is preserved for the hang-branch diagnosis.
+ * WHY A SETTABLE SINK, not a call into a native module HERE. This file is in the Node import graph of
+ * dozens of un-mocking tests (i18n, runtime, session, notes); `expo`'s entry runs `async-require/setup`
+ * which reads the Metro-only `__DEV__` global → `ReferenceError: __DEV__ is not defined` at COLLECTION.
+ * The previous attempt used a dynamic `import('expo').…catch(() => {})`, which kept the static graph
+ * clean but produced ZERO device output (lane run 34158006328) AND hid its own failure behind the silent
+ * `.catch` — the exact §2.11 anti-pattern (a diagnostic whose failure is invisible cannot be told apart
+ * from "the code never ran"). So the expo import now lives in the device-only `src/harness/native-diag.ts`
+ * (which no Node test imports) and is INJECTED here by the app entry (`index.ts`) via
+ * `setNativeDiagnosticsMirror`. Node never reaches expo; device gets `emit.ts`'s proven static path.
  * Reverted together with the a061555 instrumentation once the failing branch is identified.
  */
-interface HarnessNativeLog {
-  logResult(tag: string, message: string): number;
-}
+let nativeMirror: ((line: string) => void) | null = null;
 
-const DIAG_LOGCAT_TAG = 'BOLUSI_DIAG';
-
-function mirrorToLogcat(message: string, meta?: Record<string, unknown>): void {
-  const line = meta === undefined ? message : `${message} ${JSON.stringify(meta)}`;
-  void import('expo')
-    .then(({ requireNativeModule }) =>
-      requireNativeModule<HarnessNativeLog>('HarnessNative').logResult(DIAG_LOGCAT_TAG, line),
-    )
-    .catch(() => {
-      // No native module here (Node, RNW, or an un-autolinked build) — console.warn above is the sink.
-    });
+/**
+ * Inject the device-only native logcat sink. Called once, at app boot, from `index.ts` — the one entry
+ * no Node test imports. Left `null` everywhere else (tests, RNW), so `warn` stays a pure `console.warn`.
+ */
+export function setNativeDiagnosticsMirror(mirror: ((line: string) => void) | null): void {
+  nativeMirror = mirror;
 }
 
 /** The v0 sink: a structured `console.warn`, mirrored to native logcat on device (see note above). */
@@ -81,7 +76,7 @@ export const consoleDiagnostics: ClientDiagnostics = {
     } else {
       console.warn(`[bolusi] ${message}`, meta);
     }
-    mirrorToLogcat(message, meta);
+    nativeMirror?.(meta === undefined ? message : `${message} ${JSON.stringify(meta)}`);
   },
 };
 

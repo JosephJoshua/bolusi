@@ -34,7 +34,10 @@ import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
 import { deviceColumnAead } from './src/ports/aead.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
-import { consoleDiagnostics } from './src/ports/diagnostics.js';
+import { consoleDiagnostics, setNativeDiagnosticsMirror } from './src/ports/diagnostics.js';
+// TEMPORARY (task 201 switcher-hang diagnosis) — the device-only native logcat sink. Imported ONLY here,
+// so its static `import 'expo'` never enters a Node test graph. Reverted with a061555/65819f9.
+import { nativeDiag } from './src/harness/native-diag.js';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
 import { SecureStoreKeyStore } from './src/ports/keystore.js';
 import { fileLocaleStore } from './src/ports/locale-store.js';
@@ -441,5 +444,18 @@ function Bootstrapped(): React.JSX.Element | null {
       }),
   });
 }
+
+// ── TEMPORARY (task 201 switcher-hang diagnosis) ─────────────────────────────────────────────────
+// Wire consoleDiagnostics' native mirror BEFORE the root mounts, so the a061555 session-open boundary
+// logs reach Maestro's device-logcat.txt on the release APK. The two beacons are POSITIVE CONTROLS run
+// unconditionally at boot: the first proves a JS-originated native tag reaches the run's capture at all
+// (isolating "channel dead" from "code path not reached"), the second drives the SAME wired path every
+// session-open log takes (`consoleDiagnostics.warn` → nativeMirror → nativeDiag). If neither appears in
+// the next run's artifact, the native→capture path itself is broken and the fix pivots to a file sink;
+// if both appear but no `session-open:` line follows, the boot chain never reached `startSessionIfEnrolled`.
+// Reverted together with the a061555 instrumentation once the failing branch is identified.
+setNativeDiagnosticsMirror(nativeDiag);
+nativeDiag('session-open: [beacon] index eval — direct native');
+consoleDiagnostics.warn('session-open: [beacon] index eval — wired sink');
 
 registerRootComponent(Bootstrapped);
