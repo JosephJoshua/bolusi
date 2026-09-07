@@ -55,10 +55,14 @@ async function main() {
   // clean shutdown on request is success, not a fault.
   let running;
   let closing = false;
+  // Assigned once the server is up (the access-log drain below); a no-op until then, so a SIGTERM during
+  // boot is safe. shutdown() flushes the tail first so the last request's record is never lost.
+  let flushAccess = () => {};
   const shutdown = async () => {
     if (closing) return;
     closing = true;
     try {
+      flushAccess();
       await running?.close();
     } finally {
       process.exit(0);
@@ -88,6 +92,26 @@ async function main() {
       credentials,
     }),
   );
+
+  // TASK 201 subtask (e) DIAGNOSTIC (systematic-debugging Phase 1.4 — instrument the boundary, do not
+  // fix). The 01-launch-enrollment flow reds at `enroll-step-done` showing the `offline` banner, which
+  // classifyFailure (apps/mobile screens/enrollment/model.ts) renders for ANY status-less throw inside
+  // runEnrollment. The single discriminator between the two live hypotheses is whether `POST
+  // /v1/devices/enroll` reached the server: login-logged-but-no-enroll ⇒ a PRE-POST throw (the on-device
+  // UNSEEDED ed25519 keygen — the one enroll step no harness gate exercises); enroll-201-logged ⇒ a
+  // POST-POST applyBundle/genesis divergence. Drain the PRODUCTION access-log records the server ALREADY
+  // captures (apps/server middleware/access-log.ts: method/path/status/requestId/deviceId ONLY — never
+  // the Authorization header, the OTP body, or a minted token; SEC-SECRET-01), which harness-lane-e2e.mjs
+  // pipes into the CI job log. Diagnostic only — no production behavior changes; remove once the seam is
+  // pinned.
+  const accessLogs = running.server.accessLogs;
+  let flushed = 0;
+  flushAccess = () => {
+    for (; flushed < accessLogs.length; flushed += 1) {
+      console.log(`LANE_ACCESS ${accessLogs[flushed]}`);
+    }
+  };
+  setInterval(flushAccess, 250).unref();
 
   // Do NOT exit here: the open socket keeps the event loop alive so the emulator can reach the host for
   // the whole Maestro run. The process ends ONLY via `shutdown()` above.
