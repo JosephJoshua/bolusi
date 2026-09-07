@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { parseLaneReady, type LaneReady } from '../src/serve-lane.js';
+import { awaitLaneReadyMarker, type LaneReady } from '../src/serve-lane.js';
 
 // packages/harness/test/ → repo root is three levels up; the entry is a root-level script.
 const ENTRY = fileURLToPath(new URL('../../../scripts/harness-serve-lane.mjs', import.meta.url));
@@ -27,15 +27,6 @@ const ENTRY = fileURLToPath(new URL('../../../scripts/harness-serve-lane.mjs', i
 // PGlite boot + migrations + argon2id provisioning is a few seconds; 120s is the same generous headroom the
 // chaos net-child host test uses so a slow CI host never flakes this.
 const BOOT_TIMEOUT = 120_000;
-
-/** First stdout line that parses as a ready marker, or undefined if none has arrived yet. */
-function findMarker(stdout: string): LaneReady | undefined {
-  for (const line of stdout.split('\n')) {
-    const parsed = parseLaneReady(line);
-    if (parsed !== undefined) return parsed;
-  }
-  return undefined;
-}
 
 async function httpLogin(
   url: string,
@@ -65,37 +56,15 @@ describe('task 201-B: the harness-serve-lane child entry (real host boot)', () =
       child = spawn(process.execPath, [ENTRY, '--port', '0'], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      let stdout = '';
-      let stderr = '';
-      child.stdout?.on('data', (chunk) => {
-        stdout += String(chunk);
-      });
-      child.stderr?.on('data', (chunk) => {
-        stderr += String(chunk);
-      });
-
       const spawned = child;
-      const ready = await new Promise<LaneReady | undefined>((resolve) => {
-        const deadline = Date.now() + BOOT_TIMEOUT;
-        let settled = false;
-        const finish = (value: LaneReady | undefined): void => {
-          if (settled) return;
-          settled = true;
-          clearInterval(timer);
-          resolve(value);
-        };
-        // A child that dies BEFORE the marker is a failure, not a wait — resolve with whatever it printed.
-        spawned.once('exit', () => finish(findMarker(stdout)));
-        const timer = setInterval(() => {
-          const parsed = findMarker(stdout);
-          if (parsed !== undefined) finish(parsed);
-          else if (Date.now() >= deadline) finish(undefined);
-        }, 200);
-      });
+
+      // The SAME wait the lane driver uses (§2.8): poll stdout for the marker, settle early if the child
+      // dies first. A child that exits before the marker resolves ready=undefined with its stderr captured.
+      const outcome = await awaitLaneReadyMarker(spawned, { timeoutMs: BOOT_TIMEOUT });
 
       // No marker ⇒ the child never booted/bound/provisioned. Surface its stderr so a boot failure is legible.
-      expect(ready, `no ready marker; child stderr:\n${stderr}`).toBeDefined();
-      const marker = ready as LaneReady;
+      expect(outcome.ready, `no ready marker; child stderr:\n${outcome.stderr}`).toBeDefined();
+      const marker = outcome.ready as LaneReady;
 
       // §2.5 over a real socket: the token-minting server bound loopback, never the LAN.
       expect(marker.address).toBe('127.0.0.1');

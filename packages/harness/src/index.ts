@@ -63,14 +63,18 @@ export {
 } from './harness-provision.js';
 export {
   assertLaneLoopbackBind,
+  awaitLaneReadyMarker,
+  findLaneReadyMarker,
   formatLaneReady,
   LANE_LOOPBACK,
   LANE_PORT,
   LANE_READY_MARKER,
   parseLaneReady,
   provisionLaneOwner,
+  type AwaitLaneReadyOptions,
   type LaneCredentials,
   type LaneReady,
+  type LaneReadyOutcome,
 } from './serve-lane.js';
 export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './net-server.js';
 // A tenant's system actor + device — HOST-ONLY setup the chaos-net child seeds so CHAOS-07's real

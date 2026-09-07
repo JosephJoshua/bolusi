@@ -9,6 +9,9 @@
 //   • the ready marker — `parseLaneReady(formatLaneReady(x))` round-trips byte-for-byte, tolerates the
 //     surrounding whitespace a `console.log` line carries, and rejects a non-marker line. This is the
 //     format↔parse agreement the lane driver depends on to read the bound port + credentials.
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
+
 import {
   bytesToBase64,
   createUuidV7Generator,
@@ -21,6 +24,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { HarnessServer } from '../src/server.js';
 import {
   assertLaneLoopbackBind,
+  awaitLaneReadyMarker,
   formatLaneReady,
   LANE_LOOPBACK,
   parseLaneReady,
@@ -162,9 +166,85 @@ describe('task 201-B: assertLaneLoopbackBind fails closed off loopback', () => {
   test('refuses the wildcard, a LAN address, the emulator alias, IPv6 loopback, and an empty host', () => {
     // Each of these is a bind a token-minting server must NEVER accept: `0.0.0.0` exposes it on every
     // interface; `192.168.*` / `10.0.2.2` are LAN-reachable (10.0.2.2 is how the GUEST reaches the host,
-    // never a host bind); `::1` is off the IPv4 `adb reverse` path; `''` is a malformed address.
+    // never a host bind); `::1` is IPv6 loopback — the `10.0.2.2` NAT alias lands on the host's IPv4
+    // `127.0.0.1`, so a `::1` bind is unreachable from the guest; `''` is a malformed address.
     for (const address of ['0.0.0.0', '192.168.1.5', '10.0.2.2', '::', '::1', 'localhost', '']) {
       expect(() => assertLaneLoopbackBind(address), address).toThrow(/non-loopback bind/);
     }
+  });
+});
+
+// A ChildProcess stand-in: the three event surfaces awaitLaneReadyMarker touches (proc `exit`, `stdout`
+// `data`, `stderr` `data`), driven synchronously so the poll/exit/timeout branches are unit-exercised
+// WITHOUT spawning a real Node child (that real-boot proof is serve-lane-child.test.ts). EventEmitter
+// supplies on/off/once/emit, exactly the methods the helper calls.
+function makeFakeChild(): {
+  readonly child: ChildProcess;
+  readonly stdout: EventEmitter;
+  readonly stderr: EventEmitter;
+  readonly exit: (code: number) => void;
+} {
+  const proc = new EventEmitter();
+  const stdout = new EventEmitter();
+  const stderr = new EventEmitter();
+  Object.assign(proc, { stdout, stderr });
+  return {
+    child: proc as unknown as ChildProcess,
+    stdout,
+    stderr,
+    exit: (code) => proc.emit('exit', code),
+  };
+}
+
+describe('task 201-B: awaitLaneReadyMarker settles on marker, early exit, and timeout', () => {
+  const sample: LaneReady = {
+    url: 'http://127.0.0.1:3000',
+    address: '127.0.0.1',
+    port: 3000,
+    credentials: {
+      ownerLogin: 'gudang-selatan',
+      oneTimePassword: 'harness-otp-password-201b',
+      pin: '314159',
+      tenantId: '0a111111-1111-7111-8111-111111111111',
+      storeId: '0b222222-2222-7222-8222-222222222222',
+      ownerUserId: '0c333333-3333-7333-8333-333333333333',
+    } satisfies LaneCredentials,
+  };
+
+  test('resolves the parsed marker once it appears in stdout (poll branch)', async () => {
+    const fake = makeFakeChild();
+    const pending = awaitLaneReadyMarker(fake.child, { timeoutMs: 2_000, pollMs: 5 });
+    // The marker arrives amid other log lines; the poll must still find it.
+    fake.stdout.emit('data', 'server booting...\n');
+    fake.stdout.emit('data', `${formatLaneReady(sample)}\n`);
+    const outcome = await pending;
+    expect(outcome.ready).toEqual(sample);
+  });
+
+  test('resolves ready=undefined and captures stderr when the child exits before the marker', async () => {
+    const fake = makeFakeChild();
+    // Large pollMs so the exit branch — not the poll — is what settles this.
+    const pending = awaitLaneReadyMarker(fake.child, { timeoutMs: 20_000, pollMs: 10_000 });
+    fake.stderr.emit('data', 'harness-serve-lane: boot failed — provision threw\n');
+    fake.exit(1);
+    const outcome = await pending;
+    expect(outcome.ready).toBeUndefined();
+    expect(outcome.stderr).toContain('boot failed');
+  });
+
+  test('the exit branch still finds a marker already printed before the child died', async () => {
+    const fake = makeFakeChild();
+    const pending = awaitLaneReadyMarker(fake.child, { timeoutMs: 20_000, pollMs: 10_000 });
+    // Marker printed, THEN the process exits before the (10s) poll tick — exit must settle with the marker.
+    fake.stdout.emit('data', `${formatLaneReady(sample)}\n`);
+    fake.exit(0);
+    const outcome = await pending;
+    expect(outcome.ready).toEqual(sample);
+  });
+
+  test('resolves ready=undefined when the deadline elapses with no marker and no exit', async () => {
+    const fake = makeFakeChild();
+    const outcome = await awaitLaneReadyMarker(fake.child, { timeoutMs: 30, pollMs: 10 });
+    expect(outcome.ready).toBeUndefined();
   });
 });

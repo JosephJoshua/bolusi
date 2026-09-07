@@ -5,11 +5,12 @@
 //
 // On boot it: (1) stands the production-auth server up on host loopback (`127.0.0.1`, fixed LANE_PORT by
 // default, `--port 0` for an ephemeral port in tests), asserting the bind is loopback (§2.5: this server
-// mints REAL control-session + device tokens, so it MUST NOT listen on the LAN — the emulator reaches it
-// via `10.0.2.2` + `adb reverse`, so loopback is both sufficient and safe); (2) provisions the lane owner
-// (deterministic LANE_OTP) and seeds the owner's LANE_PIN verifier (real argon2id) so the enroll bundle
-// carries it; (3) prints ONE ready-marker line the driver waits on before `adb reverse` + `maestro`. Then
-// it stays alive on the open socket until SIGTERM/SIGINT, tearing the socket + PGlite down cleanly.
+// mints REAL control-session + device tokens, so it MUST NOT listen on the LAN — the guest reaches it via
+// the `10.0.2.2` NAT alias, the emulator's alias for the host's IPv4 `127.0.0.1`, so loopback is both
+// sufficient and safe; no `adb reverse`); (2) provisions the lane owner (deterministic LANE_OTP) and seeds
+// the owner's LANE_PIN verifier (real argon2id) so the enroll bundle carries it; (3) prints ONE ready-marker
+// line the driver waits on before it runs `maestro`. Then it stays alive on the open socket until
+// SIGTERM/SIGINT, tearing the socket + PGlite down cleanly.
 //
 // RESOLUTION (why imports are relative `dist/`, not `@bolusi/harness`): the repo-root `node_modules`
 // carries NO `@bolusi/*` workspace link, so a bare specifier would not resolve for a root-level script.

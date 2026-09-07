@@ -2,8 +2,9 @@
 // `pglite-production-auth.test.ts`): `HarnessServer.boot({ productionAuth: true })` +
 // `listen()` stands the REAL `@bolusi/server` on a REAL loopback TCP socket with the DB-backed auth
 // path ENGAGED, and a REAL login → device enroll succeeds OVER HTTP (not in-process `app.request`).
-// This is the emulator-faithful shape: the lane reaches this exact socket via `10.0.2.2` + `adb
-// reverse`, so proving login→enroll over `fetch(running.url)` here is the local stand-in for the lane.
+// This is the emulator-faithful shape: the guest reaches this exact socket via the `10.0.2.2` NAT alias
+// (the emulator's alias for the host's IPv4 `127.0.0.1` — no `adb reverse`), so proving login→enroll over
+// `fetch(running.url)` here is the local stand-in for the lane.
 //
 // WHAT MAKES 201 GREEN VS RED (the load-bearing assertion). Enroll presents the `bcs_` control session
 // from login as its Bearer; the server resolves it via `findControlSessionByTokenHash` (a D14 definer)
@@ -128,7 +129,8 @@ describe('task 201-B: a productionAuth server refuses a non-loopback bind (close
     server = await HarnessServer.boot({ productionAuth: true });
     // Each is a bind a token-minting server must NEVER accept: `0.0.0.0` exposes every interface;
     // `192.168.*` / `10.0.2.2` are network-reachable (10.0.2.2 is how the emulator GUEST reaches the
-    // host, never a host bind); `::1` / `localhost` are off the IPv4 `adb reverse` path this lane needs.
+    // host, never a host bind); `::1` / `localhost` resolve off the IPv4 `127.0.0.1` the `10.0.2.2` NAT
+    // alias lands on, so the guest could not reach them anyway.
     for (const hostname of ['0.0.0.0', '192.168.1.5', '10.0.2.2', '::1', 'localhost']) {
       await expect(server.listen({ hostname }), hostname).rejects.toThrow(/non-loopback bind/);
     }
