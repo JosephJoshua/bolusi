@@ -108,3 +108,29 @@ describe('task 201-B: HarnessServer.boot({ productionAuth }) serves real auth ov
     expect(res.status).toBe(401);
   });
 });
+
+// §2.5 / §2.11: the loopback-only bind is THE control of this token-minting surface, and it is CLOSED BY
+// CONSTRUCTION — enforced at the bind site in `listen()` whenever the server booted `productionAuth`, not
+// left to the `.mjs` caller-check (a comment until now). This proves the REJECT branch directly: a real
+// productionAuth server refuses a non-loopback `hostname` and opens no socket, so no future caller can
+// talk this surface onto the LAN. (Falsified: removing the `listen()` guard makes `0.0.0.0` bind and
+// resolve, flipping this red.)
+describe('task 201-B: a productionAuth server refuses a non-loopback bind (closed by construction)', () => {
+  let server: HarnessServer | undefined;
+  afterEach(async () => {
+    // Each `listen()` below throws before opening a socket, so there is no RunningHarnessServer to close;
+    // tear the booted PGlite handle down directly so a refused bind never leaks the DB.
+    await server?.close();
+    server = undefined;
+  });
+
+  test('listen({ hostname }) refuses every non-loopback host and opens no socket', async () => {
+    server = await HarnessServer.boot({ productionAuth: true });
+    // Each is a bind a token-minting server must NEVER accept: `0.0.0.0` exposes every interface;
+    // `192.168.*` / `10.0.2.2` are network-reachable (10.0.2.2 is how the emulator GUEST reaches the
+    // host, never a host bind); `::1` / `localhost` are off the IPv4 `adb reverse` path this lane needs.
+    for (const hostname of ['0.0.0.0', '192.168.1.5', '10.0.2.2', '::1', 'localhost']) {
+      await expect(server.listen({ hostname }), hostname).rejects.toThrow(/non-loopback bind/);
+    }
+  });
+});

@@ -23,6 +23,7 @@ import { FakeClock } from '@bolusi/test-support';
 import type { DeviceIdentity } from './device.js';
 import type { FetchLike } from './fault-fetch.js';
 import { createPgliteAuthDirectory } from './production-auth.js';
+import { assertLaneLoopbackBind } from './serve-lane.js';
 
 const SERVER_CLOCK_BASE = 1_726_100_000_000;
 const CREATED_AT = 1_726_000_000_000n;
@@ -139,6 +140,13 @@ export class HarnessServer {
      * and one protocol (T-7), reached two ways.
      */
     private readonly app: ReturnType<typeof createApp>,
+    /**
+     * Whether this server booted the §2.5 production-auth path (it mints REAL control-session + device
+     * tokens, not just test `bdt_harness_*` bearers). When true, {@link listen} refuses any non-loopback
+     * bind BY CONSTRUCTION — the token-minting surface cannot be talked onto the LAN by a caller that
+     * forgets the guard (§2.11: a guard belongs at the bind site, not in a comment or a caller check).
+     */
+    private readonly productionAuth: boolean,
   ) {}
 
   /**
@@ -262,6 +270,7 @@ export class HarnessServer {
       tokens,
       authStore,
       app,
+      productionAuth,
     );
     (server as { accessLogs: string[] }).accessLogs = accessLogs;
     return server;
@@ -345,7 +354,10 @@ export class HarnessServer {
    *
    * Binds host LOOPBACK ONLY (`127.0.0.1`) by default: this server mints valid `bdt_harness_*` bearer
    * tokens (and, under `productionAuth`, REAL control-session + device tokens), so it MUST NOT listen
-   * on the LAN (§2.5). The Android emulator still reaches it — `10.0.2.2` aliases the host loopback,
+   * on the LAN (§2.5). Under `productionAuth` this is CLOSED BY CONSTRUCTION, not merely defaulted: a
+   * non-loopback `hostname` is refused here at the bind site ({@link assertLaneLoopbackBind}) BEFORE the
+   * socket opens, so the token-minting surface cannot be talked onto the LAN by a caller that forgets
+   * the guard (§2.11). The Android emulator still reaches it — `10.0.2.2` aliases the host loopback,
    * and `adb reverse tcp:P tcp:P` maps device `127.0.0.1:P` to the host — so loopback is both
    * sufficient and safe. `port` defaults to `0` ⇒ an ephemeral port, so parallel test servers never
    * collide; the emulator lane passes a FIXED port (`3000`, matching the APK's `EXPO_PUBLIC_API_URL`).
@@ -356,6 +368,15 @@ export class HarnessServer {
   }): Promise<RunningHarnessServer> {
     const hostname = options?.hostname ?? '127.0.0.1';
     const port = options?.port ?? 0;
+    // §2.5 closed-by-construction: a production-auth server mints REAL control-session + device tokens,
+    // so refuse any non-loopback bind HERE, at the bind site, before the socket opens — no caller
+    // (present or future) can open this token-minting surface to the LAN. Same pure, unit-falsifiable
+    // predicate the serve entry uses (§2.8 one source): it accepts only `127.0.0.1` (not `::1`/`localhost`,
+    // which are off the IPv4 `adb reverse` path this lane requires). Non-productionAuth binds are
+    // unaffected — they still default to loopback but keep the CHAOS runners' existing flexibility.
+    if (this.productionAuth) {
+      assertLaneLoopbackBind(hostname);
+    }
     const { node, info } = await new Promise<{ node: ServerType; info: AddressInfo }>((resolve) => {
       const node_ = serve({ fetch: this.app.fetch, hostname, port }, (i) =>
         resolve({ node: node_, info: i }),
