@@ -91,11 +91,12 @@ describe('noblePort — Ed25519 interop vectors (RFC 8032 §7.1)', () => {
 
   // Unseeded keygen (no argument) is the CryptoPort branch enrollment uses to mint a device's identity
   // key (packages/core/src/auth/enrollment.ts). It has no KAT vector — the output is random — so these
-  // pin the CONTRACT both port bindings must uphold: the mobile quick-crypto binding now derives an
-  // unseeded key via the raw-seed handle over randomBytes(32) (apps/mobile/src/ports/crypto.ts), and
-  // its on-device leg is proven end-to-end by the emulator enrollment lane. A binding that returned a
-  // constant, an aliased, or a wrong-length key would pass every seeded vector above yet brick device
-  // identity; that is exactly what goes untested without these.
+  // pin the CONTRACT both port bindings must uphold: the mobile quick-crypto binding derives an unseeded
+  // key by DER-framing `randomBytes(32)` as a PKCS8 private key (apps/mobile/src/ports/crypto.ts —
+  // NOT the raw-seed handle, which is broken on the Android build; that is exactly why the DER path
+  // exists), and its on-device leg is proven end-to-end by the emulator enrollment lane. A binding that
+  // returned a constant, an aliased, or a wrong-length key would pass every seeded vector above yet brick
+  // device identity; that is exactly what goes untested without these.
   it('mints a distinct keypair on each unseeded call', () => {
     const a = noblePort.ed25519Keygen();
     const b = noblePort.ed25519Keygen();
@@ -105,8 +106,8 @@ describe('noblePort — Ed25519 interop vectors (RFC 8032 §7.1)', () => {
 
   it('yields a valid, self-consistent 32-byte-seed keypair when unseeded', () => {
     const { secretKey, publicKey } = noblePort.ed25519Keygen();
-    // RFC 8032: the secret IS a 32-byte seed, and the raw-seed handle the mobile fix derives through
-    // requires exactly that length.
+    // RFC 8032: the secret IS a 32-byte seed, and the DER framing the mobile fix derives through (a
+    // fixed 16-byte PKCS8 prefix + the 32 seed bytes) requires exactly that length.
     expect(secretKey).toHaveLength(32);
     // The public half must be the one derived from the secret (not a stale/mismatched pair)...
     expect(bytesToHex(noblePort.ed25519GetPublicKey(secretKey))).toBe(bytesToHex(publicKey));
