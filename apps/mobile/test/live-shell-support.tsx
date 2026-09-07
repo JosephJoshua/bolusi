@@ -566,6 +566,9 @@ export async function mountRoot(
     controller: {
       login: () => Promise.reject(new Error('login not used by this test')),
       enroll: () => Promise.reject(new Error('enroll not used by this test')),
+      finish: () => {
+        throw new Error('finish not used by this test');
+      },
     },
     evaluator: runtime.evaluator as PermissionEvaluator,
     runtime,

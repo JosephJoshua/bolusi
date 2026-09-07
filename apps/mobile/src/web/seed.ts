@@ -197,6 +197,9 @@ export function fakeEnrollmentController(): EnrollmentController {
   return {
     login: () => Promise.resolve(DEMO_LOGIN),
     enroll: () => Promise.resolve(),
+    // The demo never hands off to a real sync loop (it has no `onEnrolled` to fire) — Continue is a
+    // no-op here, matching "resolves against the demo rather than hitting a server".
+    finish: () => undefined,
   };
 }
 

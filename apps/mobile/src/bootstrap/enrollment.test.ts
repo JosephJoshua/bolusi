@@ -252,8 +252,10 @@ test('login returns the LoginResult the wizard renders, including the tenant nam
 test('enroll appends a signed genesis at seq 1, persists the device identity, and signals onEnrolled', async () => {
   const { platform, enrollBodies } = platformFor();
   let enrolledWith: string | null = null;
-  const { controller } = createAppEnrollment(app, platform, (deviceId) => {
+  let enrolledOwner: string | null = null;
+  const { controller } = createAppEnrollment(app, platform, (deviceId, ownerUserId) => {
     enrolledWith = deviceId;
+    enrolledOwner = ownerUserId;
   });
 
   await controller.enroll({ login: loginResult(), storeId: STORE_ID, deviceName: 'Kasir 1' });
@@ -261,7 +263,10 @@ test('enroll appends a signed genesis at seq 1, persists the device identity, an
   // The device is enrolled: `meta_kv` holds the id (task 88) — the boot signal that gates the loop.
   const deviceId = await readDeviceId(app.db.db);
   expect(deviceId).not.toBeNull();
-  expect(enrolledWith).toBe(deviceId); // onEnrolled fired AFTER the persist, with the real id
+  // `enroll` REGISTERS and persists but does NOT hand off: `onEnrolled` is deferred to the done-step
+  // `finish()` so the wizard renders its success step (design-system §8.5 step 3) before Root flips the
+  // zone to the switcher. Firing it inside `enroll` is what unmounted `enroll-step-done` on device (201).
+  expect(enrolledWith).toBeNull();
   expect(await readStoreId(app.db.db)).toBe(STORE_ID); // from the enroll RESPONSE (§7.4 binding)
 
   // The genesis op: seq 1, chained from 64 zeros, entityId = the device's own id (05 §9.5).
@@ -286,6 +291,12 @@ test('enroll appends a signed genesis at seq 1, persists the device identity, an
   // The directory was written BEFORE the genesis (§4.1 step 4) — the owner is switcher-visible.
   const users = await app.db.db.selectFrom('usersDirectory').select(['id', 'name']).execute();
   expect(users).toEqual([{ id: OWNER_ID, name: 'Ocep' }]);
+
+  // The owner taps Continue on the done step (`controller.finish()`) → NOW the handoff fires, with the
+  // real device id and the owner as the acting user Root registers the push token for (api/04-push §2 (b)).
+  controller.finish();
+  expect(enrolledWith).toBe(deviceId);
+  expect(enrolledOwner).toBe(OWNER_ID);
 });
 
 test('enroll persists the device/store/tenant NAMES → readDeviceInfo surfaces the real identity (task 94)', async () => {
@@ -367,6 +378,8 @@ test('RESUME after crash-before-genesis: a FRESH keystore reloads the seed and c
 
   // The SAME device id from the draft is now enrolled — no fresh keypair, no double-register (§4.3).
   expect(await readDeviceId(app.db.db)).toBe(draftDeviceId);
+  expect(enrolledWith).toBeNull(); // the handoff is deferred to the done-step finish() (task 201)
+  controller.finish();
   expect(enrolledWith).toBe(draftDeviceId);
 
   // The genesis was appended and is signed with the RESUMED seed — the one reloaded from SecureStore,

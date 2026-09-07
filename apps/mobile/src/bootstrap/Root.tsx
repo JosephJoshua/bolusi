@@ -90,6 +90,11 @@ import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 const UNWIRED_ENROLLMENT: EnrollmentController = {
   login: () => Promise.reject(new Error('enrollment is not wired (no createEnrollment injected)')),
   enroll: () => Promise.reject(new Error('enrollment is not wired (no createEnrollment injected)')),
+  // `finish` is reachable only after a successful `enroll`, which this stub rejects — so a call here
+  // is a bug, not a no-op. Throw for the same reason the others reject: no working-looking lie.
+  finish: () => {
+    throw new Error('enrollment is not wired (no createEnrollment injected)');
+  },
 };
 
 export interface RootProps {

@@ -537,7 +537,8 @@ export default function App(props: AppProps): React.JSX.Element {
 
   // Step 2 (§4.3 + §4.1 steps 4–6): register + genesis + persist. The state is captured BEFORE the
   // async call so a concurrent edit cannot change what was submitted. On success the wizard shows the
-  // done step; Root has already re-derived the enrolled deviceId and started the loop (`onEnrolled`).
+  // done step; the enrolled-zone handoff and sync loop wait for the owner's Continue tap (`finish`,
+  // §8.5 step 3) so the done step is not unmounted before it renders (task 201).
   const runEnroll = (): void => {
     if (enrollment.busy || !canSubmitConfirm(enrollment)) return;
     const { login, selectedStoreId } = enrollment;
@@ -636,7 +637,13 @@ export default function App(props: AppProps): React.JSX.Element {
             onChange={(patch) => setEnrollment((previous) => ({ ...previous, ...patch }))}
             onLogin={runLogin}
             onEnroll={runEnroll}
-            onFinish={() => setEnrollment(initialEnrollmentState())}
+            // §8.5 step 3: the owner taps Continue on the success step. `finish` fires the deferred
+            // `onEnrolled` (zone flip + loop/push start); resetting the wizard state is just hygiene for
+            // a future re-enroll, since the zone has already handed off to the switcher (task 201).
+            onFinish={() => {
+              props.enrollment.finish();
+              setEnrollment(initialEnrollmentState());
+            }}
             onBack={goBack}
             discardPrompt={discardPrompt}
             onConfirmDiscard={() => {

@@ -461,14 +461,26 @@ describe('the ENROLLMENT leg registers the push token for the just-enrolled owne
     if (controller === null) throw new Error('Root composed no enrollment controller');
     const enrollController: AppEnrollment['controller'] = controller;
 
-    // Enroll — the real runEnrollment (draft → POST → token → bundle → genesis → meta_kv), then
-    // `onEnrolled(deviceId, req.login.user.id)` → Root's `registerPushTokenOnEnrollment`.
+    // Enroll — the real runEnrollment (draft → POST → token → bundle → genesis → meta_kv). This REGISTERS
+    // and persists but does NOT hand off yet: the push register is deferred to the done-step
+    // `controller.finish()` (api/04-push §2 (b): "enrollment completes" is the owner acknowledging the
+    // success step, not the moment `enroll` resolves — task 201).
     await act(async () => {
       await enrollController.enroll({
         login: enrollLoginResult(),
         storeId: ENROLL_STORE_ID,
         deviceName: 'Kasir 1',
       });
+      for (let i = 0; i < 12; i += 1) await Promise.resolve();
+    });
+
+    // Still nothing registered — the handoff has not fired.
+    expect(push.posts).toHaveLength(0);
+
+    // The owner taps Continue (`finish()`) → `onEnrolled(deviceId, req.login.user.id)` → Root's
+    // `registerPushTokenOnEnrollment`.
+    await act(async () => {
+      enrollController.finish();
       for (let i = 0; i < 12; i += 1) await Promise.resolve();
     });
 
@@ -485,5 +497,67 @@ describe('the ENROLLMENT leg registers the push token for the just-enrolled owne
     expect(push.posts[0]?.token).toBe(EXPO_TOKEN);
     expect(push.posts[0]?.deviceId).toBe(enrolledDeviceId);
     expect(push.posts[0]?.actingUserId).toBe(ENROLL_OWNER_ID);
+  });
+});
+
+describe('the enrollment wizard shows its DONE step before the zone hands off (task 201; design-system §8.5)', () => {
+  test('THE REPRODUCTION: driving the real wizard through Root reaches enroll-step-done, and only Continue flips the zone', async () => {
+    // The on-device symptom (emulator lane, task 201): the DER-crypto fix let enrollment COMPLETE on a
+    // real device for the first time, and Maestro then landed on the switcher — never `enroll-step-done`.
+    // A controller/unit test cannot see this: the defect is the screen→zone WIRE. `onEnrolled` firing
+    // inside `enroll` makes Root `setApp(enrolled)` recompute `device`→'active' (shell-inputs.ts) and
+    // unmount `EnrollmentScreen` in the commit BEFORE App's `.then(step:'done')` runs — so the success
+    // step the owner must see is structurally unreachable. Only mounting the REAL Root and driving the
+    // REAL wizard buttons reproduces it ("Falsify at the boundary").
+    fixture = await bootFixture(); // UNENROLLED: the device must complete the wizard here.
+    const platform = enrollPlatform();
+    const createEnrollment: RootProps['createEnrollment'] = (app, onEnrolled) =>
+      createAppEnrollment(app, platform, onEnrolled);
+
+    const screen = await mountRoot(fixture, { createEnrollment });
+
+    // Denominator (T-14): a fresh device sits on the wizard, not the switcher.
+    expect(screen.query('enrollment-screen')).not.toBeNull();
+    expect(screen.query('switcher-screen')).toBeNull();
+
+    // Step 1 — credentials → the single-store login auto-selects the store and advances to confirm.
+    // `@bolusi/ui` TextInput carries the caller testID on its wrapper View and forwards `onChangeText`
+    // to the inner RN field at `${testID}.field` — drive the field, not the wrapper (see notes editor).
+    fire(screen.get('enroll-identifier.field'), 'onChangeText', 'ocep');
+    fire(screen.get('enroll-password.field'), 'onChangeText', 'Owner1PasswordBase58');
+    await settle();
+    fireOn(screen, 'enroll-submit');
+    await waitUntil(() => screen.query('enroll-device-name') !== null);
+
+    // Step 2 — name the device, confirm the binding, bind.
+    fire(screen.get('enroll-device-name.field'), 'onChangeText', 'Kasir 1');
+    await settle();
+    fireOn(screen, 'enroll-confirm-toggle');
+    await settle();
+    fireOn(screen, 'enroll-bind');
+
+    // THE REPRODUCTION. Enrollment has completed (keys persisted, genesis appended) — but the wizard
+    // must be showing its DONE step, and the zone must NOT have handed off yet. On the pre-fix wire this
+    // waits the full budget and both assertions red (the switcher is already mounted, the done step never
+    // rendered).
+    await waitUntil(() => screen.query('enroll-step-done') !== null);
+    expect(screen.query('enroll-step-done')).not.toBeNull();
+    expect(screen.query('switcher-screen')).toBeNull();
+    expect(screen.query('enrollment-screen')).not.toBeNull();
+
+    // Step 3 — the owner taps Continue → the handoff fires (onEnrolled), the zone flips to the switcher.
+    fireOn(screen, 'enroll-finish');
+    await waitUntil(() => screen.query('switcher-screen') !== null);
+    expect(screen.query('switcher-screen')).not.toBeNull();
+    expect(screen.query('enroll-step-done')).toBeNull();
+    expect(screen.query('enrollment-screen')).toBeNull();
+
+    // Teardown drain (NOT a product fix). `waitUntil` returns the instant the switcher appears — it
+    // drains nothing after — so the enrolled shell's mount-time read of `pendingOperationCount` /
+    // `readMeta` (Root's invalidation-subscribed reread) is still dispatched against the live DB when
+    // this test returns. `afterEach` then closes the client connection and those reads reject
+    // ("database connection is not open"). Under a running app the client DB is never closed, so there
+    // is nothing to fix in production; here we settle the in-flight reads before the fixture closes.
+    await settle();
   });
 });
