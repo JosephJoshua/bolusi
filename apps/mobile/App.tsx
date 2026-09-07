@@ -42,12 +42,10 @@ import {
   canSubmitConfirm,
   canSubmitCredentials,
   classifyFailure,
-  describeError,
   initialEnrollmentState,
   needsDiscardConfirm,
   type EnrollmentState,
 } from './src/screens/enrollment/model.js';
-import { harnessEnabled } from './src/harness/flag.js';
 import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
@@ -553,9 +551,6 @@ export default function App(props: AppProps): React.JSX.Element {
           ...s,
           busy: false,
           failure: classifyFailure(error),
-          // DIAGNOSTIC (harness-only, remove before merge): surface the swallowed pre-POST throw into
-          // the screen-hierarchy JSON so the emulator lane can name the failing native step.
-          ...(harnessEnabled() ? { debug: describeError(error) } : {}),
         })),
       );
   };

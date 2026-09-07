@@ -111,26 +111,6 @@ export interface EnrollmentState {
   readonly failure: EnrollmentFailure | null;
   /** §8.5: a `revoked` device lands here with the danger banner. */
   readonly revoked: boolean;
-  /**
-   * DIAGNOSTIC (harness-only, remove before merge). `classifyFailure` collapses a status-less throw
-   * to `offline`, discarding the raw error — which is exactly what hid the pre-POST enrollment throw
-   * the emulator lane caught. When `harnessEnabled()`, `runEnroll` fills this with the raw error's
-   * name+message+stack so Maestro's screen-hierarchy JSON pinpoints the throwing native step. Never
-   * populated off the `test` EAS profile; the screen renders it only when present.
-   */
-  readonly debug?: string;
-}
-
-/**
- * DIAGNOSTIC (harness-only, remove before merge). Flatten a swallowed error into a single line the
- * screen-hierarchy JSON can carry — distinct native layers (quick-crypto DER/OpenSSL vs SecureStore
- * vs op-sqlite) throw distinguishable name/message shapes, so this alone usually names the layer.
- */
-export function describeError(error: unknown): string {
-  if (!(error instanceof Error)) return `nonError:${typeof error}:${String(error)}`;
-  const ctor = error.constructor.name;
-  const head = (error.stack ?? '').split('\n').slice(0, 2).join(' // ');
-  return `${error.name}(${ctor}): ${error.message} @@ ${head}`;
 }
 
 export function initialEnrollmentState(revoked = false): EnrollmentState {

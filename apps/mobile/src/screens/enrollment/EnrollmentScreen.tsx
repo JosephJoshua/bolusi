@@ -108,13 +108,6 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
       {state.step === 'confirm' ? <ConfirmStep {...props} /> : null}
       {state.step === 'done' ? <DoneStep {...props} /> : null}
 
-      {/* DIAGNOSTIC (harness-only, remove before merge): the raw swallowed-error text, present only
-          when App populated `state.debug` under the test harness. Maestro's screen-hierarchy capture
-          reads this testID's text to name the throwing pre-POST enrollment step. */}
-      {state.debug !== undefined ? (
-        <Text testID="enroll-failure-diagnostic">{state.debug}</Text>
-      ) : null}
-
       {discardPrompt ? (
         <ConfirmSheet
           title={t('core.action.cancel')}
