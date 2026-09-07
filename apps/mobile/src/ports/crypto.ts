@@ -9,9 +9,16 @@
 // task 27a), because this module is a JSI native binding and cannot execute under Node.
 //
 // KEY REPRESENTATION. `CryptoPort` speaks RAW RFC 8032 bytes: a 32-byte seed as the secret and a
-// 32-byte compressed point as the public key — never a DER/PEM KeyObject. quick-crypto 1.1.6 exposes
-// exactly that through its `raw-seed` / `raw-public` key formats, so this adapter needs no hand-rolled
-// ASN.1: `export({ format: 'raw-seed' })` IS the RFC 8032 seed the op envelope signs with (05 §2.2).
+// 32-byte compressed point as the public key — never a DER/PEM KeyObject. quick-crypto 1.1.6 nominally
+// exposes those through `raw-seed` / `raw-public` formats, but that path is BROKEN on this Android
+// build: `KeyObjectHandle.initRawSeed` throws "Failed to create key from raw seed" (the emulator lane
+// caught it — enrollment keygen is the one crypto step no on-device gate exercised, so nothing proved
+// the raw handle before it shipped). So this adapter stays on quick-crypto's OWN internal interchange —
+// DER — and converts raw<->DER itself. For Ed25519 that is NOT hand-rolled variable-length ASN.1: the
+// key type is single-length, so PKCS8/SPKI is a FIXED 16-/12-byte prefix over the 32 raw bytes (RFC
+// 8410 §10) — prepend to import, slice the trailing 32 to export. Those prefixes are byte-verified
+// against OpenSSL's own Ed25519 export. Every method below therefore avoids the raw-seed / raw-public
+// KeyObjectHandle constructors and exporters, and touches only `init`/`exportKey`/`SignHandle` (DER).
 import {
   argon2,
   createHash,
@@ -24,21 +31,51 @@ import {
 
 import type { CryptoPort, Ed25519KeyPair, KdfParams } from '@bolusi/core';
 
-const ED25519 = 'ed25519';
+// Fixed RFC 8410 §10 DER framings for Ed25519. The key type is single-length, so these are constants,
+// not variable-length ASN.1: a valid PKCS8 private key is this 16-byte prefix + the 32-byte seed, and a
+// valid SPKI public key is this 12-byte prefix + the 32-byte point. Verified byte-for-byte against
+// OpenSSL's own `export({ format: 'der' })`, so `prepend`/`slice(-32)` round-trip exactly.
+const PKCS8_ED25519_PREFIX = Uint8Array.from([
+  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+]);
+const SPKI_ED25519_PREFIX = Uint8Array.from([
+  0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+]);
 
 /** Copy a quick-crypto Buffer into a plain Uint8Array — core's surface never sees a Buffer. */
 function toBytes(value: { readonly [index: number]: number; readonly length: number }): Uint8Array {
   return Uint8Array.from(value as ArrayLike<number>);
 }
 
-/** A `PrivateKeyObject` for a raw 32-byte RFC 8032 seed. */
-function privateKeyFromSeed(seed: Uint8Array): ReturnType<typeof createPrivateKey> {
-  return createPrivateKey({ key: seed, format: 'raw-seed', asymmetricKeyType: ED25519 });
+/** Frame a raw 32-byte value inside its fixed DER prefix (see the prefix constants). */
+function framed(prefix: Uint8Array, raw: Uint8Array): Uint8Array {
+  const out = new Uint8Array(prefix.length + raw.length);
+  out.set(prefix, 0);
+  out.set(raw, prefix.length);
+  return out;
 }
 
-/** A `PublicKeyObject` for a raw 32-byte compressed Edwards point. */
+/** A `PrivateKeyObject` for a raw 32-byte RFC 8032 seed — via DER, never the broken raw-seed handle. */
+function privateKeyFromSeed(seed: Uint8Array): ReturnType<typeof createPrivateKey> {
+  return createPrivateKey({
+    key: framed(PKCS8_ED25519_PREFIX, seed),
+    format: 'der',
+    type: 'pkcs8',
+  });
+}
+
+/** A `PublicKeyObject` for a raw 32-byte compressed point — via DER, never the broken raw-public handle. */
 function publicKeyFromRaw(publicKey: Uint8Array): ReturnType<typeof createPublicKey> {
-  return createPublicKey({ key: publicKey, format: 'raw-public', asymmetricKeyType: ED25519 });
+  return createPublicKey({
+    key: framed(SPKI_ED25519_PREFIX, publicKey),
+    format: 'der',
+    type: 'spki',
+  });
+}
+
+/** The raw 32-byte point of a public KeyObject: the trailing 32 bytes of its fixed-length SPKI DER. */
+function rawPublicOf(key: ReturnType<typeof createPublicKey>): Uint8Array {
+  return toBytes(key.export({ type: 'spki', format: 'der' })).slice(-32);
 }
 
 /**
@@ -54,22 +91,18 @@ export const quickCryptoPort: CryptoPort = {
 
   ed25519Keygen(seed?: Uint8Array): Ed25519KeyPair {
     // RFC 8032: an Ed25519 private key IS a uniform 32-byte seed, so an unseeded keypair is just a
-    // seeded one over fresh CSPRNG bytes. Route BOTH branches through the raw-seed handle. The old
-    // unseeded branch (`generateKeyPairSync('ed25519').privateKey`) built a PKCS8/DER-initialized key
-    // object whose native `export({ format: 'raw-seed' })` THROWS on device (Hermes/JSI, quick-crypto
-    // 1.1.6) — enrollment keygen is the one crypto step no on-device gate exercised, and the emulator
-    // lane caught it: `POST /v1/auth/login` returned 200 but the enroll POST never fired (the throw was
-    // swallowed into the wizard's "offline" banner by classifyFailure). The raw-seed handle is the path
-    // every on-device gate proves; `randomBytes(32)` keeps a distinct key per device.
-    const privateKey = privateKeyFromSeed(seed ?? toBytes(randomBytes(32)));
+    // seeded one over fresh CSPRNG bytes. The secret we return and store IS that seed (the contract,
+    // and what the noble vectors pin); the public key is derived from the DER-framed private key. No
+    // step touches the raw-seed handle — see the header for why that handle is off-limits on device.
+    const secretKey = seed === undefined ? toBytes(randomBytes(32)) : Uint8Array.from(seed);
     return {
-      secretKey: toBytes(privateKey.export({ format: 'raw-seed' })),
-      publicKey: toBytes(createPublicKey(privateKey).export({ format: 'raw-public' })),
+      secretKey,
+      publicKey: rawPublicOf(createPublicKey(privateKeyFromSeed(secretKey))),
     };
   },
 
   ed25519GetPublicKey(secretKey: Uint8Array): Uint8Array {
-    return toBytes(createPublicKey(privateKeyFromSeed(secretKey)).export({ format: 'raw-public' }));
+    return rawPublicOf(createPublicKey(privateKeyFromSeed(secretKey)));
   },
 
   sign(message: Uint8Array, secretKey: Uint8Array): Uint8Array {
