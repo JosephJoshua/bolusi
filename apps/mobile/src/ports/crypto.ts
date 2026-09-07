@@ -14,11 +14,12 @@
 // build: `KeyObjectHandle.initRawSeed` throws "Failed to create key from raw seed" (the emulator lane
 // caught it — enrollment keygen is the one crypto step no on-device gate exercised, so nothing proved
 // the raw handle before it shipped). So this adapter stays on quick-crypto's OWN internal interchange —
-// DER — and converts raw<->DER itself. For Ed25519 that is NOT hand-rolled variable-length ASN.1: the
-// key type is single-length, so PKCS8/SPKI is a FIXED 16-/12-byte prefix over the 32 raw bytes (RFC
-// 8410 §10) — prepend to import, slice the trailing 32 to export. Those prefixes are byte-verified
-// against OpenSSL's own Ed25519 export. Every method below therefore avoids the raw-seed / raw-public
-// KeyObjectHandle constructors and exporters, and touches only `init`/`exportKey`/`SignHandle` (DER).
+// DER — and converts raw<->DER itself via `./ed25519-der` (the pure, native-free framing, extracted so it
+// is host-tested against `node:crypto`'s own Ed25519 DER export in `ed25519-der.test.ts` — the check this
+// JSI file cannot host). For Ed25519 that is NOT hand-rolled variable-length ASN.1: the key type is
+// single-length, so PKCS8/SPKI is a FIXED 16-/12-byte prefix over the 32 raw bytes (RFC 8410 §10) —
+// prepend to import, slice the trailing 32 to export. Every method below therefore avoids the raw-seed /
+// raw-public KeyObjectHandle constructors and exporters, and touches only `init`/`exportKey`/`SignHandle`.
 import {
   argon2,
   createHash,
@@ -31,34 +32,17 @@ import {
 
 import type { CryptoPort, Ed25519KeyPair, KdfParams } from '@bolusi/core';
 
-// Fixed RFC 8410 §10 DER framings for Ed25519. The key type is single-length, so these are constants,
-// not variable-length ASN.1: a valid PKCS8 private key is this 16-byte prefix + the 32-byte seed, and a
-// valid SPKI public key is this 12-byte prefix + the 32-byte point. Verified byte-for-byte against
-// OpenSSL's own `export({ format: 'der' })`, so `prepend`/`slice(-32)` round-trip exactly.
-const PKCS8_ED25519_PREFIX = Uint8Array.from([
-  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
-]);
-const SPKI_ED25519_PREFIX = Uint8Array.from([
-  0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
-]);
+import { frameEd25519Pkcs8, frameEd25519Spki, pointFromSpkiDer } from './ed25519-der';
 
 /** Copy a quick-crypto Buffer into a plain Uint8Array — core's surface never sees a Buffer. */
 function toBytes(value: { readonly [index: number]: number; readonly length: number }): Uint8Array {
   return Uint8Array.from(value as ArrayLike<number>);
 }
 
-/** Frame a raw 32-byte value inside its fixed DER prefix (see the prefix constants). */
-function framed(prefix: Uint8Array, raw: Uint8Array): Uint8Array {
-  const out = new Uint8Array(prefix.length + raw.length);
-  out.set(prefix, 0);
-  out.set(raw, prefix.length);
-  return out;
-}
-
 /** A `PrivateKeyObject` for a raw 32-byte RFC 8032 seed — via DER, never the broken raw-seed handle. */
 function privateKeyFromSeed(seed: Uint8Array): ReturnType<typeof createPrivateKey> {
   return createPrivateKey({
-    key: framed(PKCS8_ED25519_PREFIX, seed),
+    key: frameEd25519Pkcs8(seed),
     format: 'der',
     type: 'pkcs8',
   });
@@ -67,7 +51,7 @@ function privateKeyFromSeed(seed: Uint8Array): ReturnType<typeof createPrivateKe
 /** A `PublicKeyObject` for a raw 32-byte compressed point — via DER, never the broken raw-public handle. */
 function publicKeyFromRaw(publicKey: Uint8Array): ReturnType<typeof createPublicKey> {
   return createPublicKey({
-    key: framed(SPKI_ED25519_PREFIX, publicKey),
+    key: frameEd25519Spki(publicKey),
     format: 'der',
     type: 'spki',
   });
@@ -75,7 +59,7 @@ function publicKeyFromRaw(publicKey: Uint8Array): ReturnType<typeof createPublic
 
 /** The raw 32-byte point of a public KeyObject: the trailing 32 bytes of its fixed-length SPKI DER. */
 function rawPublicOf(key: ReturnType<typeof createPublicKey>): Uint8Array {
-  return toBytes(key.export({ type: 'spki', format: 'der' })).slice(-32);
+  return pointFromSpkiDer(toBytes(key.export({ type: 'spki', format: 'der' })));
 }
 
 /**
