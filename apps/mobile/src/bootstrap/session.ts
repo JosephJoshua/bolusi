@@ -76,6 +76,7 @@ import {
 import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
 
+import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { PinTargetUser } from '../screens/pin/pin-target.js';
 import type { SwitcherUser } from '../screens/switcher/model.js';
 import { ShellSession, type LockReason } from '../session/shell-session.js';
@@ -224,7 +225,10 @@ export interface AppSessionDeps {
  */
 export async function createAppSession(deps: AppSessionDeps): Promise<AppSessionController | null> {
   const device = await readDeviceIdentity(deps.app);
-  if (device === null) return null;
+  if (device === null) {
+    consoleDiagnostics.warn('session-open: createAppSession device null (no controller)');
+    return null;
+  }
 
   const db = deps.app.db.db;
   // The command runtime session ops are emitted through — the SAME composition the genesis and every
@@ -357,8 +361,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     },
 
     async refresh(): Promise<void> {
+      consoleDiagnostics.warn('session-open: refresh begin');
       try {
         const directory = await listSwitcherUsers(db);
+        consoleDiagnostics.warn('session-open: refresh listSwitcherUsers done', {
+          count: directory.length,
+        });
         users = await Promise.all(
           directory.map(async (user) => {
             const [verifier, lastActiveAt, roleKeys] = await Promise.all([
@@ -378,12 +386,15 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
             } satisfies SwitcherUser;
           }),
         );
+        consoleDiagnostics.warn('session-open: refresh users built', { count: users.length });
         usersError = null;
         await Promise.all(directory.map((user) => loadRow(user.id)));
+        consoleDiagnostics.warn('session-open: refresh loadRows done');
       } catch (error: unknown) {
         // The switcher's `error` state (design-system §5). A closed CODE, never a raw server string.
         users = null;
         usersError = errorCodeOrUnexpected(error);
+        consoleDiagnostics.warn('session-open: refresh threw', { error: String(error) });
       }
       emit();
     },

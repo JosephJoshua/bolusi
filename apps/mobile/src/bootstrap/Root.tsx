@@ -432,9 +432,25 @@ export function Root({
       enroll: AppEnrollment | null,
     ): Promise<void> => {
       if (disposed || sessionRef.current !== null || booted.deviceId === null) return;
-      if (enroll === null) return;
-      const controller = (await createSession?.(booted, enroll.runtime)) ?? null;
-      if (controller === null || disposed) return;
+      consoleDiagnostics.warn('session-open: startSessionIfEnrolled begin', {
+        deviceId: booted.deviceId,
+        enrollNull: enroll === null,
+      });
+      if (enroll === null) {
+        consoleDiagnostics.warn('session-open: enroll null — no runtime, aborting');
+        return;
+      }
+      let controller: AppSession | null;
+      try {
+        controller = (await createSession?.(booted, enroll.runtime)) ?? null;
+      } catch (error) {
+        consoleDiagnostics.warn('session-open: createSession threw', { error: String(error) });
+        throw error;
+      }
+      if (controller === null || disposed) {
+        consoleDiagnostics.warn('session-open: createSession returned null', { disposed });
+        return;
+      }
       sessionRef.current = controller;
       sessionUnsubRef.current = controller.subscribe(() => bump());
       setSession(controller);
