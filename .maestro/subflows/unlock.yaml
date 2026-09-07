@@ -1,0 +1,40 @@
+# Reusable precondition subflow (task 201-B): take the enrolled device that 01 produced from a cold
+# launch to the unlocked notes surface. Called via `runFlow: subflows/unlock.yaml` by the flows that need
+# an open session (03-06). It is NOT a top-level flow — maestro directory discovery ignores subfolders —
+# so it never runs standalone; it only executes when a flow runs it.
+#
+# Why every downstream flow needs this: each top-level flow starts with its OWN `launchApp`, and only 01
+# clears state. A cold relaunch of an enrolled device with no open session resolves to the switcher
+# (apps/mobile/src/navigation/zone.ts), NOT the shell — the previous flow's session does not survive the
+# relaunch. So the switcher → PIN → notes.list hop has to be re-driven at the top of each flow.
+appId: com.bolusi.app
+---
+- launchApp
+# One enrolled owner; ids are UUIDv7, so match the row by prefix.
+- assertVisible:
+    id: 'switcher-screen'
+- tapOn:
+    id: 'switcher-user-.*'
+- assertVisible:
+    id: 'pin-screen'
+- assertVisible:
+    id: 'pin-pad'
+# The lane-seeded owner PIN (LANE_PIN = '314159', packages/harness/src/harness-provision.ts). onComplete
+# fires on the 6th digit (PIN_LENGTH = 6, packages/ui/src/components/PinPad.tsx); only the seeded value
+# unlocks — any other lands the pad in its `wrong` state and the notes.list assert below never passes.
+- tapOn:
+    id: 'pin-pad.key.3'
+- tapOn:
+    id: 'pin-pad.key.1'
+- tapOn:
+    id: 'pin-pad.key.4'
+- tapOn:
+    id: 'pin-pad.key.1'
+- tapOn:
+    id: 'pin-pad.key.5'
+- tapOn:
+    id: 'pin-pad.key.9'
+# A correct PIN opens the session; with the live NotesRuntime wired (task 119) the home route renders the
+# notes surface. This assert is the unlock success signal every downstream flow depends on.
+- assertVisible:
+    id: 'notes.list'

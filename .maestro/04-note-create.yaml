@@ -1,0 +1,43 @@
+# Note create journey (task 201-B; promoted from pending-119). Precondition: an unlocked session on the
+# live notes surface — delegated to subflows/unlock.yaml. This flow's created note also seeds the archive
+# flow (05), which runs after it and does not clearState.
+#
+# Journey: list -> create -> fill title/body -> (attach a photo; camera is emulator-stubbed) -> save ->
+# the new note appears in the list. testIDs are the notes module's own (NoteEditor.tsx / NotesList.tsx):
+# `notes.list.create`, `notes.editor.title|body|attach|save`, `notes.list.items`. Text entry targets the
+# inner `${testID}.field` RN input (packages/ui/src/components/TextInput.tsx).
+appId: com.bolusi.app
+tags:
+  - live
+  - notes
+---
+- runFlow: subflows/unlock.yaml
+- assertVisible:
+    id: 'notes.list'
+- takeScreenshot:
+    path: note-01-list
+- tapOn:
+    id: 'notes.list.create'
+- assertVisible:
+    id: 'notes.editor'
+- tapOn:
+    id: 'notes.editor.title.field'
+- inputText: 'Stok kiriman pagi'
+- tapOn:
+    id: 'notes.editor.body.field'
+- inputText: 'Terima 12 dus, 2 rusak.'
+- takeScreenshot:
+    path: note-02-editor-filled
+# Attach a photo. On the emulator the camera is a stub; left optional because emulator camera behaviour
+# varies by AVD image.
+- tapOn:
+    id: 'notes.editor.attach'
+    optional: true
+- takeScreenshot:
+    path: note-03-attach
+- tapOn:
+    id: 'notes.editor.save'
+- assertVisible:
+    id: 'notes.list.items'
+- takeScreenshot:
+    path: note-04-saved

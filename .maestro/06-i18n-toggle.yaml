@@ -1,0 +1,37 @@
+# Locale-toggle journey (task 201-B; promoted from pending-119). Precondition: an unlocked session on the
+# notes surface — delegated to subflows/unlock.yaml — from which Settings is a real in-app hop.
+#
+# Journey: notes -> Settings -> switch locale id <-> en -> the active-locale marker follows. This is the
+# i18n toggle the task calls out (07-i18n). Settings' own testIDs: `settings-locale-<locale>` and
+# `settings-locale-active-<locale>`. Reaching Settings is a real in-app hop: the notes surface's
+# `shell-open-settings` chip (App.tsx) navigates to `settings-screen`.
+appId: com.bolusi.app
+tags:
+  - live
+  - settings
+  - i18n
+---
+- runFlow: subflows/unlock.yaml
+# The settings chip lives on the notes surface; assert it before tapping.
+- assertVisible:
+    id: 'notes.list'
+- tapOn:
+    id: 'shell-open-settings'
+- assertVisible:
+    id: 'settings-screen'
+- takeScreenshot:
+    path: i18n-01-settings
+# Switch to English, assert the active marker moved to en.
+- tapOn:
+    id: 'settings-locale-en'
+- assertVisible:
+    id: 'settings-locale-active-en'
+- takeScreenshot:
+    path: i18n-02-en
+# Switch back to Indonesian (the shop's default), assert the active marker moved to id.
+- tapOn:
+    id: 'settings-locale-id'
+- assertVisible:
+    id: 'settings-locale-active-id'
+- takeScreenshot:
+    path: i18n-03-id

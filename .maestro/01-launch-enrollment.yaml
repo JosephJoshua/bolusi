@@ -1,29 +1,31 @@
-# LIVE NOW — the one journey reachable on a fresh Android emulator TODAY, no server required.
+# LIVE on the production-auth emulator lane (task 201-B). The lane driver (scripts/harness-lane-e2e.mjs)
+# stands up @bolusi/server on the host loopback and provisions a real, enrollable owner BEFORE maestro
+# runs; the APK's EXPO_PUBLIC_API_URL points at the emulator's `10.0.2.2` NAT alias for that host bind.
+# So — unlike the old serverless lane — the login + enroll POSTs below actually reach a server and
+# SUCCEED. This flow drives the FULL native enrollment journey to a real enrolled device; the sibling
+# flows (02-06) relaunch THAT enrolled device and unlock it.
 #
-# Why this is reachable and the others (pending-119/) are not: the app's shell is a pure GATE
-# (apps/mobile/src/navigation/zone.ts). A fresh, unenrolled device — device status derived from a
-# null deviceId — resolves UNCONDITIONALLY to the enrollment wizard:
-#     resolveZone({ device: 'unenrolled', ... }) -> { kind: 'enrollment', revoked: false }
-# The composition root (apps/mobile/src/bootstrap/Root.tsx) currently hardcodes `session={null}`,
-# `users={null}`, `locked={false}` and passes no `notes` runtime, so the switcher/PIN/shell/notes/
-# settings surfaces are NOT yet reachable in the running app — task 119 wires the live session shell.
-# Those flows are authored under pending-119/ and are SKIPPED by CI (Maestro runs only top-level
-# flows by default), so this suite never reds on a surface the build cannot yet show.
+# The credentials typed here are the lane's provisioned owner (packages/harness/src/harness-provision.ts,
+# surfaced on the ready marker): login `gudang-selatan`, one-time password `harness-otp-password-201b`.
+# They are the SAME literals provisionLaneOwner seeds over the real productionAuth server — not a
+# decorative form fill: a wrong password fails the login 401 and never reaches the confirm step.
 #
-# `clearState: true` clears app data before launch (== `adb shell pm clear com.bolusi.app`), so this
-# flow is deterministic and order-independent from 27a's harness run on the same AVD: whatever state
-# the harness left, the app comes up UNENROLLED here and gates to the wizard.
+# `clearState: true` wipes app data first (== `adb shell pm clear com.bolusi.app`), so regardless of what
+# 27a's harness run left on the AVD, the app comes up UNENROLLED and the pure shell gate
+# (apps/mobile/src/navigation/zone.ts) resolves to the enrollment wizard. This is the ONLY flow that
+# clears state; 02-06 inherit the enrolled device this flow produces.
 #
-# This is true NATIVE driving (UIAutomator2 over real RN views) — the native TextInput entry below is
-# exactly what a browser/WebView tool (task 116's Playwright approximation) can never do on RN.
+# True NATIVE driving (UIAutomator2 over real RN views): text entry targets the inner RN TextInput, which
+# the shared field renders as `${testID}.field` (packages/ui/src/components/TextInput.tsx) — the
+# container `testID` is a wrapping View and is not itself typeable.
 appId: com.bolusi.app
 tags:
   - live
 ---
 - launchApp:
     clearState: true
-# The shell root is up (App.tsx renders <View testID="bolusi-app-shell">). assertVisible auto-waits,
-# so this also covers the async boot (i18n + notification channels + the SQLCipher DB open).
+# The shell root is up (App.tsx renders <View testID="bolusi-app-shell">). assertVisible auto-waits, so
+# this also covers the async boot (i18n + notification channels + the SQLCipher DB open).
 - assertVisible:
     id: 'bolusi-app-shell'
 # The gate landed on the enrollment wizard, credentials step (EnrollmentScreen.tsx).
@@ -35,20 +37,50 @@ tags:
     id: 'enroll-progress'
 - takeScreenshot:
     path: 01-enrollment-wizard
-# Drive the REAL native RN text inputs. No `submit` tap: the login POST needs the server, which this
-# lane does not stand up (EXPO_PUBLIC_API_URL is inlined but unreachable) — so we stop at a fully,
-# deterministically reachable state rather than assert a network-timing-dependent failure banner.
-- assertVisible:
-    id: 'enroll-identifier'
+# Credentials step: type the lane owner's login + one-time password into the REAL native inputs.
 - tapOn:
-    id: 'enroll-identifier'
+    id: 'enroll-identifier.field'
 - inputText: 'gudang-selatan'
-- assertVisible:
-    id: 'enroll-password'
 - tapOn:
-    id: 'enroll-password'
-- inputText: 'demo-passphrase-01'
+    id: 'enroll-password.field'
+- inputText: 'harness-otp-password-201b'
 - takeScreenshot:
     path: 02-enrollment-credentials-entered
-- assertVisible:
+# Submit → the login POST hits the lane server; on success the wizard auto-advances to the confirm step
+# (assertVisible auto-waits for the round-trip).
+- tapOn:
     id: 'enroll-submit'
+- assertVisible:
+    id: 'enroll-step-confirm'
+- takeScreenshot:
+    path: 03-enrollment-confirm
+# Pick the (single) provisioned store. The row's testID carries the store's UUIDv7 — unknown ahead of
+# time — so match it by prefix; the leading hex class excludes the `enroll-store-name` summary label
+# (a UUIDv7 starts 0-9a-f; the label starts `n`), which renders BEFORE the selectable row.
+- tapOn:
+    id: 'enroll-store-[0-9a-f].*'
+# A device name is REQUIRED before binding: canSubmitConfirm gates enroll-bind on deviceNameError === null
+# (apps/mobile/src/screens/enrollment/model.ts) and the field starts empty, so type one.
+- tapOn:
+    id: 'enroll-device-name.field'
+- inputText: 'Tablet Kasir'
+# Tick the tenant/store confirmation (enabled once a store is selected), then bind.
+- tapOn:
+    id: 'enroll-confirm-toggle'
+- tapOn:
+    id: 'enroll-bind'
+# The enroll POST succeeded → the wizard shows its done step. This asserts enrollment actually LANDED on
+# the server, not merely that we tapped bind.
+- assertVisible:
+    id: 'enroll-step-done'
+- takeScreenshot:
+    path: 04-enrollment-done
+# Finish → the gate hands off to the user switcher, where the freshly enrolled owner is now selectable.
+- tapOn:
+    id: 'enroll-finish'
+- assertVisible:
+    id: 'switcher-screen'
+- assertVisible:
+    id: 'switcher-user-.*'
+- takeScreenshot:
+    path: 05-switcher

@@ -32,9 +32,15 @@ export PATH="$HOME/.maestro/bin:$PATH"
 APK=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 # 27a's correctness driver — UNCHANGED command, runs first and unmasked.
 pnpm harness:device --apk "$APK"
-# Task 117: install the test-profile APK so Maestro's launchApp (appId com.bolusi.app)
-# finds it, then drive the real native app. `maestro test .maestro/` runs only the
-# top-level LIVE flow by default; .maestro/pending-119/* is skipped until task 119 wires
-# the live session shell. --test-output-dir collects screenshots for the upload step.
+# Task 117 + 201-B: install the test-profile APK so Maestro's launchApp (appId com.bolusi.app)
+# finds it, then drive the real native app against a LIVE lane server. The lane driver
+# (scripts/harness-lane-e2e.mjs) boots @bolusi/server on the 127.0.0.1:3000 loopback — the guest
+# reaches it via the 10.0.2.2 NAT alias, no `adb reverse` — provisions a real enrolled+PIN owner,
+# then waits for its ready marker. FAIL CLOSED (§2.11): no marker ⇒ the driver exits non-zero
+# BEFORE running Maestro, so a lane can never "pass" against a dead socket. It then runs
+# `maestro test --test-output-dir=maestro-artifacts .maestro/` — all six now-live top-level flows
+# (enrollment → PIN → shell → notes → archive → i18n) — and propagates Maestro's exit code, so a
+# red flow reds the job. The driver imports the compiled harness barrel, so ci.yml's `tsc -b` must
+# have run first (it does). --test-output-dir collects screenshots for the upload step.
 adb install -r "$APK"
-maestro test --test-output-dir=maestro-artifacts .maestro/
+node scripts/harness-lane-e2e.mjs

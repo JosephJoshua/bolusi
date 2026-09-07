@@ -1,0 +1,40 @@
+# Shell chrome navigation (task 201-B; promoted from pending-119). Precondition: an unlocked session on
+# the notes surface — delegated to subflows/unlock.yaml (switcher → PIN → notes.list), because this flow
+# relaunches cold and only 01 clears state.
+#
+# The home surface has two shapes (App.tsx): the empty shell (testID `shell-home`) when no `NotesRuntime`
+# is injected, and the notes module surface (testID `notes.list`) once a live session-scoped runtime is
+# wired (task 119). The header chrome (sync chip + settings chip + avatar) renders ONLY on the notes
+# surface — `props.notes !== undefined && currentUser !== null` (App.tsx) — so the unlock subflow lands on
+# `notes.list` and this flow taps the chrome from there.
+#
+# The chrome affordances carry testIDs (App.tsx):
+#   - the sync chip is `ui.syncChip` (SyncChip default testID) -> `sync-status-screen`;
+#   - the settings entry is its OWN chip, `shell-open-settings` -> `settings-screen`.
+# NOTE the avatar (`ui.avatarButton`) is NOT the settings affordance — it opens the user switcher.
+appId: com.bolusi.app
+tags:
+  - live
+  - shell
+---
+- runFlow: subflows/unlock.yaml
+# Anchored on the chrome-bearing surface the subflow left us on.
+- assertVisible:
+    id: 'notes.list'
+- takeScreenshot:
+    path: shell-01-home
+# Sync chip -> Sync Status screen, then hardware back to home.
+- tapOn:
+    id: 'ui.syncChip'
+- assertVisible:
+    id: 'sync-status-screen'
+- takeScreenshot:
+    path: shell-02-sync-status
+- back
+# Settings chip -> Settings screen (its own affordance, not the avatar).
+- tapOn:
+    id: 'shell-open-settings'
+- assertVisible:
+    id: 'settings-screen'
+- takeScreenshot:
+    path: shell-03-settings

@@ -1,18 +1,18 @@
-# PENDING task 119 (live session shell) — NOT run by CI (see 02-pin-entry.yaml's header for why).
-#
-# Precondition once 119 lands: the notes module surface is live (see 04-note-create.yaml) AND at
-# least one note exists (this flow can be chained after 04, or seeded). Until then unreachable.
+# Archive-via-ConfirmSheet journey (task 201-B; promoted from pending-119). Precondition: an unlocked
+# session on the notes surface with at least one note — delegated to subflows/unlock.yaml, and the note
+# is the one 04 created (04 runs first alphabetically and its write persists across the cold relaunch,
+# since only 01 clears state).
 #
 # Journey: list -> open a note -> Archive -> the ConfirmSheet appears -> Confirm -> the archived badge
-# shows. This exercises the archive-via-ConfirmSheet path the task calls out. testIDs are the notes
-# module's own (NoteDetail.tsx) + the shared ConfirmSheet (`.archiveConfirm.confirm`).
+# shows. testIDs are the notes module's own (NoteDetail.tsx) + the shared ConfirmSheet
+# (`.archiveConfirm.confirm`).
 appId: com.bolusi.app
 tags:
-  - pending-119
+  - live
   - notes
   - archive
 ---
-- launchApp
+- runFlow: subflows/unlock.yaml
 - assertVisible:
     id: 'notes.list'
 # Open the first note (ids are UUIDv7 — regex-match the row).
