@@ -47,6 +47,8 @@ import {
 } from '@bolusi/server/test-support';
 import { deriveDeviceKeypair, FakeClock, noblePort } from '@bolusi/test-support';
 
+import { createPgliteAuthDirectory } from '../src/production-auth.js';
+
 const CLOCK_BASE = 1_726_100_000_000;
 const BASE = 'http://srv.test';
 
@@ -85,45 +87,10 @@ async function bootProductionAuth(): Promise<ProductionAuthServer> {
       return fn(trx);
     });
 
-  // The production D14 SECURITY DEFINER lookups, run over PGlite (mirrors identity-db.ts verbatim).
-  const authDirectory = {
-    async findDeviceByTokenHash(hashHex: string) {
-      const { rows } = await sql<{
-        tenantId: string;
-        storeId: string | null;
-        deviceId: string;
-        status: string;
-      }>`SELECT * FROM auth_find_device_by_token_hash(${hashHex})`.execute(db);
-      return rows[0];
-    },
-    async findControlSessionByTokenHash(hashHex: string) {
-      const { rows } = await sql<{
-        tenantId: string;
-        userId: string;
-        sessionId: string;
-        expiresAt: string | number;
-        revokedAt: string | number | null;
-      }>`SELECT * FROM auth_find_control_session_by_token_hash(${hashHex})`.execute(db);
-      const row = rows[0];
-      if (row === undefined) return undefined;
-      return {
-        tenantId: row.tenantId,
-        userId: row.userId,
-        sessionId: row.sessionId,
-        expiresAt: Number(row.expiresAt),
-        revokedAt: row.revokedAt === null ? null : Number(row.revokedAt),
-      };
-    },
-    async findLoginCredential(loginIdentifier: string) {
-      const { rows } = await sql<{
-        tenantId: string;
-        userId: string;
-        passwordVerifier: string | null;
-        status: string;
-      }>`SELECT * FROM auth_find_login_credential(${loginIdentifier})`.execute(db);
-      return rows[0];
-    },
-  };
+  // The production D14 SECURITY DEFINER lookups over PGlite — the SAME factory
+  // `HarnessServer.boot({ productionAuth: true })` injects, so this de-risk and the boot path exercise
+  // one implementation of the three `auth_find_*` calls (§2.8), not two copies that can drift.
+  const authDirectory = createPgliteAuthDirectory(db);
 
   const app = createApp({
     now: () => clock.now(),

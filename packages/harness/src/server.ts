@@ -22,6 +22,7 @@ import { FakeClock } from '@bolusi/test-support';
 
 import type { DeviceIdentity } from './device.js';
 import type { FetchLike } from './fault-fetch.js';
+import { createPgliteAuthDirectory } from './production-auth.js';
 
 const SERVER_CLOCK_BASE = 1_726_100_000_000;
 const CREATED_AT = 1_726_000_000_000n;
@@ -75,6 +76,17 @@ interface DevicePrincipal {
 }
 
 /**
+ * The harness's RLS-scoped tenant transaction (`SET LOCAL ROLE bolusi_app` + `set_config` the tenant),
+ * production `dbForTenant`'s shape over the PGlite handle. Exposed on {@link HarnessServer} so the
+ * production-auth emulator entry (task 201-B) can run the real `provisionTenant` transaction and seed a
+ * PIN verifier through the SAME tenant-scoped path the app itself uses — never a raw, unscoped handle.
+ */
+export type HarnessForTenant = <T>(
+  tenantId: string,
+  fn: (tx: Kysely<DB>) => Promise<T>,
+) => Promise<T>;
+
+/**
  * A {@link HarnessServer} exposed over a REAL loopback TCP socket (task 198 step 1). `url` is the
  * bound origin (`http://127.0.0.1:<ephemeral-port>` by default); `server` is the same booted instance,
  * so a test can still `seedDevice` after listening. `close()` shuts the socket AND destroys the PGlite
@@ -101,6 +113,12 @@ export class HarnessServer {
     readonly db: Kysely<DB>,
     readonly clock: FakeClock,
     readonly fetch: FetchLike,
+    /**
+     * The RLS-scoped tenant transaction this server booted with (`SET LOCAL ROLE bolusi_app` +
+     * `set_config`). Retained so the production-auth emulator entry can `provisionTenant` and seed a
+     * PIN verifier through the same tenant-scoped path — the app never gets a raw, unscoped handle.
+     */
+    readonly forTenant: HarnessForTenant,
     private readonly tokens: Map<string, DevicePrincipal>,
     /**
      * CHAOS-05 (task 103 seam): when the server was booted with `testAuthSeam`, this is the REAL
@@ -149,7 +167,23 @@ export class HarnessServer {
      * `AUTH_TOKEN_INVALID`s. Every other scenario leaves this unset and keeps the map verifier.
      */
     readonly testAuthSeam?: boolean;
+    /**
+     * Task 201-B (§2.5 security surface): boot the REAL DB-backed production auth path over PGlite —
+     * inject `authDirectory` (the D14 `auth_find_*` definer lookups; {@link createPgliteAuthDirectory})
+     * and OMIT `verifyToken`, so production `resolveDeps` builds `createDbVerifyToken(authDirectory)`
+     * (deps.ts) and `POST /v1/auth/login` resolves credentials through `findLoginCredential`. This is
+     * how the serverless emulator lane reaches an ENROLLED, unlocked app: a real login → device enroll,
+     * verified end-to-end, no token-map bypass. Mutually exclusive with `testAuthSeam` (both own the
+     * auth path). The default (both unset) keeps the in-memory token map.
+     */
+    readonly productionAuth?: boolean;
   }): Promise<HarnessServer> {
+    if (options?.productionAuth === true && options.testAuthSeam === true) {
+      throw new Error(
+        'HarnessServer.boot: productionAuth and testAuthSeam are mutually exclusive auth modes',
+      );
+    }
+    const productionAuth = options?.productionAuth === true;
     const pglite = new PGlite();
     const db = new Kysely<DB>({
       dialect: new PGliteDialect({ pglite }),
@@ -192,13 +226,19 @@ export class HarnessServer {
         ? mapVerifyToken
         : createVerifyToken({ store: authStore, now: () => clock.now() });
 
-    // The forTenant/verifyToken shapes are the production ones; the internal ServerDeps types are
-    // not exported from @bolusi/server, so the whole overrides object crosses the boundary via one
-    // structural cast (the harness test-only seam).
+    // The forTenant/verifyToken/authDirectory shapes are the production ones; the internal ServerDeps
+    // types are not exported from @bolusi/server, so the whole overrides object crosses the boundary
+    // via one structural cast (the harness test-only seam).
+    //
+    // productionAuth ⇒ inject `authDirectory` (the PGlite D14 lookups) and OMIT `verifyToken`, so
+    // `resolveDeps` builds the REAL `createDbVerifyToken(authDirectory)` (deps.ts:378) — every token
+    // verify + login runs the production definer path. Otherwise inject the token-map/test-auth
+    // `verifyToken` and let `authDirectory` default to `dbAuthDirectory` (unused: no request presents a
+    // bdt_/bcs_ token the DB path would resolve, since the map verifier answers first).
     const app = createApp({
       now: () => clock.now(),
       forTenant,
-      verifyToken,
+      ...(productionAuth ? { authDirectory: createPgliteAuthDirectory(db) } : { verifyToken }),
       accessLogSink: (record: unknown) => accessLogs.push(JSON.stringify(record)),
       ...(options?.gzipOnProgress === undefined ? {} : { gzipOnProgress: options.gzipOnProgress }),
       // CHAOS-07: forwarded structurally to production `resolveDeps` (deps.ts). `systemKeyStore`
@@ -214,6 +254,7 @@ export class HarnessServer {
       db,
       clock,
       (input, init) => Promise.resolve(app.request(input, init)),
+      forTenant,
       tokens,
       authStore,
       app,
@@ -299,15 +340,20 @@ export class HarnessServer {
    * does; it only opens a port.
    *
    * Binds host LOOPBACK ONLY (`127.0.0.1`) by default: this server mints valid `bdt_harness_*` bearer
-   * tokens, so it MUST NOT listen on the LAN (§2.5). The Android emulator still reaches it — `10.0.2.2`
-   * aliases the host loopback, and `adb reverse tcp:P tcp:P` maps device `127.0.0.1:P` to the host —
-   * so loopback is both sufficient and safe. Port `0` ⇒ an ephemeral port, so parallel test servers
-   * never collide.
+   * tokens (and, under `productionAuth`, REAL control-session + device tokens), so it MUST NOT listen
+   * on the LAN (§2.5). The Android emulator still reaches it — `10.0.2.2` aliases the host loopback,
+   * and `adb reverse tcp:P tcp:P` maps device `127.0.0.1:P` to the host — so loopback is both
+   * sufficient and safe. `port` defaults to `0` ⇒ an ephemeral port, so parallel test servers never
+   * collide; the emulator lane passes a FIXED port (`3000`, matching the APK's `EXPO_PUBLIC_API_URL`).
    */
-  async listen(options?: { readonly hostname?: string }): Promise<RunningHarnessServer> {
+  async listen(options?: {
+    readonly hostname?: string;
+    readonly port?: number;
+  }): Promise<RunningHarnessServer> {
     const hostname = options?.hostname ?? '127.0.0.1';
+    const port = options?.port ?? 0;
     const { node, info } = await new Promise<{ node: ServerType; info: AddressInfo }>((resolve) => {
-      const node_ = serve({ fetch: this.app.fetch, hostname, port: 0 }, (i) =>
+      const node_ = serve({ fetch: this.app.fetch, hostname, port }, (i) =>
         resolve({ node: node_, info: i }),
       );
     });
@@ -346,9 +392,15 @@ export class HarnessServer {
  * option (e.g. `testAuthSeam`) plus an optional `hostname` override.
  */
 export async function startHarnessServer(
-  options?: NonNullable<Parameters<typeof HarnessServer.boot>[0]> & { readonly hostname?: string },
+  options?: NonNullable<Parameters<typeof HarnessServer.boot>[0]> & {
+    readonly hostname?: string;
+    readonly port?: number;
+  },
 ): Promise<RunningHarnessServer> {
-  const { hostname, ...bootOptions } = options ?? {};
+  const { hostname, port, ...bootOptions } = options ?? {};
   const server = await HarnessServer.boot(bootOptions);
-  return server.listen(hostname === undefined ? undefined : { hostname });
+  return server.listen({
+    ...(hostname === undefined ? {} : { hostname }),
+    ...(port === undefined ? {} : { port }),
+  });
 }

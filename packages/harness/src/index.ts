@@ -41,6 +41,7 @@ export { toProjectionManifest, notesProjectionManifest } from './manifest.js';
 export {
   HarnessServer,
   startHarnessServer,
+  type HarnessForTenant,
   type HarnessSurfacedConflict,
   type HarnessSystemKeyStore,
   type HarnessSystemSigner,
@@ -48,6 +49,7 @@ export {
   type SeededServerDevice,
   type SystemDeviceSeed,
 } from './server.js';
+export { createPgliteAuthDirectory, type PgliteAuthDirectory } from './production-auth.js';
 export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './net-server.js';
 // A tenant's system actor + device — HOST-ONLY setup the chaos-net child seeds so CHAOS-07's real
 // conflict-detection pipeline has a signer whose key matches `devices.signing_key_public`. It lives
