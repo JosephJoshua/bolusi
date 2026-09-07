@@ -10,7 +10,7 @@
 //     surrounding whitespace a `console.log` line carries, and rejects a non-marker line. This is the
 //     format↔parse agreement the lane driver depends on to read the bound port + credentials.
 import { EventEmitter } from 'node:events';
-import type { ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 import {
   bytesToBase64,
@@ -24,6 +24,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { HarnessServer } from '../src/server.js';
 import {
   assertLaneLoopbackBind,
+  awaitChildExit,
   awaitLaneReadyMarker,
   formatLaneReady,
   LANE_LOOPBACK,
@@ -246,5 +247,47 @@ describe('task 201-B: awaitLaneReadyMarker settles on marker, early exit, and ti
     const fake = makeFakeChild();
     const outcome = await awaitLaneReadyMarker(fake.child, { timeoutMs: 30, pollMs: 10 });
     expect(outcome.ready).toBeUndefined();
+  });
+});
+
+// The teardown-wait the driver uses AFTER maestro returns. Driven with REAL children (not the
+// EventEmitter fake) because the whole point is the `exitCode` transition null→set that a fake models
+// as `undefined` — the guard keys on `exitCode !== null`, so only a real ChildProcess exercises it. The
+// load-bearing case is a child that ALREADY exited: a bare `once('exit')` there hangs forever, and in the
+// driver that hang drains the loop and exits 0, turning a red maestro run green (§2.11 false-green).
+describe('task 201-B: awaitChildExit resolves even for an already-exited child (teardown false-green guard)', () => {
+  let child: ChildProcess | undefined;
+  afterEach(() => {
+    if (child !== undefined && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+    child = undefined;
+  });
+
+  test('resolves immediately when the child has ALREADY exited before the wait is registered', async () => {
+    child = spawn(process.execPath, ['-e', 'process.exit(7)'], { stdio: 'ignore' });
+    // Let it fully exit first — this is the driver's real hazard (server crashed DURING maestro), where a
+    // fresh `once('exit')` would be attached to an event that has already fired and never resolve.
+    await new Promise<void>((resolve) => child!.once('exit', () => resolve()));
+    expect(child.exitCode).toBe(7);
+    // The buggy `new Promise((r) => server.once('exit', r))` hangs here → this test times out. The guarded
+    // helper sees exitCode !== null and resolves. A 2s race proves it settles rather than hanging.
+    const settled = await Promise.race([
+      awaitChildExit(child).then(() => 'exited' as const),
+      new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 2_000)),
+    ]);
+    expect(settled).toBe('exited');
+  });
+
+  test('resolves when a still-running child exits later', async () => {
+    child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30_000)'], { stdio: 'ignore' });
+    // Registered while the child is alive (exitCode === null) — the normal teardown path.
+    const waiting = awaitChildExit(child);
+    child.kill('SIGTERM');
+    const settled = await Promise.race([
+      waiting.then(() => 'exited' as const),
+      new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 2_000)),
+    ]);
+    expect(settled).toBe('exited');
   });
 });

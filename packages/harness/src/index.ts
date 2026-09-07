@@ -63,6 +63,7 @@ export {
 } from './harness-provision.js';
 export {
   assertLaneLoopbackBind,
+  awaitChildExit,
   awaitLaneReadyMarker,
   findLaneReadyMarker,
   formatLaneReady,

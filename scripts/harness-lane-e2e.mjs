@@ -22,7 +22,11 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { assertLaneLoopbackBind, awaitLaneReadyMarker } from '../packages/harness/dist/index.js';
+import {
+  assertLaneLoopbackBind,
+  awaitChildExit,
+  awaitLaneReadyMarker,
+} from '../packages/harness/dist/index.js';
 
 // scripts/harness-lane-e2e.mjs → repo root is one level up; the serve entry is its sibling. Maestro runs
 // from the repo root so `.maestro/` and the `--test-output-dir` land where CI collects artifacts.
@@ -100,7 +104,10 @@ async function main() {
   });
 
   // Tear the server down and WAIT for its exit, so the driver leaves no zombie/stray port on the CI host.
-  const serverExit = new Promise((resolve) => server.once('exit', () => resolve()));
+  // `awaitChildExit` (NOT a bare `once('exit')`) so a server that ALREADY died during the maestro run is
+  // handled: a late listener on the one-shot `exit` would never fire, the loop would drain, and the driver
+  // would exit 0 — turning a RED maestro run GREEN (§2.11 false-green). Resolve immediately if it is gone.
+  const serverExit = awaitChildExit(server);
   killServer();
   const grace = setTimeout(() => {
     if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');

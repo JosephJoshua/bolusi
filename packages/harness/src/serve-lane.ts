@@ -205,3 +205,22 @@ export function awaitLaneReadyMarker(
     cleanups.push(() => clearInterval(timer));
   });
 }
+
+/**
+ * Resolve when `child` has exited — or IMMEDIATELY if it has ALREADY exited. A bare `child.once('exit')`
+ * is a trap for a process that may already be gone: `exit` fires exactly once and is never re-emitted, so
+ * a listener attached after the fact waits forever. In the lane driver that hang is not benign — with no
+ * other pending handle the event loop drains and Node exits the driver 0, turning a RED maestro run GREEN
+ * (a §2.11 false-green: tearing down a server that crashed mid-run must not swallow the flow's verdict).
+ * The `exitCode`/`signalCode` check and the listener registration run synchronously in one tick, so an
+ * exit cannot slip between them.
+ */
+export function awaitChildExit(child: ChildProcess): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    child.once('exit', () => resolve());
+  });
+}
