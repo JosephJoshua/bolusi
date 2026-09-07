@@ -459,6 +459,42 @@ export function Root({
       await controller.refresh();
     };
 
+    /**
+     * Start the enrolled-device services in the ONE order that keeps the switcher live: session
+     * FIRST, then device-info + the sync/media loops. Session-open populates the switcher roster
+     * (`controller.refresh()`); the loops await native/DB work (op-sqlite hydrate; a media
+     * background-task registration that can stall on the Play-Services-less CI emulator), so running
+     * them ahead of session — as the boot path once did, and the enrollment callback did with session
+     * LAST — let a stall (or a synchronous throw) there leave `users` null and the switcher stuck on
+     * its loading skeleton forever (task 201). Shared by BOTH the already-enrolled boot path (awaited)
+     * and the just-enrolled callback (fire-and-forget) so the two can never drift apart (§2.8).
+     * Device-info + the loops run in a try/catch: a throw there is a visible diagnostic and never
+     * stops session-open, which has already settled. `via` tags which path ran, for the device logcat.
+     */
+    const startServicesForEnrolled = async (
+      booted: Bootstrapped,
+      enroll: AppEnrollment | null,
+      via: 'boot' | 'enroll',
+    ): Promise<void> => {
+      await startSessionIfEnrolled(booted, enroll);
+      consoleDiagnostics.warn(
+        `session-open: [${via}] session settled — starting deviceInfo/sync/media`,
+      );
+      try {
+        const info = await readDeviceInfo(booted);
+        if (!disposed) setDeviceInfo(info);
+        consoleDiagnostics.warn(`session-open: [${via}] readDeviceInfo done`);
+        await startSyncIfEnrolled(booted, enroll);
+        consoleDiagnostics.warn(`session-open: [${via}] sync started`);
+        await startMediaIfEnrolled(booted);
+        consoleDiagnostics.warn(`session-open: [${via}] media started`);
+      } catch (error) {
+        consoleDiagnostics.warn(`session-open: [${via}] post-session step threw`, {
+          error: String(error),
+        });
+      }
+    };
+
     void (async () => {
       // Order matters (08 §6.3). i18n FIRST, because the notification channels' NAMES are catalog
       // strings and Android keeps whatever name it is first given.
@@ -503,17 +539,13 @@ export function Root({
         createEnrollment?.(booting, (deviceId, ownerUserId) => {
           const enrolled: Bootstrapped = { ...booting, deviceId };
           setApp(enrolled);
-          // Re-derive the Settings device-info NOW: enrollment.ts persisted the device/store/tenant
-          // names to meta_kv before firing this, so this read surfaces the real identity live, no
-          // reboot (task 94). Without it the just-enrolled device would keep the pre-enroll blanks.
-          void readDeviceInfo(enrolled).then((info) => {
-            if (!disposed) setDeviceInfo(info);
-          });
-          void startSyncIfEnrolled(enrolled, enroll);
-          void startMediaIfEnrolled(enrolled);
-          // The device just became enrolled — the switcher can now list users and a PIN can open a
-          // session, live, without a reboot (the same no-reboot rule the loop follows).
-          void startSessionIfEnrolled(enrolled, enroll);
+          // The device just became enrolled — start its services in the shared order: session FIRST,
+          // so the switcher can list users and a PIN can open a session live, without a reboot; then
+          // re-derive the Settings device-info (enrollment.ts persisted the device/store/tenant names
+          // to meta_kv before firing this, so the read surfaces the real identity, no reboot — task
+          // 94) and start the loops. Fire-and-forget so the enroll-success path is never delayed, and
+          // a stall in a loop cannot starve the switcher — session has already settled (task 201).
+          void startServicesForEnrolled(enrolled, enroll, 'enroll');
           // Register the push token immediately post-enrollment (api/04-push §2 (b)) — ALWAYS, so the
           // server stamps `user_id` for the just-enrolled device even if the token has not changed.
           // The acting user is the OWNER who enrolled (the only user known at this instant; no PIN
@@ -526,35 +558,11 @@ export function Root({
         }) ?? null;
       setEnrollment(enroll);
       setApp(booting);
-      // Session-open FIRST (task 201). The switcher roster an already-enrolled device shows on launch
-      // must not be gated behind sync/media start: those await native/DB work (op-sqlite hydrate; a
-      // media background-task registration that stalls on the Play-Services-less CI emulator) and, when
-      // awaited ahead of session as they were, a stall there left `users` null and the switcher on its
-      // loading skeleton forever. The enrollment callback already fires session INDEPENDENTLY of
-      // sync/media (see above); the boot path is brought in line — session first, then the loops.
-      await startSessionIfEnrolled(booting, enroll);
-      consoleDiagnostics.warn(
-        'session-open: [boot] session settled — starting deviceInfo/sync/media',
-      );
-
-      // The device-info the Settings screen renders (task 94) and the loops, AFTER the switcher can
-      // render. Guarded so a throw here is a visible diagnostic, not a silent unhandled rejection that
-      // stops the remaining starts. `startSyncIfEnrolled`/`startMediaIfEnrolled` are no-ops when
-      // `deviceId` is null, so nothing starts on a device that cannot sync — no faked loop.
-      try {
-        // The device-info block: honest empty on a never-enrolled device, real persisted identity on a
-        // device enrolled in a PRIOR run — read here rather than handed in as a literal.
-        setDeviceInfo(await readDeviceInfo(booting));
-        consoleDiagnostics.warn('session-open: [boot] readDeviceInfo done');
-        await startSyncIfEnrolled(booting, enroll);
-        consoleDiagnostics.warn('session-open: [boot] sync started');
-        await startMediaIfEnrolled(booting);
-        consoleDiagnostics.warn('session-open: [boot] media started');
-      } catch (error) {
-        consoleDiagnostics.warn('session-open: [boot] post-session boot step threw', {
-          error: String(error),
-        });
-      }
+      // Start the enrolled-device services on the already-enrolled boot path. Awaited so boot
+      // sequences them; the shared helper runs session-open FIRST so a stalled sync/media start
+      // cannot starve the switcher roster (task 201). A no-op on a never-enrolled device (deviceId
+      // null) — nothing starts on a device that cannot sync, no faked loop.
+      await startServicesForEnrolled(booting, enroll, 'boot');
     })();
 
     return () => {
