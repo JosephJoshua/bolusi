@@ -17,7 +17,6 @@ import {
   createHash,
   createPrivateKey,
   createPublicKey,
-  generateKeyPairSync,
   randomBytes,
   sign,
   verify,
@@ -54,10 +53,15 @@ export const quickCryptoPort: CryptoPort = {
   },
 
   ed25519Keygen(seed?: Uint8Array): Ed25519KeyPair {
-    // With a seed the result is deterministic (RFC 8032): derive the key object from the seed and
-    // read both halves back out raw. Without one, let the native RNG mint the pair.
-    const privateKey =
-      seed === undefined ? generateKeyPairSync(ED25519).privateKey : privateKeyFromSeed(seed);
+    // RFC 8032: an Ed25519 private key IS a uniform 32-byte seed, so an unseeded keypair is just a
+    // seeded one over fresh CSPRNG bytes. Route BOTH branches through the raw-seed handle. The old
+    // unseeded branch (`generateKeyPairSync('ed25519').privateKey`) built a PKCS8/DER-initialized key
+    // object whose native `export({ format: 'raw-seed' })` THROWS on device (Hermes/JSI, quick-crypto
+    // 1.1.6) — enrollment keygen is the one crypto step no on-device gate exercised, and the emulator
+    // lane caught it: `POST /v1/auth/login` returned 200 but the enroll POST never fired (the throw was
+    // swallowed into the wizard's "offline" banner by classifyFailure). The raw-seed handle is the path
+    // every on-device gate proves; `randomBytes(32)` keeps a distinct key per device.
+    const privateKey = privateKeyFromSeed(seed ?? toBytes(randomBytes(32)));
     return {
       secretKey: toBytes(privateKey.export({ format: 'raw-seed' })),
       publicKey: toBytes(createPublicKey(privateKey).export({ format: 'raw-public' })),

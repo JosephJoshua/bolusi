@@ -88,6 +88,32 @@ describe('noblePort — Ed25519 interop vectors (RFC 8032 §7.1)', () => {
     seed.fill(0);
     expect(bytesToHex(secretKey)).toBe(ed25519Vectors[0]!.seedHex);
   });
+
+  // Unseeded keygen (no argument) is the CryptoPort branch enrollment uses to mint a device's identity
+  // key (packages/core/src/auth/enrollment.ts). It has no KAT vector — the output is random — so these
+  // pin the CONTRACT both port bindings must uphold: the mobile quick-crypto binding now derives an
+  // unseeded key via the raw-seed handle over randomBytes(32) (apps/mobile/src/ports/crypto.ts), and
+  // its on-device leg is proven end-to-end by the emulator enrollment lane. A binding that returned a
+  // constant, an aliased, or a wrong-length key would pass every seeded vector above yet brick device
+  // identity; that is exactly what goes untested without these.
+  it('mints a distinct keypair on each unseeded call', () => {
+    const a = noblePort.ed25519Keygen();
+    const b = noblePort.ed25519Keygen();
+    expect(bytesToHex(a.secretKey)).not.toBe(bytesToHex(b.secretKey));
+    expect(bytesToHex(a.publicKey)).not.toBe(bytesToHex(b.publicKey));
+  });
+
+  it('yields a valid, self-consistent 32-byte-seed keypair when unseeded', () => {
+    const { secretKey, publicKey } = noblePort.ed25519Keygen();
+    // RFC 8032: the secret IS a 32-byte seed, and the raw-seed handle the mobile fix derives through
+    // requires exactly that length.
+    expect(secretKey).toHaveLength(32);
+    // The public half must be the one derived from the secret (not a stale/mismatched pair)...
+    expect(bytesToHex(noblePort.ed25519GetPublicKey(secretKey))).toBe(bytesToHex(publicKey));
+    // ...and the pair must actually sign and verify.
+    const message = utf8ToBytes('enrollment-genesis-preimage');
+    expect(noblePort.verify(noblePort.sign(message, secretKey), message, publicKey)).toBe(true);
+  });
 });
 
 describe('noblePort — argon2id', () => {
