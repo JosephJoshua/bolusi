@@ -50,6 +50,26 @@ export {
   type SystemDeviceSeed,
 } from './server.js';
 export { createPgliteAuthDirectory, type PgliteAuthDirectory } from './production-auth.js';
+export {
+  LANE_OTP,
+  LANE_OWNER_LOGIN,
+  LANE_OWNER_NAME,
+  LANE_PIN,
+  LANE_STORE_NAME,
+  LANE_TENANT_NAME,
+  provisionHarnessOwner,
+  seedOwnerPin,
+  type ProvisionableServer,
+} from './harness-provision.js';
+export {
+  formatLaneReady,
+  LANE_PORT,
+  LANE_READY_MARKER,
+  parseLaneReady,
+  provisionLaneOwner,
+  type LaneCredentials,
+  type LaneReady,
+} from './serve-lane.js';
 export { describeDeviceHandoff, socketBaseFetch, type DeviceHandoff } from './net-server.js';
 // A tenant's system actor + device — HOST-ONLY setup the chaos-net child seeds so CHAOS-07's real
 // conflict-detection pipeline has a signer whose key matches `devices.signing_key_public`. It lives

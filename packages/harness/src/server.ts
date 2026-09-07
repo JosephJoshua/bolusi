@@ -15,7 +15,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { serve, type ServerType } from '@hono/node-server';
 import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
-import { migrateToLatest, type DB } from '@bolusi/db-server';
+import { migrateToLatest, type DB, type TenantDb } from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
@@ -81,9 +81,13 @@ interface DevicePrincipal {
  * production-auth emulator entry (task 201-B) can run the real `provisionTenant` transaction and seed a
  * PIN verifier through the SAME tenant-scoped path the app itself uses — never a raw, unscoped handle.
  */
+// The callback receives a `TenantDb` (= `Transaction<DB>`), exactly what production `dbForTenant` hands
+// and what `provisionTenant`'s `ForTenant` demands — never the wider raw `Kysely<DB>`. The concrete
+// `forTenant` below is `db.transaction().execute(...)`, so the value IS always a transaction; typing it
+// as such lets the real `provisionTenant` run through this path with no boundary cast.
 export type HarnessForTenant = <T>(
   tenantId: string,
-  fn: (tx: Kysely<DB>) => Promise<T>,
+  fn: (tx: TenantDb) => Promise<T>,
 ) => Promise<T>;
 
 /**
@@ -201,7 +205,7 @@ export class HarnessServer {
     // The RLS-scoped tenant transaction, exactly as production `dbForTenant` (helpers.ts shape):
     // SET LOCAL ROLE bolusi_app so the app is subject to the FORCE RLS predicate, then set_config
     // the tenant id (transaction-local — never leaks across the pooled connection).
-    const forTenant = <T>(tenantId: string, fn: (tx: Kysely<DB>) => Promise<T>): Promise<T> =>
+    const forTenant = <T>(tenantId: string, fn: (tx: TenantDb) => Promise<T>): Promise<T> =>
       db.transaction().execute(async (trx) => {
         await sql`SET LOCAL ROLE ${sql.id(APP_ROLE)}`.execute(trx);
         await sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`.execute(trx);

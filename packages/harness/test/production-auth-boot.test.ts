@@ -17,43 +17,25 @@
 // `generatePassword` provision seam (a fixed one-time password, argon2id UNTOUCHED) that the
 // provision-and-serve emulator entry will bake into the Maestro login flow.
 import { bytesToBase64, createUuidV7Generator } from '@bolusi/core';
-import {
-  defaultProvisionDeps,
-  provisionTenant,
-  type ProvisionResult,
-} from '@bolusi/server/test-support';
+import { type ProvisionResult } from '@bolusi/server/test-support';
 import { deriveDeviceKeypair, noblePort } from '@bolusi/test-support';
 import { afterEach, describe, expect, test } from 'vitest';
 
+// The deterministic provision seam (LANE_OTP injected as the one-time password, argon2id UNTOUCHED) and
+// the provision transaction itself are the SHARED harness-provision helpers (§2.8) — the same ones the
+// lane serve entry and the PGlite de-risk use. This test proves that seam works over a REAL socket.
+import { LANE_OTP, LANE_OWNER_LOGIN, provisionHarnessOwner } from '../src/harness-provision.js';
 import { HarnessServer, type RunningHarnessServer } from '../src/server.js';
 
-// A fixed one-time password injected via the provision seam — deterministic so a Maestro flow can type
-// a literal, while `defaultProvisionDeps.createPasswordVerifier` (real argon2id) is left untouched.
-const ONE_TIME_PASSWORD = 'harness-otp-password-201b';
-const OWNER_LOGIN = 'gudang-selatan';
-
 async function provisionOwner(server: HarnessServer): Promise<ProvisionResult> {
-  return provisionTenant(
-    {
-      ...defaultProvisionDeps,
-      forTenant: server.forTenant,
-      now: () => server.clock.now(),
-      generatePassword: () => ONE_TIME_PASSWORD,
-    },
-    {
-      tenantName: 'Gudang Selatan',
-      storeNames: ['Toko Utama'],
-      ownerName: 'Pemilik',
-      ownerLogin: OWNER_LOGIN,
-    },
-  );
+  return provisionHarnessOwner(server, { oneTimePassword: LANE_OTP });
 }
 
 async function httpLogin(baseUrl: string, password: string): Promise<Response> {
   return fetch(`${baseUrl}/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ loginIdentifier: OWNER_LOGIN, password }),
+    body: JSON.stringify({ loginIdentifier: LANE_OWNER_LOGIN, password }),
   });
 }
 
@@ -100,10 +82,10 @@ describe('task 201-B: HarnessServer.boot({ productionAuth }) serves real auth ov
 
     const provisioned = await provisionOwner(server);
     // The deterministic provision seam is wired: the returned OTP is the injected literal.
-    expect(provisioned.oneTimePassword).toBe(ONE_TIME_PASSWORD);
+    expect(provisioned.oneTimePassword).toBe(LANE_OTP);
 
     // LOGIN over HTTP — findLoginCredential (definer) + real argon2id verify, over PGlite.
-    const loginRes = await httpLogin(running.url, ONE_TIME_PASSWORD);
+    const loginRes = await httpLogin(running.url, LANE_OTP);
     expect(loginRes.status).toBe(200);
     const controlSession = ((await loginRes.json()) as { controlSession: string }).controlSession;
     expect(typeof controlSession).toBe('string');

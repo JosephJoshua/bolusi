@@ -30,23 +30,20 @@ import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
-  buildPinVerifier,
   bytesToBase64,
   createUuidV7Generator,
-  DEFAULT_KDF_PARAMS,
   verifyPinAgainst,
-  type CanonicalRef,
   type PinVerifier,
 } from '@bolusi/core';
 import { migrateToLatest, type DB } from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
-import {
-  defaultProvisionDeps,
-  provisionTenant,
-  type ProvisionResult,
-} from '@bolusi/server/test-support';
+import { type ProvisionResult } from '@bolusi/server/test-support';
 import { deriveDeviceKeypair, FakeClock, noblePort } from '@bolusi/test-support';
 
+// The provision transaction + PIN seed are the SHARED harness-provision helpers (§2.8). This de-risk
+// depends ONLY on that pure-provisioning module (which it genuinely exercises) — never on lane serve /
+// ready-marker code — so the pivotal §2.5 security-evidence proof cannot be falsely reddened by it.
+import { provisionHarnessOwner, seedOwnerPin } from '../src/harness-provision.js';
 import { createPgliteAuthDirectory } from '../src/production-auth.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
@@ -105,15 +102,9 @@ async function bootProductionAuth(): Promise<ProductionAuthServer> {
 }
 
 async function provisionOwner(s: ProductionAuthServer): Promise<ProvisionResult> {
-  return provisionTenant(
-    { ...defaultProvisionDeps, forTenant: s.forTenant, now: () => s.clock.now() },
-    {
-      tenantName: 'Gudang Selatan',
-      storeNames: ['Toko Utama'],
-      ownerName: 'Pemilik',
-      ownerLogin: 'gudang-selatan',
-    },
-  );
+  // No provision seam ⇒ the DEFAULT random one-time password: test 1 reads it back off `oneTimePassword`
+  // to prove the real provision path. The shared helper hardcodes the same tenant/store/owner names.
+  return provisionHarnessOwner(s);
 }
 
 async function login(s: ProductionAuthServer, oneTimePassword: string): Promise<Response> {
@@ -184,29 +175,15 @@ describe('task 201-B de-risk: production auth (D14 SECURITY DEFINER) over PGlite
     srv = await bootProductionAuth();
     const p = await provisionOwner(srv);
 
-    // Seed the owner's PIN verifier with REAL argon2id — the exact row shape users.ts `writeVerifier`
-    // writes (params jsonb as { m, t, p }). A self-describing verifier: its argon2id params travel
-    // with it, so it verifies on-device iff both sides run standard argon2id.
-    const correctPin = new TextEncoder().encode('271828');
-    const salt = noblePort.randomBytes(16);
-    const asOf: CanonicalRef = { timestamp: srv.clock.now(), deviceId: p.systemDeviceId, seq: 0 };
-    const verifier = await buildPinVerifier(noblePort, correctPin, DEFAULT_KDF_PARAMS, salt, asOf);
-    await srv.forTenant(p.tenantId, (trx) =>
-      trx
-        .insertInto('userPinVerifiers')
-        .values({
-          userId: p.ownerUserId,
-          tenantId: p.tenantId,
-          algo: 'argon2id',
-          salt: verifier.saltB64,
-          params: { m: verifier.mKiB, t: verifier.t, p: verifier.p } as never,
-          hash: verifier.hashB64,
-          asOfTimestamp: BigInt(verifier.asOf.timestamp),
-          asOfDeviceId: verifier.asOf.deviceId,
-          asOfSeq: BigInt(verifier.asOf.seq),
-        })
-        .execute(),
-    );
+    // Seed the owner's PIN verifier with REAL argon2id (shared seedOwnerPin, §2.8) — the exact row shape
+    // users.ts `writeVerifier` writes (params jsonb as { m, t, p }). A self-describing verifier: its
+    // argon2id params travel with it, so it verifies on-device iff both sides run standard argon2id.
+    await seedOwnerPin(srv, {
+      tenantId: p.tenantId,
+      userId: p.ownerUserId,
+      asOfDeviceId: p.systemDeviceId,
+      pin: '271828',
+    });
 
     const loginRes = await login(srv, p.oneTimePassword);
     const controlSession = ((await loginRes.json()) as { controlSession: string }).controlSession;
