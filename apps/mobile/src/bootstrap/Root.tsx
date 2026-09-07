@@ -526,16 +526,35 @@ export function Root({
         }) ?? null;
       setEnrollment(enroll);
       setApp(booting);
-      // The device-info the Settings screen renders (task 94). On a fresh, never-enrolled device this
-      // is the honest empty block; on a device enrolled in a PRIOR run it is the real persisted
-      // identity — read here rather than handed in as a literal.
-      setDeviceInfo(await readDeviceInfo(booting));
-
-      // The loop, IFF the device is ALREADY enrolled at boot. `startSyncIfEnrolled` is a no-op when
-      // `deviceId` is null, so nothing starts on a device that cannot sync — no faked loop.
-      await startSyncIfEnrolled(booting, enroll);
-      await startMediaIfEnrolled(booting);
+      // Session-open FIRST (task 201). The switcher roster an already-enrolled device shows on launch
+      // must not be gated behind sync/media start: those await native/DB work (op-sqlite hydrate; a
+      // media background-task registration that stalls on the Play-Services-less CI emulator) and, when
+      // awaited ahead of session as they were, a stall there left `users` null and the switcher on its
+      // loading skeleton forever. The enrollment callback already fires session INDEPENDENTLY of
+      // sync/media (see above); the boot path is brought in line — session first, then the loops.
       await startSessionIfEnrolled(booting, enroll);
+      consoleDiagnostics.warn(
+        'session-open: [boot] session settled — starting deviceInfo/sync/media',
+      );
+
+      // The device-info the Settings screen renders (task 94) and the loops, AFTER the switcher can
+      // render. Guarded so a throw here is a visible diagnostic, not a silent unhandled rejection that
+      // stops the remaining starts. `startSyncIfEnrolled`/`startMediaIfEnrolled` are no-ops when
+      // `deviceId` is null, so nothing starts on a device that cannot sync — no faked loop.
+      try {
+        // The device-info block: honest empty on a never-enrolled device, real persisted identity on a
+        // device enrolled in a PRIOR run — read here rather than handed in as a literal.
+        setDeviceInfo(await readDeviceInfo(booting));
+        consoleDiagnostics.warn('session-open: [boot] readDeviceInfo done');
+        await startSyncIfEnrolled(booting, enroll);
+        consoleDiagnostics.warn('session-open: [boot] sync started');
+        await startMediaIfEnrolled(booting);
+        consoleDiagnostics.warn('session-open: [boot] media started');
+      } catch (error) {
+        consoleDiagnostics.warn('session-open: [boot] post-session boot step threw', {
+          error: String(error),
+        });
+      }
     })();
 
     return () => {
