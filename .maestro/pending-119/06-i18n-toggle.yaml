@@ -4,13 +4,14 @@
 # a shell route behind an open session. Today Root.tsx passes `session={null}`, so Settings — and the
 # locale toggle on it — is unreachable in the running app.
 #
-# Journey: Settings -> switch locale id <-> en -> the active-locale marker follows. This is the i18n
-# toggle the task calls out (07-i18n). testIDs are SettingsScreen's own: `settings-locale-<locale>`
-# and `settings-locale-active-<locale>`.
+# Journey: home -> Settings -> switch locale id <-> en -> the active-locale marker follows. This is the
+# i18n toggle the task calls out (07-i18n). Settings' own testIDs: `settings-locale-<locale>` and
+# `settings-locale-active-<locale>`.
 #
-# KNOWN GAP for the promoter: reaching Settings needs the shell avatar/settings affordance to carry a
-# testID (same gap noted in 03-shell-navigation.yaml). The `launchApp`->Settings hop below assumes the
-# device is deep-linked or navigated to Settings by that (yet-to-exist) affordance.
+# Reaching Settings is a real in-app hop now (the earlier KNOWN GAP is closed): the notes surface's
+# `shell-open-settings` chip (App.tsx) navigates to `settings-screen`. This flow does that hop rather
+# than assuming a deep link — it asserts the chrome-bearing `notes.list` surface, taps the settings
+# chip, and only then drives the locale toggle.
 appId: com.bolusi.app
 tags:
   - pending-119
@@ -18,6 +19,13 @@ tags:
   - i18n
 ---
 - launchApp
+- assertVisible:
+    id: 'bolusi-app-shell'
+# The settings chip lives on the notes surface (not the empty `shell-home`); assert it before tapping.
+- assertVisible:
+    id: 'notes.list'
+- tapOn:
+    id: 'shell-open-settings'
 - assertVisible:
     id: 'settings-screen'
 - takeScreenshot:

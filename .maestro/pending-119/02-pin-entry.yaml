@@ -32,14 +32,22 @@ tags:
 - takeScreenshot:
     path: pin-02-pad
 - tapOn:
-    id: 'pin-pad.key.1'
-- tapOn:
-    id: 'pin-pad.key.2'
-- tapOn:
     id: 'pin-pad.key.3'
 - tapOn:
+    id: 'pin-pad.key.1'
+- tapOn:
     id: 'pin-pad.key.4'
-# On a correct PIN the gate advances to the shell (home). `pin-pad.onComplete` fires at the 4th digit.
+- tapOn:
+    id: 'pin-pad.key.1'
+- tapOn:
+    id: 'pin-pad.key.5'
+- tapOn:
+    id: 'pin-pad.key.9'
+# On a correct PIN the gate advances to the shell (home). `pin-pad.onComplete` fires on the 6th digit
+# (PIN_LENGTH = 6, packages/ui/src/components/PinPad.tsx) — not the 4th. The six digits ARE the lane-seeded
+# owner PIN (LANE_PIN = '314159', packages/harness/src/harness-provision.ts): the value the enroll bundle
+# carries, so typing it actually unlocks. Any other sequence lands the pad in its `wrong` state, and this
+# assert never sees the shell — the flow's pass condition binds these digits to what the lane seeds.
 - assertVisible:
     id: 'bolusi-app-shell'
 - takeScreenshot:
