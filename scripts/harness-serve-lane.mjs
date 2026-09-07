@@ -19,6 +19,7 @@
 import { register } from 'tsx/esm/api';
 
 import {
+  assertLaneLoopbackBind,
   formatLaneReady,
   LANE_PORT,
   provisionLaneOwner,
@@ -32,8 +33,6 @@ import {
 // The static imports above are compiled `dist/*.js` and need no loader; only the runtime migration
 // `import()` inside `startHarnessServer` does, and it runs after this call.
 register();
-
-const LOOPBACK = '127.0.0.1';
 
 /** Parse `--port <n>` (default LANE_PORT). `0` ⇒ ephemeral. Rejects anything outside a TCP port range. */
 function parsePort(argv) {
@@ -69,10 +68,14 @@ async function main() {
 
   running = await startHarnessServer({ productionAuth: true, port });
 
-  // §2.5: fail closed if the bind is not loopback — a token-minting server must never reach the LAN.
-  if (running.address !== LOOPBACK) {
+  // §2.5: fail closed if the bind is not loopback — a token-minting server must never reach the LAN. The
+  // decision is the pure, unit-falsifiable `assertLaneLoopbackBind`; on reject we still close the socket
+  // here so a refused bind never leaks a listening port.
+  try {
+    assertLaneLoopbackBind(running.address);
+  } catch (error) {
     await running.close();
-    throw new Error(`harness-serve-lane: expected loopback bind, got ${running.address}`);
+    throw error;
   }
 
   const credentials = await provisionLaneOwner(running.server);

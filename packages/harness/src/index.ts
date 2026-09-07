@@ -62,7 +62,9 @@ export {
   type ProvisionableServer,
 } from './harness-provision.js';
 export {
+  assertLaneLoopbackBind,
   formatLaneReady,
+  LANE_LOOPBACK,
   LANE_PORT,
   LANE_READY_MARKER,
   parseLaneReady,

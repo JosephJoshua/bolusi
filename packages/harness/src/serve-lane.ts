@@ -28,6 +28,29 @@ export const LANE_PORT = 3000;
 /** The stdout token the serve entry prints ONCE the server is listening + provisioned. */
 export const LANE_READY_MARKER = 'BOLUSI_LANE_READY';
 
+/**
+ * The ONE host the lane may bind: IPv4 loopback. The emulator does not reach the host directly — it hits
+ * the `10.0.2.2` alias, which `adb reverse tcp:P tcp:P` forwards to host `127.0.0.1:P`. So loopback is
+ * both sufficient (the emulator still reaches it) and the only safe bind.
+ */
+export const LANE_LOOPBACK = '127.0.0.1';
+
+/**
+ * §2.5 fail-closed guard for the serve entry: the lane server mints REAL control-session + device tokens,
+ * so it MUST bind {@link LANE_LOOPBACK} and nothing else. Throws on any other host — a LAN address, the
+ * `0.0.0.0` wildcard, the `10.0.2.2` emulator alias (that is how the guest REACHES the host, never what the
+ * host BINDS), or even IPv6 `::1` (the `adb reverse` hop maps IPv4 only, so a `::1` bind is unreachable as
+ * well as off-contract). Pure and exported so the REJECT branch is unit-falsifiable — the security control
+ * is closed by construction, not by a decorative `if` buried in the un-unit-testable `.mjs` entry (§2.11).
+ */
+export function assertLaneLoopbackBind(address: string): void {
+  if (address !== LANE_LOOPBACK) {
+    throw new Error(
+      `harness-serve-lane: refusing non-loopback bind ${address} — a token-minting server must not reach the LAN`,
+    );
+  }
+}
+
 /** The lane owner's credentials — the literals the pending Maestro flows type to enroll + unlock. */
 export interface LaneCredentials {
   readonly ownerLogin: string;

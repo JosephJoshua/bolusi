@@ -20,7 +20,9 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { HarnessServer } from '../src/server.js';
 import {
+  assertLaneLoopbackBind,
   formatLaneReady,
+  LANE_LOOPBACK,
   parseLaneReady,
   provisionLaneOwner,
   type LaneCredentials,
@@ -144,5 +146,25 @@ describe('task 201-B: the lane ready marker round-trips', () => {
     expect(parseLaneReady('some other server log line')).toBeUndefined();
     // The prefix requires the exact `: ` separator — the bare marker word is not a payload line.
     expect(parseLaneReady('BOLUSI_LANE_READY without a colon')).toBeUndefined();
+  });
+});
+
+// §2.5 / §2.11: the loopback-only bind is THE security control of this token-minting surface. The child
+// test (serve-lane-child.test.ts) proves the HAPPY path binds 127.0.0.1 over a real socket; this proves
+// the guard's REJECT branch — that a non-loopback address is actually refused — directly and falsifiably,
+// so "binds loopback-only" is not a decorative, never-red `if` in the un-unit-testable `.mjs` entry.
+describe('task 201-B: assertLaneLoopbackBind fails closed off loopback', () => {
+  test('accepts the IPv4 loopback the lane binds (and nothing else advertises)', () => {
+    expect(() => assertLaneLoopbackBind(LANE_LOOPBACK)).not.toThrow();
+    expect(LANE_LOOPBACK).toBe('127.0.0.1');
+  });
+
+  test('refuses the wildcard, a LAN address, the emulator alias, IPv6 loopback, and an empty host', () => {
+    // Each of these is a bind a token-minting server must NEVER accept: `0.0.0.0` exposes it on every
+    // interface; `192.168.*` / `10.0.2.2` are LAN-reachable (10.0.2.2 is how the GUEST reaches the host,
+    // never a host bind); `::1` is off the IPv4 `adb reverse` path; `''` is a malformed address.
+    for (const address of ['0.0.0.0', '192.168.1.5', '10.0.2.2', '::', '::1', 'localhost', '']) {
+      expect(() => assertLaneLoopbackBind(address), address).toThrow(/non-loopback bind/);
+    }
   });
 });
