@@ -19,7 +19,7 @@
 import { AvatarButton, Chip, SyncChip, touch } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
@@ -593,7 +593,7 @@ export default function App(props: AppProps): React.JSX.Element {
      * shutter, so the identity must not be switchable between opening the camera and pressing it.
      */
     return (
-      <View testID="bolusi-app-shell" style={FILL}>
+      <View testID="bolusi-app-shell" style={styles.shell}>
         <StatusBar style="auto" />
         <CaptureScreen
           // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
@@ -623,7 +623,7 @@ export default function App(props: AppProps): React.JSX.Element {
   }
 
   return (
-    <View testID="bolusi-app-shell" style={FILL}>
+    <View testID="bolusi-app-shell" style={styles.shell}>
       <StatusBar style="auto" />
       {renderZone(zone, {
         enrollment: (revoked) => (
@@ -929,7 +929,20 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 
 const FILL = { flex: 1 } as const;
 
+/**
+ * Android 15 (Expo SDK 57 / RN 0.81, targetSdk 35) enforces edge-to-edge: the app draws under the
+ * system status bar, whose window sits z-above ours and eats any touch that lands in it. The header
+ * chrome (sync chip, language chip, avatar) is laid out at y=0, so at center it falls under the
+ * status bar and is un-tappable — invisible to prop-level render tests, caught only on-device.
+ * Inset the shell by the status-bar height so the header (and body) render below it. iOS is out of
+ * v0 scope; `react-native-safe-area-context` is not a dependency, and `currentHeight` is the exact
+ * occluding height, so it needs no extra package.
+ */
+const STATUS_BAR_INSET = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
+
 const styles = StyleSheet.create({
+  /** The app shell: fills the screen and clears the status bar so header chrome stays tappable. */
+  shell: { flex: 1, paddingTop: STATUS_BAR_INSET },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   headerChrome: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
 });
