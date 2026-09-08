@@ -30,6 +30,11 @@ tags:
 - inputText: 'Terima 12 dus, 2 rusak.'
 - takeScreenshot:
     path: note-02-editor-filled
+# The soft keyboard is up after typing and covers AppShell's bottom-docked save action (verified on run
+# 34198321073: `notes.editor.save` was absent from the view hierarchy, hidden behind the IME, while the
+# in-content `notes.editor.attach` was still present). Dismiss it so the docked save button returns to the
+# visible hierarchy — the same thing a real user does to reach it.
+- hideKeyboard
 # NB: no attach step here. Tapping `notes.editor.attach` pushes the camera capture screen (capture-screen /
 # "Ambil Foto"), which sits on a loading spinner forever on a headless AVD with no camera — the editor and
 # its save button are then off-screen and the flow can never reach save. Media capture is exercised on the
