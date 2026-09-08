@@ -13,8 +13,9 @@
  * public surface — the alternative — was not available. `tsc` still resolves the REAL `react-native`
  * types for both packages, so every prop these screens pass stays compiler-checked against real RN.
  *
- * WHAT THIS FILE ADDS on top: the two platform surfaces the SHELL needs and a component library does
- * not. Both are recorded rather than real, because a test must never wait on a native event.
+ * WHAT THIS FILE ADDS on top: the platform surfaces the SHELL needs and a component library does
+ * not (`BackHandler`, `StatusBar`). All are recorded rather than real, because a test must never wait
+ * on a native event or read a native measurement.
  *
  * INHERITED LIMITS — do not claim these are tested here: no Yoga layout (every dimension assertion
  * reads a declared STYLE value, never a measured frame — which is exactly why the banner-truncation
@@ -33,6 +34,21 @@ export {
   Vibration,
   View,
 } from '../../../../packages/ui/test/doubles/react-native.js';
+
+/**
+ * `StatusBar` double. The shell reads `StatusBar.currentHeight` for its edge-to-edge TOP inset
+ * (App.tsx `STATUS_BAR_INSET`) — the app draws under the status bar, so the header chrome is padded
+ * down by exactly the bar's height. RECORDED, not measured: there is no native status bar in this
+ * lane, so a fixed Android height stands in, purely so the App module can be imported and mounted
+ * (a top-level `const` evaluates `StatusBar.currentHeight` at import — an undefined export there throws
+ * before a single test collects). No assertion depends on the value: the inset feeds a declared style
+ * and this lane reads declared styles, never measured frames (see the inherited-limits note above).
+ * Only `currentHeight` is modelled because that is the only member the shell touches — it never renders
+ * this `StatusBar` (it renders `expo-status-bar`'s component instead). Real RN exports a numeric
+ * `currentHeight` on Android and `undefined` elsewhere; production already `?? 0`s it, so on-device only
+ * the export's PRESENCE, not this stand-in height, decides behaviour.
+ */
+export const StatusBar = { currentHeight: 24 };
 
 type BackHandlerSubscription = { remove(): void };
 type BackListener = () => boolean;
