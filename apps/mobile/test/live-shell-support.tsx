@@ -572,6 +572,11 @@ export async function mountRoot(
     },
     evaluator: runtime.evaluator as PermissionEvaluator,
     runtime,
+    // `runtimeFor` signs with a fake in-memory keypair that is ALWAYS present (no SecureStore read), so
+    // a cold reload is a genuine no-op for every existing lane. The cold-start bug lives only where the
+    // keystore's cache can be empty at first sign — reproduced by live-shell-cold-start-signing, which
+    // injects its own `createEnrollment` bound to a real, cold `SecureStoreKeyStore`.
+    loadSigningKey: () => Promise.resolve(),
   };
 
   const screen = render(

@@ -453,6 +453,15 @@ export function Root({
       }
       let controller: AppSession | null;
       try {
+        // COLD-START SIGNING KEY (api/02-auth §3; `KeyStorePort.loadSigningKey` — "MUST be awaited
+        // once at startup before the command runtime signs its first op"; task 201). On an
+        // already-enrolled cold start no enrollment runs, so `runEnrollment`'s mid-flow reload — which
+        // covers a resume DURING enrollment — never fires, yet the session op emitted at this first PIN
+        // unlock must be signed. Reload the persisted seed into the keystore's in-memory cache BEFORE
+        // composing the session, so the runtime's SYNCHRONOUS `getSigningKey()` (it signs inside the
+        // append transaction, so it cannot await Keychain per op) finds the seed. Idempotent on the
+        // just-enrolled path, where enroll already cached it; `enroll` is non-null here (guarded above).
+        await enroll.loadSigningKey();
         controller = (await createSession?.(booted, enroll.runtime)) ?? null;
       } catch (error) {
         consoleDiagnostics.warn('session-open: createSession threw', { error: String(error) });

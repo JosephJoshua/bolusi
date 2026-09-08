@@ -101,6 +101,18 @@ export interface AppEnrollment {
    * this object; both are here so the two can never be different objects (§2.8).
    */
   readonly runtime: AppRuntime;
+  /**
+   * Reload the persisted device seed into the keystore's in-memory cache (api/02-auth §3;
+   * `KeyStorePort.loadSigningKey` — "MUST be awaited once at startup before the command runtime signs
+   * its first op").
+   *
+   * On an already-enrolled COLD start no enrollment runs, so `runEnrollment`'s mid-flow reload — which
+   * covers a resume DURING enrollment (see {@link EnrollmentPlatform.keystore}) — never fires, yet the
+   * runtime must sign the session op at the FIRST PIN unlock. Root awaits this before composing the
+   * session so a fresh `SecureStoreKeyStore` (empty cache, seed on disk from the original enroll) can
+   * sign. Idempotent on the just-enrolled path, where the seed is already cached.
+   */
+  loadSigningKey(): Promise<void>;
 }
 
 /**
@@ -185,5 +197,18 @@ export function createAppEnrollment(
     },
   };
 
-  return { controller, evaluator: runtime.evaluator, runtime };
+  return {
+    controller,
+    evaluator: runtime.evaluator,
+    runtime,
+    // Reload the persisted seed into the SAME keystore this runtime signs through (§2.8 object
+    // identity). On the just-enrolled path the seed is already cached, so this is a no-op; on an
+    // already-enrolled cold start it is the ONLY thing that repopulates a fresh keystore's empty cache
+    // before the session op signs. `platform.keystore` is `KeyStorePort`, which declares
+    // `loadSigningKey`; the null it may return (no seed on disk) is discarded — the caller only needs
+    // the cache primed, and an unenrolled cold start never reaches here (Root guards on `enroll`).
+    loadSigningKey: async () => {
+      await platform.keystore.loadSigningKey();
+    },
+  };
 }
