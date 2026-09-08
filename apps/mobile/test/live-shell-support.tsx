@@ -510,6 +510,12 @@ export interface MountOptions {
    */
   readonly onSessionController?: (controller: AppSessionController) => void;
   /**
+   * Override the session factory entirely (default: the PRODUCTION `createAppSession` wrapper below).
+   * The session-open-failure test injects one that REJECTS, to prove a session-open throw degrades to
+   * the pre-unlock surface + a diagnostic rather than a blank tree + an unhandled rejection.
+   */
+  readonly createSession?: RootProps['createSession'];
+  /**
    * The push-token registration factory (api/04-push §2; task 135). Omitted by default, so tests that
    * do not exercise push behave exactly as before — `Root` skips registration when it is `undefined`.
    * The push composed test passes a fake that records `postToken` calls.
@@ -608,20 +614,23 @@ export async function mountRoot(
       // identical to before (a timer that never fires drives no tick).
       appState={options.appState ?? fakeAppState()}
       timer={options.timer ?? manualTimer()}
-      createSession={async (booted, appRuntime) => {
-        const controller = await createAppSession({
-          app: booted,
-          runtime: appRuntime,
-          crypto: noblePort,
-          clock: sessionClock,
-          idSource: createUuidV7Generator({
-            now: () => FIXED_NOW,
-            randomBytes: (n) => prngBytes(mulberry32(7), n),
-          }),
-        });
-        if (controller !== null) options.onSessionController?.(controller);
-        return controller;
-      }}
+      createSession={
+        options.createSession ??
+        (async (booted, appRuntime) => {
+          const controller = await createAppSession({
+            app: booted,
+            runtime: appRuntime,
+            crypto: noblePort,
+            clock: sessionClock,
+            idSource: createUuidV7Generator({
+              now: () => FIXED_NOW,
+              randomBytes: (n) => prngBytes(mulberry32(7), n),
+            }),
+          });
+          if (controller !== null) options.onSessionController?.(controller);
+          return controller;
+        })
+      }
       // THE PRODUCTION SEAM CHOICE, not a fixture-local one (task 130): `notesMediaSeamsFor` is the
       // same function `index.ts` calls, so what this lane binds into the notes runtime is what a
       // device binds. It was `UNWIRED_NOTES_MEDIA` unconditionally here, which meant the composed

@@ -472,16 +472,31 @@ export function Root({
      * LAST — let a stall (or a synchronous throw) there leave `users` null and the switcher stuck on
      * its loading skeleton forever (task 201). Shared by BOTH the already-enrolled boot path (awaited)
      * and the just-enrolled callback (fire-and-forget) so the two can never drift apart (§2.8).
-     * Device-info + the loops run in a try/catch: a throw there is surfaced as a diagnostic and never
-     * stops session-open, which has already settled. `via` tags which path ran, so the diagnostic
-     * names whether the boot path or the just-enrolled callback hit it.
+     * Session-open and the device-info+loops step each run in their OWN try/catch, so a throw in
+     * EITHER is surfaced as a diagnostic and never stops the other: a session-open throw still lets
+     * device-info be read (so the app renders the enrolled pre-unlock surface, never a blank tree), and
+     * a loops throw never stops session-open, which has already settled. `via` tags which path ran, so
+     * each diagnostic names whether the boot path or the just-enrolled callback hit it.
      */
     const startServicesForEnrolled = async (
       booted: Bootstrapped,
       enroll: AppEnrollment | null,
       via: 'boot' | 'enroll',
     ): Promise<void> => {
-      await startSessionIfEnrolled(booted, enroll);
+      // Session-open gets its OWN try/catch, SEPARATE from the loops below: a throw here (a rejecting
+      // `createSession`, a `loadSigningKey`/`refresh` that throws) must degrade to the enrolled
+      // pre-unlock surface — NOT skip the device-info read that follows. Sharing one try with the loops
+      // would let a session throw jump past `setDeviceInfo`, leaving `deviceInfo` null and Root's gate
+      // blanking the whole app; and because the already-enrolled boot path awaits this inside a
+      // no-`.catch` IIFE, that same throw also surfaced as an unhandled rejection (task 201, V6/R10).
+      try {
+        await startSessionIfEnrolled(booted, enroll);
+      } catch (error) {
+        consoleDiagnostics.warn('session open failed; degrading to the pre-unlock surface', {
+          via,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       try {
         const info = await readDeviceInfoStable(booted);
         if (!disposed) setDeviceInfo(info);
