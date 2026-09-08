@@ -86,6 +86,47 @@ import type { Bootstrapped } from './bootstrap.js';
 import { readDeviceIdentity } from './notes.js';
 import type { AppRuntime } from './runtime.js';
 
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// task-201 DIAGNOSTIC — REMOVE before merge (mirrors the a061555 session-open instrumentation;
+// trimmed once the PIN-unlock root cause is pinned, as 3ea546e/3972926 trimmed the enrollment ones).
+//
+// On the emulator lane the correct PIN (LANE_PIN 314159) does not unlock (flows 02-05). Every
+// argon2id INPUT is provably identical across seed→bundle→apply→verify, and the host live-shell
+// unlock path proves the verify→unlock→gate wiring sound under noble. The ONE seam no host test can
+// exercise is the DEVICE's native quick-crypto argon2id re-derivation of a noble-BUILT verifier
+// (the lane is the first place server-JS-noble meets device-native). This KAT settles native≡noble
+// directly with a FIXED PUBLIC vector — no credential material — the device kdf over the PIN params
+// (m=32768,t=3,p=1,dkLen=32,v=0x13) must reproduce noble's tag. Fires once on the first submit.
+const PIN_KAT_EXPECTED_NOBLE_HEX =
+  '41d52806abacc5c115bd9cd19f0d54d743cd0959f8b14a32798580a79e56bf59';
+let pinKatFired = false;
+const diagBytesToHex = (bytes: Uint8Array): string =>
+  Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+async function runPinArgon2Kat(crypto: CryptoPort): Promise<void> {
+  if (pinKatFired) return;
+  pinKatFired = true;
+  try {
+    const password = new TextEncoder().encode('bolusi-kat-v1');
+    const salt = new Uint8Array(16);
+    for (let i = 0; i < 16; i += 1) salt[i] = i;
+    const derived = await crypto.kdf(password, salt, {
+      memoryCost: 32768,
+      timeCost: 3,
+      parallelism: 1,
+      outputLength: 32,
+    });
+    const derivedHex = diagBytesToHex(derived);
+    consoleDiagnostics.warn('pin-kat: argon2id done', {
+      len: derived.length,
+      equalsNoble: derivedHex === PIN_KAT_EXPECTED_NOBLE_HEX,
+      derivedPrefix: derivedHex.slice(0, 16),
+      expectedPrefix: PIN_KAT_EXPECTED_NOBLE_HEX.slice(0, 16),
+    });
+  } catch (error: unknown) {
+    consoleDiagnostics.warn('pin-kat: argon2id THREW', { error: String(error) });
+  }
+}
+
 /** What a PIN submission produced. Every arm is a state the shell already knows how to render. */
 export type PinOutcome =
   /** Verified — a session is open and `current` now holds it. */
@@ -402,6 +443,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     pinRow: (userId) => rows.get(userId) ?? null,
 
     async submitPin(userId, pin): Promise<PinOutcome> {
+      consoleDiagnostics.warn('pin-submit: begin');
+      await runPinArgon2Kat(deps.crypto);
       let outcome: PinOutcome;
       try {
         const result = await verifyPin(
@@ -432,16 +475,21 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
             throw new Error('unlock did not open a session (SessionManager.current stayed null)');
           }
           outcome = { kind: 'opened', session };
+          consoleDiagnostics.warn('pin-submit: opened');
         } else {
           outcome = { kind: 'wrong', state: result.state, lockedOut: result.lockedOut };
+          consoleDiagnostics.warn('pin-submit: wrong', { lockedOut: result.lockedOut });
         }
       } catch (error: unknown) {
         if (error instanceof DomainError && error.code === 'ENTITY_NOT_FOUND') {
           outcome = { kind: 'needs_first_pin' };
+          consoleDiagnostics.warn('pin-submit: needs_first_pin');
         } else if (error instanceof DomainError) {
           // `PIN_LOCKED` / `PIN_RATE_LIMITED` — refused before the KDF ran (SEC-AUTH-02).
           outcome = { kind: 'gated', code: error.code };
+          consoleDiagnostics.warn('pin-submit: gated', { code: error.code });
         } else {
+          consoleDiagnostics.warn('pin-submit: rethrow', { error: String(error) });
           throw error;
         }
       }
