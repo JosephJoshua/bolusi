@@ -3,9 +3,12 @@
 # is the one 04 created (04 runs first alphabetically and its write persists across the cold relaunch,
 # since only 01 clears state).
 #
-# Journey: list -> open a note -> Archive -> the ConfirmSheet appears -> Confirm -> the archived badge
-# shows. testIDs are the notes module's own (NoteDetail.tsx) + the shared ConfirmSheet
-# (`.archiveConfirm.confirm`).
+# Journey: list -> open a note -> Archive -> the ConfirmSheet appears -> Confirm -> the app pops back to
+# the list with the note filtered out of the active view -> switch to the archived view -> open the note
+# -> its archived badge shows. testIDs are the notes module's own (NoteDetail.tsx / NotesList.tsx) + the
+# shared ConfirmSheet (`.archiveConfirm.confirm`). Archive is optimistic and navigates AWAY (§4.1): it
+# does NOT flip a badge in place on the detail, so the badge is verified where it actually renders — on
+# an already-archived note's detail, reached through the archived filter.
 appId: com.bolusi.app
 tags:
   - live
@@ -31,7 +34,20 @@ tags:
     path: archive-02-confirmsheet
 - tapOn:
     id: 'notes.detail.archiveConfirm.confirm'
-# The note is now archived — the archived badge renders on the detail (NoteDetail.tsx).
+# Archive is optimistic (design-system §4.1): NoteDetail.archive() fires archiveNote and immediately pops
+# to the list (onBack), which re-renders with the note filtered out of the active view. So we land back on
+# the LIST — now empty of active notes — not on the detail. The archived badge lives on an already-archived
+# note's detail (row.archived), reached via the archived filter; confirm the archive took by opening it there.
+- assertVisible:
+    id: 'notes.list'
+- tapOn:
+    id: 'notes.list.archivedToggle'
+# The archived view now lists the just-archived note. The list is a live query (NotesList.tsx §7), so it
+# re-fires when the optimistic archive op commits; Maestro's tapOn waits for the row to appear.
+- tapOn:
+    id: 'notes.list.row..*'
+- assertVisible:
+    id: 'notes.detail'
 - assertVisible:
     id: 'notes.detail.archivedBadge'
 - takeScreenshot:
