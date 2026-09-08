@@ -2,11 +2,11 @@
 # live notes surface — delegated to subflows/unlock.yaml. This flow's created note also seeds the archive
 # flow (05), which runs after it and does not clearState.
 #
-# Journey: list -> create -> fill title/body -> (attach a photo; camera is emulator-stubbed) -> save ->
-# the new note appears in the list. testIDs are the notes module's own (NoteEditor.tsx / NotesList.tsx):
-# the create affordance on an EMPTY list is the empty-state CTA `ui.emptyState.cta` (NotesList renders the
-# bottom-action `notes.list.create` button only once rows exist), then `notes.editor.title|body|attach|save`
-# and `notes.list.items`. Text entry targets the inner `${testID}.field` RN input
+# Journey: list -> create -> fill title/body -> save -> the new note appears in the list. testIDs are the
+# notes module's own (NoteEditor.tsx / NotesList.tsx): the create affordance on an EMPTY list is the
+# empty-state CTA `ui.emptyState.cta` (NotesList renders the bottom-action `notes.list.create` button only
+# once rows exist), then `notes.editor.title|body|save` and `notes.list.items`. Text entry targets the
+# inner `${testID}.field` RN input
 # (packages/ui/src/components/TextInput.tsx).
 appId: com.bolusi.app
 tags:
@@ -30,13 +30,11 @@ tags:
 - inputText: 'Terima 12 dus, 2 rusak.'
 - takeScreenshot:
     path: note-02-editor-filled
-# Attach a photo. On the emulator the camera is a stub; left optional because emulator camera behaviour
-# varies by AVD image.
-- tapOn:
-    id: 'notes.editor.attach'
-    optional: true
-- takeScreenshot:
-    path: note-03-attach
+# NB: no attach step here. Tapping `notes.editor.attach` pushes the camera capture screen (capture-screen /
+# "Ambil Foto"), which sits on a loading spinner forever on a headless AVD with no camera — the editor and
+# its save button are then off-screen and the flow can never reach save. Media capture is exercised on the
+# media pipeline's own surface (task 82), not this note-create journey; here we only create + save so flow
+# 05 has a note to archive.
 - tapOn:
     id: 'notes.editor.save'
 - assertVisible:
