@@ -940,9 +940,35 @@ const FILL = { flex: 1 } as const;
  */
 const STATUS_BAR_INSET = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
 
+/**
+ * The bottom half of the same edge-to-edge story (see `STATUS_BAR_INSET`): the app also draws under
+ * the system navigation bar, whose window sits z-above ours and eats any touch landing in it. The
+ * shell's bottom action bar (AppShell §8.1) docks the screen's one primary Button at the screen
+ * bottom, so its lower half — including its center, the point a tap dispatches to — falls under the
+ * nav bar and the press never reaches the button. Verified on the emulator lane: `notes.editor.save`
+ * rendered at center y≈2284 on a 2400-tall AVD, inside the 3-button nav-bar band, and the save tap
+ * COMPLETED yet produced no onPress / no navigation. Like the status-bar case this is invisible to
+ * prop-level render tests (the button is present and "visible" in the hierarchy) and caught only
+ * on-device. Inset the shell by the nav-bar height so the action bar lifts above it.
+ *
+ * Unlike the status bar there is no core-RN "exact occluding height" API for the nav bar
+ * (`RNStatusBar.currentHeight` has no bottom twin, and under edge-to-edge `Dimensions` screen ==
+ * window so their difference is 0); `react-native-safe-area-context` — the only source of the exact
+ * per-mode inset — is deliberately not a dependency (see above). 48 dp is the Android 3-button
+ * navigation-bar height: exact on the lane AVD and on the 3-button budget Android this app targets,
+ * and it can only ever over-pad, never under-pad, so the button is always fully clear. Gesture-nav
+ * devices have a smaller bottom inset, so there this leaves a small cosmetic gap above the gesture
+ * pill — the same kind of accepted v0 trade-off as iOS being out of scope. This is a platform system
+ * measurement, not a Bolusi design value, so it lives here beside `STATUS_BAR_INSET`, not in tokens.
+ */
+const NAV_BAR_INSET = Platform.OS === 'android' ? 48 : 0;
+
 const styles = StyleSheet.create({
-  /** The app shell: fills the screen and clears the status bar so header chrome stays tappable. */
-  shell: { flex: 1, paddingTop: STATUS_BAR_INSET },
+  /**
+   * The app shell: fills the screen and clears both system bars so the header chrome and the
+   * bottom-docked primary action stay tappable under edge-to-edge (§8.1).
+   */
+  shell: { flex: 1, paddingTop: STATUS_BAR_INSET, paddingBottom: NAV_BAR_INSET },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   headerChrome: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
 });
