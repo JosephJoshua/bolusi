@@ -1,0 +1,25 @@
+# Maestro workspace config for the emulator lane (task 201-B). PINS run order.
+#
+# Without this, `maestro test .maestro/` runs flows in ARBITRARY order (Maestro docs: "the order is not
+# guaranteed"). The lane's journeys are stateful and chained: 01 enrolls the device, 02 sets the PIN, and 04
+# creates the note that 05 then archives. Out of order on run 34195026801, 06 booted a factory-fresh app into
+# the enrollment wizard and 05 had no note to archive — the exact reds seen there.
+#
+# `flowsOrder` lists all six discovered top-level flows, so the whole suite is deterministic (flows NOT in
+# flowsOrder would otherwise run afterward in non-deterministic order). Entries are filenames-sans-.yaml (no
+# flow sets a `name:`). `continueOnFailure: false` stops at the first red so a failure can't be masked by a
+# later green and a broken precondition can't cascade into misleading downstream reds.
+#
+# Deliberately NO `flows:` / `includeTags` / `excludeTags` block: default discovery already finds exactly
+# these six (subflows/unlock.yaml is a runFlow target and is not discovered standalone — verified on the
+# no-config run 34195026801), and tag filters + flowsOrder / repeated flowsOrder entries are known to make
+# Maestro silently run zero flows / mis-order (maestro #1567).
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-launch-enrollment
+    - 02-pin-entry
+    - 03-shell-navigation
+    - 04-note-create
+    - 05-archive-confirmsheet
+    - 06-i18n-toggle
