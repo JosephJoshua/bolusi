@@ -443,34 +443,18 @@ export function Root({
       enroll: AppEnrollment | null,
     ): Promise<void> => {
       if (disposed || sessionRef.current !== null || booted.deviceId === null) return;
-      consoleDiagnostics.warn('session-open: startSessionIfEnrolled begin', {
-        deviceId: booted.deviceId,
-        enrollNull: enroll === null,
-      });
-      if (enroll === null) {
-        consoleDiagnostics.warn('session-open: enroll null — no runtime, aborting');
-        return;
-      }
-      let controller: AppSession | null;
-      try {
-        // COLD-START SIGNING KEY (api/02-auth §3; `KeyStorePort.loadSigningKey` — "MUST be awaited
-        // once at startup before the command runtime signs its first op"; task 201). On an
-        // already-enrolled cold start no enrollment runs, so `runEnrollment`'s mid-flow reload — which
-        // covers a resume DURING enrollment — never fires, yet the session op emitted at this first PIN
-        // unlock must be signed. Reload the persisted seed into the keystore's in-memory cache BEFORE
-        // composing the session, so the runtime's SYNCHRONOUS `getSigningKey()` (it signs inside the
-        // append transaction, so it cannot await Keychain per op) finds the seed. Idempotent on the
-        // just-enrolled path, where enroll already cached it; `enroll` is non-null here (guarded above).
-        await enroll.loadSigningKey();
-        controller = (await createSession?.(booted, enroll.runtime)) ?? null;
-      } catch (error) {
-        consoleDiagnostics.warn('session-open: createSession threw', { error: String(error) });
-        throw error;
-      }
-      if (controller === null || disposed) {
-        consoleDiagnostics.warn('session-open: createSession returned null', { disposed });
-        return;
-      }
+      if (enroll === null) return;
+      // COLD-START SIGNING KEY (api/02-auth §3; `KeyStorePort.loadSigningKey` — "MUST be awaited
+      // once at startup before the command runtime signs its first op"; task 201). On an
+      // already-enrolled cold start no enrollment runs, so `runEnrollment`'s mid-flow reload — which
+      // covers a resume DURING enrollment — never fires, yet the session op emitted at this first PIN
+      // unlock must be signed. Reload the persisted seed into the keystore's in-memory cache BEFORE
+      // composing the session, so the runtime's SYNCHRONOUS `getSigningKey()` (it signs inside the
+      // append transaction, so it cannot await Keychain per op) finds the seed. Idempotent on the
+      // just-enrolled path, where enroll already cached it; `enroll` is non-null here (guarded above).
+      await enroll.loadSigningKey();
+      const controller = (await createSession?.(booted, enroll.runtime)) ?? null;
+      if (controller === null || disposed) return;
       sessionRef.current = controller;
       sessionUnsubRef.current = controller.subscribe(() => bump());
       setSession(controller);
@@ -488,8 +472,9 @@ export function Root({
      * LAST — let a stall (or a synchronous throw) there leave `users` null and the switcher stuck on
      * its loading skeleton forever (task 201). Shared by BOTH the already-enrolled boot path (awaited)
      * and the just-enrolled callback (fire-and-forget) so the two can never drift apart (§2.8).
-     * Device-info + the loops run in a try/catch: a throw there is a visible diagnostic and never
-     * stops session-open, which has already settled. `via` tags which path ran, for the device logcat.
+     * Device-info + the loops run in a try/catch: a throw there is surfaced as a diagnostic and never
+     * stops session-open, which has already settled. `via` tags which path ran, so the diagnostic
+     * names whether the boot path or the just-enrolled callback hit it.
      */
     const startServicesForEnrolled = async (
       booted: Bootstrapped,
@@ -497,20 +482,15 @@ export function Root({
       via: 'boot' | 'enroll',
     ): Promise<void> => {
       await startSessionIfEnrolled(booted, enroll);
-      consoleDiagnostics.warn(
-        `session-open: [${via}] session settled — starting deviceInfo/sync/media`,
-      );
       try {
         const info = await readDeviceInfoStable(booted);
         if (!disposed) setDeviceInfo(info);
-        consoleDiagnostics.warn(`session-open: [${via}] readDeviceInfo done`);
         await startSyncIfEnrolled(booted, enroll);
-        consoleDiagnostics.warn(`session-open: [${via}] sync started`);
         await startMediaIfEnrolled(booted);
-        consoleDiagnostics.warn(`session-open: [${via}] media started`);
       } catch (error) {
-        consoleDiagnostics.warn(`session-open: [${via}] post-session step threw`, {
-          error: String(error),
+        consoleDiagnostics.warn('enrolled-services start failed after session open', {
+          via,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     };

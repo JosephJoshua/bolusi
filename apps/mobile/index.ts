@@ -34,10 +34,7 @@ import { appStatePort } from './src/ports/app-state.js';
 import { systemClock } from './src/ports/clock.js';
 import { deviceColumnAead } from './src/ports/aead.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
-import { consoleDiagnostics, setNativeDiagnosticsMirror } from './src/ports/diagnostics.js';
-// TEMPORARY (task 201 switcher-hang diagnosis) — the device-only native logcat sink. Imported ONLY here,
-// so its static `import 'expo'` never enters a Node test graph. Reverted with a061555/65819f9.
-import { nativeDiag } from './src/harness/native-diag.js';
+import { consoleDiagnostics } from './src/ports/diagnostics.js';
 import { SecureStoreDbKeyStore } from './src/ports/db-keystore.js';
 import { SecureStoreKeyStore } from './src/ports/keystore.js';
 import { fileLocaleStore } from './src/ports/locale-store.js';
@@ -95,9 +92,6 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
-  // TEMP boot-diag counter (task 201-B flow-06 root cause): distinguishes the recovery re-boot (attempt 2)
-  // from the first attempt. Remove with the `boot-diag:` logs below once the root cause is confirmed.
-  let bootDiagAttempt = 0;
   // `bootWithLocalRecovery` self-heals a boot that fails because the data layer is genuinely
   // unreadable-with-our-key — by wiping and dropping to enrollment; every other failure still
   // surfaces through Root's no-catch.
@@ -111,48 +105,16 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // routes into the SAME wipe below. The old `missing_key`/`not_a_database` branches remain as
   // defensive backstops. Same defence covers the Android partial-data-clear (file kept, key lost).
   return bootWithLocalRecovery({
-    boot: async () => {
-      // TEMP boot-diag (task 201-B flow-06 root cause): the recovery path is otherwise SILENT, so a
-      // wipe→re-enroll is invisible in logcat. Capture, at the boot boundary: (a) whether the at-rest DB
-      // key is present BEFORE bootstrap (a BOOLEAN only — never the key value, SEC-DEV-06 / §6.4), (b) the
-      // resulting deviceId presence, and (c) the name+message of any thrown error (distinguishes the two
-      // ForeignDatabaseError branches: "different key" vs "no cipher key tag"). Remove after diagnosis.
-      bootDiagAttempt += 1;
-      let dbKeyPresent: boolean | 'read-threw' = false;
-      try {
-        const existing = await keyStore.getDatabaseEncryptionKey();
-        dbKeyPresent = existing !== null && existing !== '';
-      } catch {
-        dbKeyPresent = 'read-threw';
-      }
-      consoleDiagnostics.warn('boot-diag: attempt begin', {
-        attempt: bootDiagAttempt,
-        dbKeyPresent,
-      });
-      try {
-        const booted = await bootstrap({
-          driverFactory: openOpSqliteDriver,
-          keyStore,
-          crypto: quickCryptoPort,
-          // D22: the 32-byte SecureStore key now drives app-layer AES-256-GCM over the sensitive columns
-          // (via quick-crypto's OpenSSL), replacing SQLCipher's whole-file encryption — task 148.
-          aead: deviceColumnAead,
-          clock: systemClock,
-        });
-        consoleDiagnostics.warn('boot-diag: attempt ok', {
-          attempt: bootDiagAttempt,
-          deviceIdPresent: booted.deviceId !== null,
-        });
-        return booted;
-      } catch (error) {
-        consoleDiagnostics.warn('boot-diag: attempt threw', {
-          attempt: bootDiagAttempt,
-          name: error instanceof Error ? error.name : 'non-error',
-          message: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
-    },
+    boot: () =>
+      bootstrap({
+        driverFactory: openOpSqliteDriver,
+        keyStore,
+        crypto: quickCryptoPort,
+        // D22: the 32-byte SecureStore key now drives app-layer AES-256-GCM over the sensitive columns
+        // (via quick-crypto's OpenSSL), replacing SQLCipher's whole-file encryption — task 148.
+        aead: deviceColumnAead,
+        clock: systemClock,
+      }),
     // The api/02-auth §7.3 wipe legs this recovery owns, IN ORDER: (1) crypto-erase the column-cipher
     // key FIRST (from this moment the PROTECTED COLUMNS are unrecoverable — the file itself is still a
     // readable SQLite file since D22, so this is a value-erase, not a file-erase), then (2) delete the DB file(s) +
@@ -163,9 +125,6 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
     // D12/D13) — the heal LOGIC is unit-verified against the `DbOpenError` kinds AND the key-tag
     // probe's `ForeignDatabaseError` (recovery.test.ts, boot-decrypt-probe.test.ts).
     wipeLocalData: async () => {
-      // TEMP boot-diag (task 201-B): the silent self-heal we are hunting — mark it so logcat shows the
-      // wipe firing between attempt 1 (threw) and attempt 2 (fresh empty DB). Remove after diagnosis.
-      consoleDiagnostics.warn('boot-diag: wipe invoked', { afterAttempt: bootDiagAttempt });
       await keyStore.wipe();
       deleteOpSqliteDatabase({ name: DEFAULT_DATABASE_NAME });
     },
@@ -482,18 +441,5 @@ function Bootstrapped(): React.JSX.Element | null {
       }),
   });
 }
-
-// ── TEMPORARY (task 201 switcher-hang diagnosis) ─────────────────────────────────────────────────
-// Wire consoleDiagnostics' native mirror BEFORE the root mounts, so the a061555 session-open boundary
-// logs reach Maestro's device-logcat.txt on the release APK. The two beacons are POSITIVE CONTROLS run
-// unconditionally at boot: the first proves a JS-originated native tag reaches the run's capture at all
-// (isolating "channel dead" from "code path not reached"), the second drives the SAME wired path every
-// session-open log takes (`consoleDiagnostics.warn` → nativeMirror → nativeDiag). If neither appears in
-// the next run's artifact, the native→capture path itself is broken and the fix pivots to a file sink;
-// if both appear but no `session-open:` line follows, the boot chain never reached `startSessionIfEnrolled`.
-// Reverted together with the a061555 instrumentation once the failing branch is identified.
-setNativeDiagnosticsMirror(nativeDiag);
-nativeDiag('session-open: [beacon] index eval — direct native');
-consoleDiagnostics.warn('session-open: [beacon] index eval — wired sink');
 
 registerRootComponent(Bootstrapped);

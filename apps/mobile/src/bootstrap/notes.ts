@@ -29,7 +29,6 @@ import { readStoreId, readTenantId, type CommandIdentity, type DeviceIdentity } 
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 import type { MediaClient } from '../media/client.js';
-import { consoleDiagnostics } from '../ports/diagnostics.js';
 import { createNotesRuntime, readNoteSyncStatuses } from '../screens/notes/runtime-adapter.js';
 import { createNotesThumbnailLoader } from '../screens/notes/thumbnail.js';
 
@@ -134,21 +133,12 @@ export async function readSessionIdentity(
  * a command runtime from it before any user has authenticated.
  */
 export async function readDeviceIdentity(app: Bootstrapped): Promise<DeviceIdentity | null> {
-  if (app.deviceId === null) {
-    consoleDiagnostics.warn('session-open: readDeviceIdentity app.deviceId null');
-    return null;
-  }
+  if (app.deviceId === null) return null;
   const [tenantId, storeId] = await Promise.all([
     readTenantId(app.db.db as never),
     readStoreId(app.db.db as never),
   ]);
-  if (tenantId === null || storeId === null) {
-    consoleDiagnostics.warn('session-open: readDeviceIdentity meta null', {
-      tenantIdNull: tenantId === null,
-      storeIdNull: storeId === null,
-    });
-    return null;
-  }
+  if (tenantId === null || storeId === null) return null;
   return { tenantId, storeId, deviceId: app.deviceId };
 }
 
