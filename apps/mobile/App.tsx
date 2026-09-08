@@ -562,6 +562,12 @@ export default function App(props: AppProps): React.JSX.Element {
     return found === undefined ? null : { id: found.id, initials: initialsOf(found.name) };
   }, [props.session, props.users]);
 
+  // The shell's edge-to-edge insets, resolved once per render and applied at BOTH `bolusi-app-shell`
+  // returns below — so the capture zone and the main zone can never drift on the top inset. The top
+  // inset is read here (not at module scope) because `RNStatusBar.currentHeight` is not reliably ready
+  // at bundle-eval; see `androidStatusBarInset`.
+  const shellStyle = [styles.shell, { paddingTop: androidStatusBarInset() }];
+
   const capture = captureSurface;
   if (capture !== null && zone.kind === 'shell') {
     /**
@@ -593,7 +599,7 @@ export default function App(props: AppProps): React.JSX.Element {
      * shutter, so the identity must not be switchable between opening the camera and pressing it.
      */
     return (
-      <View testID="bolusi-app-shell" style={styles.shell}>
+      <View testID="bolusi-app-shell" style={shellStyle}>
         <StatusBar style="auto" />
         <CaptureScreen
           // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
@@ -623,7 +629,7 @@ export default function App(props: AppProps): React.JSX.Element {
   }
 
   return (
-    <View testID="bolusi-app-shell" style={styles.shell}>
+    <View testID="bolusi-app-shell" style={shellStyle}>
       <StatusBar style="auto" />
       {renderZone(zone, {
         enrollment: (revoked) => (
@@ -930,6 +936,13 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 const FILL = { flex: 1 } as const;
 
 /**
+ * Fallback status-bar inset (dp) for the rare render where `RNStatusBar.currentHeight` is not yet
+ * populated. 24 dp is the standard Android status-bar height; over-insetting by a hairline is harmless,
+ * under-insetting occludes a control (see `androidStatusBarInset`), so the fallback errs high, never 0.
+ */
+const ANDROID_STATUS_BAR_FALLBACK_DP = 24;
+
+/**
  * Android 15 (Expo SDK 57 / RN 0.81, targetSdk 35) enforces edge-to-edge: the app draws under the
  * system status bar, whose window sits z-above ours and eats any touch that lands in it. The header
  * chrome (sync chip, language chip, avatar) is laid out at y=0, so at center it falls under the
@@ -937,11 +950,26 @@ const FILL = { flex: 1 } as const;
  * Inset the shell by the status-bar height so the header (and body) render below it. iOS is out of
  * v0 scope; `react-native-safe-area-context` is not a dependency, and `currentHeight` is the exact
  * occluding height, so it needs no extra package.
+ *
+ * READ AT RENDER, never at module-eval. `RNStatusBar.currentHeight` is a native constant marshalled
+ * across the bridge; on a cold launch it is not reliably populated the instant the JS bundle evaluates.
+ * A module-scope `const STATUS_BAR_INSET = RNStatusBar.currentHeight ?? 0` (the shape this replaced)
+ * froze whatever was there at import — on the emulator lane that was 0, so the shell got `paddingTop: 0`,
+ * the header drew under the status bar, and its language chip was occluded, absent from the a11y
+ * hierarchy, and un-tappable (flow 06 flaked; the same run's warmer flow 03 inset correctly and passed).
+ * Calling this per render moves the read past bundle-eval so the constant is populated in the normal
+ * case, and the non-zero fallback guarantees the header is never un-inset even on a render where the
+ * value is still missing. Reading here (not at module scope) also means importing `App` performs no
+ * native member read (task 207).
  */
-const STATUS_BAR_INSET = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
+function androidStatusBarInset(): number {
+  if (Platform.OS !== 'android') return 0;
+  const measured = RNStatusBar.currentHeight;
+  return typeof measured === 'number' && measured > 0 ? measured : ANDROID_STATUS_BAR_FALLBACK_DP;
+}
 
 /**
- * The bottom half of the same edge-to-edge story (see `STATUS_BAR_INSET`): the app also draws under
+ * The bottom half of the same edge-to-edge story (see `androidStatusBarInset`): the app also draws under
  * the system navigation bar, whose window sits z-above ours and eats any touch landing in it. The
  * shell's bottom action bar (AppShell §8.1) docks the screen's one primary Button at the screen
  * bottom, so its lower half — including its center, the point a tap dispatches to — falls under the
@@ -959,16 +987,18 @@ const STATUS_BAR_INSET = Platform.OS === 'android' ? (RNStatusBar.currentHeight 
  * and it can only ever over-pad, never under-pad, so the button is always fully clear. Gesture-nav
  * devices have a smaller bottom inset, so there this leaves a small cosmetic gap above the gesture
  * pill — the same kind of accepted v0 trade-off as iOS being out of scope. This is a platform system
- * measurement, not a Bolusi design value, so it lives here beside `STATUS_BAR_INSET`, not in tokens.
+ * measurement, not a Bolusi design value, so it lives here beside `androidStatusBarInset`, not in tokens.
  */
 const NAV_BAR_INSET = Platform.OS === 'android' ? 48 : 0;
 
 const styles = StyleSheet.create({
   /**
-   * The app shell: fills the screen and clears both system bars so the header chrome and the
-   * bottom-docked primary action stay tappable under edge-to-edge (§8.1).
+   * The app shell: fills the screen and clears the system nav bar so the bottom-docked primary action
+   * stays tappable under edge-to-edge (§8.1). The TOP inset is applied per render via
+   * `androidStatusBarInset()` (see its docblock) — a static `paddingTop` here would freeze a possibly-
+   * unpopulated status-bar height at module-eval.
    */
-  shell: { flex: 1, paddingTop: STATUS_BAR_INSET, paddingBottom: NAV_BAR_INSET },
+  shell: { flex: 1, paddingBottom: NAV_BAR_INSET },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   headerChrome: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
 });
