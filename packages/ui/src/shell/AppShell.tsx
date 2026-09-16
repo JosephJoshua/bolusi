@@ -7,7 +7,7 @@
  * ├──────────────────────────────┤
  * │ Banner slot (§3.6, max one)  │
  * ├──────────────────────────────┤
- * │ Content (padding space.lg)   │
+ * │ Content (scrolls, pad lg)    │  the ONLY scrolling region; header/action bar stay fixed
  * ├──────────────────────────────┤
  * │ Bottom action bar (optional) │  primary Button, 56 dp, thumb zone
  * └──────────────────────────────┘
@@ -24,7 +24,7 @@
  * this component only surfaces the affordance.
  */
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
@@ -73,7 +73,15 @@ const styles = StyleSheet.create({
   titleRoot: { ...type.title, color: color.text, flex: 1, marginHorizontal: space.sm },
   titleDetail: { ...type.heading, color: color.text, flex: 1, marginHorizontal: space.sm },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
-  content: { flex: 1, padding: space.lg },
+  content: { flex: 1 },
+  /**
+   * `flexGrow` — NOT `flex` — is load-bearing (task 206). On a ScrollView's content container,
+   * `flex: 1` would clamp the content to the viewport height and defeat scrolling entirely; the
+   * screen would clip exactly as it did before. `flexGrow: 1` lets short content still fill the
+   * viewport (so the centered empty / loading / error states stay centered) while tall content is
+   * free to exceed it and scroll.
+   */
+  contentContainer: { flexGrow: 1, padding: space.lg },
   actionBar: {
     padding: space.lg,
     borderTopWidth: border.hairline,
@@ -127,9 +135,23 @@ export function AppShell({
 
       {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
 
-      <View testID={`${testID}.content`} style={styles.content}>
+      {/*
+        Scrollable by default (task 206). The content slot was a plain padded View, and no screen
+        supplied its own ScrollView, so on a small low-end screen — or at a raised OS font scale —
+        anything taller than the viewport was clipped with no gesture to reach it. The RNW visual
+        harness renders at a desktop viewport, which is why this never showed up there.
+      */}
+      <ScrollView
+        testID={`${testID}.content`}
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
+        // would read as the whole screen coming loose.
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {children}
-      </View>
+      </ScrollView>
 
       {bottomAction === undefined ? null : (
         <View testID={`${testID}.actionBar`} style={styles.actionBar}>

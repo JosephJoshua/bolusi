@@ -15,6 +15,7 @@
  */
 import { StyleSheet, Text, View } from 'react-native';
 
+import { NAV_BAR_INSET } from '../platform-insets.js';
 import { color, overlayOpacity, radius, space, type } from '../tokens.js';
 import { Button } from './Button.js';
 
@@ -49,6 +50,14 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,
     padding: space.lg,
+    /**
+     * Clears the Android nav bar (task 205). This sheet is an absolute overlay docked to the bottom
+     * of the SCREEN, mounted outside the app shell, so it inherits none of the shell's bottom
+     * padding — and Cancel is deliberately its LAST child, in the thumb zone, which put the safe
+     * action squarely in the nav-bar band. The nav-bar window eats the touch, so Cancel rendered
+     * but could not be pressed.
+     */
+    paddingBottom: space.lg + NAV_BAR_INSET,
   },
   title: { ...type.heading, color: color.text },
   message: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
@@ -68,7 +77,7 @@ export function ConfirmSheet({
   return (
     <View testID={testID} style={styles.root}>
       <View testID={`${testID}.scrim`} style={styles.scrim} />
-      <View style={styles.sheet}>
+      <View testID={`${testID}.sheet`} style={styles.sheet}>
         <Text testID={`${testID}.title`} numberOfLines={2} style={styles.title}>
           {title}
         </Text>
