@@ -42,6 +42,13 @@ export {
 // holds. Its consumer is apps/server's push transaction (task 49).
 export { createServerWatermarkStore } from './watermarks.js';
 
+// Task 208 — the ONE `userPinVerifiers` row builder, shared by apps/server's `writeVerifier` and the
+// harness lane seed so the PIN-auth row shape cannot drift between production and the emulator
+// oracle. A PURE mapping function: it takes plain values and returns a plain object, touching no
+// handle and exposing no `selectFrom`, so the export-surface `queryish` assertion still holds.
+export { buildPinVerifierRow } from './pin-verifier-row.js';
+export type { PinVerifierRowInput, PinVerifierRowOwner } from './pin-verifier-row.js';
+
 // Task 49 — the SERVER projection engine factory (10-db §3 step 6, 04 §4). Same D7 weighing as
 // the watermark store: it CONSUMES a `forTenant` handle rather than producing one, and returns a
 // `ProjectionEngine` (apply/rebuild methods, no `selectFrom`), so the export-surface `queryish`

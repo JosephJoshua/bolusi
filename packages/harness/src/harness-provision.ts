@@ -14,6 +14,7 @@
 // only on the provisioning it actually exercises, never on serve/marker code whose breakage would
 // falsely red the security-evidence proof.
 import { buildPinVerifier, DEFAULT_KDF_PARAMS, type CanonicalRef } from '@bolusi/core';
+import { buildPinVerifierRow } from '@bolusi/db-server';
 import {
   defaultProvisionDeps,
   provisionTenant,
@@ -101,20 +102,12 @@ export async function seedOwnerPin(
     seq: 0,
   };
   const verifier = await buildPinVerifier(noblePort, pinBytes, DEFAULT_KDF_PARAMS, salt, asOf);
+  // The SAME row builder `users.ts` `writeVerifier` uses (task 208) — a shared, typed mapping rather
+  // than a hand-copied literal, so a server-side row-shape change fails this build instead of
+  // silently seeding the lane a verifier production no longer writes. Only the STATEMENT differs:
+  // the route upserts (a user may re-set a PIN), a fresh lane owner has no conflict to resolve.
+  const row = buildPinVerifierRow(verifier, { userId: args.userId, tenantId: args.tenantId });
   await server.forTenant(args.tenantId, (trx) =>
-    trx
-      .insertInto('userPinVerifiers')
-      .values({
-        userId: args.userId,
-        tenantId: args.tenantId,
-        algo: 'argon2id',
-        salt: verifier.saltB64,
-        params: { m: verifier.mKiB, t: verifier.t, p: verifier.p } as never,
-        hash: verifier.hashB64,
-        asOfTimestamp: BigInt(verifier.asOf.timestamp),
-        asOfDeviceId: verifier.asOf.deviceId,
-        asOfSeq: BigInt(verifier.asOf.seq),
-      })
-      .execute(),
+    trx.insertInto('userPinVerifiers').values(row).execute(),
   );
 }
