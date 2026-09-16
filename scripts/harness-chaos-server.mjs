@@ -32,7 +32,7 @@
 // (`tsc -b`), which the emulator lane does before `harness:device`. `formatChaosNetHandshake` comes from
 // the sibling driver so the child and the driver agree on the wire BY CONSTRUCTION (round-trip pinned in
 // packages/harness/scenarios/chaos-net-server-child.test.ts).
-import { register } from 'tsx/esm/api';
+import { installShutdownHandlers, registerTsLoader, runEntry } from './harness-server-entry.mjs';
 
 import {
   DEFAULT_CHAOS03_OPTIONS,
@@ -50,22 +50,9 @@ import {
 
 import { formatChaosNetHandshake } from './harness-device.mjs';
 
-// A TS-capable ESM loader, mandatory for this child. `startHarnessServer()` runs the DB migrator
-// (packages/db-server/src/migrator.ts), which uses Kysely's `FileMigrationProvider` to dynamically
-// `import()` the RAW `.ts` migration files under `packages/db-server/migrations/` — and those import
-// `.js` sibling specifiers (NodeNext). A bare `node` child has no way to load `.ts`, so that dynamic
-// import dies `ERR_MODULE_NOT_FOUND: Cannot find module '.../schema/security.js' imported from
-// .../migrations/0001_roles.ts`, `main()` reds, and the driver reads no handshake. vitest transpiles
-// for the host-binding tests; here we register tsx explicitly (the migrator's own doc says "whatever
-// imports them needs a TS-capable loader — vitest here, tsx under kysely-ctl"). Use tsx's OWN
-// `esm/api` register(), not `node:module`'s register('tsx/esm', …) — tsx rejects the latter with
-// "tsx must be loaded with --import instead of --loader" (the deprecated loader path). The bare
-// specifier resolves from THIS file's location up to the root `node_modules/tsx` (a root devDep),
-// cwd-independent, so it works wherever the driver spawns us. The static imports above are compiled
-// `dist/*.js` and need no loader; only the runtime migration `import()` inside `startHarnessServer` does,
-// and it runs after this call — falsify by deleting this line: the child dies with the ERR_MODULE_NOT_FOUND
-// above and the child-boot scenario reds.
-register();
+// The tsx loader + the shutdown/failure scaffold are shared with `harness-serve-lane.mjs`; the
+// rationale for each lives in `harness-server-entry.mjs`.
+registerTsLoader();
 
 /**
  * Boot one production server + seed one scenario's canonical devices, returning the running server and
@@ -117,23 +104,10 @@ async function bootScenario(servers, seed, deviceCount, { detection = false } = 
 }
 
 async function main() {
-  // Tear every server (socket + PGlite) down on the driver's SIGTERM or a Ctrl-C. Registered BEFORE the
-  // first boot and closing whatever `servers` has recorded so far, so even a failure while booting the
-  // second/third server still releases the first. Idempotent — once closing, ignore repeats — and it
-  // exits 0 because a clean shutdown on request is success, not a fault.
+  // Tear every server (socket + PGlite) down on SIGTERM/Ctrl-C. The closure reads `servers` at signal
+  // time, so a failure while booting the second/third server still releases the first.
   const servers = [];
-  let closing = false;
-  const shutdown = async () => {
-    if (closing) return;
-    closing = true;
-    try {
-      await Promise.all(servers.map((running) => running.close()));
-    } finally {
-      process.exit(0);
-    }
-  };
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
+  installShutdownHandlers(async () => Promise.all(servers.map((running) => running.close())));
 
   // CHAOS-03/06 plain (detection OFF); CHAOS-07 with detection ON. Each at its OWN default seed (see the
   // SEED PARITY note in the header) — the seed the matching on-device runner derives its identities from.
@@ -163,11 +137,4 @@ async function main() {
   // during the driver's logcat poll. The process ends ONLY via `shutdown()` above.
 }
 
-main().catch((error) => {
-  // A boot/seed failure must be LOUD and NON-ZERO: the driver then reads no handshake and reds the lane
-  // (CHAOS-03/06/07 are REQUIRED gates — they cannot skip, §2.11). stderr so the driver's failure capture
-  // shows it.
-  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  console.error(`harness-chaos-server: ${detail}`);
-  process.exit(1);
-});
+runEntry('harness-chaos-server', main);
