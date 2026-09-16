@@ -53,6 +53,10 @@ const EXPECTED_EXPORTS = [
   // than producing one, and returns a read/advance store with no `selectFrom` — so the D7
   // invariant this file guards is unchanged, and the `queryish` assertion below still covers it.
   'createServerWatermarkStore',
+  // Task 208: the ONE `userPinVerifiers` row builder, shared by apps/server's `writeVerifier` and the
+  // harness lane seed. A PURE mapping — plain values in, a plain object out — so it touches no handle
+  // and the `queryish` assertion below still holds.
+  'buildPinVerifierRow',
   // Task 49: the server projection engine factory (10-db §3 step 6). Same shape as the watermark
   // store — it CONSUMES a `forTenant` handle and returns a `ProjectionEngine` (apply/rebuild
   // methods, no `selectFrom`), so D7 and the `queryish` assertion below are untouched.
