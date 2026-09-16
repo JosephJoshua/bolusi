@@ -19,6 +19,7 @@ import {
   checkExtraction,
   checkIcuSubset,
   checkKeyGrammar,
+  checkModuleCatalogCoverage,
   checkParity,
 } from '../scripts/gates.mjs';
 import { REPO_ROOT, loadReservedCatalogs } from '../scripts/catalog.mjs';
@@ -373,5 +374,49 @@ describe('checked-in code registry mirrors the specs', () => {
       (match) => match[1],
     );
     expect(codes).toEqual(REJECTION_CODES);
+  });
+});
+
+describe('module catalog coverage (task 195)', () => {
+  const notesCatalog = source(
+    'notes',
+    'id',
+    { editor: { titleField: 'Judul' } },
+    { isModule: true },
+  );
+
+  it('passes when every tn() namespace has a module catalog behind it', () => {
+    expect(checkModuleCatalogCoverage(['notes'], 15, 1, [notesCatalog])).toEqual([]);
+  });
+
+  it('FAILS when a namespace is used by tn() but ships no catalog', () => {
+    // The whole point: `sources` holds only catalogs that EXIST, so every other gate stays green
+    // over the smaller set. Comparing against the namespaces the CODE uses is what finds this.
+    const errors = checkModuleCatalogCoverage(['notes', 'inventory'], 20, 1, [notesCatalog]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("namespace 'inventory'");
+  });
+
+  it('FAILS when the tn() scan collapses, instead of passing over an empty set', () => {
+    // T-14 denominator guard. Without it a broken TN_CALL_RE yields no namespaces, the loop runs
+    // zero times, and the gate reports PASS — indistinguishable from real coverage.
+    const errors = checkModuleCatalogCoverage([], 0, 1, [notesCatalog]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('would pass over an empty set');
+  });
+
+  it('does not count a module catalog that contributes zero keys', () => {
+    // A present-but-empty catalog would satisfy a does-the-directory-exist check while linting
+    // nothing, so coverage is measured in KEYS, not in files.
+    const empty = source('notes', 'id', {}, { isModule: true });
+    const errors = checkModuleCatalogCoverage(['notes'], 15, 1, [empty]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("namespace 'notes'");
+  });
+
+  it('ignores reserved (non-module) catalogs when deciding coverage', () => {
+    // A reserved catalog that happens to share the name must not discharge a module's obligation.
+    const reserved = source('notes', 'id', { a: 'b' }, { isModule: false });
+    expect(checkModuleCatalogCoverage(['notes'], 15, 1, [reserved])).toHaveLength(1);
   });
 });

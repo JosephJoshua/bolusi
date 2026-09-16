@@ -6,6 +6,7 @@ import { join, relative } from 'node:path';
 import {
   checkBlankValues,
   checkCollision,
+  checkModuleCatalogCoverage,
   checkErrorCodeCoverage,
   checkExtraction,
   checkIcuSubset,
@@ -57,6 +58,16 @@ const SKIP_TEST_FILE_RE = /\.test\.tsx?$/;
 const T_CALL_RE = /\bt\(\s*'([a-zA-Z][\w.]*)'(?!\s*\+)/g;
 
 /**
+ * Module-scoped lookups (07-i18n §3.3): `tn('notes.editor.titleField')`.
+ *
+ * A SEPARATE pattern because {@link T_CALL_RE} cannot match these — it requires `t(`, and `tn(` has
+ * an `n` in the way — so before task 195 no gate here saw a `tn()` call at all. The namespaces these
+ * keys carry are the denominator for the module-catalog coverage floor: a module that calls `tn()`
+ * has, by that call, declared a namespace it owes a catalog for.
+ */
+const TN_CALL_RE = /\btn\(\s*'([a-zA-Z][\w.]*)'(?!\s*\+)/g;
+
+/**
  * @param {string} dir
  * @param {string[]} out
  */
@@ -84,20 +95,31 @@ const EXTRACTION_FILE_FLOOR = 60;
 const EXTRACTION_KEY_FLOOR = 40;
 
 /**
- * @returns {{ keys: string[], fileCount: number }} every key referenced by a `t('...')` call in
- * SHIPPING app/module/ui code, plus the number of files that were actually read.
+ * The same denominator guard for the `tn()` scan (task 195). If this hits zero the pattern has
+ * stopped matching, and "every module that uses tn() has a catalog" would be vacuously true over an
+ * empty set — the precise shape of INC-T11 #6, where a gate was green BECAUSE what it should have
+ * caught was invisible to it. One module ships tn() keys today; the floor only catches a collapse.
+ */
+const TN_KEY_FLOOR = 1;
+
+/**
+ * @returns {{ keys: string[], tnKeys: string[], fileCount: number }} every key referenced by a
+ * `t('...')` call in SHIPPING app/module/ui code, the keys referenced by `tn('...')` calls, and the
+ * number of files actually read.
  */
 function collectUsedKeys() {
   const keys = new Set();
+  const tnKeys = new Set();
   let fileCount = 0;
   for (const root of SOURCE_ROOTS) {
     for (const file of collectSourceFiles(join(REPO_ROOT, root), [])) {
       fileCount += 1;
       const text = readFileSync(file, 'utf8');
       for (const match of text.matchAll(T_CALL_RE)) keys.add(match[1]);
+      for (const match of text.matchAll(TN_CALL_RE)) tnKeys.add(match[1]);
     }
   }
-  return { keys: [...keys], fileCount };
+  return { keys: [...keys], tnKeys: [...tnKeys], fileCount };
 }
 
 /**
@@ -125,6 +147,9 @@ async function checkGenerated() {
 async function main() {
   const sources = [...loadReservedCatalogs(), ...loadModuleCatalogs()];
   const used = collectUsedKeys();
+  // The denominator is derived from the CODE, not from the catalog dirs: a module that ships tn()
+  // keys with no catalog leaves no directory behind to count, so only the calls reveal it (T-14).
+  const tnNamespaces = [...new Set(used.tnKeys.map((key) => key.split('.')[0]))].sort();
   const extraction = checkExtraction(used.keys, sources);
   // The gate's own coverage assertion — see EXTRACTION_FILE_FLOOR. Reported as an extraction error
   // so a collapsed denominator turns this gate RED rather than silently green.
@@ -142,6 +167,10 @@ async function main() {
   const results = [
     { name: 'key grammar (catalogs)', errors: checkKeyGrammar(sources) },
     { name: 'collision', errors: checkCollision(sources) },
+    {
+      name: 'module catalog coverage',
+      errors: checkModuleCatalogCoverage(tnNamespaces, used.tnKeys.length, TN_KEY_FLOOR, sources),
+    },
     { name: 'parity (id ↔ en)', errors: checkParity(sources) },
     { name: 'blank value', errors: checkBlankValues(sources) },
     { name: 'ICU restricted subset', errors: checkIcuSubset(sources) },
@@ -180,6 +209,11 @@ async function main() {
     `i18n:check: extracted ${used.keys.length} t() key(s) from ${used.fileCount} shipping source ` +
       `file(s) under ${SOURCE_ROOTS.join(', ')} — test files excluded ` +
       `(floors: ${EXTRACTION_FILE_FLOOR} file(s), ${EXTRACTION_KEY_FLOOR} key(s))`,
+  );
+  console.log(
+    `i18n:check: module catalog coverage — ${used.tnKeys.length} tn() key(s) across ` +
+      `${tnNamespaces.length} namespace(s) (${tnNamespaces.join(', ') || 'none'}); ` +
+      `each must have a catalog (floor: ${TN_KEY_FLOOR} tn() key(s))`,
   );
 
   if (failed > 0) {
