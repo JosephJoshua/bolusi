@@ -26,6 +26,9 @@ export {
 } from './tokens.js';
 export type { ContrastPair } from './tokens.js';
 
+// ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
+export { NAV_BAR_INSET } from './platform-insets.js';
+
 // ---- Component inventory (design-system §3) ----------------------------------------------------
 export * from './components/index.js';
 export * from './shell/index.js';
