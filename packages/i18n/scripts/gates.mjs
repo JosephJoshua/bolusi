@@ -160,6 +160,56 @@ export function checkCollision(sources) {
 }
 
 /**
+ * Every namespace a module actually USES must have a catalog behind it (task 195).
+ *
+ * The other catalog gates all read `sources` — the catalogs that exist — so they are structurally
+ * incapable of noticing one that does not. A module shipping screen keys via `tn()` with no `i18n/`
+ * dir, or with the dir somewhere `loadModuleCatalogs()` does not scan, is simply absent from
+ * `sources`, and every gate stays green over the smaller set. Same shape as INC-T11 #6, where the
+ * key-grammar gate was green BECAUSE the keys it should have caught were invisible to it (the real
+ * denominator was 113 of 127).
+ *
+ * The denominator therefore comes from the CODE, not the filesystem: a `tn('notes.x')` call is the
+ * module DECLARING it owns the `notes` namespace, and a module that forgot its catalog leaves no
+ * directory behind to count but still makes that call.
+ *
+ * @param {string[]} namespaces first segment of every tn() key found in shipping source
+ * @param {number} tnKeyCount how many tn() keys the scan found (the raw denominator)
+ * @param {number} tnKeyFloor the collapse floor for that count
+ * @param {CatalogSource[]} sources
+ * @returns {string[]}
+ */
+export function checkModuleCatalogCoverage(namespaces, tnKeyCount, tnKeyFloor, sources) {
+  const errors = [];
+
+  // T-14: assert the denominator BEFORE trusting anything derived from it. If the tn() scan found
+  // nothing, "every namespace has a catalog" is vacuously true over an empty set — which reads
+  // identically to real coverage, and is the exact false assurance this gate exists to prevent.
+  if (tnKeyCount < tnKeyFloor) {
+    errors.push(
+      `found only ${tnKeyCount} tn() key(s) (floor ${tnKeyFloor}) — TN_CALL_RE is matching nothing, so this gate would pass over an empty set`,
+    );
+    return errors;
+  }
+
+  /** @type {Set<string>} */
+  const covered = new Set();
+  for (const source of sources) {
+    if (!source.isModule) continue;
+    if (flattenSource(source).length > 0) covered.add(source.namespace);
+  }
+
+  for (const namespace of namespaces) {
+    if (!covered.has(namespace)) {
+      errors.push(
+        `namespace '${namespace}' is used by a tn() call but no module catalog contributes keys for it — expected packages/modules/${namespace}/i18n/{id,en}.json; its keys are unlinted by every catalog gate`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
  * Gate: id/en parity — nobody merges id-only keys (07-i18n §7.1.2, §7.3). `zh` is exempt.
  * @param {CatalogSource[]} sources
  * @returns {string[]}
