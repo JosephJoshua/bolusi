@@ -11,9 +11,10 @@
 //
 // This module holds getDb (internal) but exposes only these fixed lookups — it is NOT a raw
 // handle, and there is no way through it to run an arbitrary cross-tenant query.
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 
 import { getDb } from './db.js';
+import type { DB } from './generated/db.js';
 
 /** Minimal device auth row for `verifyToken` (bdt_) — api/02-auth §8. */
 export interface DeviceAuthRecord {
@@ -45,8 +46,19 @@ export interface LoginCredentialRecord {
   readonly status: string;
 }
 
-/** Resolve a device by its SHA-256 token hash (hex). Cross-tenant, definer-gated. */
-export async function findDeviceByTokenHash(
+/**
+ * Resolve a device by its SHA-256 token hash (hex) ON a caller-supplied executor.
+ *
+ * The SQL lives here ONCE (task 204). `@bolusi/harness` runs these same three lookups against its own
+ * PGlite handle to prove the production auth path under the emulator lane; it used to carry a
+ * line-for-line copy whose only difference was the executor, so a change to a definer call or an alias
+ * had to be made twice or the oracle silently stopped mirroring production.
+ *
+ * Takes an executor, never produces one: `getDb` stays private to this package and no handle is
+ * exported (08 §3.2 / D7 / FR-1039). A caller can only reach this with a handle it already owns.
+ */
+export async function findDeviceByTokenHashOn(
+  db: Kysely<DB>,
   tokenHashHex: string,
 ): Promise<DeviceAuthRecord | undefined> {
   const { rows } = await sql<{
@@ -57,12 +69,20 @@ export async function findDeviceByTokenHash(
   }>`
     SELECT tenant_id AS "tenantId", store_id AS "storeId", device_id AS "deviceId", status
       FROM auth_find_device_by_token_hash(${tokenHashHex})
-  `.execute(getDb());
+  `.execute(db);
   return rows[0];
 }
 
-/** Resolve a control session by its SHA-256 token hash (hex). Cross-tenant, definer-gated. */
-export async function findControlSessionByTokenHash(
+/** Resolve a device by its SHA-256 token hash (hex). Cross-tenant, definer-gated. */
+export async function findDeviceByTokenHash(
+  tokenHashHex: string,
+): Promise<DeviceAuthRecord | undefined> {
+  return findDeviceByTokenHashOn(getDb(), tokenHashHex);
+}
+
+/** Resolve a control session by its token hash ON a caller-supplied executor — see {@link findDeviceByTokenHashOn}. */
+export async function findControlSessionByTokenHashOn(
+  db: Kysely<DB>,
   tokenHashHex: string,
 ): Promise<ControlSessionAuthRecord | undefined> {
   const { rows } = await sql<{
@@ -75,7 +95,7 @@ export async function findControlSessionByTokenHash(
     SELECT tenant_id AS "tenantId", user_id AS "userId", session_id AS "sessionId",
            expires_at AS "expiresAt", revoked_at AS "revokedAt"
       FROM auth_find_control_session_by_token_hash(${tokenHashHex})
-  `.execute(getDb());
+  `.execute(db);
   const row = rows[0];
   if (row === undefined) return undefined;
   return {
@@ -87,8 +107,16 @@ export async function findControlSessionByTokenHash(
   };
 }
 
-/** Resolve a user by globally-unique loginIdentifier. Cross-tenant, definer-gated. */
-export async function findLoginCredential(
+/** Resolve a control session by its SHA-256 token hash (hex). Cross-tenant, definer-gated. */
+export async function findControlSessionByTokenHash(
+  tokenHashHex: string,
+): Promise<ControlSessionAuthRecord | undefined> {
+  return findControlSessionByTokenHashOn(getDb(), tokenHashHex);
+}
+
+/** Resolve a user by globally-unique loginIdentifier ON a caller-supplied executor — see {@link findDeviceByTokenHashOn}. */
+export async function findLoginCredentialOn(
+  db: Kysely<DB>,
   loginIdentifier: string,
 ): Promise<LoginCredentialRecord | undefined> {
   const { rows } = await sql<{
@@ -100,6 +128,13 @@ export async function findLoginCredential(
     SELECT tenant_id AS "tenantId", user_id AS "userId",
            password_verifier AS "passwordVerifier", status
       FROM auth_find_login_credential(${loginIdentifier})
-  `.execute(getDb());
+  `.execute(db);
   return rows[0];
+}
+
+/** Resolve a user by globally-unique loginIdentifier. Cross-tenant, definer-gated. */
+export async function findLoginCredential(
+  loginIdentifier: string,
+): Promise<LoginCredentialRecord | undefined> {
+  return findLoginCredentialOn(getDb(), loginIdentifier);
 }
