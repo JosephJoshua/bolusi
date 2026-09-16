@@ -3,7 +3,7 @@
   "command": "knip --production --include exports,files --no-progress --reporter json",
   "canary": "packages/test-support/src/knip-canary.ts#KNIP_SWEEP_CANARY",
   "fileCanary": "packages/test-support/src/knip-file-canary.ts",
-  "denominator": 142,
+  "denominator": 143,
   "fileDenominator": 29,
   "nonProductionRules": [
     "test-dir",
@@ -84,6 +84,7 @@
     "packages/db-server/src/index.ts#forTenant",
     "packages/db-server/src/migrator.ts#migrateDownToStart",
     "packages/db-server/src/migrator.ts#migrateToLatest",
+    "packages/db-server/src/pin-verifier-row.ts#buildPinVerifierRow",
     "packages/db-server/src/projection-apply.ts#createServerProjectionEngine",
     "packages/i18n/src/errors.ts#translateErrorCode",
     "packages/i18n/src/errors.ts#translateOpType",
