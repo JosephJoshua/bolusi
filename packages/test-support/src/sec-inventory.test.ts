@@ -15,6 +15,8 @@ import { expect, test } from 'vitest';
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
 import { auditInventory, parseGuideIds, parseRollupIds } from '../../../scripts/sec-inventory.mjs';
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
+import { partitionFailures, pendingOwedIds } from '../../../scripts/sec-inventory.mjs';
+// @ts-expect-error — plain .mjs script without type declarations (CI entry point)
 import { SEC_FAIL_CODES } from '../../../scripts/sec-inventory.mjs';
 // @ts-expect-error — plain .mjs script without type declarations (CI entry point)
 import { auditDependencies, parseCatalog } from '../../../scripts/dependency-audit.mjs';
@@ -199,10 +201,11 @@ test('inventory FAILS when an id is BOTH allowlisted and titled — the row and 
 });
 
 test('every inventory FAIL line begins with a known machine-readable [CODE] (task 166)', () => {
-  // 166: the owed-red assert in ci-parity.mjs scopes by FAILURE MODE, so it depends on every FAIL line
-  // carrying exactly one bracketed code as its first token. Provoke several distinct modes at once and
-  // assert each failure is `[CODE] …` with CODE a member of SEC_FAIL_CODES — an uncoded line would be
-  // classified UNEXPECTED downstream, so a missing code is a real break, not cosmetics.
+  // 166: the owed/real split scopes by FAILURE MODE, so it depends on every FAIL line carrying
+  // exactly one bracketed code as its first token. Provoke several distinct modes at once and
+  // assert each failure is `[CODE] …` with CODE a member of SEC_FAIL_CODES — an uncoded line is
+  // classified as REAL (blocking) by `partitionFailures`, so a missing code is a real break.
+  // (Task 194 moved that classification from a CI-log oracle into `partitionFailures` below.)
   const result = auditInventory({
     guideText: CONSISTENT_GUIDE,
     allowlist: { 'SEC-OPLOG-02': 'ai-docs/tasks/27-device-gates.md' },
@@ -232,6 +235,98 @@ test('every inventory FAIL line begins with a known machine-readable [CODE] (tas
   expect(seen.has(SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY)).toBe(true);
   expect(seen.has(SEC_FAIL_CODES.ALLOWLISTED_BUT_TITLED)).toBe(true);
   expect(seen.size).toBeGreaterThanOrEqual(3);
+});
+
+// ── owed vs blocking (task 194) ──────────────────────────────────────────────────────────────────
+//
+// These replace what scripts/ci-parity.mjs used to do by parsing CI logs. The classification now
+// happens where the failures are produced, so the two CI jobs (`security-sweep`, required, and
+// `sec-owed`, expected-red) carry it structurally. The controls below are the load-bearing part:
+// they prove the split cannot quietly absorb a real regression into the standing red.
+
+test('the owed bucket accepts ONLY the non-empty-allowlist mode; other modes are blocking', () => {
+  const { owed, real } = partitionFailures([
+    `[${SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY}] the SEC pending allowlist is NOT empty`,
+    `[${SEC_FAIL_CODES.NO_PASSING_TEST}] an id has no passing test`,
+    `[${SEC_FAIL_CODES.ROLLUP_MISSING_ID}] doc drift`,
+  ]);
+  expect(owed).toHaveLength(1);
+  expect(real).toHaveLength(2);
+});
+
+test('a DIFFERENT failure mode naming an already-owed id still BLOCKS — it is not absorbed (task 166)', () => {
+  // The regression this whole design exists to prevent: an id may be exempt for its allowlist row
+  // and for nothing else. Here the SAME id that is legitimately owed also trips a real bookkeeping
+  // fault; that second finding must land in the blocking bucket or the standing red would hide it.
+  const owedId = 'SEC-OPLOG-02';
+  const { owed, real } = partitionFailures([
+    `[${SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY}] the SEC pending allowlist is NOT empty: ${owedId} → t.md`,
+    `[${SEC_FAIL_CODES.ALLOWLISTED_BUT_TITLED}] ${owedId} is on the pending allowlist but a test titles it`,
+  ]);
+  expect(owed).toHaveLength(1);
+  expect(real).toEqual([
+    `[${SEC_FAIL_CODES.ALLOWLISTED_BUT_TITLED}] ${owedId} is on the pending allowlist but a test titles it`,
+  ]);
+});
+
+test('an unrecognised or absent failure code is treated as BLOCKING — the partition fails closed', () => {
+  // A new failure mode added later must block on the day it is introduced, without anyone
+  // remembering to register it. Defaulting the other way is how a gate goes green for nothing.
+  const { owed, real } = partitionFailures([
+    '[SOME_MODE_INVENTED_LATER] a mode this code has never heard of',
+    'a FAIL line with no bracketed code at all',
+  ]);
+  expect(owed).toHaveLength(0);
+  expect(real).toHaveLength(2);
+});
+
+test('the owed set is derived from the allowlist, and is empty when the allowlist is', () => {
+  const guideText = CONSISTENT_GUIDE;
+  expect(pendingOwedIds({ guideText, allowlist: { 'SEC-OPLOG-02': 'owner.md' } })).toEqual([
+    { id: 'SEC-OPLOG-02', owner: 'owner.md' },
+  ]);
+  expect(pendingOwedIds({ guideText, allowlist: {} })).toEqual([]);
+});
+
+test('an id allowlisted but absent from the guide is not counted as owed', () => {
+  // The guide is the denominator. A stale allowlist row for an id the guide no longer defines must
+  // not invent an owed id out of nothing — otherwise the expected-red job could never go green.
+  expect(
+    pendingOwedIds({ guideText: CONSISTENT_GUIDE, allowlist: { 'SEC-GONE-99': 'owner.md' } }),
+  ).toEqual([]);
+});
+
+test('a real finding alongside an owed one still fails the sweep, and the owed one alone does not', () => {
+  // End-to-end over auditInventory: this is exactly the two CI outcomes the split has to produce.
+  const owedOnly = auditInventory({
+    guideText: CONSISTENT_GUIDE,
+    allowlist: { 'SEC-OPLOG-02': 'owner.md' },
+    reports: [
+      {
+        lane: 'fixture',
+        report: report([
+          ['SEC-OPLOG-01 forged signature rejected', 'passed'],
+          ['SEC-META-01 every id has a producer', 'passed'],
+        ]),
+      },
+    ],
+  });
+  expect(owedOnly.ok).toBe(false); // the inventory still reports it …
+  expect(partitionFailures(owedOnly.failures).real).toEqual([]); // … but nothing blocking remains.
+
+  const withRegression = auditInventory({
+    guideText: CONSISTENT_GUIDE,
+    allowlist: { 'SEC-OPLOG-02': 'owner.md' },
+    reports: [
+      {
+        lane: 'fixture',
+        report: report([['SEC-OPLOG-01 forged signature rejected', 'passed']]),
+      },
+    ],
+  });
+  expect(partitionFailures(withRegression.failures).real.join('\n')).toContain(
+    SEC_FAIL_CODES.NO_PASSING_TEST,
+  );
 });
 
 // ── the real guide ──────────────────────────────────────────────────────────────────────────────
