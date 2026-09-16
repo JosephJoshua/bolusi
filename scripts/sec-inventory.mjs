@@ -22,12 +22,12 @@ export const SEC_ID_PATTERN = /SEC-[A-Z]+-[0-9]+/g;
 
 /**
  * Machine-readable failure codes (task 166). Every FAIL string an inventory produces begins with
- * exactly one `[CODE]` token, so a downstream reader — scripts/ci-parity.mjs's owed-red `assert()` —
- * can scope the security-sweep exemption by FAILURE MODE, not merely by which id a FAIL line names.
+ * exactly one `[CODE]` token, so `partitionFailures` below can scope the security-sweep exemption by
+ * FAILURE MODE, not merely by which id a FAIL line names.
  * Only PENDING_ALLOWLIST_NON_EMPTY is owed-eligible: a DIFFERENT mode that happens to name an owed id
  * (e.g. an id that is BOTH allowlisted AND titled — a real bookkeeping regression) must surface as
- * UNEXPECTED rather than be absorbed by the standing SEC red. Keep these tokens stable and unique;
- * ci-parity.mjs matches on them, and an unrecognised or absent code there is treated as UNEXPECTED.
+ * blocking rather than be absorbed by the standing SEC red. Keep these tokens stable and unique;
+ * `partitionFailures` matches on them, and an absent or unrecognised code is treated as BLOCKING.
  */
 export const SEC_FAIL_CODES = Object.freeze({
   ZERO_GUIDE_IDS: 'ZERO_GUIDE_IDS',
@@ -40,6 +40,57 @@ export const SEC_FAIL_CODES = Object.freeze({
   NO_PASSING_TEST: 'NO_PASSING_TEST',
   PENDING_ALLOWLIST_NON_EMPTY: 'PENDING_ALLOWLIST_NON_EMPTY',
 });
+
+/**
+ * The ONLY failure mode a permanently-owed SEC id may produce (task 194).
+ *
+ * Task 166's lesson, made structural: an owed id is exempt from the release gate for ONE reason —
+ * its allowlist row — and for no other. A DIFFERENT mode that happens to name an owed id (e.g.
+ * ALLOWLISTED_BUT_TITLED on SEC-AUTH-10: both allowlisted AND titled, a real bookkeeping
+ * regression) is a genuine red and must block. Partitioning on this set is what lets the owed red
+ * live in its own CI job instead of being re-derived from CI logs by a downstream oracle.
+ */
+export const OWED_ELIGIBLE_CODES = Object.freeze(
+  new Set([SEC_FAIL_CODES.PENDING_ALLOWLIST_NON_EMPTY]),
+);
+
+/**
+ * Split inventory failures into the owed bucket and the blocking bucket.
+ *
+ * FAIL-CLOSED BY CONSTRUCTION: a failure whose `[CODE]` token is absent or unrecognised lands in
+ * `real`, so a new failure mode blocks merges the day it is introduced rather than being silently
+ * absorbed into the standing red. That default is the whole point — the predecessor oracle
+ * (scripts/ci-parity.mjs, deleted by task 194) had to restate it downstream from CI log text.
+ *
+ * @param {readonly string[]} failures
+ * @returns {{ owed: string[], real: string[] }}
+ */
+export function partitionFailures(failures) {
+  const owed = [];
+  const real = [];
+  for (const failure of failures) {
+    const code = String(failure).match(/^\[([A-Z_]+)\]/)?.[1];
+    if (code !== undefined && OWED_ELIGIBLE_CODES.has(code)) owed.push(failure);
+    else real.push(failure);
+  }
+  return { owed, real };
+}
+
+/**
+ * The owed set, DERIVED from the allowlist (task 184 — never hand-copied).
+ *
+ * Deliberately independent of the vitest reports: "which ids are owed" is a question about the
+ * guide and the allowlist alone, which is what lets the owed check run as a seconds-long CI job
+ * instead of re-running the whole suite just to rediscover a standing red.
+ *
+ * @param {{ guideText: string, allowlist: Record<string,string> }} input
+ * @returns {Array<{ id: string, owner: string }>}
+ */
+export function pendingOwedIds(input) {
+  return parseGuideIds(input.guideText)
+    .filter((id) => input.allowlist[id] !== undefined)
+    .map((id) => ({ id, owner: input.allowlist[id] }));
+}
 
 /** Every SEC id mentioned anywhere in the guide, sorted and deduped. */
 export function parseGuideIds(guideText) {
@@ -154,12 +205,13 @@ export function auditInventory(input) {
       `[${SEC_FAIL_CODES.ZERO_ASSERTIONS}] the vitest reports contained ZERO assertions — the lanes did not run, so every "passed" below would be vacuous`,
     );
   }
-  const pending = [];
+  // Derived once, by the SAME function the standalone owed job runs (§2.8): two callers, one
+  // implementation, so the job and the sweep can never disagree about which ids are owed.
+  const pending = pendingOwedIds(input).map(({ id, owner }) => `${id} → ${owner}`);
   for (const id of guideIds) {
     const owner = input.allowlist[id];
     const outcome = outcomes.get(id);
     if (owner !== undefined) {
-      pending.push(`${id} → ${owner}`);
       if (outcome.passed + outcome.failed + outcome.other > 0) {
         failures.push(
           `[${SEC_FAIL_CODES.ALLOWLISTED_BUT_TITLED}] ${id} is on the pending allowlist (owed by ${owner}) but a test titles it — the row and the title cannot both be true`,
