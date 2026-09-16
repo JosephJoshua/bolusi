@@ -22,12 +22,12 @@ export const SEC_ID_PATTERN = /SEC-[A-Z]+-[0-9]+/g;
 
 /**
  * Machine-readable failure codes (task 166). Every FAIL string an inventory produces begins with
- * exactly one `[CODE]` token, so a downstream reader — scripts/ci-parity.mjs's owed-red `assert()` —
- * can scope the security-sweep exemption by FAILURE MODE, not merely by which id a FAIL line names.
+ * exactly one `[CODE]` token, so `partitionFailures` below can scope the security-sweep exemption by
+ * FAILURE MODE, not merely by which id a FAIL line names.
  * Only PENDING_ALLOWLIST_NON_EMPTY is owed-eligible: a DIFFERENT mode that happens to name an owed id
  * (e.g. an id that is BOTH allowlisted AND titled — a real bookkeeping regression) must surface as
- * UNEXPECTED rather than be absorbed by the standing SEC red. Keep these tokens stable and unique;
- * ci-parity.mjs matches on them, and an unrecognised or absent code there is treated as UNEXPECTED.
+ * blocking rather than be absorbed by the standing SEC red. Keep these tokens stable and unique;
+ * `partitionFailures` matches on them, and an absent or unrecognised code is treated as BLOCKING.
  */
 export const SEC_FAIL_CODES = Object.freeze({
   ZERO_GUIDE_IDS: 'ZERO_GUIDE_IDS',

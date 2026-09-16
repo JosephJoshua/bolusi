@@ -417,21 +417,20 @@ jobs:
   # the only placeholder in this pipeline is stage 12 (device-lane), which belongs to task 27. So
   # this is a NEW job, and it is deliberately NOT a fail-safe stub: it runs the real sweep.
   #
-  # IT IS EXPECTED TO BE RED TODAY, AND THAT IS THE GATE WORKING (CLAUDE.md §2.11). Exactly ONE thing
-  # keeps it red. It is NOT re-enumerated in prose here: this block twice grew stale entries a real
+  # IT IS EXPECTED GREEN, AND IT IS THE REQUIRED CHECK (task 194). Until 194 this job was expected
+  # RED, because the permanently-owed SEC ids shared its conclusion with the real findings — so a red
+  # meant either "the expected one" or "a regression", and telling them apart took a tower of
+  # CI-log-parsing oracles. The owed check now runs in its own `sec-owed` job below, and this one
+  # fails ONLY on real findings. That is what lets branch protection require it: any red here is a
+  # regression and must block the merge.
+  #
+  # The owed ids are NOT re-enumerated in prose here. This block twice grew stale entries a real
   # regression could hide behind (task 164 — a SEC-TENANT-04 leg that PASSES was once listed as a red
   # reason, and a §12 "SEC-DEV-08 omission" that the roll-up no longer has). A hand-written list of
   # machine facts drifts by default, so the register points at its single source instead of restating
-  # it:
-  #
-  #   the SEC pending allowlist (packages/test-support/src/sec-pending-allowlist.json) is non-empty.
-  #   Its live keys ARE the owed ids, and scripts/ci-parity.mjs derives EXPECTED.SEC_OWED_D21 from that
-  #   same file (task 184) — so this human register and the machine oracle cannot disagree. The gate
-  #   self-retires the day the allowlist empties.
-  #
-  #   OWED (do-not-hand-edit; ci-parity.test.ts asserts this equals the allowlist live keys): SEC-AUTH-10
-  #   — a physical-device argon2id-p95 timing artifact (task 27) that Node/CI cannot produce (D21,
-  #   non-gating).
+  # it: the SEC pending allowlist (packages/test-support/src/sec-pending-allowlist.json). Its live
+  # keys ARE the owed ids (task 184), `pnpm sec:owed` derives them from that same file, and the owed
+  # job self-retires the day the allowlist empties.
   #
   # SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28): its at-rest leg is proven on the emulator artifact
   # and re-checked every push by the git-provenance/staleness guard (packages/harness/src/security/

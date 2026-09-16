@@ -6,9 +6,15 @@
 
 **Filed by:** the 2026-08-30 complexity/over-engineering audit (owner-approved cut-list, **Tier 3 #7 — the biggest single LOC win, and the only one that moves a security gate**).
 
-## Blocked on
+## Sign-off — OBTAINED 2026-09-16
 
-**Owner sign-off (§6 red flag — moves a SEC gate; governed by D21).** Build the design and present it; do **NOT** touch `ci.yml`, branch protection, or delete any oracle until signed off. Status flips to `todo` only after the owner ratifies with a `decisions/` entry.
+**Owner ratified** ("full delete + native checks"), recorded in **`ai-docs/decisions/2026-08-30-split-owed-sec-job.md`** (D25). The gate below is discharged; the work is implemented.
+
+> The original clause, kept for the record: *"Owner sign-off (§6 red flag — moves a SEC gate; governed by D21). Build the design and present it; do NOT touch `ci.yml`, branch protection, or delete any oracle until signed off."*
+
+**One deviation from the file list, deliberate:** `scripts/sec-sweep.mjs` and `scripts/sec-inventory.mjs` are **KEPT**, not deleted. They are not oracles — they run the SEC inventory, secrets scan, dependency/lockfile audit, and the frozen-lockfile check, which are exactly the checks non-negotiable #2 requires in order for a *new* red to block. Only the owed assertion moved out of the sweep (into `partitionFailures` + the `sec-owed` job). The LOC target is still met by ci-parity/ci-status/verify + their tests. Rationale in D25.
+
+**Outstanding — branch protection (repo settings, outward-facing).** The required-check set must name `security-sweep` and must **NOT** name `sec-owed`. This is the one step that cannot be made in-tree; until it is applied, merge-gating is unchanged. See "Residual risk" in D25.
 
 ## Goal — the root cause of "the weird CI setup"
 
