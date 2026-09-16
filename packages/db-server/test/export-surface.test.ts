@@ -42,6 +42,13 @@ const EXPECTED_EXPORTS = [
   'findDeviceByTokenHash',
   'findControlSessionByTokenHash',
   'findLoginCredential',
+  // Task 204: the same three lookups, parameterized over the executor so @bolusi/harness runs the
+  // production SQL against its PGlite handle instead of a hand-copied mirror. They CONSUME a handle
+  // and never produce one — `getDb` stays private — so the D7/FR-1039 invariant is unchanged and the
+  // `queryish` assertion below still covers them (they return plain records, not a query builder).
+  'findDeviceByTokenHashOn',
+  'findControlSessionByTokenHashOn',
+  'findLoginCredentialOn',
   // Task 47: the server watermark store (10-db §8). It CONSUMES a tenant-bound handle rather
   // than producing one, and returns a read/advance store with no `selectFrom` — so the D7
   // invariant this file guards is unchanged, and the `queryish` assertion below still covers it.
