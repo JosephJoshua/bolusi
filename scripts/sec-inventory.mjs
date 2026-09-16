@@ -69,7 +69,12 @@ export function partitionFailures(failures) {
   const owed = [];
   const real = [];
   for (const failure of failures) {
-    const code = String(failure).match(/^\[([A-Z_]+)\]/)?.[1];
+    // `[A-Z0-9_]` matches the token grammar `sec-inventory.test.ts` asserts every FAIL line carries.
+    // The two patterns must agree: a narrower one here would fail to PARSE a future digit-bearing
+    // code that the test happily accepts, so the code would be routed by "unparseable" rather than
+    // by "not owed-eligible". Both land in `real` — the safe direction — but for different reasons,
+    // and a classifier that is right by accident is the thing this file exists to avoid.
+    const code = String(failure).match(/^\[([A-Z0-9_]+)\]/)?.[1];
     if (code !== undefined && OWED_ELIGIBLE_CODES.has(code)) owed.push(failure);
     else real.push(failure);
   }
