@@ -5,6 +5,12 @@
 # Precondition: 01 has enrolled the device against the lane server. This flow does NOT clearState, so it
 # inherits that enrolled state; a cold launch of an enrolled device with no open session resolves to the
 # switcher (apps/mobile/src/navigation/zone.ts).
+#
+# SOURCE OF TRUTH — packages/harness/src/harness-provision.ts (task 210). The pad taps below spell
+# LANE_PIN. Maestro YAML cannot import a TS constant, so this mirror is hand-maintained by necessity:
+# change the constant and every mirror site must change in lockstep. A stale literal fails SILENTLY —
+# a wrong PIN only leaves the pad in its `wrong` state, so the failure surfaces as a downstream
+# `notes.list` timeout with no "credential mismatch" anywhere in the log.
 appId: com.bolusi.app
 tags:
   - live
