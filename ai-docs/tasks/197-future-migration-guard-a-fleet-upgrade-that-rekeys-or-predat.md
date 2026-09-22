@@ -50,3 +50,23 @@ This must be a deliberate migration step keyed to the specific upgrade that crea
 - **Negative controls (must STILL wipe):** a genuine foreign DB (sealed under a different key, `deviceId` set, no tag) → key fails to decrypt the probe cell → `ForeignDatabaseError` → wipe. Prove SEC-DEV-06 is not reopened: the foreign DB is never adopted.
 - **Transient (must NOT wipe):** an I/O error while reading the probe cell propagates raw (not `ForeignDatabaseError`), so `isUnrecoverableLocalDbError` is false and it surfaces un-wiped.
 - Break the "decrypts?" gate to always-true and watch the foreign-DB negative control go from wipe → adopt (red) — the SEC-DEV-06 regression the gate prevents; restore → green.
+
+## Deferral RE-VERIFIED 2026-09-22 (trigger still has not fired)
+
+Re-checked because 27a flipped to `done` — one half of the stated trigger names 27a, so the premise
+deserved a fresh look rather than an assumption that the 2026-09-02 note still held.
+
+Checked at the source, not from the note:
+- `apps/mobile/src/bootstrap/db-identity.ts` — the fresh-DB branch still binds the tag when
+  `deviceId === null`, and `bootstrap.ts` still reads `readDeviceId` before `assertDatabaseKeyBinding`.
+  So a DB created under the 160 build is tagged BEFORE enrolment persists a deviceId: the
+  "enrolled + no tag" state still cannot arise on any same-device path.
+- 27a being `done` means the EMULATOR lane is green, not that a fleet exists. The Maestro lane enrols
+  a real device DB, but flow 01 runs `clearState: true`, so nothing survives a run — there is still no
+  installed base carrying a pre-tag enrolled DB.
+- No key-derivation / rekey migration exists, so nothing legitimately produces an untagged enrolled DB.
+
+**Both trigger conditions remain unmet, so this stays deferred and the line-100 branch stays
+fail-closed.** Shipping the backfill now would add a migration keyed to an upgrade that does not
+exist, on a security control whose naive form reopens SEC-DEV-06 — the task's own warning. Re-check
+this again when an on-device fleet ships or a rekey migration is designed.

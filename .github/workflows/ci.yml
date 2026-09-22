@@ -563,7 +563,18 @@ jobs:
       - name: harness correctness gates + Maestro native E2E on the emulator (every figure EMULATOR)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          # API 36 matches the compileSdk/targetSdk we ship (task 167, owner ruling D23 §4). It was
+          # pinned at 34, and RN 0.86 gates its predictive-back shim on BOTH halves —
+          # `Build.VERSION.SDK_INT >= BAKLAVA && applicationInfo.targetSdkVersion >= BAKLAVA`
+          # (AndroidVersion.kt) — so with SDK_INT=34 the first conjunct was false no matter what the
+          # APK targeted. Every `isAtLeastTargetSdk36` behaviour was unexercised BY CONSTRUCTION,
+          # including the `OnBackPressedCallback` shim that is the only `hardwareBackPress` delivery
+          # path on Android 16. The lane was not failing; its green did not mean what its name said.
+          #
+          # Accepted cost, decided rather than discovered: newer system images can boot slower and
+          # flake on early runs. Running 34 AND 36 was considered and rejected — it roughly doubles
+          # wall-clock on a job whose build step alone is ~21 min. One level, matching what ships.
+          api-level: 36
           arch: x86_64
           profile: pixel_6
           script: bash scripts/emulator-gates.sh
