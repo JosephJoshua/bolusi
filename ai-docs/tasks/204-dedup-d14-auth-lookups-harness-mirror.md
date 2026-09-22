@@ -42,6 +42,12 @@ Therefore the resolution is an owner-facing design choice, not a mechanical extr
 
 Pick with the owner before writing code; do not export `getDb` or thread an external Kysely into `auth-entry.ts`'s authz functions without a decision file — that would be a §6 security-control change.
 
+## RESOLVED 2026-09-22 — approach 1, recorded in `decisions/2026-09-22-d14-auth-lookup-query-builders.md` (D26)
+
+Shipped as approach 1: three UNEXECUTED `sql` builders in `packages/db-server/src/auth-lookup-queries.ts` (plus `mapControlSessionRow` for the int8 coercion), each caller executing with the handle it already holds — `getDb()` in `auth-entry.ts`, the PGlite handle in the harness. No handle is exported and none is accepted.
+
+**The clause above was violated once, then reverted.** The first implementation added handle-taking `findDeviceByTokenHashOn(db, …)` &c. to `auth-entry.ts` — exactly what this task forbids — because this file was never read; only its `_index.md` one-liner was. The PR-5 security review caught it. Falsified to this task's own bar afterwards: the production SQL literal appears **once** plus two `.execute()` sites, and the `queryish` export-surface assertion was re-checked by running the built module (`RawBuilderImpl`, no `selectFrom`), not by reading the code.
+
 ## FALSIFY (§2.11) — before collapsing, prove they are safe to collapse
 
 - **Byte-identity of the SQL first.** Confirm the three `production-auth.ts` bodies still match `auth-entry.ts` verbatim modulo the driver (they do as of this filing — `origin/main` HEAD carrying 201). If either side has drifted by the time this is picked up, that drift **is** a finding: reconcile it deliberately (which is correct?), don't collapse by fiat to whichever copy you started from.
