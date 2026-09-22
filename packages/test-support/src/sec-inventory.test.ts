@@ -241,7 +241,7 @@ test('every inventory FAIL line begins with a known machine-readable [CODE] (tas
 //
 // These replace what scripts/ci-parity.mjs used to do by parsing CI logs. The classification now
 // happens where the failures are produced, so the two CI jobs (`security-sweep`, required, and
-// `sec-owed`, expected-red) carry it structurally. The controls below are the load-bearing part:
+// excluded from its exit status) carries it structurally. The controls below are load-bearing:
 // they prove the split cannot quietly absorb a real regression into the standing red.
 
 test('the owed bucket accepts ONLY the non-empty-allowlist mode; other modes are blocking', () => {

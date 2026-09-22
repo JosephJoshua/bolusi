@@ -29,9 +29,9 @@ Every one of those is the same defect: a second-order reader trying to recover, 
 **Fix at the source, not with another wrapper.** The inventory already tags each failure with a machine-readable `[CODE]`. Partition on it where it is produced:
 
 - **`security-sweep`** — fails only on real findings. Expected GREEN. **This is the required check**; any red here blocks the merge.
-- **`sec-owed`** — fails only while ids are owed. Expected RED. **Not required**, so it never blocks. Seconds-long: "which ids are owed" is a question about the guide and the allowlist, needing no build and no test lanes.
+- **Owed ids** — printed in `security-sweep`'s own log as `OWED (recorded, not a failure here)`, and excluded from its exit status.
 
-The job identity now *is* the classification, so nothing downstream has to re-derive it.
+**AMENDED 2026-09-22 (owner):** the split originally gave the owed check its own CI job (`sec-owed`), expected-red and non-required. That job was REMOVED at the owner's direction: a job whose only purpose is to be permanently red is noise, and the same information is already in the sweep's log. Nothing about the gate changes — `security-sweep` still fails only on real findings, the partition still fails closed, and SEC-AUTH-10 remains owed on the allowlist. Only the second, always-red reporting surface is gone.
 
 ### Deleted (~3.3k LOC)
 
@@ -50,10 +50,10 @@ The job identity now *is* the classification, so nothing downstream has to re-de
 
 ## Falsification performed before ratifying (§2.11)
 
-- **Owed job derives its red:** emptied the allowlist → `pnpm sec:owed` EXIT=0; restored → EXIT=1 naming `SEC-AUTH-10 → ai-docs/tasks/27-device-gates.md`. The red is read from the file, not hardcoded.
+- **The owed set derives from the file:** emptying the allowlist removed `SEC-AUTH-10` from the owed output; restoring it brought the row back. The owed list is read from the allowlist, not hardcoded. (Run against the now-removed `sec-owed` entry point; `partitionFailures` and `pendingOwedIds`, which carry the behaviour, are unchanged and unit-tested.)
 - **Fail-closed default:** flipped the partition so an uncoded failure counted as owed → the fail-closed control went RED (EXIT=1); restored → green.
 - **Task-166 absorption:** added `ALLOWLISTED_BUT_TITLED` to the owed-eligible set → the "different mode naming an owed id still blocks" control went RED (EXIT=1); restored → green.
 
 ## Residual risk, recorded
 
-Merge-gating now depends on **branch-protection configuration**, which lives in repo settings rather than in the tree — it is not diffable and not reviewable in a PR. That is the accepted trade for deleting ~3.3k LOC of in-tree machinery that was itself a documented source of wrong-reason greens (incidents INC-T11). The required-check set must name `security-sweep` and must **not** name `sec-owed`; if that configuration is ever lost, the symptom is a merge that should have been blocked going through, so the configuration is recorded here and in task 194.
+Merge-gating now depends on **branch-protection configuration**, which lives in repo settings rather than in the tree — it is not diffable and not reviewable in a PR. That is the accepted trade for deleting ~3.3k LOC of in-tree machinery that was itself a documented source of wrong-reason greens (incidents INC-T11). The required-check set must name `security-sweep`; if that configuration is ever lost, the symptom is a merge that should have been blocked going through, so the configuration is recorded here and in task 194. **Ground truth checked 2026-09-22: `main` had NO branch protection at all** — so this ruling does not remove an existing gate, it makes one possible for the first time (a permanently-red `security-sweep` could never have been a required check).

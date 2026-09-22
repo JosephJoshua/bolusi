@@ -420,17 +420,17 @@ jobs:
   # IT IS EXPECTED GREEN, AND IT IS THE REQUIRED CHECK (task 194). Until 194 this job was expected
   # RED, because the permanently-owed SEC ids shared its conclusion with the real findings — so a red
   # meant either "the expected one" or "a regression", and telling them apart took a tower of
-  # CI-log-parsing oracles. The owed check now runs in its own `sec-owed` job below, and this one
-  # fails ONLY on real findings. That is what lets branch protection require it: any red here is a
-  # regression and must block the merge.
+  # CI-log-parsing oracles. Owed ids no longer count toward this job's exit status — they are still
+  # printed in its log, for the record — so this job fails ONLY on real findings. That is what lets
+  # branch protection require it: any red here is a regression and must block the merge.
   #
   # The owed ids are NOT re-enumerated in prose here. This block twice grew stale entries a real
   # regression could hide behind (task 164 — a SEC-TENANT-04 leg that PASSES was once listed as a red
   # reason, and a §12 "SEC-DEV-08 omission" that the roll-up no longer has). A hand-written list of
   # machine facts drifts by default, so the register points at its single source instead of restating
   # it: the SEC pending allowlist (packages/test-support/src/sec-pending-allowlist.json). Its live
-  # keys ARE the owed ids (task 184), `pnpm sec:owed` derives them from that same file, and the owed
-  # job self-retires the day the allowlist empties.
+  # keys ARE the owed ids (task 184), and the last owed row disappears from this job's log the day
+  # its owning task produces the artifact that earns it.
   #
   # SEC-AUTH-09 was DISCHARGED 2026-07-25 (task 28): its at-rest leg is proven on the emulator artifact
   # and re-checked every push by the git-provenance/staleness guard (packages/harness/src/security/
@@ -465,31 +465,6 @@ jobs:
           rm gitleaks.tgz
       - name: security sweep (SEC inventory + SEC-TENANT-04 walk + secrets + dependency audit)
         run: pnpm sec:sweep
-
-  # Stage 11b — THE OWED SEC IDS, ALONE (task 194).
-  #
-  # SEC-AUTH-10 is owed until a physical device produces its KDF benchmark artifact (D21), so this
-  # job is EXPECTED RED and is deliberately NOT a required check. It exists so that red stops
-  # sharing a conclusion with `security-sweep`: that job now fails only on REAL findings and is the
-  # one branch protection requires, which is what makes a NEW security red block a merge natively
-  # instead of via a bespoke CI-log oracle (ci-parity.mjs / ci-status.mjs, deleted by this task).
-  #
-  # Do NOT make this job green by emptying the allowlist — that discharges an id without its proof
-  # (§2.11). It retires when task 27 lands the artifact. Seconds-long by design: "which ids are
-  # owed" is a question about the guide + allowlist, so it needs no build and no test lanes.
-  sec-owed:
-    runs-on: ubuntu-latest
-    needs: install
-    steps:
-      - uses: actions/checkout@v4
-      - run: corepack enable
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: owed SEC ids (EXPECTED RED while any id is owed — non-blocking by design)
-        run: pnpm sec:owed
 
   # Stage 12 — Android EMULATOR CORRECTNESS lane (task 27a; D20 §1, 08 §5.6 stage 12). REPLACES the
   # task-36 fail-safe `device-lane` stub. Scheduled / on-demand, NOT per-PR (see the `on:` note).

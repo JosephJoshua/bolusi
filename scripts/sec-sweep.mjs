@@ -20,10 +20,10 @@
 // is the gate working (§2.11).
 //
 // WHAT THIS GATE NO LONGER OWNS (task 194). The permanently-owed SEC ids (the pending allowlist —
-// SEC-AUTH-10 until a device produces its artifact, D21) are reported by `pnpm sec:owed` in its own
-// CI job. They are listed below for context but do NOT contribute to this gate's exit status, so a
-// red here means a REAL finding and can block merges natively. Everything that is not explicitly
-// owed-eligible counts as real — see `partitionFailures`, which fails closed.
+// SEC-AUTH-10 until a device produces its artifact, D21) are PRINTED below for the record but do NOT
+// contribute to this gate's exit status, so a red here means a REAL finding and can block merges
+// natively. Everything not explicitly owed-eligible counts as real — see `partitionFailures`, which
+// fails closed.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -103,7 +103,7 @@ const inventory = auditInventory({
   ),
   reports,
 });
-// Owed findings are reported by `pnpm sec:owed` in its own job and are NOT this gate's failures
+// Owed findings are printed for the record but are NOT this gate's failures
 // (task 194). The partition fails closed: an unrecognised code counts as real and blocks.
 const { owed, real } = partitionFailures(inventory.failures);
 record(
@@ -113,7 +113,7 @@ record(
     `${inventory.checked.guideIds} ids parsed from the guide; ${inventory.checked.rollupIds} declared by the §12 roll-up (${inventory.checked.rollupEntries.join(' · ')}).`,
     `${inventory.checked.assertions} test assertions read from ${reports.length} lane report(s); ${inventory.checked.idsWithPass} ids have >=1 PASSING test.`,
     ...real.map((failure) => `FAIL ${failure}`),
-    ...owed.map((failure) => `OWED (reported by \`pnpm sec:owed\`, not a failure here) ${failure}`),
+    ...owed.map((failure) => `OWED (recorded, not a failure here) ${failure}`),
   ].join('\n'),
 );
 
@@ -162,7 +162,7 @@ for (const step of steps) {
 const failed = steps.filter((step) => step.status !== 0);
 console.log(
   failed.length === 0
-    ? `\nsec:sweep: all steps EXIT=0.${owed.length > 0 ? ` ${owed.length} owed id(s) are reported separately by \`pnpm sec:owed\` and do not gate this command.` : ''}`
-    : `\nsec:sweep: ${failed.length} step(s) failed — the release gate is RED for a REAL finding (owed ids are excluded here and reported by \`pnpm sec:owed\`).`,
+    ? `\nsec:sweep: all steps EXIT=0.${owed.length > 0 ? ` ${owed.length} owed id(s) recorded above; they do not gate this command.` : ''}`
+    : `\nsec:sweep: ${failed.length} step(s) failed — the release gate is RED for a REAL finding (owed ids are recorded but excluded).`,
 );
 process.exit(failed.length === 0 ? 0 : 1);
