@@ -69,6 +69,9 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
 
   return (
     <AppShell
+      // Card + one ListRow per store + input + actions — plain views, no FlatList; a tenant with
+      // several stores overflows a small viewport (task 206).
+      scrollable
       title={t('auth.enroll.title')}
       // The progress lives in the accessibility label as well as the visible counter: a screen
       // reader user needs "2 of 3" as much as a sighted one does.

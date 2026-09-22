@@ -66,6 +66,24 @@ vectors on Hermes). CHAOS-01/03/06/07 honestly `skipped` — no on-device runner
 exits non-zero BECAUSE of the 4 honest skips (correct §2.11 outcome), not a gate failure. 27a's 3
 correctness/security legs are DONE; 27a goes fully GREEN when 181 lands the 4 chaos runners.
 
+### 27a GREEN 2026-09-16 — all 7 gates PASS, the 4 skips are gone (emulator run 34221556289, buildSha a93cbb0)
+
+181 landed the chaos runners, and the lane's own `BOLUSI_HARNESS_RESULT` now reports **7 gates, every
+one `"status":"pass"`**, with no skips — the condition named above:
+
+`SEC-DEV-06-at-rest` (every signed-off column ciphertext at rest, and the T-14b positive control
+witnessed the seed in a cipher-disabled control DB) · `SEC-AUTH-09-leg1` (verifier salt/hash/params
+sealed) · `SEC-OPLOG-06-jcs` (Hermes `canonicalizeJcs` byte-identical to the RFC-8785 goldens: 26
+number + 1 canonicalization + 1 property vector) · `CHAOS-01` (3 devices, 100 ops each, 502
+head-applies / 458 re-folds) · `CHAOS-03` (686 foreign ops folded, empty redundant pull) · `CHAOS-06`
+(61 replayed all duplicate, held pull applied 0, novel op still applied) · `CHAOS-07` (3/3 converged,
+LWW winner canonical, edit-after-archive surfaced a significant conflict).
+
+The lane states its own scope in the same line: *"Every figure is EMULATOR — perf gates (P-1..P-6) +
+SEC-AUTH-10 are task 27b (physical device)."* **27a → `done`. 27b stays `blocked` on hardware**, which
+is what keeps SEC-AUTH-10's allowlist row correctly non-stale (see the D21 note at the top: task 27
+counts as done only when BOTH rows are done).
+
 ## COUPLED WORK — re-land task 160 in THIS lane's next run (owner-ruled 2026-07-26: defer 160 to 27a)
 Task 160 (the boot key-tag self-heal) was built, reviewed, merged, then **reverted** on 2026-07-25
 because its probe exposes the column-cipher marker on `packages/db-client/src/connection.ts` — an

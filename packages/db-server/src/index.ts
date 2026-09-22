@@ -33,6 +33,20 @@ export {
   type LoginCredentialRecord,
 } from './auth-entry.js';
 
+// Task 204, approach 1 — the three lookups' SQL, shared as UNEXECUTED query builders so
+// `@bolusi/harness` can run the same statement against its own PGlite handle instead of keeping a
+// line-for-line copy whose aliases drift silently. Deliberately NOT functions that accept a
+// `Kysely` handle: threading an external executor into this package's authz path would be a §6
+// security-control change (task 204 says so explicitly). A builder cannot execute anything on its
+// own, `getDb` stays private, no handle is exported, and the definer gating is untouched — so
+// D7/FR-1039 and the export-surface `queryish` assertion both still hold.
+export {
+  deviceByTokenHashQuery,
+  controlSessionByTokenHashQuery,
+  loginCredentialQuery,
+  mapControlSessionRow,
+} from './auth-lookup-queries.js';
+
 // Task 47 — the SERVER projection watermark store (10-db §8, 04 §4.3), moved here from
 // apps/server so the real-PG16 lane executes it rather than a hand-copied mirror (watermarks.ts
 // header). A deliberate surface addition, weighed against D7/FR-1039 rather than waved through:
@@ -41,6 +55,13 @@ export {
 // to reach a tenant table" is untouched, and export-surface.test.ts's `queryish` assertion still
 // holds. Its consumer is apps/server's push transaction (task 49).
 export { createServerWatermarkStore } from './watermarks.js';
+
+// Task 208 — the ONE `userPinVerifiers` row builder, shared by apps/server's `writeVerifier` and the
+// harness lane seed so the PIN-auth row shape cannot drift between production and the emulator
+// oracle. A PURE mapping function: it takes plain values and returns a plain object, touching no
+// handle and exposing no `selectFrom`, so the export-surface `queryish` assertion still holds.
+export { buildPinVerifierRow } from './pin-verifier-row.js';
+export type { PinVerifierRowInput, PinVerifierRowOwner } from './pin-verifier-row.js';
 
 // Task 49 — the SERVER projection engine factory (10-db §3 step 6, 04 §4). Same D7 weighing as
 // the watermark store: it CONSUMES a `forTenant` handle rather than producing one, and returns a

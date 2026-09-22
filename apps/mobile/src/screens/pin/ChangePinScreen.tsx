@@ -59,6 +59,8 @@ export function ChangePinScreen({ onChangePin, onClose }: ChangePinScreenProps):
 
   return (
     <AppShell
+      // Plain views, no List — safe to scroll when the content outgrows the viewport (task 206).
+      scrollable
       title={t('auth.pin.change.title')}
       titleVariant="detail"
       onBack={onClose}

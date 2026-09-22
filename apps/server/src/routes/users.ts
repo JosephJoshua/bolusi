@@ -1,7 +1,7 @@
 // Users sub-router (api/02-auth §5.4). Bearer-guarded; the §4.5 matrix + the §5.4 anti-escalation
 // rules are enforced here against the server directory.
 import { compareCanonicalOrder } from '@bolusi/core';
-import type { TenantDb } from '@bolusi/db-server';
+import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
@@ -439,17 +439,9 @@ async function writeVerifier(
   userId: string,
   verifier: PutPinVerifierReq['verifier'],
 ): Promise<void> {
-  const row = {
-    userId,
-    tenantId,
-    algo: 'argon2id' as const,
-    salt: verifier.saltB64,
-    params: { m: verifier.mKiB, t: verifier.t, p: verifier.p } as never,
-    hash: verifier.hashB64,
-    asOfTimestamp: BigInt(verifier.asOf.timestamp),
-    asOfDeviceId: verifier.asOf.deviceId,
-    asOfSeq: BigInt(verifier.asOf.seq),
-  };
+  // The row shape lives in ONE place (task 208) — the harness lane seeds the same row to stand up the
+  // emulator's on-device unlock, and an inline copy here would let the two drift silently.
+  const row = buildPinVerifierRow(verifier, { userId, tenantId });
   await db
     .insertInto('userPinVerifiers')
     .values(row)

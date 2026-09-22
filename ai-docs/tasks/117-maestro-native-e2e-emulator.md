@@ -55,3 +55,20 @@ Task 201 (Option B — `@bolusi/server` on the lane) promoted `02..06` to top-le
 - **06-i18n-toggle — fails inside `subflows/unlock.yaml` at `assertVisible: switcher-screen` (device on `enrollment-screen`).** The flow does NOT `clearState`; the launch logcat shows no `startSessionIfEnrolled` (app saw no enrolled device) and no wipe/revoke/lockout marker. Enrolled state was present for 02–05 and absent for 06 only — a flow-sequence / maestro-state effect (entangled with the preceding failed 04/05), NOT a seam-producer defect (the producer works deterministically 4×). Needs 117-level investigation once 04/05 are fixed.
 
 Net: the 201 seam (the missing producer) is delivered and proven (02 green). The four remaining failures are 117 flow-authoring (04, 05) + a 119 shell-nav gap (03) + flow-suite state sequencing (06) — all outside the enrollment-seed seam's scope (201's fixture is enrolled-state only: no content, no nav wiring, no notes-module testIDs). Meeting 117's full 5-flow Acceptance requires this 117/119 work; that it cannot be met by the seam alone is the re-scope the owner adjudicates on task 201 (§4).
+
+## RESOLVED 2026-09-16 — 6/6 flows live and green; the re-scope was never needed
+
+The four failures above were fixed inside the 201-B branch (merged to `main` as `a900438`), so the Acceptance is met in full and **no launch-only re-scope was taken** — the owner never had to adjudicate it, because the suite reached 6/6.
+
+| Flow | Was | Fixed by |
+| ---- | --- | -------- |
+| 03-shell-navigation | syncChip tap never reached `sync-status-screen` | `c82c580` — the shell drew under the status bar, so the chip's tap target was occluded |
+| 04-note-create | tapped `notes.list.create`, absent on an empty list | `ea42250` — tap `ui.emptyState.cta` on the empty precondition |
+| 05-archive-confirmsheet | cascaded from 04 (no row to archive) | `282972c` — verify the archived badge via the archived filter after the optimistic pop |
+| 06-i18n-toggle | ran before 01 enrolled the device | `4483ad3` — pin lane flow order so the stateful chain runs 01 → 06 |
+
+Also landed: `37ad3a0` (nav-bar inset — the docked save action was under the nav bar), `482bc03` (dismiss the keyboard before saving), `5ee57c5` (drop `attach` on a cameraless emulator).
+
+**Evidence — run 34221556289's own `maestro-native-e2e` artifact (§2.1, judged on the artifact, never the job conclusion):** all 6 flows green; **154/154 commands COMPLETED** (27/17/25/29/30/26); zero `onCommandFailed`/skipped/canceled; **zero `screen-hierarchy/` dumps** (Maestro writes those only on a failed command); every flow's last command is its terminal screenshot. The `Exception … 'grant'` lines in the logs are Maestro's launch-time `pm grant` preamble for permissions the app never declares — benign, present on every run.
+
+There are no `pending-119/*` files left: all six flows are top-level in `.maestro/`.

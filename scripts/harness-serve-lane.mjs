@@ -12,28 +12,19 @@
 // line the driver waits on before it runs `maestro`. Then it stays alive on the open socket until
 // SIGTERM/SIGINT, tearing the socket + PGlite down cleanly.
 //
-// RESOLUTION (why imports are relative `dist/`, not `@bolusi/harness`): the repo-root `node_modules`
-// carries NO `@bolusi/*` workspace link, so a bare specifier would not resolve for a root-level script.
-// The built barrel resolves its OWN transitive `@bolusi/*` from the harness's `node_modules` (Node
-// resolves a module's imports from the module's location, not the entry script's) — so this requires the
-// harness + deps BUILT (`tsc -b`), which the emulator lane does before invoking this.
-import { register } from 'tsx/esm/api';
+// Process scaffold (tsx loader, shutdown lifecycle, failure reporting) is shared with
+// `harness-chaos-server.mjs` — see `harness-server-entry.mjs`, which also documents why these imports
+// are relative `dist/` paths rather than `@bolusi/harness`.
+import { installShutdownHandlers, registerTsLoader, runEntry } from './harness-server-entry.mjs';
 
 import {
-  assertLaneLoopbackBind,
   formatLaneReady,
   LANE_PORT,
   provisionLaneOwner,
   startHarnessServer,
 } from '../packages/harness/dist/index.js';
 
-// A TS-capable ESM loader, mandatory here: `startHarnessServer()` runs the DB migrator, which
-// dynamically `import()`s the RAW `.ts` migration files (kysely's FileMigrationProvider). A bare `node`
-// child cannot load `.ts`, so that import would die `ERR_MODULE_NOT_FOUND` and the server never boots.
-// Use tsx's OWN `esm/api` register() (not `node:module`'s register('tsx/esm', …), which tsx rejects).
-// The static imports above are compiled `dist/*.js` and need no loader; only the runtime migration
-// `import()` inside `startHarnessServer` does, and it runs after this call.
-register();
+registerTsLoader();
 
 /** Parse `--port <n>` (default LANE_PORT). `0` ⇒ ephemeral. Rejects anything outside a TCP port range. */
 function parsePort(argv) {
@@ -50,34 +41,21 @@ function parsePort(argv) {
 async function main() {
   const port = parsePort(process.argv.slice(2));
 
-  // Tear the server (socket + PGlite) down on the driver's SIGTERM or a Ctrl-C. Registered BEFORE listen
-  // so a signal arriving during boot still releases whatever came up. Idempotent, and exits 0 because a
-  // clean shutdown on request is success, not a fault.
+  // Tear the server (socket + PGlite) down on SIGTERM/Ctrl-C. The closure reads `running` at signal
+  // time, not registration time, so a signal arriving mid-boot still releases whatever came up.
   let running;
-  let closing = false;
-  const shutdown = async () => {
-    if (closing) return;
-    closing = true;
-    try {
-      await running?.close();
-    } finally {
-      process.exit(0);
-    }
-  };
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
+  installShutdownHandlers(async () => running?.close());
 
+  // §2.5 — the loopback bind is enforced at the BIND SITE, inside `listen()` (packages/harness/src/
+  // server.ts): under `productionAuth` it runs `assertLaneLoopbackBind(hostname)` and throws BEFORE the
+  // socket opens, so a token-minting server can never reach the LAN. There is deliberately no second
+  // check on `running.address` here: `startHarnessServer` cannot return unless that guard already
+  // passed, so a re-check would be unreachable code that reads like protection (task 209).
+  //
+  // That guard is load-bearing, watched go red: disabling it makes this server bind `0.0.0.0` and
+  // `production-auth-boot.test.ts` fails with `promise resolved "{ url: 'http://0.0.0.0:…' }" instead
+  // of rejecting`. Restore before trusting any of this.
   running = await startHarnessServer({ productionAuth: true, port });
-
-  // §2.5: fail closed if the bind is not loopback — a token-minting server must never reach the LAN. The
-  // decision is the pure, unit-falsifiable `assertLaneLoopbackBind`; on reject we still close the socket
-  // here so a refused bind never leaks a listening port.
-  try {
-    assertLaneLoopbackBind(running.address);
-  } catch (error) {
-    await running.close();
-    throw error;
-  }
 
   const credentials = await provisionLaneOwner(running.server);
   console.log(
@@ -93,10 +71,4 @@ async function main() {
   // the whole Maestro run. The process ends ONLY via `shutdown()` above.
 }
 
-main().catch((error) => {
-  // A boot/provision failure must be LOUD and NON-ZERO: the driver then reads no marker and reds the lane
-  // (it cannot skip, §2.11). stderr so the driver's failure capture shows it.
-  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  console.error(`harness-serve-lane: ${detail}`);
-  process.exit(1);
-});
+runEntry('harness-serve-lane', main);

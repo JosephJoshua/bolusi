@@ -18,13 +18,17 @@
 // aliases, identical `Number()` coercion for the control-session int8 columns — with the single, sole
 // delta being the driver: `.execute(getDb())` → `.execute(db)`. The db-server record types are imported
 // (not re-declared) so a field drift in the oracle is a compile error here, not a silent divergence.
-import { sql, type Kysely } from 'kysely';
+import { type Kysely } from 'kysely';
 
-import type {
-  ControlSessionAuthRecord,
-  DB,
-  DeviceAuthRecord,
-  LoginCredentialRecord,
+import {
+  controlSessionByTokenHashQuery,
+  deviceByTokenHashQuery,
+  loginCredentialQuery,
+  mapControlSessionRow,
+  type ControlSessionAuthRecord,
+  type DB,
+  type DeviceAuthRecord,
+  type LoginCredentialRecord,
 } from '@bolusi/db-server';
 
 /**
@@ -51,54 +55,24 @@ export interface PgliteAuthDirectory {
  * `undefined` on no match (fail closed), exactly as the definer functions do.
  */
 export function createPgliteAuthDirectory(db: Kysely<DB>): PgliteAuthDirectory {
+  // Runs the PRODUCTION query builders (task 204, approach 1) against this harness's own PGlite
+  // handle. This file used to carry a line-for-line copy of all three statements whose only
+  // difference was the executor — an aware copy on a D14 cross-tenant SECURITY path, where drift is
+  // silent: the oracle keeps passing while no longer mirroring production. The SQL now has one
+  // definition, so a change to a definer call, an alias, or the int8 coercion reaches the emulator
+  // lane by construction — WITHOUT db-server accepting an outside handle into its authz path.
   return {
     async findDeviceByTokenHash(tokenHashHex) {
-      const { rows } = await sql<{
-        tenantId: string;
-        storeId: string | null;
-        deviceId: string;
-        status: string;
-      }>`
-        SELECT tenant_id AS "tenantId", store_id AS "storeId", device_id AS "deviceId", status
-          FROM auth_find_device_by_token_hash(${tokenHashHex})
-      `.execute(db);
+      const { rows } = await deviceByTokenHashQuery(tokenHashHex).execute(db);
       return rows[0];
     },
-
     async findControlSessionByTokenHash(tokenHashHex) {
-      const { rows } = await sql<{
-        tenantId: string;
-        userId: string;
-        sessionId: string;
-        expiresAt: string | number;
-        revokedAt: string | number | null;
-      }>`
-        SELECT tenant_id AS "tenantId", user_id AS "userId", session_id AS "sessionId",
-               expires_at AS "expiresAt", revoked_at AS "revokedAt"
-          FROM auth_find_control_session_by_token_hash(${tokenHashHex})
-      `.execute(db);
+      const { rows } = await controlSessionByTokenHashQuery(tokenHashHex).execute(db);
       const row = rows[0];
-      if (row === undefined) return undefined;
-      return {
-        tenantId: row.tenantId,
-        userId: row.userId,
-        sessionId: row.sessionId,
-        expiresAt: Number(row.expiresAt),
-        revokedAt: row.revokedAt === null ? null : Number(row.revokedAt),
-      };
+      return row === undefined ? undefined : mapControlSessionRow(row);
     },
-
     async findLoginCredential(loginIdentifier) {
-      const { rows } = await sql<{
-        tenantId: string;
-        userId: string;
-        passwordVerifier: string | null;
-        status: string;
-      }>`
-        SELECT tenant_id AS "tenantId", user_id AS "userId",
-               password_verifier AS "passwordVerifier", status
-          FROM auth_find_login_credential(${loginIdentifier})
-      `.execute(db);
+      const { rows } = await loginCredentialQuery(loginIdentifier).execute(db);
       return rows[0];
     },
   };

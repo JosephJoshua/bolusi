@@ -7,6 +7,16 @@
 # clears state. A cold relaunch of an enrolled device with no open session resolves to the switcher
 # (apps/mobile/src/navigation/zone.ts), NOT the shell — the previous flow's session does not survive the
 # relaunch. So the switcher → PIN → notes.list hop has to be re-driven at the top of each flow.
+#
+# SOURCE OF TRUTH — packages/harness/src/harness-provision.ts (task 210). The pad taps below spell
+# LANE_PIN. Maestro YAML cannot import a TS constant, so this mirror is hand-maintained by necessity:
+# change the constant and every mirror site must change in lockstep. A stale literal fails SILENTLY —
+# a wrong PIN only leaves the pad in its `wrong` state, so the failure surfaces as a downstream
+# `notes.list` timeout with no "credential mismatch" anywhere in the log.
+#
+# 02-pin-entry.yaml deliberately inlines the SAME taps rather than calling this subflow — that is
+# first-class evidence that a correct PIN unlocks the session, not accidental duplication. Do not
+# collapse the two (task 210).
 appId: com.bolusi.app
 ---
 - launchApp

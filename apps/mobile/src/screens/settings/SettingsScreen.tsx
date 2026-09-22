@@ -81,6 +81,9 @@ export function SettingsScreen({
 }: SettingsScreenProps): React.JSX.Element {
   return (
     <AppShell
+      // Up to 10 ListRows (plain views, NOT a FlatList) plus 5 section headers: ~640dp of rows
+      // alone at touch.row=64, so this clips on a small screen or a raised font scale (task 206).
+      scrollable
       // The SCREEN title names the whole screen (language + notifications + device), not just the
       // first section — `core.settings.language` was the language section's own header (§129 item 1).
       title={t('core.settings.title')}

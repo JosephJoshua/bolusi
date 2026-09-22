@@ -84,6 +84,8 @@ export function PinScreen({
 
   return (
     <AppShell
+      // Plain views, no List — safe to scroll when the content outgrows the viewport (task 206).
+      scrollable
       title={t('auth.pin.title')}
       titleVariant="detail"
       onBack={onSwitchUser}

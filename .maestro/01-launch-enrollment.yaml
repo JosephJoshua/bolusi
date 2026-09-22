@@ -5,10 +5,13 @@
 # SUCCEED. This flow drives the FULL native enrollment journey to a real enrolled device; the sibling
 # flows (02-06) relaunch THAT enrolled device and unlock it.
 #
-# The credentials typed here are the lane's provisioned owner (packages/harness/src/harness-provision.ts,
-# surfaced on the ready marker): login `gudang-selatan`, one-time password `harness-otp-password-201b`.
-# They are the SAME literals provisionLaneOwner seeds over the real productionAuth server — not a
-# decorative form fill: a wrong password fails the login 401 and never reaches the confirm step.
+# SOURCE OF TRUTH — packages/harness/src/harness-provision.ts (task 210). The credentials typed here
+# are the lane's provisioned owner, surfaced on the ready marker: login `gudang-selatan`
+# (LANE_OWNER_LOGIN), one-time password `harness-otp-password-201b` (LANE_OTP). They are the SAME
+# literals provisionLaneOwner seeds over the real productionAuth server — not a decorative form fill.
+# Maestro YAML cannot import a TS constant, so this mirror is hand-maintained by necessity: change a
+# constant and every mirror site must change in lockstep. Here a wrong value at least fails LOUDLY
+# (the login 401s and never reaches the confirm step), unlike the PIN mirror in 02 / subflows/unlock.
 #
 # `clearState: true` wipes app data first (== `adb shell pm clear com.bolusi.app`), so regardless of what
 # 27a's harness run left on the AVD, the app comes up UNENROLLED and the pure shell gate

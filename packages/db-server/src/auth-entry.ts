@@ -11,8 +11,13 @@
 //
 // This module holds getDb (internal) but exposes only these fixed lookups — it is NOT a raw
 // handle, and there is no way through it to run an arbitrary cross-tenant query.
-import { sql } from 'kysely';
 
+import {
+  controlSessionByTokenHashQuery,
+  deviceByTokenHashQuery,
+  loginCredentialQuery,
+  mapControlSessionRow,
+} from './auth-lookup-queries.js';
 import { getDb } from './db.js';
 
 /** Minimal device auth row for `verifyToken` (bdt_) — api/02-auth §8. */
@@ -49,15 +54,7 @@ export interface LoginCredentialRecord {
 export async function findDeviceByTokenHash(
   tokenHashHex: string,
 ): Promise<DeviceAuthRecord | undefined> {
-  const { rows } = await sql<{
-    tenantId: string;
-    storeId: string | null;
-    deviceId: string;
-    status: string;
-  }>`
-    SELECT tenant_id AS "tenantId", store_id AS "storeId", device_id AS "deviceId", status
-      FROM auth_find_device_by_token_hash(${tokenHashHex})
-  `.execute(getDb());
+  const { rows } = await deviceByTokenHashQuery(tokenHashHex).execute(getDb());
   return rows[0];
 }
 
@@ -65,41 +62,15 @@ export async function findDeviceByTokenHash(
 export async function findControlSessionByTokenHash(
   tokenHashHex: string,
 ): Promise<ControlSessionAuthRecord | undefined> {
-  const { rows } = await sql<{
-    tenantId: string;
-    userId: string;
-    sessionId: string;
-    expiresAt: string | number;
-    revokedAt: string | number | null;
-  }>`
-    SELECT tenant_id AS "tenantId", user_id AS "userId", session_id AS "sessionId",
-           expires_at AS "expiresAt", revoked_at AS "revokedAt"
-      FROM auth_find_control_session_by_token_hash(${tokenHashHex})
-  `.execute(getDb());
+  const { rows } = await controlSessionByTokenHashQuery(tokenHashHex).execute(getDb());
   const row = rows[0];
-  if (row === undefined) return undefined;
-  return {
-    tenantId: row.tenantId,
-    userId: row.userId,
-    sessionId: row.sessionId,
-    expiresAt: Number(row.expiresAt),
-    revokedAt: row.revokedAt === null ? null : Number(row.revokedAt),
-  };
+  return row === undefined ? undefined : mapControlSessionRow(row);
 }
 
 /** Resolve a user by globally-unique loginIdentifier. Cross-tenant, definer-gated. */
 export async function findLoginCredential(
   loginIdentifier: string,
 ): Promise<LoginCredentialRecord | undefined> {
-  const { rows } = await sql<{
-    tenantId: string;
-    userId: string;
-    passwordVerifier: string | null;
-    status: string;
-  }>`
-    SELECT tenant_id AS "tenantId", user_id AS "userId",
-           password_verifier AS "passwordVerifier", status
-      FROM auth_find_login_credential(${loginIdentifier})
-  `.execute(getDb());
+  const { rows } = await loginCredentialQuery(loginIdentifier).execute(getDb());
   return rows[0];
 }
