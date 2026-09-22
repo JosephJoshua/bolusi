@@ -82,3 +82,42 @@ is reported rather than inferred from a conclusion.
 - `apps/mobile/src/navigation/useHardwareBack.test.tsx`'s limits section updated once the lane is
   green at 36: it currently says the shim path is unexercised "until the lane runs API 36 per D23
   §4", and that clause should become a statement about what the lane now covers.
+
+## DONE 2026-09-22 — lane raised to API 36, and it booted at 36 (run 35750111132)
+
+`.github/workflows/ci.yml` `android-emulator` now pins `api-level: 36`.
+
+**Falsification, per this task's own bar — the LOG, not the step conclusion.** From run
+`35750111132`'s `android-emulator` job log:
+
+```
+api-level: 36
+avdmanager create avd --force -n test --package 'system-images;android-36;default;x86_64' --device 'pixel_6'
+sdkmanager --install 'system-images;android-36;default;x86_64' --channel=0
+INFO | Found systemPath /usr/local/lib/android/sdk/system-images/android-36/default/x86_64/
+```
+
+The AVD was created from the API-36 system image and the emulator resolved that path — no fallback to
+another image, no skipped step. `SDK_INT` on the lane is now 36, so `isAtLeastTargetSdk36`'s first
+conjunct is satisfied and everything behind it stops being dead code.
+
+**Gate results as observed (run/job `106821737792`):**
+
+```
+harness:device: EMULATOR correctness gates PASS (7 gates, target=emulator, hermes=250829098.0.14)
+[Passed] 01-launch-enrollment (41s)   [Passed] 04-note-create (41s)
+[Passed] 02-pin-entry (20s)           [Passed] 05-archive-confirmsheet (32s)
+[Passed] 03-shell-navigation (27s)    [Passed] 06-i18n-toggle (28s)
+```
+
+7/7 gates, 6/6 flows, job conclusion `success`. This task predicted the first genuinely-executing run
+would likely be RED and told the implementer to budget for triage; it was green instead. Recorded as
+observed rather than as expected — the prediction was a caution, not a requirement.
+
+Boot cost was real but tolerable: the job ran ~33 min wall-clock (15:51:39Z → ~16:24Z), against ~22
+min at API 34, most of it the unchanged ~21-min APK assemble.
+
+`apps/mobile/src/navigation/useHardwareBack.test.tsx`'s limits section is rewritten per this task's
+last acceptance bullet. It now states what the lane covers — and is explicit that the shim path is
+EXERCISED, not yet ASSERTED: no Maestro flow drives a system back gesture, so nothing fails today if
+the shim stops delivering. That flow is the remaining gap if this path is to be genuinely covered.

@@ -70,13 +70,21 @@
  *     build is on record at `ai-docs/tasks/148-duplicate-libcrypto-blocks-android-apk.md:89` as
  *     `compileSdk/targetSdk 36`, which puts us squarely on the shim path rather than hypothetically
  *     near it. Closing it needs an L6 run at a matching API level. That is a scheduled gap, not a
- *     permanent one: the emulator lane is pinned to `api-level: 34` (`.github/workflows/ci.yml`,
- *     the `android-emulator` job) while the shim is gated on `SDK_INT >= 36` AND
- *     `targetSdkVersion >= 36` (`AndroidVersion.kt:51-53`), so the lane cannot exercise this path
- *     TODAY — but the owner has ruled the lane moves to API 36 (D23 §4), tracked as task 167. Once
- *     the lane runs API 36 per D23 §4 it WILL exercise the shim path, and this paragraph should be
- *     rewritten to say what the lane then covers. Until then the premise above stays unmeasured, and
- *     task 148 separately blocks the Android build.
+ *     one: the emulator lane WAS pinned to `api-level: 34` while the shim is gated on `SDK_INT >= 36`
+ *     AND `targetSdkVersion >= 36` (`AndroidVersion.kt:51-53`), so the first conjunct was false and
+ *     the lane could not exercise this path at all.
+ *
+ *     **That is fixed (task 167, owner ruling D23 §4): the lane runs `api-level: 36`.** Proven at the
+ *     log, not inferred from a green step — run 35750111132 created its AVD from
+ *     `system-images;android-36;default;x86_64` (no fallback image), and on that run the harness
+ *     reported `EMULATOR correctness gates PASS (7 gates)` with all six Maestro flows `[Passed]`.
+ *     So `SDK_INT` is now 36 on the lane and the shim's gate is satisfied on both halves.
+ *
+ *     What that does and does NOT buy: the lane now EXERCISES the `OnBackPressedCallback` dispatch
+ *     path rather than skipping it by construction, so a regression there can finally surface. It is
+ *     not yet an ASSERTION about predictive back — no Maestro flow drives a system back gesture, so
+ *     nothing yet fails if the shim stops delivering. Writing that flow is the next step if this
+ *     path is to be genuinely covered rather than merely executed.
  */
 import { describe, expect, test, beforeEach } from 'vitest';
 
