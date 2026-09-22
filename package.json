@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=22 <23"
   },
+  "op-sqlite": {
+    "performanceMode": true
+  },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "task:new": "node scripts/task-new.mjs",

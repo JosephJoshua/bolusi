@@ -63,3 +63,33 @@ Task 148 landed D22: **`sqlcipher` is now OFF on BOTH platforms, deliberately.**
 4. **The SEC-id hunt in the header is ANSWERED and should not be pursued as written.** The at-rest row is `SEC-DEV-06`, it is owned by the 148 lane, and D22 reshaped its claim (sensitive VALUES ciphertext; structure plaintext). This task claims no SEC id.
 
 **Re-scoped title/goal:** *prove `performanceMode` is discovered and applied on iOS* (and, while in there, that the config-discovery walk is fixed or documented as unfixable for a pnpm workspace). **Priority drops from HIGH-security to a performance/config correctness item.** The old security framing above is retained as the historical record of how this was found — it is no longer the work.
+
+## RESOLVED 2026-09-22 — the config is now discoverable by BOTH build systems, with a guard
+
+Root cause confirmed by reading the INSTALLED package's own discovery code (better ground truth than
+the docs, per §2.11 — trace to the producer):
+
+- `op-sqlite.podspec` walks up from its own `__dir__` and takes the FIRST `package.json` it finds.
+  Under pnpm that path — `node_modules/.pnpm/@op-engineering+op-sqlite@…/node_modules/@op-engineering/
+  op-sqlite` — has no intermediate `package.json`, so it bottoms out at the REPO ROOT.
+- `android/build.gradle` applies the same rule from `$rootDir/../`, reaching `apps/mobile/package.json`.
+
+Same algorithm, different starting points. The block existed only at `apps/mobile/package.json`, so
+iOS found nothing and silently dropped `performanceMode` — exactly how `sqlcipher` was lost on iOS
+before D22 removed it. This matches the empirical two-lane evidence recorded above.
+
+**Fix:** the `op-sqlite` block is MIRRORED into the repo-root `package.json`. It cannot simply MOVE
+there — Android's walk stops at `apps/mobile/package.json` first — and the two walks cannot be taught
+to share one file, so two copies are structural.
+
+**Guard (the task's explicit deliverable):** `packages/test-support/src/op-sqlite-config.test.ts`
+asserts each build system's discovery point has a block, that the two are EQUAL, and that the shared
+value still pins `performanceMode: true` (a denominator check — two empty blocks would satisfy
+equality while pinning nothing). Falsified: deleting the root block reds the iOS-discovery and
+mirror-agreement tests by name; restored, green.
+
+**Still owed, and not claimable from this host (Linux, no Xcode):** the build-log confirmation that
+iOS now reports the config found. The `ios-simulator` CI lane prints op-sqlite's own discovery line,
+so the next run of that lane is the proof — read the line, do not infer it from the job conclusion.
+Note the log line is necessary, not sufficient: it says the block was FOUND, not that
+`performanceMode` changed behaviour, which would need an on-device measurement (27b territory).
