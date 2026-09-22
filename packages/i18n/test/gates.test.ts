@@ -397,6 +397,17 @@ describe('module catalog coverage (task 195)', () => {
     expect(errors[0]).toContain("namespace 'inventory'");
   });
 
+  it('FAILS when keys were found but no namespace came out of them', () => {
+    // Found by the PR-5 test-quality review. The floor alone does not cover this: the count is
+    // healthy (20, well above the floor) while the derived namespace list is empty, so the coverage
+    // loop runs zero times and the function would return [] — a silent PASS over 20 unchecked keys.
+    // Unreachable through check.mjs today (it derives both from one list), which is exactly why the
+    // invariant needs asserting rather than assuming.
+    const errors = checkModuleCatalogCoverage([], 20, 1, [notesCatalog]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('ZERO namespaces were derived');
+  });
+
   it('FAILS when the tn() scan collapses, instead of passing over an empty set', () => {
     // T-14 denominator guard. Without it a broken TN_CALL_RE yields no namespaces, the loop runs
     // zero times, and the gate reports PASS — indistinguishable from real coverage.

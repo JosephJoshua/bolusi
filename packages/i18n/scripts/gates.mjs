@@ -192,6 +192,20 @@ export function checkModuleCatalogCoverage(namespaces, tnKeyCount, tnKeyFloor, s
     return errors;
   }
 
+  // The SECOND half of the same denominator check, and the one the floor alone cannot make. The
+  // namespaces are derived FROM the very keys `tnKeyCount` counts, so "keys exist but no namespace
+  // came out of them" is a contradiction: the derivation step broke. Without this the loop below
+  // iterates zero times and the function returns [] — a silent PASS while not one of those keys was
+  // checked against a catalog. That is INC-T11 #6 exactly: green BECAUSE what it should catch became
+  // invisible to it. Today `check.mjs` derives both from one list so the two cannot diverge; this
+  // asserts that invariant instead of depending on it staying true through a future refactor.
+  if (namespaces.length === 0) {
+    errors.push(
+      `${tnKeyCount} tn() key(s) were found but ZERO namespaces were derived from them — the namespace derivation is broken, so no catalog would be checked and this gate would pass over an empty set`,
+    );
+    return errors;
+  }
+
   /** @type {Set<string>} */
   const covered = new Set();
   for (const source of sources) {
