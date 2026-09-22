@@ -179,6 +179,8 @@ function EditNoteLoader({
 
   const shell = (body: ReactNode): React.JSX.Element => (
     <AppShell
+      // Plain views + text inputs, no List — scroll so a raised font scale cannot clip (task 206).
+      scrollable
       title={t('core.action.edit')}
       titleVariant="detail"
       onBack={onCancel}
@@ -400,6 +402,8 @@ function EditorForm({
 
   return (
     <AppShell
+      // Plain views + text inputs, no List — scroll so a raised font scale cannot clip (task 206).
+      scrollable
       title={mode === 'create' ? tn('notes.action.new') : t('core.action.edit')}
       titleVariant="detail"
       onBack={requestCancel}

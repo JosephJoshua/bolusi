@@ -7,7 +7,7 @@
  * ├──────────────────────────────┤
  * │ Banner slot (§3.6, max one)  │
  * ├──────────────────────────────┤
- * │ Content (scrolls, pad lg)    │  the ONLY scrolling region; header/action bar stay fixed
+ * │ Content (pad lg)             │  opt-in scrolling via `scrollable` — see that prop
  * ├──────────────────────────────┤
  * │ Bottom action bar (optional) │  primary Button, 56 dp, thumb zone
  * └──────────────────────────────┘
@@ -51,6 +51,24 @@ export interface AppShellProps {
   readonly children: ReactNode;
   /** Bottom action bar: the screen's one primary Button, in the thumb zone (§0, §8.1). */
   readonly bottomAction?: ReactNode;
+  /**
+   * Scroll the content slot when it overflows the viewport (task 206). **Opt-in, and deliberately so.**
+   *
+   * Set this ONLY on a screen whose content is plain views. A screen whose content is a `List` (i.e.
+   * a `FlatList`) must leave it `false`: RN refuses to nest a same-orientation `VirtualizedList`
+   * inside a plain `ScrollView` — it logs "VirtualizedLists should never be nested inside plain
+   * ScrollViews with the same orientation because it can break windowing" and windowing/`onEndReached`
+   * stop working. 7 of the 13 current AppShell screens render a `List`, which is why scrolling is not
+   * the default; those screens already scroll through the list itself.
+   *
+   * Do not reach for this to fix a full-bleed screen either (capture viewfinder, signature pad): a
+   * lone `flex: 1` child that IS the viewport wants to fill, not scroll.
+   *
+   * This cannot be caught by the test suite — `packages/ui/test/doubles/react-native.tsx` replaces
+   * both `ScrollView` and `FlatList` with pass-through host nodes, so the nesting warning can only
+   * appear on a device or the emulator lane.
+   */
+  readonly scrollable?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -99,6 +117,7 @@ export function AppShell({
   banner,
   children,
   bottomAction,
+  scrollable = false,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
   return (
@@ -136,22 +155,27 @@ export function AppShell({
       {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
 
       {/*
-        Scrollable by default (task 206). The content slot was a plain padded View, and no screen
-        supplied its own ScrollView, so on a small low-end screen — or at a raised OS font scale —
-        anything taller than the viewport was clipped with no gesture to reach it. The RNW visual
-        harness renders at a desktop viewport, which is why this never showed up there.
+        The content slot. Plain View by default; a ScrollView only when the screen opts in (task 206
+        — see the `scrollable` prop docs for why this is not the default). The slot keeps ONE testID
+        either way so navigation and the Maestro flows do not care which shape it took.
       */}
-      <ScrollView
-        testID={`${testID}.content`}
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
-        // would read as the whole screen coming loose.
-        bounces={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {children}
-      </ScrollView>
+      {scrollable ? (
+        <ScrollView
+          testID={`${testID}.content`}
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
+          // would read as the whole screen coming loose.
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View testID={`${testID}.content`} style={styles.contentContainer}>
+          {children}
+        </View>
+      )}
 
       {bottomAction === undefined ? null : (
         <View testID={`${testID}.actionBar`} style={styles.actionBar}>

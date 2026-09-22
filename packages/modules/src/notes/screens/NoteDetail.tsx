@@ -100,6 +100,8 @@ export function NoteDetail({
 
   return (
     <AppShell
+      // Plain views, no List — safe to scroll when the content outgrows the viewport (task 206).
+      scrollable
       title={tn('notes.detail.title')}
       titleVariant="detail"
       onBack={onBack}

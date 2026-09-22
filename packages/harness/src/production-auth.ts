@@ -21,9 +21,10 @@
 import { type Kysely } from 'kysely';
 
 import {
-  findControlSessionByTokenHashOn,
-  findDeviceByTokenHashOn,
-  findLoginCredentialOn,
+  controlSessionByTokenHashQuery,
+  deviceByTokenHashQuery,
+  loginCredentialQuery,
+  mapControlSessionRow,
   type ControlSessionAuthRecord,
   type DB,
   type DeviceAuthRecord,
@@ -54,16 +55,25 @@ export interface PgliteAuthDirectory {
  * `undefined` on no match (fail closed), exactly as the definer functions do.
  */
 export function createPgliteAuthDirectory(db: Kysely<DB>): PgliteAuthDirectory {
-  // Delegates to the PRODUCTION lookups (task 204), passing this harness's PGlite handle as the
-  // executor. This file used to carry a line-for-line copy of all three queries whose only difference
-  // was `.execute(db)` vs `.execute(getDb())` — an aware copy, on a D14 cross-tenant SECURITY path,
-  // where drift would be silent: the oracle would keep passing while no longer mirroring production.
-  // Now there is one definition, so a change to a definer call, an alias, or the int8 coercion reaches
-  // the emulator lane by construction.
+  // Runs the PRODUCTION query builders (task 204, approach 1) against this harness's own PGlite
+  // handle. This file used to carry a line-for-line copy of all three statements whose only
+  // difference was the executor — an aware copy on a D14 cross-tenant SECURITY path, where drift is
+  // silent: the oracle keeps passing while no longer mirroring production. The SQL now has one
+  // definition, so a change to a definer call, an alias, or the int8 coercion reaches the emulator
+  // lane by construction — WITHOUT db-server accepting an outside handle into its authz path.
   return {
-    findDeviceByTokenHash: (tokenHashHex) => findDeviceByTokenHashOn(db, tokenHashHex),
-    findControlSessionByTokenHash: (tokenHashHex) =>
-      findControlSessionByTokenHashOn(db, tokenHashHex),
-    findLoginCredential: (loginIdentifier) => findLoginCredentialOn(db, loginIdentifier),
+    async findDeviceByTokenHash(tokenHashHex) {
+      const { rows } = await deviceByTokenHashQuery(tokenHashHex).execute(db);
+      return rows[0];
+    },
+    async findControlSessionByTokenHash(tokenHashHex) {
+      const { rows } = await controlSessionByTokenHashQuery(tokenHashHex).execute(db);
+      const row = rows[0];
+      return row === undefined ? undefined : mapControlSessionRow(row);
+    },
+    async findLoginCredential(loginIdentifier) {
+      const { rows } = await loginCredentialQuery(loginIdentifier).execute(db);
+      return rows[0];
+    },
   };
 }

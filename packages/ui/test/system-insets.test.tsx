@@ -25,9 +25,9 @@ function sheet() {
   );
 }
 
-function shell() {
+function shell(scrollable = false) {
   return render(
-    <AppShell title="t" syncChip={null} avatar={null}>
+    <AppShell title="t" syncChip={null} avatar={null} scrollable={scrollable}>
       {null}
     </AppShell>,
   );
@@ -62,14 +62,27 @@ test('the nav-bar inset is a positive height on Android', () => {
 
 // ── task 206: the shell content slot must be reachable when it overflows ─────────────────────────
 
-test('the shell content slot scrolls rather than clipping what overflows', () => {
-  expect(shell().get('ui.appShell.content').type).toBe('ScrollView');
+test('the shell content slot does NOT scroll unless the screen opts in', () => {
+  // Opt-in, not default (task 206 + the PR-5 correctness review). 7 of 13 AppShell screens render a
+  // `List` (a FlatList); nesting a same-orientation VirtualizedList inside a plain ScrollView breaks
+  // RN windowing. Defaulting to a ScrollView silently did that to all seven.
+  expect(shell().get('ui.appShell.content').type).toBe('View');
 });
 
-test('the shell content container grows without being clamped to the viewport', () => {
+test('the shell content slot scrolls when the screen opts in', () => {
+  expect(shell(true).get('ui.appShell.content').type).toBe('ScrollView');
+});
+
+test('the content keeps the same testID whichever shape it took', () => {
+  // Navigation and the Maestro flows address this slot by testID; the opt-in must not move it.
+  expect(shell().query('ui.appShell.content')).not.toBeNull();
+  expect(shell(true).query('ui.appShell.content')).not.toBeNull();
+});
+
+test('the scrolling content container grows without being clamped to the viewport', () => {
   // `flex: 1` on a scroll content container clamps it to the viewport and silently restores the
   // clipping this task exists to remove — so the absence of `flex` is the real assertion here.
-  const container = shell().get('ui.appShell.content').props['contentContainerStyle'] as Record<
+  const container = shell(true).get('ui.appShell.content').props['contentContainerStyle'] as Record<
     string,
     unknown
   >;
@@ -77,12 +90,13 @@ test('the shell content container grows without being clamped to the viewport', 
   expect(container['flex']).toBeUndefined();
 });
 
-test('the shell content keeps its padding after becoming scrollable', () => {
-  // The padding moved from the outer view to the content container; losing it in the move would be
-  // a silent regression no other test covers.
-  const container = shell().get('ui.appShell.content').props['contentContainerStyle'] as Record<
+test('the content keeps its padding in both shapes', () => {
+  // The padding moved off the outer view onto the shared container style; losing it in either
+  // branch would be a silent regression no other test covers.
+  const scrolling = shell(true).get('ui.appShell.content').props['contentContainerStyle'] as Record<
     string,
     unknown
   >;
-  expect(container['padding']).toBe(space.lg);
+  expect(scrolling['padding']).toBe(space.lg);
+  expect(shell().styleOf('ui.appShell.content')['padding']).toBe(space.lg);
 });

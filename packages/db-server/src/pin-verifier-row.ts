@@ -20,9 +20,14 @@
  * The verifier fields this row is built from — structural on purpose.
  *
  * `@bolusi/core`'s `PinVerifier` satisfies it, and so does the server's validated
- * `PutPinVerifierReq['verifier']`. Declaring the narrower `PinVerifier` here instead would reject the
- * server's input (core pins `p: 1`, the wire type allows a `number`) and would also make
- * `@bolusi/db-server` depend on `@bolusi/core` purely to name a parameter.
+ * `PutPinVerifierReq['verifier']`. Naming either concrete type here instead would make
+ * `@bolusi/db-server` depend on that package purely to describe a parameter — this package sits
+ * BELOW both and should not reach up into them for a type it can state structurally.
+ *
+ * (An earlier version of this comment claimed the two differ on `p` — core pinning `1` while the
+ * wire type allowed a `number`. That was wrong: `packages/schemas/src/auth.ts` pins `p: z.literal(1)`
+ * too. Corrected rather than deleted, because a plausible-sounding false reason in a comment is the
+ * thing that survives review.)
  */
 export interface PinVerifierRowInput {
   /** 16 CSPRNG bytes, base64 — a NEW salt on every set/change/reset (SEC-AUTH-06). */

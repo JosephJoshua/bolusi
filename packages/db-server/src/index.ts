@@ -24,22 +24,28 @@ export {
 // paths that read across tenants; each is a fixed, keyed, definer-gated lookup (never a raw
 // handle, never an arbitrary query). Token verification and login need them because they resolve
 // the tenant FROM an opaque credential before the tenant is known (api/02-auth §4.2/§8).
-// The `…On` variants (task 204) take the executor as an argument so `@bolusi/harness` can run the
-// SAME SQL against its PGlite handle instead of keeping a line-for-line copy that drifts silently.
-// They CONSUME a handle and never produce one — `getDb` stays private and nothing here hands back a
-// raw handle — so the D7/FR-1039 invariant and the export-surface `queryish` assertion both hold,
-// the same weighing as the watermark store and projection engine below.
 export {
   findDeviceByTokenHash,
   findControlSessionByTokenHash,
   findLoginCredential,
-  findDeviceByTokenHashOn,
-  findControlSessionByTokenHashOn,
-  findLoginCredentialOn,
   type DeviceAuthRecord,
   type ControlSessionAuthRecord,
   type LoginCredentialRecord,
 } from './auth-entry.js';
+
+// Task 204, approach 1 — the three lookups' SQL, shared as UNEXECUTED query builders so
+// `@bolusi/harness` can run the same statement against its own PGlite handle instead of keeping a
+// line-for-line copy whose aliases drift silently. Deliberately NOT functions that accept a
+// `Kysely` handle: threading an external executor into this package's authz path would be a §6
+// security-control change (task 204 says so explicitly). A builder cannot execute anything on its
+// own, `getDb` stays private, no handle is exported, and the definer gating is untouched — so
+// D7/FR-1039 and the export-surface `queryish` assertion both still hold.
+export {
+  deviceByTokenHashQuery,
+  controlSessionByTokenHashQuery,
+  loginCredentialQuery,
+  mapControlSessionRow,
+} from './auth-lookup-queries.js';
 
 // Task 47 — the SERVER projection watermark store (10-db §8, 04 §4.3), moved here from
 // apps/server so the real-PG16 lane executes it rather than a hand-copied mirror (watermarks.ts
