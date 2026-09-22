@@ -58,7 +58,7 @@ export interface AppShellProps {
    * a `FlatList`) must leave it `false`: RN refuses to nest a same-orientation `VirtualizedList`
    * inside a plain `ScrollView` — it logs "VirtualizedLists should never be nested inside plain
    * ScrollViews with the same orientation because it can break windowing" and windowing/`onEndReached`
-   * stop working. 7 of the 13 current AppShell screens render a `List`, which is why scrolling is not
+   * stop working. 5 of the 13 current AppShell screens render a `List`, which is why scrolling is not
    * the default; those screens already scroll through the list itself.
    *
    * Do not reach for this to fix a full-bleed screen either (capture viewfinder, signature pad): a

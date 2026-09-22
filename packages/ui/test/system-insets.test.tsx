@@ -63,7 +63,7 @@ test('the nav-bar inset is a positive height on Android', () => {
 // ── task 206: the shell content slot must be reachable when it overflows ─────────────────────────
 
 test('the shell content slot does NOT scroll unless the screen opts in', () => {
-  // Opt-in, not default (task 206 + the PR-5 correctness review). 7 of 13 AppShell screens render a
+  // Opt-in, not default (task 206 + the PR-5 correctness review). 5 of 13 AppShell screens render a
   // `List` (a FlatList); nesting a same-orientation VirtualizedList inside a plain ScrollView breaks
   // RN windowing. Defaulting to a ScrollView silently did that to all seven.
   expect(shell().get('ui.appShell.content').type).toBe('View');
