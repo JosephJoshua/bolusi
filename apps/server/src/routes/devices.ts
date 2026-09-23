@@ -176,6 +176,26 @@ export function createDevicesRouter(deps: ServerDeps) {
             ),
           );
 
+          // A REPLACEMENT enrolment also revokes, so it must also pay the revoke budget (§9:
+          // 20/tenant/hour) — the SAME counter `POST /v1/devices/:id/revoke` charges.
+          //
+          // Found by the QA sweep of this surface. The two limits are independent keys in one store,
+          // so charging only `enroll:` let a caller exhaust the hourly revoke budget on the standalone
+          // endpoint and then keep revoking through here on the untouched daily enrol budget — 40
+          // revocations an hour against a documented cap of 20. The limit exists to bound how fast a
+          // control session can tear down a store's fleet; a second door into the same action has to
+          // charge the same meter or the cap is decorative.
+          if (body.replacesDeviceId !== undefined) {
+            enforce(
+              deps.identityRateStore.hit(
+                `revoke:${tenantId}`,
+                IDENTITY_LIMITS.revokePerTenantHour.limit,
+                IDENTITY_LIMITS.revokePerTenantHour.windowMs,
+                t,
+              ),
+            );
+          }
+
           const rawBody = JSON.stringify(body);
           const requestHash = sha256Hex(rawBody);
 

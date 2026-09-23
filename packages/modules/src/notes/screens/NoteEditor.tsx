@@ -407,6 +407,37 @@ function EditorForm({
       title={mode === 'create' ? tn('notes.action.new') : t('core.action.edit')}
       titleVariant="detail"
       onBack={requestCancel}
+      // OVERLAY slot, not children: this screen is `scrollable`, and inside a ScrollView the
+      // sheet's absolute box spans the scrollable height, dropping its buttons below the viewport
+      // on a long note (found by a QA sweep of tasks 205+206 together).
+      overlay={
+        discardPrompt ? (
+          <ConfirmSheet
+            // Reuses the app's established "abandon this flow" idiom (EnrollmentScreen) — the notes
+            // catalog carries no dedicated discard-confirm copy (flagged for the next i18n pass).
+            title={t('core.action.cancel')}
+            confirmLabel={t('core.action.confirm')}
+            onConfirm={() => {
+              setDiscardPrompt(false);
+              // Leave toward whatever asked (a chrome tap's destination), or the header back's default.
+              const proceed = pendingLeave ?? onCancel;
+              setPendingLeave(null);
+              // THE CONSENT (task 155). "Discard" has to mean discarded: without this the text would
+              // survive in retention and the next idle-lock unlock would hand back a note the user had
+              // explicitly thrown away. This is where retention composes with §8.1's gate rather than
+              // fighting it — the gate decides, this line obeys.
+              releaseDraft();
+              proceed();
+            }}
+            cancelLabel={t('core.action.back')}
+            onCancel={() => {
+              setDiscardPrompt(false);
+              setPendingLeave(null);
+            }}
+            testID={`${testID}.discard`}
+          />
+        ) : null
+      }
       backLabel={t('core.action.back')}
       syncChip={syncChip}
       avatar={avatar}
@@ -465,33 +496,6 @@ function EditorForm({
             </View>
           )}
         </View>
-      ) : null}
-
-      {discardPrompt ? (
-        <ConfirmSheet
-          // Reuses the app's established "abandon this flow" idiom (EnrollmentScreen) — the notes
-          // catalog carries no dedicated discard-confirm copy (flagged for the next i18n pass).
-          title={t('core.action.cancel')}
-          confirmLabel={t('core.action.confirm')}
-          onConfirm={() => {
-            setDiscardPrompt(false);
-            // Leave toward whatever asked (a chrome tap's destination), or the header back's default.
-            const proceed = pendingLeave ?? onCancel;
-            setPendingLeave(null);
-            // THE CONSENT (task 155). "Discard" has to mean discarded: without this the text would
-            // survive in retention and the next idle-lock unlock would hand back a note the user had
-            // explicitly thrown away. This is where retention composes with §8.1's gate rather than
-            // fighting it — the gate decides, this line obeys.
-            releaseDraft();
-            proceed();
-          }}
-          cancelLabel={t('core.action.back')}
-          onCancel={() => {
-            setDiscardPrompt(false);
-            setPendingLeave(null);
-          }}
-          testID={`${testID}.discard`}
-        />
       ) : null}
     </AppShell>
   );

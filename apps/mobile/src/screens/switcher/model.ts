@@ -198,19 +198,23 @@ export function tapTarget(user: SwitcherUser): SwitcherTap {
 
 /** §8.2: the empty state's CTA goes to Device Enrollment. */
 /**
- * The empty roster's GUIDANCE line (design-system §5; owner ruling D23 §3, 2026-07-23).
+ * The empty roster's GUIDANCE line (design-system §5).
  *
- * It was `SWITCHER_EMPTY_CTA_KEY = 'auth.switcher.addUser'` — the label of a create-CTA whose
- * `onCreate` the composition root wired to `noop`, so the one control on the one screen a shop sees
- * when its roster is empty rendered, took a press, and did nothing (task 130). D23 §3 ruled the CTA
- * OUT of v0 rather than wiring it: reaching Device Enrollment from an `active` device needs a new
- * input on the `resolveZone` security gate, and completing it runs api/02-auth §7.4 re-enrollment —
- * a new `deviceId`, a new keypair, a fresh chain at seq 1, with the old registration left `active`
- * server-side (03 §5 has no `active → re-enroll` transition). Task 168 carries that to v1.
+ * It accompanies the CTA rather than replacing it. History, because the reversal matters: this key
+ * was once `SWITCHER_EMPTY_CTA_KEY = 'auth.switcher.addUser'` — a create-CTA whose `onCreate` the
+ * composition root wired to `noop`, so the one control on the one screen a shop sees when its roster
+ * empties rendered, took a press, and did nothing (task 130). D23 §3 ruled it OUT of v0 rather than
+ * wiring it, because the flow behind it was unbuilt.
  *
- * §5 still requires the Empty state to say what to do, so the CTA is replaced by TEXT naming the
- * real-world action — the store owner enrols the device — rather than a button this build cannot
- * honour. `auth.switcher.addUser` stays in the catalog for 168 to use.
+ * **Task 168 / D27 built that flow, and the CTA is back** (`auth.switcher.reenroll`): `resolveZone`
+ * gained the `reenrolling` input, and enrolment carries `replacesDeviceId` so the server revokes the
+ * outgoing registration in the same transaction. The hint still reads true — asking the owner is the
+ * normal path; the button is for when the owner IS the person who can no longer sign in.
+ *
+ * (This docblock previously ended "Task 168 carries that to v1" and described the CTA as removed.
+ * That went stale the moment 168 shipped in the same delta, and it contradicted the one-line comment
+ * directly above it. Found by a QA sweep; corrected rather than deleted, because a comment asserting
+ * removed behaviour as current is the drift this codebase keeps paying for.)
  */
 export const SWITCHER_EMPTY_HINT_KEY = 'auth.switcher.emptyUsers';
 

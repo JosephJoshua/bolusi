@@ -75,11 +75,47 @@ export async function revokeDevice(
   }
 
   const revokedAt = params.now;
-  await db
+  // `status = 'active'` in the WHERE is the CONCURRENCY GUARD, not a redundant restatement of the
+  // SELECT above (found by the QA sweep of task 168).
+  //
+  // The SELECT takes no row lock, so under READ COMMITTED two concurrent revocations of the same
+  // device — a standalone `POST /:id/revoke` racing an enrol-with-`replacesDeviceId`, or two such
+  // enrolments — both read `active` (each other's write is still uncommitted and invisible). Without
+  // this predicate both would then UPDATE: the second to commit overwrites the first's `revokedAt`
+  // and `revokedBy`, so the audit records whoever finished LAST rather than who actually ended the
+  // identity, a second `device.revoked` audit row is appended for one transition, and both callers
+  // compute `newlyRevoked: true` and fire the revocation hooks — breaking the "fires exactly once"
+  // invariant their call sites rely on.
+  //
+  // With the predicate, Postgres re-evaluates it after the first transaction releases the row lock;
+  // the loser matches zero rows and reports `newlyRevoked: false`, so exactly one caller owns the
+  // transition. `numUpdatedRows` is the witness — it is the only way to tell "I did it" from "someone
+  // else did it while I waited".
+  const updated = await db
     .updateTable('devices')
     .set({ status: 'revoked', revokedAt: BigInt(revokedAt), revokedBy: params.revokedBy })
     .where('id', '=', params.deviceId)
-    .execute();
+    .where('status', '=', 'active')
+    .executeTakeFirst();
+
+  if (updated.numUpdatedRows === 0n) {
+    // Lost the race. Re-read so the response carries the WINNER's revocation, never our own values.
+    const winner = await db
+      .selectFrom('devices')
+      .select(['id', 'revokedAt'])
+      .where('id', '=', params.deviceId)
+      .executeTakeFirst();
+    if (winner === undefined) return { kind: 'not_found' };
+    return {
+      kind: 'revoked',
+      newlyRevoked: false,
+      body: {
+        deviceId: winner.id,
+        status: 'revoked',
+        revokedAt: Number(winner.revokedAt),
+      },
+    };
+  }
 
   // Push-token cleanup (api/02-auth §7.2; api/04-push: deletion is server-internal on revocation).
   await db.deleteFrom('pushTokens').where('deviceId', '=', params.deviceId).execute();
