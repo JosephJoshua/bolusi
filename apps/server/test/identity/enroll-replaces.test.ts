@@ -7,6 +7,7 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
+import { IDENTITY_LIMITS } from '../../src/identity/rate-limits.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
   enroll,
@@ -243,4 +244,58 @@ test('an idempotent REPLAY of a replacement does not revoke twice', async () => 
 
   const afterReplay = await deviceRow(old.deviceId);
   expect(afterReplay?.revokedAt).toEqual(afterFirst?.revokedAt);
+});
+
+// ── the two findings from the QA sweep of this surface ──────────────────────────────────────────
+
+test('a replacement enrolment charges the REVOKE budget, not just the enrol budget', async () => {
+  // Found by QA. The two limits are independent keys in one store, so charging only `enroll:` let a
+  // caller exhaust the hourly revoke budget on `POST /:id/revoke` and then keep revoking through the
+  // enrol endpoint on the untouched daily budget — double the documented 20/tenant/hour cap
+  // (api/02-auth §9). Anything that revokes must charge the meter that bounds revocation.
+  const { p, control, storeId } = await setup();
+
+  // Enrol the device we will later try to replace, BEFORE exhausting the budget.
+  const victim = enrollBody(storeId);
+  expect((await enroll(h, control, victim, uuidv7(h.clock.now()))).status).toBe(201);
+
+  // Burn the hourly revoke budget on the SAME counter the standalone endpoint charges.
+  for (let i = 0; i < IDENTITY_LIMITS.revokePerTenantHour.limit; i += 1) {
+    h.rateStore.hit(
+      `revoke:${p.tenantId}`,
+      IDENTITY_LIMITS.revokePerTenantHour.limit,
+      IDENTITY_LIMITS.revokePerTenantHour.windowMs,
+      h.clock.now(),
+    );
+  }
+
+  // The replacement must now be refused — it is a revocation, and the meter is empty.
+  const res = await enroll(
+    h,
+    control,
+    enrollBody(storeId, { replacesDeviceId: victim.deviceId }),
+    uuidv7(h.clock.now()),
+  );
+  expect(res.status).toBe(429);
+  // Fails closed: the victim survives.
+  expect((await deviceRow(victim.deviceId))?.status).toBe('active');
+});
+
+test('a plain enrolment does NOT charge the revoke budget', async () => {
+  // The denominator for the test above. If the charge were unconditional, every ordinary enrolment
+  // would eat the revoke meter and 20 enrolments an hour would lock out real revocations.
+  const { control, storeId } = await setup();
+  for (let i = 0; i < 3; i += 1) {
+    expect((await enroll(h, control, enrollBody(storeId), uuidv7(h.clock.now()))).status).toBe(201);
+  }
+  // A replacement still works, so the budget was untouched by the three plain enrolments.
+  const first = enrollBody(storeId);
+  await enroll(h, control, first, uuidv7(h.clock.now()));
+  const res = await enroll(
+    h,
+    control,
+    enrollBody(storeId, { replacesDeviceId: first.deviceId }),
+    uuidv7(h.clock.now()),
+  );
+  expect(res.status).toBe(201);
 });

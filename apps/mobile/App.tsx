@@ -489,6 +489,19 @@ export default function App(props: AppProps): React.JSX.Element {
     if (zone.kind === 'shell' && zone.route === 'home' && surfaceNavRef.current !== null) {
       return surfaceNavRef.current.handleBack();
     }
+    // The wizard asks before discarding typed input (§8.1) — BEFORE any target dispatch, because
+    // where back would otherwise go is irrelevant to whether the user is about to lose work.
+    //
+    // This used to sit in the `exitApp` branch below, where it was DEAD: `backTarget` only returns
+    // `exitApp` for `shell`+`home`, so `zone.kind === 'enrollment'` could never be true there. The
+    // forced wizard's back fell into `target === null` and was silently swallowed; the voluntary
+    // wizard task 168 added fell into the `switcher` branch and silently destroyed the typed input.
+    // Found by a QA sweep of this surface. Checking here covers both, which is why it is not a
+    // `voluntary`-only fix.
+    if (zone.kind === 'enrollment' && needsDiscardConfirm(enrollment)) {
+      setDiscardPrompt(true);
+      return true;
+    }
     const target = backTarget(zone);
     if (target === null) return true; // Nothing behind this surface — consume, never exit past a lock.
     if (target.kind === 'switcher') {
@@ -510,11 +523,6 @@ export default function App(props: AppProps): React.JSX.Element {
       setPinFor(null);
       setSwitching(false);
       setRoute(target.route);
-      return true;
-    }
-    // `exitApp`: the wizard is the exception — a back press on typed input asks first (§8.1).
-    if (zone.kind === 'enrollment' && needsDiscardConfirm(enrollment)) {
-      setDiscardPrompt(true);
       return true;
     }
     return false; // Let Android exit.

@@ -120,3 +120,60 @@ test('revoke of an unknown device id in this tenant → 404', async () => {
   });
   expect(res.status).toBe(404);
 });
+
+// ── the concurrency guard (found by the QA sweep of task 168) ───────────────────────────────────
+
+test('two revocations of one device: exactly ONE owns the transition', async () => {
+  // `revokeDevice`'s SELECT takes no row lock, so under READ COMMITTED two concurrent revocations
+  // both read `active`. Before the `status = 'active'` predicate on the UPDATE, both would then
+  // write: the one committing LAST overwrote the other's `revokedAt`/`revokedBy`, a second
+  // `device.revoked` audit row was appended for one transition, and both reported
+  // `newlyRevoked: true` so the revocation hooks fired twice — breaking the "fires exactly once"
+  // invariant the call sites rely on (a double socket-close, and a corrupted attribution record on a
+  // fraud-model path).
+  //
+  // This drives the two calls SEQUENTIALLY rather than truly in parallel, which is enough to pin the
+  // property that matters and is deterministic: the second caller must report `newlyRevoked: false`
+  // and must NOT re-stamp the first caller's attribution. A genuinely parallel test against one
+  // Postgres would be timing-dependent; the predicate is what makes both orderings safe.
+  const { p, storeId } = await setup();
+  const first = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
+  const device = await seedDevice(h, { tenantId: p.tenantId, storeId });
+
+  const a = await h.app.request(`/v1/devices/${device.deviceId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${first}` },
+  });
+  expect(a.status).toBe(200);
+  const afterFirst = await h.idb.db
+    .selectFrom('devices')
+    .select(['revokedAt', 'revokedBy'])
+    .where('id', '=', device.deviceId)
+    .executeTakeFirst();
+
+  // A second revocation, at a LATER clock and by a DIFFERENT actor, must not overwrite the record.
+  h.clock.advance(60_000);
+  const second = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
+  const b = await h.app.request(`/v1/devices/${device.deviceId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${second}` },
+  });
+  expect(b.status).toBe(200);
+
+  const afterSecond = await h.idb.db
+    .selectFrom('devices')
+    .select(['revokedAt', 'revokedBy'])
+    .where('id', '=', device.deviceId)
+    .executeTakeFirst();
+  expect(afterSecond?.revokedAt).toEqual(afterFirst?.revokedAt);
+  expect(afterSecond?.revokedBy).toEqual(afterFirst?.revokedBy);
+
+  // And exactly ONE audit row records the transition — not one per caller.
+  const audits = await h.idb.db
+    .selectFrom('identityAudit')
+    .select('id')
+    .where('entityId', '=', device.deviceId)
+    .where('action', '=', 'device.revoked')
+    .execute();
+  expect(audits).toHaveLength(1);
+});
