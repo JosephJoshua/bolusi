@@ -21,20 +21,21 @@ tags:
     id: 'settings-screen'
 - takeScreenshot:
     path: i18n-01-settings
-# Switch to English. THE MARKER IS NOT ENOUGH (task 211): `settings-locale-active-<locale>` is driven
-# by Root's React `locale` state, which moved correctly even while the language did not change at all
-# — this flow ran green for six releases over a toggle that only repainted its own checkmark, and the
-# i18n-02-en screenshot it captured shows an English checkmark above an entirely Indonesian screen. So
-# each arm also asserts a STRING that only that locale renders.
-#
-# SOURCE OF TRUTH for both literals: `packages/i18n/src/generated/resources.ts`, key
-# `core.settings.title` (id: "Pengaturan", en: "Settings"). Maestro YAML cannot import TS, so this is
-# a hand-mirror like task 210's credentials — reword that key and this flow must be updated with it.
+# Switch to English. THE CHECKMARK IS NOT ENOUGH (task 211): `settings-locale-active-<locale>` renders
+# from the `locale` PROP Root hands down, so it moves whenever Root's state moves — which it did
+# correctly all through a defect where the language never changed at all. This flow passed the entire
+# time, and the `i18n-02-en` screenshot it captured is the evidence: an English checkmark above an
+# entirely Indonesian screen. So each arm also asserts `settings-rendered-locale-<locale>`, whose
+# testID carries the locale the screen's strings are ACTUALLY resolving in (SettingsScreen.tsx reads
+# it from the i18next instance, not from the prop). Asserting a rendered string would have worked too
+# and is forbidden by T-4 — catalogs get reworded, and a copy assertion reds on an edit that broke
+# nothing.
 - tapOn:
     id: 'settings-locale-en'
 - assertVisible:
     id: 'settings-locale-active-en'
-- assertVisible: 'Settings'
+- assertVisible:
+    id: 'settings-rendered-locale-en'
 - takeScreenshot:
     path: i18n-02-en
 # Switch back to Indonesian (the shop's default). The return arm matters as much as the outbound one:
@@ -43,6 +44,7 @@ tags:
     id: 'settings-locale-id'
 - assertVisible:
     id: 'settings-locale-active-id'
-- assertVisible: 'Pengaturan'
+- assertVisible:
+    id: 'settings-rendered-locale-id'
 - takeScreenshot:
     path: i18n-03-id

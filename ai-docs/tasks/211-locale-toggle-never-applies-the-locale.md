@@ -15,10 +15,12 @@
 1. `packages/i18n/src/instance.ts:92` `setLocale()` is the **only** function that changes i18next's active language.
 2. Its only wrapper is `apps/mobile/src/i18n.ts` `writeDeviceLocale()`.
 3. `writeDeviceLocale` had **zero production callers and zero tests**.
-4. The live handler, `Root.tsx:920`, wrote the store directly and then called `setLocale(next)` — which resolved to the **React `useState` setter** destructured at `Root.tsx:261`, not the i18next applier of the same name imported into the same module.
+4. The live handler, `Root.tsx:920`, wrote the store directly and then called `setLocale(next)` — the **React `useState` setter** destructured at `Root.tsx:261`.
 5. No `useEffect` synced the state back to i18next.
 
-The two `setLocale`s are both `(Locale) => void`, so the shadow is invisible to TypeScript. The React state did change — which is why the checkmark moved — while `t()`, which reads the i18next singleton at render, kept returning Indonesian. The choice was persisted, so the language changed on the **next app launch**, when `bootstrapI18n` re-read it.
+**There was no name shadowing, and the distinction matters.** `git show origin/main:apps/mobile/src/bootstrap/Root.tsx` imports only `bootstrapI18n` / `type LocaleStorePort` from `../i18n.js` and `type Locale` from `@bolusi/i18n`; the value `setLocale` was never in Root's scope, and `apps/mobile/src/i18n.ts` does not export it (it imports it privately and calls it inside `writeDeviceLocale`). So `setLocale(next)` was a valid, unambiguous call to the only `setLocale` there was. Nothing was masked — which is exactly why no compiler, linter or type could have caught this. The applying half of the operation was simply never wired up, and the surviving half looked complete because the name reads like the whole job.
+
+The React state did change — which is why the checkmark moved — while `t()`, which reads the i18next instance at render, kept returning Indonesian. The choice was persisted, so the language changed on the **next app launch**, when `bootstrapI18n` re-read it.
 
 ## Why every existing gate was green (CLAUDE.md §2.11)
 
@@ -31,13 +33,14 @@ Three of the documented classes at once:
 ## The fix
 
 - `apps/mobile/src/i18n.ts` — `writeDeviceLocale` applies the locale **before** its first `await`, then persists. Order is load-bearing twice: the apply must land in the caller's tick so the `setState` re-render renders the new language (there is no second render to correct it), and a failing persist must not cost the user their language.
-- `apps/mobile/src/bootstrap/Root.tsx` — the handler calls `writeDeviceLocale`; the `useState` setter is renamed `setLocaleState` so the name collision cannot recur by accident.
+- `apps/mobile/src/bootstrap/Root.tsx` — the handler calls `writeDeviceLocale`; the `useState` setter is renamed `setLocaleState`. The rename is **prophylactic, not the fix**: with the two spellings distinct a future import of the real applier cannot be masked, and a reader can tell which of the two operations a call site performs.
+- `apps/mobile/src/screens/settings/SettingsScreen.tsx` — a `settings-rendered-locale-<locale>` node whose testID carries the locale `t()` is actually resolving in, read from the i18next instance rather than the `locale` prop. The active-row checkmark is `option === locale` and therefore structurally incapable of witnessing this defect; T-4 forbids the obvious alternative of asserting a rendered string, so the gate needs a testID that is wrong exactly when the copy is wrong.
 
 ## Acceptance
 
 - [x] RED-first: the new `live-shell-settings.test.tsx` reproduction fails on the unfixed tree at `expect(i18n.language).toBe('en')` **after** the marker assertion passes — proving the marker is a false witness — and passes after the fix.
 - [x] The test sources both expectations from the catalogs via `getFixedT`, so it asserts no UI copy (testing-guide) and survives rewording.
-- [x] `.maestro/06-i18n-toggle.yaml` asserts a locale-specific string on **both** arms, so the on-device gate can red on this defect.
+- [x] `.maestro/06-i18n-toggle.yaml` asserts `settings-rendered-locale-<locale>` on **both** arms, so the on-device gate can red on this defect — via a testID, not a rendered string (T-4).
 - [x] Mobile suite, `pnpm lint`, `pnpm typecheck` green.
 
 ## Adjacent finding, NOT fixed here

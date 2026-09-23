@@ -74,8 +74,9 @@ export async function readDeviceLocale(store: LocaleStorePort): Promise<Locale> 
 
 /**
  * Apply the device locale and persist it (§1.2). THE ONLY runtime producer of a locale change —
- * every caller that changes the language goes through here, never `store.write` plus a hand-rolled
- * apply (task 211: Root did exactly that and shipped a toggle that never changed the language).
+ * every caller that changes the language goes through here, never `store.write` on its own (task
+ * 211: Root called the store directly and skipped the apply entirely, shipping a toggle that
+ * persisted a choice it never enacted; this function was correct the whole time and had no caller).
  *
  * APPLY FIRST, PERSIST SECOND, and the order is load-bearing twice over:
  *

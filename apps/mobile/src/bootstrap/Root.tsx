@@ -258,11 +258,14 @@ export function Root({
   uploadPinVerifier,
   capturePlatform,
 }: RootProps): React.JSX.Element | null {
-  // `setLocaleState`, NOT `setLocale`: the i18next applier exported by `../i18n.js` is also called
-  // `setLocale`, and a local binding of that name silently shadows it — both are `(Locale) => void`,
-  // so TypeScript cannot tell them apart. Task 211 shipped because of exactly that collision: the
-  // language toggle called this setter, the checkmark moved, and the language never changed. The
-  // rename is the guard — the shadow can no longer happen by accident.
+  // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
+  // function that changes the language the catalog resolves in is `@bolusi/i18n`'s `setLocale`,
+  // reached through `writeDeviceLocale`. Task 211 shipped because the toggle called this setter and
+  // nothing else: the checkmark moved and the language never changed. Nothing was shadowed — the
+  // i18next applier is not imported here and never was — which is precisely why no compiler or lint
+  // rule could have caught it. `setLocale(next)` was a valid call to the only `setLocale` in scope.
+  // The name is the guard that remains: with the two spellings distinct, a future import of the real
+  // applier cannot be masked, and a reader can see which of the two things a call site does.
   const [locale, setLocaleState] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
@@ -924,11 +927,11 @@ export function Root({
         }
         onSelectLocale={(next) => {
           // `writeDeviceLocale` APPLIES the locale (synchronously, before its first `await`) and then
-          // persists it. Both halves matter and they used to be split here: this handler wrote the
-          // store directly and called `setLocale` — which resolved to the `useState` setter two
-          // hundred lines up, not the i18next applier of the same name. The result was a toggle that
-          // moved its own checkmark and left every string on screen in the old language until the
-          // next app launch, when boot re-read the persisted value (task 211).
+          // persists it. Task 211: this handler used to do only the persisting half — `localeStore
+          // .write(...)` plus the `useState` setter below — so the language the catalog resolved in
+          // was never touched. The toggle moved its own checkmark and left every string on screen in
+          // the old language until the next launch, when boot re-read the persisted value. The apply
+          // was not broken; it simply had no caller, which is why every test of it stayed green.
           void writeDeviceLocale(localeStore, next);
           // React state, for the active-row marker — the rendered STRINGS come from the apply above.
           setLocaleState(next);

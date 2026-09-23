@@ -177,6 +177,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     // 1. THE DENOMINATOR (T-14). The shell is rendering Indonesian BEFORE the tap, so a pass below
     //    cannot come from a tree that was already in English.
     expect(textsIn(screen.get('settings-section-language')).join('')).toBe(inIndonesian);
+    expect(screen.query('settings-rendered-locale-id')).not.toBeNull();
 
     // 2. The affordance a user's thumb reaches — not `setLocale`, not a prop.
     fireOn(screen, 'settings-locale-en');
@@ -190,6 +191,13 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     //    language you cannot read, so "applies on next launch" is not a working toggle.
     expect(i18n.language).toBe('en');
     expect(textsIn(screen.get('settings-section-language')).join('')).toBe(inEnglish);
+
+    // 5. THE ON-DEVICE WITNESS. `.maestro/06-i18n-toggle.yaml` asserts this testID instead of a
+    //    rendered string (T-4 forbids asserting copy), so it is the only thing standing between that
+    //    flow and the false-green it just spent a release in. Covered here so a change that leaves it
+    //    stale fails in CI rather than silently disarming the emulator lane.
+    expect(screen.query('settings-rendered-locale-en')).not.toBeNull();
+    expect(screen.query('settings-rendered-locale-id')).toBeNull();
   });
 
   test('Android hardware back returns from Settings to the notes surface (design-system §8.1, zone.backTarget)', async () => {

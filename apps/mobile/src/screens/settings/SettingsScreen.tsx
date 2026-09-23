@@ -7,7 +7,7 @@
  * design (07-i18n §10.1) — and the active one is marked with a check, not merely with a colour. Both
  * choices mean a user who lands in the wrong language can still see which row is theirs and tap back.
  */
-import { t } from '@bolusi/i18n';
+import { getLocale, t } from '@bolusi/i18n';
 import type { Locale } from '@bolusi/i18n';
 import {
   AppShell,
@@ -108,6 +108,17 @@ export function SettingsScreen({
       }
       testID="settings-screen"
     >
+      {/*
+        A WITNESS for the on-device gate — and the reason it is not the active-row checkmark below.
+        That checkmark is `option === locale`, the PROP, so it tracks whatever Root's state says. All
+        through task 211 the state was right and the SCREEN was in the old language, and the Maestro
+        flow asserting the checkmark passed the whole time. This node's testID carries the locale
+        `t()` is actually resolving in — read from the i18next instance, the same place every string
+        on this screen comes from — so it is wrong exactly when the copy is wrong.
+        Why a testID and not an assertion on the rendered title: T-4 forbids asserting copy, because
+        catalogs get reworded and a copy assertion then reds on an edit that broke nothing.
+      */}
+      <View testID={`settings-rendered-locale-${getLocale()}`} />
       <Text style={styles.section} testID="settings-section-language">
         {t('core.settings.language')}
       </Text>
