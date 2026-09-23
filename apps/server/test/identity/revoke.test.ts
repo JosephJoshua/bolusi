@@ -138,7 +138,7 @@ test('two revocations of one device: exactly ONE owns the transition', async () 
   // Postgres would be timing-dependent; the predicate is what makes both orderings safe.
   const { p, storeId } = await setup();
   const first = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
-  const device = await seedDevice(h, { tenantId: p.tenantId, storeId, name: 'Tablet' });
+  const device = await seedDevice(h, { tenantId: p.tenantId, storeId });
 
   const a = await h.app.request(`/v1/devices/${device.deviceId}/revoke`, {
     method: 'POST',
