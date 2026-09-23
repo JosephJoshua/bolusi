@@ -42,6 +42,17 @@ Three of the documented classes at once:
 - [x] The test sources both expectations from the catalogs via `getFixedT`, so it asserts no UI copy (testing-guide) and survives rewording.
 - [x] `.maestro/06-i18n-toggle.yaml` asserts `settings-rendered-locale-<locale>` on **both** arms, so the on-device gate can red on this defect — via a testID, not a rendered string (T-4).
 
+### On-device falsification of the shipped guard, both directions
+
+A guard needs both halves watched (§2.11 / T-11). Paired emulator runs, same flow, same screen, same moment:
+
+| Build | Run | `settings-locale-active-en` | `settings-rendered-locale-en` |
+| ----- | --- | --------------------------- | ----------------------------- |
+| defect restored | 35860693421 | **COMPLETED** | **FAILED** |
+| fix | 35863275047 | COMPLETED | **COMPLETED** |
+
+The top row is the whole finding in one line: the assertion this flow used to carry passes on a build where the language does not change, and the one that replaced it does not. The bottom row is what makes the guard usable rather than merely loud — the first version of this node reddened on *both* builds (see below), which would have read as success if only the defect run had been dispatched. Lane A on 35863275047 was 6/6 flows with zero `screen-hierarchy/` dirs.
+
 ### The witness's own first version was a guard that could not PASS
 
 Worth recording, because it is the exact mirror of the defect this task fixes and only one lane could see it. The node started as an empty `<View testID={…} />` beside the section header. An empty View has **zero bounds**, and Maestro drops zero-bounds nodes from the accessibility hierarchy it queries:
