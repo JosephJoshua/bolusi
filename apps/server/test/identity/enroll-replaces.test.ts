@@ -13,6 +13,7 @@ import {
   makeIdentityHarness,
   provision,
   seedControlSession,
+  seedUser,
   type IdentityHarness,
 } from '../helpers/identity-app.js';
 
@@ -160,4 +161,86 @@ test('replacing an already-revoked device does not re-stamp its revocation', asy
 
   const afterSecond = await deviceRow(first.deviceId);
   expect(afterSecond?.revokedAt).toEqual(afterFirst?.revokedAt);
+});
+
+// ── the three controls the PR-7 review found missing ────────────────────────────────────────────
+
+test('a replacement across stores is authorised against the REPLACED store, not the enrolling one', async () => {
+  // Why the code checks `replaced.storeId` rather than `body.storeId`. Every other test here uses one
+  // store, so this is the only one that can tell the two apart — without it, an implementation that
+  // checked the wrong store would pass the whole file.
+  const p = await provision(h, {
+    tenantName: 'T',
+    storeNames: ['A', 'B'],
+    ownerName: 'O',
+    ownerLogin: `o-${Math.random()}`,
+  });
+  const control = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
+  const [storeA, storeB] = p.storeIds as [string, string];
+
+  const old = enrollBody(storeA);
+  expect((await enroll(h, control, old, uuidv7(h.clock.now()))).status).toBe(201);
+
+  // The owner holds the permission tenant-wide, so a cross-store replacement is allowed...
+  const fresh = enrollBody(storeB, { replacesDeviceId: old.deviceId });
+  expect((await enroll(h, control, fresh, uuidv7(h.clock.now()))).status).toBe(201);
+  // ...and it is the device in store A that ended, while the new one lives in store B.
+  expect((await deviceRow(old.deviceId))?.status).toBe('revoked');
+  expect((await deviceRow(fresh.deviceId))?.status).toBe('active');
+});
+
+test('an enroller WITHOUT auth.device_revoke cannot use replacesDeviceId, and nothing applies', async () => {
+  // The authorisation claim, which was asserted only in a comment before this test existed. A caller
+  // who may enrol must not gain the power to revoke by routing it through the enrol endpoint.
+  const p = await provision(h, {
+    tenantName: 'T',
+    storeNames: ['S'],
+    ownerName: 'O',
+    ownerLogin: `o-${Math.random()}`,
+  });
+  const owner = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
+  const storeId = p.storeIds[0] as string;
+
+  const old = enrollBody(storeId);
+  expect((await enroll(h, owner, old, uuidv7(h.clock.now()))).status).toBe(201);
+
+  // A staff user: enrolment rights in the store, but not revocation.
+  const staffId = await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'Staff',
+    storeIds: [storeId],
+    roleKeys: ['staff'],
+  });
+  const staff = await seedControlSession(h, { tenantId: p.tenantId, userId: staffId });
+
+  const attempt = enrollBody(storeId, { replacesDeviceId: old.deviceId });
+  const res = await enroll(h, staff, attempt, uuidv7(h.clock.now()));
+
+  expect(res.status).toBeGreaterThanOrEqual(400);
+  // Fails CLOSED in both directions: the old device survives and the new one was never registered.
+  expect((await deviceRow(old.deviceId))?.status).toBe('active');
+  expect(await deviceRow(attempt.deviceId)).toBeUndefined();
+});
+
+test('an idempotent REPLAY of a replacement does not revoke twice', async () => {
+  // `replacedNewly` is hoisted outside `execute` precisely so a replay cannot re-fire the revocation
+  // hooks. A replay must be a verbatim response with no second side effect — the `revokedAt` stamp is
+  // the observable proof that the revoke ran exactly once.
+  const { control, storeId } = await setup();
+  const old = enrollBody(storeId);
+  await enroll(h, control, old, uuidv7(h.clock.now()));
+
+  const key = uuidv7(h.clock.now());
+  const body = enrollBody(storeId, { replacesDeviceId: old.deviceId });
+  const first = await enroll(h, control, body, key);
+  expect(first.status).toBe(201);
+  const afterFirst = await deviceRow(old.deviceId);
+
+  h.clock.advance(60_000);
+  const replay = await enroll(h, control, body, key);
+  expect(replay.status).toBe(201);
+  expect(replay.headers.get('X-Idempotent-Replay')).toBe('true');
+
+  const afterReplay = await deviceRow(old.deviceId);
+  expect(afterReplay?.revokedAt).toEqual(afterFirst?.revokedAt);
 });
