@@ -49,6 +49,15 @@ export interface SwitcherScreenProps {
   readonly onBack: (() => void) | null;
   readonly onSelect: (user: SwitcherUser) => void;
   /**
+   * §5 Empty-state recovery (task 168, D27): open Device Enrolment to RE-ENROL this handset.
+   *
+   * Rendered IFF supplied — `EmptyState` gates its CTA on the handler existing (EmptyState.tsx:20-27),
+   * which is what made D23 §3's removal structural rather than a promise. It is still structural: a
+   * caller that cannot service the flow passes nothing and no button appears. It is NOT `noop`-able;
+   * a dead control here is the exact defect task 130 removed.
+   */
+  readonly onReenroll?: (() => void) | undefined;
+  /**
    * §5's Error retry: re-run the directory read that failed. RE-RUN, not "go away" — see
    * `onUnauthorizedBack` for why the distinction is a prop and not a comment.
    */
@@ -77,6 +86,7 @@ export function SwitcherScreen({
   onSelect,
   onRetry,
   onUnauthorizedBack,
+  onReenroll,
   syncChip,
   pendingCount,
   onOpenSync,
@@ -89,13 +99,20 @@ export function SwitcherScreen({
             kind: 'empty',
             empty: {
               title: t('core.status.empty'),
-              // GUIDANCE, NOT A BUTTON (owner ruling D23 §3 — see `SWITCHER_EMPTY_HINT_KEY`). No
-              // `createLabel`/`onCreate`: `EmptyState` renders its CTA IFF `onCreate` is supplied
-              // (EmptyState.tsx:20-27), so omitting them is the whole removal — the affordance
-              // cannot come back by accident, because there is no handler for it to come back to.
-              // The previous hint here was `auth.enroll.instruction`, the WIZARD's copy ("Masuk
-              // dengan akun kamu…"), which addressed a login form this screen does not have.
+              // D23 §3 removed the old create-CTA because nothing could service it; D27 restores a
+              // control that CAN — it re-enrols this handset (task 168), which is the only in-app way
+              // out of an empty roster. Still structural, not a flag: `EmptyState` renders the CTA
+              // IFF a handler is supplied (EmptyState.tsx:20-27), so a caller that cannot service the
+              // flow passes none and the affordance genuinely does not exist.
+              //
+              // The hint stays and still reads true — asking the owner remains the normal path; the
+              // button is for when the owner IS the person who can no longer sign in. (It once held
+              // `auth.enroll.instruction`, the WIZARD's copy, which addressed a login form this
+              // screen does not have.)
               hint: t(SWITCHER_EMPTY_HINT_KEY),
+              ...(onReenroll === undefined
+                ? {}
+                : { createLabel: t('auth.switcher.reenroll'), onCreate: onReenroll }),
               testID: 'switcher-empty',
             },
           }

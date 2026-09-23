@@ -70,3 +70,40 @@ is the pattern and already contains the v0 half (`an empty directory renders gui
 pressable create control`, falsified by restoring `createLabel`/`onCreate` → the CTA node reappears
 and the test reds). A component test injecting `vi.fn()` proves nothing here: that is exactly what
 let this control ship dead through task 24, 119 and 143 without a single red.
+
+## BUILT FOR v0 2026-09-23 — D23 §3 amended by D27
+
+Owner ruled the flow in for v0 and chose the replacement semantics
+(`decisions/2026-09-23-reenroll-active-device-replaces-old.md`). Both costs this file recorded are
+paid, not inherited.
+
+**Cost 1 — the gate.** `ZoneInput` gains `reenrolling`, read INSIDE the `session === null` branch and
+AFTER `locked`/`pinFor`, exactly where this file predicted. `Zone`'s enrolment variant gains
+`voluntary`, which is what lets `backTarget` answer `{kind:'switcher'}` for a chosen re-enrolment
+while still returning `null` for a forced one — the semantic change this file flagged.
+
+**Cost 2 — the orphan.** Answered explicitly rather than inherited: the enrol request carries
+`replacesDeviceId`, and the server revokes the named device in the SAME transaction that registers
+its successor, through the existing `revokeDevice` (so the audit row, push-token cleanup and
+revocation hooks come for free). One handset is never two `active` registrations, and the old device
+token does not outlive the swap.
+
+**A premise in this file was wrong, and is corrected in D27.** It reads as though the flow has no
+authenticated actor. `POST /v1/devices/enroll` is control-session only (§4.5), so the operator
+authenticates with owner credentials — there IS an acting user to authorise the revoke against, and
+no new permission model was needed.
+
+**Falsified (§2.11), both directions:**
+- Wired the CTA to `() => {}` — the composed test red: *"the CTA did not reach Device Enrolment"*.
+  That is the precise defect that shipped dead through tasks 24, 119 and 143 without a single red,
+  and the reason this file demanded a composed test over an injected `vi.fn()`.
+- Removed the `!input.locked` guard so `reenrolling` could beat a lock — *"an IDLE LOCK beats
+  re-enrolling"* red. Restored; 47/47 navigation tests green.
+
+**Not run locally, and not claimed:** `apps/server/test/identity/enroll-replaces.test.ts` (six
+adversarial controls incl. the cross-tenant `replacesDeviceId` case) needs Docker/testcontainers,
+which this host lacks. CI's `server-integration` lane executes them — read that lane, do not infer
+from this file.
+
+**Spec edits, in scope per D27:** `api/02-auth.md` §4.3 + §7.4, `03-state-machines.md` §5 (the
+`active → revoked` row gains the enrol-with-replacement trigger, converging on one implementation).

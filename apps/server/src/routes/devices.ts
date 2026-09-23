@@ -183,6 +183,10 @@ export function createDevicesRouter(deps: ServerDeps) {
           // enroll later fails validation (SEC-DEV-02: the 24 h purge bounds the token-retention).
           await deps.forTenant(tenantId, (db) => purgeExpiredIdempotency(db, tenantId, t));
 
+          // Set inside the transaction, read after it commits. A REPLAYED idempotent enrol does not
+          // run `execute`, so this stays false and the hooks do not fire twice — the first call
+          // already closed the old device's sockets.
+          let replacedNewly = false;
           const result = await deps.forTenant(tenantId, (db) =>
             runIdempotent(db, {
               tenantId,
@@ -205,6 +209,43 @@ export function createDevicesRouter(deps: ServerDeps) {
                   storeId: body.storeId,
                   permissionId: PERM.deviceEnroll,
                 });
+
+                // §4.3 / D27 — this enrolment REPLACES an existing registration (task 168). Revoke
+                // the old row HERE, inside the same transaction that registers the new one, so there
+                // is never a window with both active nor one with the old revoked and the new
+                // missing. A new identity is still minted (§7.4); this only ends the old one.
+                //
+                // Authorised exactly like the standalone revoke endpoint: the acting control-session
+                // user must hold auth.device_revoke scoped to the REPLACED device's store — which may
+                // differ from the store being enrolled into, so the permission is checked against the
+                // target's own store, not `body.storeId`. Opens no path the revoke endpoint does not.
+                //
+                // The lookup is RLS-scoped, so a `replacesDeviceId` naming another tenant's device
+                // reads as absent and fails closed as NOT_FOUND — indistinguishable from a device id
+                // that does not exist at all (security-guide §2.2; the same rule the dupId branch
+                // below documents).
+                if (body.replacesDeviceId !== undefined) {
+                  const replaced = await db
+                    .selectFrom('devices')
+                    .select(['id', 'storeId'])
+                    .where('id', '=', body.replacesDeviceId)
+                    .executeTakeFirst();
+                  if (replaced === undefined) throw new ApiError('NOT_FOUND');
+                  await requirePermission(db, {
+                    userId: control.userId,
+                    tenantId,
+                    storeId: replaced.storeId,
+                    permissionId: PERM.deviceRevoke,
+                  });
+                  const outcome = await revokeDevice(db, {
+                    tenantId,
+                    deviceId: body.replacesDeviceId,
+                    revokedBy: control.userId,
+                    now: t,
+                  });
+                  if (outcome.kind === 'not_found') throw new ApiError('NOT_FOUND');
+                  replacedNewly = outcome.newlyRevoked;
+                }
 
                 // deviceId unused.
                 const dupId = await db
@@ -286,6 +327,13 @@ export function createDevicesRouter(deps: ServerDeps) {
               },
             }),
           );
+
+          // Post-commit, once, exactly as the standalone revoke endpoint does: the replaced device's
+          // live sockets must close, or a revoked identity keeps streaming until it happens to
+          // reconnect (task 20 registers the socket-close hook).
+          if (replacedNewly && body.replacesDeviceId !== undefined) {
+            await deps.revocationHooks.fire({ deviceId: body.replacesDeviceId, tenantId });
+          }
 
           if (result.replay) c.header('X-Idempotent-Replay', 'true');
           return c.json(result.body as EnrollRes, 201);

@@ -44,6 +44,7 @@ export type TranslationKey =
   | 'auth.switcher.emptyUsers'
   | 'auth.switcher.idleLocked'
   | 'auth.switcher.instruction'
+  | 'auth.switcher.reenroll'
   | 'auth.switcher.title'
   | 'conflict.action.decide'
   | 'conflict.autoResolved.toast'
@@ -274,6 +275,7 @@ export interface TranslationResources {
       title: string;
       instruction: string;
       addUser: string;
+      reenroll: string;
       emptyUsers: string;
       idleLocked: string;
     };

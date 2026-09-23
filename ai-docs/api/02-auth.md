@@ -128,7 +128,20 @@ const EnrollReq = z.object({
   deviceName: z.string().min(1).max(64),   // human label for device management UI
   platform: z.enum(['android', 'ios']),
   appVersion: z.string().max(32),
+  replacesDeviceId: z.string().uuid().optional(), // the registration this enrolment REPLACES (D27)
 }).strict();
+
+**`replacesDeviceId` (optional, D27 / task 168).** Set only when an already-enrolled handset
+re-enrols — e.g. recovering a store whose user roster emptied out. A NEW identity is still minted
+(§7.4); this names the OLD row so the server can revoke it **inside the same transaction** that
+registers the new one. Without it the shop is left with two `active` registrations for one handset
+and the old device token still valid.
+
+Authorisation is exactly the standalone revoke's (§7.3): the acting control-session user must hold
+`auth.device_revoke` scoped to the **replaced device's own store**, which may differ from the store
+being enrolled into. A `replacesDeviceId` naming a device in another tenant reads as absent under RLS
+and returns `404 NOT_FOUND` — indistinguishable from an id that does not exist (security-guide §2.2).
+Revoking the replaced device fires the normal revocation hooks, so its live sockets close.
 
 // 201
 type EnrollRes = {
@@ -457,7 +470,13 @@ Unsynced ops and media are destroyed with the rest — by design; the mitigation
 
 ### 7.4 Re-enrollment
 
-A wiped (or factory-reset) device may enroll again via §4 as a **new device**: new `deviceId`, new keypair, new token, new chain starting at seq 1 (05 §4). A device identity is never resurrected (security-guide §6.1); the old chain simply ends. Key rotation in v0 **is** revoke + re-enroll — there is no in-place rotation (recorded against Q4; in-place rotation is a roadmap.md item).
+A wiped (or factory-reset) device may enroll again via §4 as a **new device**: new `deviceId`, new keypair, new token, new chain starting at seq 1 (05 §4). A device identity is never resurrected (security-guide §6.1); the old chain simply ends.
+
+An enrolling device that still holds its previous identity — it was never wiped, e.g. a store
+recovering from an empty user roster (task 168) — SHOULD pass `replacesDeviceId` (§4.3). The server
+then revokes that registration in the same transaction as the new one, so re-enrolment never leaves a
+second `active` device for one handset. Omitting it is still valid (a genuinely wiped device has
+nothing to name) and leaves the old row untouched. Key rotation in v0 **is** revoke + re-enroll — there is no in-place rotation (recorded against Q4; in-place rotation is a roadmap.md item).
 
 ## 8. Token & session lifecycle
 

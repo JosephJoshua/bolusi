@@ -35,8 +35,8 @@ function renderers(seen: string[]): ZoneRenderers {
 
 describe('every zone renders — no state maps to a blank screen', () => {
   test.each<[string, Zone, string]>([
-    ['unenrolled', { kind: 'enrollment', revoked: false }, 'enrollment:false'],
-    ['revoked', { kind: 'enrollment', revoked: true }, 'enrollment:true'],
+    ['unenrolled', { kind: 'enrollment', revoked: false, voluntary: false }, 'enrollment:false'],
+    ['revoked', { kind: 'enrollment', revoked: true, voluntary: false }, 'enrollment:true'],
     ['lock switcher', { kind: 'switcher', mode: 'lock', origin: 'home' }, 'switcher:lock'],
     [
       'voluntary switcher',
@@ -66,15 +66,26 @@ describe('every zone renders — no state maps to a blank screen', () => {
       for (const session of [null, { userId: 'user-a' }])
         for (const locked of [true, false])
           for (const pinFor of [null, 'user-b'])
-            for (const switching of [true, false])
-              for (const route of routes) {
-                const zone = resolveZone({ device, session, locked, pinFor, switching, route });
-                expect(renderZone(zone, renderers(seen))).toBeDefined();
-                count += 1;
-              }
+            for (const reenrolling of [true, false])
+              for (const switching of [true, false])
+                for (const route of routes) {
+                  const zone = resolveZone({
+                    device,
+                    session,
+                    locked,
+                    pinFor,
+                    reenrolling,
+                    switching,
+                    route,
+                  });
+                  expect(renderZone(zone, renderers(seen))).toBeDefined();
+                  count += 1;
+                }
 
     // The sweep's own denominator (T-14): a zero-iteration loop would otherwise report green.
-    expect(count).toBe(devices.length * 2 * 2 * 2 * 2 * routes.length);
+    // One more dimension since task 168: `reenrolling`. The literal product is restated rather than
+    // computed from the loops so a dropped dimension reds here instead of silently halving coverage.
+    expect(count).toBe(devices.length * 2 * 2 * 2 * 2 * 2 * routes.length);
     expect(seen).toHaveLength(count);
     // And every arm was genuinely exercised — not just the easy ones.
     expect(new Set(seen.map((entry) => entry.split(':')[0])).size).toBe(4);

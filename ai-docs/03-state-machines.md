@@ -92,7 +92,12 @@ Per-item: `5 s → 15 s → 60 s → 5 min` cap, indexed by `uploadAttempts`. Co
 
 | From | Event / trigger | To | Side effects | Triggered by |
 | ---- | --------------- | -- | ------------ | ------------ |
+| `active` | **replacement enrolment** — `POST /v1/devices/enroll` carrying `replacesDeviceId` (api/02-auth §4.3; D27, task 168) | `revoked` | Identical to the row above — same `revokeDevice` path, same audit row, same push-token cleanup, same revocation hooks. The distinction is only the trigger: the replaced device is revoked in the SAME transaction that registers its successor, so one handset is never two `active` registrations. | the enrolling control session, which must hold `auth.device_revoke` scoped to the **replaced** device's store |
 | `active` | **directory mutation** via `POST /v1/devices/:deviceId/revoke` (api/02-auth §7 — online-only, control plane) | `revoked` | `revokedAt`/`revokedBy` set on the directory row; `identity_audit` row appended (the audit record — 10-db). Server: device token invalid ⇒ `401`; every op **received after** the revocation is rejected `DEVICE_REVOKED` (receipt-time cut, 05 §8). Ops accepted before revocation remain valid — history stays verifiable (PRD-011 FR-1019). Device surfaced as revoked in the device list. | user holding `auth.device_revoke` (02-permissions §11), or a control session (api/02-auth §7.1) |
+
+**Both triggers converge on one implementation** (`revokeDevice`) — the second is not a parallel path
+with its own semantics, which is what keeps "revoked means revoked" true regardless of how it was
+reached.
 
 **Terminal:** `revoked`. There is no un-revoke. Recovery = a **new enrollment**: new `deviceId`, new keypair, `seq` restarts at 1, fresh chain genesis (05 §2.1). A revoked deviceId or key is never reused.
 

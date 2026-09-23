@@ -15,6 +15,7 @@ function input(overrides: Partial<ZoneInput> = {}): ZoneInput {
     session: { userId: 'user-a' },
     locked: false,
     pinFor: null,
+    reenrolling: false,
     switching: false,
     route: 'home',
     ...overrides,
@@ -26,6 +27,7 @@ describe('resolveZone — the gate (task 24 acceptance)', () => {
     expect(resolveZone(input({ device: 'unenrolled', session: null }))).toEqual({
       kind: 'enrollment',
       revoked: false,
+      voluntary: false,
     });
   });
 
@@ -33,6 +35,7 @@ describe('resolveZone — the gate (task 24 acceptance)', () => {
     expect(resolveZone(input({ device: 'revoked', session: null }))).toEqual({
       kind: 'enrollment',
       revoked: true,
+      voluntary: false,
     });
   });
 
@@ -130,13 +133,14 @@ describe('revocation is terminal and beats every other input (03 §Device)', () 
     ['an open session mid-switch', input({ device: 'revoked', pinFor: 'user-b' })],
     ['a session and a shell route', input({ device: 'revoked', route: 'settings' })],
   ])('revoked wins over %s', (_label, given) => {
-    expect(resolveZone(given)).toEqual({ kind: 'enrollment', revoked: true });
+    expect(resolveZone(given)).toEqual({ kind: 'enrollment', revoked: true, voluntary: false });
   });
 
   test('unenrolled likewise wins over a stale in-memory session', () => {
     expect(resolveZone(input({ device: 'unenrolled', route: 'settings' }))).toEqual({
       kind: 'enrollment',
       revoked: false,
+      voluntary: false,
     });
   });
 });
@@ -163,17 +167,34 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
       for (const session of sessions)
         for (const locked of locks)
           for (const pinFor of pins)
-            for (const switching of switches)
-              for (const route of routes) {
-                const zone = resolveZone({ device, session, locked, pinFor, switching, route });
-                expect(
-                  zone,
-                  JSON.stringify({ device, session, locked, pinFor, switching, route }),
-                ).toBeDefined();
-                expect(zone.kind).toBeTruthy();
-                kinds.add(zone.kind);
-                count += 1;
-              }
+            for (const reenrolling of [true, false])
+              for (const switching of switches)
+                for (const route of routes) {
+                  const zone = resolveZone({
+                    device,
+                    session,
+                    locked,
+                    pinFor,
+                    reenrolling,
+                    switching,
+                    route,
+                  });
+                  expect(
+                    zone,
+                    JSON.stringify({
+                      device,
+                      session,
+                      locked,
+                      pinFor,
+                      reenrolling,
+                      switching,
+                      route,
+                    }),
+                  ).toBeDefined();
+                  expect(zone.kind).toBeTruthy();
+                  kinds.add(zone.kind);
+                  count += 1;
+                }
 
     // The sweep's own denominator (T-14 — a guard must assert its own coverage). Without these two
     // lines a bug that made the loops iterate zero times would report a green "every combination".
@@ -182,6 +203,10 @@ describe('resolveZone is total — no input maps to nothing (the blank-screen gu
         sessions.length *
         locks.length *
         pins.length *
+        // `reenrolling` (task 168) — the sweep covers both values, so the product includes it. This
+        // assertion red'd when the dimension was added, which is the denominator doing its job:
+        // adding an input without widening the sweep would otherwise halve coverage silently.
+        2 *
         switches.length *
         routes.length,
     );
@@ -215,8 +240,8 @@ describe('backTarget — hardware back IS the header back (§8.1)', () => {
   });
 
   test('the enrollment wizard has nothing behind it', () => {
-    expect(backTarget({ kind: 'enrollment', revoked: false })).toBeNull();
-    expect(backTarget({ kind: 'enrollment', revoked: true })).toBeNull();
+    expect(backTarget({ kind: 'enrollment', revoked: false, voluntary: false })).toBeNull();
+    expect(backTarget({ kind: 'enrollment', revoked: true, voluntary: false })).toBeNull();
   });
 
   test('PIN back returns to the user list in BOTH modes — a mis-tapped face must not cost an attempt', () => {

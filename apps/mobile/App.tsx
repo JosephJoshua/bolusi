@@ -219,6 +219,12 @@ export default function App(props: AppProps): React.JSX.Element {
    * completed switch), so a stale intent can never re-open the roster over the incoming user's shell.
    */
   const [switching, setSwitching] = useState(false);
+  /**
+   * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
+   * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
+   * PIN all beat it, so setting this can never render the wizard over a locked device.
+   */
+  const [reenrolling, setReenrolling] = useState(false);
   const [enrollment, setEnrollment] = useState<EnrollmentState>(() =>
     initialEnrollmentState(props.device === 'revoked'),
   );
@@ -428,6 +434,7 @@ export default function App(props: AppProps): React.JSX.Element {
     session: props.session,
     locked: props.locked,
     pinFor,
+    reenrolling,
     switching,
     route,
   });
@@ -488,6 +495,12 @@ export default function App(props: AppProps): React.JSX.Element {
       // Back from the PIN pad to the roster — a mis-tapped face costs no attempt (§8.2). The switch is
       // still in progress, so `switching` STAYS set: clearing it here would drop straight to the shell.
       setPinFor(null);
+      // `reenrolling` is the OPPOSITE case and must be cleared (task 168). `resolveZone` re-derives
+      // the zone from state on every render, so leaving it set means back lands on the switcher and
+      // the very next render computes the wizard again — a dead loop, and afterwards every
+      // logged-out render shows the wizard instead of the roster for the life of the process.
+      // Abandoning a voluntary re-enrolment is exactly what this clear makes possible.
+      setReenrolling(false);
       return true;
     }
     if (target.kind === 'shellRoute') {
@@ -644,6 +657,9 @@ export default function App(props: AppProps): React.JSX.Element {
             onFinish={() => {
               props.enrollment.finish();
               setEnrollment(initialEnrollmentState());
+              // Same re-derivation hazard as the back path: the zone hands off to the switcher, and a
+              // still-set `reenrolling` would immediately pull it back into the wizard (task 168).
+              setReenrolling(false);
             }}
             onBack={goBack}
             discardPrompt={discardPrompt}
@@ -661,15 +677,17 @@ export default function App(props: AppProps): React.JSX.Element {
             // §8.2: the LOCK has no back. `backTarget` is the single source of that rule.
             onBack={backTarget(switcherZone) === null ? null : goBack}
             onSelect={(user) => setPinFor(tapTarget(user).userId)}
-            // NO `onEnroll` — the prop is GONE, not passed as a stub (owner ruling D23 §3; task 130).
-            // §8.2's empty-roster CTA is out of v0: reaching Device Enrollment from an `active`
-            // device needs a new input on `resolveZone` (the security gate) and completing it runs
-            // api/02-auth §7.4 re-enrollment — new `deviceId`, new keypair, fresh chain at seq 1,
-            // old registration left `active` server-side. §5 forbids rendering a control that
-            // cannot work, so the empty state carries GUIDANCE TEXT instead
-            // (`SWITCHER_EMPTY_HINT_KEY`). Deleting the prop rather than stubbing it is the
-            // load-bearing half: a surviving prop is how the affordance grows back. Task 168
-            // carries the flow to v1.
+            // §8.2's empty-roster recovery, LIVE since task 168 / D27 (which amends D23 §3). D23 §3
+            // removed this control because nothing could service it: reaching Device Enrolment from
+            // an `active` device needed a new input on `resolveZone`, and completing it left the old
+            // registration `active` server-side. Both are now built — `reenrolling` feeds the gate
+            // (device status, lock and pending PIN all still beat it), and the enrol request carries
+            // `replacesDeviceId` so the server revokes the outgoing device in the same transaction.
+            //
+            // Still not a stub: the handler is REAL, and `EmptyState` renders the CTA only because
+            // one exists. §5's "a control that cannot work must not render" is satisfied by the
+            // control now working, not by hiding it.
+            onReenroll={() => setReenrolling(true)}
             //
             // §5's Error retry — the real producer (`AppSessionController.refresh`), reached through
             // Root. This is the read that FAILED; running it again is the only thing that can clear
