@@ -92,6 +92,7 @@ import {
   type VirtualTimer,
 } from './live-shell-support.js';
 import { fire, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
+import { __emitHardwareBack } from './doubles/react-native.js';
 
 const MEDIA_ID = '01920000-0000-7000-8000-0000000130a1';
 
@@ -590,6 +591,41 @@ describe('the empty roster CTA is LIVE and reaches the wizard (design-system §5
     expect(reached, 'the CTA did not reach Device Enrolment').toBe(true);
     // And the switcher is genuinely replaced, not merely overlaid.
     expect(screen.query('switcher-screen')).toBeNull();
+  });
+
+  test('the voluntary wizard is ABANDONABLE — back returns to the switcher and stays there', async () => {
+    // THE RETURN TRIP, and the half the first version of this test missed. `resolveZone` re-derives
+    // the zone from state on EVERY render, so a `reenrolling` flag that back does not clear makes the
+    // wizard re-appear immediately: back becomes a dead loop, and afterwards every logged-out render
+    // shows the wizard instead of the roster for the life of the process. Found by the PR-7 review.
+    //
+    // Asserting "we are on the switcher" once is NOT enough — a single render could land there before
+    // the gate recomputes. The settle check below is what distinguishes "left the wizard" from
+    // "bounced off it".
+    await sql`UPDATE users_directory SET status = 'deactivated'`.execute(fixture.app.db.db);
+
+    const screen = await mountRoot(fixture);
+    await waitUntil(() => screen.query('switcher-empty.cta') !== null);
+    fire(screen.get('switcher-empty.cta'), 'onPress');
+    await waitUntil(() => screen.query('enrollment-screen') !== null);
+
+    // The wizard renders no header back control, so the platform back IS the affordance here
+    // (design-system §8.1: hardware back equals header back). This drives the REAL `BackHandler`
+    // listener `useHardwareBack` registered, not a prop.
+    let consumed = false;
+    await act(async () => {
+      consumed = __emitHardwareBack();
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    });
+    // Consumed, never passed through to Android — backing out of the wizard must not exit the app.
+    expect(consumed).toBe(true);
+
+    const back = await waitUntil(() => screen.query('switcher-screen') !== null);
+    expect(back, 'back did not leave the voluntary wizard').toBe(true);
+    // ...and it STAYS left: re-render and confirm the gate does not pull it straight back.
+    await settle();
+    expect(screen.query('enrollment-screen')).toBeNull();
+    expect(screen.query('switcher-screen')).not.toBeNull();
   });
 });
 

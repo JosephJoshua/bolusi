@@ -495,6 +495,12 @@ export default function App(props: AppProps): React.JSX.Element {
       // Back from the PIN pad to the roster — a mis-tapped face costs no attempt (§8.2). The switch is
       // still in progress, so `switching` STAYS set: clearing it here would drop straight to the shell.
       setPinFor(null);
+      // `reenrolling` is the OPPOSITE case and must be cleared (task 168). `resolveZone` re-derives
+      // the zone from state on every render, so leaving it set means back lands on the switcher and
+      // the very next render computes the wizard again — a dead loop, and afterwards every
+      // logged-out render shows the wizard instead of the roster for the life of the process.
+      // Abandoning a voluntary re-enrolment is exactly what this clear makes possible.
+      setReenrolling(false);
       return true;
     }
     if (target.kind === 'shellRoute') {
@@ -651,6 +657,9 @@ export default function App(props: AppProps): React.JSX.Element {
             onFinish={() => {
               props.enrollment.finish();
               setEnrollment(initialEnrollmentState());
+              // Same re-derivation hazard as the back path: the zone hands off to the switcher, and a
+              // still-set `reenrolling` would immediately pull it back into the wizard (task 168).
+              setReenrolling(false);
             }}
             onBack={goBack}
             discardPrompt={discardPrompt}
