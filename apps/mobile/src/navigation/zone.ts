@@ -39,7 +39,7 @@ export type ShellRoute =
  * no shell behind it); reached from a live session it is wherever the avatar was tapped.
  */
 export type Zone =
-  | { readonly kind: 'enrollment'; readonly revoked: boolean }
+  | { readonly kind: 'enrollment'; readonly revoked: boolean; readonly voluntary: boolean }
   | { readonly kind: 'switcher'; readonly mode: SwitcherMode; readonly origin: ShellRoute }
   | { readonly kind: 'pin'; readonly userId: string; readonly mode: SwitcherMode }
   | { readonly kind: 'shell'; readonly route: ShellRoute };
@@ -53,6 +53,19 @@ export interface ZoneInput {
   readonly locked: boolean;
   /** The user tapped on the switcher, awaiting PIN. Null ⇒ the switcher itself. */
   readonly pinFor: string | null;
+  /**
+   * The user asked to RE-ENROL this device from the empty-roster switcher (task 168; D27).
+   *
+   * Set only from the switcher's empty state, where the device is enrolled and working but has no
+   * users left to sign in as — a shop that is otherwise stuck with no in-app way out.
+   *
+   * PRECEDENCE IS THE SECURITY PROPERTY, and it is why this field sits where it does rather than
+   * beside `device`. It is read INSIDE the `session === null` branch and AFTER `locked`/`pinFor`, so:
+   * a revoked or unenrolled device still routes to the FORCED wizard at step 1 (device status is
+   * terminal and beats everything), an idle lock beats it, and a pending PIN beats it. Anywhere
+   * earlier and setting this before a lock would render the wizard over a locked device.
+   */
+  readonly reenrolling: boolean;
   /**
    * A session is open and the user asked for the switcher — the voluntary quick-switch (PRD-011 §6.1;
    * api/02-auth §6.2/§6.3). This is the field task 124 could not add without redesigning the model:
@@ -79,13 +92,20 @@ export interface ZoneInput {
  */
 export function resolveZone(input: ZoneInput): Zone {
   // 1. Device status is terminal and beats everything, including an open session.
-  if (input.device === 'unenrolled') return { kind: 'enrollment', revoked: false };
-  if (input.device === 'revoked') return { kind: 'enrollment', revoked: true };
+  if (input.device === 'unenrolled')
+    return { kind: 'enrollment', revoked: false, voluntary: false };
+  if (input.device === 'revoked') return { kind: 'enrollment', revoked: true, voluntary: false };
 
   // 2. No session (or a lock ended it) ⇒ the switcher, which doubles as the lock screen (§8.2).
   if (input.session === null) {
     const mode: SwitcherMode = input.locked ? 'lock' : 'choose';
     if (input.pinFor !== null) return { kind: 'pin', userId: input.pinFor, mode };
+    // Voluntary re-enrolment (task 168), reachable ONLY here: the device is `active` (status was
+    // checked first), no session is open, no lock ended one, and no PIN is pending. A lock therefore
+    // beats it — `mode` is already 'lock' in that case and the switcher-as-lock-screen wins below.
+    if (input.reenrolling && !input.locked) {
+      return { kind: 'enrollment', revoked: false, voluntary: true };
+    }
     return { kind: 'switcher', mode, origin: input.route };
   }
 
@@ -117,8 +137,12 @@ export type BackTarget =
 export function backTarget(zone: Zone): BackTarget | null {
   switch (zone.kind) {
     case 'enrollment':
-      // Nothing behind the wizard: the device is unusable until it enrolls. Step-to-step back is
-      // the wizard's own state (see enrollment/model.ts), not the shell's.
+      // A VOLUNTARY re-enrolment (task 168) is abandonable — the device still works, the user chose
+      // this, and stranding them in a wizard with no way out would be a worse trap than the empty
+      // roster they came from. It backs to the switcher they launched it from.
+      if (zone.voluntary) return { kind: 'switcher' };
+      // A FORCED wizard has nothing behind it: the device is unusable until it enrols. Step-to-step
+      // back is the wizard's own state (see enrollment/model.ts), not the shell's.
       return null;
     case 'switcher':
       // A voluntary switch can be abandoned; a LOCK cannot (§8.2). Abandoning returns to the surface

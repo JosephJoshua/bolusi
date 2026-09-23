@@ -109,6 +109,16 @@ export const EnrollReq = z
     deviceName: z.string().min(1).max(64),
     platform: z.enum(['android', 'ios']),
     appVersion: z.string().max(32),
+    /**
+     * The device registration this enrolment REPLACES (§4.3, D27) — set only when an already-enrolled
+     * handset re-enrols, e.g. recovering a store whose user roster emptied out (task 168).
+     *
+     * A new identity is still minted (§7.4: an identity is never resurrected). This names the OLD row
+     * so the server can revoke it in the SAME transaction, rather than leaving two `active`
+     * registrations for one handset with the old device token still valid. Omitted on a first
+     * enrolment, where there is nothing to replace.
+     */
+    replacesDeviceId: zId.optional(),
   })
   .strict();
 export type EnrollReq = z.infer<typeof EnrollReq>;
