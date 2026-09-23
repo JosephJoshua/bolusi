@@ -80,11 +80,21 @@
  *     reported `EMULATOR correctness gates PASS (7 gates)` with all six Maestro flows `[Passed]`.
  *     So `SDK_INT` is now 36 on the lane and the shim's gate is satisfied on both halves.
  *
- *     What that does and does NOT buy: the lane now EXERCISES the `OnBackPressedCallback` dispatch
- *     path rather than skipping it by construction, so a regression there can finally surface. It is
- *     not yet an ASSERTION about predictive back — no Maestro flow drives a system back gesture, so
- *     nothing yet fails if the shim stops delivering. Writing that flow is the next step if this
- *     path is to be genuinely covered rather than merely executed.
+ *     What that buys: the lane now EXERCISES the `OnBackPressedCallback` dispatch path rather than
+ *     skipping it by construction, AND asserts it. `.maestro/03-shell-navigation.yaml` presses the
+ *     system `back` from Sync Status and asserts it lands on `notes.list`, so a shim that stops
+ *     delivering reds that flow.
+ *
+ *     (An earlier version of this paragraph, written the same day the lane moved to 36, claimed "no
+ *     Maestro flow drives a system back gesture, so nothing yet fails if the shim stops delivering."
+ *     That was FALSE — flow 03 already pressed `back`, and the following step taps a control that
+ *     only exists on home, so a broken shim already failed it. The assertion was implicit, not
+ *     absent; it is now explicit. Corrected rather than deleted: a confident false claim in a comment
+ *     is the thing this file's own limits section exists to guard against.)
+ *
+ *     What it still does NOT buy: predictive back's ANIMATION and the gesture's progressive/cancellable
+ *     phases are untested — Maestro's `back` dispatches the event, it does not swipe. A user who
+ *     starts a back gesture and releases it mid-swipe is outside what any lane here covers.
  */
 import { describe, expect, test, beforeEach } from 'vitest';
 
