@@ -119,20 +119,24 @@ export function NoteDetail({
         ) : undefined
       }
       testID={testID}
+      // OVERLAY slot, not children: inside a scrollable content slot the sheet's absolute box spans
+      // the scrollable height and its bottom-docked buttons fall below the viewport on a long note
+      // (found by a QA sweep of tasks 205+206 together).
+      overlay={
+        confirmArchive && note !== undefined ? (
+          <ConfirmSheet
+            title={tn('notes.action.archive')}
+            message={tn('notes.confirm.archive')}
+            confirmLabel={tn('notes.action.archive')}
+            onConfirm={archive}
+            cancelLabel={t('core.action.cancel')}
+            onCancel={() => setConfirmArchive(false)}
+            testID={`${testID}.archiveConfirm`}
+          />
+        ) : null
+      }
     >
       {renderBody()}
-
-      {confirmArchive && note !== undefined ? (
-        <ConfirmSheet
-          title={tn('notes.action.archive')}
-          message={tn('notes.confirm.archive')}
-          confirmLabel={tn('notes.action.archive')}
-          onConfirm={archive}
-          cancelLabel={t('core.action.cancel')}
-          onCancel={() => setConfirmArchive(false)}
-          testID={`${testID}.archiveConfirm`}
-        />
-      ) : null}
     </AppShell>
   );
 

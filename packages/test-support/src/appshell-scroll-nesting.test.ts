@@ -169,3 +169,39 @@ test('no screen opts into AppShell scrolling while reaching a List', () => {
       `its list — drop \`scrollable\`.`,
   ).toEqual([]);
 });
+
+test('no ConfirmSheet renders inside a scrollable AppShell content slot', () => {
+  // ConfirmSheet's root is `position:'absolute'` with all four edges at 0, so its box resolves
+  // against its containing block. Passed as an AppShell CHILD on a `scrollable` screen, that block is
+  // the ScrollView's content — the full scrollable height, not the viewport — so on a long screen the
+  // sheet's bottom-docked Cancel/Confirm render below the visible window. A confirmation whose
+  // buttons are off-screen is worse than no confirmation. AppShell's `overlay` slot renders outside
+  // the scrolling region, which is where these belong.
+  //
+  // Found by a QA sweep of tasks 205 and 206 TOGETHER: each was correct alone, and neither test
+  // mounted them nested. The RN doubles are pass-throughs, so no render test can observe the real
+  // clipping — the oracle has to be structural.
+  const offenders: string[] = [];
+  for (const [path, text] of files) {
+    if (!/<AppShell/.test(text) || !/\bscrollable\b/.test(text)) continue;
+    if (!/<ConfirmSheet/.test(text)) continue;
+    // In the overlay slot the tag follows `overlay={`; as a child it does not.
+    const viaOverlay = /overlay=\{[\s\S]{0,400}?<ConfirmSheet/.test(text);
+    if (!viaOverlay) offenders.push(relative(REPO_ROOT, path));
+  }
+  expect(
+    offenders,
+    'These scrollable screens render a <ConfirmSheet> as an AppShell CHILD. Inside the ScrollView its ' +
+      'absolute box spans the scrollable height and its buttons fall below the viewport — pass it to ' +
+      "AppShell's `overlay` slot instead.",
+  ).toEqual([]);
+});
+
+test('the ConfirmSheet detector sees the screens that actually have one', () => {
+  // Denominator for the check above: if the scan stopped finding ConfirmSheet screens at all, the
+  // assertion would pass over an empty set — green for the wrong reason.
+  const withSheet = [...files].filter(
+    ([, text]) => /<AppShell/.test(text) && /<ConfirmSheet/.test(text),
+  );
+  expect(withSheet.length).toBeGreaterThanOrEqual(3);
+});

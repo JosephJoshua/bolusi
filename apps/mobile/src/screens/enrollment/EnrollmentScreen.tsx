@@ -102,6 +102,22 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
         ) : undefined
       }
       testID="enrollment-screen"
+      // OVERLAY slot, not children: this screen is `scrollable`, and inside a ScrollView the sheet's
+      // absolute box spans the scrollable height, dropping its buttons below the viewport on a long
+      // form (found by a QA sweep of tasks 205+206 together).
+      overlay={
+        discardPrompt ? (
+          <ConfirmSheet
+            title={t('core.action.cancel')}
+            message={t('auth.enroll.instruction')}
+            confirmLabel={t('core.action.confirm')}
+            onConfirm={onConfirmDiscard}
+            cancelLabel={t('core.action.cancel')}
+            onCancel={onCancelDiscard}
+            testID="enroll-discard-sheet"
+          />
+        ) : null
+      }
     >
       <Text style={styles.progress} testID="enroll-progress">
         {`${stepNumber}/${STEPS.length}`}
@@ -110,18 +126,6 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
       {state.step === 'credentials' ? <CredentialsStep {...props} /> : null}
       {state.step === 'confirm' ? <ConfirmStep {...props} /> : null}
       {state.step === 'done' ? <DoneStep {...props} /> : null}
-
-      {discardPrompt ? (
-        <ConfirmSheet
-          title={t('core.action.cancel')}
-          message={t('auth.enroll.instruction')}
-          confirmLabel={t('core.action.confirm')}
-          onConfirm={onConfirmDiscard}
-          cancelLabel={t('core.action.cancel')}
-          onCancel={onCancelDiscard}
-          testID="enroll-discard-sheet"
-        />
-      ) : null}
     </AppShell>
   );
 }

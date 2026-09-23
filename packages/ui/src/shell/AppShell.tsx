@@ -69,6 +69,19 @@ export interface AppShellProps {
    * appear on a device or the emulator lane.
    */
   readonly scrollable?: boolean | undefined;
+  /**
+   * Screen-covering overlays — today only `ConfirmSheet` (§3.10, the one sanctioned modal).
+   *
+   * They render as a SIBLING of the content slot, never inside it, and that placement is the whole
+   * point. `ConfirmSheet`'s root is `position: 'absolute'` with all four edges at 0, which resolves
+   * against its containing block. Passed as a child it lands inside the content — and once `scrollable`
+   * made that content a ScrollView, the containing block became the full SCROLLABLE height rather than
+   * the viewport, so on a long screen the sheet's bottom-docked Cancel/Confirm rendered below the
+   * visible window. A confirmation whose buttons are off-screen is worse than no confirmation.
+   *
+   * Rendered LAST so it paints over the header and the action bar, which is what a modal must do.
+   */
+  readonly overlay?: ReactNode;
   readonly testID?: string | undefined;
 }
 
@@ -118,6 +131,7 @@ export function AppShell({
   children,
   bottomAction,
   scrollable = false,
+  overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
   return (
@@ -182,6 +196,10 @@ export function AppShell({
           {bottomAction}
         </View>
       )}
+
+      {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
+          the header and action bar the way a modal must. */}
+      {overlay}
     </View>
   );
 }
