@@ -41,6 +41,18 @@ Three of the documented classes at once:
 - [x] RED-first: the new `live-shell-settings.test.tsx` reproduction fails on the unfixed tree at `expect(i18n.language).toBe('en')` **after** the marker assertion passes — proving the marker is a false witness — and passes after the fix.
 - [x] The test sources both expectations from the catalogs via `getFixedT`, so it asserts no UI copy (testing-guide) and survives rewording.
 - [x] `.maestro/06-i18n-toggle.yaml` asserts `settings-rendered-locale-<locale>` on **both** arms, so the on-device gate can red on this defect — via a testID, not a rendered string (T-4).
+
+### The witness's own first version was a guard that could not PASS
+
+Worth recording, because it is the exact mirror of the defect this task fixes and only one lane could see it. The node started as an empty `<View testID={…} />` beside the section header. An empty View has **zero bounds**, and Maestro drops zero-bounds nodes from the accessibility hierarchy it queries — its own logcat says so: `Skipping invisible child: … boundsInParent: Rect(0, 0 - 0, 0)`. So the assertion could never succeed on a device.
+
+Every local gate passed it: 1004 unit tests, typecheck, lint. `test-renderer` resolves `settings-rendered-locale-en` happily because it has no layout at all — the mobile vitest config states this limit in its own header ("CANNOT: Yoga layout"). It took an emulator run on the FIX branch to catch it:
+
+```
+CommandFailed: Assertion is false: id: settings-rendered-locale-en is visible
+```
+
+Fixed by wrapping the section header (a node with real bounds) instead of sitting beside it. **This is why lane A — the run that is "supposed" to just pass — is not optional.** A falsification run on the defect branch would have gone red either way and been read as success.
 - [x] Mobile suite, `pnpm lint`, `pnpm typecheck` green.
 
 ## Second defect, found while fixing the first — the per-user locale op was denied on every tap
