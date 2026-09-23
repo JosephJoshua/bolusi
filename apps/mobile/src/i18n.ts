@@ -72,12 +72,26 @@ export async function readDeviceLocale(store: LocaleStorePort): Promise<Locale> 
   }
 }
 
-/** Persist the device locale and apply it immediately (§1.2). */
+/**
+ * Apply the device locale and persist it (§1.2). THE ONLY runtime producer of a locale change —
+ * every caller that changes the language goes through here, never `store.write` on its own (task
+ * 211: Root called the store directly and skipped the apply entirely, shipping a toggle that
+ * persisted a choice it never enacted; this function was correct the whole time and had no caller).
+ *
+ * APPLY FIRST, PERSIST SECOND, and the order is load-bearing twice over:
+ *
+ *  1. The apply must land in the caller's own tick. `initAsync: false` (i18n instance.ts) makes
+ *     `changeLanguage` synchronous, so calling it before the first `await` puts the new language in
+ *     place BEFORE the re-render the caller's `setState` schedules. Awaiting the write first would
+ *     push the apply past that render, and since the state settles in the same batch there is no
+ *     second render to correct it — the screen would sit in the old language until the next launch.
+ *  2. A failed write must not cost the user their language. `fileLocaleStore.write` already swallows
+ *     its own errors for this reason (ports/locale-store.ts); ordering makes that true for any store
+ *     that throws instead, rather than true only for the one implementation.
+ */
 export async function writeDeviceLocale(store: LocaleStorePort, locale: Locale): Promise<void> {
-  await store.write(DEVICE_LOCALE_KEY, locale);
-  // Applied synchronously — `initAsync: false` (i18n instance.ts) means the toggle re-renders in
-  // the same frame rather than showing one frame of the old language.
   setLocale(locale);
+  await store.write(DEVICE_LOCALE_KEY, locale);
 }
 
 /** Is `locale` one a v0 user may actually be shown? Delegates to 07-i18n's own list, never a copy. */

@@ -21,17 +21,30 @@ tags:
     id: 'settings-screen'
 - takeScreenshot:
     path: i18n-01-settings
-# Switch to English, assert the active marker moved to en.
+# Switch to English. THE CHECKMARK IS NOT ENOUGH (task 211): `settings-locale-active-<locale>` renders
+# from the `locale` PROP Root hands down, so it moves whenever Root's state moves — which it did
+# correctly all through a defect where the language never changed at all. This flow passed the entire
+# time, and the `i18n-02-en` screenshot it captured is the evidence: an English checkmark above an
+# entirely Indonesian screen. So each arm also asserts `settings-rendered-locale-<locale>`, whose
+# testID carries the locale the screen's strings are ACTUALLY resolving in (SettingsScreen.tsx reads
+# it from the i18next instance, not from the prop). Asserting a rendered string would have worked too
+# and is forbidden by T-4 — catalogs get reworded, and a copy assertion reds on an edit that broke
+# nothing.
 - tapOn:
     id: 'settings-locale-en'
 - assertVisible:
     id: 'settings-locale-active-en'
+- assertVisible:
+    id: 'settings-rendered-locale-en'
 - takeScreenshot:
     path: i18n-02-en
-# Switch back to Indonesian (the shop's default), assert the active marker moved to id.
+# Switch back to Indonesian (the shop's default). The return arm matters as much as the outbound one:
+# it is the path a user takes who cannot read the language they just landed in (07-i18n §1.2).
 - tapOn:
     id: 'settings-locale-id'
 - assertVisible:
     id: 'settings-locale-active-id'
+- assertVisible:
+    id: 'settings-rendered-locale-id'
 - takeScreenshot:
     path: i18n-03-id

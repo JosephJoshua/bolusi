@@ -7,7 +7,7 @@
  * design (07-i18n §10.1) — and the active one is marked with a check, not merely with a colour. Both
  * choices mean a user who lands in the wrong language can still see which row is theirs and tap back.
  */
-import { t } from '@bolusi/i18n';
+import { getLocale, t } from '@bolusi/i18n';
 import type { Locale } from '@bolusi/i18n';
 import {
   AppShell,
@@ -108,9 +108,36 @@ export function SettingsScreen({
       }
       testID="settings-screen"
     >
-      <Text style={styles.section} testID="settings-section-language">
-        {t('core.settings.language')}
-      </Text>
+      {/*
+        A WITNESS for the on-device gate — and the reason it is not the active-row checkmark below.
+        That checkmark is `option === locale`, the PROP, so it tracks whatever Root's state says. All
+        through task 211 the state was right and the SCREEN was in the old language, and the Maestro
+        flow asserting the checkmark passed the whole time. This node's testID carries the locale
+        `t()` is actually resolving in — read from the i18next instance, the same place every string
+        on this screen comes from — so it is wrong exactly when the copy is wrong.
+        Why a testID and not an assertion on the rendered title: T-4 forbids asserting copy, because
+        catalogs get reworded and a copy assertion then reds on an edit that broke nothing.
+
+        IT WRAPS THE HEADER RATHER THAN SITTING BESIDE IT AS AN EMPTY `<View/>`, AND THAT IS NOT
+        COSMETIC. An empty View has zero bounds, and Maestro drops zero-bounds nodes from the
+        accessibility hierarchy it queries — "Skipping invisible child: … boundsInParent: Rect(0, 0 -
+        0, 0)", in the `maestro-native-e2e` artifact of CI run 35857403792, `01-launch-enrollment/
+        logs/device-logcat.txt`. The empty version's own failure is in run 35857400093,
+        `06-i18n-toggle/logs/maestro.log`: "CommandFailed: Assertion is false: id:
+        settings-rendered-locale-en is visible". Neither artifact lives in this repo (CI artifacts
+        expire), so these are pointers to a producer, not evidence checked into the tree — re-run the
+        lane to reproduce. So the first version of this node could never be asserted on a device,
+        only in `test-renderer`, which has no layout at all. That is a guard that cannot
+        PASS, the mirror of the guard that could not FAIL which this whole task exists to fix, and
+        the mobile vitest lane is structurally incapable of catching it (its config says so: "CANNOT:
+        Yoga layout"). Wrapping a node that has real bounds is what makes the testID reachable.
+        Keep a visible child inside this View.
+      */}
+      <View testID={`settings-rendered-locale-${getLocale()}`}>
+        <Text style={styles.section} testID="settings-section-language">
+          {t('core.settings.language')}
+        </Text>
+      </View>
       {localeOptions.map((option) => (
         <ListRow
           key={option}

@@ -57,6 +57,8 @@ vi.mock('expo-location', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 
+import { getI18nInstance } from '@bolusi/i18n';
+
 import { textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
 
 import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.js';
@@ -147,6 +149,70 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     expect(screen.query('settings-locale-id')).not.toBeNull();
     expect(screen.query('settings-locale-en')).not.toBeNull();
     expect(screen.query('settings-locale-active-id')).not.toBeNull();
+  });
+
+  test('THE REPRODUCTION (task 211): tapping the English row renders the shell IN English', async () => {
+    // WHY THIS IS A SEPARATE TEST FROM THE ONE ABOVE, WHICH ALREADY TOUCHES THE LANGUAGE ROWS.
+    // That test asserts the rows EXIST and that the active one is MARKED. Both stayed green through
+    // the entire defect, because both are driven by `Root`'s React `locale` state — which the toggle
+    // did update. What it never updated was the i18next singleton that `t()` actually reads, so the
+    // checkmark moved and every string on screen stayed Indonesian. Maestro flow 06 asserted the same
+    // marker testID and was green for the same wrong reason. The observable a user cares about is the
+    // one neither checked: did the WORDS change.
+    //
+    // NO COPY LITERALS (testing-guide: tests never assert UI copy). `getFixedT(locale)` reads a
+    // catalog directly, independent of the ACTIVE language, so the expectations come from the same
+    // source the screen renders from — and the test keeps working when the copy is reworded.
+    const screen = await unlockedShell();
+    fireOn(screen, 'shell-open-settings');
+    await settle();
+
+    const i18n = getI18nInstance();
+    const inIndonesian = i18n.getFixedT('id')('core.settings.language');
+    const inEnglish = i18n.getFixedT('en')('core.settings.language');
+    // The fixture is meaningful: if this key happened to be identical in both catalogs the assertions
+    // below could not distinguish a working toggle from a broken one.
+    expect(inEnglish).not.toBe(inIndonesian);
+
+    // 1. THE DENOMINATOR (T-14). The shell is rendering Indonesian BEFORE the tap, so a pass below
+    //    cannot come from a tree that was already in English.
+    expect(textsIn(screen.get('settings-section-language')).join('')).toBe(inIndonesian);
+    expect(screen.query('settings-rendered-locale-id')).not.toBeNull();
+
+    // 2. The affordance a user's thumb reaches — not `setLocale`, not a prop.
+    fireOn(screen, 'settings-locale-en');
+    await settle();
+
+    // 3. The marker moves. This is the ENTIRE old assertion surface; it passes either way.
+    expect(screen.query('settings-locale-active-en')).not.toBeNull();
+
+    // 4. THE DEFECT. The active locale and the rendered string must follow the tap. On an
+    //    Indonesian-first product these rows are documented (07-i18n §1.2) as the only way out of a
+    //    language you cannot read, so "applies on next launch" is not a working toggle.
+    expect(i18n.language).toBe('en');
+    expect(textsIn(screen.get('settings-section-language')).join('')).toBe(inEnglish);
+
+    // 5. THE ON-DEVICE WITNESS. `.maestro/06-i18n-toggle.yaml` asserts this testID instead of a
+    //    rendered string (T-4 forbids asserting copy), so it is the only thing standing between that
+    //    flow and the false-green it just spent a release in. Covered here so a change that leaves it
+    //    stale fails in CI rather than silently disarming the emulator lane.
+    expect(screen.query('settings-rendered-locale-en')).not.toBeNull();
+    expect(screen.query('settings-rendered-locale-id')).toBeNull();
+
+    // 6. THE OTHER HALF OF THE TOGGLE (07-i18n §1.1). The device locale above is unsigned UI state;
+    //    the per-USER preference is a signed, replicated op. Root fires it best-effort and swallows
+    //    the failure into diagnostics, so nothing here could ever go red on it — and it WAS failing,
+    //    on every tap, because the fixture's role bundle under-granted `platform.set_locale` (the
+    //    denial is only visible in vitest output when some OTHER assertion has already failed the
+    //    test, which is how it stayed invisible). Asserting the op lands is what makes the swallowed
+    //    path observable.
+    const localeOps = await fixture!.app.db.db
+      .selectFrom('operations')
+      .select(['type', 'userId', 'entityId'])
+      .where('type', '=', 'platform.user_locale_changed')
+      .execute();
+    expect(localeOps).toHaveLength(1);
+    expect(localeOps[0]?.entityId).toBe(fixture?.userId);
   });
 
   test('Android hardware back returns from Settings to the notes surface (design-system §8.1, zone.backTarget)', async () => {
