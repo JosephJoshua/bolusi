@@ -198,6 +198,21 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     //    stale fails in CI rather than silently disarming the emulator lane.
     expect(screen.query('settings-rendered-locale-en')).not.toBeNull();
     expect(screen.query('settings-rendered-locale-id')).toBeNull();
+
+    // 6. THE OTHER HALF OF THE TOGGLE (07-i18n §1.1). The device locale above is unsigned UI state;
+    //    the per-USER preference is a signed, replicated op. Root fires it best-effort and swallows
+    //    the failure into diagnostics, so nothing here could ever go red on it — and it WAS failing,
+    //    on every tap, because the fixture's role bundle under-granted `platform.set_locale` (the
+    //    denial is only visible in vitest output when some OTHER assertion has already failed the
+    //    test, which is how it stayed invisible). Asserting the op lands is what makes the swallowed
+    //    path observable.
+    const localeOps = await fixture!.app.db.db
+      .selectFrom('operations')
+      .select(['type', 'userId', 'entityId'])
+      .where('type', '=', 'platform.user_locale_changed')
+      .execute();
+    expect(localeOps).toHaveLength(1);
+    expect(localeOps[0]?.entityId).toBe(fixture?.userId);
   });
 
   test('Android hardware back returns from Settings to the notes surface (design-system §8.1, zone.backTarget)', async () => {

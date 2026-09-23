@@ -179,13 +179,24 @@ export async function enrolledDevice(fixture: Fixture): Promise<void> {
  *  bounds' required hash size). */
 const KDF_FLOOR = { memoryCost: 19456, timeCost: 2, parallelism: 1, outputLength: 32 } as const;
 
-/** The plain notes role's permissions (02-permissions §12 grants `auth.pin_change` to every role). */
+/**
+ * The plain notes role's permissions — a hand-mirror of the `staff` role the server actually seeds.
+ *
+ * SOURCE OF TRUTH: `apps/server/src/identity/permissions.ts` `STAFF_PERMS` (02-permissions §10/§12).
+ * This list may not import it — `apps/mobile`'s test graph must not depend on `apps/server` — so the
+ * mirror is structural, and it drifted: `platform.set_locale` was missing, which the spec grants to
+ * every role (§11). The effect was invisible by construction. Root fires the per-user locale op
+ * best-effort and swallows a failure into diagnostics, and vitest surfaces console output only for
+ * tests that ALREADY failed — so every live-shell locale tap was denied, silently, in a green suite.
+ * Found while fixing task 211; the guard is now the op-log assertion in `live-shell-settings.test.tsx`.
+ */
 const NOTES_PERMISSIONS: readonly string[] = [
   'notes.read',
   'notes.create',
   'notes.edit',
   'notes.archive',
   'auth.pin_change',
+  'platform.set_locale',
 ];
 
 /** A REAL argon2id verifier of `TEST_PIN`. Distinct `saltBase`/`seq` give genuinely different rows for

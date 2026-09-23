@@ -43,8 +43,14 @@ Three of the documented classes at once:
 - [x] `.maestro/06-i18n-toggle.yaml` asserts `settings-rendered-locale-<locale>` on **both** arms, so the on-device gate can red on this defect — via a testID, not a rendered string (T-4).
 - [x] Mobile suite, `pnpm lint`, `pnpm typecheck` green.
 
-## Adjacent finding, NOT fixed here
+## Second defect, found while fixing the first — the per-user locale op was denied on every tap
 
-The RED run emitted `01920000-…-119d0 lacks platform.set_locale for command setLocale (02-permissions §4)` from the best-effort per-user preference op (`Root.tsx` `notes?.setUserLocale`). 07-i18n §1.1 and 02-permissions §11 both say `platform.set_locale` is granted to **every role**, so a denial for the fixture's owner contradicts the spec.
+The RED run emitted `01920000-…-119d0 lacks platform.set_locale for command setLocale (02-permissions §4)` from the best-effort per-user preference op (`Root.tsx` `notes?.setUserLocale`).
 
-It stopped reproducing after the fix (0 occurrences across three consecutive runs, vs 1 on the RED run), which is itself unexplained — nothing in this change touches permission evaluation. **Unresolved.** It is recorded here rather than filed as its own task because no reproducing failure currently exists for it (§2.7): the op is best-effort by design and its failure is swallowed into diagnostics, so there is no red test to point at. If it resurfaces, the reproduction is a `live-shell` test asserting the emitted `platform.user_locale_changed` op lands for an owner.
+**The trap on the way to the answer is worth recording, because it produced a confident wrong reading.** The warning appeared on defect runs and not on fixed runs — 3/3 vs 0/3, deterministic — which looks like causation and is not. Vitest's default reporter surfaces console output only for tests that FAIL. The defect runs were the failing runs. Proven, not reasoned: an **unconditional** `console.warn` placed in the handler printed nothing on a passing run. `EXIT=0`, `Tests 4 passed`, zero console lines. The denial was firing the whole time, on every tap, in a green suite.
+
+Root cause: `apps/mobile/test/live-shell-support.tsx:183` `NOTES_PERMISSIONS` is a hand-mirror of the server's `staff` role (`apps/server/src/identity/permissions.ts` `STAFF_PERMS`) and had drifted by exactly one entry — `platform.set_locale`. **Production is unaffected**: all three seeded roles grant it. The damage was to coverage — the 07-i18n §1.1 signed, replicated preference op has a unit test (`user-locale.test.ts`) and was denied in every composed run, which is the same "tested in isolation, dead in composition" shape as the primary defect one layer up.
+
+Why nothing could go red on it: Root fires the op best-effort and swallows failures into diagnostics **by design** (a stuck op-append must not block the language switch), and the diagnostic is only displayed when something else already failed. Two independent silencers in series.
+
+Fixed here: the fixture mirror now carries `platform.set_locale` and names its source of truth, and `live-shell-settings.test.tsx` asserts the `platform.user_locale_changed` op actually lands. Falsified both ways — with the drifted fixture the assertion reds on `expected [] to have a length of 1`; with it corrected, green.
