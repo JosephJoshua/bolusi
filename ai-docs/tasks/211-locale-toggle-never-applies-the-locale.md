@@ -44,13 +44,23 @@ Three of the documented classes at once:
 
 ### The witness's own first version was a guard that could not PASS
 
-Worth recording, because it is the exact mirror of the defect this task fixes and only one lane could see it. The node started as an empty `<View testID={…} />` beside the section header. An empty View has **zero bounds**, and Maestro drops zero-bounds nodes from the accessibility hierarchy it queries — its own logcat says so: `Skipping invisible child: … boundsInParent: Rect(0, 0 - 0, 0)`. So the assertion could never succeed on a device.
+Worth recording, because it is the exact mirror of the defect this task fixes and only one lane could see it. The node started as an empty `<View testID={…} />` beside the section header. An empty View has **zero bounds**, and Maestro drops zero-bounds nodes from the accessibility hierarchy it queries:
+
+```
+Skipping invisible child: … boundsInParent: Rect(0, 0 - 0, 0)
+  — run 35857403792, maestro-native-e2e / 01-launch-enrollment/logs/device-logcat.txt
+```
+
+So the assertion could never succeed on a device.
 
 Every local gate passed it: 1004 unit tests, typecheck, lint. `test-renderer` resolves `settings-rendered-locale-en` happily because it has no layout at all — the mobile vitest config states this limit in its own header ("CANNOT: Yoga layout"). It took an emulator run on the FIX branch to catch it:
 
 ```
 CommandFailed: Assertion is false: id: settings-rendered-locale-en is visible
+  — run 35857400093, maestro-native-e2e / 06-i18n-toggle/logs/maestro.log
 ```
+
+**Both quotes are pointers to a producer, not evidence in this repo.** CI artifacts are not committed and expire; re-run the lane to reproduce. Naming the run and the path is what makes them checkable at all (T-16) — review-wave flagged the first version of this section for quoting them with no traceable source.
 
 Fixed by wrapping the section header (a node with real bounds) instead of sitting beside it. **This is why lane A — the run that is "supposed" to just pass — is not optional.** A falsification run on the defect branch would have gone red either way and been read as success.
 - [x] Mobile suite, `pnpm lint`, `pnpm typecheck` green.

@@ -120,9 +120,14 @@ export function SettingsScreen({
 
         IT WRAPS THE HEADER RATHER THAN SITTING BESIDE IT AS AN EMPTY `<View/>`, AND THAT IS NOT
         COSMETIC. An empty View has zero bounds, and Maestro drops zero-bounds nodes from the
-        accessibility hierarchy it queries ("Skipping invisible child: … boundsInParent: Rect(0, 0 -
-        0, 0)" in the lane's own logcat) — so the first version of this node could never be asserted
-        on a device, only in `test-renderer`, which has no layout at all. That is a guard that cannot
+        accessibility hierarchy it queries — "Skipping invisible child: … boundsInParent: Rect(0, 0 -
+        0, 0)", in the `maestro-native-e2e` artifact of CI run 35857403792, `01-launch-enrollment/
+        logs/device-logcat.txt`. The empty version's own failure is in run 35857400093,
+        `06-i18n-toggle/logs/maestro.log`: "CommandFailed: Assertion is false: id:
+        settings-rendered-locale-en is visible". Neither artifact lives in this repo (CI artifacts
+        expire), so these are pointers to a producer, not evidence checked into the tree — re-run the
+        lane to reproduce. So the first version of this node could never be asserted on a device,
+        only in `test-renderer`, which has no layout at all. That is a guard that cannot
         PASS, the mirror of the guard that could not FAIL which this whole task exists to fix, and
         the mobile vitest lane is structurally incapable of catching it (its config says so: "CANNOT:
         Yoga layout"). Wrapping a node that has real bounds is what makes the testID reachable.
