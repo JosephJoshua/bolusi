@@ -31,6 +31,20 @@ tags:
 - takeScreenshot:
     path: shell-02-sync-status
 - back
+# EXPLICIT: the system back landed us back on home. This assert is the point, not decoration.
+#
+# Since task 167 the lane runs api-level 36, and on Android 16 with targetSdk 36 `onBackPressed` is no
+# longer called and KEYCODE_BACK is no longer dispatched — the `OnBackPressedCallback` shim RN
+# registers is the ONLY delivery path for this press (AndroidVersion.isAtLeastTargetSdk36 gates it on
+# BOTH SDK_INT and targetSdk, so at api-level 34 the whole path was dead code). This step is therefore
+# the lane's coverage of that shim.
+#
+# It was previously implicit — the next step taps `shell-open-settings`, which exists only on home, so
+# a broken shim did fail the flow. But it failed as "element not found" pointing at the SETTINGS chip,
+# which reads as a chrome bug rather than a back-dispatch bug. Naming the expectation here means the
+# failure names the right thing.
+- assertVisible:
+    id: 'notes.list'
 # Settings chip -> Settings screen (its own affordance, not the avatar).
 - tapOn:
     id: 'shell-open-settings'
