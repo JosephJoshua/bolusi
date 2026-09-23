@@ -42,7 +42,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import App from '../../App.js';
-import { bootstrapI18n, type LocaleStorePort } from '../i18n.js';
+import { bootstrapI18n, writeDeviceLocale, type LocaleStorePort } from '../i18n.js';
 import { defaultMuteState, type DeviceInfo } from '../screens/settings/model.js';
 import { systemClock } from '../ports/clock.js';
 import { startLocationWatcher } from '../ports/location.js';
@@ -258,7 +258,12 @@ export function Root({
   uploadPinVerifier,
   capturePlatform,
 }: RootProps): React.JSX.Element | null {
-  const [locale, setLocale] = useState<Locale | null>(null);
+  // `setLocaleState`, NOT `setLocale`: the i18next applier exported by `../i18n.js` is also called
+  // `setLocale`, and a local binding of that name silently shadows it — both are `(Locale) => void`,
+  // so TypeScript cannot tell them apart. Task 211 shipped because of exactly that collision: the
+  // language toggle called this setter, the checkmark moved, and the language never changed. The
+  // rename is the guard — the shadow can no longer happen by accident.
+  const [locale, setLocaleState] = useState<Locale | null>(null);
   const [app, setApp] = useState<Bootstrapped | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [enrollment, setEnrollment] = useState<AppEnrollment | null>(null);
@@ -514,7 +519,7 @@ export function Root({
       // Order matters (08 §6.3). i18n FIRST, because the notification channels' NAMES are catalog
       // strings and Android keeps whatever name it is first given.
       const booted = await bootstrapI18n(localeStore);
-      setLocale(booted);
+      setLocaleState(booted);
       await createNotificationChannels(defaultMuteState());
       // Fire-and-forget: the watcher is telemetry (PRD-009 FR-802) and its port is NON-BLOCKING by
       // contract (ports/location.ts), so its START must never gate the shell. `await`-ing it here made
@@ -918,8 +923,15 @@ export function Root({
             : session.resetPin(targetUserId, newPin)
         }
         onSelectLocale={(next) => {
-          void localeStore.write('bolusi.device_locale', next);
-          setLocale(next);
+          // `writeDeviceLocale` APPLIES the locale (synchronously, before its first `await`) and then
+          // persists it. Both halves matter and they used to be split here: this handler wrote the
+          // store directly and called `setLocale` — which resolved to the `useState` setter two
+          // hundred lines up, not the i18next applier of the same name. The result was a toggle that
+          // moved its own checkmark and left every string on screen in the old language until the
+          // next app launch, when boot re-read the persisted value (task 211).
+          void writeDeviceLocale(localeStore, next);
+          // React state, for the active-row marker — the rendered STRINGS come from the apply above.
+          setLocaleState(next);
           // The DEVICE locale (above) applies immediately (07-i18n §1.2). The per-user PREFERENCE is a
           // signed, replicated op (§1.1, task 138 item 4) — best-effort: a stuck op-append must not block
           // the language switch the user just made, so a failure is surfaced to the diagnostics channel

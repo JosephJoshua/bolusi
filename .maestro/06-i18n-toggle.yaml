@@ -21,17 +21,28 @@ tags:
     id: 'settings-screen'
 - takeScreenshot:
     path: i18n-01-settings
-# Switch to English, assert the active marker moved to en.
+# Switch to English. THE MARKER IS NOT ENOUGH (task 211): `settings-locale-active-<locale>` is driven
+# by Root's React `locale` state, which moved correctly even while the language did not change at all
+# — this flow ran green for six releases over a toggle that only repainted its own checkmark, and the
+# i18n-02-en screenshot it captured shows an English checkmark above an entirely Indonesian screen. So
+# each arm also asserts a STRING that only that locale renders.
+#
+# SOURCE OF TRUTH for both literals: `packages/i18n/src/generated/resources.ts`, key
+# `core.settings.title` (id: "Pengaturan", en: "Settings"). Maestro YAML cannot import TS, so this is
+# a hand-mirror like task 210's credentials — reword that key and this flow must be updated with it.
 - tapOn:
     id: 'settings-locale-en'
 - assertVisible:
     id: 'settings-locale-active-en'
+- assertVisible: 'Settings'
 - takeScreenshot:
     path: i18n-02-en
-# Switch back to Indonesian (the shop's default), assert the active marker moved to id.
+# Switch back to Indonesian (the shop's default). The return arm matters as much as the outbound one:
+# it is the path a user takes who cannot read the language they just landed in (07-i18n §1.2).
 - tapOn:
     id: 'settings-locale-id'
 - assertVisible:
     id: 'settings-locale-active-id'
+- assertVisible: 'Pengaturan'
 - takeScreenshot:
     path: i18n-03-id
