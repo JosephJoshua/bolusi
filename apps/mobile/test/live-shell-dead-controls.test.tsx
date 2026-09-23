@@ -627,6 +627,37 @@ describe('the empty roster CTA is LIVE and reaches the wizard (design-system §5
     expect(screen.query('enrollment-screen')).toBeNull();
     expect(screen.query('switcher-screen')).not.toBeNull();
   });
+
+  test('back with TYPED input asks before discarding, instead of silently destroying it', async () => {
+    // Found by a QA sweep. The test above drives the CLEAN-input path, so it stayed green while back
+    // on a half-filled wizard threw the work away without asking — §8.1 requires a ConfirmSheet.
+    //
+    // The discard gate existed but was unreachable: it sat in `goBack`'s `exitApp` branch, and
+    // `backTarget` only returns `exitApp` for shell+home, so `zone.kind === 'enrollment'` could never
+    // be true there. The forced wizard swallowed back silently; the voluntary one destroyed input.
+    await sql`UPDATE users_directory SET status = 'deactivated'`.execute(fixture.app.db.db);
+
+    const screen = await mountRoot(fixture);
+    await waitUntil(() => screen.query('switcher-empty.cta') !== null);
+    fire(screen.get('switcher-empty.cta'), 'onPress');
+    await waitUntil(() => screen.query('enrollment-screen') !== null);
+
+    // Type through the REAL field's `onChangeText`, so the wizard is genuinely dirty.
+    fire(screen.get('enroll-identifier.field'), 'onChangeText', 'gudang-selatan');
+    await settle();
+
+    let consumed = false;
+    await act(async () => {
+      consumed = __emitHardwareBack();
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    });
+    expect(consumed).toBe(true);
+
+    // It ASKS: the sheet is up and the wizard is still mounted, work intact.
+    expect(screen.query('enroll-discard-sheet')).not.toBeNull();
+    expect(screen.query('enrollment-screen')).not.toBeNull();
+    expect(screen.query('switcher-screen')).toBeNull();
+  });
 });
 
 /** A camera that hands back a fixed frame — the one thing that genuinely cannot exist under Node. */

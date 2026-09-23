@@ -18,7 +18,7 @@
  * binding name for `List` and walks relative imports to a fixpoint. A component that reaches a
  * `List` through any chain of repo-local modules counts as rendering one.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,7 +39,15 @@ function collect(dir: string, out: string[]): string[] {
     if (SKIP.has(entry)) continue;
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) collect(path, out);
-    else if (entry.endsWith('.tsx') && !entry.endsWith('.test.tsx')) out.push(path);
+    // `.ts` as well as `.tsx`: a barrel like `packages/modules/src/notes/screens/index.ts` renders
+    // nothing itself but is the EDGE that carries a screen to a `<List>` in a sibling file. Dropping
+    // `.ts` broke the chain at exactly that hop — the cross-package case this guard was widened for.
+    else if (
+      (entry.endsWith('.tsx') || entry.endsWith('.ts')) &&
+      !entry.endsWith('.test.tsx') &&
+      !entry.endsWith('.test.ts')
+    )
+      out.push(path);
   }
   return out;
 }
@@ -71,17 +79,44 @@ function rendersListDirectly(text: string): boolean {
   return new RegExp(`<${binding}[\\s/>]`).test(text);
 }
 
-/** Repo-local modules this file imports, resolved to files in the scanned set. */
+/**
+ * Repo-local modules this file imports — relative paths AND workspace `@bolusi/*` specifiers.
+ *
+ * Following the workspace specifiers matters: `apps/mobile/src/screens/notes/NotesHome.tsx` reaches
+ * the notes screens through `@bolusi/modules/notes/screens`, and its own docstring calls that "the
+ * reference wiring every future module surface copies". A relative-only walk would miss a screen that
+ * set `scrollable` and reached a `<List>` across a package boundary — the guard would pass silently,
+ * which is the failure mode it exists to prevent. (Found by a QA sweep of the guard itself.)
+ */
 function localImports(path: string, text: string): string[] {
   const out: string[] = [];
+  for (const spec of text.matchAll(/from\s*['"](@bolusi\/[^'"]+)['"]/g)) {
+    const target = spec[1];
+    if (target === undefined) continue;
+    // `@bolusi/modules/notes/screens` → packages/modules/src/notes/screens; `@bolusi/ui` → packages/ui/src.
+    const [, pkg, ...rest] = target.split('/');
+    if (pkg === undefined) continue;
+    const base = join(REPO_ROOT, 'packages', pkg, 'src', ...rest);
+    for (const candidate of [
+      `${base}.tsx`,
+      `${base}.ts`,
+      join(base, 'index.tsx'),
+      join(base, 'index.ts'),
+    ]) {
+      if (files.has(candidate)) out.push(candidate);
+    }
+  }
   for (const spec of text.matchAll(/from\s*['"](\.[^'"]*)['"]/g)) {
     const target = spec[1];
     if (target === undefined) continue;
     const base = resolve(dirname(path), target.replace(/\.js$/, ''));
-    for (const candidate of [`${base}.tsx`, join(base, 'index.tsx')]) {
+    for (const candidate of [
+      `${base}.tsx`,
+      `${base}.ts`,
+      join(base, 'index.tsx'),
+      join(base, 'index.ts'),
+    ]) {
       if (files.has(candidate)) out.push(candidate);
-      else if (existsSync(candidate) && !files.has(candidate))
-        files.set(candidate, readFileSync(candidate, 'utf8'));
     }
   }
   return out;
