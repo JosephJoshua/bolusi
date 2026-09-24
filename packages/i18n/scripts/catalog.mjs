@@ -19,6 +19,7 @@ export const RESERVED_NAMESPACES = [
   'sync',
   'conflict',
   'media',
+  'platform',
   'push',
   'permission',
   'role',

@@ -1,0 +1,7 @@
+{
+  "opType": {
+    "conflictDetected": "Conflict detected",
+    "conflictAcknowledged": "Conflict decided",
+    "userLocaleChanged": "Language changed"
+  }
+}

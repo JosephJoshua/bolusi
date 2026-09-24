@@ -181,6 +181,16 @@ export const resources: SeededResources = {
           title: 'Perangkat Diblokir',
           body: 'Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang.',
         },
+        opType: {
+          deviceEnrolled: 'Perangkat didaftarkan',
+          userSwitched: 'Pengguna diganti',
+          sessionEnded: 'Sesi berakhir',
+          pinChanged: 'PIN diganti',
+          pinReset: 'PIN diatur ulang',
+          pinLockedOut: 'PIN terkunci',
+          pinLockoutCleared: 'Kunci PIN dibuka',
+          permissionDenied: 'Akses ditolak',
+        },
       },
       sync: {
         chip: {
@@ -279,6 +289,13 @@ export const resources: SeededResources = {
         },
         upload: {
           persistentFailure: '{count} foto belum sampai ke server.',
+        },
+      },
+      platform: {
+        opType: {
+          conflictDetected: 'Data bentrok terdeteksi',
+          conflictAcknowledged: 'Data bentrok diputuskan',
+          userLocaleChanged: 'Bahasa diubah',
         },
       },
       push: {
@@ -472,6 +489,16 @@ export const resources: SeededResources = {
           title: 'Device Revoked',
           body: 'This device has been revoked and can no longer be used. Contact the store owner to enroll it again.',
         },
+        opType: {
+          deviceEnrolled: 'Device enrolled',
+          userSwitched: 'User switched',
+          sessionEnded: 'Session ended',
+          pinChanged: 'PIN changed',
+          pinReset: 'PIN reset',
+          pinLockedOut: 'PIN locked',
+          pinLockoutCleared: 'PIN unlocked',
+          permissionDenied: 'Access denied',
+        },
       },
       sync: {
         chip: {
@@ -575,6 +602,13 @@ export const resources: SeededResources = {
         upload: {
           persistentFailure:
             '{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}',
+        },
+      },
+      platform: {
+        opType: {
+          conflictDetected: 'Conflict detected',
+          conflictAcknowledged: 'Conflict decided',
+          userLocaleChanged: 'Language changed',
         },
       },
       push: {

@@ -55,11 +55,13 @@ This is the §2.11 family again — not a gate green for the wrong reason, but a
 
 ## Fix direction
 
-Per the 2026-08-05 owner ruling, op-type labels are module-provided, so the labels belong with their modules, not in the base catalog:
+**Resolved by owner ruling D28 (2026-09-24): a label lives in the ordinary catalog for its namespace — no op-type-specific mechanism.** That amends 07-i18n §4.4, which had required labels to be module-provided and forbade `@bolusi/i18n` from carrying op-type rows. The old rule was right for `notes` (it ships a catalog) and impossible for `auth`/`platform` (neither is a client-screen module, so neither has a catalog to write into) — it did not say where their labels belonged, it said nowhere. See `decisions/2026-09-24-op-type-labels-follow-their-namespace.md`.
 
-1. Add `auth.opType.*` (8) and `platform.opType.*` (3) label sets, registered the way `registerModuleCatalogs` already merges the notes catalog (`apps/mobile/src/bootstrap/module-catalogs.ts`).
-2. Decide whether `auth`/`platform` get client catalogs of their own or whether these labels belong to a core-owned set — an **owner call** (§6), since it decides whether `auth` becomes a client-screen module.
-3. Contended `@bolusi/i18n` + the label catalog (§4) — serialize against other i18n work.
+As built:
+
+1. `auth.opType.*` (8 rows) went into the existing reserved catalog `packages/i18n/catalogs/auth/{id,en}.json`.
+2. `platform` became a reserved namespace (`packages/i18n/catalogs/platform/{id,en}.json`, plus `RESERVED_NAMESPACES` in `packages/i18n/scripts/catalog.mjs`) and took its 3 rows. Safe: the module-id collision gate (`scripts/gates.mjs`) fires only for catalogs where `isModule` is true, and no module ships a `platform` catalog — `auth` has been both a module id and a reserved namespace since before this.
+3. No change to `translateOpType`, to the fallback, or to how `notes` ships its rows. The alternatives — inventing a client-catalog path for two screenless modules, or a lookup table inside `@bolusi/i18n` — were rejected in D28.
 
 ## Acceptance
 
