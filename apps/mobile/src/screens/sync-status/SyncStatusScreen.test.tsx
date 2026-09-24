@@ -307,8 +307,10 @@ describe('the chip and title are witnessed together on the pending-media screen 
 //
 // The rejection code ("BAD_SIGNATURE") names the server's verdict; alone it cannot tell a shop owner
 // which of their changes it landed on. Item 5 adds the op-type to the row's secondary line
-// (`sync.rejected.opMeta` = "{opType} · {time}"), resolved through `translateOpType` — the label is
-// MODULE-PROVIDED (07-i18n §4.4), not a table on the screen. This render guard proves the wire: two
+// (`sync.rejected.opMeta` = "{opType} · {time}"), resolved through `translateOpType` — the label
+// comes from the catalog owning the op type's namespace (07-i18n §4.4, D28), never a table on the
+// screen. (It read "MODULE-PROVIDED" until D28; that rule left `auth` and `platform` with nowhere to
+// put a label, which is task 212.) This render guard proves the wire: two
 // rows with the SAME code and SAME timestamp, differing only in op type, must render DIFFERENT
 // secondary lines. A time-only line (the pre-item-5 render) makes them identical and reds the test.
 describe('the rejected row names which change was rejected, not only when (task 129 item 5)', () => {

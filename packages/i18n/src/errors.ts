@@ -58,13 +58,21 @@ export function translateRejectionCode(code: string, values?: TranslationValues)
  * Render an operation type (05-operation-log §3, e.g. `notes.note_created`) as a human label for the
  * Sync Status rejected-changes list.
  *
- * The label is MODULE-PROVIDED, not owned here: the key is derived mechanically as
- * `<module>.opType.<camelVerb>` — the module prefix verbatim, the snake-case verb camelCased to
- * satisfy the segment grammar (§3.1) — and resolves wherever that module's catalog is registered
- * (07-i18n §3.3). There is deliberately no op-type→label table in this package; adding one would
- * duplicate what each module's catalog already declares (CLAUDE.md §2.8). An op type from an
- * unregistered module, or one whose module ships no matching row, renders `core.opType.unknown`
- * and logs once (§4.4), mirroring `translateCode`'s unknown-code path.
+ * The key is derived mechanically as `<module>.opType.<camelVerb>` — the module prefix verbatim, the
+ * snake-case verb camelCased to satisfy the segment grammar (§3.1) — and resolves against whatever
+ * catalog owns that namespace (07-i18n §3.3). An op type with no matching row renders
+ * `core.opType.unknown` and logs once (§4.4), mirroring `translateCode`'s unknown-code path.
+ *
+ * THE LABEL LIVES WHERE ITS NAMESPACE LIVES — there is no op-type-specific rule (D28). A reserved,
+ * platform-owned namespace (`auth`, `platform`) carries its rows in this package's own catalogs; a
+ * module that ships a catalog (`notes`) carries them there. This docstring previously said the
+ * opposite — "MODULE-PROVIDED, not owned here… deliberately no op-type→label table in this package"
+ * — and that rule is what produced task 212: `auth` and `platform` declare 11 op types between them
+ * and ship no catalog, so the rule did not say where their labels belonged, it said nowhere, and all
+ * 11 rendered the fallback on a live screen. Resolving by namespace needs no new mechanism.
+ *
+ * `apps/mobile/test/op-type-labels.test.ts` enumerates `ALL_MODULES`' declared operations and fails
+ * on any type without a row, so this is enforced rather than remembered.
  */
 export function translateOpType(type: string, values?: TranslationValues): string {
   const dot = type.indexOf('.');
