@@ -58,5 +58,15 @@
   "revoked": {
     "title": "Device Revoked",
     "body": "This device has been revoked and can no longer be used. Contact the store owner to enroll it again."
+  },
+  "opType": {
+    "deviceEnrolled": "Device enrolled",
+    "userSwitched": "User switched",
+    "sessionEnded": "Session ended",
+    "pinChanged": "PIN changed",
+    "pinReset": "PIN reset",
+    "pinLockedOut": "PIN locked",
+    "pinLockoutCleared": "PIN unlocked",
+    "permissionDenied": "Access denied"
   }
 }

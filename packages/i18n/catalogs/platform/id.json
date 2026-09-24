@@ -1,0 +1,7 @@
+{
+  "opType": {
+    "conflictDetected": "Data bentrok terdeteksi",
+    "conflictAcknowledged": "Data bentrok diputuskan",
+    "userLocaleChanged": "Bahasa diubah"
+  }
+}

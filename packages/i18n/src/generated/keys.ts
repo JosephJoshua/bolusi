@@ -11,6 +11,14 @@ export type TranslationKey =
   | 'auth.enroll.submit'
   | 'auth.enroll.success'
   | 'auth.enroll.title'
+  | 'auth.opType.deviceEnrolled'
+  | 'auth.opType.permissionDenied'
+  | 'auth.opType.pinChanged'
+  | 'auth.opType.pinLockedOut'
+  | 'auth.opType.pinLockoutCleared'
+  | 'auth.opType.pinReset'
+  | 'auth.opType.sessionEnded'
+  | 'auth.opType.userSwitched'
   | 'auth.pin.attemptsLeft'
   | 'auth.pin.change.done'
   | 'auth.pin.change.enterCurrent'
@@ -142,6 +150,9 @@ export type TranslationKey =
   | 'media.storage.lowCritical'
   | 'media.storage.lowWarning'
   | 'media.upload.persistentFailure'
+  | 'platform.opType.conflictAcknowledged'
+  | 'platform.opType.conflictDetected'
+  | 'platform.opType.userLocaleChanged'
   | 'push.conflict.body'
   | 'push.conflict.title'
   | 'push.device.body'
@@ -331,6 +342,16 @@ export interface TranslationResources {
       title: string;
       body: string;
     };
+    opType: {
+      deviceEnrolled: string;
+      userSwitched: string;
+      sessionEnded: string;
+      pinChanged: string;
+      pinReset: string;
+      pinLockedOut: string;
+      pinLockoutCleared: string;
+      permissionDenied: string;
+    };
   };
   sync: {
     chip: {
@@ -426,6 +447,13 @@ export interface TranslationResources {
     };
     upload: {
       persistentFailure: string;
+    };
+  };
+  platform: {
+    opType: {
+      conflictDetected: string;
+      conflictAcknowledged: string;
+      userLocaleChanged: string;
     };
   };
   push: {

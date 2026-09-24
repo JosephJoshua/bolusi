@@ -58,5 +58,15 @@
   "revoked": {
     "title": "Perangkat Diblokir",
     "body": "Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang."
+  },
+  "opType": {
+    "deviceEnrolled": "Perangkat didaftarkan",
+    "userSwitched": "Pengguna diganti",
+    "sessionEnded": "Sesi berakhir",
+    "pinChanged": "PIN diganti",
+    "pinReset": "PIN diatur ulang",
+    "pinLockedOut": "PIN terkunci",
+    "pinLockoutCleared": "Kunci PIN dibuka",
+    "permissionDenied": "Akses ditolak"
   }
 }
