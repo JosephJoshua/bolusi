@@ -70,6 +70,8 @@ export interface ProjectionEngineOptions<DB> {
   readonly seqColumn: OpSeqColumn;
   /** Factory so rebuild can bind the store to a batch transaction (rebuild.ts). */
   readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
+  /** Invalidate an in-progress rebuild after an incremental apply, or no-op on server push. */
+  readonly invalidateRebuildCursor?: (moduleId: string) => Promise<void>;
   readonly invalidation?: InvalidationBus;
   readonly stats?: ProjectionStats;
 }
@@ -86,6 +88,7 @@ export class ProjectionEngine<DB> {
   private readonly watermarks: WatermarkStore;
   private readonly seqColumn: OpSeqColumn;
   private readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
+  private readonly invalidateRebuildCursor: (moduleId: string) => Promise<void>;
   readonly invalidation: InvalidationBus;
   readonly stats: ProjectionStats;
 
@@ -95,6 +98,14 @@ export class ProjectionEngine<DB> {
     this.watermarks = options.watermarks;
     this.seqColumn = options.seqColumn;
     this.makeRebuildStore = options.makeRebuildStore;
+    this.invalidateRebuildCursor =
+      options.invalidateRebuildCursor ??
+      (async (moduleId) => {
+        const store = this.makeRebuildStore(this.db);
+        if ((await store.readCursor(moduleId)) !== null) {
+          await store.writeCursor(moduleId, { phase: 'invalidated' });
+        }
+      });
     this.invalidation = options.invalidation ?? new InvalidationBus();
     this.stats = options.stats ?? new ProjectionStats();
   }
@@ -162,6 +173,8 @@ export class ProjectionEngine<DB> {
       mode = 'refold';
     }
 
+    await this.invalidateRebuildCursor(module.id);
+
     if (source === 'append') {
       await this.watermarks.advanceLocalSeq(module.id, op.seq);
     } else {
@@ -215,7 +228,8 @@ export class ProjectionEngine<DB> {
     const store = this.makeRebuildStore(this.db);
     const stored = await store.readVersion(moduleId);
     const current = moduleVersionSignature(module);
-    if (stored === current) return { rebuilt: false };
+    if (stored === current && (await store.readCursor(moduleId)) === null)
+      return { rebuilt: false };
     const outcome = await this.rebuild(moduleId, options);
     return { rebuilt: true, outcome };
   }

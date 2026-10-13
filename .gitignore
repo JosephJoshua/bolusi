@@ -38,3 +38,6 @@ secrets.*
 
 # Playwright MCP browser session dumps (agent scratch, never source)
 .playwright-mcp/
+
+# Private Claude-to-Codex transcript and memory archive (may contain secrets)
+.codex/claude-migration/

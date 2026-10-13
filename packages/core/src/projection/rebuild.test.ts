@@ -66,6 +66,33 @@ describe('rebuild == incremental (CHAOS-08 precursor)', () => {
   });
 });
 
+test('same-version check resumes an interrupted cursor instead of treating the version as complete', async () => {
+  const generated = generateNotesScript(217, { deviceCount: 2, opsPerDevice: 8 });
+  const harness = await openProjectionHarness();
+  try {
+    await deliverPulled(harness, generated);
+    expect((await harness.engine.rebuildIfVersionChanged('notes')).rebuilt).toBe(true);
+    const baseline = await harness.digest();
+    expect((await harness.engine.rebuildIfVersionChanged('notes')).rebuilt).toBe(false);
+
+    const partial = await harness.engine.rebuild('notes', { batchSize: 3, stopAfterBatches: 1 });
+    expect(partial.complete).toBe(false);
+    expect(partial.appliedCount).toBe(3);
+    expect((await createSqlRebuildStore(harness.db).readCursor('notes'))?.phase).toBe('progress');
+
+    const restarted = createProjectionEngine(harness.db, harness.registry);
+    const resume = await restarted.rebuildIfVersionChanged('notes', { batchSize: 3 });
+    expect(resume.rebuilt).toBe(true);
+    expect(resume.outcome?.complete).toBe(true);
+    expect(resume.outcome?.startedFresh).toBe(false);
+    expect(resume.outcome?.appliedCount).toBe(generated.length - 3);
+    expect(await harness.digest()).toBe(baseline);
+    expect((await restarted.rebuildIfVersionChanged('notes')).rebuilt).toBe(false);
+  } finally {
+    await harness.close();
+  }
+});
+
 describe('interrupted-rebuild resume (CHAOS-08a precursor)', () => {
   test('resume continues from the cursor at ~25/50/75%, re-applying nothing at or below it', async () => {
     const generated = generateNotesScript(600, { deviceCount: 4, opsPerDevice: 100 }); // 400 ops

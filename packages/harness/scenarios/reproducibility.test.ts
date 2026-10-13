@@ -81,7 +81,9 @@ describe('nightly reproduction command is faithful (§3.7)', () => {
     } catch (error) {
       message = (error as Error).message;
     }
-    expect(message).toContain('CHAOS_SEEDS=7 CHAOS_SCALE=1 pnpm chaos');
+    expect(message).toContain(
+      `CHAOS_SEEDS=7 CHAOS_SCALE=${activeVolumes(process.env).scale} pnpm chaos`,
+    );
     expect(message).toContain('boom');
   });
 });

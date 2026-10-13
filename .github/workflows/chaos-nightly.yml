@@ -7,13 +7,19 @@
 #   CHAOS_SEEDS=<printed seed> CHAOS_SCALE=<printed scale> pnpm chaos
 #
 # PER-SCENARIO ×4 SEED CAP (§3.7 D-CHAOS-SCALE, task 113) — stated here so this job's coverage claim
-# matches what it runs. "100 seeds at ×4" holds for every scenario EXCEPT the two heavy ones, whose
+# matches what it runs. "100 seeds at ×4" holds for every scenario EXCEPT the three heavy ones, whose
 # single ×4 seed is minutes-to-an-hour and whose 100-seed sweep would never finish (CHAOS-03 ×4 =
-# 56,000 ops/seed ≈ 40 min ⇒ ~2.7 days; CHAOS-08 ×4 = 80,000 ops/seed ≈ 3.6 min ⇒ ~6 h). Those two
+# CHAOS-02 is the newly capped heavy case; its measured cost is documented above.
+# 56,000 ops/seed ≈ 40 min ⇒ ~2.7 days; CHAOS-08 ×4 = 80,000 ops/seed ≈ 3.6 min ⇒ ~6 h). Those three
 # run the FULL ×4 VOLUME (never reduced — that is the point of this lane) over a capped SEED SAMPLE:
 #
-#   CHAOS-03 → 3 seeds     CHAOS-08 → 5 seeds     (every other scenario → the full 100)
+#   CHAOS-02 → 3 seeds     CHAOS-03 → 3 seeds     CHAOS-08 → 5 seeds
+#   (every other scenario → the full 100)
 #
+# CHAOS-02: six full-volume fault/control cases per seed. On 2026-10-13 a local ×4 F1
+# push case took 210 s; the 2026-10-12 uncapped job timed out at 360 min. The budget
+# guard in nightly-seed-cap.test.ts reserves 60 min after the other-file baseline and
+# ceiling-bound CHAOS-02 cases. Failures remain red, including prior CHAOS-03 failures.
 # The caps live in ONE registry (`packages/harness/src/nightly-scale.ts` → NIGHTLY_X4_SEED_CAPS),
 # are announced per scenario in this job's log, and are asserted against this comment and
 # testing-guide §3.7 by `packages/harness/scenarios/nightly-seed-cap.test.ts` — so the cap can never

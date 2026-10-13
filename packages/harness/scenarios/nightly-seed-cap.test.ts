@@ -59,6 +59,7 @@ describe('nightly ×4 per-scenario seed cap (§3.7 D-CHAOS-SCALE)', () => {
   test('the registry is a small, sane, non-empty exception list', () => {
     // Denominator (T-14): an empty registry would make every "capped" assertion below vacuous.
     expect(CAPPED_IDS.length).toBeGreaterThanOrEqual(1);
+    expect([...CAPPED_IDS].sort()).toEqual(['CHAOS-02', 'CHAOS-03', 'CHAOS-08']);
     for (const id of CAPPED_IDS) {
       const cap = NIGHTLY_X4_SEED_CAPS[id];
       // A SMALL documented sample — task 113 fixes the band at 3–5. Zero would run nothing; a large
@@ -86,7 +87,7 @@ describe('nightly ×4 per-scenario seed cap (§3.7 D-CHAOS-SCALE)', () => {
 
   test('light scenarios: the ×4 lane still resolves to the full nightly seed set', () => {
     const light = scenarioFiles().filter((s) => !CAPPED_IDS.includes(s.id as X4CappedScenario));
-    // Denominator: there ARE light scenarios (10 of the 12) — the claim is not vacuous.
+    // Denominator: there ARE light scenarios (9 of the 12) — the claim is not vacuous.
     expect(light.length).toBeGreaterThanOrEqual(1);
     // They all resolve through the uncapped `resolveSeeds`, which returns 100 under the nightly env.
     expect(resolveSeeds(NIGHTLY_X4)).toHaveLength(NIGHTLY_SEED_COUNT);
@@ -167,5 +168,31 @@ describe('nightly ×4 per-scenario seed cap (§3.7 D-CHAOS-SCALE)', () => {
       expect(stated.test(workflow), `chaos-nightly.yml does not state ${id} → its cap`).toBe(true);
       expect(stated.test(guide), `testing-guide §3.7 does not state ${id} → its cap`).toBe(true);
     }
+  });
+
+  test('the declared ×4 workload fits the 360-minute job with headroom', () => {
+    const workflow = readFileSync(join(REPO_ROOT, '.github/workflows/chaos-nightly.yml'), 'utf8');
+    const jobMinutes = Number(/timeout-minutes:\s*(\d+)/.exec(workflow)?.[1]);
+    const scenario = readFileSync(join(SCENARIOS_DIR, 'chaos-02-interrupted-sync.test.ts'), 'utf8');
+    const config = readFileSync(join(REPO_ROOT, 'packages/harness/vitest.config.ts'), 'utf8');
+    expect(jobMinutes).toBe(360);
+    expect(config).toContain('120_000 * activeVolumes().scale');
+    expect(scenario).toContain("for (const point of ['F1', 'F2'] as const)");
+    expect(scenario).toContain('CHAOS-02 F5 crash mid apply-transaction');
+    expect(scenario).toContain('CHAOS-02 positive control: a NO-FAULT sync');
+    const baselineOtherFilesMinutes = 120;
+    const casesPerSeed = 2 * 2 + 2;
+    const ceilingPerCaseMinutes = 8;
+    const negativeControlMinutes = 8;
+    const reserveMinutes = 60;
+    const workloadMinutes =
+      baselineOtherFilesMinutes +
+      NIGHTLY_X4_SEED_CAPS['CHAOS-02'] * casesPerSeed * ceilingPerCaseMinutes +
+      negativeControlMinutes +
+      reserveMinutes;
+    expect(workloadMinutes).toBeLessThan(jobMinutes);
+    expect(baselineOtherFilesMinutes + 100 * casesPerSeed * ceilingPerCaseMinutes).toBeGreaterThan(
+      jobMinutes,
+    );
   });
 });

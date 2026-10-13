@@ -349,6 +349,7 @@ Mechanism: api/00-conventions §12 (realtime channel) + api/04-push (push catego
 - [ ] FCM service-account JSON lives in EAS credentials/secrets only; `google-services.json` contains identifiers, not secrets, but is still not committed (EAS-managed).
 - [ ] Server-side at-rest rules: device tokens hashed (§6.1); PIN verifiers argon2id (§5); no secret material in logs — a log-redaction test greps captured logs from a full enroll+auth+sync integration run for token values, PINs, and key bytes (**SEC-SECRET-01**).
 - [ ] Pre-commit secret scanning (gitleaks or equivalent) runs in the mandatory pre-commit hooks (CLAUDE.md §2.10) and in CI (**SEC-SECRET-02**: CI job exists and a fixture secret is caught).
+- [ ] The shared `.gitleaks.toml` keeps gitleaks' default rules and excludes only generated `apps/mobile/android/app/build/` output (including nested worktrees). Local `pnpm sec:secrets` scans on-disk source, including untracked code, and full history with redacted findings; CI uses the same config for its checkout/history scan. Tracked source, native module Android source, and untracked code outside the generated app build remain in scope. Do not add broad `android/`, `build/`, or worktree exclusions.
 - [ ] Database connection strings, RLS-bypassing superuser credentials, and migration credentials are distinct from the app role's — the app role cannot `ALTER TABLE` or bypass RLS (ties into SEC-TENANT-01/02).
 
 ## 11. Dependency posture

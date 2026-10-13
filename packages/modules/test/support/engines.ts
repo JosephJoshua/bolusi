@@ -163,7 +163,11 @@ async function createNotesTables(db: Kysely<never>): Promise<void> {
 }
 
 /** Insert an op into the engine's op-log (the engine reads it to decide head vs re-fold, 04 §4.2). */
-export async function insertOp(db: Kysely<never>, op: SignedOperation): Promise<void> {
+export async function insertOp(
+  db: Kysely<never>,
+  op: SignedOperation,
+  arrivalSeq: number | null = null,
+): Promise<void> {
   await sql`
     INSERT INTO operations (
       id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
@@ -174,7 +178,8 @@ export async function insertOp(db: Kysely<never>, op: SignedOperation): Promise<
       ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
       ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
       ${op.timestamp}, ${null}, ${op.source}, ${op.agentInitiated ? 1 : 0}, ${null},
-      ${op.previousHash}, ${op.hash}, ${op.signature}, ${`jcs:${op.id}`}, ${'local'}, ${null}, ${null}
+      ${op.previousHash}, ${op.hash}, ${op.signature}, ${`jcs:${op.id}`},
+      ${arrivalSeq === null ? 'local' : 'synced'}, ${arrivalSeq}, ${arrivalSeq === null ? null : 1}
     )
   `.execute(db);
 }
