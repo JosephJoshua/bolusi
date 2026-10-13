@@ -25,10 +25,13 @@ export const DEFAULT_REBUILD_BATCH_SIZE = 500;
 
 /**
  * Rebuild progress in `meta_kv`: `started` = tables cleared, nothing applied yet; `progress`
- * = last canonical triple checkpointed. Absent (null) = no rebuild in flight.
+ * = last canonical triple checkpointed; invalidated = an incremental apply made the checkpoint
+ * unsafe, so the next rebuild starts fresh. Absent (null) = no rebuild in flight.
  */
 export type RebuildCursorState =
-  { readonly phase: 'started' } | { readonly phase: 'progress'; readonly cursor: CanonicalCursor };
+  | { readonly phase: 'started' }
+  | { readonly phase: 'progress'; readonly cursor: CanonicalCursor }
+  | { readonly phase: 'invalidated' };
 
 /**
  * The durable rebuild bookkeeping port: the resume cursor and the applied version signature.
@@ -137,7 +140,7 @@ export async function runRebuild<DB>(
 
   let after: CanonicalCursor | null;
   let startedFresh = false;
-  if (existing === null) {
+  if (existing === null || existing.phase === 'invalidated') {
     startedFresh = true;
     ctx.stats.recordRebuildStart();
     await ctx.db.transaction().execute(async (trx) => {
@@ -158,36 +161,45 @@ export async function runRebuild<DB>(
   let complete = false;
 
   while (batches < stopAfterBatches) {
-    const page = await readCanonicalPage(ctx.db, opTypes, after, batchSize);
-    if (page.length === 0) {
-      complete = true;
-      break;
-    }
-    const lastCursor = cursorOf(page[page.length - 1] as (typeof page)[number]);
-    await ctx.db.transaction().execute(async (trx) => {
+    const expected = after === null ? { phase: 'started' } : { phase: 'progress', cursor: after };
+    const batch = await ctx.db.transaction().execute(async (trx) => {
+      const store = ctx.makeStore(trx);
+      if (JSON.stringify(await store.readCursor(moduleId)) !== JSON.stringify(expected)) {
+        return null;
+      }
+      const page = await readCanonicalPage(trx, opTypes, after, batchSize);
+      if (page.length === 0) {
+        await store.clearCursor(moduleId);
+        await store.writeVersion(moduleId, moduleVersionSignature(module));
+        return { length: 0, cursor: after };
+      }
       for (const op of page) {
         const applier = module.appliers[op.type] as ProjectionApplier<DB>;
         await applier(trx, op);
       }
-      await ctx.makeStore(trx).writeCursor(moduleId, { phase: 'progress', cursor: lastCursor });
+      const cursor = cursorOf(page[page.length - 1] as (typeof page)[number]);
+      if (page.length < batchSize) {
+        await store.clearCursor(moduleId);
+        await store.writeVersion(moduleId, moduleVersionSignature(module));
+      } else {
+        await store.writeCursor(moduleId, { phase: 'progress', cursor });
+      }
+      return { length: page.length, cursor };
     });
-    after = lastCursor;
-    batches += 1;
-    appliedCount += page.length;
-    ctx.stats.recordRebuildBatch(page.length);
-    ctx.invalidation.emit(tables);
-    if (page.length < batchSize) {
+    if (batch === null) break;
+    if (batch.length === 0) {
       complete = true;
       break;
     }
-  }
-
-  if (complete) {
-    await ctx.db.transaction().execute(async (trx) => {
-      const store = ctx.makeStore(trx);
-      await store.clearCursor(moduleId);
-      await store.writeVersion(moduleId, moduleVersionSignature(module));
-    });
+    after = batch.cursor;
+    batches += 1;
+    appliedCount += batch.length;
+    ctx.stats.recordRebuildBatch(batch.length);
+    ctx.invalidation.emit(tables);
+    if (batch.length < batchSize) {
+      complete = true;
+      break;
+    }
   }
 
   return { complete, batches, appliedCount, startedFresh };

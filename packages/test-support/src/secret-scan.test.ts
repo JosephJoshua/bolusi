@@ -3,9 +3,10 @@
 // runtime (never committed) and assembled from fragments so this source file itself can
 // never match a scanner rule.
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterAll, expect, test } from 'vitest';
 
@@ -44,4 +45,63 @@ test('SEC-SECRET-02 secret scanner passes a clean fixture (control case)', () =>
 
   const result = scan(dir);
   expect(result.status).toBe(0);
+});
+
+test('SEC-SECRET-02 generated Android app build is excluded but source and nested-worktree code are scanned', () => {
+  const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
+  const dir = mkdtempSync(join(repoRoot, '.secret-scan-fixture-'));
+  tempDirs.push(dir);
+  const generated = join(dir, 'apps/mobile/android/app/build');
+  const nestedGenerated = join(dir, '.claude/worktrees/task-test/apps/mobile/android/app/build');
+  const appSource = join(dir, 'apps/mobile/src');
+  const nestedSource = join(dir, '.claude/worktrees/task-test/apps/mobile/src');
+  const nativeModuleSource = join(dir, 'apps/mobile/modules/harness-native/android/src/main/java');
+  const unrelatedBuild = join(dir, 'packages/test-support/build');
+  for (const path of [
+    generated,
+    nestedGenerated,
+    appSource,
+    nestedSource,
+    nativeModuleSource,
+    unrelatedBuild,
+  ]) {
+    mkdirSync(path, { recursive: true });
+  }
+
+  const fakeAwsKeyId = ['AKIA', 'Q7R2X9WP', 'LM4N6V8B'].join('');
+  const generatedFile = join(generated, 'index.android.bundle');
+  writeFileSync(generatedFile, `export const uploadKey = "${fakeAwsKeyId}";\n`);
+  writeFileSync(
+    join(nestedGenerated, 'index.android.bundle'),
+    `const uploadKey = "${fakeAwsKeyId}";\n`,
+  );
+
+  const args = ['dir', dir, '--no-banner', '--redact=100', '--exit-code', '1'];
+  const withoutConfig = spawnSync('gitleaks', args, { encoding: 'utf8' });
+  expect(withoutConfig.status).toBe(1);
+
+  const config = join(repoRoot, '.gitleaks.toml');
+  const withConfig = () =>
+    spawnSync(
+      'gitleaks',
+      [...args, '--config', config, '--report-format', 'json', '--report-path', '-'],
+      { encoding: 'utf8' },
+    );
+  expect(withConfig().status).toBe(0);
+
+  const sourceFiles = [
+    join(appSource, 'leaky-config.ts'),
+    join(nestedSource, 'leaky-config.ts'),
+    join(nativeModuleSource, 'LeakyConfig.kt'),
+    join(unrelatedBuild, 'leaky-config.ts'),
+  ];
+  for (const file of sourceFiles) {
+    writeFileSync(file, `const uploadKey = "${fakeAwsKeyId}";\n`);
+  }
+  const result = withConfig();
+  expect(result.status).toBe(1);
+  const findings = JSON.parse(result.stdout) as { File: string; Secret: string }[];
+  expect(findings.map((finding) => finding.File).sort()).toEqual(sourceFiles.sort());
+  expect(result.stdout + result.stderr).not.toContain(fakeAwsKeyId);
+  expect(findings.every((finding) => finding.Secret !== fakeAwsKeyId)).toBe(true);
 });

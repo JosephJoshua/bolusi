@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated Android app build output; native module source remains in scope"
+paths = ['''(^|/)apps/mobile/android/app/build/''']

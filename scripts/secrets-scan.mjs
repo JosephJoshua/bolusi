@@ -1,7 +1,8 @@
 // Repo secrets scan (security-guide §10) — the sweep's "no secrets in the repo, ever" leg.
 //
 // Three checks, and the second is the one the pre-commit hook cannot give you:
-//   1. gitleaks over the WORKING TREE — what is on disk right now.
+//   1. gitleaks over the WORKING TREE — source on disk, including untracked code. The shared
+//      .gitleaks.toml excludes only generated Android app build output (not native module source).
 //   2. gitleaks over the FULL GIT HISTORY — a secret committed and then deleted is still in the
 //      pack files and still leaked. `gitleaks git` walks the log; the pre-commit hook only ever
 //      sees the staged diff.
@@ -77,19 +78,25 @@ export function scanSecrets({ repoRoot = '.', envExamplePath = 'apps/server/.env
     return { ok: false, failures, checked };
   }
   checked.gitleaksVersion = version.stdout.trim();
+  const configPath = `${repoRoot}/.gitleaks.toml`;
+  const configArgs = ['--config', configPath];
 
   // 1 — working tree.
-  const tree = run('gitleaks', ['dir', repoRoot, '--no-banner', '--exit-code', '1'], {
-    cwd: repoRoot,
-  });
+  const tree = run(
+    'gitleaks',
+    ['dir', repoRoot, '--no-banner', '--redact=100', '--exit-code', '1', ...configArgs],
+    { cwd: repoRoot },
+  );
   if (tree.status !== 0) {
     failures.push(`gitleaks found secrets in the WORKING TREE:\n${tree.stdout}${tree.stderr}`);
   }
 
   // 2 — full history.
-  const history = run('gitleaks', ['git', repoRoot, '--no-banner', '--exit-code', '1'], {
-    cwd: repoRoot,
-  });
+  const history = run(
+    'gitleaks',
+    ['git', repoRoot, '--no-banner', '--redact=100', '--exit-code', '1', ...configArgs],
+    { cwd: repoRoot },
+  );
   checked.historyHits = history.status;
   if (history.status !== 0) {
     failures.push(`gitleaks found secrets in GIT HISTORY:\n${history.stdout}${history.stderr}`);

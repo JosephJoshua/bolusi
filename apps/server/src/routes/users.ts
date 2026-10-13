@@ -5,7 +5,12 @@ import { buildPinVerifierRow, type TenantDb } from '@bolusi/db-server';
 import { Hono } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
-import { countActiveTenantAdmins, isTenantAdmin, requirePermission } from '../auth/permissions.js';
+import {
+  countActiveTenantAdmins,
+  hasPermission,
+  isTenantAdmin,
+  requirePermission,
+} from '../auth/permissions.js';
 import { TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
 import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
@@ -385,6 +390,23 @@ export function createUsersRouter(deps: ServerDeps) {
                 storeId: acting.deviceStoreId,
                 permissionId: PERM.userResetPin,
               });
+              for (const storeId of await targetStoreIds(db, targetUserId)) {
+                if (
+                  !(await hasPermission(db, {
+                    userId: acting.userId,
+                    tenantId,
+                    storeId,
+                    permissionId: PERM.userResetPin,
+                  }))
+                ) {
+                  throw new PermissionDeniedError({
+                    actorUserId: acting.userId,
+                    permissionId: PERM.userResetPin,
+                    scopeStoreId: storeId,
+                    reason: 'restriction_violated',
+                  });
+                }
+              }
               if (await holdsMainOwner(db, targetUserId)) {
                 if (!(await holdsMainOwner(db, acting.userId)))
                   // Privileged-target restriction (§6.6) — the online endpoint mirror of the

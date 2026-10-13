@@ -54,7 +54,7 @@ import { mintIdentities } from '../src/identities.js';
 import { assertConvergence, canonicalFold, notesRows } from '../src/oracle.js';
 import { FaultFetch, type FaultPoint } from '../src/fault-fetch.js';
 import { HttpTransport, SILENT_SURFACE } from '../src/transport.js';
-import { activeVolumes, resolveSeeds, withSeed } from '../src/index.js';
+import { activeVolumes, nightlyX4Seeds, resolveSeeds, withSeed } from '../src/index.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const PUSH_BATCH = 500; // api/01 §3 cap.
@@ -322,11 +322,12 @@ function crashOnceTransaction(
  * WHAT IS AND IS NOT REDUCED: the VOLUME is never reduced (acceptance forbids a silently smaller run)
  * and every fault point still runs. The SEED SWEEP is the bounded dimension — CI runs every fault at
  * the first CI seed; an explicit `CHAOS_SEEDS=…` (a reproduction) or the nightly lane runs every seed
- * it is given. Widening the CI sweep is [[106-chaos-heavy-scenario-scale-policy]]'s call, not this
+ * it is given, except for the declared nightly ×4 sample in `NIGHTLY_X4_SEED_CAPS`.
+ * Explicit `CHAOS_SEEDS` reproduction remains uncapped. Widening the CI sweep is [[106-chaos-heavy-scenario-scale-policy]]'s call, not this
  * file's, and this comment is the flag.
  */
 function chaos02Seeds(env: NodeJS.ProcessEnv = process.env): number[] {
-  const seeds = resolveSeeds(env);
+  const seeds = nightlyX4Seeds('CHAOS-02', resolveSeeds(env), env);
   const explicit = env.CHAOS_SEEDS !== undefined && env.CHAOS_SEEDS !== '';
   if (explicit || env.CHAOS_NIGHTLY === '1') return seeds;
   return seeds.slice(0, 1);
