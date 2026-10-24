@@ -1,12 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
-// Root projects config (08-stack-and-repo §5.4). Every workspace carries its own
-// vitest.config.ts and >=1 test — passWithNoTests is deliberately NOT set anywhere.
+// Run every behavioral suite once, including the cross-module security probes.
 export default defineConfig({
   test: {
     projects: [
       'apps/*/vitest.config.ts',
       'packages/*/vitest.config.ts',
+      'packages/harness/vitest.security.config.ts',
       'tooling/*/vitest.config.ts',
     ],
   },

@@ -533,18 +533,14 @@ export const PROBE_REGISTRY: ProbeRegistry = {
  * below pass it — neither distinguishes on the id it is addressed by. What §2.2 excepts is narrower
  * and is exactly what the legs here assert.
  *
- * Membership is pinned to `ai-docs/security-guide.md` §2.2 in both directions (SEC-TENANT-04), so a
- * third exception cannot be added here to quiet a red probe — it takes an owner ruling and a spec
- * edit first (CLAUDE.md §6).
  */
 export const DOCUMENTED_EXISTENCE_EXCEPTIONS: Readonly<Record<EndpointKey, ExistenceException>> = {
   // Exception 1 — a blind fetch by resource id must not become an existence oracle, so every
   // out-of-scope id (cross-tenant, unassigned store, another device's in-flight upload) is the SAME
   // `404` as an id that exists nowhere. This is SEC-MEDIA-03's `404` on every leg.
   'GET /v1/media/:id': {
-    docExceptionIndex: 1,
     rationale:
-      '§2.2 exception 1 — id-keyed resource probes: every out-of-scope or nonexistent media id is one indistinguishable 404 (api/03-media §2)',
+      'id-keyed resource probes: every out-of-scope or nonexistent media id is one indistinguishable 404 (api/03-media §2)',
     indistinguishable: true,
     legs: (ctx) =>
       (
@@ -572,9 +568,8 @@ export const DOCUMENTED_EXISTENCE_EXCEPTIONS: Readonly<Record<EndpointKey, Exist
   // is printed as the assertion message when this leg fails, i.e. exactly when someone is triaging
   // a live tenant-isolation regression: it must not hand them a premise the spec disowns.
   'POST /v1/push/tokens': {
-    docExceptionIndex: 2,
     rationale:
-      '§2.2 exception 2 — push-token registration: a token held by another tenant is 403, a fresh one 200 (D22 §2; justified by the 30/day probe budget, NOT by token entropy)',
+      'push-token registration: a token held by another tenant is 403, a fresh one 200 (D22 §2; justified by the 30/day probe budget, NOT by token entropy)',
     indistinguishable: false,
     legs: (ctx) => {
       const register = (expoPushToken: string): ProbeRequest => ({

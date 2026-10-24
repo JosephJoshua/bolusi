@@ -1,16 +1,7 @@
-// Unit tests for the `pnpm harness:device` result-JSON parser (`scripts/harness-device.mjs`, task
-// 27a). The driver boots the emulator, runs the release/`test`-profile harness, captures the
-// `BOLUSI_HARNESS_RESULT` logcat JSON (testing-guide §2.6) and this parser decides pass/fail. It is
-// the fail-safe of the whole lane, so it is proven to go NON-ZERO on every way a run can be bad —
-// any gate red, a missing gate, a dev-mode (non-release) build, a stale capture reused from a prior
-// run, a truncated/absent result, unparseable JSON — mirroring the `task-status.mjs` script-test
-// pattern (import the plain `.mjs` with a ts-expect-error, exercise its PURE parse function).
-//
-// The point is CLAUDE.md §2.11: a device lane whose parser rubber-stamps whatever it sees is a green
-// that means nothing. Every red path below is a falsification of that parser.
+// Exercise the emulator result parser: failures, missing results, stale runs, and malformed JSON.
 import { describe, expect, test } from 'vitest';
 
-// @ts-expect-error — plain .mjs CLI without type declarations (mirrors task-status.test.ts).
+// @ts-expect-error — plain .mjs CLI without type declarations.
 import * as driver from '../../../scripts/harness-device.mjs';
 
 const RUN_ID = 'run-2026-07-21T05-00-00-abcdef';

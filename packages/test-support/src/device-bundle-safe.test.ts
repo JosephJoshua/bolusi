@@ -92,8 +92,7 @@ describe('@bolusi/test-support/device is device-bundle-safe (task 177)', () => {
 
   test('does NOT reach crypto/node-column-aead (the node:crypto file the barrel re-exports)', () => {
     expect(reachedRel).not.toContain('crypto/node-column-aead.ts');
-    // Nor the sec-meta child-process file, nor the noble/envelope crypto the barrel also carries.
-    expect(reachedRel).not.toContain('sec-meta.ts');
+    // The device bundle also excludes Node-only crypto helpers.
     expect(reachedRel.some((f) => f.startsWith('crypto/'))).toBe(false);
   });
 

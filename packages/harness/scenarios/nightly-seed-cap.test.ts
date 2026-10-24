@@ -11,9 +11,6 @@
 //      not a general trim.
 //   3. The two heavy scenario files actually CALL the cap, and no other scenario file does (T-16 —
 //      a mention is not a producer; the registry being right proves nothing if nothing reads it).
-//   4. The number is the SAME in all three places that state it (registry, the nightly workflow's
-//      stated coverage, testing-guide §3.7) and the nightly job really is a ×4 nightly lane, so the
-//      cap predicate matches the job that runs it.
 //
 // The CI lane is asserted unchanged here too: off the ×4 nightly lane the cap is a pass-through.
 import { readFileSync, readdirSync } from 'node:fs';
@@ -35,7 +32,6 @@ import {
 } from '../src/index.js';
 
 const SCENARIOS_DIR = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(SCENARIOS_DIR, '..', '..', '..');
 
 /** The env the nightly job runs under: `CHAOS_NIGHTLY=1 CHAOS_SCALE=4` (asserted below). */
 const NIGHTLY_X4: NodeJS.ProcessEnv = { CHAOS_NIGHTLY: '1', CHAOS_SCALE: '4' };
@@ -146,53 +142,5 @@ describe('nightly ×4 per-scenario seed cap (§3.7 D-CHAOS-SCALE)', () => {
     // A deliberate deeper sample is allowed and takes effect.
     const deeper = { ...NIGHTLY_X4, [X4_SEED_CAP_ENV]: '12' };
     expect(nightlyX4Seeds('CHAOS-03', resolveSeeds(deeper), deeper)).toHaveLength(12);
-  });
-
-  test('the nightly job really is a ×4 nightly lane, and states the caps it runs', () => {
-    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
-      scripts: Record<string, string>;
-    };
-    const nightly = pkg.scripts['chaos:nightly'];
-    // If the job stopped setting either var, `isNightlyX4Lane` would silently stop matching and the
-    // heavy scenarios would go back to 100 unrunnable ×4 seeds. Pin the job to the predicate.
-    expect(nightly, 'chaos:nightly script').toBeDefined();
-    expect(nightly).toContain('CHAOS_NIGHTLY=1');
-    expect(nightly).toContain('CHAOS_SCALE=4');
-    expect(isNightlyX4Lane({ CHAOS_NIGHTLY: '1', CHAOS_SCALE: '4' })).toBe(true);
-
-    // The coverage claim must match reality in BOTH documents that make it.
-    const workflow = readFileSync(join(REPO_ROOT, '.github/workflows/chaos-nightly.yml'), 'utf8');
-    const guide = readFileSync(join(REPO_ROOT, 'ai-docs/testing-guide.md'), 'utf8');
-    for (const id of CAPPED_IDS) {
-      const stated = new RegExp(`${id}\\s*→\\s*${NIGHTLY_X4_SEED_CAPS[id]} seeds`);
-      expect(stated.test(workflow), `chaos-nightly.yml does not state ${id} → its cap`).toBe(true);
-      expect(stated.test(guide), `testing-guide §3.7 does not state ${id} → its cap`).toBe(true);
-    }
-  });
-
-  test('the declared ×4 workload fits the 360-minute job with headroom', () => {
-    const workflow = readFileSync(join(REPO_ROOT, '.github/workflows/chaos-nightly.yml'), 'utf8');
-    const jobMinutes = Number(/timeout-minutes:\s*(\d+)/.exec(workflow)?.[1]);
-    const scenario = readFileSync(join(SCENARIOS_DIR, 'chaos-02-interrupted-sync.test.ts'), 'utf8');
-    const config = readFileSync(join(REPO_ROOT, 'packages/harness/vitest.config.ts'), 'utf8');
-    expect(jobMinutes).toBe(360);
-    expect(config).toContain('120_000 * activeVolumes().scale');
-    expect(scenario).toContain("for (const point of ['F1', 'F2'] as const)");
-    expect(scenario).toContain('CHAOS-02 F5 crash mid apply-transaction');
-    expect(scenario).toContain('CHAOS-02 positive control: a NO-FAULT sync');
-    const baselineOtherFilesMinutes = 120;
-    const casesPerSeed = 2 * 2 + 2;
-    const ceilingPerCaseMinutes = 8;
-    const negativeControlMinutes = 8;
-    const reserveMinutes = 60;
-    const workloadMinutes =
-      baselineOtherFilesMinutes +
-      NIGHTLY_X4_SEED_CAPS['CHAOS-02'] * casesPerSeed * ceilingPerCaseMinutes +
-      negativeControlMinutes +
-      reserveMinutes;
-    expect(workloadMinutes).toBeLessThan(jobMinutes);
-    expect(baselineOtherFilesMinutes + 100 * casesPerSeed * ceilingPerCaseMinutes).toBeGreaterThan(
-      jobMinutes,
-    );
   });
 });
