@@ -111,7 +111,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'media_items metadata is frozen at capture: no UPDATE may assign captured_at, location, captured_by_user_id, device_id, type, mime_type, byte_size or sha256 (ai-docs/06-media-pipeline.md §4)',
+        'media_items metadata is frozen at capture: no UPDATE may assign captured_at, location, captured_by_user_id, device_id, type, mime_type, byte_size or sha256',
     },
     messages: {
       immutableColumn:

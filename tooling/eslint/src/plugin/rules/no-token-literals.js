@@ -73,7 +73,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'No raw color/size literals outside tokens.ts — tokens are the only styling vocabulary (ai-docs/design-system.md §1, §7).',
+        'No raw color/size literals outside tokens.ts — tokens are the only styling vocabulary.',
     },
     messages: {
       hex: "Raw color literal '{{value}}'. Use a token from @bolusi/ui tokens.ts (design-system §1.1).",

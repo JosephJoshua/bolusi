@@ -1,13 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { ESLint } from 'eslint';
 import { expect, test } from 'vitest';
 
 import config, { bolusi } from './index.js';
-
-const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 test('all bolusi custom rules are registered at error in the flat config', () => {
   // `no-token-literals` added task 23 (design-system §7 lint (a)).
@@ -331,25 +325,6 @@ test('runtime-emission-allowlist fires repo-wide on a non-command append (04 §5
   expect(await lintAt(directAppend, 'apps/mobile/src/sneaky.ts')).toContain(
     'bolusi/runtime-emission-allowlist',
   );
-});
-
-// The config passes the closed set to the rule (so the rule holds no copy), which makes the config
-// itself the second place the five are written. Anchor it to the SAME source of truth core's
-// constant is pinned to — 04 §5.1 — so the two cannot drift apart without the spec moving.
-test('the configured sanctioned set is exactly 04 §5.1`s five', () => {
-  const doc = readFileSync(join(REPO_ROOT, 'ai-docs', '04-module-contract.md'), 'utf8');
-  const [, afterHeading] = doc.split('**Sanctioned runtime emissions.**');
-  expect(afterHeading, '04 §5.1 sanctioned-emissions paragraph not found').toBeDefined();
-  const [paragraph] = afterHeading.split('\n\n');
-  const fromSpec = [...paragraph.matchAll(/`(auth\.[a-z_]+)`/g)].map((m) => m[1]);
-
-  // The parse's own denominator (T-14): a reformat that made this find 0 or 2 types would
-  // otherwise let the comparison below pass against a starved list.
-  expect(fromSpec, 'the §5.1 parse found the wrong number of types').toHaveLength(5);
-
-  const block = config.find((b) => Array.isArray(b.rules?.['bolusi/runtime-emission-allowlist']));
-  const configured = block.rules['bolusi/runtime-emission-allowlist'][1].sanctionedTypes;
-  expect([...configured].sort()).toEqual([...fromSpec].sort());
 });
 
 // Added task 24. design-system §3.13's boundary is an ASYMMETRY, and the asymmetry is the whole

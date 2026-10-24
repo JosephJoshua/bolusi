@@ -60,11 +60,10 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'No user-visible hardcoded string literals — every label goes through the @bolusi/i18n catalog (ai-docs/07-i18n.md)',
+        'No user-visible hardcoded string literals — every label goes through the @bolusi/i18n catalog',
     },
     messages: {
-      hardcoded:
-        'Hardcoded user-visible string. Use the @bolusi/i18n label catalog (ai-docs/07-i18n.md).',
+      hardcoded: 'Hardcoded user-visible string. Use the @bolusi/i18n label catalog.',
     },
     schema: [],
   },

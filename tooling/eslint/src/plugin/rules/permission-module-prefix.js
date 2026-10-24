@@ -65,7 +65,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'A module manifest declares permissions only under its own prefix, and its commands/queries require only its own permissions (ai-docs/02-permissions.md §2).',
+        'A module manifest declares permissions only under its own prefix, and its commands/queries require only its own permissions.',
     },
     messages: {
       declaredPrefix:

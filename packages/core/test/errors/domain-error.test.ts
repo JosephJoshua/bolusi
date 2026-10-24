@@ -1,17 +1,4 @@
-// The DomainError closed code registry (04-module-contract §5.3).
-//
-// WHY THIS PINS AGAINST THE DOC AND NOT AGAINST A LIST IN THIS FILE. A test that re-types the
-// twelve codes proves only that someone typed them twice. §5.3 is the source of truth ("closed
-// set; extend here first"), so the assertion reads the spec — adding a code to the registry
-// without changing 04 §5.3, or changing §5.3 without the registry, fails here.
-//
-// THE SECOND COPY, AND WHY IT IS STILL A SECOND COPY. `packages/i18n/scripts/error-code-registry.mjs`
-// carries a transcribed DOMAIN_ERROR_CODES for the 07-i18n §7.3 coverage gate, with a
-// `TODO(task-10)` asking task 10 to replace it with an import of THIS registry. That import cannot
-// be written: 08 §3.3 gives `i18n` no internal dependencies, so an `i18n → core` edge is a change
-// to the boundary matrix — a spec edit, and therefore its own task (CLAUDE.md §4). Until then both
-// lists are anchored to the SAME doc section (i18n's gates.test.ts pins its copy to 04 §5.3 too),
-// so they cannot drift from each other without the spec moving under both. Reported for task 33.
+// Domain errors and their user-facing catalog entries.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -26,32 +13,7 @@ import {
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
-/** Slice a spec section, failing loudly if the doc's headings ever move. */
-function sectionBetween(doc: string, start: string, end: string): string {
-  const [, afterStart] = doc.split(start);
-  if (afterStart === undefined) throw new Error(`spec section '${start}' not found`);
-  const [section] = afterStart.split(end);
-  if (section === undefined) throw new Error(`spec section end '${end}' not found`);
-  return section;
-}
-
-function codesFromSpec(): string[] {
-  const doc = readFileSync(`${REPO_ROOT}ai-docs/04-module-contract.md`, 'utf8');
-  const section = sectionBetween(doc, '### 5.3', '## 6.');
-  return [...section.matchAll(/`([A-Z][A-Z0-9_]+)`/g)].map((match) => match[1] as string);
-}
-
-describe('the closed DomainError registry (04 §5.3)', () => {
-  it('is exactly the twelve codes 04 §5.3 declares, in order', () => {
-    const fromSpec = codesFromSpec();
-
-    // The parse's own denominator (T-14): a heading rename or a reformat that made the extraction
-    // return 0 or 2 codes would otherwise let `toEqual` pass against a starved list.
-    expect(fromSpec, 'the §5.3 parse found the wrong number of codes').toHaveLength(12);
-    expect(DOMAIN_ERROR_CODES).toHaveLength(12);
-    expect([...DOMAIN_ERROR_CODES]).toEqual(fromSpec);
-  });
-
+describe('the DomainError registry', () => {
   it('contains PERMISSION_DENIED and VALIDATION_FAILED — the two the command runtime throws', () => {
     expect(DOMAIN_ERROR_CODES).toContain('PERMISSION_DENIED');
     expect(DOMAIN_ERROR_CODES).toContain('VALIDATION_FAILED');

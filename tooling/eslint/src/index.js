@@ -338,12 +338,12 @@ export default tseslint.config(
         {
           selector: "NewExpression[callee.object.name='Intl']",
           message:
-            'Do not construct Intl formatters outside packages/i18n — use the @bolusi/i18n formatters (ai-docs/07-i18n.md §5).',
+            'Do not construct Intl formatters outside packages/i18n — use the @bolusi/i18n formatters.',
         },
         {
           selector: "CallExpression[callee.object.name='Intl']",
           message:
-            'Do not call Intl directly outside packages/i18n — use the @bolusi/i18n formatters (ai-docs/07-i18n.md §5).',
+            'Do not call Intl directly outside packages/i18n — use the @bolusi/i18n formatters.',
         },
       ],
     },

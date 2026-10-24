@@ -28,7 +28,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'The legacy expo-file-system upload APIs (uploadAsync, createUploadTask) throw at runtime in SDK 57 and offer no resumable upload — use the chunked MediaTransportPort (ai-docs/06-media-pipeline.md §5.5)',
+        'The legacy expo-file-system upload APIs (uploadAsync, createUploadTask) throw at runtime in SDK 57 and offer no resumable upload — use the chunked MediaTransportPort',
     },
     messages: {
       legacyUploadImport:

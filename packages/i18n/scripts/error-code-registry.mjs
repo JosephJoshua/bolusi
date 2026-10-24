@@ -1,12 +1,4 @@
-// Checked-in mirror of the closed code registries the coverage gate checks (07-i18n §7.3).
-//
-// TODO(task-10): task 10 lands the real `DomainError` code registry in @bolusi/core. When it
-// does, replace DOMAIN_ERROR_CODES with an import of that registry so this file cannot drift —
-// the whole point of the gate is that adding a code without its catalog row fails the build,
-// which only holds if the code list has a single source of truth.
-//
-// Until then these lists are transcribed from the specs and pinned by a unit test that
-// re-reads the docs, so drift fails CI rather than passing silently.
+// Error-code inputs for the catalog checks. Runtime definitions live in core and schemas.
 
 /** 04-module-contract §5.3 — the closed DomainError set. */
 export const DOMAIN_ERROR_CODES = [

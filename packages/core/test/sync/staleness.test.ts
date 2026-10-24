@@ -1,13 +1,4 @@
-// Staleness levels + thresholds (03-state-machines §8; consumer contract api/01-sync §7).
-//
-// NO NUMERIC LITERALS FOR THRESHOLDS. Every boundary below is expressed in terms of the EXPORTED
-// constants. A test that wrote `3_600_000` would keep passing after someone changed the constant to
-// 2 h — it would assert the old contract against the new code and call that agreement. 03 §8 is the
-// sole numeric source; these tests consume it, they do not restate it.
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+// Staleness behavior, including the one-hour and one-day boundaries.
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -33,39 +24,12 @@ function syncedAt(age: number, over: Partial<StalenessInput> = {}): StalenessInp
 
 const at = (now: number) => new FakeClock(now);
 
-describe('staleness thresholds (03 §8)', () => {
-  // T-13, INTERROGATE THE ORACLE — and this block is here because the oracle was wrong.
-  //
-  // This test used to assert `STALENESS_WARNING_MS === 60 * 60 * 1000` under a comment claiming the
-  // numbers were checked "against 03 §8's table". They were not: the right-hand side was a
-  // hand-computed literal, so the assertion only proved this file agrees with ITSELF. Change 03 §8
-  // to 2 h and the code would disagree with the spec while this test stayed green — the exact drift
-  // it was written to catch, invisible to it. The comment was the guard (CLAUDE.md §2.11).
-  //
-  // So the numbers are PARSED out of the doc, which is the shape task 24's `sync/contract.test.ts`
-  // used for the same constants while they were a local stopgap. That file is deleted by task 50
-  // (the constants now live here, §2.8); its guard moves here rather than dying with it — it is the
-  // only thing standing between 03 §8's "**sole numeric source**" claim and a silent divergence.
-  const SPEC = readFileSync(
-    resolve(dirname(fileURLToPath(import.meta.url)), '../../../../ai-docs/03-state-machines.md'),
-    'utf8',
-  );
-
-  const fromSpec = (name: string): number => {
-    const match = SPEC.match(new RegExp(`\`${name} = ([0-9_]+)\``));
-    // The parse's OWN denominator (T-14): a doc reformat that stopped matching would otherwise let
-    // `undefined === undefined` pass and check nothing — a guard whose failure mode is "silently
-    // checks nothing" is worse than no guard.
-    expect(match, `03 §8 no longer declares ${name} in the expected form`).not.toBeNull();
-    return Number(match![1]!.replaceAll('_', ''));
-  };
-
-  it('STALENESS_WARNING_MS equals 03 §8`s declared constant', () => {
-    expect(STALENESS_WARNING_MS).toBe(fromSpec('STALENESS_WARNING_MS'));
-  });
-
-  it('STALENESS_STALE_MS equals 03 §8`s declared constant', () => {
-    expect(STALENESS_STALE_MS).toBe(fromSpec('STALENESS_STALE_MS'));
+describe('staleness thresholds', () => {
+  it('warns after one hour and becomes stale after one day', () => {
+    expect(stalenessLevel(syncedAt(60 * 60 * 1000 - 1), at(SERVER_T0))).toBe('fresh');
+    expect(stalenessLevel(syncedAt(60 * 60 * 1000), at(SERVER_T0))).toBe('warning');
+    expect(stalenessLevel(syncedAt(24 * 60 * 60 * 1000 - 1), at(SERVER_T0))).toBe('warning');
+    expect(stalenessLevel(syncedAt(24 * 60 * 60 * 1000), at(SERVER_T0))).toBe('stale');
   });
 
   it('never synced ⇒ stale, whatever the clock says (03 §8)', () => {

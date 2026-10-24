@@ -80,7 +80,7 @@ export function nightlyX4Seeds(
   // Announce it in the run log: the nightly output states, per scenario, that it sampled and by how
   // much — so "×4 × 100 seeds" can never be read off a run that sampled 3 (§2.11).
   console.log(
-    `[chaos:nightly] ${scenario} ×${activeVolumes(env).scale} seed cap: running ${sampled.length}` +
+    `[chaos:extended] ${scenario} ×${activeVolumes(env).scale} seed cap: running ${sampled.length}` +
       ` of ${seeds.length} nightly seeds (${sampled.join(',')}) — testing-guide §3.7 D-CHAOS-SCALE`,
   );
   return sampled;

@@ -72,10 +72,10 @@ export function resolveSeeds(env: NodeJS.ProcessEnv = process.env): number[] {
     // seed N reproduces with `CHAOS_SEEDS=N CHAOS_SCALE=<scale> pnpm chaos` (the same command
     // `reproductionCommand`/`withSeed` print on the failing test itself).
 
-    console.log(`[chaos:nightly] runSeed=${runSeed} scale=${scale} seeds=${seeds.join(',')}`);
+    console.log(`[chaos:extended] runSeed=${runSeed} scale=${scale} seeds=${seeds.join(',')}`);
 
     console.log(
-      `[chaos:nightly] reproduce a failing seed N: CHAOS_SEEDS=N CHAOS_SCALE=${scale} pnpm chaos`,
+      `[chaos:extended] reproduce a failing seed N: CHAOS_SEEDS=N CHAOS_SCALE=${scale} pnpm chaos`,
     );
     return seeds;
   }

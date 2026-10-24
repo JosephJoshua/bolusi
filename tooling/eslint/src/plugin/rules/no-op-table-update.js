@@ -52,7 +52,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Operation-log tables are append-only: no UPDATE/DELETE outside the allowlisted bookkeeping paths, and an allowlisted UPDATE may touch only its sanctioned bookkeeping columns (ai-docs/05-operation-log.md §1)',
+        'Operation-log tables are append-only: no UPDATE/DELETE outside the allowlisted bookkeeping paths, and an allowlisted UPDATE may touch only its sanctioned bookkeeping columns',
     },
     messages: {
       opTableMutation:

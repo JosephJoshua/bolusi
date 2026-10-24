@@ -1,0 +1,80 @@
+# Architecture and current limits
+
+This is a map to the implementation, not a second schema/API registry. Versions
+live in manifests and the workspace catalog; tables live in migrations and types.
+
+## Data flow
+
+Mobile persists work in SQLite. Commands check local permissions and produce
+append-only operations, canonicalized, hashed, chained per device, and signed.
+Projections derive queryable state. Sync pushes pending operations and pulls
+accepted ones. The server verifies device identity, scope, signatures and chain
+continuity, and persists operations in PostgreSQL. Replay must not duplicate effects.
+
+| Concern               | Implementation                                                                  |
+| --------------------- | ------------------------------------------------------------------------------- |
+| Registered modules    | `packages/modules/src/index.ts`                                                 |
+| Commands/runtime      | `packages/core/src/runtime`, `packages/core/src/module`                         |
+| Wire format/integrity | `packages/schemas/src`, `packages/core/src/crypto`, `packages/core/src/oplog`   |
+| Sync/projections      | `packages/core/src/sync`, `packages/core/src/projection`                        |
+| Server acceptance     | `apps/server/src/oplog`, `apps/server/src/sync`                                 |
+| HTTP routes           | `apps/server/src/app.ts`, `apps/server/src/routes`                              |
+| Local bootstrap       | `apps/mobile/src/bootstrap`                                                     |
+| Identity/permissions  | `packages/core/src/auth`, `packages/core/src/authz`, `apps/server/src/identity` |
+| Media                 | `apps/mobile/src/media`, `apps/server/src/media`                                |
+| Translations          | `packages/i18n/catalogs`, module screen catalogs                                |
+
+Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
+behind adapters. Node tests do not establish native performance or correctness.
+
+## Invariants worth protecting
+
+- Signed history is immutable; corrections are new operations. Sync bookkeeping
+  can change without rewriting signed facts.
+- Apply operations transactionally and make replay idempotent. Interrupted rebuilds
+  and reordered sync must preserve resulting business state.
+- Tenant-bound access and PostgreSQL row-level security isolate tenants. Within a
+  tenant, store scope still matters; a store owner is not a tenant administrator.
+- Signatures establish device attribution/integrity, not user authorization or
+  payment settlement.
+- Pending, rejected, and conflicting offline work stays visible and recoverable.
+- Money uses integer IDR. Stock receipt, consumption, shipment, and payment are
+  distinct events; business modules need direct tests for their effects.
+- Preserve evidence integrity and keep credential/PIN material out of projections,
+  sync responses, logs, and attachments.
+
+## Limits to carry into repair work
+
+- Only platform, auth, and Notes are registered. Notes exercises the mechanism;
+  it does not prove repair, inventory, or accounting correctness.
+- General pushed business operations are not reauthorized server-side in v0.
+  Privileged PIN operations are an exception. High-risk v1 approvals still need
+  a server validation/revocation policy covering legitimate offline work.
+- Pull scope is tied to the enrolled store. Cross-store workflows require sync
+  and authorization work, not just screens.
+- Physical 2 GB Android performance was deferred, not measured. Emulator/Simulator
+  results are not hardware benchmarks. Signed iOS and physical iPhone verification
+  are also still owed.
+- Local confidentiality uses application-layer encryption; SQLCipher is disabled.
+  Old comments/report names do not establish whole-database encryption.
+- Extended chaos has unresolved large-workload failures: the recorded October 14
+  run hit rate limits in CHAOS-03 and timeouts in CHAOS-08; later nightly runs also
+  failed. Removing the schedule does not resolve them. Reproduce a bounded seed
+  before attributing a failure to the application or test workload.
+- A future rekey/pre-key-tag fleet migration may need verified key-tag backfill.
+  It was deferred because current creation tags the DB before enrollment. Add a
+  migration when a real upgrade needs it, not to satisfy a historical task entry.
+
+## Server configuration
+
+`apps/server/.env.example` lists configuration names. `DATABASE_URL` selects the
+DB; `MEDIA_STORAGE_DIR` needs durable, backed-up production storage.
+`EXPO_ACCESS_TOKEN` is required by the production push transport at boot. Tests
+inject their transport and need no production push credentials.
+
+`SYSTEM_KEY_DIR` enables server conflict detection. It contains one mode-0600
+`system-device-<tenantId>.key` per tenant: a base64 Ed25519 private key created by
+tenant provisioning. Unset means detection is off. When enabled, missing/invalid
+keys can fail colliding pushes; provision every served tenant before enabling it.
+Signers are cached, so restart after changing keys. See
+`apps/server/src/sync/system-key-store.ts` and the provisioning CLI.

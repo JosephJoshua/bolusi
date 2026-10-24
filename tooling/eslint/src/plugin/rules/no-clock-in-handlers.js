@@ -118,8 +118,7 @@ export default {
   meta: {
     type: 'problem',
     docs: {
-      description:
-        'Command handlers are pure: no clock, no rng, no network, no timers (ai-docs/04-module-contract.md §5.2).',
+      description: 'Command handlers are pure: no clock, no rng, no network, no timers.',
     },
     messages: {
       ambientEffect:
