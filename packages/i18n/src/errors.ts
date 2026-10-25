@@ -4,7 +4,7 @@
 // and adding one would defeat the coverage gate (§7.3) that keeps the registries and the catalog
 // in lockstep. A `DomainError`'s `message` is developer-facing English for logs and is never
 // rendered; the `code` is the contract.
-import type { TranslationKey } from './generated/keys.js';
+import type { TranslationKey } from './keys.js';
 import { DEFAULT_LOCALE } from './locale.js';
 import { warnOnce } from './logger.js';
 import { hasKey, t, type TranslationValues } from './t.js';

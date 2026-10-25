@@ -111,7 +111,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Money is integer IDR — z.number() must chain .int(); float operations on money identifiers are forbidden (ai-docs/05-operation-log.md §3)',
+        'Money is integer IDR — z.number() must chain .int(); float operations on money identifiers are forbidden',
     },
     messages: {
       zNumberWithoutInt:

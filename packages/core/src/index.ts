@@ -1,6 +1,5 @@
 // @bolusi/core — op log, projection engine, command runtime, sync client loop, JCS,
 // UUIDv7. PURE TS; every effect behind an injected port (08-stack-and-repo §3.2).
-export const PACKAGE_NAME = '@bolusi/core' as const;
 
 export * from './auth/index.js';
 export * from './authz/index.js';

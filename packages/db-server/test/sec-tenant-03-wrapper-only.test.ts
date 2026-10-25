@@ -98,7 +98,7 @@ test('SEC-TENANT-03 the repo contains no session-level tenant context', async ()
   // the walk covers TRACKED files only (by design, so an untracked decoy cannot smuggle the
   // pattern past CI), which means a file is in scope from the commit that adds it onward.
   expect(files.length).toBeGreaterThan(10);
-  expect(files.some((f) => f.path === 'scripts/check-single-zod.mjs')).toBe(true);
+  expect(files.some((f) => f.path === 'packages/db-server/src/for-tenant.ts')).toBe(true);
 
   expect(scanFiles(files)).toEqual([]);
 });

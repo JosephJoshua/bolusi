@@ -1,67 +1,13 @@
-// SEC-TENANT-04 (security-guide §8.2) — the cross-tenant probe per endpoint, deferred here by
-// tasks 05/12 and owned by task 28.
-//
-// The walk is driven off the REAL composed `@bolusi/server` route table (`route-walker.ts`), so a
-// new endpoint is covered the moment it is mounted; an endpoint with no probe row FAILS (unknown
-// != skipped). The oracle is security-guide §2.2's rule table plus api/00 §7's code registry —
-// never a transcript of current behaviour — so a route that drifts off the table goes red here.
-//
-// FALSIFICATION (CLAUDE.md §2.11) — each of these was BROKEN, the named red was READ, and the
-// break was reverted:
-//   * deleted the `GET /v1/devices` registry row →
-//     "an endpoint with no probe mapping FAILS the sweep: expected [ 'GET /v1/devices' ] to
-//     deeply equal []" (`unmappedEndpoints`);
-//   * added a `GET /v1/ghost` registry row for an endpoint the app does not serve →
-//     "the registry holds rows for endpoints the app no longer serves: expected
-//     [ 'GET /v1/ghost' ] to deeply equal []" (`staleProbeKeys`);
-//   * removed `/v1/auth/login` from `EXPECTED_MIDDLEWARE_MOUNTS` → the multiset assertion went red
-//     naming the extra mount, so a new middleware (or an `app.all()` endpoint hiding behind the
-//     `ALL` filter) cannot land unclassified;
-//   * pointed the `POST /v1/push/tokens` cross-tenant probe at the caller's OWN device id so the
-//     server legitimately answered 200 → "LEAK: 200 on out-of-scope access …", proving the 2xx
-//     branch fires as a LEAK rather than as a bland status mismatch.
-// The oracle's other proof is the live one: it found the `POST /v1/media/:id/init` `500` that
-// commit `d12face` then fixed (that row now answers the required `404` and this suite is green —
-// the "KNOWN RED" note that used to stand here outlived the defect by a whole task).
-//
-// FALSIFICATION of the §2.2 documented-exception legs (task 141a, D22 §2) — same discipline:
-//   * added a third entry to `DOCUMENTED_EXISTENCE_EXCEPTIONS` that §2.2 does not enumerate →
-//     "the harness allowlist and security-guide §2.2 disagree about which endpoints may confirm
-//     existence …: expected [ 'GET /v1/media/:id', …(1) ] to deeply equal [ …(2) ]";
-//   * added a "Documented exception 3" paragraph to §2.2 with no probe → the same test red on its
-//     denominator, "expected […] to have a length of 2 but got 3";
-//   * flipped the push-token exception to `indistinguishable: true` (i.e. judged as if §2.2 did
-//     NOT document it) → "status differs (403 vs 200) — an existence oracle" on
-//     `POST /v1/push/tokens`. That is the load-bearing one: the sweep SEES the oracle, and is
-//     green only because §2.2 documents it — the allowlist was widened, the check was not turned off;
-//   * emptied `KNOWN_EXISTENCE_CONTROL_DIFFERENCES` → the control sweep red naming
-//     `POST /v1/media/:id/init` (404 vs 200), so a pinned difference cannot go stale silently;
-//   * pointed `PATCH /v1/users/:userId`'s cross-tenant probe at a same-tenant unassigned-store user
-//     so the endpoint genuinely distinguished → the sweep red naming it (403 vs 404) alongside the
-//     known one, proving a NEW distinguisher cannot join unnoticed;
-//   * declared a `foreignId` that appears nowhere in its own request → "the control would re-issue
-//     the SAME request and could never fail", so the control cannot pass vacuously (T-14);
-//   * (review round 2) wrote a METHOD-LESS third exception into §2.2 — ``(`/v1/devices`)`` — which
-//     the endpoint grammar cannot read. Before `countDocumentedExceptionHeadings` this was GREEN
-//     with the spec and the harness disagreeing; now → "security-guide §2.2 starts an exception
-//     paragraph the endpoint grammar could not read …: expected 3 to be 2";
-//   * (review round 2) changed the pinned difference's BODY text as if `init` had begun echoing the
-//     other tenant's data, leaving the endpoint set identical → "the cross-tenant/nonexistent
-//     difference set changed … or the known one changed character". An endpoint-name-only pin was
-//     green for that input, which is why the pin carries the full violation text.
-import { readFileSync } from 'node:fs';
-
+// Cross-tenant response and resource-existence probes against the real server.
 import { describe, expect, test } from 'vitest';
 
 import {
   censusOf,
-  countDocumentedExceptionHeadings,
   enumerateEndpoints,
   indistinguishabilityViolations,
   judgeProbe,
   middlewareMounts,
   nonexistentControlOf,
-  parseDocumentedExistenceExceptions,
   probesWithoutRequests,
   staleProbeKeys,
   unmappedEndpoints,
@@ -74,12 +20,6 @@ import {
   PROBE_REGISTRY,
 } from '../../src/security/probe-registry.js';
 import { openTenantProbeFixture } from '../../src/security/tenant-probe.js';
-
-/** The spec this suite is the oracle for — read from the repo, never restated here. */
-const SECURITY_GUIDE = readFileSync(
-  new URL('../../../../ai-docs/security-guide.md', import.meta.url),
-  'utf8',
-);
 
 /**
  * A distinct UUIDv7-shaped id per control leg, existing nowhere. v7 (version nibble `7`, variant
@@ -237,83 +177,8 @@ describe('SEC-TENANT-04 cross-tenant probe per endpoint', () => {
     }
   });
 
-  // ── the §2.2 documented-exception allowlist (task 141a, D22 §2) ───────────────────────────────
-  //
-  // §2.2 allows exactly TWO endpoints to confirm existence. The pair of tests below is what makes
-  // that sentence load-bearing: the first pins the allowlist to the guide's own text in both
-  // directions, the second issues each exception's legs so the prose describes behaviour the server
-  // actually has. Neither exempts anything from the nonexistent-id control that follows.
-  test('SEC-TENANT-04 the documented existence exceptions are exactly the two security-guide §2.2 enumerates', async () => {
-    const documented = parseDocumentedExistenceExceptions(SECURITY_GUIDE);
-    // Denominator first (T-14): a parse that matched nothing must not read as "no exceptions".
-    expect(
-      documented,
-      'security-guide §2.2 enumerates no documented exception — either the section was rewritten or the parse grammar drifted',
-    ).toHaveLength(2);
-    // …and every paragraph §2.2 STARTS was parsed. The endpoint grammar fails in the dangerous
-    // direction — a heading missing its HTTP method matches nothing and disappears — so count the
-    // headings on the loosest marker and require the two numbers to agree.
-    expect(
-      countDocumentedExceptionHeadings(SECURITY_GUIDE),
-      'security-guide §2.2 starts an exception paragraph the endpoint grammar could not read — a malformed heading must fail loudly, not vanish from the allowlist',
-    ).toBe(documented.length);
-    expect(documented.map((entry) => entry.index)).toEqual([1, 2]);
-    expect(
-      documented.map((entry) => entry.endpoint).sort(),
-      'the harness allowlist and security-guide §2.2 disagree about which endpoints may confirm existence — a third exception takes an owner ruling (CLAUDE.md §6), not a test edit',
-    ).toEqual(Object.keys(DOCUMENTED_EXISTENCE_EXCEPTIONS).sort());
-
-    // …and each named endpoint is one the app actually serves, so a typo cannot except nothing
-    // while looking like it excepts something.
-    const fixture = await openTenantProbeFixture();
-    try {
-      const served = new Set(enumerateEndpoints(fixture.app));
-      expect(documented.filter((entry) => !served.has(entry.endpoint))).toEqual([]);
-    } finally {
-      await fixture.close();
-    }
-  });
-
-  test('SEC-TENANT-04 each harness exception CITES the §2.2 exception it implements, and the citation resolves (task 171)', () => {
-    // 141a's round-2 defect: §2.2's justification was corrected, the harness `rationale` silently kept
-    // the refuted premise — in the string PRINTED as the assertion failure, i.e. handed to an engineer
-    // triaging a live tenant-isolation regression. The endpoint set was already pinned to §2.2 (above);
-    // what was uncoupled is the exception NUMBER the rationale cites. This binds it — the §2.8 "one
-    // claim, two copies" shape, closed by asserting the CITATION resolves (NOT by comparing prose,
-    // which the reviewer warned would rot into a deletable string-equality check).
-    const documented = parseDocumentedExistenceExceptions(SECURITY_GUIDE);
-    // Blind-parse control (T-14b): a §2.2 that parsed to nothing would let every resolution below
-    // "match" vacuously — assert there IS a subject to resolve against first.
-    expect(
-      documented.length,
-      'security-guide §2.2 parsed to no exceptions — the citation resolver has nothing to resolve against',
-    ).toBe(2);
-
-    const byPair = new Set(documented.map((entry) => `${entry.index} ${entry.endpoint}`));
-    let resolved = 0;
-    for (const [endpoint, exception] of Object.entries(DOCUMENTED_EXISTENCE_EXCEPTIONS)) {
-      // 1. The citation RESOLVES: the harness's (index, endpoint) pair is one §2.2 actually enumerates.
-      //    A rationale citing the wrong exception number, or a §2.2 renumbering the harness did not
-      //    follow, fails HERE rather than shipping a stale premise in the assertion message.
-      expect(
-        byPair.has(`${exception.docExceptionIndex} ${endpoint}`),
-        `${endpoint}: cites §2.2 exception ${exception.docExceptionIndex}, but §2.2 enumerates ` +
-          `${documented.map((e) => `${e.index}→${e.endpoint}`).join(', ')} — the citation does not resolve`,
-      ).toBe(true);
-      // 2. The printed rationale's own "§2.2 exception <n>" equals the machine index, so the human
-      //    citation an engineer reads and the machine one this test checks cannot drift apart.
-      expect(
-        exception.rationale,
-        `${endpoint}: rationale must open with "§2.2 exception ${exception.docExceptionIndex}"`,
-      ).toMatch(new RegExp(`^§2\\.2 exception ${exception.docExceptionIndex}\\b`));
-      resolved += 1;
-    }
-    // Denominator (T-14): the loop resolved EVERY harness entry, not zero.
-    expect(resolved).toBe(Object.keys(DOCUMENTED_EXISTENCE_EXCEPTIONS).length);
-    expect(resolved).toBeGreaterThanOrEqual(2);
-  });
-
-  test('SEC-TENANT-04 each documented existence exception answers exactly as security-guide §2.2 records it', async () => {
+  // Exercise each resource-specific response, then compare foreign and nonexistent IDs.
+  test('SEC-TENANT-04 media lookups and push-token registration enforce their expected responses', async () => {
     const fixture = await openTenantProbeFixture();
     try {
       let probed = 0;

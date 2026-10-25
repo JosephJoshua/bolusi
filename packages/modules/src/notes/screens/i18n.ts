@@ -1,51 +1,9 @@
-// The notes module's i18n seam for its screens (07-i18n §3.1/§3.3).
-//
-// WHY A MODULE-LOCAL TRANSLATE AND REGISTRATION EXIST. The reserved-namespace `t()` from
-// `@bolusi/i18n` types its key against a GENERATED union built from `packages/i18n/catalogs/*`
-// (07-i18n §3.4) — which, by design, does NOT include module-owned namespaces: 07-i18n §3.3 puts
-// each module's catalog under `packages/modules/<id>/i18n/` and says the runtime "merges every
-// catalog" at load. The merge for module catalogs was never wired (task 25 shipped the `notes/i18n`
-// JSON but nothing loaded it), so this file is the notes module's half of that contract:
-//   - `registerNotesCatalog` merges the shipped catalog trees into the shared instance under the
-//     `notes` namespace, exactly as §3.3 specifies (`resources[locale].translation.notes = tree`).
-//   - `tn` is the typed entry point screens call; its `NotesKey` union is this module's own key
-//     typing (the generated union cannot carry it), kept EQUAL to the shipped catalog by a
-//     key-parity test (§2.11 gated mirror), so a screen typo is still a compile error.
+// Module-owned translations share the app's i18n instance and fallback behavior.
 import { getI18nInstance, t } from '@bolusi/i18n';
 import type { TranslationKey, TranslationValues } from '@bolusi/i18n';
 
-/**
- * Every `notes.*` label key (07-i18n §3.1 grammar). Hand-declared because the reserved-namespace
- * generated union (07-i18n §3.4) does not include module namespaces — this is the module's own
- * typing, pinned to the shipped catalog by the parity assertion in
- * `apps/mobile/test/notes-catalog-keys.test.ts`.
- */
-export type NotesKey =
-  | 'notes.list.title'
-  | 'notes.detail.title'
-  | 'notes.detail.meta'
-  | 'notes.list.empty'
-  | 'notes.list.emptyArchived'
-  | 'notes.action.new'
-  | 'notes.action.archive'
-  | 'notes.action.attachPhoto'
-  | 'notes.editor.titleField'
-  | 'notes.editor.bodyField'
-  | 'notes.editor.titleRequired'
-  | 'notes.confirm.archive'
-  | 'notes.badge.archived'
-  | 'notes.filter.showArchived'
-  | 'notes.filter.hideArchived'
-  // Op-type labels (design-system §8.4 item 4). NOT reached through `tn()` — the Sync Status screen
-  // resolves them via `@bolusi/i18n`'s `translateOpType`, which derives `notes.opType.<camelVerb>`
-  // from the op type (`NOTES_OP`, e.g. `notes.note_created` → `noteCreated`). They live here so the
-  // catalog-parity pin (notes-catalog-keys.test.ts) keeps the shipped labels typed.
-  | 'notes.opType.noteCreated'
-  | 'notes.opType.noteBodyEdited'
-  | 'notes.opType.noteArchived';
-
-/** The runtime-checkable list `apps/mobile/test/notes-catalog-keys.test.ts` reads as its denominator. */
-export const NOTES_KEYS: readonly NotesKey[] = [
+// Keep the key vocabulary in one place; catalog parity is checked against both locales.
+export const NOTES_KEYS = [
   'notes.list.title',
   'notes.detail.title',
   'notes.detail.meta',
@@ -64,7 +22,9 @@ export const NOTES_KEYS: readonly NotesKey[] = [
   'notes.opType.noteCreated',
   'notes.opType.noteBodyEdited',
   'notes.opType.noteArchived',
-];
+] as const;
+
+export type NotesKey = (typeof NOTES_KEYS)[number];
 
 /** A shipped catalog locale tree, as the module JSON carries it (nested, prefix added at merge). */
 export type NotesCatalogTree = Readonly<Record<string, unknown>>;

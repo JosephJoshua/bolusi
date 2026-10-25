@@ -73,7 +73,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Only the five sanctioned op types may be appended outside a command, and only through the runtime emission channel (ai-docs/04-module-contract.md §5.1).',
+        'Only the five sanctioned op types may be appended outside a command, and only through the runtime emission channel.',
     },
     messages: {
       unsanctionedType:

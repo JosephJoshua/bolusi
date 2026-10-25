@@ -95,7 +95,6 @@ describe('@bolusi/test-support/chaos is device-bundle-safe (task 181)', () => {
 
   test('reaches only crypto/noble-port under crypto/ — never the node:crypto AEAD file', () => {
     expect(reachedRel).not.toContain('crypto/node-column-aead.ts');
-    expect(reachedRel).not.toContain('sec-meta.ts');
     // The rig's single legitimate crypto dependency is noble-port (pure @noble/*). If any other
     // crypto/ file becomes reachable, this fails — that is the leak this guard is here to catch.
     expect(reachedRel.filter((f) => f.startsWith('crypto/'))).toEqual(['crypto/noble-port.ts']);

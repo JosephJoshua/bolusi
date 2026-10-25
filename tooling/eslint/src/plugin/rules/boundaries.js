@@ -243,7 +243,7 @@ export default {
     type: 'problem',
     docs: {
       description:
-        'Import-boundary matrix (ai-docs/08-stack-and-repo.md §3.3–3.4): platform-free packages, DB-driver locks, screens split, type-only app edge',
+        'Import-boundary matrix: platform-free packages, DB-driver locks, screens split, type-only app edge',
     },
     messages: {
       forbiddenEverywhere: "'{{source}}' is forbidden: {{reason}}",

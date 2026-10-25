@@ -296,22 +296,6 @@ export function judgeProbe(
   return violations;
 }
 
-// ── the §2.2 documented-exception allowlist ─────────────────────────────────────────────────────
-//
-// security-guide §2.2 allows exactly TWO endpoints to distinguish "exists but denied" from "does
-// not exist". Everything else must answer a cross-tenant id and a nonexistent one identically.
-//
-// The allowlist is pinned to the DOC, not to a constant a test can quietly grow: the sweep parses
-// §2.2 and requires the harness's exception set to equal it in BOTH directions. Widening the
-// allowlist therefore takes a spec edit (an owner ruling, CLAUDE.md §6) and cannot be done by
-// editing a test to make a red probe green.
-
-/** One exception as the guide declares it: its ordinal and the endpoint it names. */
-export interface DocumentedException {
-  readonly index: number;
-  readonly endpoint: EndpointKey;
-}
-
 /** One leg of a documented exception's own proof, with the verdict §2.2 records for it. */
 export interface ExistenceExceptionLeg {
   readonly leg: string;
@@ -328,62 +312,9 @@ export interface ExistenceExceptionLeg {
  * cannot describe behaviour the server no longer has — the prose is a live claim.
  */
 export interface ExistenceException {
-  /**
-   * The security-guide §2.2 exception index this entry implements (task 171). This is the CITATION
-   * that binds the harness copy to its spec source: SEC-TENANT-04 resolves `(docExceptionIndex,
-   * endpoint)` against `parseDocumentedExistenceExceptions` and fails if it does not appear in §2.2,
-   * so a rationale that cites the wrong exception number, or a §2.2 renumbering the harness did not
-   * follow, is loud rather than silent (the §2.8 "one claim, two copies" shape — 141a's round-2
-   * drift). The suite also pins that this number equals the "§2.2 exception <n>" the `rationale`
-   * states, so the human-facing citation and the machine one cannot diverge.
-   */
-  readonly docExceptionIndex: number;
   readonly rationale: string;
   readonly indistinguishable: boolean;
   readonly legs: (ctx: ProbeContext) => readonly ExistenceExceptionLeg[];
-}
-
-/**
- * The exceptions security-guide §2.2 enumerates, in document order. The grammar is fixed:
- *
- * ```
- * **Documented exception 1 — id-keyed resource probes (`GET /v1/media/:id`).**
- * ```
- *
- * Only §2.2 is scanned, so an "exception" written up in another section cannot smuggle itself in.
- * An EMPTY result means the parse matched nothing — callers must fail loudly rather than read it as
- * "no exceptions declared" (testing-guide T-14).
- */
-export function parseDocumentedExistenceExceptions(guideText: string): DocumentedException[] {
-  const pattern = /\*\*Documented exception (\d+) [^*\n]*\(`([A-Z]+ \/[^`]+)`\)\.\*\*/g;
-  const found: DocumentedException[] = [];
-  for (const match of sectionTwoTwo(guideText).matchAll(pattern)) {
-    found.push({ index: Number(match[1]), endpoint: match[2] as EndpointKey });
-  }
-  return found;
-}
-
-/**
- * How many exception paragraphs §2.2 STARTS, counted on the loosest possible marker
- * (`**Documented exception <n>`) with no endpoint grammar at all.
- *
- * This exists because the parser above fails in the dangerous direction: an exception whose
- * backticked endpoint omits the method (``(`/v1/devices`)``) matches nothing and vanishes, and a
- * sweep that found fewer than the spec declares is green while the spec and the harness disagree.
- * Asserting this count EQUALS the parsed count turns a malformed heading into a loud failure — the
- * "a guard must assert its own coverage" corollary (testing-guide T-14).
- */
-export function countDocumentedExceptionHeadings(guideText: string): number {
-  return [...sectionTwoTwo(guideText).matchAll(/\*\*Documented exception \d+/g)].length;
-}
-
-/** The body of security-guide §2.2, from its heading to the next `##`/`###`. */
-function sectionTwoTwo(guideText: string): string {
-  const start = guideText.indexOf('### 2.2 ');
-  if (start === -1) return '';
-  const afterHeading = guideText.slice(start + 1);
-  const nextHeading = afterHeading.search(/\n#{2,3} /);
-  return nextHeading === -1 ? afterHeading : afterHeading.slice(0, nextHeading);
 }
 
 /**

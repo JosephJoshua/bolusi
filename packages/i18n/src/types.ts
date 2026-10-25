@@ -1,6 +1,6 @@
-// Wires the generated catalog shape through i18next's TS resource typing (07-i18n §3.4), so a
+// Wires the catalog-derived shape through i18next's TS resource typing (07-i18n §3.4), so a
 // bare `i18next.t('auth.pin.typo')` is a compile error and not just a runtime fallback.
-import type { TranslationResources } from './generated/keys.js';
+import type { TranslationResources } from './keys.js';
 
 declare module 'i18next' {
   interface CustomTypeOptions {

@@ -1,0 +1,115 @@
+name: native
+
+on:
+  workflow_dispatch:
+
+jobs:
+  android-emulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: pnpm install --frozen-lockfile
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: build workspace packages (Metro resolves @bolusi/* through dist/)
+        run: npx tsc -b
+      - name: prebuild + assemble release APK (EXPO_PUBLIC_BOLUSI_TEST_HARNESS=1)
+        env:
+          EXPO_PUBLIC_BOLUSI_TEST_HARNESS: '1'
+          EXPO_PUBLIC_API_URL: 'http://10.0.2.2:3000'
+          EXPO_PUBLIC_BOLUSI_BUILD_SHA: ${{ github.sha }}
+        run: |
+          pnpm --filter @bolusi/mobile exec expo prebuild --platform android --no-install
+          ./apps/mobile/android/gradlew -p apps/mobile/android assembleRelease
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: harness correctness gates + Maestro native E2E on the emulator (every figure EMULATOR)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          profile: pixel_6
+          script: bash scripts/emulator-gates.sh
+      - name: Upload Maestro artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-native-e2e
+          path: maestro-artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  ios-simulator:
+    runs-on: macos-latest
+    env:
+      EXPO_PUBLIC_API_URL: 'http://localhost:3000'
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build workspace packages (Metro resolves @bolusi/* through dist/)
+        run: npx tsc -b
+      - name: expo prebuild (iOS native project)
+        run: pnpm --filter @bolusi/mobile exec expo prebuild --platform ios --no-install
+      - name: pod install
+        working-directory: apps/mobile/ios
+        run: pod install
+      - name: xcodebuild — unsigned iOS Simulator build (Release)
+        working-directory: apps/mobile/ios
+        run: |
+          set -eu
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          test -n "$WORKSPACE"
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ios-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+      - name: Verify application identity and permission copy
+        run: |
+          set -eu
+          APP=$(find "$RUNNER_TEMP/ios-build/Build/Products" -maxdepth 3 -name '*.app' | head -1)
+          test -n "$APP"
+          PLIST="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = 'com.bolusi.app'
+          /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$PLIST" \
+            | grep -qF 'Izinkan aplikasi memakai kamera untuk ambil foto.'
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$PLIST" \
+            | grep -qF 'Izinkan aplikasi memakai lokasi'
+      - name: boot Simulator, install + launch the app
+        run: |
+          set -eu
+          APP=$(find "$RUNNER_TEMP/ios-build/Build/Products" -maxdepth 3 -name '*.app' | head -1)
+          test -n "$APP"
+          DEVICE=$(xcrun simctl list devices available --json \
+            | jq -r '.devices | to_entries[] | .value[] | select(.name | startswith("iPhone")) | .udid' \
+            | head -1)
+          test -n "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" com.bolusi.app
+          sleep 8
+          xcrun simctl spawn "$DEVICE" launchctl list | grep -q com.bolusi.app

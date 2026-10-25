@@ -1,7 +1,7 @@
 // `pnpm harness:device` — the Android EMULATOR correctness driver (task 27a; testing-guide §2.6,
 // 08 §5.6 stage 12). It boots the release/`test`-profile harness on the emulator, captures the
 // single `BOLUSI_HARNESS_RESULT` logcat JSON, and this module's PURE `parseHarnessResult` decides
-// pass/fail. The file is deliberately split the way `task-status.mjs` is: a pure, unit-tested parse
+// pass/fail. The file separates parsing from execution: a pure, unit-tested parse
 // function (proven in `packages/test-support/src/harness-device.test.ts`) plus a thin CLI that does
 // the adb I/O — so the fail-safe logic is testable in CI (no emulator here) and the orchestration is
 // the only unverified part.

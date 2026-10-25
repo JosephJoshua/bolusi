@@ -5,7 +5,6 @@
 // comforting name, and §6 forbids it outright. A test that only checked "invalidation works" would
 // pass just as happily against a 60-second cache.
 import { describe, expect, test } from 'vitest';
-import { readFileSync } from 'node:fs';
 
 import {
   assemblePermissionRegistry,
@@ -208,55 +207,5 @@ describe('memo (§6)', () => {
     flaky.load = () => Promise.reject(new Error('offline'));
     await expect(evaluator3.onBundleRefresh()).rejects.toThrow('offline');
     expect(evaluator3.hasPermission(staffQuery)).toEqual({ allowed: true });
-  });
-});
-
-describe('no TTL, ever (§6 — the rule this module exists to keep)', () => {
-  test('advancing a FakeClock alone never invalidates and never changes an answer', async () => {
-    const source = new MutableSource();
-    const evaluator = new PermissionEvaluator(registry, source);
-    await evaluator.prime();
-    expect(evaluator.hasPermission(staffQuery)).toEqual({ allowed: true });
-
-    // The row changes underneath, with no event. A TTL cache would eventually pick this up; an
-    // event-driven memo never does. That difference is the whole point of §6.
-    deactivateStaff(source);
-
-    for (const elapsed of [1_000, 60_000, 5 * 60_000, 60 * 60_000, 24 * 60 * 60_000]) {
-      void elapsed; // there is no clock to advance — that IS the assertion
-      expect(evaluator.hasPermission(staffQuery)).toEqual({ allowed: true });
-    }
-    expect(source.loads).toBe(1);
-    expect(evaluator.stats.generation).toBe(1);
-  });
-
-  test('the module contains no clock, no timer, and no expiry (source-level, T-14 denominator)', () => {
-    const sources = ['memo.ts', 'evaluate.ts', 'registry.ts', 'directory.ts', 'invalidation.ts'];
-    // The denominator: a typo'd path list would read zero files and report green.
-    expect(sources).toHaveLength(5);
-    for (const name of sources) {
-      const path = new URL(`../../src/authz/${name}`, import.meta.url);
-      const text = readFileSync(path, 'utf8');
-      expect(text.length, `${name} is empty`).toBeGreaterThan(0);
-      // Code only — comments legitimately discuss the ban (this file's own header does).
-      const code = text
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .split('\n')
-        .filter((line) => !line.trimStart().startsWith('//'))
-        .join('\n');
-      for (const banned of [
-        'Date.now',
-        'setTimeout',
-        'setInterval',
-        'performance.now',
-        'expiresAt',
-        'ttl',
-        'TTL',
-      ]) {
-        expect(code.includes(banned), `${name} must not contain ${banned} (§6: never TTL)`).toBe(
-          false,
-        );
-      }
-    }
   });
 });

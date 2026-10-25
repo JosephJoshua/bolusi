@@ -1,20 +1,5 @@
-/**
- * The shell root (design-system §8.1; task 24).
- *
- * It holds the shell's state, asks `resolveZone` which surface is showing, and hands the answer to
- * `renderZone`. Everything with a decision in it lives elsewhere and is tested there: the gate in
- * `navigation/zone.ts`, the lock and work retention in `session/shell-session.ts`, each screen's
- * rules in its own `model.ts`. What is left here is wiring — which is why this file has no test of
- * its own and why it must stay this thin.
- *
- * ── WHAT IS STUBBED, AND WHY (read before wiring task 15) ───────────────────────────────────────
- * `SyncStatusInput` arrives as the `sync` PROP. Task 15 (sync-client) is not merged,
- * so nothing on this device yet computes a real `SyncState`, the derived counters, or the rejected /
- * quarantined / media lists. The seam is typed against `03-state-machines` §8/§10 and `01` §5.2 (see
- * `src/sync/contract.ts`) rather than against a guess, so task 15 supplies the value and this file
- * does not change. The same is true of `requestSync`: the platform trigger adapters (NetInfo, the
- * 3 s append debounce, the 60 s foreground interval, the background task, pull-to-refresh) feed
- * core's intake behind this seam — this task ships the seam, task 15 ships the loop.
+/** App shell: session gates, navigation, retained drafts and screen callbacks.
+ * Native services and sync state are supplied by the bootstrap composition root.
  */
 import { AvatarButton, Chip, NAV_BAR_INSET, SyncChip, touch } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
@@ -76,9 +61,7 @@ import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modul
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
 /**
- * Everything the shell reads from the outside. Injected rather than imported so the root is
- * drivable from fakes — and so the task-15 seam (`sync`) is one prop rather than a reach into a
- * module that does not exist yet.
+ * Services and state supplied by bootstrap; tests can supply the same interface.
  */
 export interface AppProps {
   readonly device: DeviceStatus;
@@ -88,7 +71,7 @@ export interface AppProps {
   readonly now: number;
   readonly session: { readonly userId: string } | null;
   readonly locked: boolean;
-  /** TASK 15 SEAM — see the file header. */
+  /** Live operation-sync state. */
   readonly sync: SyncStatusInput;
   readonly onSyncNow: () => void;
   /**

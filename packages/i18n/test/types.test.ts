@@ -17,6 +17,11 @@ describe('key typing', () => {
     expect(() => t('auth.pin')).toBeTypeOf('function');
   });
 
+  it('rejects an empty namespace', () => {
+    // @ts-expect-error — permission has no labels yet
+    expect(() => t('permission')).toBeTypeOf('function');
+  });
+
   it('accepts real keys', () => {
     initI18n({ locale: 'id' });
     const key: TranslationKey = 'auth.pin.attemptsLeft';

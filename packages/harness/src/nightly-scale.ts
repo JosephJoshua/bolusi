@@ -1,43 +1,11 @@
-// The nightly ×4 lane's PER-SCENARIO SEED CAP (testing-guide §3.7 D-CHAOS-SCALE — the third lever,
-// owned by the nightly JOB rather than by a scenario's own scale policy).
-//
-// WHY THIS EXISTS. `chaos:nightly` runs `CHAOS_NIGHTLY=1 CHAOS_SCALE=4` — 100 PRNG seeds per
-// scenario at 4× the §3.6 volumes. For the light scenarios that is a long-but-finite run. For the
-// three HEAVY ones it is not runnable at all (task 113, measured from task 106):
-//
-//   - CHAOS-02 at ×4 runs six full-volume sync cases per seed; on 2026-10-13 one
-//     nightly-scale F1 push case took 210 s locally. An uncapped 100-seed sweep exceeded the
-//     360-minute job budget on 2026-10-12.
-//   - CHAOS-03 at ×4 = 4 devices × 7 days × 2,000 ops/day = 56,000 ops/seed. The 14,000-op case is
-//     MEASURED at ~591 s on a quiet box and the cost is volume-proportional (≈90 % server
-//     round-trips + Ed25519 verify), so one ×4 seed is ≈ 40 min. × 100 seeds ≈ 2.7 DAYS.
-//   - CHAOS-08 at ×4 = 80,000 + 2,000 ops/seed. The 20,000-op rebuild is ~54 s, so one ×4 seed is
-//     ≈ 3.6 min. × 100 seeds ≈ 6 h — the whole nightly budget for one file.
-//
-// A job that cannot finish is a coverage CLAIM with no coverage behind it — the exact failure mode
-// D-CHAOS-SCALE exists to prevent. So the ×4 lane samples SEEDS for those three scenarios. It does
-// NOT reduce the ×4 VOLUME: 4× volume is the entire point of the lane, and the cap is on the seed
-// dimension only.
-//
-// WHY THE CAP IS NOT INSIDE THE SCENARIO HELPERS' OWN POLICY. `chaos02Seeds`/`chaos03Seeds`/`chaos08Seeds` bound
-// the CI SEED SWEEP (lever 1) and must keep returning EVERY resolved seed whenever someone asks for
-// them explicitly — guardrail #2 of §3.7: a `CHAOS_SEEDS=…` reproduction, or a hand-run
-// `CHAOS_NIGHTLY=1` at ×1, still runs the full set. This cap is a different lever with a different
-// owner: it is scoped to the nightly ×4 LANE (`CHAOS_NIGHTLY=1` AND scale > 1 AND no explicit
-// seeds), it lives in ONE registry a reviewer can diff against the doc, and it ANNOUNCES itself in
-// the run log. The scenarios only declare that they are heavy by naming themselves here.
-//
-// NEVER SILENT (§2.11). The caps are stated in three places that are checked against each other by
-// `scenarios/nightly-seed-cap.test.ts`: this registry, `.github/workflows/chaos-nightly.yml`, and
-// testing-guide §3.7. That test also asserts the three heavy scenario files genuinely CALL this
-// function (a mention is not a producer — T-16) and that the other scenario files do NOT, so the
-// uncapped 100-seed claim for them stays true.
+// Extended chaos runs sample the expensive scenarios at full volume.
+// Explicit CHAOS_SEEDS reproductions always keep the requested seeds.
 import { activeVolumes } from './volumes.js';
 
 /**
  * The scenarios whose ×4 nightly lane runs against a capped SEED SAMPLE, and the sample size.
  * Per-scenario because the three costs differ by an order of magnitude; both sized so the file fits
- * inside the nightly job's 360-min ceiling with contention headroom:
+ * inside a practical local runtime budget:
  *
  * - `CHAOS-02` → **3** seeds. Six fault/control cases per seed at ×4, plus one
  *   negative control; one F1 push case took 210 s locally (2026-10-13).
@@ -112,7 +80,7 @@ export function nightlyX4Seeds(
   // Announce it in the run log: the nightly output states, per scenario, that it sampled and by how
   // much — so "×4 × 100 seeds" can never be read off a run that sampled 3 (§2.11).
   console.log(
-    `[chaos:nightly] ${scenario} ×${activeVolumes(env).scale} seed cap: running ${sampled.length}` +
+    `[chaos:extended] ${scenario} ×${activeVolumes(env).scale} seed cap: running ${sampled.length}` +
       ` of ${seeds.length} nightly seeds (${sampled.join(',')}) — testing-guide §3.7 D-CHAOS-SCALE`,
   );
   return sampled;

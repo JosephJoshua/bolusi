@@ -14,7 +14,7 @@ import {
   flattenSource,
   checkParity,
 } from './gates.mjs';
-import { KEYS_PATH, RESOURCES_PATH, renderAll } from './gen.mjs';
+import { RESOURCES_PATH, renderResources } from './gen.mjs';
 import { REPO_ROOT, loadModuleCatalogs, loadReservedCatalogs } from './catalog.mjs';
 
 /** Directories scanned for `t()` call sites by the extraction gate. */
@@ -123,25 +123,15 @@ function collectUsedKeys() {
 }
 
 /**
- * Gate: the generated key union and merged resources are in sync with the catalogs
- * (07-i18n §3.3, §3.4).
+ * Ensure the bundled resources match the editable JSON catalogs.
  * @returns {string[]}
  */
 async function checkGenerated() {
-  const rendered = await renderAll();
-  const errors = [];
-  for (const [path, expected] of [
-    [KEYS_PATH, rendered.keys],
-    [RESOURCES_PATH, rendered.resources],
-  ]) {
-    const name = relative(REPO_ROOT, path);
-    if (!existsSync(path)) {
-      errors.push(`${name} is missing; run \`pnpm --filter @bolusi/i18n i18n:gen\``);
-    } else if (readFileSync(path, 'utf8') !== expected) {
-      errors.push(`${name} is stale; run \`pnpm --filter @bolusi/i18n i18n:gen\``);
-    }
-  }
-  return errors;
+  const expected = await renderResources();
+  if (existsSync(RESOURCES_PATH) && readFileSync(RESOURCES_PATH, 'utf8') === expected) return [];
+  return [
+    `${relative(REPO_ROOT, RESOURCES_PATH)} is missing or stale; run \`pnpm --filter @bolusi/i18n i18n:gen\``,
+  ];
 }
 
 async function main() {
@@ -176,7 +166,7 @@ async function main() {
     { name: 'ICU restricted subset', errors: checkIcuSubset(sources) },
     { name: 'error-code coverage', errors: checkErrorCodeCoverage(sources) },
     { name: 'extraction', errors: extraction.errors },
-    { name: 'generated key union + resources', errors: await checkGenerated() },
+    { name: 'bundled resources', errors: await checkGenerated() },
   ];
 
   let failed = 0;

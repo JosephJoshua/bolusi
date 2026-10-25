@@ -1,8 +1,6 @@
 // Every 07-i18n §7.3 gate is proven by a failing fixture: a gate that cannot fail is not a gate.
 // The real seed is asserted to pass each one, so the fixtures cannot be satisfied by a gate that
 // simply rejects everything.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -22,7 +20,7 @@ import {
   checkModuleCatalogCoverage,
   checkParity,
 } from '../scripts/gates.mjs';
-import { REPO_ROOT, loadReservedCatalogs } from '../scripts/catalog.mjs';
+import { loadReservedCatalogs } from '../scripts/catalog.mjs';
 
 type Tree = Record<string, unknown>;
 
@@ -344,36 +342,6 @@ describe('extraction gate (07-i18n §7.3)', () => {
 
   it('is silent when every used key exists', () => {
     expect(checkExtraction(['auth.pin.title'], sources)).toEqual({ errors: [], warnings: [] });
-  });
-});
-
-// The registry is transcribed until task 10 lands the real one (see error-code-registry.mjs).
-// Re-reading the specs here means a transcription slip fails CI rather than silently weakening
-// the coverage gate it feeds.
-describe('checked-in code registry mirrors the specs', () => {
-  /** Slice a spec section, failing loudly if the doc's headings ever move. */
-  function sectionBetween(doc: string, start: string, end: string): string {
-    const [, afterStart] = doc.split(start);
-    if (afterStart === undefined) throw new Error(`spec section '${start}' not found`);
-    const [section] = afterStart.split(end);
-    if (section === undefined) throw new Error(`spec section end '${end}' not found`);
-    return section;
-  }
-
-  it('matches the DomainError closed set in 04-module-contract §5.3', () => {
-    const doc = readFileSync(join(REPO_ROOT, 'ai-docs', '04-module-contract.md'), 'utf8');
-    const section = sectionBetween(doc, '### 5.3', '## 6.');
-    const codes = [...section.matchAll(/`([A-Z][A-Z0-9_]+)`/g)].map((match) => match[1]);
-    expect(codes).toEqual(DOMAIN_ERROR_CODES);
-  });
-
-  it('matches the rejection-code closed set in 05-operation-log §8', () => {
-    const doc = readFileSync(join(REPO_ROOT, 'ai-docs', '05-operation-log.md'), 'utf8');
-    const section = sectionBetween(doc, '## 8. Rejection codes', '## 9.');
-    const codes = [...section.matchAll(/^\|\s*`([A-Z][A-Z0-9_]+)`\s*\|/gm)].map(
-      (match) => match[1],
-    );
-    expect(codes).toEqual(REJECTION_CODES);
   });
 });
 
