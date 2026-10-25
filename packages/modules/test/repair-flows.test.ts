@@ -289,6 +289,16 @@ describe('intake draft', () => {
       lines: [{ kind: 'part' as const, description: '', amount: 0 }],
     };
     expect(stepProblems(untouched, 'price')).toEqual(['quoteLines']);
+    // Discounts may bring the price to nothing, never below it (openTicket refuses that).
+    const discounted = (discount: number) => ({
+      ...emptyIntakeDraft(),
+      lines: [
+        { kind: 'labour' as const, description: 'Servis', amount: 50_000 },
+        { kind: 'discount' as const, description: 'Diskon', amount: discount },
+      ],
+    });
+    expect(stepProblems(discounted(60_000), 'price')).toEqual(['negativeTotal']);
+    expect(stepProblems(discounted(50_000), 'price')).toEqual([]);
   });
 
   test('photos are walked in slot order, and "the rest OK" keeps the issues called out', async () => {

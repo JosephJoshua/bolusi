@@ -343,6 +343,7 @@ describe('ctx — the §5.2 surface', () => {
     // ctx have op()?" would never see it.
     expect(Object.keys(ctx).sort()).toEqual(
       [
+        'colleagueHasPermission',
         'deviceId',
         'newId',
         'op',

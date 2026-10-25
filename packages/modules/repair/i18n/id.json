@@ -172,7 +172,8 @@
     "deviceModel": "Isi tipe.",
     "photos": "Keenam foto wajib diambil.",
     "quoteLines": "Tambahkan minimal satu baris harga.",
-    "incompleteLine": "Isi keterangan untuk setiap baris yang ada jumlahnya."
+    "incompleteLine": "Isi keterangan untuk setiap baris yang ada jumlahnya.",
+    "negativeTotal": "Diskon lebih besar dari harga. Total tidak boleh kurang dari nol."
   },
   "ready": {
     "threeDays": "3 hari lagi",

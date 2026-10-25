@@ -11,6 +11,7 @@ import {
   QUOTE_LINE_KINDS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
+  REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
   WORK_PHOTOS_MAX,
   workPhotoStage,
@@ -55,6 +56,17 @@ function checkLineSign(kind: QuoteLineKind, amount: number): void {
       'VALIDATION_FAILED',
       { field: 'amount', issue: `${kind} amount has the wrong sign` },
       `a ${kind} line cannot have amount ${amount}`,
+    );
+  }
+}
+
+/** The agreed price can come down to nothing, but never below: the store would owe the customer. */
+function checkTotal(total: number): void {
+  if (total < 0) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'amount', issue: 'the total price would be negative' },
+      `the total price cannot be ${total}`,
     );
   }
 }
@@ -212,6 +224,7 @@ export async function openTicketHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<OpenTicketResult>> {
   for (const line of input.quoteLines) checkLineSign(line.kind, line.amount);
+  checkTotal(input.quoteLines.reduce((sum, line) => sum + line.amount, 0));
 
   const ops: OpDraft[] = [];
   let customerId: string;
@@ -292,6 +305,15 @@ export async function assignTechnicianHandler(
   requireOpen(ticket, REPAIR_OP.technicianAssigned);
   if (ticket.technicianId === input.technicianId) {
     throw invalidTransition(ticket, REPAIR_OP.technicianAssigned, 'already assigned to them');
+  }
+  // The picker only lists people who can do repair work; a crafted or stale input must not park a
+  // customer's phone with someone who can never start it.
+  if (!ctx.colleagueHasPermission(input.technicianId, REPAIR_PERMISSION.work)) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'technicianId', issue: 'cannot do repair work in this store' },
+      `user ${input.technicianId} cannot do repair work`,
+    );
   }
   return {
     ops: [
@@ -458,6 +480,7 @@ export async function changeQuoteHandler(
   checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChanged);
+  checkTotal(ticket.quoteTotal + input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -511,6 +534,7 @@ export async function applyProposalHandler(
   const proposal = findProposal(ticket, input.lineId, REPAIR_OP.quoteChanged);
   const amount = input.amount ?? proposal.amount;
   checkLineSign(proposal.kind, amount);
+  checkTotal(ticket.quoteTotal + amount);
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.quoteChanged, {

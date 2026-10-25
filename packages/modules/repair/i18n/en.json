@@ -172,7 +172,8 @@
     "deviceModel": "Enter the model.",
     "photos": "All six photos are required.",
     "quoteLines": "Add at least one price line.",
-    "incompleteLine": "Describe every line that has an amount."
+    "incompleteLine": "Describe every line that has an amount.",
+    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero."
   },
   "ready": {
     "threeDays": "In 3 days",

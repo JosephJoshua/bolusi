@@ -85,6 +85,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   photos: 'repair.problem.photos',
   quoteLines: 'repair.problem.quoteLines',
   incompleteLine: 'repair.problem.incompleteLine',
+  negativeTotal: 'repair.problem.negativeTotal',
 };
 
 const CHECK_STATE_KEY: Readonly<Record<ChecklistState, RepairKey>> = {

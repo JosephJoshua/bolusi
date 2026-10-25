@@ -141,6 +141,7 @@ export const REPAIR_KEYS = [
   'repair.problem.deviceBrand',
   'repair.problem.deviceModel',
   'repair.problem.incompleteLine',
+  'repair.problem.negativeTotal',
   'repair.problem.photos',
   'repair.problem.quoteLines',
   'repair.ready.threeDays',

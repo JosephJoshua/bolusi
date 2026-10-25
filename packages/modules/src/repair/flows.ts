@@ -336,7 +336,8 @@ export type IntakeProblem =
   | 'complaint'
   | 'photos'
   | 'quoteLines'
-  | 'incompleteLine';
+  | 'incompleteLine'
+  | 'negativeTotal';
 
 export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProblem[] {
   const problems: IntakeProblem[] = [];
@@ -362,6 +363,8 @@ export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProble
         problems.push('incompleteLine');
       }
       if (validLines(draft.lines).length === 0) problems.push('quoteLines');
+      // Mirrors `openTicket`: discounts can bring the price to nothing, never below it.
+      else if (intakeTotal(draft.lines) < 0) problems.push('negativeTotal');
       break;
     case 'review':
       for (const earlier of INTAKE_STEPS.slice(0, -1)) {

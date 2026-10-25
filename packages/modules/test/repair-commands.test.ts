@@ -97,6 +97,41 @@ describe('intake', () => {
     );
   });
 
+  test('the price can come down to nothing but never below zero', async () => {
+    h = await openRepairHarness(31);
+    await expectCode(
+      open(h, { quoteLines: [{ kind: 'discount', description: 'Diskon', amount: -1 }] }),
+      'VALIDATION_FAILED',
+    );
+    const { ticketId } = await open(h, {
+      quoteLines: [{ kind: 'labour', description: 'Cek mesin', amount: 100_000 }],
+    });
+    const discount = (amount: number) => ({
+      ticketId,
+      kind: 'discount',
+      description: 'Diskon',
+      amount,
+      reason: 'Gratis',
+      customerAgreed: true,
+    });
+    await expectCode(h.run('changeQuote', discount(-100_001), h.cashierId), 'VALIDATION_FAILED');
+    const proposal = (await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'discount', description: 'Diskon', amount: -150_000, reason: 'Rusak' },
+      h.technicianId,
+    )) as { lineId: string };
+    await expectCode(
+      h.run(
+        'applyProposal',
+        { ticketId, lineId: proposal.lineId, customerAgreed: true },
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+    );
+    await h.run('changeQuote', discount(-100_000), h.cashierId);
+    expect((await ticket(h, ticketId)).quoteTotal).toBe(0);
+  });
+
   test('a customer with no phone number is fine; blank phone becomes null', async () => {
     h = await openRepairHarness(4);
     const opened = await open(h, { customer: { name: 'Mama Yuliana', phone: '  ' } });
@@ -173,6 +208,11 @@ describe('queue and work', () => {
     const { ticketId } = await open(h);
     await h.run('assignTechnician', { ticketId, technicianId: h.technician2Id }, h.cashierId);
     expect((await ticket(h, ticketId)).technicianId).toBe(h.technician2Id);
+    // Only someone who can do the repair work can be given the phone.
+    await expectCode(
+      h.run('assignTechnician', { ticketId, technicianId: h.zeroUserId }, h.cashierId),
+      'VALIDATION_FAILED',
+    );
     await expectCode(
       h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.technicianId),
       'PERMISSION_DENIED',
