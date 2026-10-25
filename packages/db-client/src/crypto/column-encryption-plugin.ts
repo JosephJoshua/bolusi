@@ -31,15 +31,15 @@
 // halves are always present together there.
 import {
   ColumnNode,
+  InsertQueryNode,
   OperationNodeTransformer,
   PrimitiveValueListNode,
   TableNode,
+  UpdateQueryNode,
   ValueListNode,
   ValueNode,
   ValuesNode,
   type ColumnUpdateNode,
-  type InsertQueryNode,
-  type UpdateQueryNode,
   type KyselyPlugin,
   type OperationNode,
   type PluginTransformQueryArgs,
@@ -166,6 +166,16 @@ class ColumnEncryptTransformer extends OperationNodeTransformer {
   }
 }
 
+/** The table an INSERT or UPDATE writes, when it is one of the builder-encrypted ones; else undefined. */
+function encryptedTarget(node: RootOperationNode): string | undefined {
+  let table: string | undefined;
+  if (InsertQueryNode.is(node)) table = node.into?.table.identifier.name;
+  else if (UpdateQueryNode.is(node) && node.table !== undefined && TableNode.is(node.table)) {
+    table = node.table.table.identifier.name;
+  }
+  return table !== undefined && BUILDER_ENCRYPTED_COLUMNS[table] !== undefined ? table : undefined;
+}
+
 /** Decrypt every marker-bearing value in a result row; rows with no ciphertext are returned as-is. */
 function decryptRow(cipher: ColumnCipher, row: UnknownRow): UnknownRow {
   let out: Record<string, unknown> | undefined;
@@ -187,6 +197,10 @@ export function createColumnEncryptionPlugin(cipher: ColumnCipher): KyselyPlugin
   const transformer = new ColumnEncryptTransformer(cipher);
   return {
     transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
+      // Only an INSERT or UPDATE into an encrypted table has a value to seal, and SQLite runs no DML
+      // nested inside another statement. Every other query passes through without a tree copy,
+      // which on Hermes costs about as much as compiling the query.
+      if (encryptedTarget(args.node) === undefined) return args.node;
       return transformer.transformNode(args.node, args.queryId);
     },
     transformResult(args: PluginTransformResultArgs): Promise<QueryResult<UnknownRow>> {
