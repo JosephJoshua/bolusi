@@ -85,12 +85,8 @@ export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): P
  * rather than a convention — a second attach touches zero rows instead of re-pointing evidence at a
  * different operation.
  *
- * This is the command runtime's step (04 §5.1 step 5). It is EXPORTED and, as of this task, called
- * only by the media client's `attach` seam — the notes module's attach (task 25) is what will drive
- * it from a real command. Stated plainly rather than implied: until 25 lands, nothing in a shipping
- * user flow calls this, so nothing a user captures becomes drainable in production yet (the drain
- * selects `attached_to_operation_id IS NOT NULL`, core/repository.ts). The capture, compression,
- * move, hash, insert, prune and download halves ARE live.
+ * This is the command runtime's step (04 §5.1 step 5): the app's append seam (`bootstrap/runtime.ts`)
+ * calls it for every `mediaRef` in each appended op's payload, inside the append transaction.
  */
 export async function attachMediaToOperation<DB>(
   db: Kysely<DB>,

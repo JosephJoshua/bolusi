@@ -25,6 +25,7 @@ import {
   createModuleRuntime,
   SearchIndexCache,
   createDirectorySource,
+  mediaIdsInPayload,
   PermissionEvaluator,
   type ClockPort,
   type CommandRuntime,
@@ -33,12 +34,14 @@ import {
   type IdSource,
   type LocationPort,
   type ModuleRuntime,
+  type ProjectionApply,
   type SigningKeyPort,
   type SyncSchedulerPort,
 } from '@bolusi/core';
 import { createClientOpStore, type ClientDatabase } from '@bolusi/db-client';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { attachMediaToOperation } from '../media/queue.js';
 import { denialAuditDiagnostics } from '../ports/diagnostics.js';
 import { systemTimer } from '../ports/timer.js';
 
@@ -115,7 +118,16 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
     createDirectorySource(app.db.db),
   );
   const store = createClientOpStore(app.db);
-  const applyProjection = app.engine.asAppendSeam();
+  const projectAppended = app.engine.asAppendSeam();
+  // 04 §5.1 step 5: a capture is attached to the op that references it inside the append's
+  // transaction, so the media drain only ever uploads evidence a signed op committed to (06 §4).
+  // Pulled ops never pass through here, and a foreign device's media has no local row anyway.
+  const applyProjection: ProjectionApply = async (op) => {
+    await projectAppended(op);
+    for (const mediaId of mediaIdsInPayload(op.payload)) {
+      await attachMediaToOperation(app.db.db, mediaId, op.id);
+    }
+  };
   // One live search cache for the app, fed by the engine's applies (search/live-index.ts), so every
   // runtime this composition mints searches the same warm indexes.
   const search = new SearchIndexCache(app.invalidation);
