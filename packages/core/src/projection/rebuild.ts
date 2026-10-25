@@ -115,9 +115,11 @@ export function createSqlRebuildStore<DB>(db: Kysely<DB>): RebuildStore {
 }
 
 /**
- * Re-fold some entities of one type (§4.2): delete their rows from the module's tables for that
- * type, then replay each entity's whole history in canonical order. Returns the ops applied. The
- * engine's out-of-order path re-folds one entity through this; the rebuild re-folds a page at a time.
+ * Re-fold some entities of one type (§4.2): for each, delete its rows from the module's tables for
+ * that type, then replay its whole history in canonical order. Returns the ops applied. The engine's
+ * out-of-order path re-folds one entity through this; the rebuild re-folds a page at a time. The
+ * histories are read in one query, but each entity's rows are deleted just before its own replay, so
+ * a read that lands inside the transaction finds at most that one entity missing, not the page.
  */
 export async function refoldEntities<DB>(
   db: Kysely<DB>,
@@ -126,15 +128,15 @@ export async function refoldEntities<DB>(
   entityType: string,
   entityIds: readonly string[],
 ): Promise<number> {
-  const ids = sql.join(entityIds.map((id) => sql`${id}`));
-  for (const ref of registry.tablesForEntityType(module, entityType)) {
-    await sql`
-      DELETE FROM ${sql.table(ref.table)} WHERE ${sql.ref(ref.entityIdColumn)} IN (${ids})
-    `.execute(db);
-  }
+  const tables = registry.tablesForEntityType(module, entityType);
   const histories = await readEntitiesOps(db, entityType, entityIds);
   let applied = 0;
   for (const entityId of entityIds) {
+    for (const ref of tables) {
+      await sql`
+        DELETE FROM ${sql.table(ref.table)} WHERE ${sql.ref(ref.entityIdColumn)} = ${entityId}
+      `.execute(db);
+    }
     for (const op of histories.get(entityId) ?? []) {
       // An op on this entity of a type the module does not fold (another module's) is skipped.
       const applier = module.appliers[op.type];
