@@ -169,6 +169,61 @@ function sanitizeOpenFailure(error: unknown, key: string): DbOpenError {
 }
 
 /**
+ * Serializes transactions on the one connection. SQLite has a single transaction per connection, and
+ * every writer here (the append path, the pull, a background rebuild batch, Kysely's
+ * `db.transaction()`) shares it, so two overlapping BEGINs would fail ("cannot start a transaction
+ * within a transaction") or one caller's ROLLBACK would discard the other's writes. `begin` waits
+ * for the previous transaction to end; `commit` frees the connection once it succeeds (a failed
+ * COMMIT leaves the transaction open for the caller's rollback), and `rollback` always does.
+ *
+ * Statements outside a transaction are not queued: a read may still land inside another caller's
+ * open transaction and see its uncommitted rows, which is why a rebuild batch removes one entity's
+ * rows at a time (core projection/rebuild.ts). A nested BEGIN from inside a transaction now waits
+ * forever instead of failing, so nothing may open a transaction while it holds one.
+ */
+export function serializeTransactions(driver: DbDriver): DbDriver {
+  let tail: Promise<void> = Promise.resolve();
+  let release: (() => void) | null = null;
+  const free = (): void => {
+    const done = release;
+    release = null;
+    done?.();
+  };
+  return {
+    execute: (sql, params) => driver.execute(sql, params),
+    executeBatch: (commands) => driver.executeBatch(commands),
+    prepare: (sql) => driver.prepare(sql),
+    async begin(): Promise<void> {
+      const previous = tail;
+      let unlock!: () => void;
+      tail = new Promise<void>((resolve) => {
+        unlock = resolve;
+      });
+      await previous;
+      release = unlock;
+      try {
+        await driver.begin();
+      } catch (error) {
+        free();
+        throw error;
+      }
+    },
+    async commit(): Promise<void> {
+      await driver.commit();
+      free();
+    },
+    async rollback(): Promise<void> {
+      try {
+        await driver.rollback();
+      } finally {
+        free();
+      }
+    },
+    close: () => driver.close(),
+  };
+}
+
+/**
  * Opens the one client connection: read key → open keyed → apply pragmas → build Kysely.
  *
  * There is deliberately no unkeyed fallback anywhere in this function. A wrong or missing
@@ -204,10 +259,12 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
 
   let driver: DbDriver;
   try {
-    driver = await options.driverFactory({
-      name: options.name ?? DEFAULT_DATABASE_NAME,
-      location: options.location,
-    });
+    driver = serializeTransactions(
+      await options.driverFactory({
+        name: options.name ?? DEFAULT_DATABASE_NAME,
+        location: options.location,
+      }),
+    );
   } catch (error) {
     throw sanitizeOpenFailure(error, encryptionKey);
   }
