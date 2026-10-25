@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -12,6 +12,7 @@ import {
   searchIndexFor,
   type QueryContext,
   type QueryPage,
+  type ReadonlyProjectionDb,
 } from '@bolusi/core';
 
 import {
@@ -28,7 +29,7 @@ import {
 } from './constants.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
-import { deviceCode, ticketCounter } from './ticket-number.js';
+import { deviceCode } from './ticket-number.js';
 
 type Qctx = QueryContext<RepairDatabase>;
 
@@ -499,24 +500,35 @@ export const nextTicketCounterInput = z.object({ deviceId: z.string().min(1) }).
 export type NextTicketCounterInput = z.infer<typeof nextTicketCounterInput>;
 
 /**
- * The next per-device counter for this device's ticket-number code. Counts every visible ticket
- * that shares the code, so a code collision with another synced device also avoids a duplicate.
+ * The next per-device counter for this device's ticket-number code. Takes the highest counter among
+ * every visible ticket that shares the code, so a code collision with another synced device also
+ * avoids a duplicate.
+ *
+ * One index seek, not a scan: these expressions match the client index
+ * `idx_repair_tickets_device_counter` (db-client migration 7) exactly, so SQLite answers the MAX from
+ * the index end. The counter is compared as an integer because `XXX-10000` sorts before `XXX-9999`
+ * as text.
  */
 export async function nextTicketCounterHandler(
   input: NextTicketCounterInput,
   qctx: Qctx,
 ): Promise<QueryPage<{ readonly counter: number }>> {
-  const code = deviceCode(input.deviceId);
-  const rows = await qctx.db
+  const row = await maxTicketCounter(qctx.db, qctx, deviceCode(input.deviceId)).executeTakeFirst();
+  return { rows: [{ counter: Number(row?.counter ?? 0) + 1 }], nextCursor: null };
+}
+
+/** The highest counter for a device code in one store. Exported so a test can check its plan. */
+export function maxTicketCounter(
+  db: ReadonlyProjectionDb<RepairDatabase>,
+  scope: { readonly tenantId: string; readonly storeId: string | null },
+  code: string,
+) {
+  return db
     .selectFrom('repairTickets')
-    .select('ticketNumber')
-    .where('tenantId', '=', qctx.tenantId)
-    .where('storeId', '=', qctx.storeId)
-    .where('ticketNumber', 'like', `${code}-%`)
-    .execute();
-  let max = 0;
-  for (const row of rows) max = Math.max(max, ticketCounter(row.ticketNumber) ?? 0);
-  return { rows: [{ counter: max + 1 }], nextCursor: null };
+    .select(sql<number | null>`MAX(CAST(substr(ticket_number, 5) AS INTEGER))`.as('counter'))
+    .where('tenantId', '=', scope.tenantId)
+    .where('storeId', '=', scope.storeId)
+    .where(sql<string>`substr(ticket_number, 1, 4)`, '=', `${code}-`);
 }
 
 export const nextTicketCounterQuery = {

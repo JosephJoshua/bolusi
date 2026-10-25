@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError } from '@bolusi/core';
 
+import { maxTicketCounter } from '../src/repair/queries.js';
+
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
@@ -365,5 +367,36 @@ describe('at-rest encryption seam', () => {
     await open(h);
     const raw = await sql<{ name: string }>`SELECT name FROM repair_customers`.execute(h.db);
     expect(raw.rows[0]!.name).toBe('Yohanis Wenda');
+  });
+});
+
+describe('ticket numbers', () => {
+  test('the counter is compared as a number past 9999 and ignores other device codes', async () => {
+    h = await openRepairHarness(15);
+    const first = await open(h);
+    const code = first.ticketNumber.slice(0, 3);
+    const otherCode = code === 'ZZZ' ? 'YYY' : 'ZZZ';
+    // As text `XXX-9999` sorts after `XXX-10000`; a text MAX would mint a duplicate here.
+    await sql`UPDATE repair_tickets SET ticket_number = ${`${code}-9999`}`.execute(h.db);
+    expect((await open(h)).ticketNumber).toBe(`${code}-10000`);
+    const third = await open(h);
+    expect(third.ticketNumber).toBe(`${code}-10001`);
+    // Another device's higher counter does not move ours.
+    await sql`UPDATE repair_tickets SET ticket_number = ${`${otherCode}-50000`} WHERE id = ${third.ticketId}`.execute(
+      h.db,
+    );
+    expect((await open(h)).ticketNumber).toBe(`${code}-10001`);
+  });
+
+  test('finding the next counter is one index seek, not a scan of the store', async () => {
+    h = await openRepairHarness(16);
+    const compiled = maxTicketCounter(h.db, h, 'K7Q').compile();
+    const rows = await h.db.executeQuery<{ detail: string }>({
+      ...compiled,
+      sql: `EXPLAIN QUERY PLAN ${compiled.sql}`,
+    });
+    expect(rows.rows.map((r) => r.detail).join('\n')).toMatch(
+      /USING COVERING INDEX idx_repair_tickets_device_counter/,
+    );
   });
 });
