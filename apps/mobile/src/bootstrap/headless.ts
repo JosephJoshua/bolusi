@@ -12,20 +12,34 @@ import type { BackgroundPassTarget, HeadlessPass } from './background-task.js';
  * through `refresh`, which re-reads whatever can change after boot (a live enrollment writes the
  * device id), so a later caller never sees a stale snapshot. A failed boot is forgotten, so the next
  * caller (the UI, after a background boot failed on a locked iPhone) tries again rather than
- * inheriting the failure.
+ * inheriting the failure. A caller that joined someone else's failed boot retries once with its own
+ * `arg`, so the UI still gets its self-healing boot after a background boot failed.
  */
-export function shareBoot<T>(
-  boot: () => Promise<T>,
+export function shareBoot<T, A = void>(
+  boot: (arg: A) => Promise<T>,
   refresh: (booted: T) => Promise<T> = (booted) => Promise.resolve(booted),
-): () => Promise<T> {
+): (arg: A) => Promise<T> {
   let inFlight: Promise<T> | null = null;
-  return async () => {
-    inFlight ??= boot().catch((error: unknown) => {
+  const run = async (arg: A, mayRetry: boolean): Promise<T> => {
+    // `arg` reaches `boot` only when this call is the one that boots; a later caller joins the boot
+    // in flight whatever it passes (a background task joining the UI's boot, or the reverse).
+    const joined = inFlight !== null;
+    inFlight ??= boot(arg).catch((error: unknown) => {
       inFlight = null;
       throw error;
     });
-    return refresh(await inFlight);
+    let booted: T;
+    try {
+      booted = await inFlight;
+    } catch (error) {
+      // A joined boot that failed was another caller's attempt, made its way (a background boot
+      // does not self-heal). Try once more our own way before giving up.
+      if (joined && mayRetry) return run(arg, false);
+      throw error;
+    }
+    return refresh(booted);
   };
+  return (arg) => run(arg, true);
 }
 
 /** A client that can run one headless pass. Both the sync and the media client are one. */

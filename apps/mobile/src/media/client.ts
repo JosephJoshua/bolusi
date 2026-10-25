@@ -48,12 +48,12 @@ import {
 } from '@bolusi/core';
 import type { ClientDatabase, ClientDb } from '@bolusi/db-client';
 
-import {
-  registerMediaDrainTask,
-  type BackgroundBinding,
-  type BackgroundLease,
-  type BackgroundRegistration,
-} from './background-task.js';
+import type {
+  BackgroundBinding,
+  BackgroundLease,
+  BackgroundRegistration,
+} from '../bootstrap/background-task.js';
+import { registerMediaDrainTask } from './background-task.js';
 import {
   capturePhoto,
   type CameraCapturePort,
@@ -249,7 +249,8 @@ class MediaClientImpl implements MediaClient {
     // has already freed what it can before the first upload attempt reads free space.
     const prune = await this.pruning.run('app_start');
 
-    this.triggers.start();
+    // Stopped while starting: `stop()` already ran, so the triggers must not start after it.
+    if (!this.stopped) this.triggers.start();
     return { recovered, background, prune };
   }
 
@@ -267,10 +268,11 @@ class MediaClientImpl implements MediaClient {
 
   stop(): void {
     this.stopped = true;
-    this.lease?.release();
-    this.lease = null;
     this.triggers.stop();
     this.loop.stop();
+    // The host waits for the item in flight before anything else drives the queue.
+    this.lease?.release(this.loop.settle());
+    this.lease = null;
   }
 
   /**

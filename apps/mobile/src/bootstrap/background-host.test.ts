@@ -81,7 +81,7 @@ describe('a pass with the app open', () => {
     expect(timer.pendingCount).toBe(0);
   });
 
-  test('pauses the client at the budget and waits for it to stop', async () => {
+  test('at the budget the pass stops waiting, but never cuts the open app`s own loop short', async () => {
     const timer = new FakeTimer();
     const host = createBackgroundHost({ timer });
     const { target, calls, holdUntilPaused } = fakeTarget();
@@ -95,7 +95,25 @@ describe('a pass with the app open', () => {
 
     timer.runPending(); // the 60 s budget
     await pass;
-    expect(calls).toEqual(['client:request', 'client:settle', 'client:pause']);
+    expect(calls).toEqual(['client:request', 'client:settle']); // no pause
+  });
+
+  test('a stopped client`s last work finishes before a headless pass touches the database', async () => {
+    const timer = new FakeTimer();
+    const headless = fakeHeadless();
+    const host = createBackgroundHost({ timer, startHeadless: headless.startHeadless });
+    const lease = await host.claim();
+    lease.attach(fakeTarget().target);
+
+    let finishLastBatch: () => void = () => undefined;
+    lease.release(new Promise<void>((resolve) => (finishLastBatch = resolve)));
+    const pass = host.runPass();
+    await flush();
+    expect(headless.boots()).toBe(0); // still waiting for the retired loop
+
+    finishLastBatch();
+    await pass;
+    expect(headless.boots()).toBe(1);
   });
 
   test('a pass while the client is still starting waits for it rather than booting another', async () => {
@@ -157,6 +175,23 @@ describe('a pass with the app open', () => {
 });
 
 describe('a pass with no app open (killed app woken by the OS)', () => {
+  test('a headless client is paused at the budget and stopped once it has', async () => {
+    const timer = new FakeTimer();
+    const headless = fakeHeadless({ hold: true });
+    const host = createBackgroundHost({ timer, startHeadless: headless.startHeadless });
+
+    const pass = host.runPass();
+    await flush();
+    timer.runPending(); // the 60 s budget
+    await pass;
+    expect(headless.log).toEqual([
+      'headless:request',
+      'headless:settle',
+      'headless:pause',
+      'headless:stop',
+    ]);
+  });
+
   test('boots a headless client, drives one pass, and stops it', async () => {
     const timer = new FakeTimer();
     const headless = fakeHeadless();

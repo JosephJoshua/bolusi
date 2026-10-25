@@ -511,13 +511,27 @@ export function Root({
       try {
         const info = await readDeviceInfoStable(booted);
         if (!disposed) setDeviceInfo(info);
-        await startSyncIfEnrolled(booted, enroll);
-        await startMediaIfEnrolled(booted);
       } catch (error) {
         consoleDiagnostics.warn('enrolled-services start failed after session open', {
           via,
           error: error instanceof Error ? error.message : String(error),
         });
+      }
+      // The two loops start side by side (FR-1138: independent), so a sync start that waits for a
+      // background pass to hand over (background-task.ts) does not hold up the media queue.
+      const loops = await Promise.allSettled([
+        startSyncIfEnrolled(booted, enroll),
+        startMediaIfEnrolled(booted),
+      ]);
+      for (const [index, outcome] of loops.entries()) {
+        if (outcome.status === 'rejected') {
+          consoleDiagnostics.warn('enrolled-services start failed after session open', {
+            via,
+            service: index === 0 ? 'sync' : 'media',
+            error:
+              outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+          });
+        }
       }
     };
 

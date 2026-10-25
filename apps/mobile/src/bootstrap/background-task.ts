@@ -176,7 +176,7 @@ export interface BackgroundPassTarget {
   requestBackground(): void;
   /** Resolves when that work (and any coalesced rerun) is done. */
   settle(): Promise<void>;
-  /** Stop at the next safe point. Without it, a pass or a handover waits for `settle` or the budget. */
+  /** Stop at the next safe point, for a headless pass out of time or handing over to the open app. */
   pause?(): void;
 }
 
@@ -190,8 +190,12 @@ export interface HeadlessPass {
 export interface BackgroundLease {
   /** The client is started; passes drive it from now on. */
   attach(target: BackgroundPassTarget): void;
-  /** The client stopped (or failed to start). Idempotent; a stale lease's release does nothing. */
-  release(): void;
+  /**
+   * The client stopped (or failed to start). `settled` resolves once its loop has finished the
+   * work in flight; nothing else drives the database until then. Idempotent; a stale lease's
+   * release does nothing.
+   */
+  release(settled?: Promise<void>): void;
 }
 
 export interface BackgroundHost {
@@ -217,6 +221,8 @@ export function createBackgroundHost(deps: {
   let lease: { target: BackgroundPassTarget | null } | null = null;
   const waiting = new Set<(target: BackgroundPassTarget | null) => void>();
   let headless: { pass: HeadlessPass | null; done: Promise<void> } | null = null;
+  /** A released foreground client's last work in flight. Never rejects. */
+  let releasing: Promise<void> = Promise.resolve();
 
   const wake = (target: BackgroundPassTarget | null): void => {
     for (const done of waiting) done(target);
@@ -237,11 +243,18 @@ export function createBackgroundHost(deps: {
     });
   }
 
-  function drive(target: BackgroundPassTarget): Promise<void> {
+  /**
+   * One bounded pass. Only a headless client is paused at the budget: the open app's loops keep
+   * going (the pass just stops waiting for them), since cutting them short would drop the open
+   * app's own triggers for nothing.
+   */
+  function drive(target: BackgroundPassTarget, headlessTarget: boolean): Promise<void> {
     return runBoundedPass({
       start: () => target.requestBackground(),
       settle: () => target.settle(),
-      ...(target.pause === undefined ? {} : { onBudgetSpent: () => target.pause?.() }),
+      ...(headlessTarget && target.pause !== undefined
+        ? { onBudgetSpent: () => target.pause?.() }
+        : {}),
       timer,
     });
   }
@@ -255,7 +268,7 @@ export function createBackgroundHost(deps: {
     run.pass = pass;
     try {
       // A foreground client may have claimed the host while this one was booting.
-      if (lease === null) await drive(pass.target);
+      if (lease === null) await drive(pass.target, true);
     } finally {
       pass.stop();
     }
@@ -269,15 +282,22 @@ export function createBackgroundHost(deps: {
         headless.pass?.target.pause?.();
         await headless.done;
       }
+      await releasing;
       return {
         attach(target) {
           if (lease !== current) return;
           current.target = target;
           wake(target);
         },
-        release() {
+        release(settled) {
           if (lease !== current) return;
           lease = null;
+          if (settled !== undefined) {
+            const previous = releasing;
+            releasing = Promise.all([previous, settled.catch(() => undefined)]).then(
+              () => undefined,
+            );
+          }
           wake(null);
         },
       };
@@ -288,9 +308,12 @@ export function createBackgroundHost(deps: {
         if (headless !== null) return await headless.done;
         if (lease !== null) {
           const target = lease.target ?? (await waitForAttach());
-          if (target !== null) await drive(target);
+          if (target !== null) await drive(target, false);
           return;
         }
+        await releasing;
+        // A foreground client may have claimed, or another pass started, while we waited.
+        if (lease !== null || headless !== null) return;
         if (deps.startHeadless === undefined) return;
         const run: { pass: HeadlessPass | null; done: Promise<void> } = {
           pass: null,

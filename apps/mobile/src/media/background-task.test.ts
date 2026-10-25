@@ -13,16 +13,15 @@
 import { describe, expect, test } from 'vitest';
 
 import { fakeBackgroundPlatform as fakePlatform } from '../bootstrap/_background-platform.test.js';
-import { createBackgroundHost } from '../bootstrap/background-task.js';
-import { FakeTimer } from './_harness.test.js';
 import {
   BACKGROUND_MINIMUM_INTERVAL_MINUTES,
   BACKGROUND_PASS_BUDGET_MS,
   BACKGROUND_STATUS_RESTRICTED,
-  MEDIA_DRAIN_TASK,
-  registerMediaDrainTask,
+  createBackgroundHost,
   type BackgroundTaskPlatform,
-} from './background-task.js';
+} from '../bootstrap/background-task.js';
+import { FakeTimer } from './_harness.test.js';
+import { MEDIA_DRAIN_TASK, registerMediaDrainTask } from './background-task.js';
 
 /** A drain target the pass drives, attached to a host as the open app's media client would be. */
 async function binding(

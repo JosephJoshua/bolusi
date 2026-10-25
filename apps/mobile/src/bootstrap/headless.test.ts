@@ -46,6 +46,25 @@ describe('shareBoot', () => {
   });
 });
 
+test('a caller that joined a failed boot retries once its own way', async () => {
+  const modes: string[] = [];
+  let release: (() => void) | null = null;
+  const boot = shareBoot(async (mode: 'foreground' | 'background') => {
+    modes.push(mode);
+    if (mode === 'background') {
+      await new Promise<void>((resolve) => (release = resolve));
+      throw new Error('foreign database'); // a background boot never wipes to heal this
+    }
+    return 'healed';
+  });
+  const background = boot('background');
+  const foreground = boot('foreground'); // the user opens the app while it is in flight
+  release!();
+  await expect(background).rejects.toThrow('foreign database');
+  await expect(foreground).resolves.toBe('healed');
+  expect(modes).toEqual(['background', 'foreground']);
+});
+
 function fakeClient(options: { failStart?: boolean } = {}) {
   const calls: string[] = [];
   const client: HeadlessClient = {

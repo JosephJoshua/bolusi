@@ -289,6 +289,32 @@ describe('a full cycle walks idle → pushing → pulling → idle (03 §10)', (
     expect(harness.timer.pending()).toBe(0);
   });
 
+  it('pause() during push stops between push batches; the rest stay local for the next trigger', async () => {
+    const ops = [await seedLocalOp(1), await seedLocalOp(2), await seedLocalOp(3)];
+    const loop = await harness.makeLoop({ deviceId: device.id, pushBatchSize: 1 });
+    harness.transport.scriptPush(() => {
+      loop.pause(); // the open app claims the database while a backlog is pushing
+      return { results: [{ id: ops[0]!.id, status: 'accepted' } as PushResult], serverTime: 1 };
+    });
+    loop.requestSync('background');
+    await loop.settle();
+
+    expect(harness.transport.pushes).toHaveLength(1);
+
+    // The unpushed ops were left `local`, so the next trigger carries on from op 2.
+    harness.transport.scriptPush(
+      { results: [{ id: ops[1]!.id, status: 'accepted' } as PushResult], serverTime: 1 },
+      { results: [{ id: ops[2]!.id, status: 'accepted' } as PushResult], serverTime: 1 },
+    );
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(harness.transport.pushes.map((p) => p.ops.map((op) => op.id))).toEqual([
+      [ops[0]!.id],
+      [ops[1]!.id],
+      [ops[2]!.id],
+    ]);
+  });
+
   it('pause() on an idle loop is a no-op', async () => {
     const loop = await harness.makeLoop({ deviceId: device.id });
     loop.pause();

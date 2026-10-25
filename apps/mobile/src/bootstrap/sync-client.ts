@@ -233,6 +233,8 @@ class SyncClientImpl implements SyncClient {
     }
     try {
       await this.startForBackgroundPass();
+      // Stopped during hydrate: `stop()` already ran, so nothing below may start.
+      if (this.stopped) return;
       // The UI half of connectivity (isOffline). The trigger's OWN subscription is inside triggers —
       // this one only mirrors the state Root renders. NetInfo fires immediately with the current value.
       this.uiNetUnsub = this.deps.netInfo.subscribe((connected) => {
@@ -282,9 +284,10 @@ class SyncClientImpl implements SyncClient {
 
   stop(): void {
     this.stopped = true;
-    this.lease?.release();
-    this.lease = null;
     this.loop.stop();
+    // The host waits for the retired loop's last batch before anything else drives the database.
+    this.lease?.release(this.loop.settle());
+    this.lease = null;
     this.realtime?.stop();
     this.triggers.stop();
     this.uiNetUnsub?.();

@@ -109,7 +109,7 @@ export class SyncLoop<DB> {
   private cancelBackoff: CancelTimer | null = null;
   private cycle: Promise<void> = Promise.resolve();
   private hydrated = false;
-  /** Set by `pause()`: the running pull stops at its next batch boundary and no rerun follows. */
+  /** Set by `pause()`: the running cycle stops at its next batch boundary and no rerun follows. */
   private pauseRequested = false;
   /** Set by `stop()`: this loop never starts another cycle. */
   private stopped = false;
@@ -174,7 +174,8 @@ export class SyncLoop<DB> {
   }
 
   /**
-   * Stop the running cycle at its next committed pull batch, without counting it as a sync. For a
+   * Stop the running cycle at its next push or committed pull batch, without counting it as a sync.
+   * A pause during push ends the push there and lets at most one pull batch through. For a
    * time-limited background run, or handing the database to another owner. The next trigger clears
    * the pause and resumes from the committed cursor. A no-op when nothing is running.
    */
@@ -230,6 +231,7 @@ export class SyncLoop<DB> {
           surface: this.options.surface,
           clock: this.options.clock,
           deviceId: this.options.deviceId,
+          shouldContinue: () => !this.pauseRequested,
           onChainBroken: async () => {
             this.pushHalted = true;
             await writeSyncState(this.options.db, { pushHalted: true });
@@ -341,6 +343,8 @@ export class SyncLoop<DB> {
     // Transport/server failure ⇒ backoff (03 §10). Op-level rejections never reach here — they are
     // results inside a resolved response, not thrown (push.ts).
     this.transition('transport_failure');
+    // A retired loop records nothing: the next owner has its own state and its own retries.
+    if (this.stopped) return;
     this.failureCount += 1;
     const delay = syncBackoffDelayMs(this.failureCount);
     const until = this.options.clock.now() + delay;
@@ -349,7 +353,6 @@ export class SyncLoop<DB> {
       backoffUntil: until,
     });
     this.clearBackoffTimer();
-    if (this.stopped) return;
     this.cancelBackoff = this.options.timer.schedule(delay, () => {
       this.cancelBackoff = null;
       if (this.syncDisabled || this.stopped) return;

@@ -16,16 +16,6 @@ import {
   type BackgroundRegistration,
 } from '../bootstrap/background-task.js';
 
-export {
-  BACKGROUND_MINIMUM_INTERVAL_MINUTES,
-  BACKGROUND_PASS_BUDGET_MS,
-  BACKGROUND_STATUS_RESTRICTED,
-  type BackgroundBinding,
-  type BackgroundLease,
-  type BackgroundRegistration,
-  type BackgroundTaskPlatform,
-} from '../bootstrap/background-task.js';
-
 /** The process-global task name. Defined once, at module scope in index.ts. */
 export const MEDIA_DRAIN_TASK = 'bolusi.media.drain';
 

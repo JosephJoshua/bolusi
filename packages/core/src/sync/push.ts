@@ -85,6 +85,8 @@ export interface PushPhaseDeps<DB> {
   /** Emits the `pushHalted` write; the loop owns `SyncState` (03 §10 — bookkeeping.ts defers here). */
   readonly onChainBroken: () => Promise<void>;
   readonly batchSize?: number;
+  /** Asked after each batch; `false` stops the phase there (the loop's `pause()`). Ops stay `local`. */
+  readonly shouldContinue?: () => boolean;
 }
 
 export interface PushPhaseResult {
@@ -158,6 +160,9 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
 
     // A short batch means the queue is drained; a full one may have more behind it.
     if (ops.length < batchSize) return { synced, rejected, halted: false, gapped: false, batches };
+    if (deps.shouldContinue?.() === false) {
+      return { synced, rejected, halted: false, gapped: false, batches };
+    }
   }
 }
 
