@@ -37,11 +37,13 @@ import {
   ticketStatus,
   type BoardView,
 } from '../flows.js';
+import { statusLabel } from './labels.js';
 import { StatusChip, repairStyles } from './parts.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 
 const PAGE = 50;
-const MAX_PAGE = 100;
+/** Search is ranked, so its best matches come first and one page is enough. */
+const SEARCH_LIMIT = 100;
 
 const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
   active: 'repair.board.view.active',
@@ -78,19 +80,40 @@ export function RepairBoard({
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
   const [view, setView] = useState<BoardView>(() => defaultBoardView(can));
   const [text, setText] = useState('');
-  const [limit, setLimit] = useState(PAGE);
+  const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
   const searching = text.trim() !== '';
 
   const query = useRepairQuery<LoadedBoard>(
     async (rt) => {
-      const page = searching
-        ? await rt.query('searchTickets', { text: text.trim(), limit: MAX_PAGE })
-        : await rt.query('listTickets', { filter: boardFilter(view, rt.userId), limit });
-      const statuses = await rt.ticketSyncStatuses(page.rows.map((row) => row.id));
-      return { rows: page.rows, statuses, hasMore: page.nextCursor !== null };
+      let rows: TicketSummaryRow[] = [];
+      let hasMore = false;
+      if (searching) {
+        rows = [
+          ...(await rt.query('searchTickets', { text: text.trim(), limit: SEARCH_LIMIT })).rows,
+        ];
+      } else {
+        // Every page the user has scrolled to, re-read on each refresh so the live board stays whole.
+        let cursor: string | null = null;
+        for (let n = 0; n < pages; n += 1) {
+          const page: {
+            readonly rows: readonly TicketSummaryRow[];
+            readonly nextCursor: string | null;
+          } = await rt.query('listTickets', {
+            filter: boardFilter(view, rt.userId),
+            limit: PAGE,
+            ...(cursor === null ? {} : { cursor }),
+          });
+          rows = [...rows, ...page.rows];
+          cursor = page.nextCursor;
+          if (cursor === null) break;
+        }
+        hasMore = cursor !== null;
+      }
+      const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
+      return { rows, statuses, hasMore };
     },
-    `board:${searching ? `q:${text.trim()}` : view}:${String(limit)}:${String(reloadNonce)}`,
+    `board:${searching ? `q:${text.trim()}` : view}:${String(pages)}:${String(reloadNonce)}`,
   );
 
   const listState = ((): ListState<TicketSummaryRow> => {
@@ -164,9 +187,11 @@ export function RepairBoard({
           <SegmentedControl
             options={BOARD_VIEWS.map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
             value={view}
+            // Wrapped, not scrolled sideways: every queue name is readable without a hidden swipe.
+            wrap
             onChange={(next) => {
               setView(next);
-              setLimit(PAGE);
+              setPages(1);
             }}
             testID={`${testID}.views`}
           />
@@ -177,8 +202,8 @@ export function RepairBoard({
         state={listState}
         keyExtractor={(row) => row.id}
         onEndReached={
-          !searching && loaded?.hasMore === true && limit < MAX_PAGE
-            ? () => setLimit((current) => Math.min(current + PAGE, MAX_PAGE))
+          !searching && loaded?.hasMore === true
+            ? () => setPages((current) => current + 1)
             : undefined
         }
         renderRow={(row) => (
@@ -220,12 +245,25 @@ function TicketRow({
   readonly testID: string;
 }): React.JSX.Element {
   const device = [row.deviceBrand, row.deviceModel].filter((s) => s !== '').join(' ');
-  const technician = row.technicianName ?? tn('repair.ticket.unassigned');
+  const details = [device, row.technicianName ?? tn('repair.ticket.unassigned')]
+    .filter((s) => s !== '')
+    .join(' · ');
+  // The label replaces what a screen reader would read from the row, so it says everything shown.
+  const label = [
+    row.ticketNumber,
+    statusLabel(ticketStatus(row)),
+    row.customerName,
+    formatMoney(row.quoteTotal),
+    details,
+    row.pendingProposals > 0 ? tn('repair.board.priceChangeWaiting') : '',
+  ]
+    .filter((s) => s !== '')
+    .join(', ');
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={`${row.ticketNumber}, ${row.customerName}, ${device}`}
+      accessibilityLabel={label}
       onPress={onPress}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [
@@ -244,8 +282,8 @@ function TicketRow({
           </Text>
           <Text style={styles.amount}>{formatMoney(row.quoteTotal)}</Text>
         </View>
-        <Text style={repairStyles.muted} numberOfLines={1}>
-          {`${device} · ${technician}`}
+        <Text style={repairStyles.muted} numberOfLines={2}>
+          {details}
         </Text>
         <View style={styles.footer}>
           {row.pendingProposals > 0 ? (

@@ -1,10 +1,10 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored.
-import type { IntakePhotoSlot, QuoteLineKind } from '../constants.js';
+import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from '../constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import type { IntakeCheck, Peripheral, ReadyChoice, TicketStatus } from '../flows.js';
+import type { IntakeCheck, IntakeStep, Peripheral, ReadyChoice, TicketStatus } from '../flows.js';
 
 const STATUS_KEY: Readonly<Record<TicketStatus, RepairKey>> = {
   received: 'repair.status.received',
@@ -67,3 +67,18 @@ function storedLabel(keys: Readonly<Record<string, RepairKey>>, value: string): 
 export const statusLabel = (status: TicketStatus): string => tn(STATUS_KEY[status]);
 export const checkLabel = (item: string): string => storedLabel(CHECK_KEY, item);
 export const peripheralLabel = (item: string): string => storedLabel(PERIPHERAL_KEY, item);
+
+export const INTAKE_STEP_KEY: Readonly<Record<IntakeStep, RepairKey>> = {
+  customer: 'repair.intake.step.customer',
+  device: 'repair.intake.step.device',
+  condition: 'repair.intake.step.condition',
+  photos: 'repair.intake.step.photos',
+  price: 'repair.intake.step.price',
+  review: 'repair.intake.step.review',
+};
+
+export const CHECK_STATE_KEY: Readonly<Record<ChecklistState, RepairKey>> = {
+  ok: 'repair.condition.ok',
+  issue: 'repair.condition.issue',
+  not_checked: 'repair.condition.notChecked',
+};

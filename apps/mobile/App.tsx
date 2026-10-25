@@ -8,6 +8,7 @@ import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-nati
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
+import { systemClock } from './src/ports/clock.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
 import {
@@ -979,7 +980,8 @@ export default function App(props: AppProps): React.JSX.Element {
               return (
                 <RepairHome
                   runtime={props.repair}
-                  now={props.now}
+                  // The clock itself, not this render's reading: an intake can sit open for hours.
+                  now={systemClock.now}
                   onRegisterSurfaceNav={registerSurfaceNav}
                   restoredDraft={restoredIntakeDraft}
                   onDraftChange={publishIntakeDraft}

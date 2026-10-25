@@ -28,7 +28,7 @@ type RepairView =
 
 export interface RepairHomeProps {
   readonly runtime: RepairRuntime;
-  readonly now: number;
+  readonly now: () => number;
   readonly syncChip: ReactNode;
   readonly avatar: ReactNode;
   readonly onOpenSyncStatus: () => void;
@@ -133,6 +133,7 @@ export function RepairHome({
           chrome={chrome}
           onDone={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
           onCancel={() => setView({ kind: 'ticket', ticketId: view.ticketId })}
+          onRegisterDiscardGuard={registerDiscardGuard}
         />
       ) : null}
     </RepairRuntimeProvider>

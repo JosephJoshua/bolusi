@@ -93,14 +93,12 @@ export function ActionErrorBanner({
 }): React.JSX.Element | null {
   if (errorCode === null) return null;
   return (
-    <View style={styles.banner}>
-      <Banner
-        variant="danger"
-        message={translateErrorCode(errorCode)}
-        onPress={onDismiss}
-        testID={testID}
-      />
-    </View>
+    <Banner
+      variant="danger"
+      message={translateErrorCode(errorCode)}
+      onPress={onDismiss}
+      testID={testID}
+    />
   );
 }
 
@@ -188,6 +186,7 @@ export function FlowScreen({
   primaryLabel,
   onPrimary,
   primaryDisabled,
+  primaryHint,
   primaryVariant,
   busy,
   errorCode,
@@ -202,6 +201,8 @@ export function FlowScreen({
   readonly primaryLabel?: string | undefined;
   readonly onPrimary?: (() => void) | undefined;
   readonly primaryDisabled?: boolean | undefined;
+  /** Said above a disabled primary, so the user knows what it is waiting for. */
+  readonly primaryHint?: string | undefined;
   readonly primaryVariant?: 'primary' | 'destructive' | undefined;
   readonly busy: boolean;
   readonly errorCode: string | null;
@@ -220,25 +221,38 @@ export function FlowScreen({
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
       overlay={overlay}
+      // In the fixed banner slot, not the scrolling content: a refusal must be seen wherever the
+      // user had scrolled to when they pressed the bottom action.
+      banner={
+        errorCode === null ? undefined : (
+          <ActionErrorBanner
+            errorCode={errorCode}
+            onDismiss={onClearError}
+            testID={`${testID}.error`}
+          />
+        )
+      }
       bottomAction={
         primaryLabel === undefined || onPrimary === undefined ? undefined : (
-          <Button
-            label={primaryLabel}
-            onPress={onPrimary}
-            variant={primaryVariant ?? 'primary'}
-            disabled={primaryDisabled === true || busy}
-            busy={busy}
-            testID={`${testID}.primary`}
-          />
+          <View>
+            {primaryDisabled === true && primaryHint !== undefined ? (
+              <Text style={styles.hint} testID={`${testID}.primaryHint`}>
+                {primaryHint}
+              </Text>
+            ) : null}
+            <Button
+              label={primaryLabel}
+              onPress={onPrimary}
+              variant={primaryVariant ?? 'primary'}
+              disabled={primaryDisabled === true || busy}
+              busy={busy}
+              testID={`${testID}.primary`}
+            />
+          </View>
         )
       }
       testID={testID}
     >
-      <ActionErrorBanner
-        errorCode={errorCode}
-        onDismiss={onClearError}
-        testID={`${testID}.error`}
-      />
       {children}
     </AppShell>
   );
@@ -306,7 +320,7 @@ export const repairStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  banner: { marginBottom: space.md },
+  hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
   thumb: {
     width: '100%',
     aspectRatio: 1,

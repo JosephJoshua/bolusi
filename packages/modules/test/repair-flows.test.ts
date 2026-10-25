@@ -176,6 +176,57 @@ describe('ticket actions', () => {
     expect(checked).toBeGreaterThanOrEqual(15);
   });
 
+  test('an action a command would accept is offered, so no valid step is hidden', async () => {
+    h = await openRepairHarness(4103);
+    const states: State[] = [
+      'received',
+      'in_repair',
+      'proposed',
+      'waiting_for_parts',
+      'repaired',
+      'cancelled',
+      'returned',
+    ];
+    const all: TicketAction[] = [
+      'decidePrice',
+      'claim',
+      'start',
+      'resume',
+      'reopen',
+      'waitForParts',
+      'markRepaired',
+      'assign',
+      'changePrice',
+      'proposePrice',
+      'handover',
+      'cancel',
+    ];
+    // start, resume and reopen are one command under three names; one of them offered covers all.
+    const sameCommand = (a: TicketAction, b: TicketAction): boolean =>
+      a === b ||
+      (['start', 'resume', 'reopen'].includes(a) && ['start', 'resume', 'reopen'].includes(b));
+    const gaps: string[] = [];
+    for (const state of states) {
+      for (const userId of [h.cashierId, h.technicianId]) {
+        const probe = await ticketIn(h, state);
+        const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
+        const offered = ticketActions(row, abilitiesOf(h, userId), userId);
+        for (const action of all) {
+          if (offered.some((o) => sameCommand(o, action))) continue;
+          const ticketId = await ticketIn(h, state);
+          const accepted = await perform(h, action, ticketId, userId).then(
+            () => true,
+            () => false,
+          );
+          if (accepted) {
+            gaps.push(`${state}/${userId === h.cashierId ? 'cashier' : 'technician'}/${action}`);
+          }
+        }
+      }
+    }
+    expect(gaps).toEqual([]);
+  });
+
   test('roles see their own work: the counter hands over and changes price, technicians repair', async () => {
     h = await openRepairHarness(4102);
     const cashier = abilitiesOf(h, h.cashierId);
@@ -235,6 +286,9 @@ describe('money and dates', () => {
     const now = new Date(2026, 9, 25, 9, 30).getTime();
     expect(readyAtFor('today', now)).toBe(new Date(2026, 9, 25, 17, 0).getTime());
     expect(readyAtFor('threeDays', now)).toBe(new Date(2026, 9, 28, 17, 0).getTime());
+    // Taken in after five, "today" is still later than now.
+    const evening = new Date(2026, 9, 25, 18, 10).getTime();
+    expect(readyAtFor('today', evening)).toBe(new Date(2026, 9, 25, 20, 0).getTime());
     expect(readyAtFor('unknown', now)).toBeNull();
   });
 });

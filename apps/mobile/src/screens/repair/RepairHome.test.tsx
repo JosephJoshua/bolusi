@@ -42,7 +42,7 @@ async function mount(
   const screen = render(
     <RepairHome
       runtime={repairRuntimeFor(harness, userId)}
-      now={NOW}
+      now={() => NOW}
       syncChip={null}
       avatar={null}
       onOpenSyncStatus={vi.fn()}
@@ -226,12 +226,51 @@ describe('price changes and handover', () => {
 
     const cashier = await mount(h, h.cashierId);
     await press(cashier, `repair.board.row.${ticketId}`);
-    await press(cashier, `repair.ticket.decide.${proposal.id}`);
-    await press(cashier, 'repair.proposal.agreed');
+    // One proposal: the bottom action opens it, so there is no second "decide" in the price list.
+    expect(cashier.query(`repair.ticket.decide.${proposal.id}`)).toBeNull();
+    await press(cashier, 'repair.ticket.action.decidePrice');
     await press(cashier, 'repair.proposal.primary');
     const ticket = await ticketRow(h, ticketId);
     expect(ticket.quoteTotal).toBe(750_000 + 150_000);
     expect(ticket.pendingProposals).toBe(0);
+    expect(
+      ticket.quoteLines.find((line: { id: string }) => line.id === proposal.id).customerAgreed,
+    ).toBe(true);
+  });
+
+  test('on a cancelled ticket a leftover proposal is history, and handover charges nothing', async () => {
+    h = await openRepairScreenHarness(5305);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      h.technicianId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(screen.query('repair.ticket.action.decidePrice')).toBeNull();
+    expect(screen.query('repair.ticket.pendingTotal')).toBeNull();
+    await press(screen, 'repair.ticket.action.handover');
+    expect(screen.query('repair.handover.cancelled')).not.toBeNull();
+    expect(screen.query('repair.handover.total')).toBeNull();
+  });
+
+  test('leaving the handover after taking a photo asks first', async () => {
+    h = await openRepairScreenHarness(5306);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    expect(screen.query('repair.handover.primaryHint')).not.toBeNull();
+    await press(screen, 'repair.handover.photo.press');
+    await press(screen, 'repair.handover.back');
+    expect(screen.query('repair.handover.discard')).not.toBeNull();
+    expect(screen.query('repair.handover')).not.toBeNull();
   });
 
   test('handover takes a photo and the customer signature, then the ticket is returned', async () => {
@@ -364,6 +403,42 @@ describe('price and assignment details', () => {
     expect(screen.query('repair.intake.price.description.0.error')).not.toBeNull();
     expect(screen.query('repair.intake.problem.incompleteLine')).toBeNull();
     expect(text(screen, 'repair.intake.price.total')).toContain('0');
+  });
+
+  test('a restored intake drops photos that were deleted while it waited, and asks for them again', async () => {
+    h = await openRepairScreenHarness(5603);
+    const kept = h.photo(71);
+    const gone = h.photo(72);
+    const draft: IntakeDraft = {
+      kind: 'intake',
+      step: 3,
+      customer: { kind: 'new', name: 'Ester', phone: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      complaint: 'Mati',
+      intakeNotes: '',
+      checks: {},
+      peripherals: [],
+      photos: { front: kept, back: gone },
+      lines: [],
+      ready: 'tomorrow',
+    };
+    const runtime = repairRuntimeFor(h, h.cashierId);
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: draft,
+      runtime: {
+        ...runtime,
+        loadThumbnail: (ref) =>
+          Promise.resolve(
+            ref.kind === 'signed' && ref.mediaId === kept.mediaId
+              ? { kind: 'ready', uri: 'file:///kept.jpg' }
+              : { kind: 'unavailable' },
+          ),
+      },
+    });
+    await settle();
+    expect(screen.query('repair.intake.photosExpired')).not.toBeNull();
+    expect(screen.query('repair.intake.photos.slot.front.done')).not.toBeNull();
+    expect(screen.query('repair.intake.photos.slot.back.done')).toBeNull();
   });
 
   test('a proposal waiting on the counter is shown apart from the agreed total', async () => {

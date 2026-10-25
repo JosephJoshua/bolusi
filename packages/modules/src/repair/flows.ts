@@ -1,7 +1,7 @@
 // Pure decisions behind the repair screens on every client (phone today, desktop next): which
 // tickets a board view shows, what a user may do next on a ticket, and how an intake draft becomes
 // an `openTicket` input. Platform-free so each client reuses them and each rule is tested directly.
-import type { MediaRef, MediaRefMime } from '@bolusi/schemas';
+import type { MediaRef, MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 import { zMediaRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
@@ -24,7 +24,6 @@ import type {
   TicketPhotoRow,
   TicketSummaryRow,
 } from './queries.js';
-import type { ThumbnailRef } from '../screen-kit/index.js';
 
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -145,6 +144,8 @@ export function ticketActions(
     if (ticket.outcome === 'received' || ticket.outcome === 'in_repair') {
       actions.push('waitForParts');
     }
+    // claimTicket would also take a repaired phone, but there is no work left to take over; only a
+    // reopen brings it back to a technician, so the board does not offer it.
     if (ticket.technicianId !== userId && ticket.outcome !== 'repaired') actions.push('claim');
   }
   // An unassigned repair waits on the counter to pick a technician, so that comes before pricing.
@@ -222,7 +223,6 @@ export const INTAKE_CHECKS = [
 ] as const;
 export type IntakeCheck = (typeof INTAKE_CHECKS)[number];
 
-/** Things customers commonly leave with the phone. Stored by key so either language reads them. */
 /** Brands the stores see most, offered as one-tap answers; any other brand is typed. */
 export const COMMON_BRANDS = [
   'Samsung',
@@ -234,6 +234,7 @@ export const COMMON_BRANDS = [
   'iPhone',
 ] as const;
 
+/** Things customers commonly leave with the phone. Stored by key so either language reads them. */
 export const PERIPHERALS = ['charger', 'cable', 'case', 'simCard', 'memoryCard', 'box'] as const;
 export type Peripheral = (typeof PERIPHERALS)[number];
 
@@ -247,6 +248,11 @@ export function readyAtFor(choice: ReadyChoice, now: number): number | null {
   const date = new Date(now);
   date.setDate(date.getDate() + days);
   date.setHours(17, 0, 0, 0);
+  // "Today" taken in after five still has to be later than now: a couple of hours, on the hour.
+  if (date.getTime() <= now) {
+    date.setTime(now);
+    date.setHours(date.getHours() + 2, 0, 0, 0);
+  }
   return date.getTime();
 }
 

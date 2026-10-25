@@ -5,15 +5,16 @@
  * where the change was made (05-operation-log §8).
  */
 import { formatDateTime, formatMoney, t, translateOpType } from '@bolusi/i18n';
-import { AppShell, Banner, Button, Card, PhotoSlot, space } from '@bolusi/ui';
-import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppShell, Banner, Button, Card, PhotoSlot, color, space, touch, type } from '@bolusi/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HANDOVER_PHOTO_SLOTS, INTAKE_PHOTO_SLOTS } from '../constants.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
   useActionRunner,
+  type DiscardGuard,
   type EntitySyncStatuses,
   type StepBack,
 } from '../../screen-kit/index.js';
@@ -48,6 +49,14 @@ import {
   ProposalStep,
   WorkPhotosStep,
 } from './TicketSteps.js';
+
+/** What an action that runs in place says once it lands, in the fixed banner slot. */
+const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
+  claim: 'repair.done.claim',
+  start: 'repair.done.start',
+  resume: 'repair.done.start',
+  reopen: 'repair.done.start',
+};
 
 const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
   decidePrice: 'repair.action.decidePrice',
@@ -105,6 +114,13 @@ export function TicketDetail({
   const runner = useActionRunner();
   const [step, setStep] = useState<Step>({ kind: 'none' });
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [done, setDone] = useState<RepairKey | null>(null);
+  const [passcodeShown, setPasscodeShown] = useState(false);
+  // An open step holding photos asks before it is dropped (header back, hardware back).
+  const stepGuardRef = useRef<DiscardGuard | null>(null);
+  const registerStepGuard = useCallback((guard: DiscardGuard | null): void => {
+    stepGuardRef.current = guard;
+  }, []);
 
   const query = useRepairQuery<LoadedTicket>(
     async (rt) => {
@@ -117,18 +133,30 @@ export function TicketDetail({
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
   const rejected = query.status === 'ready' && hasRejectedOp(query.data.statuses[ticketId] ?? []);
   const closeStep = (): void => setStep({ kind: 'none' });
+  const leaveStep = useCallback((): void => {
+    const guard = stepGuardRef.current;
+    const close = (): void => setStep({ kind: 'none' });
+    if (guard === null) close();
+    else guard(close);
+  }, []);
   const stepOpen = step.kind !== 'none';
 
   useEffect(() => {
     onRegisterStepBack?.(() => {
       if (!stepOpen) return false;
-      setStep({ kind: 'none' });
+      leaveStep();
       return true;
     });
     return () => onRegisterStepBack?.(null);
-  }, [stepOpen, onRegisterStepBack]);
+  }, [stepOpen, onRegisterStepBack, leaveStep]);
 
-  const stepProps = { chrome, ticketId, onDone: closeStep, onCancel: closeStep };
+  const stepProps = {
+    chrome,
+    ticketId,
+    onDone: closeStep,
+    onCancel: leaveStep,
+    onRegisterDiscardGuard: registerStepGuard,
+  };
 
   switch (step.kind) {
     case 'before':
@@ -149,6 +177,13 @@ export function TicketDetail({
       break;
   }
 
+  const runInPlace = (action: TicketAction, run: () => Promise<unknown>): void => {
+    setDone(null);
+    void runner.run(run).then((result) => {
+      if (result !== undefined) setDone(DONE_KEY[action] ?? null);
+    });
+  };
+
   const perform = (action: TicketAction, row: TicketDetailRow): void => {
     switch (action) {
       case 'decidePrice': {
@@ -161,10 +196,10 @@ export function TicketDetail({
       case 'reopen':
         // The first start needs a before photo; a resume keeps the ones already taken.
         if (workPhotos(row, 'before').length === 0) setStep({ kind: 'before' });
-        else void runner.run(() => runtime.run('startWork', { ticketId }));
+        else runInPlace(action, () => runtime.run('startWork', { ticketId }));
         return;
       case 'claim':
-        void runner.run(() => runtime.run('claimTicket', { ticketId }));
+        runInPlace(action, () => runtime.run('claimTicket', { ticketId }));
         return;
       case 'markRepaired':
         setStep({ kind: 'after' });
@@ -187,6 +222,37 @@ export function TicketDetail({
   const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
   const [primary, ...others] = actions.filter((action) => action !== 'cancel');
   const canCancel = actions.includes('cancel');
+  const label = (action: TicketAction): string =>
+    tn(
+      action === 'assign' && ticket?.technicianId != null
+        ? 'repair.action.reassign'
+        : ACTION_KEY[action],
+    );
+
+  // One banner at a time, in the fixed slot so it shows wherever the user has scrolled: a refusal of
+  // what they just did, then a rejected op from sync, then what their last action did.
+  const banner =
+    runner.errorCode !== null ? (
+      <ActionErrorBanner
+        errorCode={runner.errorCode}
+        onDismiss={runner.clearError}
+        testID={`${testID}.actionError`}
+      />
+    ) : rejected ? (
+      <Banner
+        variant="danger"
+        message={t('sync.rejected.banner', { count: 1 })}
+        onPress={onOpenSyncStatus}
+        testID={`${testID}.rejectedBanner`}
+      />
+    ) : done !== null ? (
+      <Banner
+        variant="info"
+        message={tn(done)}
+        onPress={() => setDone(null)}
+        testID={`${testID}.done`}
+      />
+    ) : undefined;
 
   return (
     <AppShell
@@ -197,20 +263,11 @@ export function TicketDetail({
       backLabel={t('core.action.back')}
       syncChip={chrome.syncChip}
       avatar={chrome.avatar}
-      banner={
-        rejected ? (
-          <Banner
-            variant="danger"
-            message={t('sync.rejected.banner', { count: 1 })}
-            onPress={onOpenSyncStatus}
-            testID={`${testID}.rejectedBanner`}
-          />
-        ) : undefined
-      }
+      banner={banner}
       bottomAction={
         ticket === undefined || primary === undefined ? undefined : (
           <Button
-            label={tn(ACTION_KEY[primary])}
+            label={label(primary)}
             onPress={() => perform(primary, ticket)}
             busy={runner.busy}
             disabled={runner.busy}
@@ -234,11 +291,6 @@ export function TicketDetail({
   function renderTicket(row: TicketDetailRow): React.JSX.Element {
     return (
       <View testID={`${testID}.content`}>
-        <ActionErrorBanner
-          errorCode={runner.errorCode}
-          onDismiss={runner.clearError}
-          testID={`${testID}.actionError`}
-        />
         <Card testID={`${testID}.summary`}>
           <View style={repairStyles.row}>
             <Text style={repairStyles.heading} testID={`${testID}.customer`}>
@@ -247,7 +299,15 @@ export function TicketDetail({
             <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
           </View>
           {row.customerPhone === null ? null : (
-            <Text style={repairStyles.muted}>{row.customerPhone}</Text>
+            // Tap to call: the counter rings the customer when the phone is ready or a price changes.
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(`tel:${row.customerPhone ?? ''}`)}
+              style={styles.phone}
+              testID={`${testID}.phone`}
+            >
+              <Text style={styles.phoneText}>{row.customerPhone}</Text>
+            </Pressable>
           )}
           <Text style={[repairStyles.body, styles.device]} testID={`${testID}.device`}>
             {[row.deviceBrand, row.deviceModel, row.deviceColor].filter((s) => s !== '').join(' ')}
@@ -269,6 +329,29 @@ export function TicketDetail({
           {row.deviceImei === null ? null : (
             <Field label={tn('repair.device.imei')} value={row.deviceImei} />
           )}
+          {row.devicePasscode === null ? null : (
+            // The technician needs it to test the phone; hidden until asked so it is not read over
+            // a shoulder at the counter.
+            <View style={styles.passcode}>
+              <View style={styles.passcodeField}>
+                <Field
+                  label={tn('repair.device.passcode')}
+                  value={passcodeShown ? row.devicePasscode : '••••'}
+                  testID={`${testID}.passcode`}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPasscodeShown((shown) => !shown)}
+                style={styles.reveal}
+                testID={`${testID}.passcode.toggle`}
+              >
+                <Text style={styles.phoneText}>
+                  {tn(passcodeShown ? 'repair.passcode.hide' : 'repair.passcode.show')}
+                </Text>
+              </Pressable>
+            </View>
+          )}
           {row.outcomeNote === null || row.outcomeNote === '' ? null : (
             <Field label={tn('repair.ticket.lastNote')} value={row.outcomeNote} />
           )}
@@ -279,7 +362,7 @@ export function TicketDetail({
             {others.map((action) => (
               <View key={action} style={styles.secondaryAction}>
                 <Button
-                  label={tn(ACTION_KEY[action])}
+                  label={label(action)}
                   variant="secondary"
                   onPress={() => perform(action, row)}
                   disabled={runner.busy}
@@ -305,9 +388,11 @@ export function TicketDetail({
 
         {canCancel ? (
           <View style={styles.cancel}>
+            {/* Outlined, not solid red: it is final for the repair, so it never looks like the
+                next step. The step it opens says what cancelling means. */}
             <Button
               label={tn(ACTION_KEY.cancel)}
-              variant="destructive"
+              variant="secondary"
               onPress={() => perform('cancel', row)}
               disabled={runner.busy}
               testID={`${testID}.action.cancel`}
@@ -320,6 +405,10 @@ export function TicketDetail({
 
   function renderPrice(row: TicketDetailRow): React.JSX.Element {
     const pending = row.quoteLines.filter((line) => line.status === 'proposed');
+    // A proposal can only be decided while the ticket is open; on a closed one it is history.
+    const deciding = actions.includes('decidePrice');
+    // The bottom action already opens the first proposal; per-line buttons only when there are more.
+    const perLine = deciding && pending.length > 1;
     return (
       <Section title={tn('repair.ticket.price')} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => (
@@ -351,12 +440,13 @@ export function TicketDetail({
                 {lineCaption(line)}
               </Text>
             )}
-            {line.status === 'proposed' && can.quoteChange ? (
+            {line.status === 'proposed' && perLine ? (
               <View style={styles.secondaryAction}>
                 <Button
                   label={tn('repair.action.decidePrice')}
                   variant="secondary"
                   onPress={() => setStep({ kind: 'proposal', line })}
+                  disabled={runner.busy}
                   testID={`${testID}.decide.${line.id}`}
                 />
               </View>
@@ -369,7 +459,7 @@ export function TicketDetail({
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
-        {pending.length === 0 ? null : (
+        {!deciding || pending.length === 0 ? null : (
           // The total is what the customer agreed to; what a decision would add is said, not summed.
           <Text style={repairStyles.warning} testID={`${testID}.pendingTotal`}>
             {tn('repair.price.pendingTotal', {
@@ -488,6 +578,11 @@ const styles = StyleSheet.create({
   actions: { marginTop: space.md },
   cancel: { marginTop: space.xl },
   secondaryAction: { marginTop: space.sm },
+  phone: { alignSelf: 'flex-start', minHeight: touch.min, justifyContent: 'center' },
+  phoneText: { ...type.bodySm, color: color.primary },
+  passcode: { flexDirection: 'row', alignItems: 'center' },
+  passcodeField: { flex: 1 },
+  reveal: { minHeight: touch.min, justifyContent: 'center', marginLeft: space.md },
   line: { marginBottom: space.sm },
   total: { marginTop: space.sm },
   event: { ...repairStyles.muted, marginBottom: space.xs },

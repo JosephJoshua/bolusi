@@ -1,7 +1,8 @@
 /**
  * Handover — giving the device back: a photo of the handover and the customer's signature, both
- * required, then one tap records it. The price shown is what the customer owes; payment itself is
- * still the store's paper cash book in this slice.
+ * required, then one tap records it. On a repaired phone the price shown is what the customer owes;
+ * on a cancelled one the repair price is not charged. Payment itself is still the store's paper cash
+ * book in this slice.
  */
 import { formatMoney } from '@bolusi/i18n';
 import { Card, PhotoSlot, TextInput } from '@bolusi/ui';
@@ -9,7 +10,7 @@ import type { MediaRef } from '@bolusi/schemas';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn } from './i18n.js';
 import { capturedThumbnailRef, ticketStatus } from '../flows.js';
@@ -23,6 +24,7 @@ import {
   repairStyles,
   type RepairChrome,
 } from './parts.js';
+import { useDiscardConfirm } from './discard.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 
 export interface HandoverProps {
@@ -30,6 +32,8 @@ export interface HandoverProps {
   readonly chrome: RepairChrome;
   readonly onDone: () => void;
   readonly onCancel: () => void;
+  /** Lets hardware back ask before dropping the photo and signature taken here. */
+  readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -38,6 +42,7 @@ export function Handover({
   chrome,
   onDone,
   onCancel,
+  onRegisterDiscardGuard,
   testID = 'repair.handover',
 }: HandoverProps): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -50,6 +55,12 @@ export function Handover({
     async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
+
+  const discard = useDiscardConfirm({
+    dirty: photo !== null || signature !== null,
+    onRegisterDiscardGuard,
+    testID,
+  });
 
   const capture = (
     take: () => Promise<{ readonly mediaRef: MediaRef } | null>,
@@ -73,10 +84,12 @@ export function Handover({
     <FlowScreen
       chrome={chrome}
       title={tn('repair.action.handover')}
-      onBack={onCancel}
+      onBack={() => discard.requestLeave(onCancel)}
+      overlay={discard.overlay}
       primaryLabel={tn('repair.action.handover')}
       onPrimary={submit}
       primaryDisabled={photo === null || signature === null}
+      primaryHint={tn('repair.hint.handover')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -98,11 +111,17 @@ export function Handover({
               <Text style={repairStyles.body}>
                 {`${ticket.ticketNumber} · ${ticket.deviceBrand} ${ticket.deviceModel}`}
               </Text>
-              <Field
-                label={tn('repair.price.total')}
-                value={formatMoney(ticket.quoteTotal)}
-                testID={`${testID}.total`}
-              />
+              {ticket.outcome === 'cancelled' ? (
+                <Text style={[repairStyles.muted, repairStyles.gap]} testID={`${testID}.cancelled`}>
+                  {tn('repair.handover.cancelled')}
+                </Text>
+              ) : (
+                <Field
+                  label={tn('repair.price.total')}
+                  value={formatMoney(ticket.quoteTotal)}
+                  testID={`${testID}.total`}
+                />
+              )}
             </Card>
           )
         }

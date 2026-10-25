@@ -22,7 +22,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { WORK_PHOTOS_MAX, type QuoteLineKind, type WorkPhotoStage } from '../constants.js';
 import type { QuoteLineRow } from '../queries.js';
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import { PRICE_KIND_KEY } from './labels.js';
@@ -35,6 +35,7 @@ import {
   repairStyles,
   type RepairChrome,
 } from './parts.js';
+import { useDiscardConfirm } from './discard.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 
 interface StepProps {
@@ -42,6 +43,8 @@ interface StepProps {
   readonly ticketId: string;
   readonly onDone: () => void;
   readonly onCancel: () => void;
+  /** Lets hardware back ask before dropping photos this step has taken. */
+  readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
 }
 
 // ── work photos ───────────────────────────────────────────────────────────────────────────────
@@ -73,6 +76,7 @@ export function WorkPhotosStep({
   stage,
   onDone,
   onCancel,
+  onRegisterDiscardGuard,
   testID = `repair.work.${stage}`,
 }: StepProps & {
   readonly stage: WorkPhotoStage;
@@ -83,6 +87,11 @@ export function WorkPhotosStep({
   const [photos, setPhotos] = useState<readonly MediaRef[]>([]);
   const [note, setNote] = useState('');
   const copy = STAGE_COPY[stage];
+  const discard = useDiscardConfirm({
+    dirty: photos.length > 0 || note.trim() !== '',
+    onRegisterDiscardGuard,
+    testID,
+  });
 
   const takePhoto = (): void => {
     void runner
@@ -109,10 +118,12 @@ export function WorkPhotosStep({
     <FlowScreen
       chrome={chrome}
       title={tn(copy.title)}
-      onBack={onCancel}
+      onBack={() => discard.requestLeave(onCancel)}
       primaryLabel={tn(copy.submit)}
       onPrimary={submit}
       primaryDisabled={photos.length === 0}
+      primaryHint={tn('repair.hint.photo')}
+      overlay={discard.overlay}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -194,11 +205,17 @@ export function NoteStep({
       primaryVariant={cancel ? 'destructive' : 'primary'}
       onPrimary={submit}
       primaryDisabled={cancel && text.trim() === ''}
+      primaryHint={tn('repair.hint.reason')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
       testID={testID}
     >
+      {cancel ? (
+        <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
+          {tn('repair.cancel.consequence')}
+        </Text>
+      ) : null}
       <TextInput
         label={tn(cancel ? 'repair.cancel.reason' : 'repair.work.partsNote')}
         value={text}
@@ -253,7 +270,7 @@ export function AssignStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.action.assign')}
+      title={tn(currentTechnicianId === null ? 'repair.action.assign' : 'repair.action.reassign')}
       onBack={onCancel}
       busy={runner.busy}
       errorCode={runner.errorCode}
@@ -352,6 +369,7 @@ export function PriceChangeStep({
       )}
       onPrimary={submit}
       primaryDisabled={!complete}
+      primaryHint={tn('repair.hint.priceLine')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -408,7 +426,11 @@ export function PriceChangeStep({
   );
 }
 
-/** The cashier decides a technician's proposed line: apply it (with the customer's answer) or not. */
+/**
+ * The cashier decides a technician's proposed line with the customer's answer as the choice itself:
+ * agreed and applied, declined, or (rarely) applied without asking. A toggle that defaulted to "not
+ * agreed" made it too easy to apply a price the customer never heard about.
+ */
 export function ProposalStep({
   chrome,
   ticketId,
@@ -422,15 +444,19 @@ export function ProposalStep({
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [customerAgreed, setCustomerAgreed] = useState(false);
   const [note, setNote] = useState('');
 
-  const decide = (apply: boolean): void => {
+  const decide = (decision: 'agreed' | 'unasked' | 'declined'): void => {
     void runner
       .run(() =>
-        apply
-          ? runtime.run('applyProposal', { ticketId, lineId: line.id, customerAgreed, note })
-          : runtime.run('declineProposal', { ticketId, lineId: line.id, note }),
+        decision === 'declined'
+          ? runtime.run('declineProposal', { ticketId, lineId: line.id, note })
+          : runtime.run('applyProposal', {
+              ticketId,
+              lineId: line.id,
+              customerAgreed: decision === 'agreed',
+              note,
+            }),
       )
       .then((result) => {
         if (result !== undefined) onDone();
@@ -442,8 +468,8 @@ export function ProposalStep({
       chrome={chrome}
       title={tn('repair.price.proposalTitle')}
       onBack={onCancel}
-      primaryLabel={tn('repair.action.applyPrice')}
-      onPrimary={() => decide(true)}
+      primaryLabel={tn('repair.action.agreeApply')}
+      onPrimary={() => decide('agreed')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -454,14 +480,6 @@ export function ProposalStep({
         {`${tn(PRICE_KIND_KEY[line.kind])} · ${formatMoney(line.amount)}`}
       </Text>
       {line.reason === null ? null : <Text style={repairStyles.muted}>{line.reason}</Text>}
-      <View style={repairStyles.gap}>
-        <ToggleChip
-          label={tn('repair.price.customerAgreed')}
-          selected={customerAgreed}
-          onToggle={() => setCustomerAgreed((current) => !current)}
-          testID={`${testID}.agreed`}
-        />
-      </View>
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.price.decisionNote')}
@@ -474,9 +492,18 @@ export function ProposalStep({
         <Button
           label={tn('repair.action.declinePrice')}
           variant="secondary"
-          onPress={() => decide(false)}
+          onPress={() => decide('declined')}
           disabled={runner.busy}
           testID={`${testID}.decline`}
+        />
+      </View>
+      <View style={repairStyles.gap}>
+        <Button
+          label={tn('repair.action.applyUnasked')}
+          variant="secondary"
+          onPress={() => decide('unasked')}
+          disabled={runner.busy}
+          testID={`${testID}.applyUnasked`}
         />
       </View>
     </FlowScreen>
@@ -485,4 +512,5 @@ export function ProposalStep({
 
 const styles = StyleSheet.create({
   decline: { marginTop: space.xl },
+  consequence: { marginBottom: space.md },
 });

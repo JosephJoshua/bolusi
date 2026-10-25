@@ -32,7 +32,10 @@
     "reopen": "Buka lagi servis",
     "resume": "Lanjutkan servis",
     "start": "Mulai servis",
-    "waitForParts": "Menunggu sparepart"
+    "waitForParts": "Tandai tunggu sparepart",
+    "reassign": "Ganti teknisi",
+    "agreeApply": "Pelanggan setuju, terapkan",
+    "applyUnasked": "Terapkan tanpa persetujuan pelanggan"
   },
   "assign": {
     "none": "Belum ada teknisi yang bisa ditugaskan di toko ini.",
@@ -53,7 +56,8 @@
     }
   },
   "cancel": {
-    "reason": "Alasan dibatalkan"
+    "reason": "Alasan pembatalan",
+    "consequence": "Perbaikan berhenti dan harganya tidak ditagih. HP tetap di toko sampai diserahkan ke pelanggan."
   },
   "check": {
     "biometrics": "Sidik jari atau buka wajah",
@@ -99,7 +103,8 @@
     "sign": "Tanda tangan pelanggan",
     "signAgain": "Tanda tangan ulang",
     "signature": "Tanda tangan pelanggan",
-    "signatureTitle": "Pelanggan tanda tangan terima HP"
+    "signatureTitle": "Pelanggan tanda tangan terima HP",
+    "cancelled": "Servis dibatalkan, jadi harga perbaikan tidak ditagih."
   },
   "intake": {
     "discard": "Buang data servis",
@@ -140,7 +145,8 @@
       "top": "Atas"
     },
     "take": "Ambil foto",
-    "takeNext": "Foto {slot}"
+    "takeNext": "Ambil foto: {slot}",
+    "expired": "Beberapa foto dari servis yang belum selesai sudah terhapus. Ambil lagi."
   },
   "price": {
     "amount": "Jumlah (Rp)",
@@ -207,5 +213,25 @@
     "beforeTitle": "Mulai servis",
     "partsNote": "Sparepart apa yang dibutuhkan? (opsional)",
     "repairNote": "Apa yang dikerjakan (opsional)"
+  },
+  "done": {
+    "claim": "Tiket ini sekarang kamu kerjakan.",
+    "start": "Servis dimulai."
+  },
+  "passcode": {
+    "show": "Lihat",
+    "hide": "Sembunyikan"
+  },
+  "hint": {
+    "handover": "Ambil foto serah terima dan tanda tangan pelanggan dulu.",
+    "photo": "Ambil minimal satu foto dulu.",
+    "reason": "Tulis alasannya dulu.",
+    "priceLine": "Isi keterangan, jumlah, dan alasan."
+  },
+  "discardPhotos": {
+    "title": "Buang foto yang sudah diambil?",
+    "message": "Foto dan tanda tangan yang belum disimpan akan hilang.",
+    "confirm": "Buang",
+    "keep": "Tetap di sini"
   }
 }
