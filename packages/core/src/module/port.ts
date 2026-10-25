@@ -57,6 +57,11 @@ export interface ModulePort<M extends ModuleOperations> {
   ): Promise<CommandResult<M['commands'][K]>>;
   /** Whether the user holds a permission; for showing actions, not for enforcing them. */
   hasPermission(permissionId: string): boolean;
+  /**
+   * Whether a colleague holds a permission in this store, for pickers such as "assign to a
+   * technician". Same evaluator and scope as `hasPermission`, only for another user.
+   */
+  colleagueHasPermission(userId: string, permissionId: string): boolean;
 }
 
 export function bindModulePort<M extends ModuleOperations, DB>(
@@ -86,5 +91,7 @@ export function bindModulePort<M extends ModuleOperations, DB>(
     },
     hasPermission: (permissionId) =>
       runtime.commands.enforcementPoint.hasPermission(identity, permissionId),
+    colleagueHasPermission: (userId, permissionId) =>
+      runtime.commands.enforcementPoint.hasPermission({ ...identity, userId }, permissionId),
   };
 }

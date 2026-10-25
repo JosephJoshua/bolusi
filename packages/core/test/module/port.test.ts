@@ -24,6 +24,7 @@ function portFor(h: ModuleHarness, userId: string) {
     run(name: string, input: unknown): Promise<{ id: string }>;
     query(name: string, input: unknown): Promise<{ rows: readonly { id: string }[] }>;
     hasPermission(permissionId: string): boolean;
+    colleagueHasPermission(userId: string, permissionId: string): boolean;
   };
 }
 
@@ -48,5 +49,14 @@ describe('bindModulePort', () => {
     expect(port.hasPermission(String(Object.values(harness.module.commands!)[0]!.permission))).toBe(
       false,
     );
+  });
+
+  test('checks a colleague in the same store without changing the bound user', async () => {
+    harness = await openModuleHarness(903);
+    const port = portFor(harness, harness.zeroGrantId);
+    const permission = String(Object.values(harness.module.commands!)[0]!.permission);
+    expect(port.colleagueHasPermission(harness.adminId, permission)).toBe(true);
+    expect(port.colleagueHasPermission(harness.zeroGrantId, permission)).toBe(false);
+    expect(port.hasPermission(permission)).toBe(false);
   });
 });
