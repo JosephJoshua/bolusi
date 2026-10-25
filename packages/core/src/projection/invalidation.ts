@@ -10,8 +10,18 @@
 // re-query is scheduled promptly. Listeners must not throw — a throwing listener would abort
 // the fire loop; the engine treats emission as best-effort notification, never a write path.
 
-/** A change notification carrying only the set of tables written (04 §7 — no row payload). */
-export type InvalidationListener = (tables: ReadonlySet<string>) => void;
+/**
+ * The entity one applied op changed. Row data never travels (04 §7); the id lets a cache refresh
+ * just that entity instead of re-reading whole tables (search/live-index.ts). Absent for a
+ * rebuild batch, which may have touched anything in its tables.
+ */
+export interface EntityChange {
+  readonly entityType: string;
+  readonly entityId: string;
+}
+
+/** A change notification carrying the set of tables written and, per op, the entity changed. */
+export type InvalidationListener = (tables: ReadonlySet<string>, change?: EntityChange) => void;
 
 /** Fires when a SPECIFIC table is among those written. */
 export type TableInvalidationListener = () => void;
@@ -46,13 +56,13 @@ export class InvalidationBus {
    * listener ONCE for its table (per-table granularity) and every all-tables listener once
    * with the set. An empty set is a no-op — nothing was written, nothing is signalled.
    */
-  emit(tables: ReadonlySet<string>): void {
+  emit(tables: ReadonlySet<string>, change?: EntityChange): void {
     if (tables.size === 0) return;
     for (const table of tables) {
       const listeners = this.perTable.get(table);
       if (listeners === undefined) continue;
       for (const listener of listeners) listener();
     }
-    for (const listener of this.all) listener(tables);
+    for (const listener of this.all) listener(tables, change);
   }
 }

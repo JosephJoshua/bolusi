@@ -25,6 +25,7 @@
 // they may not, whereas gating is the query correctly shaping a result the caller IS allowed to
 // receive. Emitting per gated field would also flood the log with one op per row per column, which
 // is precisely what the §7 throttle exists to prevent.
+import type { SearchIndexCache } from '../search/live-index.js';
 import type { Kysely } from 'kysely';
 
 /**
@@ -129,4 +130,9 @@ export interface QueryContext<DB> {
    * handler must OMIT the field (§9.2: absent, never `null`, never `"***"`) or filter the row.
    */
   hasPermission(permissionId: string): boolean;
+  /**
+   * The device's live search indexes (search/live-index.ts), when the runtime keeps them. Read
+   * through `searchIndexFor`, which builds a one-off index when this is absent.
+   */
+  readonly search?: SearchIndexCache;
 }

@@ -12,6 +12,7 @@ import {
   assemblePermissionRegistry,
   createModuleRuntime,
   createProjectionEngine,
+  SearchIndexCache,
   createUuidV7Generator,
   PermissionEvaluator,
   registerModules,
@@ -143,6 +144,8 @@ export async function openRepairHarness(
     signingKey: { getSigningKey: () => keypair.secretKey },
     applyProjection: (op) => engine.applyAppendedOp(op).then(() => undefined),
     syncScheduler: { schedule: () => undefined },
+    // The device's live search cache, fed by this engine's applies (local and pulled).
+    search: new SearchIndexCache(engine.invalidation),
   });
 
   await runtime.commands.emitRuntimeOp({

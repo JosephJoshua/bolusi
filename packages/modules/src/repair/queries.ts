@@ -1,6 +1,6 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
-// decrypted transparently by the connection, so name/phone search ranks in JS (search.ts).
+// decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
@@ -9,6 +9,7 @@ import {
   DomainError,
   fetchKeysetPage,
   keysetPredicate,
+  searchIndexFor,
   type QueryContext,
   type QueryPage,
 } from '@bolusi/core';
@@ -26,7 +27,7 @@ import {
   type RepairOutcome,
 } from './constants.js';
 import type { RepairDatabase } from './schema.js';
-import { searchCustomers, searchTickets } from './search.js';
+import { customerSearchSource, ticketSearchSource } from './search.js';
 import { deviceCode, ticketCounter } from './ticket-number.js';
 
 type Qctx = QueryContext<RepairDatabase>;
@@ -285,34 +286,19 @@ export const searchTicketsInput = z
 
 export type SearchTicketsInput = z.infer<typeof searchTicketsInput>;
 
-/** Name/phone/ticket number/IMEI/model search across the store's tickets, best match first. */
+/** Fuzzy search across the store's tickets (search.ts), best match first. */
 export async function searchTicketsHandler(
   input: SearchTicketsInput,
   qctx: Qctx,
 ): Promise<QueryPage<TicketSummaryRow>> {
-  if (input.text.trim() === '') return { rows: [], nextCursor: null };
-  const all = await summaryQuery(qctx).execute();
-  const ranked = searchTickets(
-    all.map((row) => ({
-      row,
-      name: row.customerName,
-      phone: row.customerPhone,
-      ticketNumber: row.ticketNumber,
-      deviceBrand: row.deviceBrand,
-      deviceModel: row.deviceModel,
-      deviceImei: row.deviceImei,
-      createdAt: Number(row.createdAt),
-    })),
-    input.text,
-    input.limit,
+  const index = await searchIndexFor(qctx, ticketSearchSource);
+  const ids = index.search(input.text, input.limit).map((hit) => hit.id);
+  if (ids.length === 0) return { rows: [], nextCursor: null };
+  const found = new Map(
+    (await summaryQuery(qctx).where('t.id', 'in', ids).execute()).map((row) => [row.id, row]),
   );
-  return {
-    rows: await toSummaries(
-      qctx,
-      ranked.map((hit) => hit.row),
-    ),
-    nextCursor: null,
-  };
+  const ranked = ids.map((id) => found.get(id)).filter((row) => row !== undefined);
+  return { rows: await toSummaries(qctx, ranked), nextCursor: null };
 }
 
 export const searchTicketsQuery = {
@@ -331,15 +317,21 @@ export async function searchCustomersHandler(
   input: SearchCustomersInput,
   qctx: Qctx,
 ): Promise<QueryPage<CustomerRow>> {
-  if (input.text.trim() === '') return { rows: [], nextCursor: null };
-  const all = await qctx.db
+  const index = await searchIndexFor(qctx, customerSearchSource);
+  const ids = index.search(input.text, input.limit).map((hit) => hit.id);
+  if (ids.length === 0) return { rows: [], nextCursor: null };
+  const rows = await qctx.db
     .selectFrom('repairCustomers')
     .select(['id', 'name', 'phone', 'createdAt'])
     .where('tenantId', '=', qctx.tenantId)
     .where('storeId', '=', qctx.storeId)
+    .where('id', 'in', ids)
     .execute();
-  const rows = all.map((row) => ({ ...row, createdAt: Number(row.createdAt) }));
-  return { rows: searchCustomers(rows, input.text, input.limit), nextCursor: null };
+  const found = new Map(rows.map((row) => [row.id, { ...row, createdAt: Number(row.createdAt) }]));
+  return {
+    rows: ids.map((id) => found.get(id)).filter((row) => row !== undefined),
+    nextCursor: null,
+  };
 }
 
 export const searchCustomersQuery = {

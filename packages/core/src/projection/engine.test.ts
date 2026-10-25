@@ -20,6 +20,7 @@ import {
   type ProjectionHarness,
 } from '../../test/projection/db.js';
 import { notesModule } from '../../test/projection/notes-fixture.js';
+import type { EntityChange } from './invalidation.js';
 
 let harness: ProjectionHarness;
 
@@ -321,6 +322,26 @@ describe('live-query invalidation (§7)', () => {
     await harness.engine.rebuild('notes');
     expect(notesFires).toBeGreaterThan(3);
     expect(untouchedFires).toBe(0);
+  });
+
+  test('each applied op names the entity it changed; a rebuild batch names none', async () => {
+    const changes: (EntityChange | undefined)[] = [];
+    harness.engine.invalidation.subscribe((_tables, change) => changes.push(change));
+    const create = noteOp({
+      id: 'a',
+      entityId: 'n7',
+      type: 'notes.note_created',
+      timestamp: 1000,
+      deviceId: 'd1',
+      seq: 1,
+      payload: { title: 'T', body: 'b0' },
+    });
+    await deliverPulled(harness, [{ op: create, arrivalSeq: null }]);
+    expect(changes).toEqual([{ entityType: create.entityType, entityId: 'n7' }]);
+
+    await harness.engine.rebuild('notes');
+    expect(changes.length).toBeGreaterThan(1);
+    expect(changes.slice(1).every((change) => change === undefined)).toBe(true);
   });
 });
 

@@ -23,6 +23,7 @@
 // supplied by index.ts, the one op-sqlite/SecureStore site.
 import {
   createModuleRuntime,
+  SearchIndexCache,
   createDirectorySource,
   PermissionEvaluator,
   type ClockPort,
@@ -115,6 +116,9 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
   );
   const store = createClientOpStore(app.db);
   const applyProjection = app.engine.asAppendSeam();
+  // One live search cache for the app, fed by the engine's applies (search/live-index.ts), so every
+  // runtime this composition mints searches the same warm indexes.
+  const search = new SearchIndexCache(app.invalidation);
 
   /**
    * Step 7's hook, indirected so it can be pointed at the loop once one exists (see
@@ -152,6 +156,7 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         signingKey: deps.signingKey,
         applyProjection,
         syncScheduler,
+        search,
         // Task 40's liveness bound, ACTIVATED here (task 102). The mechanism (`#recordBounded` in
         // core's enforcement point) is OFF unless a `RuntimeTimerPort` is wired: a denied command's
         // best-effort `auth.permission_denied` append is otherwise awaited UNBOUNDED, so a stuck

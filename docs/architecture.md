@@ -23,6 +23,13 @@ continuity, and persists operations in PostgreSQL. Replay must not duplicate eff
 | Identity/permissions  | `packages/core/src/auth`, `packages/core/src/authz`, `apps/server/src/identity` |
 | Media                 | `apps/mobile/src/media`, `apps/server/src/media`                                |
 | Translations          | `packages/i18n/catalogs`, module screen catalogs                                |
+| Search                | `packages/core/src/search`, each module's `search.ts`                           |
+
+Search is shared: modules declare a `SearchSource` (what to load, which entity
+changes affect it) and query through `searchIndexFor`. Matching is fuzzy for
+anything typed (edit distance over names, digits and codes, never exact). On a
+device the index lives in memory per store, loads once, and reloads only the
+entities the projection engine reports as changed.
 
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
@@ -45,8 +52,8 @@ behind adapters. Node tests do not establish native performance or correctness.
 
 ## Limits to carry into repair work
 
-- Only platform, auth, and Notes are registered. Notes exercises the mechanism;
-  it does not prove repair, inventory, or accounting correctness.
+- Platform, auth, Notes and the repair core are registered. Repair has no screens
+  yet; inventory and accounting do not exist.
 - General pushed business operations are not reauthorized server-side in v0.
   Privileged PIN operations are an exception. High-risk v1 approvals still need
   a server validation/revocation policy covering legitimate offline work.
