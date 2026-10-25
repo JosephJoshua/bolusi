@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
+import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
@@ -18,6 +19,11 @@ import {
 } from './src/bootstrap/enrollment.js';
 import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
+import {
+  createSessionRepairRuntime,
+  repairMediaSeamsFor,
+  type RepairMediaSeams,
+} from './src/bootstrap/repair.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
@@ -341,6 +347,22 @@ function createNotes(
   });
 }
 
+/** The repair surface: Node-safe composition in `bootstrap/repair.ts`, native media seams here. */
+function createRepair(
+  app: Bootstrapped,
+  runtime: AppRuntime,
+  identity: CommandIdentity,
+  media: MediaClient | null,
+  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
+): RepairRuntime {
+  return createSessionRepairRuntime({
+    app,
+    runtime,
+    identity,
+    media: repairMediaSeamsFor(media, capture),
+  });
+}
+
 /**
  * THE PUSH-TOKEN REGISTRATION PORTS (api/04-push §2) — bound to the native seams `registration.ts`
  * leaves to the composition root: `getExpoPushTokenAsync` (native, inside `registration.ts`), the
@@ -415,6 +437,7 @@ function Bootstrapped(): React.JSX.Element | null {
     createMedia,
     createSession,
     createNotes,
+    createRepair,
     // THE PUSH VERTICAL, CLIENT HALF (api/04-push §2/§4; task 135). `createPushRegistration` returns
     // `undefined` on an unenrolled device or a build with no EAS project id — `Root` then simply does
     // not register (push is best-effort, §1). `expoPushRouter` binds the native tap listener so a

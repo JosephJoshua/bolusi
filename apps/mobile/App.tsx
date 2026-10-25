@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
+import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
 import {
@@ -63,6 +64,8 @@ import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
+import { REPAIR_MODULE_ID, parseIntakeDraft, type IntakeDraft } from '@bolusi/modules/repair';
+import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -117,6 +120,11 @@ export interface AppProps {
    * which case `home` stays the empty shell rather than faking a surface that cannot query.
    */
   readonly notes?: NotesRuntime | undefined;
+  /**
+   * The repair module surface (slice 1). When present it is the `home` surface, ahead of notes,
+   * because the repair ticket is what the stores use the app for.
+   */
+  readonly repair?: RepairRuntime | undefined;
   /**
    * Submit a PIN for `userId`. Resolves TRUE when a session opened (task 119).
    *
@@ -347,6 +355,24 @@ export default function App(props: AppProps): React.JSX.Element {
         // only a real edit moves retention.
         if (sameNotesDraft(current, draft)) return base;
         return withDraft(base, NOTES_MODULE_ID, draft);
+      });
+    },
+    [publishWorkspace],
+  );
+
+  /** The repair intake in progress, retained across a lock exactly like a notes draft. */
+  const restoredIntakeDraft = useMemo<IntakeDraft | null>(
+    () => (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
+    [workspace],
+  );
+
+  const publishIntakeDraft = useCallback(
+    (draft: IntakeDraft | null): void => {
+      publishWorkspace((base) => {
+        const current = base.drafts[REPAIR_MODULE_ID] ?? null;
+        // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
+        if (JSON.stringify(current) === JSON.stringify(draft)) return base;
+        return withDraft(base, REPAIR_MODULE_ID, draft);
       });
     },
     [publishWorkspace],
@@ -877,6 +903,89 @@ export default function App(props: AppProps): React.JSX.Element {
           // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
           // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
           // the copy the label catalog exists to prevent (07-i18n).
+          if (props.notes === undefined && props.repair === undefined) {
+            return <View testID="shell-home" style={FILL} />;
+          }
+          // The header chrome every home surface shares (§8.1).
+          const homeSyncChip = (
+            <SyncChip
+              state={chip}
+              pendingCount={props.sync.pendingOperationCount}
+              progressPercent={setupPercent}
+              accessibilityLabels={syncChipAccessibilityLabels({
+                relative:
+                  props.sync.state.lastSuccessfulSyncAt === null
+                    ? t('core.status.empty')
+                    : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                pendingCount: props.sync.pendingOperationCount,
+                firstSyncPercent: setupPercent,
+              })}
+              onPress={() => leaveHome(() => setRoute('syncStatus'))}
+            />
+          );
+          const homeAvatar =
+            currentUser === null ? (
+              <View testID="notes-no-avatar" />
+            ) : (
+              // THE HEADER CHROME (§8.1): the language Chip (the ONLY producer of `route:
+              // 'settings'`) and the avatar (the producer of the User Switcher).
+              //
+              // WHY THE LANGUAGE CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
+              // toggle, the notification deep-links and the device-identity readout, and until
+              // task 124 added this node nothing in shipping source ever called
+              // `setRoute('settings')` — the render arm below was live, typed and tested, and no
+              // user could open it (CLAUDE.md §2.11's "sound tests, zero callers"). On an
+              // Indonesian-first product the language rows are the ONLY way out of a wrong locale
+              // (07-i18n §1.2), so the entry point cannot be folded behind the avatar: the avatar
+              // opens the User Switcher (a roster of faces), not Settings, so Settings needs its
+              // own direct control regardless of whether the switcher is reachable.
+              //
+              // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
+              // control before: `resolveZone` returned the shell for every session-open render
+              // (`session !== null && pinFor === null`), and the only writer was `setPinFor(null)`
+              // — a no-op in that state — so tapping the avatar left the notes list exactly where
+              // it was. `setSwitching(true)` is the input the model was missing: it produces the
+              // switcher zone from a live session, and `backTarget` returns to `home` (this
+              // surface's route) when the switch is abandoned.
+              //
+              // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
+              // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
+              // users this product is for) and pads its 28 dp height to the §1.4 48 dp floor. It
+              // sits in the §8.1 header chrome beside the avatar; §0 only bottom-anchors the
+              // primary action, so this placement rests on §8.1 (header-right is not a §0 claim).
+              // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
+              // outright, taking an open editor's title/body/mediaRef with it and showing no
+              // confirm — the §8.1 discard gate the editor's own header back has always run.
+              <View style={styles.headerChrome}>
+                <Chip
+                  label={t('core.settings.language')}
+                  icon="language"
+                  onPress={() => leaveHome(() => setRoute('settings'))}
+                  testID="shell-open-settings"
+                />
+                <AvatarButton
+                  userId={currentUser.id}
+                  initials={currentUser.initials}
+                  accessibilityLabel={t('auth.switcher.title')}
+                  onPress={() => leaveHome(() => setSwitching(true))}
+                />
+              </View>
+            );
+          // Repair is the slice-1 home; notes stays the home on a build without it.
+          if (props.repair !== undefined) {
+            return (
+              <RepairHome
+                runtime={props.repair}
+                now={props.now}
+                onRegisterSurfaceNav={registerSurfaceNav}
+                restoredDraft={restoredIntakeDraft}
+                onDraftChange={publishIntakeDraft}
+                onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
+                syncChip={homeSyncChip}
+                avatar={homeAvatar}
+              />
+            );
+          }
           if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
           return (
             <NotesHome
@@ -890,71 +999,8 @@ export default function App(props: AppProps): React.JSX.Element {
               restoredDraft={restoredNotesDraft}
               onDraftChange={publishNotesDraft}
               onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
-              syncChip={
-                <SyncChip
-                  state={chip}
-                  pendingCount={props.sync.pendingOperationCount}
-                  progressPercent={setupPercent}
-                  accessibilityLabels={syncChipAccessibilityLabels({
-                    relative:
-                      props.sync.state.lastSuccessfulSyncAt === null
-                        ? t('core.status.empty')
-                        : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
-                    pendingCount: props.sync.pendingOperationCount,
-                    firstSyncPercent: setupPercent,
-                  })}
-                  onPress={() => leaveHome(() => setRoute('syncStatus'))}
-                />
-              }
-              avatar={
-                currentUser === null ? (
-                  <View testID="notes-no-avatar" />
-                ) : (
-                  // THE HEADER CHROME (§8.1): the language Chip (the ONLY producer of `route:
-                  // 'settings'`) and the avatar (the producer of the User Switcher).
-                  //
-                  // WHY THE LANGUAGE CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
-                  // toggle, the notification deep-links and the device-identity readout, and until
-                  // task 124 added this node nothing in shipping source ever called
-                  // `setRoute('settings')` — the render arm below was live, typed and tested, and no
-                  // user could open it (CLAUDE.md §2.11's "sound tests, zero callers"). On an
-                  // Indonesian-first product the language rows are the ONLY way out of a wrong locale
-                  // (07-i18n §1.2), so the entry point cannot be folded behind the avatar: the avatar
-                  // opens the User Switcher (a roster of faces), not Settings, so Settings needs its
-                  // own direct control regardless of whether the switcher is reachable.
-                  //
-                  // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
-                  // control before: `resolveZone` returned the shell for every session-open render
-                  // (`session !== null && pinFor === null`), and the only writer was `setPinFor(null)`
-                  // — a no-op in that state — so tapping the avatar left the notes list exactly where
-                  // it was. `setSwitching(true)` is the input the model was missing: it produces the
-                  // switcher zone from a live session, and `backTarget` returns to `home` (this
-                  // surface's route) when the switch is abandoned.
-                  //
-                  // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
-                  // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
-                  // users this product is for) and pads its 28 dp height to the §1.4 48 dp floor. It
-                  // sits in the §8.1 header chrome beside the avatar; §0 only bottom-anchors the
-                  // primary action, so this placement rests on §8.1 (header-right is not a §0 claim).
-                  // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
-                  // outright, taking an open editor's title/body/mediaRef with it and showing no
-                  // confirm — the §8.1 discard gate the editor's own header back has always run.
-                  <View style={styles.headerChrome}>
-                    <Chip
-                      label={t('core.settings.language')}
-                      icon="language"
-                      onPress={() => leaveHome(() => setRoute('settings'))}
-                      testID="shell-open-settings"
-                    />
-                    <AvatarButton
-                      userId={currentUser.id}
-                      initials={currentUser.initials}
-                      accessibilityLabel={t('auth.switcher.title')}
-                      onPress={() => leaveHome(() => setSwitching(true))}
-                    />
-                  </View>
-                )
-              }
+              syncChip={homeSyncChip}
+              avatar={homeAvatar}
             />
           );
         },
