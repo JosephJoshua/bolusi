@@ -400,6 +400,9 @@ export function Root({
       syncRef.current = client;
       unsubRef.current = client.subscribe(() => bump());
       await client.start();
+      // `start` can wait on a background pass that is still finishing (background-task.ts). If Root
+      // unmounted meanwhile, the teardown already stopped this client: do not bind its scheduler.
+      if (disposed) return;
       // ── STEP 7 GETS ITS PRODUCER (04 §5.1; api/01-sync §5 (b); task 136) ────────────────────────
       // The one place in the app where the runtime and the loop are both in scope, which is the only
       // place this bind can happen: the runtime is built BEFORE any loop (it appends the genesis that

@@ -50,8 +50,12 @@ import {
   type RealtimeHandle,
   type RealtimeSocketCtor,
 } from './realtime-client.js';
-import type { BackgroundRegistration } from './background-task.js';
-import { registerSyncTask, type BackgroundSyncBinding } from './background-sync.js';
+import type {
+  BackgroundBinding,
+  BackgroundLease,
+  BackgroundRegistration,
+} from './background-task.js';
+import { registerSyncTask } from './background-sync.js';
 import { readOldestOpAt } from './sync-status-reads.js';
 import { createFetchSyncTransport } from './transport.js';
 import {
@@ -95,7 +99,7 @@ export interface SyncClientDeps {
    */
   readonly createRealtime?: (trigger: () => void) => RealtimeHandle;
   /** Trigger (d): the OS background task, when the platform has one (background-sync.ts). */
-  readonly background?: BackgroundSyncBinding;
+  readonly background?: BackgroundBinding;
 }
 
 /** The live sync client. Owns the loop + triggers and a small reactive view Root renders from. */
@@ -116,6 +120,11 @@ export interface SyncClient {
   readonly scheduler: SyncSchedulerPort;
   /** Hydrate the loop (mandatory before any trigger), then start the triggers (and the boot sync). */
   start(): Promise<void>;
+  /**
+   * Hydrate only: no triggers, no realtime, no task registration. For a client built for one
+   * headless background pass (a killed app woken by the OS), which `requestBackground` then drives.
+   */
+  startForBackgroundPass(): Promise<void>;
   /** (e) pull-to-refresh. */
   requestManual(): void;
   /** (d) one background-task pass. */
@@ -158,7 +167,8 @@ class SyncClientImpl implements SyncClient {
   /** Oldest op time on this device, read once per process when the first pull reports a batch. */
   private historyStart: Promise<number | null> | null = null;
   private background: BackgroundRegistration | null = null;
-  private detachBackground: (() => void) | null = null;
+  private lease: BackgroundLease | null = null;
+  private stopped = false;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -211,28 +221,47 @@ class SyncClientImpl implements SyncClient {
   }
 
   async start(): Promise<void> {
-    // hydrate() BEFORE any trigger: the loop throws if a trigger arrives un-hydrated (loop.ts), and
-    // the boot connectivity trigger fires inside triggers.start() below.
-    await this.loop.hydrate();
-    this.currentSyncState = await readSyncState(this.deps.db.db);
-    // The UI half of connectivity (isOffline). The trigger's OWN subscription is inside triggers —
-    // this one only mirrors the state Root renders. NetInfo fires immediately with the current value.
-    this.uiNetUnsub = this.deps.netInfo.subscribe((connected) => {
-      this.connected = connected;
-      this.notify();
-    });
-    this.triggers.start();
-    // Realtime rides the loop and can only trigger AFTER hydrate() (requestSync throws un-hydrated), so
-    // it is started LAST — a poke now has a hydrated loop to drive. Purely additive (FR-1146): if the
-    // channel never connects, the §5 triggers above keep sync converging with no dependency on it.
-    this.realtime?.start();
+    const background = this.deps.background;
+    // Before hydrating: a headless background pass may be mid-pull on this same database, and the
+    // claim waits for it to stop at a committed batch, so hydrate reads where it left off.
+    this.lease = background === undefined ? null : await background.host.claim();
+    if (this.stopped) {
+      // Stopped while waiting for the claim (Root unmounted): hand the host straight back.
+      this.lease?.release();
+      this.lease = null;
+      return;
+    }
+    try {
+      await this.startForBackgroundPass();
+      // The UI half of connectivity (isOffline). The trigger's OWN subscription is inside triggers —
+      // this one only mirrors the state Root renders. NetInfo fires immediately with the current value.
+      this.uiNetUnsub = this.deps.netInfo.subscribe((connected) => {
+        this.connected = connected;
+        this.notify();
+      });
+      this.triggers.start();
+      // Realtime rides the loop and can only trigger AFTER hydrate() (requestSync throws un-hydrated), so
+      // it is started LAST — a poke now has a hydrated loop to drive. Purely additive (FR-1146): if the
+      // channel never connects, the §5 triggers above keep sync converging with no dependency on it.
+      this.realtime?.start();
+    } catch (error) {
+      this.lease?.release();
+      this.lease = null;
+      throw error;
+    }
     // Last, like realtime: a background pass drives the hydrated loop. Attach before registering so a
     // pass the OS runs the moment registration lands already finds this client.
-    const background = this.deps.background;
     if (background !== undefined) {
-      this.detachBackground = background.host.attach(this);
+      this.lease?.attach(this);
       this.background = await registerSyncTask(background);
     }
+  }
+
+  async startForBackgroundPass(): Promise<void> {
+    // hydrate() BEFORE any trigger: the loop throws if a trigger arrives un-hydrated (loop.ts), and
+    // the boot connectivity trigger fires inside triggers.start().
+    await this.loop.hydrate();
+    this.currentSyncState = await readSyncState(this.deps.db.db);
   }
 
   requestManual(): void {
@@ -252,8 +281,9 @@ class SyncClientImpl implements SyncClient {
   }
 
   stop(): void {
-    this.detachBackground?.();
-    this.detachBackground = null;
+    this.stopped = true;
+    this.lease?.release();
+    this.lease = null;
     this.realtime?.stop();
     this.triggers.stop();
     this.uiNetUnsub?.();
@@ -386,7 +416,7 @@ export interface SyncClientForAppConfig {
    */
   readonly onBundleRefreshed?: () => void | Promise<void>;
   /** Trigger (d)'s native binding and the module-scope host (index.ts). */
-  readonly background?: BackgroundSyncBinding;
+  readonly background?: BackgroundBinding;
 }
 
 /**

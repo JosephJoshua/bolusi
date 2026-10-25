@@ -50,8 +50,9 @@ import type { ClientDatabase, ClientDb } from '@bolusi/db-client';
 
 import {
   registerMediaDrainTask,
+  type BackgroundBinding,
+  type BackgroundLease,
   type BackgroundRegistration,
-  type BackgroundTaskPlatform,
 } from './background-task.js';
 import {
   capturePhoto,
@@ -109,11 +110,11 @@ export interface MediaClientDeps {
   readonly newId: () => string;
   readonly location: { getBestFix(): { lat: number; lng: number; accuracyMeters: number } | null };
   /**
-   * The `expo-background-task` binding, or `null` when there is none (Node, or a composition that
-   * chose not to register one). `null` is an honest "trigger (d) is absent", which `start()` reports
-   * as such — NOT a silently skipped registration.
+   * The `expo-background-task` binding and the module-scope host (index.ts), or `null` when there is
+   * none (Node, or a client built for one headless pass). `null` is an honest "trigger (d) is
+   * absent", which `start()` reports as such — NOT a silently skipped registration.
    */
-  readonly background: BackgroundTaskPlatform | null;
+  readonly background: BackgroundBinding | null;
   readonly surface?: MediaSurfacePort;
   /** Where an un-awaited background rejection goes. Never swallowed (06 §8). */
   readonly onError: (error: unknown) => void;
@@ -135,6 +136,13 @@ export interface MediaStartReport {
 
 export interface MediaClient {
   start(): Promise<MediaStartReport>;
+  /**
+   * Crash recovery only: no triggers, no pruning, no task registration. For a client built for one
+   * headless background pass (a killed app woken by the OS), which `requestBackground` then drives.
+   */
+  startForBackgroundPass(): Promise<void>;
+  /** 06 §5.2 (d): one background drain. */
+  requestBackground(): void;
   stop(): void;
   /** 06 §2.2. `camera` is per call — the `CameraView` ref lives in the screen that owns the preview. */
   capturePhoto(identity: CaptureIdentity, camera: CameraCapturePort): Promise<CaptureOutcome>;
@@ -167,6 +175,8 @@ class MediaClientImpl implements MediaClient {
   private readonly triggers: MediaTriggers;
   private readonly pruning: ReturnType<typeof createPruningPass<ClientDatabase>>;
   private readonly surfaceBuffer: MediaSurfacing[] = [];
+  private lease: BackgroundLease | null = null;
+  private stopped = false;
 
   constructor(private readonly deps: MediaClientDeps) {
     const surface: MediaSurfacePort = deps.surface ?? {
@@ -208,23 +218,30 @@ class MediaClientImpl implements MediaClient {
   }
 
   async start(): Promise<MediaStartReport> {
-    // 03 §4's crash recovery, FIRST and before any trigger: an `uploading` row with no live task is
-    // a process that died mid-upload, and leaving it `uploading` makes it invisible to the drain
-    // selection forever (which reads `pending`/`failed`). Resume is server-authoritative afterwards,
-    // so nothing is re-sent that the server already holds (06 §5.1 step 2).
-    const recovered = await recoverInterruptedUploads(this.deps.db.db);
+    const binding = this.deps.background;
+    // FIRST: a headless background pass may be uploading from this same queue. The claim waits for
+    // it to finish, so the recovery below cannot reset a row that pass is still sending.
+    this.lease = binding === null ? null : await binding.host.claim();
+    if (this.stopped) {
+      this.lease?.release();
+      this.lease = null;
+      return { recovered: null, background: null, prune: null };
+    }
+
+    let recovered: number | null;
+    try {
+      recovered = await this.recover();
+    } catch (error) {
+      this.lease?.release();
+      this.lease = null;
+      throw error;
+    }
 
     // §5.4's trigger (d). The outcome is REPORTED, never assumed — see background-task.ts's header
-    // for why a resolved `registerTaskAsync` means nothing on its own.
-    const background =
-      this.deps.background === null
-        ? null
-        : await registerMediaDrainTask({
-            platform: this.deps.background,
-            requestDrain: (reason) => this.request(reason),
-            settle: () => this.loop.settle(),
-            timer: this.deps.timer,
-          });
+    // for why a resolved `registerTaskAsync` means nothing on its own. Attach first so a pass the OS
+    // runs the moment registration lands already finds this client.
+    this.lease?.attach(this);
+    const background = binding === null ? null : await registerMediaDrainTask(binding);
 
     // §7: "Pruning pass runs on app start". Before the triggers, so a device that booted nearly full
     // has already freed what it can before the first upload attempt reads free space.
@@ -234,8 +251,29 @@ class MediaClientImpl implements MediaClient {
     return { recovered, background, prune };
   }
 
+  async startForBackgroundPass(): Promise<void> {
+    await this.recover();
+  }
+
+  requestBackground(): void {
+    this.request('background_task');
+  }
+
   stop(): void {
+    this.stopped = true;
+    this.lease?.release();
+    this.lease = null;
     this.triggers.stop();
+  }
+
+  /**
+   * 03 §4's crash recovery, before any drain: an `uploading` row with no live task is a process that
+   * died mid-upload, and leaving it `uploading` makes it invisible to the drain selection forever
+   * (which reads `pending`/`failed`). Resume is server-authoritative afterwards, so nothing is re-sent
+   * that the server already holds (06 §5.1 step 2).
+   */
+  private recover(): Promise<number | null> {
+    return recoverInterruptedUploads(this.deps.db.db);
   }
 
   capturePhoto(identity: CaptureIdentity, camera: CameraCapturePort): Promise<CaptureOutcome> {

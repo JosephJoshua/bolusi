@@ -25,8 +25,11 @@ import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
-import { createBackgroundSyncHost, SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
+import { SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
+import { createBackgroundHost, type BackgroundHost } from './src/bootstrap/background-task.js';
+import { headlessPass, shareBoot } from './src/bootstrap/headless.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
+import { MEDIA_DRAIN_TASK } from './src/media/background-task.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
@@ -155,19 +158,57 @@ function apiBaseUrl(): string {
 }
 
 /**
- * TRIGGER (d) FOR SYNC, DEFINED AT MODULE SCOPE. An OS launch straight into the background runs this
- * file and then dispatches the task, so the definition has to exist before any boot. The executor
- * drives whichever client `createSync` built once it attaches (bootstrap/background-sync.ts).
+ * ONE BOOT PER PROCESS. Root and the background tasks below share it, so a killed app woken by the
+ * OS and then opened by the user keeps one connection to one database (bootstrap/headless.ts).
  */
-const backgroundSync = createBackgroundSyncHost(systemTimer);
+const appBoot = shareBoot(boot);
+
+function reportBackgroundError(task: string): (error: unknown) => void {
+  return (error) =>
+    consoleDiagnostics.warn('background pass failed', {
+      task,
+      error: error instanceof Error ? error.message : String(error),
+    });
+}
+
+/**
+ * TRIGGER (d) FOR SYNC AND MEDIA, DEFINED AT MODULE SCOPE. An OS launch straight into the background
+ * runs this file and then dispatches the task; a task with no executor at that moment is
+ * unregistered by expo-task-manager and never runs again. Each host drives the client Root started,
+ * or, when Root never mounts (a killed Android app woken by WorkManager), boots and drives a client
+ * for that one pass (bootstrap/background-task.ts).
+ */
+const backgroundSync: BackgroundHost = createBackgroundHost({
+  timer: systemTimer,
+  startHeadless: headlessPass(appBoot, (app) => buildSync(app, { background: false })),
+  onError: reportBackgroundError(SYNC_BACKGROUND_TASK),
+});
+const backgroundMedia: BackgroundHost = createBackgroundHost({
+  timer: systemTimer,
+  startHeadless: headlessPass(appBoot, (app) => buildMedia(app, { background: false })),
+  onError: reportBackgroundError(MEDIA_DRAIN_TASK),
+});
 expoBackgroundTaskPlatform.defineTask(SYNC_BACKGROUND_TASK, () => backgroundSync.runPass());
+expoBackgroundTaskPlatform.defineTask(MEDIA_DRAIN_TASK, () => backgroundMedia.runPass());
 
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
 ): SyncClient | null {
+  return buildSync(app, { background: true, onBundleRefreshed });
+}
+
+/** `background: false` builds a client for one headless pass: the host drives it directly. */
+function buildSync(
+  app: Bootstrapped,
+  options: {
+    readonly background: boolean;
+    readonly onBundleRefreshed?: (() => void | Promise<void>) | undefined;
+  },
+): SyncClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
+  const { onBundleRefreshed } = options;
   return createSyncClientForApp(app, {
     baseUrl: apiBaseUrl(),
     deviceId: app.deviceId,
@@ -176,7 +217,9 @@ function createSync(
     clock: systemClock,
     appState: appStatePort,
     netInfo: netInfoPort,
-    background: { platform: expoBackgroundTaskPlatform, host: backgroundSync },
+    ...(options.background
+      ? { background: { platform: expoBackgroundTaskPlatform, host: backgroundSync } }
+      : {}),
     ...(onBundleRefreshed === undefined ? {} : { onBundleRefreshed }),
   });
 }
@@ -199,6 +242,14 @@ function createSync(
  * authenticating at once (api/02-auth §7.3) — the same rule the sync legs follow.
  */
 function createMedia(app: Bootstrapped): MediaClient | null {
+  return buildMedia(app, { background: true });
+}
+
+/** `background: false` builds a client for one headless pass: the host drives it directly. */
+function buildMedia(
+  app: Bootstrapped,
+  options: { readonly background: boolean },
+): MediaClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
   // Reads (never mints) the at-rest DB key so the media-file cipher can derive its sibling key (task
@@ -206,6 +257,7 @@ function createMedia(app: Bootstrapped): MediaClient | null {
   // completes would see `null` and fail closed rather than write plaintext.
   const dbKeyStore = new SecureStoreDbKeyStore(quickCryptoPort);
   return createMediaClientForApp({
+    background: options.background ? { host: backgroundMedia } : null,
     db: app.db,
     dbKeyHex: () => dbKeyStore.getDatabaseEncryptionKey(),
     transport: createFetchMediaTransport({
@@ -409,7 +461,7 @@ const expoPushRouter: PushRouterPort = {
 
 function Bootstrapped(): React.JSX.Element | null {
   return Root({
-    boot,
+    boot: appBoot,
     createSync,
     createEnrollment,
     createMedia,

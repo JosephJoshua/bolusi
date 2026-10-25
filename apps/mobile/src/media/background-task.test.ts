@@ -13,6 +13,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { fakeBackgroundPlatform as fakePlatform } from '../bootstrap/_background-platform.test.js';
+import { createBackgroundHost } from '../bootstrap/background-task.js';
 import { FakeTimer } from './_harness.test.js';
 import {
   BACKGROUND_MINIMUM_INTERVAL_MINUTES,
@@ -20,33 +21,28 @@ import {
   BACKGROUND_STATUS_RESTRICTED,
   MEDIA_DRAIN_TASK,
   registerMediaDrainTask,
-  runBoundedDrainPass,
   type BackgroundTaskPlatform,
 } from './background-task.js';
 
-function deps(
+/** A drain target the pass drives, attached to a host as the open app's media client would be. */
+async function binding(
   platform: BackgroundTaskPlatform,
   extra: Partial<{ settle: () => Promise<void> }> = {},
 ) {
   const drains: string[] = [];
   const timer = new FakeTimer();
-  return {
-    drains,
-    timer,
-    value: {
-      platform,
-      requestDrain: (reason: string) => drains.push(reason),
-      settle: extra.settle ?? ((): Promise<void> => Promise.resolve()),
-      timer,
-    },
-  };
+  const host = createBackgroundHost({ timer });
+  (await host.claim()).attach({
+    requestBackground: () => drains.push('background_task'),
+    settle: extra.settle ?? ((): Promise<void> => Promise.resolve()),
+  });
+  return { drains, timer, value: { platform, host } };
 }
 
 describe('§5.4 — registration reports what actually happened', () => {
   test('an AVAILABLE platform registers, at WorkManager`s 15-minute floor', async () => {
     const platform = fakePlatform({});
-    const rig = deps(platform);
-    const outcome = await registerMediaDrainTask(rig.value as never);
+    const outcome = await registerMediaDrainTask((await binding(platform)).value);
 
     expect(outcome).toEqual({ kind: 'registered' });
     expect(platform.defined).toEqual([MEDIA_DRAIN_TASK]);
@@ -62,7 +58,7 @@ describe('§5.4 — registration reports what actually happened', () => {
     // matters is the SIDE EFFECT — `registered` is empty — because the resolved promise is exactly
     // what a naive caller would have believed.
     const platform = fakePlatform({ status: BACKGROUND_STATUS_RESTRICTED });
-    const outcome = await registerMediaDrainTask(deps(platform).value as never);
+    const outcome = await registerMediaDrainTask((await binding(platform)).value);
 
     expect(outcome).toEqual({ kind: 'restricted' });
     expect(platform.registered).toEqual([]);
@@ -75,7 +71,7 @@ describe('§5.4 — registration reports what actually happened', () => {
     // The residual case a pre-check cannot close: the status flipped between the read and the call.
     // Believing the resolved promise here is how a guard silently checks nothing (§2.11).
     const platform = fakePlatform({ registrationTakes: false });
-    const outcome = await registerMediaDrainTask(deps(platform).value as never);
+    const outcome = await registerMediaDrainTask((await binding(platform)).value);
 
     expect(outcome).toEqual({ kind: 'not_registered' });
     expect(platform.registered).toHaveLength(1); // it was attempted…
@@ -84,17 +80,17 @@ describe('§5.4 — registration reports what actually happened', () => {
 
   test('`restricted` and `not_registered` stay DISTINCT — one is expected, one is a surprise', async () => {
     const restricted = await registerMediaDrainTask(
-      deps(fakePlatform({ status: BACKGROUND_STATUS_RESTRICTED })).value as never,
+      (await binding(fakePlatform({ status: BACKGROUND_STATUS_RESTRICTED }))).value,
     );
     const notRegistered = await registerMediaDrainTask(
-      deps(fakePlatform({ registrationTakes: false })).value as never,
+      (await binding(fakePlatform({ registrationTakes: false }))).value,
     );
     expect(restricted.kind).not.toBe(notRegistered.kind);
   });
 
   test('a throwing platform yields `failed` WITH the error — a bonus trigger never takes the app down', async () => {
     const outcome = await registerMediaDrainTask(
-      deps(fakePlatform({ throwOnDefine: true })).value as never,
+      (await binding(fakePlatform({ throwOnDefine: true }))).value,
     );
     expect(outcome.kind).toBe('failed');
     expect((outcome as { error: Error }).error.message).toBe('task manager unavailable');
@@ -102,10 +98,11 @@ describe('§5.4 — registration reports what actually happened', () => {
 });
 
 describe('§5.4 — the bounded pass', () => {
-  test('a pass triggers a drain and completes when the loop settles', async () => {
+  test('the task triggers a drain and completes when the loop settles', async () => {
     const platform = fakePlatform({});
-    const rig = deps(platform);
-    await runBoundedDrainPass(rig.value as never);
+    const rig = await binding(platform);
+    await registerMediaDrainTask(rig.value);
+    await platform.executors.get(MEDIA_DRAIN_TASK)?.();
     expect(rig.drains).toEqual(['background_task']);
     // The budget timer is cancelled on the way out — a leaked 60 s timer per background wake, on a
     // device that wakes every 15 minutes, is a battery bug.
@@ -117,14 +114,17 @@ describe('§5.4 — the bounded pass', () => {
     // construction (the server's `receivedChunks` is ground truth), so the next trigger picks up
     // exactly where this one stopped.
     let stuck: (() => void) | null = null;
-    const rig = deps(fakePlatform({}), {
+    const platform = fakePlatform({});
+    const rig = await binding(platform, {
       settle: () =>
         new Promise<void>((resolve) => {
           stuck = resolve;
         }),
     });
+    await registerMediaDrainTask(rig.value);
 
-    const pass = runBoundedDrainPass(rig.value as never);
+    const pass = platform.executors.get(MEDIA_DRAIN_TASK)?.();
+    await new Promise((resolve) => setImmediate(resolve));
     // Nothing resolves the drain; only the budget timer can end this.
     rig.timer.runPending();
     await pass;
