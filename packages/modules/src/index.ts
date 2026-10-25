@@ -37,6 +37,7 @@
 import { authModule, platformModule, type AnyModuleDefinition } from '@bolusi/core';
 
 import { notesModule } from './notes/manifest.js';
+import { repairModule } from './repair/manifest.js';
 
 /**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`
@@ -47,5 +48,6 @@ import { notesModule } from './notes/manifest.js';
 export const ALL_MODULES = [
   platformModule,
   notesModule,
+  repairModule,
   authModule,
 ] as unknown as readonly AnyModuleDefinition<never>[];

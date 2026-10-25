@@ -1,0 +1,512 @@
+// The `repair` projection appliers and table manifests.
+//
+// Appliers are deterministic fold steps; the engine supplies canonical order and re-folds an
+// entity's history when an op arrives out of order. Every ticket table is keyed to the ticket
+// entity (`ticket_id`), so a re-fold clears and replays all of them together.
+//
+// Store safety: every UPDATE is constrained to the op's own store, as in notes, so a device in one
+// store cannot sign an op that rewrites another store's ticket.
+//
+// Appliers never throw on business-rule surprises that concurrency can produce (two devices both
+// returning a device, a proposal approved and declined at once). Commands refuse those locally;
+// the fold must still accept whatever the server accepted, and the declared conflict keys surface
+// the collision for review.
+import { sql } from 'kysely';
+
+import type { ProjectionApplier, ProjectionOperation, ProjectionTableManifest } from '@bolusi/core';
+import type { MediaRef } from '@bolusi/schemas';
+
+import {
+  INTAKE_PHOTO_SLOTS,
+  REPAIR_CUSTOMER_ENTITY,
+  REPAIR_TICKET_ENTITY,
+  type DeviceLocation,
+  type RepairOutcome,
+} from './constants.js';
+import type { RepairDatabase } from './schema.js';
+
+type Db = Parameters<ProjectionApplier<RepairDatabase>>[0];
+
+// ── table manifests (column order = DDL order) ─────────────────────────────────────────────────
+
+export const repairCustomersTable: ProjectionTableManifest = {
+  columns: {
+    id: 'text',
+    tenant_id: 'text',
+    store_id: 'text',
+    name: 'text',
+    phone: 'text',
+    created_by: 'text',
+    created_at: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['id'],
+  entityType: REPAIR_CUSTOMER_ENTITY,
+  entityIdColumn: 'id',
+  projectionVersion: 1,
+};
+
+export const repairTicketsTable: ProjectionTableManifest = {
+  columns: {
+    id: 'text',
+    tenant_id: 'text',
+    store_id: 'text',
+    ticket_number: 'text',
+    customer_id: 'text',
+    device_brand: 'text',
+    device_model: 'text',
+    device_color: 'text',
+    device_imei: 'text',
+    device_passcode: 'text',
+    complaint: 'text',
+    intake_notes: 'text',
+    checklist_json: 'text',
+    peripherals_json: 'text',
+    estimated_ready_at: 'integer',
+    outcome: 'text',
+    outcome_note: 'text',
+    location: 'text',
+    technician_id: 'text',
+    quote_total: 'integer',
+    created_by: 'text',
+    created_at: 'integer',
+    updated_at: 'integer',
+    returned_by: 'text',
+    returned_at: 'integer',
+  },
+  primaryKey: ['id'],
+  entityType: REPAIR_TICKET_ENTITY,
+  entityIdColumn: 'id',
+  projectionVersion: 1,
+};
+
+export const repairQuoteLinesTable: ProjectionTableManifest = {
+  columns: {
+    id: 'text',
+    tenant_id: 'text',
+    store_id: 'text',
+    ticket_id: 'text',
+    kind: 'text',
+    description: 'text',
+    amount: 'integer',
+    status: 'text',
+    reason: 'text',
+    customer_agreed: 'integer',
+    created_by: 'text',
+    created_at: 'integer',
+    decided_by: 'text',
+    decided_at: 'integer',
+    decision_note: 'text',
+  },
+  primaryKey: ['id'],
+  entityType: REPAIR_TICKET_ENTITY,
+  entityIdColumn: 'ticket_id',
+  projectionVersion: 1,
+};
+
+export const repairTicketPhotosTable: ProjectionTableManifest = {
+  columns: {
+    ticket_id: 'text',
+    slot: 'text',
+    tenant_id: 'text',
+    store_id: 'text',
+    media_id: 'text',
+    media_sha256: 'text',
+    media_mime: 'text',
+    captured_at: 'integer',
+    added_by: 'text',
+    added_at: 'integer',
+  },
+  primaryKey: ['ticket_id', 'slot'],
+  entityType: REPAIR_TICKET_ENTITY,
+  entityIdColumn: 'ticket_id',
+  projectionVersion: 1,
+};
+
+export const repairTicketEventsTable: ProjectionTableManifest = {
+  columns: {
+    id: 'text',
+    tenant_id: 'text',
+    store_id: 'text',
+    ticket_id: 'text',
+    kind: 'text',
+    actor_id: 'text',
+    at: 'integer',
+    detail_json: 'text',
+  },
+  primaryKey: ['id'],
+  entityType: REPAIR_TICKET_ENTITY,
+  entityIdColumn: 'ticket_id',
+  projectionVersion: 1,
+};
+
+// ── payload shapes the appliers read (validated by operations.ts before any fold) ───────────────
+
+interface QuoteLineDraft {
+  readonly lineId: string;
+  readonly kind: string;
+  readonly description: string;
+  readonly amount: number;
+}
+
+export interface TicketOpenedPayload {
+  readonly ticketNumber: string;
+  readonly customerId: string;
+  readonly device: {
+    readonly brand: string;
+    readonly model: string;
+    readonly color: string;
+    readonly imei: string | null;
+    readonly passcode: string | null;
+  };
+  readonly complaint: string;
+  readonly intakeNotes: string;
+  readonly checklist: readonly { item: string; state: string; note: string }[];
+  readonly peripherals: readonly string[];
+  readonly estimatedReadyAt: number | null;
+  readonly quoteLines: readonly QuoteLineDraft[];
+  readonly photos: Readonly<Record<(typeof INTAKE_PHOTO_SLOTS)[number], MediaRef>>;
+}
+
+interface QuoteChangedPayload extends QuoteLineDraft {
+  readonly reason: string;
+  readonly customerAgreed: boolean;
+  readonly fromProposal: boolean;
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────────────────────
+
+function storeIdOf(op: ProjectionOperation): string {
+  if (op.storeId === null) {
+    throw new Error(`repair applier: ${op.type} on ${op.entityId} has a null storeId`);
+  }
+  return op.storeId;
+}
+
+function payloadOf<T>(op: ProjectionOperation): T {
+  return op.payload as unknown as T;
+}
+
+async function recordEvent(db: Db, op: ProjectionOperation, detail: object): Promise<void> {
+  await db
+    .insertInto('repairTicketEvents')
+    .values({
+      id: op.id,
+      tenantId: op.tenantId,
+      storeId: storeIdOf(op),
+      ticketId: op.entityId,
+      kind: op.type,
+      actorId: op.userId,
+      at: op.timestamp,
+      detailJson: JSON.stringify(detail),
+    })
+    .execute();
+}
+
+async function updateTicket(
+  db: Db,
+  op: ProjectionOperation,
+  values: Partial<{
+    outcome: RepairOutcome;
+    outcomeNote: string | null;
+    location: DeviceLocation;
+    technicianId: string;
+    returnedBy: string;
+    returnedAt: number;
+  }>,
+): Promise<void> {
+  await db
+    .updateTable('repairTickets')
+    .set({ ...values, updatedAt: op.timestamp })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+}
+
+/** Recompute the total from the lines, so a repeated or concurrent approval never double-counts. */
+async function refreshQuoteTotal(db: Db, op: ProjectionOperation): Promise<void> {
+  await db
+    .updateTable('repairTickets')
+    .set({
+      quoteTotal: sql<number>`(
+        SELECT COALESCE(SUM(amount), 0) FROM repair_quote_lines
+        WHERE ticket_id = ${op.entityId} AND status IN ('intake', 'applied')
+      )`,
+      updatedAt: op.timestamp,
+    })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+}
+
+async function insertPhoto(
+  db: Db,
+  op: ProjectionOperation,
+  slot: string,
+  ref: MediaRef,
+): Promise<void> {
+  await db
+    .insertInto('repairTicketPhotos')
+    .values({
+      ticketId: op.entityId,
+      slot,
+      tenantId: op.tenantId,
+      storeId: storeIdOf(op),
+      mediaId: ref.mediaId,
+      mediaSha256: ref.sha256,
+      mediaMime: ref.mime,
+      capturedAt: ref.capturedAt,
+      addedBy: op.userId,
+      addedAt: op.timestamp,
+    })
+    // Two devices recording the same handover keep the first (canonical) evidence.
+    .onConflict((oc) => oc.columns(['ticketId', 'slot']).doNothing())
+    .execute();
+}
+
+// ── customers ─────────────────────────────────────────────────────────────────────────────────
+
+export const customerRegisteredApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<{ name: string; phone: string | null }>(op);
+  await db
+    .insertInto('repairCustomers')
+    .values({
+      id: op.entityId,
+      tenantId: op.tenantId,
+      storeId: storeIdOf(op),
+      name: payload.name,
+      phone: payload.phone,
+      createdBy: op.userId,
+      createdAt: op.timestamp,
+      updatedBy: op.userId,
+      updatedAt: op.timestamp,
+    })
+    .execute();
+};
+
+export const customerDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> = async (
+  db,
+  op,
+) => {
+  const payload = payloadOf<{ name: string; phone: string | null }>(op);
+  await db
+    .updateTable('repairCustomers')
+    .set({
+      name: payload.name,
+      phone: payload.phone,
+      updatedBy: op.userId,
+      updatedAt: op.timestamp,
+    })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+};
+
+// ── tickets ───────────────────────────────────────────────────────────────────────────────────
+
+export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<TicketOpenedPayload>(op);
+  const storeId = storeIdOf(op);
+  await db
+    .insertInto('repairTickets')
+    .values({
+      id: op.entityId,
+      tenantId: op.tenantId,
+      storeId,
+      ticketNumber: payload.ticketNumber,
+      customerId: payload.customerId,
+      deviceBrand: payload.device.brand,
+      deviceModel: payload.device.model,
+      deviceColor: payload.device.color,
+      deviceImei: payload.device.imei,
+      devicePasscode: payload.device.passcode,
+      complaint: payload.complaint,
+      intakeNotes: payload.intakeNotes,
+      checklistJson: JSON.stringify(payload.checklist),
+      peripheralsJson: JSON.stringify(payload.peripherals),
+      estimatedReadyAt: payload.estimatedReadyAt,
+      outcome: 'received',
+      outcomeNote: null,
+      location: 'in_store',
+      technicianId: null,
+      quoteTotal: payload.quoteLines.reduce((sum, line) => sum + line.amount, 0),
+      createdBy: op.userId,
+      createdAt: op.timestamp,
+      updatedAt: op.timestamp,
+      returnedBy: null,
+      returnedAt: null,
+    })
+    .execute();
+
+  for (const line of payload.quoteLines) {
+    await db
+      .insertInto('repairQuoteLines')
+      .values({
+        id: line.lineId,
+        tenantId: op.tenantId,
+        storeId,
+        ticketId: op.entityId,
+        kind: line.kind,
+        description: line.description,
+        amount: line.amount,
+        status: 'intake',
+        reason: null,
+        customerAgreed: null,
+        createdBy: op.userId,
+        createdAt: op.timestamp,
+        decidedBy: null,
+        decidedAt: null,
+        decisionNote: null,
+      })
+      .execute();
+  }
+
+  for (const slot of INTAKE_PHOTO_SLOTS) await insertPhoto(db, op, slot, payload.photos[slot]);
+  await recordEvent(db, op, {});
+};
+
+export const ticketClaimedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  await updateTicket(db, op, { technicianId: op.userId });
+  await recordEvent(db, op, { technicianId: op.userId });
+};
+
+export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { technicianId } = payloadOf<{ technicianId: string }>(op);
+  await updateTicket(db, op, { technicianId });
+  await recordEvent(db, op, { technicianId });
+};
+
+export const workStartedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  await updateTicket(db, op, { outcome: 'in_repair', outcomeNote: null });
+  await recordEvent(db, op, {});
+};
+
+export const workPausedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { note } = payloadOf<{ note: string }>(op);
+  await updateTicket(db, op, { outcome: 'waiting_for_parts', outcomeNote: note });
+  await recordEvent(db, op, { note });
+};
+
+export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { note } = payloadOf<{ note: string }>(op);
+  await updateTicket(db, op, { outcome: 'repaired', outcomeNote: note });
+  await recordEvent(db, op, { note });
+};
+
+export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { reason } = payloadOf<{ reason: string }>(op);
+  await updateTicket(db, op, { outcome: 'cancelled', outcomeNote: reason });
+  await recordEvent(db, op, { reason });
+};
+
+export const quoteChangeProposedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<QuoteLineDraft & { reason: string }>(op);
+  await db
+    .insertInto('repairQuoteLines')
+    .values({
+      id: payload.lineId,
+      tenantId: op.tenantId,
+      storeId: storeIdOf(op),
+      ticketId: op.entityId,
+      kind: payload.kind,
+      description: payload.description,
+      amount: payload.amount,
+      status: 'proposed',
+      reason: payload.reason,
+      customerAgreed: null,
+      createdBy: op.userId,
+      createdAt: op.timestamp,
+      decidedBy: null,
+      decidedAt: null,
+      decisionNote: null,
+    })
+    .execute();
+  await recordEvent(db, op, {
+    lineId: payload.lineId,
+    description: payload.description,
+    amount: payload.amount,
+    reason: payload.reason,
+  });
+};
+
+export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<QuoteChangedPayload>(op);
+  const customerAgreed = payload.customerAgreed ? 1 : 0;
+  if (payload.fromProposal) {
+    // Approval wins over a concurrent decline: money the cashier agreed with the customer is not
+    // silently dropped because another device declined the same proposal offline.
+    await db
+      .updateTable('repairQuoteLines')
+      .set({
+        kind: payload.kind,
+        description: payload.description,
+        amount: payload.amount,
+        status: 'applied',
+        customerAgreed,
+        decidedBy: op.userId,
+        decidedAt: op.timestamp,
+        decisionNote: payload.reason,
+      })
+      .where('id', '=', payload.lineId)
+      .where('ticketId', '=', op.entityId)
+      .where('storeId', '=', storeIdOf(op))
+      .where('status', 'in', ['proposed', 'declined'])
+      .execute();
+  } else {
+    await db
+      .insertInto('repairQuoteLines')
+      .values({
+        id: payload.lineId,
+        tenantId: op.tenantId,
+        storeId: storeIdOf(op),
+        ticketId: op.entityId,
+        kind: payload.kind,
+        description: payload.description,
+        amount: payload.amount,
+        status: 'applied',
+        reason: payload.reason,
+        customerAgreed,
+        createdBy: op.userId,
+        createdAt: op.timestamp,
+        decidedBy: op.userId,
+        decidedAt: op.timestamp,
+        decisionNote: null,
+      })
+      .execute();
+  }
+  await refreshQuoteTotal(db, op);
+  await recordEvent(db, op, {
+    lineId: payload.lineId,
+    description: payload.description,
+    amount: payload.amount,
+    reason: payload.reason,
+    customerAgreed: payload.customerAgreed,
+    fromProposal: payload.fromProposal,
+  });
+};
+
+export const quoteProposalDeclinedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { lineId, note } = payloadOf<{ lineId: string; note: string }>(op);
+  await db
+    .updateTable('repairQuoteLines')
+    .set({ status: 'declined', decidedBy: op.userId, decidedAt: op.timestamp, decisionNote: note })
+    .where('id', '=', lineId)
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('status', '=', 'proposed')
+    .execute();
+  await recordEvent(db, op, { lineId, note });
+};
+
+export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<{ handoverPhoto: MediaRef; signature: MediaRef; note: string }>(op);
+  await updateTicket(db, op, {
+    location: 'returned',
+    returnedBy: op.userId,
+    returnedAt: op.timestamp,
+  });
+  await insertPhoto(db, op, 'handover', payload.handoverPhoto);
+  await insertPhoto(db, op, 'signature', payload.signature);
+  await recordEvent(db, op, { note: payload.note });
+};

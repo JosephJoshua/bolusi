@@ -15,6 +15,7 @@ import { CommandRuntime, type CommandRuntimeOptions } from '../runtime/execute.j
 import type { CommandIdentity, QueryExecutorPort, QueryHandle } from '../runtime/ctx.js';
 import { QueryRuntime } from '../query/execute.js';
 import type { ProjectionDb } from '../projection/manifest.js';
+import type { SearchIndexCache } from '../search/live-index.js';
 import type { ModuleRegistry } from './registry.js';
 
 /**
@@ -22,7 +23,10 @@ import type { ModuleRegistry } from './registry.js';
  * two things this factory derives from the module list (`operations`) or builds itself
  * (`queryExecutor`).
  */
-export type ModuleRuntimeOptions = Omit<CommandRuntimeOptions, 'operations' | 'queryExecutor'>;
+export type ModuleRuntimeOptions = Omit<CommandRuntimeOptions, 'operations' | 'queryExecutor'> & {
+  /** Live search indexes for every query (search/live-index.ts). Devices pass one. */
+  readonly search?: SearchIndexCache;
+};
 
 /** A wired build: the registries plus the two runtimes, sharing one enforcement point. */
 export interface ModuleRuntime<DB> {
@@ -73,13 +77,18 @@ export function createModuleRuntime<DB>(
     },
   };
 
+  const { search, ...commandOptions } = options;
   const commands = new CommandRuntime({
-    ...options,
+    ...commandOptions,
     operations: registry.operations,
     queryExecutor,
   });
 
-  queryRuntime = new QueryRuntime<DB>({ db, enforcement: commands.enforcementPoint });
+  queryRuntime = new QueryRuntime<DB>({
+    db,
+    enforcement: commands.enforcementPoint,
+    ...(search !== undefined ? { search } : {}),
+  });
 
   return { registry, commands, queries: queryRuntime };
 }

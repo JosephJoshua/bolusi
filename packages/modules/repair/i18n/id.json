@@ -1,0 +1,17 @@
+{
+  "opType": {
+    "customerRegistered": "Pelanggan ditambahkan",
+    "customerDetailsCorrected": "Data pelanggan diperbaiki",
+    "ticketOpened": "Tiket servis dibuka",
+    "ticketClaimed": "Servis diambil",
+    "technicianAssigned": "Teknisi ditugaskan",
+    "workStarted": "Servis dimulai",
+    "workPaused": "Menunggu suku cadang",
+    "markedRepaired": "Selesai diperbaiki",
+    "ticketCancelled": "Servis dibatalkan",
+    "quoteChangeProposed": "Perubahan harga diusulkan",
+    "quoteChanged": "Harga diubah",
+    "quoteProposalDeclined": "Perubahan harga ditolak",
+    "deviceReturned": "Perangkat diserahkan"
+  }
+}

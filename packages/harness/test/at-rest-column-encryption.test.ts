@@ -50,6 +50,7 @@ import {
   type ClientDb,
 } from '@bolusi/db-client';
 import { noteBodyEditedApplier } from '@bolusi/modules/notes';
+import { repairModule } from '@bolusi/modules/repair';
 import { nodeColumnAead } from '@bolusi/test-support';
 
 import { openFileDriver } from '@bolusi/sqlite-test-driver';
@@ -657,3 +658,111 @@ async function reopen(file: string, dir: string, key: string): Promise<{ db: Cli
   });
   return { db };
 }
+
+describe('at-rest column encryption — repair customer data', () => {
+  test('customer name/phone, device passcode and event notes are sealed by the real repair appliers', async () => {
+    opened = await openAt(DB_KEY);
+    const secret = {
+      name: 'PLAINTEXT-CUSTOMER-Yohanis Wenda',
+      phone: 'PLAINTEXT-PHONE-081244556677',
+      corrected: 'PLAINTEXT-CORRECTED-Yohanes Wenda',
+      passcode: 'PLAINTEXT-PASSCODE-pola Z 2580',
+      note: 'PLAINTEXT-NOTE-tunggu LCD dari Jayapura',
+      complaint: 'PLAINTEXT-COMPLAINT-layar retak kena air',
+    };
+    const base = {
+      tenantId: '01920000-0000-7000-8000-0000000a0001',
+      storeId: '01920000-0000-7000-8000-0000000a0002',
+      userId: '01920000-0000-7000-8000-0000000e000a',
+      deviceId: '01920000-0000-7000-8000-0000000d000a',
+      schemaVersion: 1,
+      location: null,
+      source: 'ui',
+      agentInitiated: false,
+      agentConversationId: null,
+    };
+    const customerId = '01920000-0000-7000-8000-0000000c0001';
+    const ticketId = '01920000-0000-7000-8000-0000000c0002';
+    const photo = (n: number) => ({
+      mediaId: `01920000-0000-7000-8000-00000000f00${n}`,
+      sha256: 'a'.repeat(64),
+      mime: 'image/jpeg',
+      type: 'image',
+      sizeBytes: 1000,
+      capturedAt: 1,
+      location: null,
+      userId: base.userId,
+      deviceId: base.deviceId,
+    });
+    const apply = (
+      type: string,
+      entityType: string,
+      entityId: string,
+      seq: number,
+      payload: object,
+    ) =>
+      repairModule.operations[type]!.apply(
+        opened!.db.db as never,
+        {
+          ...base,
+          id: `01920000-0000-7000-8000-0000000b000${seq}`,
+          seq,
+          type,
+          entityType,
+          entityId,
+          payload,
+          timestamp: 1_700_000_000_000 + seq,
+        } as never,
+      );
+
+    await apply('repair.customer_registered', 'repair_customer', customerId, 1, {
+      name: secret.name,
+      phone: secret.phone,
+    });
+    await apply('repair.customer_details_corrected', 'repair_customer', customerId, 2, {
+      name: secret.corrected,
+      phone: secret.phone,
+    });
+    await apply('repair.ticket_opened', 'repair_ticket', ticketId, 3, {
+      ticketNumber: 'K7Q-0001',
+      customerId,
+      device: { brand: 'Samsung', model: 'A14', color: '', imei: null, passcode: secret.passcode },
+      complaint: secret.complaint,
+      intakeNotes: '',
+      checklist: [],
+      peripherals: [],
+      estimatedReadyAt: null,
+      quoteLines: [
+        {
+          lineId: '01920000-0000-7000-8000-0000000c0003',
+          kind: 'part',
+          description: 'LCD',
+          amount: 1,
+        },
+      ],
+      photos: {
+        front: photo(1),
+        back: photo(2),
+        left: photo(3),
+        right: photo(4),
+        top: photo(5),
+        bottom: photo(6),
+      },
+    });
+    await apply('repair.work_paused', 'repair_ticket', ticketId, 4, { note: secret.note });
+
+    const customer = await opened.db.db
+      .selectFrom('repairCustomers')
+      .select(['name', 'phone'])
+      .executeTakeFirstOrThrow();
+    expect(customer).toEqual({ name: secret.corrected, phone: secret.phone });
+
+    await closeClientDb();
+    const bytes = readFileSync(opened.file);
+    for (const [column, plaintext] of Object.entries(secret)) {
+      expect(bytes.includes(Buffer.from(plaintext, 'utf8')), `${column} stored in the clear`).toBe(
+        false,
+      );
+    }
+  });
+});

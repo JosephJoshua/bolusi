@@ -24,7 +24,7 @@ const CAMEL_SEGMENT = /^[a-z][a-zA-Z0-9]*$/;
 const SCREAMING_SNAKE_SEGMENT = /^[A-Z][A-Z0-9_]*$/;
 const SNAKE_SEGMENT = /^[a-z][a-z0-9_]*$/;
 /** 01-domain-model §4.2 — the three seeded roles. */
-const ROLE_KEYS = ['main_owner', 'store_owner', 'staff'];
+const ROLE_KEYS = ['main_owner', 'store_owner', 'staff', 'cashier', 'technician'];
 const DERIVED_CORE_AREAS = ['errors', 'rejection'];
 const PERMISSION_LEAVES = ['name', 'description'];
 

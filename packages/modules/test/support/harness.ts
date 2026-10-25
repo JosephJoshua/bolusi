@@ -39,7 +39,7 @@ import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 /** The op store over the REAL driver: one driver-level transaction per command, shared with the
  *  Kysely handle the projection engine writes through — what makes append+project atomic (04 §5.1).
  *  Copied verbatim from core's L2 harness (the shape `@bolusi/db-client` binds in production). */
-class SqliteOpStore implements OpAppendStore {
+export class SqliteOpStore implements OpAppendStore {
   constructor(
     private readonly driver: DbDriver,
     private readonly db: Kysely<ClientDatabase>,

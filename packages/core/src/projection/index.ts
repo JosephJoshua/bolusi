@@ -68,6 +68,7 @@ export {
 
 export {
   InvalidationBus,
+  type EntityChange,
   type InvalidationListener,
   type TableInvalidationListener,
 } from './invalidation.js';

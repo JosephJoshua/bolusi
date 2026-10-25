@@ -3,6 +3,7 @@ import { toDbError, type DbDriver } from '../driver.js';
 import { initialSchemaMigration } from './001-initial-schema.js';
 import { noteMediaRefMigration } from './002-note-media-ref.js';
 import { columnEncryptionMigration } from './003-column-encryption.js';
+import { repairMigration } from './004-repair.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -10,6 +11,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   initialSchemaMigration,
   noteMediaRefMigration,
   columnEncryptionMigration,
+  repairMigration,
 ];
 
 export interface RunMigrationsOptions {

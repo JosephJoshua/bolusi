@@ -236,6 +236,88 @@ export interface PushTokens {
   userId: string | null;
 }
 
+export interface RepairCustomers {
+  createdAt: Int8;
+  createdBy: string;
+  id: string;
+  name: string;
+  phone: string | null;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface RepairQuoteLines {
+  amount: Int8;
+  createdAt: Int8;
+  createdBy: string;
+  customerAgreed: number | null;
+  decidedAt: Int8 | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  description: string;
+  id: string;
+  kind: string;
+  reason: string | null;
+  status: string;
+  storeId: string;
+  tenantId: string;
+  ticketId: string;
+}
+
+export interface RepairTicketEvents {
+  actorId: string;
+  at: Int8;
+  detailJson: string;
+  id: string;
+  kind: string;
+  storeId: string;
+  tenantId: string;
+  ticketId: string;
+}
+
+export interface RepairTicketPhotos {
+  addedAt: Int8;
+  addedBy: string;
+  capturedAt: Int8;
+  mediaId: string;
+  mediaMime: string;
+  mediaSha256: string;
+  slot: string;
+  storeId: string;
+  tenantId: string;
+  ticketId: string;
+}
+
+export interface RepairTickets {
+  checklistJson: string;
+  complaint: string;
+  createdAt: Int8;
+  createdBy: string;
+  customerId: string;
+  deviceBrand: string;
+  deviceColor: string;
+  deviceImei: string | null;
+  deviceModel: string;
+  devicePasscode: string | null;
+  estimatedReadyAt: Int8 | null;
+  id: string;
+  intakeNotes: string;
+  location: string;
+  outcome: string;
+  outcomeNote: string | null;
+  peripheralsJson: string;
+  quoteTotal: Int8;
+  returnedAt: Int8 | null;
+  returnedBy: string | null;
+  storeId: string;
+  technicianId: string | null;
+  tenantId: string;
+  ticketNumber: string;
+  updatedAt: Int8;
+}
+
 export interface RolePermissions {
   permissionId: string;
   roleId: string;
@@ -341,6 +423,11 @@ export interface DB {
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
+  repairCustomers: RepairCustomers;
+  repairQuoteLines: RepairQuoteLines;
+  repairTicketEvents: RepairTicketEvents;
+  repairTicketPhotos: RepairTicketPhotos;
+  repairTickets: RepairTickets;
   rolePermissions: RolePermissions;
   roles: Roles;
   stores: Stores;

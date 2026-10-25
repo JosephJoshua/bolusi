@@ -36,6 +36,7 @@ import type {
 } from '../runtime/ctx.js';
 import { defaultInvocation } from '../runtime/ctx.js';
 import type { PermissionEnforcementPoint } from '../runtime/enforce.js';
+import type { SearchIndexCache } from '../search/live-index.js';
 import { readOnlyDb, type QueryContext } from './qctx.js';
 
 /**
@@ -58,6 +59,8 @@ export interface QueryRuntimeOptions<DB> {
   readonly db: Kysely<DB>;
   /** THE control (02 §4), shared with the command runtime. See runtime/enforce.ts. */
   readonly enforcement: PermissionEnforcementPoint;
+  /** Live search indexes shared by every query (search/live-index.ts); devices pass one. */
+  readonly search?: SearchIndexCache;
 }
 
 /**
@@ -72,10 +75,12 @@ export interface QueryRuntimeOptions<DB> {
 export class QueryRuntime<DB> implements QueryExecutorPort {
   readonly #db: Kysely<DB>;
   readonly #enforcement: PermissionEnforcementPoint;
+  readonly #search: SearchIndexCache | undefined;
 
   constructor(options: QueryRuntimeOptions<DB>) {
     this.#db = options.db;
     this.#enforcement = options.enforcement;
+    this.#search = options.search;
   }
 
   /**
@@ -134,7 +139,7 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
     return executable.handler(input, this.#contextFor(identity));
   }
 
-  /** Build the §6 `qctx` — exactly `{ db, tenantId, storeId, userId, hasPermission }`. */
+  /** Build the §6 `qctx`: `{ db, tenantId, storeId, userId, hasPermission }`, plus `search` on a device. */
   #contextFor(identity: CommandIdentity): QueryContext<DB> {
     // FROZEN, like `ctx` (runtime/ctx.ts): a minted context is a statement of who is asking, and a
     // handler that reassigned `qctx.userId` and saw its gating still evaluated for the real user
@@ -149,6 +154,7 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
       // this?"; it can only ask about the caller.
       hasPermission: (permissionId: string): boolean =>
         this.#enforcement.hasPermission(identity, permissionId),
+      ...(this.#search !== undefined ? { search: this.#search } : {}),
     });
   }
 }

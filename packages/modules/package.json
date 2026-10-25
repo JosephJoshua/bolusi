@@ -17,12 +17,23 @@
       "types": "./dist/notes/screens/index.d.ts",
       "default": "./dist/notes/screens/index.js"
     },
+    "./repair": {
+      "types": "./dist/repair/index.d.ts",
+      "default": "./dist/repair/index.js"
+    },
+    "./repair/screens": {
+      "types": "./dist/repair/screens/index.d.ts",
+      "default": "./dist/repair/screens/index.js"
+    },
     "./notes/i18n/id.json": "./notes/i18n/id.json",
-    "./notes/i18n/en.json": "./notes/i18n/en.json"
+    "./notes/i18n/en.json": "./notes/i18n/en.json",
+    "./repair/i18n/id.json": "./repair/i18n/id.json",
+    "./repair/i18n/en.json": "./repair/i18n/en.json"
   },
   "files": [
     "dist",
-    "notes/i18n"
+    "notes/i18n",
+    "repair/i18n"
   ],
   "dependencies": {
     "@bolusi/core": "workspace:*",

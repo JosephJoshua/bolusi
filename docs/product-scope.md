@@ -13,6 +13,48 @@ may revise them. Before implementing a new scope, discuss the relevant unresolve
 choices and challenge assumptions; record any changed agreement. The old PRDs are
 inputs to revalidate, not executable specifications.
 
+## Slice 1 agreement — digital repair ticket (2026-10-25)
+
+Agreed with the owner before implementation. This is the first usable slice; it
+overrides the earlier "foundations first" ordering in product direction.
+
+- **Outcome:** replace the paper ticket and WhatsApp tracking with a repair ticket
+  from intake to handover, piloted in one store. Stock and customer payments are
+  later slices; payments stay in the store's paper cash book until then. The
+  ticket keeps a stable ID and quote total so a payment ledger attaches later
+  without reworking tickets.
+- **Intake (cashier only):** customer name required, phone encouraged but never
+  forced. Device entered manually (model lookup later). Condition checklist,
+  peripherals, complaint, itemized quote lines (parts/labour) and estimated
+  completion. The customer leaves with a price that may change later. All 6
+  intake photos are required. Customers who wait in the store get the same
+  ticket and documents, since they may return for warranty.
+- **Finding tickets:** offline search by name with Indonesian spelling
+  tolerance, any phone format (08…, 628…, +628…), ticket number, IMEI and model.
+- **Work:** a store queue; technicians self-assign or are assigned. Technicians
+  never do intake. Each ticket tracks **repair outcome** (received, in repair,
+  waiting for parts, repaired, cancelled) separately from **device location**
+  (in store, returned to customer), so "cancelled, still in store" is visible.
+- **Price changes:** after intake, each change is a new logged line with a reason
+  and a "customer agreed" mark. Only the cashier or store owner applies changes;
+  technicians propose.
+- **Handover:** photo, signature and a printed final document.
+- **Clients:** three over time sharing the offline core, logic and translations:
+  the Expo mobile app (technicians, phone-only counters); an **Electron** desktop
+  app for Windows counter PCs with its own DOM UI (shadcn/Radix + Tailwind); and
+  a web app later for back-office work. A pure web counter was rejected: browsers
+  cannot send raw output to dot-matrix printers and their offline storage is
+  less durable.
+- **Printing:** every ticket gets a repair order with store and customer copies.
+  Documents are code templates in the repo (Crystal Reports is retired; no
+  report-designer product). HTML/CSS pages print through the desktop app to any
+  installed printer, any paper size, or PDF. An ESC/P text-mode renderer drives
+  Epson-compatible dot-matrix printers on blank carbonless continuous paper.
+  Owners edit store details and terms, not layouts.
+- **UX:** screens follow user flows, not record editing; guided photo capture;
+  search-first finding. Admin grids later get Excel-like in-place bulk editing.
+- **No paid components:** use high-quality open-source libraries or build it.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.

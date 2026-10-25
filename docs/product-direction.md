@@ -22,7 +22,8 @@ point for that conversation.
 - Unreliable connectivity and long power outages. Routine store work must survive
   offline use; sync status and stale information must be understandable.
 - Android and iOS as first-class targets, with Bahasa Indonesia and English.
-  Desktop remains a later option.
+  Windows counter PCs get an Electron desktop app from the first repair slice;
+  a web app for back-office work is later.
 - Auditable business events, recoverable mistakes and honest evidence. Stock and
   money must reconcile; signatures and location alone do not prove a human claim.
 - Simple workflows for shop staff, with deeper financial and operational views
@@ -30,14 +31,14 @@ point for that conversation.
 
 ## Milestones
 
-| Stage                             | Intended outcome                                                                                                                                       | Current standing                                                                                                                                                    |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **v0 — Foundation proof**         | Offline operation log, sync, authentication, tenant isolation, media, translations and notification infrastructure, exercised by Notes.                | Implemented foundation; see [architecture](architecture.md) for remaining limits and unverified hardware behavior. This is not a usable repair business release.    |
-| **V1 — Complete repair journey**  | Run a repair from intake through parts sourcing, work, QC, pickup, payment and warranty, with real customer, inventory and finance foundations.        | Chosen first release. Detailed decisions are in [repair scope](product-scope.md); unresolved choices need discussion as slices are selected.                        |
-| **After the repair release**      | Extend into standalone retail/wholesale POS and useful owner reporting. Consider direct EDC terminal integration (previously proposed as v1.1).        | Candidate next scopes; order, size and providers remain undecided. A small owner view can be scoped separately once repair data exists.                             |
-| **v1.x — Wider store operations** | Attendance, wholesale delivery, supporting GPS services, fuller reporting and contextual internal chat.                                                | Earlier direction, with sequencing still open. Chat was the lowest priority and needs evidence that staff want it.                                                  |
-| **SaaS and desktop expansion**    | Serve other businesses through tenant onboarding and configuration; decide billing/support/suspension behavior and whether a desktop client is useful. | Longer-term ambitions after V1, without dates or a fixed order relative to other later scopes. Tauri was a preference to investigate, not a settled desktop design. |
-| **V2 — In-product AI assistant**  | Let users ask questions about their business and, with appropriate permissions and confirmation, request actions.                                      | Deferred idea to revisit after useful workflows exist. This is a Bolusi feature, separate from using Claude Projects to develop Bolusi.                             |
+| Stage                             | Intended outcome                                                                                                                                | Current standing                                                                                                                                                 |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **v0 — Foundation proof**         | Offline operation log, sync, authentication, tenant isolation, media, translations and notification infrastructure, exercised by Notes.         | Implemented foundation; see [architecture](architecture.md) for remaining limits and unverified hardware behavior. This is not a usable repair business release. |
+| **V1 — Complete repair journey**  | Run a repair from intake through parts sourcing, work, QC, pickup, payment and warranty, with real customer, inventory and finance foundations. | Chosen first release. Detailed decisions are in [repair scope](product-scope.md); unresolved choices need discussion as slices are selected.                     |
+| **After the repair release**      | Extend into standalone retail/wholesale POS and useful owner reporting. Consider direct EDC terminal integration (previously proposed as v1.1). | Candidate next scopes; order, size and providers remain undecided. A small owner view can be scoped separately once repair data exists.                          |
+| **v1.x — Wider store operations** | Attendance, wholesale delivery, supporting GPS services, fuller reporting and contextual internal chat.                                         | Earlier direction, with sequencing still open. Chat was the lowest priority and needs evidence that staff want it.                                               |
+| **SaaS and desktop expansion**    | Serve other businesses through tenant onboarding and configuration; decide billing/support/suspension behavior.                                 | Longer-term ambitions after V1, without dates or a fixed order relative to other later scopes. The counter desktop client moved into V1 (Electron, 2026-10-25).  |
+| **V2 — In-product AI assistant**  | Let users ask questions about their business and, with appropriate permissions and confirmation, request actions.                               | Deferred idea to revisit after useful workflows exist. This is a Bolusi feature, separate from using Claude Projects to develop Bolusi.                          |
 
 ### The current repair sequence
 

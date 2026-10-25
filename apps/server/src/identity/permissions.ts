@@ -58,7 +58,7 @@ export const PERM = AUTH_PERMISSION;
  */
 export const TENANT_ADMIN_PERMISSION = AUTH_PERMISSION.roleManage;
 
-export type RoleKey = 'main_owner' | 'store_owner' | 'staff';
+export type RoleKey = 'main_owner' | 'store_owner' | 'staff' | 'cashier' | 'technician';
 
 export interface DefaultRoleDef {
   readonly key: RoleKey;
@@ -82,9 +82,25 @@ const STAFF_PERMS = [
   'platform.set_locale',
 ];
 
-/** 02 §10 — the three v0 system-default roles, seeded at provisioning. */
+// Repair presets (product-scope.md slice 1): the cashier takes devices in, prices, assigns, cancels
+// and hands back; the technician works tickets and may only propose price changes.
+const PERSONAL_PERMS = [AUTH_PERMISSION.pinChange, 'platform.set_locale'];
+const CASHIER_PERMS = [
+  ...PERSONAL_PERMS,
+  'repair.read',
+  'repair.intake',
+  'repair.assign',
+  'repair.quote_change',
+  'repair.cancel',
+  'repair.handover',
+];
+const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work'];
+
+/** 02 §10 — the system-default roles, seeded at provisioning. Store owners can edit grants later. */
 export const DEFAULT_ROLES: readonly DefaultRoleDef[] = [
   { key: 'main_owner', scopeType: 'tenant', permissionIds: ALL_IDS },
   { key: 'store_owner', scopeType: 'store', permissionIds: STORE_OWNER_PERMS },
   { key: 'staff', scopeType: 'store', permissionIds: STAFF_PERMS },
+  { key: 'cashier', scopeType: 'store', permissionIds: CASHIER_PERMS },
+  { key: 'technician', scopeType: 'store', permissionIds: TECHNICIAN_PERMS },
 ];
