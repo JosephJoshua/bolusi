@@ -8,8 +8,8 @@
  * from the command/query runtime (the media client; the op-log bookkeeping) and keeping them as
  * parameters is what lets a test drive the SAME screens over a real runtime with fake media.
  */
-import { NOTE_ENTITY, NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
-import type { CapturedMedia, NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
+import { NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
+import type { NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
 import {
   bindModulePort,
   type CommandIdentity,
@@ -17,17 +17,15 @@ import {
   type ModuleRuntime,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
-import type { OperationSyncStatus } from '@bolusi/ui';
-import type { Kysely } from 'kysely';
 
 export interface NotesRuntimeDeps {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly invalidation: InvalidationBus;
   readonly identity: CommandIdentity;
-  /** Per-note op statuses (design-system §3.5) — read from the op log, see `readNoteSyncStatuses`. */
+  /** Per-note op statuses (design-system §3.5), read from the op log (`readEntitySyncStatuses`). */
   readonly noteSyncStatuses: (noteIds: readonly string[]) => Promise<NoteSyncStatuses>;
   /** Task-82 capture flow, resolved to the attached media id (or null on cancel). */
-  readonly capturePhoto: () => Promise<CapturedMedia | null>;
+  readonly capturePhoto: NotesRuntime['capturePhoto'];
   /**
    * Media client's verified thumbnail (06 §6).
    *
@@ -53,26 +51,4 @@ export function createNotesRuntime(deps: NotesRuntimeDeps): NotesRuntime {
     capturePhoto: deps.capturePhoto,
     loadThumbnail: deps.loadThumbnail,
   };
-}
-
-/**
- * Read each note's op sync statuses from the op log (design-system §3.5 — the projection row carries
- * no op status). A note with no rows is all-`synced` (absent from the map ⇒ the silent chip).
- */
-export async function readNoteSyncStatuses(
-  db: Kysely<ClientDatabase>,
-  noteIds: readonly string[],
-): Promise<NoteSyncStatuses> {
-  if (noteIds.length === 0) return {};
-  const rows = await db
-    .selectFrom('operations')
-    .select(['entityId', 'syncStatus'])
-    .where('entityType', '=', NOTE_ENTITY)
-    .where('entityId', 'in', [...noteIds])
-    .execute();
-  const out: Record<string, OperationSyncStatus[]> = {};
-  for (const row of rows) {
-    (out[row.entityId] ??= []).push(row.syncStatus as OperationSyncStatus);
-  }
-  return out;
 }

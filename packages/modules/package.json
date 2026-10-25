@@ -25,6 +25,10 @@
       "types": "./dist/repair/screens/index.d.ts",
       "default": "./dist/repair/screens/index.js"
     },
+    "./screen-kit": {
+      "types": "./dist/screen-kit/index.d.ts",
+      "default": "./dist/screen-kit/index.js"
+    },
     "./notes/i18n/id.json": "./notes/i18n/id.json",
     "./notes/i18n/en.json": "./notes/i18n/en.json",
     "./repair/i18n/id.json": "./repair/i18n/id.json",

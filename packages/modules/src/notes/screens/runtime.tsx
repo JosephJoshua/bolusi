@@ -17,13 +17,13 @@
 import type { ReactNode } from 'react';
 
 import type { QueryPage } from '@bolusi/core';
-import type { MediaRef } from '@bolusi/schemas';
-import type { OperationSyncStatus } from '@bolusi/ui';
 
 import type { CreateNoteInput, EditNoteBodyInput, ArchiveNoteInput } from '../commands.js';
 import {
   createRuntimeContext,
   useLiveQuery,
+  type EntitySyncStatuses,
+  type PhotoCapture,
   useThumbnailState,
   type QueryState,
   type ThumbnailRef,
@@ -34,18 +34,9 @@ export type { QueryState, ThumbnailState } from '../../screen-kit/index.js';
 import type { GetNoteInput, ListNotesInput, NoteRow } from '../queries.js';
 
 /** The `Operation.syncStatus` of every op backing a note, keyed by note id (design-system §3.5). */
-export type NoteSyncStatuses = Readonly<Record<string, readonly OperationSyncStatus[]>>;
+export type NoteSyncStatuses = EntitySyncStatuses;
 
-/**
- * What the in-app capture flow (06 §2.1; task 82) hands back — the whole `mediaRef` the note op will
- * carry, not just the id. The capture pipeline already computes the SHA-256 over the final bytes
- * (06 §2.2 step 6), and the note's signed payload is the only tamper-evident place that hash can
- * live (05 §2), so dropping everything but the id here would make every note this device creates
- * unverifiable on every OTHER device (06 §6).
- */
-export interface CapturedMedia {
-  readonly mediaRef: MediaRef;
-}
+export type { CapturedMedia } from '../../screen-kit/index.js';
 
 /**
  * Everything the notes screens need from the platform, and nothing more. apps/mobile binds each
@@ -75,7 +66,7 @@ export interface NotesRuntime {
    */
   hasPermission(permissionId: string): boolean;
   /** Open the in-app capture flow (task 82) and resolve the attached media, or null if cancelled. */
-  capturePhoto(): Promise<CapturedMedia | null>;
+  capturePhoto: PhotoCapture;
   /**
    * Resolve a note's attachment to a displayable thumbnail (06 §6, media client).
    *

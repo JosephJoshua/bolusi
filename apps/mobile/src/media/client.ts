@@ -24,7 +24,7 @@
 //   WIRED END-TO-END NOW (task 130): the notes editor's attach button (`NoteEditor.tsx`) calls
 //            `runtime.capturePhoto`, which `Root` binds to the REAL `CaptureHost` seam over
 //            `createExpoCapturePlatform()` (`index.ts`), and `loadThumbnail` binds to
-//            `createNotesThumbnailLoader` (task 120). The attach button "opens a camera instead of
+//            `createThumbnailLoader` (task 120). The attach button "opens a camera instead of
 //            throwing" (index.ts). `UNWIRED_NOTES_MEDIA.capturePhoto` (which REJECTS, never resolves a
 //            fake `null`) is the fallback ONLY for `media === null` / a build with no camera binding
 //            (`bootstrap/notes.ts`) — no longer the only value the app has.
