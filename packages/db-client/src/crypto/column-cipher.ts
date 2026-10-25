@@ -73,6 +73,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   bytesToUtf8,
+  isCanonicalBase64,
   utf8ToBytes,
   type ColumnCipher,
   type SealOptions,
@@ -200,12 +201,12 @@ export class Aes256GcmColumnCipher implements ColumnCipher {
     if (typeof value !== 'string') return false;
     const marker = this.#markerOf(value);
     if (marker === null) return false;
-    try {
-      return base64ToBytes(value.slice(marker.length)).length >= MIN_BLOB_BYTES;
-    } catch {
-      // A marker followed by non-base64 is not one of ours — treat as plaintext, do not attempt open.
-      return false;
-    }
+    // A marker followed by non-base64 is not one of ours — treat as plaintext, do not attempt open.
+    // Checked without decoding: every read asks this of every value, and decrypt decodes anyway.
+    const body = value.slice(marker.length);
+    if (!isCanonicalBase64(body)) return false;
+    const padding = body.endsWith('==') ? 2 : body.endsWith('=') ? 1 : 0;
+    return (body.length / 4) * 3 - padding >= MIN_BLOB_BYTES;
   }
 
   /** Which of this key's markers `value` carries, or `null` for neither. */
