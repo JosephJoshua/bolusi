@@ -3,7 +3,7 @@ export { repairModule, repairModuleManifest } from './manifest.js';
 export * from './constants.js';
 export type * from './schema.js';
 export * from './search.js';
-export { deviceCode, formatTicketNumber, ticketCounter } from './ticket-number.js';
+export { deviceCode, formatTicketNumber } from './ticket-number.js';
 export type {
   CustomerRow,
   QuoteLineRow,

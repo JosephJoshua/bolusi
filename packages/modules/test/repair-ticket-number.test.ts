@@ -1,7 +1,7 @@
 // Offline ticket numbers: short, unambiguous, minted with no network.
 import { describe, expect, test } from 'vitest';
 
-import { deviceCode, formatTicketNumber, ticketCounter } from '../src/repair/ticket-number.js';
+import { deviceCode, formatTicketNumber } from '../src/repair/ticket-number.js';
 
 describe('ticket numbers', () => {
   const device = '01920000-0000-7000-8000-00000000d00a';
@@ -18,11 +18,8 @@ describe('ticket numbers', () => {
     );
   });
 
-  test('format and parse round-trip', () => {
-    const number = formatTicketNumber(device, 42);
-    expect(number).toMatch(/^[0-9A-Z]{3}-0042$/);
-    expect(ticketCounter(number)).toBe(42);
-    expect(ticketCounter(formatTicketNumber(device, 12345))).toBe(12345);
-    expect(ticketCounter('not a number')).toBeNull();
+  test('the counter is zero-padded to four digits and grows past them', () => {
+    expect(formatTicketNumber(device, 42)).toMatch(/^[0-9A-Z]{3}-0042$/);
+    expect(formatTicketNumber(device, 12345)).toMatch(/^[0-9A-Z]{3}-12345$/);
   });
 });

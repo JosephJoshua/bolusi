@@ -525,7 +525,15 @@ export function maxTicketCounter(
 ) {
   return db
     .selectFrom('repairTickets')
-    .select(sql<number | null>`MAX(CAST(substr(ticket_number, 5) AS INTEGER))`.as('counter'))
+    .select(
+      // Only well-formed numbers count (4 to 9 digits after the code): a malformed number synced
+      // from another device is NULL here instead of casting to 0 or saturating at INT64 max.
+      sql<
+        number | null
+      >`MAX(CASE WHEN length(ticket_number) BETWEEN 8 AND 13 AND substr(ticket_number, 5) NOT GLOB '*[^0-9]*' THEN CAST(substr(ticket_number, 5) AS INTEGER) END)`.as(
+        'counter',
+      ),
+    )
     .where('tenantId', '=', scope.tenantId)
     .where('storeId', '=', scope.storeId)
     .where(sql<string>`substr(ticket_number, 1, 4)`, '=', `${code}-`);

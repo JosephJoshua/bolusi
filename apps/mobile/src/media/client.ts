@@ -143,6 +143,8 @@ export interface MediaClient {
   startForBackgroundPass(): Promise<void>;
   /** 06 §5.2 (d): one background drain. */
   requestBackground(): void;
+  /** Stop the running drain after its current item, for a background pass out of time. */
+  pause(): void;
   stop(): void;
   /** 06 §2.2. `camera` is per call — the `CameraView` ref lives in the screen that owns the preview. */
   capturePhoto(identity: CaptureIdentity, camera: CameraCapturePort): Promise<CaptureOutcome>;
@@ -259,11 +261,16 @@ class MediaClientImpl implements MediaClient {
     this.request('background_task');
   }
 
+  pause(): void {
+    this.loop.pause();
+  }
+
   stop(): void {
     this.stopped = true;
     this.lease?.release();
     this.lease = null;
     this.triggers.stop();
+    this.loop.stop();
   }
 
   /**

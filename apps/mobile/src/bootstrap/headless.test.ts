@@ -11,8 +11,25 @@ describe('shareBoot', () => {
       return { connection: boots };
     });
     const [a, b] = await Promise.all([boot(), boot()]);
-    expect(a).toBe(b);
+    expect(a).toBe(b); // without a refresh, the very same object
     expect(await boot()).toBe(a);
+    expect(boots).toBe(1);
+  });
+
+  test('each caller gets the shared boot refreshed, so a later enrollment is seen', async () => {
+    let boots = 0;
+    let enrolledAs: string | null = null;
+    const boot = shareBoot(
+      async () => {
+        boots += 1;
+        return { connection: 1, deviceId: null as string | null };
+      },
+      async (app) => ({ ...app, deviceId: enrolledAs }),
+    );
+    expect((await boot()).deviceId).toBeNull();
+    enrolledAs = 'device-1';
+    const later = await boot();
+    expect(later).toEqual({ connection: 1, deviceId: 'device-1' });
     expect(boots).toBe(1);
   });
 

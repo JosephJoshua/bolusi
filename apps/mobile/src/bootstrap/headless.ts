@@ -8,18 +8,23 @@
 import type { BackgroundPassTarget, HeadlessPass } from './background-task.js';
 
 /**
- * Run `boot` at most once per process and hand every caller the same result. A failed boot is
- * forgotten, so the next caller (the UI, after a background boot failed on a locked iPhone) tries
- * again rather than inheriting the failure.
+ * Run `boot` at most once per process. Every caller shares that boot's connection and gets it
+ * through `refresh`, which re-reads whatever can change after boot (a live enrollment writes the
+ * device id), so a later caller never sees a stale snapshot. A failed boot is forgotten, so the next
+ * caller (the UI, after a background boot failed on a locked iPhone) tries again rather than
+ * inheriting the failure.
  */
-export function shareBoot<T>(boot: () => Promise<T>): () => Promise<T> {
+export function shareBoot<T>(
+  boot: () => Promise<T>,
+  refresh: (booted: T) => Promise<T> = (booted) => Promise.resolve(booted),
+): () => Promise<T> {
   let inFlight: Promise<T> | null = null;
-  return () => {
+  return async () => {
     inFlight ??= boot().catch((error: unknown) => {
       inFlight = null;
       throw error;
     });
-    return inFlight;
+    return refresh(await inFlight);
   };
 }
 

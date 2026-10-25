@@ -29,9 +29,3 @@ export function deviceCode(deviceId: string): string {
 export function formatTicketNumber(deviceId: string, counter: number): string {
   return `${deviceCode(deviceId)}-${String(counter).padStart(4, '0')}`;
 }
-
-/** The per-device counter part of a ticket number, or null if it is not one of ours. */
-export function ticketCounter(ticketNumber: string): number | null {
-  const match = /^[0-9A-Z]{3}-(\d{4,})$/.exec(ticketNumber);
-  return match === null ? null : Number(match[1]);
-}

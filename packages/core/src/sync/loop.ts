@@ -111,6 +111,8 @@ export class SyncLoop<DB> {
   private hydrated = false;
   /** Set by `pause()`: the running pull stops at its next batch boundary and no rerun follows. */
   private pauseRequested = false;
+  /** Set by `stop()`: this loop never starts another cycle. */
+  private stopped = false;
   /** Mirrors of the persisted guards, so the trigger guard needs no `await` (see the header). */
   private syncDisabled = false;
   private pushHalted = false;
@@ -151,7 +153,7 @@ export class SyncLoop<DB> {
       throw new Error('SyncLoop.hydrate() must be awaited before requestSync()');
     }
     // 03 §10 trigger guard: `syncDisabled` ⇒ no cycle starts, for ANY reason including manual.
-    if (this.syncDisabled) return;
+    if (this.syncDisabled || this.stopped) return;
 
     if (this.loopState === 'pushing' || this.loopState === 'pulling') {
       // 03 §10: "any trigger arrives → (no transition), rerun flag set". Coalescing: N triggers
@@ -178,6 +180,18 @@ export class SyncLoop<DB> {
    */
   pause(): void {
     if (this.loopState === 'pushing' || this.loopState === 'pulling') this.pauseRequested = true;
+  }
+
+  /**
+   * Retire this loop: the running cycle stops as `pause()` would, no rerun or backoff retry
+   * follows, and every later trigger is ignored. For an owner that is going away, so a loop left
+   * in backoff cannot keep syncing behind the next owner's back.
+   */
+  stop(): void {
+    this.stopped = true;
+    this.pause();
+    this.rerun = false;
+    this.clearBackoffTimer();
   }
 
   /** Resolves when the current cycle (and any rerun it chains) has settled. Tests only. */
@@ -297,7 +311,7 @@ export class SyncLoop<DB> {
     this.pauseRequested = false;
     // 03 §10: "if the rerun flag is set, immediately re-enter `pushing`". ONE follow-up regardless
     // of how many triggers coalesced into it.
-    if (this.rerun && !this.syncDisabled && !paused) {
+    if (this.rerun && !this.syncDisabled && !paused && !this.stopped) {
       this.transition('trigger');
       this.cycle = this.runCycle();
     }
@@ -335,9 +349,10 @@ export class SyncLoop<DB> {
       backoffUntil: until,
     });
     this.clearBackoffTimer();
+    if (this.stopped) return;
     this.cancelBackoff = this.options.timer.schedule(delay, () => {
       this.cancelBackoff = null;
-      if (this.syncDisabled) return;
+      if (this.syncDisabled || this.stopped) return;
       if (this.loopState !== 'backoff') return;
       this.transition('timer_elapsed');
       this.cycle = this.runCycle();

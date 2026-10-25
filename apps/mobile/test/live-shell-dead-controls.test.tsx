@@ -126,6 +126,7 @@ function fakeMediaClient(
       } satisfies MediaStartReport),
     startForBackgroundPass: () => Promise.resolve(),
     requestBackground: () => undefined,
+    pause: () => undefined,
     stop: () => undefined,
     // RECORDS FIRST, ALWAYS. An earlier version of this double let a per-test override REPLACE this
     // method, so the scripted outcome silently stopped recording and `captureCalls` stayed empty

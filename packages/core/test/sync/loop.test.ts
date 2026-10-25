@@ -260,6 +260,35 @@ describe('a full cycle walks idle → pushing → pulling → idle (03 §10)', (
     expect(loop.state).toBe('idle');
   });
 
+  it('stop() retires a loop in backoff: no retry fires and later triggers are ignored', async () => {
+    // A loop whose owner went away (a headless background pass that ended offline) must not keep
+    // syncing from its backoff timer behind the next owner's back.
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(netFail);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(loop.state).toBe('backoff');
+    expect(harness.timer.pending()).toBe(1);
+
+    loop.stop();
+    expect(harness.timer.pending()).toBe(0);
+    loop.requestSync('manual');
+    await harness.timer.advance(600_000);
+    await loop.settle();
+    expect(harness.transport.pulls).toHaveLength(1);
+  });
+
+  it('stop() during a cycle ends it at the batch boundary with no backoff armed after a failure', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(() => {
+      loop.stop();
+      throw new Error('network down');
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(harness.timer.pending()).toBe(0);
+  });
+
   it('pause() on an idle loop is a no-op', async () => {
     const loop = await harness.makeLoop({ deviceId: device.id });
     loop.pause();

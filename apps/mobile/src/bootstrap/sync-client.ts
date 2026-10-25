@@ -284,6 +284,7 @@ class SyncClientImpl implements SyncClient {
     this.stopped = true;
     this.lease?.release();
     this.lease = null;
+    this.loop.stop();
     this.realtime?.stop();
     this.triggers.stop();
     this.uiNetUnsub?.();

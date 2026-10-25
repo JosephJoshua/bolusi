@@ -223,3 +223,16 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     throw error;
   }
 }
+
+/**
+ * A booted app with the two facts that change after boot read again: `deviceId` (a live enrollment
+ * writes it) and `syncState` (every sync does). For a boot shared across callers (headless.ts), so a
+ * later caller does not see the device as it was when the process started.
+ */
+export async function refreshBootstrapped(app: Bootstrapped): Promise<Bootstrapped> {
+  return {
+    ...app,
+    deviceId: await readDeviceId(app.db.db as never),
+    syncState: await readSyncState(app.db.db as never),
+  };
+}

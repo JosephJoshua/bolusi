@@ -388,6 +388,22 @@ describe('ticket numbers', () => {
     expect((await open(h)).ticketNumber).toBe(`${code}-10001`);
   });
 
+  test('malformed numbers synced from elsewhere cannot wedge the counter', async () => {
+    h = await openRepairHarness(17);
+    const first = await open(h);
+    const code = first.ticketNumber.slice(0, 3);
+    // As integers these cast to INT64 max (every later number would collide) or to 12.
+    await sql`UPDATE repair_tickets SET ticket_number = ${`${code}-99999999999999999999`}`.execute(
+      h.db,
+    );
+    const second = await open(h);
+    await sql`UPDATE repair_tickets SET ticket_number = ${`${code}-12x`} WHERE id = ${second.ticketId}`.execute(
+      h.db,
+    );
+    expect(second.ticketNumber).toBe(`${code}-0001`);
+    expect((await open(h)).ticketNumber).toBe(`${code}-0001`);
+  });
+
   test('finding the next counter is one index seek, not a scan of the store', async () => {
     h = await openRepairHarness(16);
     const compiled = maxTicketCounter(h.db, h, 'K7Q').compile();

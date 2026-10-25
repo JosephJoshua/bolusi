@@ -7,7 +7,7 @@ import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
-import { bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
+import { bootstrap, refreshBootstrapped, type Bootstrapped } from './src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
@@ -161,7 +161,7 @@ function apiBaseUrl(): string {
  * ONE BOOT PER PROCESS. Root and the background tasks below share it, so a killed app woken by the
  * OS and then opened by the user keeps one connection to one database (bootstrap/headless.ts).
  */
-const appBoot = shareBoot(boot);
+const appBoot = shareBoot(boot, refreshBootstrapped);
 
 function reportBackgroundError(task: string): (error: unknown) => void {
   return (error) =>
