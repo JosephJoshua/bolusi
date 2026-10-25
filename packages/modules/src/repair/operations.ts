@@ -21,9 +21,17 @@ import {
   ticketClaimedApplier,
   ticketOpenedApplier,
   workPausedApplier,
+  workPhotosAddedApplier,
   workStartedApplier,
 } from './applier.js';
-import { CHECKLIST_STATES, QUOTE_LINE_KINDS, REPAIR_CONFLICT_KEY, REPAIR_OP } from './constants.js';
+import {
+  CHECKLIST_STATES,
+  QUOTE_LINE_KINDS,
+  REPAIR_CONFLICT_KEY,
+  REPAIR_OP,
+  WORK_PHOTO_STAGES,
+  WORK_PHOTOS_MAX,
+} from './constants.js';
 import type { RepairDatabase } from './schema.js';
 
 const MAX_TEXT = 2000;
@@ -114,6 +122,13 @@ export const quoteChangedPayload = zQuoteLineDraft
 
 export const quoteProposalDeclinedPayload = z.object({ lineId: zUuidV7, note: zLongText }).strict();
 
+export const workPhotosAddedPayload = z
+  .object({
+    stage: z.enum(WORK_PHOTO_STAGES),
+    photos: z.array(zMediaRef).min(1).max(WORK_PHOTOS_MAX),
+  })
+  .strict();
+
 export const deviceReturnedPayload = z
   .object({ handoverPhoto: zMediaRef, signature: zMediaRef, note: zLongText })
   .strict();
@@ -154,6 +169,12 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     reversal: 'Reversed by another repair.technician_assigned.',
     apply: technicianAssignedApplier,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
+  },
+  [REPAIR_OP.workPhotosAdded]: {
+    schemaVersion: 1,
+    payload: workPhotosAddedPayload,
+    reversal: 'Not reversible: photos are evidence and are never removed.',
+    apply: workPhotosAddedApplier,
   },
   [REPAIR_OP.workStarted]: {
     schemaVersion: 1,

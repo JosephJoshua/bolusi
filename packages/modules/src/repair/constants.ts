@@ -21,6 +21,7 @@ export const REPAIR_OP = {
   ticketOpened: 'repair.ticket_opened',
   ticketClaimed: 'repair.ticket_claimed',
   technicianAssigned: 'repair.technician_assigned',
+  workPhotosAdded: 'repair.work_photos_added',
   workStarted: 'repair.work_started',
   workPaused: 'repair.work_paused',
   markedRepaired: 'repair.marked_repaired',
@@ -63,6 +64,28 @@ export type DeviceLocation = (typeof DEVICE_LOCATIONS)[number];
 /** The six intake photos every ticket requires (owner decision, 2026-10-25). */
 export const INTAKE_PHOTO_SLOTS = ['front', 'back', 'left', 'right', 'top', 'bottom'] as const;
 export type IntakePhotoSlot = (typeof INTAKE_PHOTO_SLOTS)[number];
+
+/**
+ * The technician's own evidence (owner decision, 2026-10-25): at least one `before` photo to start
+ * work and at least one `after` photo each time the repair is marked done. Separate from the six
+ * intake photos the counter takes.
+ */
+export const WORK_PHOTO_STAGES = ['before', 'after'] as const;
+export type WorkPhotoStage = (typeof WORK_PHOTO_STAGES)[number];
+export const WORK_PHOTOS_MAX = 6;
+
+/** Work photos accumulate across restarts, so each one gets its own slot keyed by its media id. */
+export function workPhotoSlot(stage: WorkPhotoStage, mediaId: string): string {
+  return `${stage}:${mediaId}`;
+}
+
+/** The stage a photo slot belongs to, or null for intake and handover slots. */
+export function workPhotoStage(slot: string): WorkPhotoStage | null {
+  const stage = slot.slice(0, slot.indexOf(':'));
+  return (WORK_PHOTO_STAGES as readonly string[]).includes(stage)
+    ? (stage as WorkPhotoStage)
+    : null;
+}
 
 /** Handover evidence slots. */
 export const HANDOVER_PHOTO_SLOTS = ['handover', 'signature'] as const;

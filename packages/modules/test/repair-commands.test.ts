@@ -133,7 +133,7 @@ describe('queue and work', () => {
     const queue = await h.query('listTickets', { filter: { unassigned: true } }, h.technicianId);
     expect(queue.rows.map((r: { id: string }) => r.id)).toEqual([ticketId]);
 
-    await h.run('startWork', { ticketId }, h.technicianId);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
     let t = await ticket(h, ticketId);
     expect(t).toMatchObject({ outcome: 'in_repair', technicianId: h.technicianId });
 
@@ -142,15 +142,21 @@ describe('queue and work', () => {
     expect(t).toMatchObject({ outcome: 'waiting_for_parts', outcomeNote: 'LCD dipesan' });
 
     await h.run('startWork', { ticketId }, h.technicianId);
-    await h.run('markRepaired', { ticketId, note: 'Tes sentuh OK' }, h.technicianId);
+    await h.run(
+      'markRepaired',
+      { ticketId, note: 'Tes sentuh OK', afterPhotos: [h.photo(21)] },
+      h.technicianId,
+    );
     t = await ticket(h, ticketId);
     expect(t.outcome).toBe('repaired');
     expect(t.events.map((e: { kind: string }) => e.kind)).toEqual([
       'repair.ticket_opened',
       'repair.ticket_claimed',
+      'repair.work_photos_added',
       'repair.work_started',
       'repair.work_paused',
       'repair.work_started',
+      'repair.work_photos_added',
       'repair.marked_repaired',
     ]);
 
@@ -180,7 +186,40 @@ describe('queue and work', () => {
   test('cannot mark repaired before work starts', async () => {
     h = await openRepairHarness(9);
     const { ticketId } = await open(h);
-    await expectCode(h.run('markRepaired', { ticketId }, h.technicianId), 'INVALID_TRANSITION');
+    await expectCode(
+      h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId),
+      'INVALID_TRANSITION',
+    );
+  });
+
+  test('work needs a before photo to start and an after photo every time it is marked repaired', async () => {
+    h = await openRepairHarness(14);
+    const { ticketId } = await open(h);
+    const [before, after1, after2, after3] = [h.photo(20), h.photo(21), h.photo(22), h.photo(23)];
+    await expectCode(h.run('startWork', { ticketId }, h.technicianId), 'VALIDATION_FAILED');
+
+    await h.run('startWork', { ticketId, beforePhotos: [before] }, h.technicianId);
+    await expectCode(h.run('markRepaired', { ticketId }, h.technicianId), 'VALIDATION_FAILED');
+    await h.run('markRepaired', { ticketId, afterPhotos: [after1] }, h.technicianId);
+
+    // Reopening keeps the earlier before photo; the next completion needs its own after photo.
+    await h.run('startWork', { ticketId }, h.technicianId);
+    await expectCode(
+      h.run('markRepaired', { ticketId, afterPhotos: [] }, h.technicianId),
+      'VALIDATION_FAILED',
+    );
+    await h.run('markRepaired', { ticketId, afterPhotos: [after2, after3] }, h.technicianId);
+
+    const slots = (await ticket(h, ticketId)).photos.map((p: { slot: string }) => p.slot);
+    expect(slots).toEqual(
+      expect.arrayContaining([
+        `before:${before.mediaId}`,
+        `after:${after1.mediaId}`,
+        `after:${after2.mediaId}`,
+        `after:${after3.mediaId}`,
+      ]),
+    );
+    expect(slots).toHaveLength(6 + 4);
   });
 });
 
@@ -290,12 +329,12 @@ describe('cancel and handover', () => {
   test('repaired device is handed back with photo and signature; then the ticket is closed', async () => {
     h = await openRepairHarness(12);
     const { ticketId } = await open(h);
-    await h.run('startWork', { ticketId }, h.technicianId);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
 
     const handover = { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8) };
     await expectCode(h.run('returnDevice', handover, h.cashierId), 'INVALID_TRANSITION');
 
-    await h.run('markRepaired', { ticketId }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
     await h.run(
       'proposeQuoteChange',
       { ticketId, kind: 'part', description: 'Baut', amount: 5_000, reason: 'Hilang' },

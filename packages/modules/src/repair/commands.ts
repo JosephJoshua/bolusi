@@ -5,15 +5,18 @@
 import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
-import { zMediaRef } from '@bolusi/schemas';
+import { zMediaRef, type MediaRef } from '@bolusi/schemas';
 
 import {
   QUOTE_LINE_KINDS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_TICKET_ENTITY,
+  WORK_PHOTOS_MAX,
+  workPhotoStage,
   type QuoteLineKind,
   type RepairOutcome,
+  type WorkPhotoStage,
 } from './constants.js';
 import { zChecklistItem, zDevice, zIntakePhotos } from './operations.js';
 import {
@@ -300,20 +303,51 @@ export async function assignTechnicianHandler(
   };
 }
 
-export const startWorkInput = ticketIdInput;
+const zWorkPhotos = z.array(zMediaRef).max(WORK_PHOTOS_MAX);
+
+export const startWorkInput = z
+  .object({ ticketId: z.string().min(1), beforePhotos: zWorkPhotos.default([]) })
+  .strict();
+export type StartWorkInput = z.input<typeof startWorkInput>;
+
+/** The work-photo op for `photos`, or nothing when the command brought none. */
+function workPhotosOp(
+  ctx: CommandContext,
+  ticketId: string,
+  stage: WorkPhotoStage,
+  photos: readonly MediaRef[],
+): OpDraft[] {
+  return photos.length === 0
+    ? []
+    : [ticketOp(ctx, ticketId, REPAIR_OP.workPhotosAdded, { stage, photos })];
+}
+
+function missingPhotos(stage: WorkPhotoStage, why: string): DomainError {
+  return new DomainError(
+    'VALIDATION_FAILED',
+    { field: `${stage}Photos`, issue: 'at least one photo is required' },
+    why,
+  );
+}
 
 /**
  * Start (or resume, or reopen) work. Starting an unassigned ticket claims it in the same command,
- * so a technician picking a device off the shelf needs one tap.
+ * so a technician picking a device off the shelf needs one tap. The first start needs at least one
+ * `before` photo; a resume keeps the ones already taken and may add more.
  */
 export async function startWorkHandler(
-  input: z.output<typeof ticketIdInput>,
+  input: z.output<typeof startWorkInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOutcome(ticket, REPAIR_OP.workStarted, ['received', 'waiting_for_parts', 'repaired']);
+  const hasBefore = ticket.photos.some((photo) => workPhotoStage(photo.slot) === 'before');
+  if (!hasBefore && input.beforePhotos.length === 0) {
+    throw missingPhotos('before', `ticket ${ticket.ticketNumber} has no before photo yet`);
+  }
   const ops: OpDraft[] = [];
   if (ticket.technicianId === null) ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {}));
+  ops.push(...workPhotosOp(ctx, ticket.id, 'before', input.beforePhotos));
   ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.workStarted, {}));
   return { ops, result: { ticketId: ticket.id } };
 }
@@ -333,16 +367,27 @@ export async function markWaitingForPartsHandler(
   };
 }
 
-export const markRepairedInput = ticketNoteInput;
+export const markRepairedInput = z
+  .object({
+    ticketId: z.string().min(1),
+    note: zText(2000).default(''),
+    afterPhotos: zWorkPhotos.min(1),
+  })
+  .strict();
+export type MarkRepairedInput = z.input<typeof markRepairedInput>;
 
+/** Mark the repair done, with at least one `after` photo each time (owner decision). */
 export async function markRepairedHandler(
-  input: z.output<typeof ticketNoteInput>,
+  input: z.output<typeof markRepairedInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOutcome(ticket, REPAIR_OP.markedRepaired, ['in_repair']);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.markedRepaired, { note: input.note })],
+    ops: [
+      ...workPhotosOp(ctx, ticket.id, 'after', input.afterPhotos),
+      ticketOp(ctx, ticket.id, REPAIR_OP.markedRepaired, { note: input.note }),
+    ],
     result: { ticketId: ticket.id },
   };
 }
