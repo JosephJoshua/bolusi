@@ -67,6 +67,7 @@ import {
   type RemoteCacheEntry,
 } from './pruning.js';
 import { attachMediaToOperation } from './queue.js';
+import type { MediaRef } from '@bolusi/schemas';
 import {
   loadLocalMediaOnly,
   loadMediaForRender,
@@ -145,7 +146,10 @@ export interface MediaClient {
     pad: PadSize,
   ): Promise<SignatureOutcome>;
   /** 04 §5.1 step 5 — the command runtime's attach. Task 25 drives it from a real command. */
-  attach(mediaId: string, operationId: string): Promise<void>;
+  attach(
+    ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
+    operation: { readonly id: string; readonly userId: string },
+  ): Promise<void>;
   /** 06 §6, at render time only. */
   loadForRender(ref: RenderableMediaRef): Promise<RenderableMedia>;
   /** 06 §6 for an attachment with NO signed hash (v1/v2 payloads): local file or nothing. */
@@ -277,8 +281,11 @@ class MediaClientImpl implements MediaClient {
     );
   }
 
-  async attach(mediaId: string, operationId: string): Promise<void> {
-    await attachMediaToOperation(this.deps.db.db, mediaId, operationId);
+  async attach(
+    ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
+    operation: { readonly id: string; readonly userId: string },
+  ): Promise<void> {
+    await attachMediaToOperation(this.deps.db.db, ref, operation);
     // A newly attached item is drainable for the first time, so this is a capture-class event.
     this.triggers.notifyCapture();
   }

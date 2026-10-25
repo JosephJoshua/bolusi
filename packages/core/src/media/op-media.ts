@@ -2,11 +2,11 @@
 // op that references it is appended). Module payloads carry `mediaRef`s anywhere (a note's single
 // photo, a ticket's six intake photos, a handover signature), so this walks the payload rather than
 // asking each module to list them.
-import { zMediaRef } from '@bolusi/schemas';
+import { zMediaRef, type MediaRef } from '@bolusi/schemas';
 
-/** The ids of every complete `mediaRef` in a payload, in first-seen order, without duplicates. */
-export function mediaIdsInPayload(payload: unknown): readonly string[] {
-  const found = new Set<string>();
+/** Every complete `mediaRef` in a payload, in first-seen order, once per media id. */
+export function mediaRefsInPayload(payload: unknown): readonly MediaRef[] {
+  const found = new Map<string, MediaRef>();
   const walk = (value: unknown): void => {
     if (value === null || typeof value !== 'object') return;
     if (Array.isArray(value)) {
@@ -15,11 +15,11 @@ export function mediaIdsInPayload(payload: unknown): readonly string[] {
     }
     const ref = zMediaRef.safeParse(value);
     if (ref.success) {
-      found.add(ref.data.mediaId);
+      if (!found.has(ref.data.mediaId)) found.set(ref.data.mediaId, ref.data);
       return;
     }
     for (const child of Object.values(value)) walk(child);
   };
   walk(payload);
-  return [...found];
+  return [...found.values()];
 }

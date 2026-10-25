@@ -25,6 +25,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import { encryptColumnValue, type PrunableItem } from '@bolusi/core';
+import type { MediaRef } from '@bolusi/schemas';
 
 /** The row as capture writes it (06 §2.2 step 7). Everything here is frozen from this moment on. */
 export interface NewMediaItem {
@@ -87,15 +88,21 @@ export async function insertMediaItem<DB>(db: Kysely<DB>, item: NewMediaItem): P
  *
  * This is the command runtime's step (04 §5.1 step 5): the app's append seam (`bootstrap/runtime.ts`)
  * calls it for every `mediaRef` in each appended op's payload, inside the append transaction.
+ *
+ * The row must also be the capture the ref describes, taken by the user whose op this is: same
+ * bytes (`sha256`) and same capturer. A payload that names another user's pending capture, or a
+ * ref whose hash does not match the file on disk, attaches nothing, so the drain never uploads
+ * evidence under an op that did not take it. Nothing throws: the op is already signed and appended.
  */
 export async function attachMediaToOperation<DB>(
   db: Kysely<DB>,
-  mediaId: string,
-  operationId: string,
+  ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
+  operation: { readonly id: string; readonly userId: string },
 ): Promise<void> {
   await sql`
-    UPDATE media_items SET attached_to_operation_id = ${operationId}
-    WHERE id = ${mediaId} AND attached_to_operation_id IS NULL
+    UPDATE media_items SET attached_to_operation_id = ${operation.id}
+    WHERE id = ${ref.mediaId} AND attached_to_operation_id IS NULL
+      AND sha256 = ${ref.sha256} AND captured_by_user_id = ${operation.userId}
   `.execute(db);
 }
 

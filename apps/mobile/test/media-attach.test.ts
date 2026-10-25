@@ -53,12 +53,12 @@ afterEach(async () => {
   await fixture.close();
 });
 
-async function capture(id: string): Promise<void> {
+async function capture(id: string, userId = fixture.userId): Promise<void> {
   await insertMediaItem(fixture.app.db.db, {
     id,
     tenantId: fixture.tenantId,
     storeId: fixture.storeId,
-    userId: fixture.userId,
+    userId,
     deviceId: fixture.deviceId,
     type: 'image',
     mime: 'image/jpeg',
@@ -111,4 +111,45 @@ test('appending an op attaches every media ref in its payload, and only those', 
   `.execute(fixture.app.db.db);
   expect(await attachedTo(PHOTO)).toBe(op.rows[0]?.id);
   expect(await attachedTo(ORPHAN)).toBeNull();
+});
+
+test('a ref only attaches the capture it describes, taken by the user who signed the op', async () => {
+  const OTHER_USERS = '01920000-0000-7000-8000-0000000140a3';
+  const WRONG_HASH = '01920000-0000-7000-8000-0000000140a4';
+  await capture(OTHER_USERS, '01920000-0000-7000-8000-0000000140f9');
+  await capture(WRONG_HASH);
+  const identity = {
+    tenantId: fixture.tenantId,
+    storeId: fixture.storeId,
+    deviceId: fixture.deviceId,
+    userId: fixture.userId,
+  };
+  const app = runtimeFor(fixture.app);
+  await app.evaluator.prime();
+  const port = bindModulePort(notesModule, app.moduleRuntimeFor(identity), identity);
+  const refTo = (mediaId: string, sha256: string) => ({
+    mediaId,
+    sha256,
+    mime: 'image/jpeg' as const,
+    type: 'image' as const,
+    sizeBytes: 1024,
+    capturedAt: 1,
+    location: null,
+    userId: fixture.userId,
+    deviceId: fixture.deviceId,
+  });
+
+  await port.run('createNote', {
+    title: 'A',
+    body: '',
+    mediaRef: refTo(OTHER_USERS, 'a'.repeat(64)),
+  });
+  await port.run('createNote', {
+    title: 'B',
+    body: '',
+    mediaRef: refTo(WRONG_HASH, 'b'.repeat(64)),
+  });
+
+  expect(await attachedTo(OTHER_USERS)).toBeNull();
+  expect(await attachedTo(WRONG_HASH)).toBeNull();
 });

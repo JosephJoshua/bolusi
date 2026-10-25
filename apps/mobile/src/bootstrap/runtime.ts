@@ -25,7 +25,7 @@ import {
   createModuleRuntime,
   SearchIndexCache,
   createDirectorySource,
-  mediaIdsInPayload,
+  mediaRefsInPayload,
   PermissionEvaluator,
   type ClockPort,
   type CommandRuntime,
@@ -124,8 +124,8 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
   // Pulled ops never pass through here, and a foreign device's media has no local row anyway.
   const applyProjection: ProjectionApply = async (op) => {
     await projectAppended(op);
-    for (const mediaId of mediaIdsInPayload(op.payload)) {
-      await attachMediaToOperation(app.db.db, mediaId, op.id);
+    for (const ref of mediaRefsInPayload(op.payload)) {
+      await attachMediaToOperation(app.db.db, ref, op);
     }
   };
   // One live search cache for the app, fed by the engine's applies (search/live-index.ts), so every
