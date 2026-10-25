@@ -10,7 +10,12 @@
  */
 import { NOTE_ENTITY, NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
 import type { CapturedMedia, NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
-import type { CommandIdentity, CommandOutcome, InvalidationBus, ModuleRuntime } from '@bolusi/core';
+import {
+  bindModulePort,
+  type CommandIdentity,
+  type InvalidationBus,
+  type ModuleRuntime,
+} from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import type { OperationSyncStatus } from '@bolusi/ui';
 import type { Kysely } from 'kysely';
@@ -34,31 +39,17 @@ export interface NotesRuntimeDeps {
 }
 
 /** `CommandRuntime.execute` returns `{ ops, result, timestamp }`; the screens want the typed result. */
-async function resultOf<T>(outcome: Promise<CommandOutcome<T>>): Promise<T> {
-  const settled = await outcome;
-  if (settled.result === undefined) {
-    throw new Error('command returned no result (04 §5.1) — a handler must return one');
-  }
-  return settled.result;
-}
-
 export function createNotesRuntime(deps: NotesRuntimeDeps): NotesRuntime {
-  const ctx = deps.runtime.commands.createContext(deps.identity.userId);
+  const port = bindModulePort(notesModule, deps.runtime, deps.identity);
   return {
-    listNotes: (input) =>
-      deps.runtime.queries.execute(notesModule.queries.listNotes, input, deps.identity),
-    getNote: (input) =>
-      deps.runtime.queries.execute(notesModule.queries.getNote, input, deps.identity),
-    createNote: (input) =>
-      resultOf(deps.runtime.commands.execute(notesModule.commands.createNote, input, ctx)),
-    editNoteBody: (input) =>
-      resultOf(deps.runtime.commands.execute(notesModule.commands.editNoteBody, input, ctx)),
-    archiveNote: (input) =>
-      resultOf(deps.runtime.commands.execute(notesModule.commands.archiveNote, input, ctx)),
+    listNotes: (input) => port.query('listNotes', input),
+    getNote: (input) => port.query('getNote', input),
+    createNote: (input) => port.run('createNote', input),
+    editNoteBody: (input) => port.run('editNoteBody', input),
+    archiveNote: (input) => port.run('archiveNote', input),
     noteSyncStatuses: deps.noteSyncStatuses,
     subscribe: (listener) => deps.invalidation.subscribeTable(NOTES_TABLE, listener),
-    hasPermission: (permissionId) =>
-      deps.runtime.commands.enforcementPoint.hasPermission(deps.identity, permissionId),
+    hasPermission: port.hasPermission,
     capturePhoto: deps.capturePhoto,
     loadThumbnail: deps.loadThumbnail,
   };

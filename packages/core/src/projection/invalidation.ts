@@ -52,6 +52,22 @@ export class InvalidationBus {
   }
 
   /**
+   * Subscribe to changes in ANY of `tables`: one call per emission that wrote at least one of them.
+   * What a screen reading several tables wants (a ticket joins customers, lines and photos).
+   */
+  subscribeTables(tables: readonly string[], listener: TableInvalidationListener): () => void {
+    const watched = new Set(tables);
+    return this.subscribe((written) => {
+      for (const table of written) {
+        if (watched.has(table)) {
+          listener();
+          return;
+        }
+      }
+    });
+  }
+
+  /**
    * Emit for the tables written by an apply/re-fold/rebuild batch. Fires each per-table
    * listener ONCE for its table (per-table granularity) and every all-tables listener once
    * with the set. An empty set is a no-op — nothing was written, nothing is signalled.
