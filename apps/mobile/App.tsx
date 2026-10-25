@@ -55,6 +55,8 @@ import {
 import { syncChipAccessibilityLabels } from './src/screens/sync-status/chip-a11y.js';
 import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
+import type { SignatureSurface } from './src/media/SignatureHost.js';
+import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
 import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
@@ -103,6 +105,11 @@ export interface AppProps {
    * so an idle lock, a revocation or a pending PIN beats an open camera (see the render below).
    */
   readonly capture?: CaptureSurface | null;
+  /**
+   * The signature pad while a customer is signing (06 §2.3), from `useSignatureHost`. Rendered
+   * exactly like `capture`: it wins the screen inside the shell zone only, so a lock still wins.
+   */
+  readonly signature?: SignatureSurface | null;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -461,6 +468,7 @@ export default function App(props: AppProps): React.JSX.Element {
   }, [switching]);
 
   const captureSurface = props.capture ?? null;
+  const signatureSurface = props.signature ?? null;
   const goBack = useCallback((): boolean => {
     // A capture owns the screen while it runs (see the early return below), so back IS its cancel —
     // §8.1's "hardware back always equals the header back action", applied to the surface actually
@@ -468,6 +476,10 @@ export default function App(props: AppProps): React.JSX.Element {
     // the user cannot see, leaving the viewfinder on top of it.
     if (captureSurface !== null) {
       captureSurface.onBack();
+      return true;
+    }
+    if (signatureSurface !== null) {
+      signatureSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -513,7 +525,7 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [zone, enrollment, captureSurface]);
+  }, [zone, enrollment, captureSurface, signatureSurface]);
 
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
@@ -578,6 +590,21 @@ export default function App(props: AppProps): React.JSX.Element {
   // at bundle-eval; see `androidStatusBarInset`.
   const shellStyle = [styles.shell, { paddingTop: androidStatusBarInset() }];
 
+  // The chrome for a capture or signature surface: the sync chip goes to Sync Status the way every
+  // other screen's does; the avatar slot stays empty so the identity cannot switch mid-capture.
+  const modalSyncChip = (
+    <SyncChip
+      state={chip}
+      pendingCount={props.sync.pendingOperationCount}
+      progressPercent={setupPercent}
+      accessibilityLabels={syncChipAccessibilityLabels({
+        pendingCount: props.sync.pendingOperationCount,
+        firstSyncPercent: setupPercent,
+      })}
+      onPress={openSyncStatus}
+    />
+  );
+
   const capture = captureSurface;
   if (capture !== null && zone.kind === 'shell') {
     /**
@@ -614,27 +641,40 @@ export default function App(props: AppProps): React.JSX.Element {
         <CaptureScreen
           // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
           // catalog's own name for this action ("Ambil Foto") — no new key, no hardcoded string.
-          title={t('media.action.takePhoto')}
+          title={capture.title ?? t('media.action.takePhoto')}
           state={capture.state}
           preview={capture.preview}
-          syncChip={
-            <SyncChip
-              state={chip}
-              pendingCount={props.sync.pendingOperationCount}
-              progressPercent={setupPercent}
-              accessibilityLabels={syncChipAccessibilityLabels({
-                pendingCount: props.sync.pendingOperationCount,
-                firstSyncPercent: setupPercent,
-              })}
-              onPress={openSyncStatus}
-            />
-          }
+          syncChip={modalSyncChip}
           avatar={<View testID="capture-no-avatar" />}
           onShutter={capture.onShutter}
           onRetake={capture.onRetake}
           onUsePhoto={capture.onUsePhoto}
           onRetry={capture.onRetry}
           onBack={capture.onBack}
+        />
+      </View>
+    );
+  }
+
+  // The signature pad follows the same rule as the camera: inside the shell zone only.
+  if (signatureSurface !== null && zone.kind === 'shell') {
+    return (
+      <View testID="bolusi-app-shell" style={shellStyle}>
+        <StatusBar style="auto" />
+        <SignaturePadScreen
+          title={signatureSurface.title}
+          state={signatureSurface.state}
+          strokes={signatureSurface.strokes}
+          syncChip={modalSyncChip}
+          avatar={<View testID="signature-no-avatar" />}
+          onStrokeStart={signatureSurface.onStrokeStart}
+          onStrokeMove={signatureSurface.onStrokeMove}
+          onStrokeEnd={signatureSurface.onStrokeEnd}
+          onClear={signatureSurface.onClear}
+          onSave={signatureSurface.onSave}
+          onRetry={signatureSurface.onRetry}
+          onBack={signatureSurface.onBack}
+          onPadLayout={signatureSurface.onPadLayout}
         />
       </View>
     );
