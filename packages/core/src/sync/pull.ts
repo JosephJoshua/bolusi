@@ -60,6 +60,7 @@ import {
   readQuarantinedOps,
   reconstructQuarantinedOp,
   signedCoreJcsOf,
+  signerKeyOf,
   verifyPulledOp,
 } from './quarantine.js';
 import { readSyncState, writeSyncState } from './state.js';
@@ -180,12 +181,9 @@ async function hasUnknownSigner<DB>(
   parsed: { envelope: Omit<PullResponse, 'ops'>; ops: ParsedOp[] },
 ): Promise<boolean> {
   const registry = await effectiveRegistry(deps.db, parsed.envelope.devices);
-  for (const entry of parsed.ops) {
-    if (!entry.ok) continue; // An unparseable op is quarantined on its own terms — no sidecar helps it.
-    const result = verifyPulledOp(entry.op, registry, deps.crypto);
-    if (!result.ok && result.reason === 'unknown_pubkey') return true;
-  }
-  return false;
+  // An unparseable op is quarantined on its own terms — no sidecar helps it. A known signer needs no
+  // signature check here: the batch verifies every op once, inside the transaction.
+  return parsed.ops.some((entry) => entry.ok && signerKeyOf(entry.op, registry) === null);
 }
 
 /**

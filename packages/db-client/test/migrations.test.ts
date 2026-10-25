@@ -42,6 +42,7 @@ const SPEC_INDEXES = [
   'idx_conflicts_surfaced',
   'idx_media_items_queue',
   'idx_notes_created',
+  'idx_operations_arrival_seq',
   'idx_operations_device_seq',
   'idx_operations_entity_canonical',
   'idx_operations_push_queue',
@@ -131,7 +132,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3, 4]);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -141,6 +142,7 @@ describe('runClientMigrations against a fresh database', () => {
       // transaction) so an in-place plaintext→ciphertext conversion leaves no stale cleartext.
       { version: 3, name: 'column_encryption', applied_at: 1_700_000_000_000 },
       { version: 4, name: 'repair', applied_at: 1_700_000_000_000 },
+      { version: 5, name: 'operations_arrival_index', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -150,11 +152,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3, 4]);
+    expect(first.applied).toEqual([1, 2, 3, 4, 5]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 4 }]);
+    expect(rows.rows).toEqual([{ c: 5 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
