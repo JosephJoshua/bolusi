@@ -29,6 +29,7 @@ import {
   decodeCursor,
   defineModule,
   encodeCursor,
+  insertOpLogRow,
   PermissionEvaluator,
   ProjectionRegistry,
   registerModules,
@@ -131,36 +132,8 @@ class SqliteOpStore implements OpAppendStore {
           `.execute(this.db);
           return rows.rows.length > 0;
         },
-        insertOp: async (row: OpRow) => {
-          await this.db
-            .insertInto('operations')
-            .values({
-              id: row.op.id,
-              tenantId: row.op.tenantId,
-              storeId: row.op.storeId,
-              userId: row.op.userId,
-              deviceId: row.op.deviceId,
-              seq: row.op.seq,
-              type: row.op.type,
-              entityType: row.op.entityType,
-              entityId: row.op.entityId,
-              schemaVersion: row.op.schemaVersion,
-              payload: JSON.stringify(row.op.payload),
-              timestampMs: row.op.timestamp,
-              location: row.op.location === null ? null : JSON.stringify(row.op.location),
-              source: row.op.source,
-              agentInitiated: row.op.agentInitiated ? 1 : 0,
-              agentConversationId: row.op.agentConversationId,
-              previousHash: row.op.previousHash,
-              hash: row.op.hash,
-              signature: row.op.signature,
-              signedCoreJcs: row.signedCoreJcs,
-              syncStatus: 'local',
-              arrivalSeq: null,
-              syncedAt: null,
-            })
-            .execute();
-        },
+        insertOp: (row: OpRow) =>
+          insertOpLogRow(this.db, row, { syncStatus: 'local', syncedAt: null, arrivalSeq: null }),
       });
       await this.driver.commit();
       return result;

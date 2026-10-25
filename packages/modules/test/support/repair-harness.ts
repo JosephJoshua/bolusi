@@ -5,13 +5,16 @@ import { CamelCasePlugin, Kysely } from 'kysely';
 
 import { createClientDialect, runClientMigrations, type ClientDatabase } from '@bolusi/db-client';
 import type { MediaRef, SignedOperation } from '@bolusi/schemas';
-import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+import { mulberry32, noblePort, randomBytes as prngBytes, opRowOf } from '@bolusi/test-support';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 import {
   assemblePermissionRegistry,
   bytesToBase64,
+  bytesToHex,
   createModuleRuntime,
+  insertOpLogRow,
+  operationFromSignedCoreJcs,
   createProjectionEngine,
   SearchIndexCache,
   createUuidV7Generator,
@@ -192,65 +195,19 @@ export async function openRepairHarness(
     ownOps: async () => {
       const rows = await db
         .selectFrom('operations')
-        .selectAll()
+        .select(['signedCoreJcs', 'hash', 'signature'])
         .where('deviceId', '=', deviceId)
         .where('type', 'like', 'repair.%')
         .orderBy('seq', 'asc')
         .execute();
-      return rows.map(
-        (row) =>
-          ({
-            id: row.id,
-            tenantId: row.tenantId,
-            storeId: row.storeId,
-            userId: row.userId,
-            deviceId: row.deviceId,
-            seq: row.seq,
-            type: row.type,
-            entityType: row.entityType,
-            entityId: row.entityId,
-            schemaVersion: row.schemaVersion,
-            payload: JSON.parse(row.payload),
-            timestamp: row.timestampMs,
-            location: null,
-            source: row.source,
-            agentInitiated: row.agentInitiated === 1,
-            agentConversationId: row.agentConversationId,
-            previousHash: row.previousHash,
-            hash: row.hash,
-            signature: row.signature,
-          }) as SignedOperation,
-      );
+      return rows.map((row) => operationFromSignedCoreJcs(row.signedCoreJcs, row));
     },
     deliverPulled: async (op, arrivalSeq) => {
-      await db
-        .insertInto('operations')
-        .values({
-          id: op.id,
-          tenantId: op.tenantId,
-          storeId: op.storeId,
-          userId: op.userId,
-          deviceId: op.deviceId,
-          seq: op.seq,
-          type: op.type,
-          entityType: op.entityType,
-          entityId: op.entityId,
-          schemaVersion: op.schemaVersion,
-          payload: JSON.stringify(op.payload),
-          timestampMs: op.timestamp,
-          location: null,
-          source: op.source,
-          agentInitiated: op.agentInitiated ? 1 : 0,
-          agentConversationId: op.agentConversationId,
-          previousHash: op.previousHash,
-          hash: op.hash,
-          signature: op.signature,
-          signedCoreJcs: `jcs:${op.id}`,
-          syncStatus: 'synced',
-          arrivalSeq,
-          syncedAt: clock.value,
-        })
-        .execute();
+      await insertOpLogRow(db, opRowOf(op), {
+        syncStatus: 'synced',
+        syncedAt: clock.value,
+        arrivalSeq,
+      });
       await engine.applyPulledOp(op);
     },
     photo: (n: number): MediaRef => {
@@ -258,7 +215,8 @@ export async function openRepairHarness(
       const hex = (n * 1000 + photoCounter).toString(16).padStart(12, '0');
       return {
         mediaId: `01920000-0000-7000-8000-${hex}`,
-        sha256: (n % 10).toString().repeat(64),
+        // Digest-shaped (random hex), so size and compression measurements see a real hash.
+        sha256: bytesToHex(prngBytes(mulberry32(n * 1000 + photoCounter), 32)),
         mime: 'image/jpeg',
         type: 'image',
         sizeBytes: 120_000,

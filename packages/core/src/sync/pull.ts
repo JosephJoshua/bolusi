@@ -48,8 +48,9 @@ import {
 } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
 
-import { encryptColumnValue } from '../crypto/column-cipher.js';
 import type { CryptoPort } from '../crypto/port.js';
+import { signedCoreJcsOf } from '../crypto/signed-core.js';
+import { insertOpLogRow } from '../oplog/row.js';
 import type { ClockPort } from '../runtime/ports.js';
 import { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } from './devices.js';
 import type { SyncSurfacePort, SyncTransportPort } from './ports.js';
@@ -59,7 +60,6 @@ import {
   QUARANTINE_LABEL_KEY,
   readQuarantinedOps,
   reconstructQuarantinedOp,
-  signedCoreJcsOf,
   signerKeyOf,
   verifyPulledOp,
 } from './quarantine.js';
@@ -464,34 +464,20 @@ async function nextArrivalSeq<DB>(db: Kysely<DB>): Promise<number> {
 
 /**
  * Insert one pulled op, born `synced` (03 §3 birth table: "insert via pull ⇒ `synced`, `syncedAt` =
- * apply time"). `signed_core_jcs` is recovered by re-canonicalizing the parsed core — JCS is a
- * fixpoint under `JSON.parse ∘ canonicalize`, so these are the exact bytes the signer hashed (05 §3).
+ * apply time"), with its local arrival number.
  */
-async function insertPulledOp<DB>(
+function insertPulledOp<DB>(
   db: Kysely<DB>,
   op: SignedOperation,
   crypto: CryptoPort,
   arrivalSeq: number,
   syncedAt: number,
 ): Promise<void> {
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs,
-      sync_status, synced_at, arrival_seq
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion},
-      ${encryptColumnValue(db, JSON.stringify(op.payload))},
-      ${op.timestamp},
-      ${encryptColumnValue(db, op.location === null ? null : JSON.stringify(op.location))},
-      ${op.source},
-      ${op.agentInitiated ? 1 : 0}, ${op.agentConversationId}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${encryptColumnValue(db, signedCoreJcsOf(op, crypto))},
-      'synced', ${syncedAt}, ${arrivalSeq}
-    )
-  `.execute(db);
+  return insertOpLogRow(
+    db,
+    { op, signedCoreJcs: signedCoreJcsOf(op, crypto) },
+    { syncStatus: 'synced', syncedAt, arrivalSeq },
+  );
 }
 
 function reportBatch<DB>(

@@ -13,7 +13,13 @@
 // the collision for review.
 import { sql } from 'kysely';
 
-import type { ProjectionApplier, ProjectionOperation, ProjectionTableManifest } from '@bolusi/core';
+import {
+  canonicalizeJcs,
+  type JsonValue,
+  type ProjectionApplier,
+  type ProjectionOperation,
+  type ProjectionTableManifest,
+} from '@bolusi/core';
 import type { MediaRef } from '@bolusi/schemas';
 
 import {
@@ -188,6 +194,16 @@ function payloadOf<T>(op: ProjectionOperation): T {
   return op.payload as unknown as T;
 }
 
+/**
+ * JSON for a projection column, in canonical key order. An op's payload reaches an applier with its
+ * keys in whatever order its path produced: the order the command built them on the writing device,
+ * sorted on a device that rebuilt it from the signed text or pulled it. Plain `JSON.stringify` would
+ * store different bytes for the same op, and devices would not converge.
+ */
+function canonicalJson(value: unknown): string {
+  return canonicalizeJcs(value as JsonValue);
+}
+
 async function recordEvent(db: Db, op: ProjectionOperation, detail: object): Promise<void> {
   await db
     .insertInto('repairTicketEvents')
@@ -199,7 +215,7 @@ async function recordEvent(db: Db, op: ProjectionOperation, detail: object): Pro
       kind: op.type,
       actorId: op.userId,
       at: op.timestamp,
-      detailJson: JSON.stringify(detail),
+      detailJson: canonicalJson(detail),
     })
     .execute();
 }
@@ -323,8 +339,8 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       devicePasscode: payload.device.passcode,
       complaint: payload.complaint,
       intakeNotes: payload.intakeNotes,
-      checklistJson: JSON.stringify(payload.checklist),
-      peripheralsJson: JSON.stringify(payload.peripherals),
+      checklistJson: canonicalJson(payload.checklist),
+      peripheralsJson: canonicalJson(payload.peripherals),
       estimatedReadyAt: payload.estimatedReadyAt,
       outcome: 'received',
       outcomeNote: null,

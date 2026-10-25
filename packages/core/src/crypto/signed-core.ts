@@ -46,6 +46,22 @@ export function hashSignedCore(core: SignedCore, crypto: CryptoPort): SignedCore
 }
 
 /**
+ * Rebuild a stored op from its verbatim signed text plus the two derived fields (05 §3).
+ *
+ * The signed text is the one stored copy of an op's fields, so this is how every local reader (push,
+ * the projection fold) gets an op back. It is not re-validated: the text was produced by
+ * `hashSignedCore` from a `zSignedCore`-parsed core (local append) or re-canonicalized from one (pull),
+ * and parsing it again on every fold would cost more than the whole read.
+ */
+export function operationFromSignedCoreJcs(
+  jcs: string,
+  derived: Pick<SignedOperation, 'hash' | 'signature'>,
+): SignedOperation {
+  const core = JSON.parse(jcs) as SignedCore;
+  return { ...core, hash: derived.hash, signature: derived.signature };
+}
+
+/**
  * Sign a signed core, producing the derived §2.2 fields.
  *
  * `secretKey` is the device's 32-byte Ed25519 seed.
@@ -99,4 +115,33 @@ export function verifyOp(op: SignedOperation, publicKey: Uint8Array, crypto: Cry
   } catch {
     return false;
   }
+}
+
+/**
+ * The verbatim JCS text of an op's signed core (05 §3 verbatim-storage rule).
+ *
+ * The wire carries the core as parsed JSON, and JCS is a fixpoint under `JSON.parse ∘ canonicalize`
+ * — re-canonicalizing recovers the exact bytes the signer hashed. That round-trip is why the pull
+ * can persist `signed_core_jcs` at all without the server shipping the text twice.
+ *
+ * @throws {ZodError | JcsInputError} if the core is not a §2.1 core — callers must have parsed the
+ * op through `zSignedOperation` first, so a throw here is a bug, not hostile input.
+ */
+export function signedCoreJcsOf(op: SignedOperation, crypto: CryptoPort): string {
+  return hashSignedCore(signedCoreOf(op), crypto).jcs;
+}
+
+/**
+ * The §2.1 signed core of an op — the §2.2 derived fields removed.
+ *
+ * `zSignedCore` is STRICT, so leaving `hash`/`signature` in would fail the parse rather than be
+ * ignored — which is the schema doing its job (they are not part of the preimage). Written as an
+ * omission rather than a hand-listed field set: a field added to 05 §2.1 must flow through here
+ * automatically, and a hand-listed core would silently drop it from the hash.
+ */
+function signedCoreOf(op: SignedOperation): SignedCore {
+  const core: Partial<SignedOperation> = { ...op };
+  delete core.hash;
+  delete core.signature;
+  return core as SignedCore;
 }

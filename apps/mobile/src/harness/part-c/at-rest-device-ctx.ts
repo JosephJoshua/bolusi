@@ -119,7 +119,8 @@ export async function runVerifierAtRestGate(env: AtRestDeviceEnv): Promise<Harne
       continue;
     }
     for (const cell of observed) {
-      if (cell.value === null || !cell.value.startsWith(ctx.sealedPrefix)) {
+      const { value } = cell;
+      if (value === null || !ctx.sealedPrefixes.some((prefix) => value.startsWith(prefix))) {
         findings.push(
           `${table}.${column} is stored WITHOUT the cipher marker — the PIN-verifier material is ` +
             `plaintext at rest`,

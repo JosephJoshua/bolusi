@@ -191,13 +191,26 @@ async function main(): Promise<void> {
 
     await device.conn.driver.execute('PRAGMA wal_checkpoint(TRUNCATE)');
     const dbBytes = statSync(join(directory, 'bolusi.db')).size;
+    // Where the bytes are: the five largest tables and indexes (SQLite's dbstat virtual table).
+    const largest = await device.conn.driver.execute(
+      `SELECT name, SUM(pgsize) AS bytes FROM dbstat GROUP BY name ORDER BY bytes DESC LIMIT 5`,
+    );
+    const breakdown = largest.rows
+      .map((row) => `${String(row['name'])} ${megabytes(Number(row['bytes']))}`)
+      .join(', ');
+
+    // A full re-fold from the op log: what a module version bump costs on this device.
+    started = performance.now();
+    await device.engine.rebuild(repairModule.id);
+    const rebuildMs = performance.now() - started;
 
     const report = [
       `History: ${days} days × ${ticketsPerDay} tickets = ${history.tickets} tickets, ${ops.length} ops (${(ops.length / history.tickets).toFixed(1)} per ticket), written in ${seconds(writeMs)}`,
       `Wire: ${megabytes(transport.wireBytes)} JSON, ${megabytes(transport.gzipBytes)} gzipped, ${result.batches} pages`,
       `Pull + verify + apply: ${seconds(pullMs)} (${((pullMs / ops.length) * 1000).toFixed(0)} µs per op, ${Math.round(ops.length / (pullMs / 1000))} ops/s)`,
       `Search index build after sync: ${seconds(indexMs)}; one fuzzy query: ${searchMs.toFixed(1)} ms (${hits.length} hits)`,
-      `Device database: ${megabytes(dbBytes)}`,
+      `Device database: ${megabytes(dbBytes)} (largest: ${breakdown})`,
+      `Repair projection rebuild from the op log: ${seconds(rebuildMs)}`,
     ];
     process.stdout.write(`${report.join('\n')}\n`);
   } finally {

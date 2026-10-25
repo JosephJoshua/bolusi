@@ -32,7 +32,7 @@
 // The pass-through-when-absent default is the ONE place a mistake could store plaintext where
 // ciphertext was intended, so it is guarded at the OTHER end: `openClientDb` refuses to open the
 // production DB without a key (SEC-DEV-06), and the adversarial raw-file test (harness) enumerates
-// all 11 signed-off columns and reds if any is stored in the clear. A guard is only load-bearing
+// every signed-off column and reds if any is stored in the clear. A guard is only load-bearing
 // once it has been watched go red (CLAUDE.md §2.11) — that test is the one that watches this.
 
 /**
@@ -56,12 +56,28 @@ export interface ColumnCipher {
    * be trusted to have produced the value. A second implementer coding to the old wording would
    * reintroduce that hole by following the spec.
    */
-  encrypt(plaintext: string): string;
+  encrypt(plaintext: string, options?: SealOptions): string;
   /** Open a sealed value. MUST throw on a wrong key or a tampered blob — never return plaintext. */
   decrypt(stored: string): string;
   /** True iff `value` is a string this cipher produced (carries the marker + a structurally valid blob). */
   isCiphertext(value: unknown): value is string;
 }
+
+/**
+ * How a value is sealed.
+ *
+ * `compress` deflates the plaintext before sealing. It is for the op log's signed-core JSON only,
+ * which is most of a device's database and shrinks about threefold. It is OFF by default because
+ * compressing before encrypting leaks how compressible a value is through its length: harmless for a
+ * value written whole by one signer, but a column that mixes text from different people must not opt
+ * in. The stored value says whether it was compressed, so reading needs no option.
+ */
+export interface SealOptions {
+  readonly compress?: boolean;
+}
+
+/** How every writer seals an op's signed core: compressed (see `SealOptions`). */
+export const SIGNED_CORE_SEAL: SealOptions = { compress: true };
 
 /**
  * Per-connection cipher store. Keyed on the Kysely handle the writers already hold, so lookup needs
@@ -79,12 +95,16 @@ export function registerColumnCipher(connection: object, cipher: ColumnCipher): 
  *
  * `null` stays `null` (a null column is not sensitive — its NULLness is already visible in the file's
  * structure, and encrypting it would break `IS NULL` predicates on plaintext-nullable columns like
- * `operations.location` / `media_items.location`). When the connection registered no cipher, the
+ * `media_items.location`). When the connection registered no cipher, the
  * value passes through UNCHANGED — see the file header for why that is the harness-safe default and
  * where it is guarded.
  */
-export function encryptColumnValue(connection: object, value: string | null): string | null {
+export function encryptColumnValue(
+  connection: object,
+  value: string | null,
+  options?: SealOptions,
+): string | null {
   if (value === null) return null;
   const cipher = CIPHERS.get(connection);
-  return cipher === undefined ? value : cipher.encrypt(value);
+  return cipher === undefined ? value : cipher.encrypt(value, options);
 }

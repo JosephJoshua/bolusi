@@ -237,9 +237,9 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
     plugins: [new CamelCasePlugin(CLIENT_CAMEL_CASE_OPTIONS), createColumnEncryptionPlugin(cipher)],
   });
 
-  // Register the cipher ON the connection so @bolusi/core's raw-`sql` writers (pull `operations`,
-  // verifiers, users, quarantine, media) seal their values via `encryptColumnValue(db, …)`. The
-  // builder writes (op-store, notes) are sealed by the plugin above; both use THIS cipher, one format.
+  // Register the cipher ON the connection so @bolusi/core's raw-`sql` writers (the op log, verifiers,
+  // users, quarantine, media) seal their values via `encryptColumnValue(db, …)`. The builder writes
+  // (notes, repair) are sealed by the plugin above; both use THIS cipher, one format.
   registerColumnCipher(db, cipher);
 
   const connection: ClientDb = {
