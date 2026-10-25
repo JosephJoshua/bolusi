@@ -35,7 +35,7 @@ import {
   createSqlWatermarkStore,
   highestContiguousSeq,
   insertQuarantinedOp,
-  readCanonicalPage,
+  readEntityPage,
   readDeviceRegistry,
   readEntityOps,
   readPushBatch,
@@ -220,23 +220,22 @@ describe('exported readers resolve their keys WITHOUT the CamelCasePlugin (task 
     expect(rebuilt?.seq).toBe(1);
   });
 
-  it('readCanonicalPage — same OP_COLUMNS read, both branches (oplog-source.ts:190,196)', async () => {
+  it('readEntityPage — aliased entity keys, both branches (oplog-source.ts)', async () => {
     const first = noteOp(1);
     const second = noteOp(2);
     await seedOperation(h.withPlugin, first);
     await seedOperation(h.withPlugin, second);
+    const [low, high] = [first.entityId, second.entityId].sort() as [string, string];
 
-    // after === null branch (:190)
-    const page = await readCanonicalPage(h.noPlugin, ['notes.note_created'], null, 10);
-    expect(page.map((o) => o.entityId)).toContain(first.entityId);
-    // after !== null branch (:196)
-    const rest = await readCanonicalPage(
-      h.noPlugin,
-      ['notes.note_created'],
-      { timestamp: first.timestamp, deviceId: first.deviceId, seq: first.seq },
-      10,
-    );
-    expect(rest.map((o) => o.entityId)).toEqual([second.entityId]);
+    // after === null branch
+    const page = await readEntityPage(h.noPlugin, ['notes.note_created'], null, 10);
+    expect(page).toEqual([
+      { entityType: 'note', entityId: low },
+      { entityType: 'note', entityId: high },
+    ]);
+    // after !== null branch
+    const rest = await readEntityPage(h.noPlugin, ['notes.note_created'], page[0]!, 10);
+    expect(rest).toEqual([{ entityType: 'note', entityId: high }]);
   });
 
   it('highestContiguousSeq — the self-alias decoy resolves the seq key (oplog-source.ts)', async () => {

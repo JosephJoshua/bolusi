@@ -1,37 +1,48 @@
 // Full projection rebuild with a resumable cursor (04-module-contract §4.3; FR-1116).
 //
-// Rebuild is the correctness escape hatch: clear the module's projection tables, replay ALL
-// of its ops in canonical order (05 §4). Because canonical order means each op is the newest
-// so far for its entity, every apply is head-case — no re-fold happens during a rebuild.
+// Rebuild is the correctness escape hatch, and on a device it runs after an app update bumps a
+// module's projectionVersion (04 §4.4) — in the background, while the shop keeps working. So it does
+// NOT clear the module's tables and replay the log: that empties every screen for minutes and makes
+// every concurrent write a hazard. It re-folds ENTITY BY ENTITY, exactly the engine's §4.2 re-fold:
+// delete one entity's rows, replay that entity's whole history in canonical order. Appliers may write
+// only rows keyed by their op's entity (§4.1 rule 2), so this reproduces the canonical fold, and at
+// every moment each entity's rows are complete (old version or new, never half of either).
 //
-// Resumability: each batch commits its applies together with a `rebuild_cursor` checkpoint
-// (the last canonical triple applied), stored as an engine-owned key in `meta_kv` (10-db §9.1
-// — NO new table; a dedicated cursor table would be a stop-and-ask per CLAUDE.md §6). An
-// interrupted rebuild reopens and resumes STRICTLY AFTER the cursor, so nothing at or below it
-// is ever re-applied. `rebuild_cursor` is SEPARATE from the §4.3 watermarks: a rebuild replays
-// the same ops and leaves applied_server_seq / applied_local_seq untouched (never decreasing
-// them). On completion the cursor is cleared and the module's projectionVersion signature is
-// recorded, so a version bump (04 §4.4) forces exactly one rebuild.
+// Concurrent applies need no coordination. A pulled or appended op for an entity the rebuild has
+// passed is folded by the engine as usual; for one it has not reached, it is folded now and again,
+// from the log, when the rebuild gets there. Either way the entity ends at its canonical fold.
+//
+// Resumability: each batch of entities commits together with a `rebuild_cursor` checkpoint (the last
+// entity re-folded), stored as an engine-owned key in `meta_kv` (10-db §9.1). An interrupted rebuild
+// resumes after the cursor. The cursor carries the version signature it is rebuilding to: after an
+// app update mid-rebuild, the entities before the cursor were folded by the old appliers, so a cursor
+// for another version restarts from the first entity. Re-folding an entity twice is harmless; only
+// skipping one would not be. `rebuild_cursor` is SEPARATE from the §4.3 watermarks, which a rebuild
+// leaves untouched. On completion the cursor is cleared and the version signature recorded, so a
+// version bump forces exactly one rebuild.
 import { sql, type Kysely } from 'kysely';
 
 import type { InvalidationBus } from './invalidation.js';
-import { moduleVersionSignature, type ProjectionApplier } from './manifest.js';
-import { cursorOf, readCanonicalPage, type CanonicalCursor } from './oplog-source.js';
+import { moduleVersionSignature, type ModuleProjectionManifest } from './manifest.js';
+import { readEntitiesOps, readEntityPage, type EntityCursor } from './oplog-source.js';
 import type { ProjectionRegistry } from './registry.js';
 import type { ProjectionStats } from './stats.js';
 
-/** Default rebuild page size (op-sqlite `executeBatch` bulk path, 10-db §9). */
-export const DEFAULT_REBUILD_BATCH_SIZE = 500;
+/**
+ * Default rebuild page size, in ENTITIES. One page is one transaction, and the app's one connection
+ * serves nothing else while it runs, so a page must stay short on a phone: 25 repair tickets are
+ * about 175 ops.
+ */
+export const DEFAULT_REBUILD_BATCH_SIZE = 25;
 
 /**
- * Rebuild progress in `meta_kv`: `started` = tables cleared, nothing applied yet; `progress`
- * = last canonical triple checkpointed; invalidated = an incremental apply made the checkpoint
- * unsafe, so the next rebuild starts fresh. Absent (null) = no rebuild in flight.
+ * Rebuild progress in `meta_kv`: the version signature being rebuilt to, and the last entity
+ * re-folded (`null` before the first page commits). Absent (null) = no rebuild in flight.
  */
-export type RebuildCursorState =
-  | { readonly phase: 'started' }
-  | { readonly phase: 'progress'; readonly cursor: CanonicalCursor }
-  | { readonly phase: 'invalidated' };
+export interface RebuildCursorState {
+  readonly version: string;
+  readonly after: EntityCursor | null;
+}
 
 /**
  * The durable rebuild bookkeeping port: the resume cursor and the applied version signature.
@@ -64,12 +75,29 @@ async function writeMeta<DB>(db: Kysely<DB>, key: string, value: string): Promis
   `.execute(db);
 }
 
+/**
+ * A stored cursor, or null when there is none or it is not this shape (a cursor an older build
+ * wrote). Null restarts the rebuild from the first entity, which is always safe.
+ */
+function parseCursor(raw: string | null): RebuildCursorState | null {
+  if (raw === null) return null;
+  const value = JSON.parse(raw) as Partial<RebuildCursorState> | null;
+  if (typeof value?.version !== 'string' || value.after === undefined) return null;
+  const after = value.after;
+  if (
+    after !== null &&
+    (typeof after.entityType !== 'string' || typeof after.entityId !== 'string')
+  ) {
+    return null;
+  }
+  return { version: value.version, after };
+}
+
 /** Client rebuild store over `meta_kv` (10-db §9.1). Values are JSON scalars. */
 export function createSqlRebuildStore<DB>(db: Kysely<DB>): RebuildStore {
   return {
     async readCursor(moduleId: string): Promise<RebuildCursorState | null> {
-      const raw = await readMeta(db, CURSOR_KEY(moduleId));
-      return raw === null ? null : (JSON.parse(raw) as RebuildCursorState);
+      return parseCursor(await readMeta(db, CURSOR_KEY(moduleId)));
     },
     writeCursor(moduleId: string, state: RebuildCursorState): Promise<void> {
       return writeMeta(db, CURSOR_KEY(moduleId), JSON.stringify(state));
@@ -86,15 +114,47 @@ export function createSqlRebuildStore<DB>(db: Kysely<DB>): RebuildStore {
   };
 }
 
+/**
+ * Re-fold some entities of one type (§4.2): delete their rows from the module's tables for that
+ * type, then replay each entity's whole history in canonical order. Returns the ops applied. The
+ * engine's out-of-order path re-folds one entity through this; the rebuild re-folds a page at a time.
+ */
+export async function refoldEntities<DB>(
+  db: Kysely<DB>,
+  registry: ProjectionRegistry<DB>,
+  module: ModuleProjectionManifest<DB>,
+  entityType: string,
+  entityIds: readonly string[],
+): Promise<number> {
+  const ids = sql.join(entityIds.map((id) => sql`${id}`));
+  for (const ref of registry.tablesForEntityType(module, entityType)) {
+    await sql`
+      DELETE FROM ${sql.table(ref.table)} WHERE ${sql.ref(ref.entityIdColumn)} IN (${ids})
+    `.execute(db);
+  }
+  const histories = await readEntitiesOps(db, entityType, entityIds);
+  let applied = 0;
+  for (const entityId of entityIds) {
+    for (const op of histories.get(entityId) ?? []) {
+      // An op on this entity of a type the module does not fold (another module's) is skipped.
+      const applier = module.appliers[op.type];
+      if (applier === undefined) continue;
+      await applier(db, op);
+      applied += 1;
+    }
+  }
+  return applied;
+}
+
 /** The result of a `runRebuild` call. `complete: false` ⇒ it was interrupted and can resume. */
 export interface RebuildOutcome {
-  /** True when the whole log was replayed and the cursor cleared. */
+  /** True when every entity was re-folded and the cursor cleared. */
   readonly complete: boolean;
   /** Batches applied by THIS call. */
   readonly batches: number;
   /** Ops applied by THIS call. */
   readonly appliedCount: number;
-  /** True when this call started a fresh rebuild (cleared tables); false when it resumed. */
+  /** True when this call started from the first entity; false when it resumed a cursor. */
   readonly startedFresh: boolean;
 }
 
@@ -107,19 +167,25 @@ export interface RunRebuildContext<DB> {
 }
 
 export interface RunRebuildOptions {
+  /** Entities per batch (one transaction each). */
   readonly batchSize?: number;
   /**
-   * Stop after this many batches, leaving a valid checkpoint — the test hook that models a
-   * crash mid-rebuild (CHAOS-08a). A later `runRebuild` resumes from the cursor.
+   * Stop after this many batches, leaving a valid checkpoint. Models a crash mid-rebuild in tests
+   * (CHAOS-08a), and lets a caller run a rebuild a batch at a time. A later call resumes.
    */
   readonly stopAfterBatches?: number;
 }
 
+const sameCursor = (a: RebuildCursorState | null, b: RebuildCursorState): boolean =>
+  a !== null &&
+  a.version === b.version &&
+  a.after?.entityType === b.after?.entityType &&
+  a.after?.entityId === b.after?.entityId;
+
 /**
- * Run (or resume) a full rebuild of `moduleId`. Fresh start clears the module's tables and
- * marks `started`; resume continues strictly after the checkpoint. Each batch — applies plus
- * the cursor checkpoint — commits atomically, so an interruption between batches leaves a
- * consistent resume point and never a partially-applied batch.
+ * Run (or resume) a full rebuild of `moduleId`. Each batch (re-folds plus the cursor checkpoint)
+ * commits atomically, so an interruption between batches leaves a consistent resume point. A batch
+ * that finds the cursor moved under it (another rebuild of the same module) stops this call.
  */
 export async function runRebuild<DB>(
   ctx: RunRebuildContext<DB>,
@@ -134,26 +200,15 @@ export async function runRebuild<DB>(
   const stopAfterBatches = options.stopAfterBatches ?? Number.POSITIVE_INFINITY;
   const opTypes = ctx.registry.moduleOpTypes(module);
   const tables = new Set(ctx.registry.moduleTableNames(module));
+  const version = moduleVersionSignature(module);
 
-  const rootStore = ctx.makeStore(ctx.db);
-  const existing = await rootStore.readCursor(moduleId);
-
-  let after: CanonicalCursor | null;
-  let startedFresh = false;
-  if (existing === null || existing.phase === 'invalidated') {
-    startedFresh = true;
+  const existing = await ctx.makeStore(ctx.db).readCursor(moduleId);
+  const resumable = existing?.version === version ? existing : null;
+  const startedFresh = resumable === null;
+  let cursor: RebuildCursorState = resumable ?? { version, after: null };
+  if (startedFresh) {
     ctx.stats.recordRebuildStart();
-    await ctx.db.transaction().execute(async (trx) => {
-      for (const table of tables) {
-        await sql`DELETE FROM ${sql.table(table)}`.execute(trx);
-      }
-      await ctx.makeStore(trx).writeCursor(moduleId, { phase: 'started' });
-    });
-    after = null;
-  } else if (existing.phase === 'started') {
-    after = null;
-  } else {
-    after = existing.cursor;
+    await ctx.makeStore(ctx.db).writeCursor(moduleId, cursor);
   }
 
   let batches = 0;
@@ -161,42 +216,43 @@ export async function runRebuild<DB>(
   let complete = false;
 
   while (batches < stopAfterBatches) {
-    const expected = after === null ? { phase: 'started' } : { phase: 'progress', cursor: after };
+    const expected = cursor;
     const batch = await ctx.db.transaction().execute(async (trx) => {
       const store = ctx.makeStore(trx);
-      if (JSON.stringify(await store.readCursor(moduleId)) !== JSON.stringify(expected)) {
-        return null;
+      if (!sameCursor(await store.readCursor(moduleId), expected)) return null;
+      const entities = await readEntityPage(trx, opTypes, expected.after, batchSize);
+      let applied = 0;
+      // The page is in (entityType, entityId) order, so each type's entities are one run.
+      for (let start = 0; start < entities.length;) {
+        const entityType = entities[start]!.entityType;
+        let end = start;
+        while (end < entities.length && entities[end]!.entityType === entityType) end += 1;
+        const ids = entities.slice(start, end).map((entity) => entity.entityId);
+        applied += await refoldEntities(trx, ctx.registry, module, entityType, ids);
+        start = end;
       }
-      const page = await readCanonicalPage(trx, opTypes, after, batchSize);
-      if (page.length === 0) {
+      const next: RebuildCursorState = {
+        version,
+        after: entities.length === 0 ? expected.after : entities[entities.length - 1]!,
+      };
+      const done = entities.length < batchSize;
+      if (done) {
         await store.clearCursor(moduleId);
-        await store.writeVersion(moduleId, moduleVersionSignature(module));
-        return { length: 0, cursor: after };
-      }
-      for (const op of page) {
-        const applier = module.appliers[op.type] as ProjectionApplier<DB>;
-        await applier(trx, op);
-      }
-      const cursor = cursorOf(page[page.length - 1] as (typeof page)[number]);
-      if (page.length < batchSize) {
-        await store.clearCursor(moduleId);
-        await store.writeVersion(moduleId, moduleVersionSignature(module));
+        await store.writeVersion(moduleId, version);
       } else {
-        await store.writeCursor(moduleId, { phase: 'progress', cursor });
+        await store.writeCursor(moduleId, next);
       }
-      return { length: page.length, cursor };
+      return { entities: entities.length, applied, next, done };
     });
     if (batch === null) break;
-    if (batch.length === 0) {
-      complete = true;
-      break;
+    cursor = batch.next;
+    if (batch.entities > 0) {
+      batches += 1;
+      appliedCount += batch.applied;
+      ctx.stats.recordRebuildBatch(batch.applied);
+      ctx.invalidation.emit(tables);
     }
-    after = batch.cursor;
-    batches += 1;
-    appliedCount += batch.length;
-    ctx.stats.recordRebuildBatch(batch.length);
-    ctx.invalidation.emit(tables);
-    if (batch.length < batchSize) {
+    if (batch.done) {
       complete = true;
       break;
     }

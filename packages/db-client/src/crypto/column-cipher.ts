@@ -33,7 +33,7 @@
 // A FIXED marker made the read dispatch attacker-steerable, and the real instance was far worse than
 // the display-surface annoyance first documented here. `operations.agent_conversation_id` is
 // plaintext by design, rides the SIGNED envelope as an unbounded `z.string().nullable()`, and is
-// selected by the projection fold (`OP_COLUMNS` → `readCanonicalPage`). So a second enrolled device
+// selected by the projection fold (`OP_COLUMNS`, read by every re-fold). So a second enrolled device
 // could sign an op whose conversation id merely LOOKED sealed; the server accepts it, it syncs to
 // every device in the store, and the fold throws — permanently breaking `runRebuild` for that module
 // on every device, in an APPEND-ONLY table whose row cannot be deleted without breaking the hash
