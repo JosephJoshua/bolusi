@@ -35,6 +35,14 @@ overrides the earlier "foundations first" ordering in product direction.
   never do intake. Each ticket tracks **repair outcome** (received, in repair,
   waiting for parts, repaired, cancelled) separately from **device location**
   (in store, returned to customer), so "cancelled, still in store" is visible.
+- **Work photos:** besides the 6 intake photos the counter takes, technicians
+  take at least one before photo to start work and at least one after photo
+  each time they mark a repair done.
+- **One device per job:** counter staff and technicians can each do their whole
+  job on a phone or on a computer; nobody is made to switch devices mid-job. A
+  PC without a camera or touch screen hands photos and signatures to a store
+  phone (this hand-off may need a connection). Owners use either and see at
+  least what staff see. Ownership video, when specified, is taken at intake.
 - **Price changes:** after intake, each change is a new logged line with a reason
   and a "customer agreed" mark. Only the cashier or store owner applies changes;
   technicians propose.
