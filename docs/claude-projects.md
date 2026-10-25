@@ -26,11 +26,15 @@ changing source and docs. See the [official Projects guide](https://code.claude.
 3. Configure the cloud environment for Node 22, Corepack/pnpm, gitleaks for the
    commit hook, and frozen-lockfile installation. Tests need Docker for real PostgreSQL. If unavailable, use GitHub
    CI or an appropriate local thread and report the limitation explicitly.
-4. Start with one useful repair slice. Let the coordinator organize additional
-   threads when needed; coordinate overlapping migrations and shared edits.
-5. Use memory for priorities and preferences. Keep accepted business rules in
-   `docs/product-scope.md` so they travel with code and remain inspectable outside
-   this account.
+4. Have Claude read `docs/product-direction.md` and `docs/product-scope.md`, then
+   discuss the next useful repair slice with you before implementation. It should
+   bring the relevant earlier ideas from `docs/product-reference/` into that
+   conversation and challenge choices that are unclear or unnecessarily complex.
+   Use additional threads when useful; coordinate migrations and shared edits.
+5. Use memory for priorities and preferences. Keep the whole product direction,
+   current scope agreements and useful earlier proposals in the repository so
+   they travel with code and remain inspectable outside this account. Memory does
+   not automatically contain removed documents or local, unpushed changes.
 
 The [official introduction](https://claude.com/resources/articles/projects-redesigned)
 explains coordination, shared memory, and per-thread branches. Consult the
@@ -40,10 +44,22 @@ cloud/local execution behavior; account capabilities can differ.
 ## Paste into project instructions
 
 ```text
-Build Bolusi into useful offline-first repair software for our stores in West Papua.
+Build Bolusi into a useful offline-first ERP for our stores in West Papua, with
+the longer-term ambition of serving other businesses as multi-tenant SaaS.
 Work in JosephJoshua/bolusi, starting from main. Read README.md and CLAUDE.md.
+Read docs/product-direction.md for the whole vision, milestones and later ideas.
 The first release is the complete repair journey in docs/product-scope.md;
 the platform and Notes demo are not that finished product.
+
+When I ask to implement a new scope, first grill me on the consequential product
+choices. Read relevant earlier ideas in docs/product-reference/ and current scope
+decisions; use them as a starting point, not a frozen specification. Ask focused
+questions in small rounds, test assumptions with real shop scenarios, challenge
+unnecessary complexity and recommend simpler options. Discuss the useful boundary,
+exceptions, permissions, offline behavior and acceptance. My ideas can change.
+Record the resulting agreement briefly, then implement once material choices are
+settled and the work is authorized. Do not repeat settled questions or turn routine
+fixes into a discovery process. An old PRD's Must label is not a new approval.
 
 Prioritize usable business workflows. Keep changes small and reuse existing code.
 Avoid speculative abstractions, extra process, and self-maintaining check systems.
@@ -66,12 +82,15 @@ Open focused PRs; merge or publish when authorized in the project conversation.
 
 ## Retired machinery
 
-The old `ai-docs/` tree, task database, phase skills, review-wave playbooks, daily
-CI schedules, SEC bookkeeping, and duplicate suite execution were removed.
-Git at `06b063b` retains old references. Behavioral tests, security controls,
-native tooling, and migrations remain.
+The old `ai-docs/` workflow, task database, phase skills, review-wave playbooks,
+daily CI schedules, SEC bookkeeping, and duplicate suite execution were removed.
+The full product direction and earlier PRD discussions remain in `docs/`, with
+generated task breakdowns removed and older designs marked as proposals to
+revalidate. Git at `06b063b` retains the other old references. Behavioral tests,
+security controls, native tooling, and migrations remain.
 
-October's repair scope was carried forward from the uncommitted local decision.
+October's repair scope and roadmap direction were carried forward from the
+uncommitted local owner notes, which were newer than `06b063b`.
 Former open items appear in `docs/architecture.md`; retiring task numbers does not
 resolve those issues. Private transcript archives stay local, outside Project uploads.
 
@@ -79,9 +98,6 @@ After changing CI job names, check GitHub branch protection for retired required
 jobs. Require the new automatic checks; manually dispatched native jobs should
 not leave every PR waiting indefinitely.
 
-Checked on 2026-10-25: the active `main protection` ruleset (ID `23824630`)
-requires 15 former CI job names. When publishing this change, replace only its
-required-status-check list with `checks` and `secrets` (GitHub Actions), preserving
-its pull-request, deletion and non-fast-forward protections. Coordinate the update
-with the workflow publication; changing it beforehand would block the old workflow.
-This local migration has not changed the remote ruleset.
+The required checks for this workflow are `checks` and `secrets` (GitHub Actions).
+Keep the `main protection` ruleset's pull-request, deletion and non-fast-forward
+protections. Update required check names alongside future workflow changes.

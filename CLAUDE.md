@@ -2,8 +2,16 @@
 
 Offline-first software for a phone-repair franchise in West Papua, Indonesia.
 Read `README.md` for orientation and `docs/development.md` for commands.
-Read `docs/product-scope.md` when a change touches product decisions.
+Read `docs/product-direction.md` for the whole product and milestones, and
+`docs/product-scope.md` for current repair-release decisions. Earlier detailed
+ideas live in `docs/product-reference/`; read only the relevant sections.
 
+- When asked to implement a new product scope, first discuss it with the owner.
+  Use prior ideas as context, challenge assumptions, and ask focused questions
+  about the real workflow, scope, exceptions, permissions, offline behavior and
+  acceptance. Recommend simpler alternatives. Old PRD “Must” labels are not fresh
+  approval. Record the resulting agreement briefly, then proceed with authorized
+  implementation. Do not repeat settled questions or interview for routine fixes.
 - Implement the requested outcome in small, reviewable changes. Reuse existing
   code before adding abstractions. Do not invent preventative infrastructure work.
 - Inspect the branch and local changes before editing; preserve other work.

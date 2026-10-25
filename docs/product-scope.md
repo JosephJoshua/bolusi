@@ -1,11 +1,17 @@
 # V1 scope — complete repair journey first
 
 Business decisions carried forward from the owner’s October 13–17 discussions.
-References to old PRDs, numbered specs and tasks are historical; recover them from
+See [product direction](product-direction.md) for the full vision and milestone
+sequence and [earlier discussions](product-reference/README.md) for the PRDs.
+References to old numbered specs and tasks are historical; recover those from
 Git at `06b063b` only when needed. This file preserves scope, not the retired
 specification/task workflow. Current implementation limits: `architecture.md`.
 
-**Status:** Product direction decided by the owner on 2026-10-13. Detailed contracts and implementation tasks are **not** yet approved. The old PRDs are inputs to revalidate, not executable specifications.
+**Status:** Product direction decided by the owner on 2026-10-13, with follow-ups
+through October 17. These decisions are the current starting point, and the owner
+may revise them. Before implementing a new scope, discuss the relevant unresolved
+choices and challenge assumptions; record any changed agreement. The old PRDs are
+inputs to revalidate, not executable specifications.
 
 ## Decision
 
@@ -69,14 +75,19 @@ The owner chose an actual repair business outcome rather than stock control alon
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
 - Pursue authorized GSMArena access; in parallel evaluate a lawful alternative model/specification source against fields, Indonesian device coverage, lookup/IMEI capabilities, cost, attribution, offline caching and retention rights. Choose and validate at least one source before promising model lookup for v1; GSMArena specifically is preferred, not a launch gate.
 
-This decision changes the roadmap's priority, not the v0 exit claims: task 214's merged-SHA nightly result and the deferred physical-device measurements remain separate. Resolve relevant open choices and record a concise contract as each repair slice is implemented. The former phase/task workflow is retired.
+Changing the roadmap does not resolve the existing extended-chaos failures or
+establish physical-device performance; see [architecture](architecture.md) for
+current limits. Resolve relevant open choices and record a concise agreement as
+each repair slice is selected. The former phase/task workflow is retired.
 
 ## Deferred and excluded scope
 
-The product overview's exclusions still apply: no agent-mode features, payroll,
-tax/e-Faktur/PPn implementation, vouchers/store credit/loyalty points, voice input
-or messages, delivery of repaired phones, facial recognition/behavioral analysis,
-or custom BI/query builders in this release. Attendance, wholesale delivery,
-continuous GPS, chat, full reporting, desktop, and standalone retail POS remain
-later scope decisions. Existing Android/iOS parity remains part of the direction.
-Simplifying development process does not silently expand or reduce product scope.
+Agent mode is deferred to V2; payroll and tax/e-Faktur/PPN remain separate later
+scope decisions. Attendance, wholesale delivery, continuous GPS, chat, full
+reporting, desktop and standalone retail POS also remain later scope discussions.
+Their ideas and milestone context are retained in [product direction](product-direction.md).
+
+Vouchers/store credit/loyalty points, voice input/messages, delivery of repaired
+phones, facial recognition/behavioral analysis and custom BI/query builders remain
+explicitly excluded unless the owner revisits them. They are not simply queued
+for the next release. Android/iOS parity remains part of the direction.

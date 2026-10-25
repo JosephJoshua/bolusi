@@ -59,6 +59,11 @@ pnpm i18n:check
 pnpm test
 ```
 
+Translations live in `packages/i18n/catalogs/`. After editing those JSON files,
+run `pnpm --filter @bolusi/i18n i18n:gen` to rebuild the bundled resources.
+TypeScript derives valid label keys from that data. `pnpm i18n:check` checks
+catalog consistency, message syntax, and whether the bundle is up to date.
+
 `pnpm test` builds shared packages and runs the ordinary Vitest projects, including
 behavioral security and default-volume chaos tests. PostgreSQL uses Docker and
 testcontainers. Tests named `SEC-*` are ordinary regression tests, not entries in
@@ -76,8 +81,9 @@ Client type generation is `pnpm --filter @bolusi/db-client db:codegen`; inspect 
 Automatic CI runs checks once plus a secret scan. Native Android/iOS builds are
 manually dispatched in GitHub Actions; use them for native changes and mobile
 verification. They do not establish physical-device performance.
-`pnpm test:jcs-hermes` is an optional compatibility check using an older host VM,
-not the exact mobile Hermes runtime.
+The native harness includes the canonicalization vectors on the app's Hermes
+runtime; the separate obsolete host-VM runner has been removed. Security
+regressions run with the ordinary harness project, without a separate suite config.
 
 Extended chaos is opt-in: `pnpm chaos:extended`. Reproduce a recorded failure with:
 

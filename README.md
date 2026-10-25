@@ -3,6 +3,8 @@
 Offline-first software for a phone-repair franchise in West Papua, Indonesia.
 Staff use shared, low-end phones with unreliable connectivity. Android and iOS
 are supported targets; the interface uses Bahasa Indonesia and English.
+The broader ambition is an ERP spanning repairs, stock, sales, finance and store
+operations, growing from roughly 10 to 100 stores and eventually multi-tenant SaaS.
 
 The repository implements the platform, authentication, and a Notes reference
 module. Repair, inventory, purchasing, and payment workflows are the next product
@@ -12,8 +14,12 @@ work, not completed features.
 
 - [Development](docs/development.md): install, run, test, and troubleshoot.
 - [Architecture](docs/architecture.md): implementation map and important limits.
+- [Product direction](docs/product-direction.md): the full vision, milestones,
+  later feature ideas and how to refine each scope before implementation.
 - [Product scope](docs/product-scope.md): accepted repair-first requirements and
   open choices, preserved from the owner's October decisions.
+- [Earlier product discussions](docs/product-reference/README.md): detailed ideas
+  across all twelve areas, preserved as proposals to revisit with the owner.
 - [Claude Code Projects](docs/claude-projects.md): migration and project instructions.
 
 ## Repository map
@@ -33,8 +39,10 @@ Use Claude Code Projects for planning, research, coordination, and working memor
 Keep code, checks, and durable product decisions in Git. Prefer a usable repair
 workflow over more framework or workflow machinery.
 
-The old `ai-docs/` specifications, task ledger, phase skills, and review playbooks
-were retired during the Projects migration. Git at `06b063b` retains them.
+The old `ai-docs/` specification workflow, task ledger, phase skills, and review
+playbooks were retired during the Projects migration. Product discussions remain
+available under `docs/product-reference/`, without their generated task lists.
+Git at `06b063b` retains the other old references.
 References to numbered documents/tasks in older source comments are historical
 rationale, not active instructions. For example:
 
