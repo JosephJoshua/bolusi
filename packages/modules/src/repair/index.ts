@@ -26,9 +26,12 @@ export type {
   TicketNoteInput,
   AssignTechnicianInput,
   CancelTicketInput,
+  StartWorkInput,
+  MarkRepairedInput,
   ProposeQuoteChangeInput,
   ChangeQuoteInput,
   ApplyProposalInput,
   DeclineProposalInput,
   ReturnDeviceInput,
 } from './commands.js';
+export * from './flows.js';

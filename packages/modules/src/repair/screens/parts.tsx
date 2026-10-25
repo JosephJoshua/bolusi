@@ -1,0 +1,319 @@
+// Small pieces every repair screen shares: the four read states around a query, a verified photo
+// thumbnail, the ticket status chip and the banner for a refused action.
+import { t, translateErrorCode } from '@bolusi/i18n';
+import {
+  AppShell,
+  Banner,
+  Button,
+  Chip,
+  EmptyState,
+  ErrorState,
+  Icon,
+  LoadingState,
+  UnauthorizedState,
+  color,
+  radius,
+  size,
+  space,
+  type,
+  type IconName,
+} from '@bolusi/ui';
+import { Image } from 'expo-image';
+import type { ReactNode } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
+
+import { statusLabel } from './labels.js';
+import { statusTone, type TicketStatus } from '../flows.js';
+import { useRepairThumbnail } from './runtime.js';
+
+/**
+ * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
+ * entity is the Empty state (the thing asked for is not here), never an error (design-system §5).
+ */
+export function QueryView<TData>({
+  query,
+  onBack,
+  onRetry,
+  testID,
+  children,
+}: {
+  readonly query: QueryState<TData>;
+  readonly onBack: () => void;
+  readonly onRetry: () => void;
+  readonly testID: string;
+  readonly children: (data: TData) => ReactNode;
+}): React.JSX.Element {
+  switch (query.status) {
+    case 'loading':
+      return (
+        <View testID={`${testID}.loading`}>
+          <LoadingState variant="spinner" />
+        </View>
+      );
+    case 'unauthorized':
+      return (
+        <UnauthorizedState
+          title={t('core.errors.PERMISSION_DENIED')}
+          hint={t('core.unauthorized.askOwner')}
+          backLabel={t('core.action.back')}
+          onBack={onBack}
+          testID={`${testID}.unauthorized`}
+        />
+      );
+    case 'error':
+      if (query.code === 'ENTITY_NOT_FOUND') {
+        return <EmptyState title={t('core.errors.ENTITY_NOT_FOUND')} testID={`${testID}.empty`} />;
+      }
+      return (
+        <ErrorState
+          title={translateErrorCode(query.code)}
+          errorCode={query.code}
+          retryLabel={t('core.action.retry')}
+          onRetry={onRetry}
+          testID={`${testID}.error`}
+        />
+      );
+    case 'ready':
+      return <>{children(query.data)}</>;
+  }
+}
+
+/** A refused command, shown where the user tried it. Danger banners cannot be dismissed (§3.6), so a
+ * tap clears it instead. */
+export function ActionErrorBanner({
+  errorCode,
+  onDismiss,
+  testID,
+}: {
+  readonly errorCode: string | null;
+  readonly onDismiss: () => void;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  if (errorCode === null) return null;
+  return (
+    <View style={styles.banner}>
+      <Banner
+        variant="danger"
+        message={translateErrorCode(errorCode)}
+        onPress={onDismiss}
+        testID={testID}
+      />
+    </View>
+  );
+}
+
+const STATUS_ICON: Readonly<Record<TicketStatus, IconName>> = {
+  received: 'pending',
+  in_repair: 'repair',
+  waiting_for_parts: 'warning',
+  repaired: 'success',
+  cancelled: 'rejected',
+  returned: 'check',
+};
+
+export function StatusChip({
+  status,
+  testID,
+}: {
+  readonly status: TicketStatus;
+  readonly testID: string;
+}): React.JSX.Element {
+  return (
+    <Chip
+      label={statusLabel(status)}
+      icon={STATUS_ICON[status]}
+      tone={statusTone(status)}
+      testID={testID}
+    />
+  );
+}
+
+/** A photo by its signed ref, verified before display; honest placeholders otherwise (06 §6). */
+export function PhotoThumb({
+  photo,
+  testID,
+}: {
+  readonly photo: ThumbnailRef;
+  readonly testID: string;
+}): React.JSX.Element {
+  const state = useRepairThumbnail(photo);
+  switch (state.kind) {
+    case 'ready':
+      return (
+        <Image
+          source={{ uri: state.uri }}
+          contentFit="cover"
+          style={styles.thumb}
+          testID={`${testID}.image`}
+        />
+      );
+    case 'loading':
+      return (
+        <View style={styles.placeholder} testID={`${testID}.loading`}>
+          <LoadingState variant="spinner" />
+        </View>
+      );
+    case 'unavailable':
+      return (
+        <View style={styles.placeholder} testID={`${testID}.unavailable`}>
+          <Icon name="pending" size={size.iconInline} color={color.textMuted} />
+        </View>
+      );
+    case 'mismatch':
+      return (
+        <View style={styles.placeholder} testID={`${testID}.mismatch`}>
+          <Icon name="rejected" size={size.iconInline} color={color.danger} />
+        </View>
+      );
+  }
+}
+
+/** The chrome every full-screen repair step shares: the shell's sync chip and avatar. */
+export interface RepairChrome {
+  readonly syncChip: ReactNode;
+  readonly avatar: ReactNode;
+}
+
+/**
+ * One full-screen step of a flow (design-system §3.10: flows, not modals): a back arrow, the body,
+ * the refused-action banner and one primary action at the bottom.
+ */
+export function FlowScreen({
+  chrome,
+  title,
+  onBack,
+  primaryLabel,
+  onPrimary,
+  primaryDisabled,
+  primaryVariant,
+  busy,
+  errorCode,
+  onClearError,
+  overlay,
+  testID,
+  children,
+}: {
+  readonly chrome: RepairChrome;
+  readonly title: string;
+  readonly onBack: () => void;
+  readonly primaryLabel: string;
+  readonly onPrimary: () => void;
+  readonly primaryDisabled?: boolean | undefined;
+  readonly primaryVariant?: 'primary' | 'destructive' | undefined;
+  readonly busy: boolean;
+  readonly errorCode: string | null;
+  readonly onClearError: () => void;
+  readonly overlay?: ReactNode;
+  readonly testID: string;
+  readonly children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <AppShell
+      scrollable
+      title={title}
+      titleVariant="detail"
+      onBack={onBack}
+      backLabel={t('core.action.back')}
+      syncChip={chrome.syncChip}
+      avatar={chrome.avatar}
+      overlay={overlay}
+      bottomAction={
+        <Button
+          label={primaryLabel}
+          onPress={onPrimary}
+          variant={primaryVariant ?? 'primary'}
+          disabled={primaryDisabled === true || busy}
+          busy={busy}
+          testID={`${testID}.primary`}
+        />
+      }
+      testID={testID}
+    >
+      <ActionErrorBanner
+        errorCode={errorCode}
+        onDismiss={onClearError}
+        testID={`${testID}.error`}
+      />
+      {children}
+    </AppShell>
+  );
+}
+
+/** A captioned group on a detail or review screen. */
+export function Section({
+  title,
+  children,
+  testID,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  return (
+    <View style={styles.section} testID={testID}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+/** A label and its value on one line, e.g. "IMEI  356789…". */
+export function Field({
+  label,
+  value,
+  testID,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={styles.fieldValue} testID={testID}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** Photos laid out in a wrapping grid. */
+export function PhotoGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
+  return <View style={styles.grid}>{children}</View>;
+}
+
+export const repairStyles = StyleSheet.create({
+  gridCell: { width: '31%' },
+  caption: { ...type.caption, color: color.textMuted, marginTop: space.xs },
+  muted: { ...type.bodySm, color: color.textMuted },
+  body: { ...type.body, color: color.text },
+  heading: { ...type.heading, color: color.text },
+  gap: { marginTop: space.md },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+});
+
+const styles = StyleSheet.create({
+  banner: { marginBottom: space.md },
+  thumb: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: radius.md,
+    backgroundColor: color.surfaceAlt,
+  },
+  placeholder: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: radius.md,
+    backgroundColor: color.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  section: { marginTop: space.lg },
+  sectionTitle: { ...type.bodyBold, color: color.textMuted, marginBottom: space.sm },
+  field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
+  fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
+  fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+});

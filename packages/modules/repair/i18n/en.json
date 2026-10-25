@@ -14,5 +14,190 @@
     "quoteChanged": "Price changed",
     "quoteProposalDeclined": "Price change declined",
     "deviceReturned": "Device handed back"
+  },
+  "action": {
+    "applyPrice": "Apply price change",
+    "assign": "Assign technician",
+    "cancel": "Cancel repair",
+    "changePrice": "Change price",
+    "claim": "Take this repair",
+    "decidePrice": "Decide price change",
+    "declinePrice": "Decline price change",
+    "handover": "Hand back to customer",
+    "markRepaired": "Mark repaired",
+    "newIntake": "New repair",
+    "next": "Next",
+    "openTicket": "Open repair ticket",
+    "proposePrice": "Propose price change",
+    "reopen": "Reopen repair",
+    "resume": "Resume repair",
+    "start": "Start repair",
+    "waitForParts": "Waiting for parts"
+  },
+  "assign": {
+    "none": "No technician can be assigned in this store yet."
+  },
+  "board": {
+    "emptyHint": "Repairs you take in or work on appear here.",
+    "noMatches": "No repair matches that search.",
+    "priceChangeWaiting": "Price change waiting",
+    "searchHint": "Name, phone, ticket number, IMEI or model",
+    "title": "Repairs",
+    "view": {
+      "active": "In progress",
+      "mine": "Mine",
+      "pickup": "Ready for pickup",
+      "returned": "Returned",
+      "unassigned": "Unassigned"
+    }
+  },
+  "cancel": {
+    "reason": "Why is it cancelled?"
+  },
+  "check": {
+    "biometrics": "Fingerprint or face unlock",
+    "buttons": "Buttons",
+    "camera": "Camera",
+    "charging": "Charging",
+    "microphone": "Microphone",
+    "screen": "Screen",
+    "signal": "Signal and SIM",
+    "speaker": "Speaker",
+    "touch": "Touch"
+  },
+  "condition": {
+    "checks": "Condition check",
+    "complaint": "Customer complaint",
+    "issue": "Problem",
+    "issues": "Problems found",
+    "notChecked": "Not checked",
+    "notes": "Other notes (optional)",
+    "ok": "OK",
+    "peripherals": "Left with the phone"
+  },
+  "customer": {
+    "change": "Choose another customer",
+    "existing": "Existing customers",
+    "name": "Customer name",
+    "phone": "Phone number (recommended)",
+    "phoneHint": "0812…"
+  },
+  "device": {
+    "brand": "Brand",
+    "color": "Color",
+    "imei": "IMEI",
+    "model": "Model",
+    "passcode": "Screen lock code (optional)"
+  },
+  "handover": {
+    "note": "Note (optional)",
+    "photo": "Handover photo",
+    "sign": "Customer signs",
+    "signAgain": "Sign again",
+    "signature": "Customer signature",
+    "signatureTitle": "Customer signs to receive the phone"
+  },
+  "intake": {
+    "discard": "Discard intake",
+    "discardMessage": "What you entered for this repair will be lost.",
+    "discardTitle": "Discard this intake?",
+    "keepEditing": "Keep editing",
+    "progress": "Step {step} of {total}",
+    "step": {
+      "condition": "Condition",
+      "customer": "Customer",
+      "device": "Device",
+      "photos": "Photos",
+      "price": "Price and ready date",
+      "review": "Check and save"
+    }
+  },
+  "peripheral": {
+    "box": "Box",
+    "cable": "Cable",
+    "case": "Case",
+    "charger": "Charger",
+    "memoryCard": "Memory card",
+    "simCard": "SIM card"
+  },
+  "photo": {
+    "after": "After repair",
+    "before": "Before repair",
+    "handover": "Handover",
+    "intake": "Intake photos",
+    "intakeHint": "Take all six sides of the phone in front of the customer.",
+    "retake": "Retake",
+    "slot": {
+      "back": "Back",
+      "bottom": "Bottom",
+      "front": "Front",
+      "left": "Left side",
+      "right": "Right side",
+      "top": "Top"
+    },
+    "take": "Take photo"
+  },
+  "price": {
+    "addLine": "Add to price",
+    "amount": "Amount (Rp)",
+    "customerAgreed": "Customer agreed",
+    "decisionNote": "Note (optional)",
+    "description": "Description",
+    "kind": {
+      "adjustment": "Adjustment",
+      "discount": "Discount",
+      "labour": "Labour",
+      "part": "Part"
+    },
+    "proposalTitle": "Proposed price change",
+    "reason": "Reason",
+    "status": {
+      "agreed": "Customer agreed",
+      "declined": "Declined",
+      "notAgreed": "Customer not asked yet",
+      "proposed": "Proposed by technician"
+    },
+    "total": "Total"
+  },
+  "problem": {
+    "complaint": "Write what the customer says is wrong.",
+    "customerName": "Enter the customer name or pick an existing customer.",
+    "deviceBrand": "Enter the brand.",
+    "deviceModel": "Enter the model.",
+    "photos": "All six photos are required.",
+    "quoteLines": "Add at least one price line."
+  },
+  "ready": {
+    "threeDays": "In 3 days",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "unknown": "Not sure yet"
+  },
+  "status": {
+    "cancelled": "Cancelled",
+    "inRepair": "In repair",
+    "received": "Received",
+    "repaired": "Repaired",
+    "returned": "Returned",
+    "waitingForParts": "Waiting for parts"
+  },
+  "ticket": {
+    "history": "History",
+    "lastNote": "Last note",
+    "price": "Price",
+    "readyBy": "Ready by",
+    "technician": "Technician",
+    "title": "Repair",
+    "unassigned": "Not assigned"
+  },
+  "work": {
+    "afterHint": "Take at least one photo of the repaired phone.",
+    "afterShot": "After photo {n}",
+    "afterTitle": "Mark repaired",
+    "beforeHint": "Take at least one photo before you open the phone.",
+    "beforeShot": "Before photo {n}",
+    "beforeTitle": "Start repair",
+    "partsNote": "Which part is needed? (optional)",
+    "repairNote": "What was done (optional)"
   }
 }
