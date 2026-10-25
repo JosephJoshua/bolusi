@@ -394,6 +394,36 @@ describe('cancel and handover', () => {
     );
     expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });
   });
+
+  // Regression: a proposal left open when the repair was cancelled (or one that synced in after the
+  // cancel) can no longer be decided, so it used to keep the customer's phone in the store forever.
+  test('an open proposal on a cancelled ticket does not block handing the phone back', async () => {
+    h = await openRepairHarness(17);
+    const { ticketId } = (await h.run('openTicket', intake(h), h.cashierId)) as {
+      ticketId: string;
+    };
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      h.technicianId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    const pending = (await ticket(h, ticketId)).quoteLines.find(
+      (l: { status: string }) => l.status === 'proposed',
+    );
+    await expectCode(
+      h.run('applyProposal', { ticketId, lineId: pending.id, customerAgreed: true }, h.cashierId),
+      'INVALID_TRANSITION',
+    );
+
+    await h.run(
+      'returnDevice',
+      { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8) },
+      h.cashierId,
+    );
+    expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });
+  });
 });
 
 describe('at-rest encryption seam', () => {

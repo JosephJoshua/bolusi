@@ -560,8 +560,10 @@ export const returnDeviceInput = z
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
 /**
- * Hand the device back. Allowed once it is repaired or cancelled; open technician proposals must
- * be decided first, because they could change what the customer owes.
+ * Hand the device back. Allowed once it is repaired or cancelled. On a repaired ticket open
+ * technician proposals must be decided first, because they could change what the customer owes; on
+ * a cancelled one they no longer can be decided and nothing is charged, so they do not hold the
+ * phone in the store.
  */
 export async function returnDeviceHandler(
   input: z.output<typeof returnDeviceInput>,
@@ -574,7 +576,7 @@ export async function returnDeviceHandler(
   if (ticket.outcome !== 'repaired' && ticket.outcome !== 'cancelled') {
     throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'repair is not finished');
   }
-  if (ticket.pendingProposals > 0) {
+  if (ticket.outcome === 'repaired' && ticket.pendingProposals > 0) {
     throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'price proposals are undecided');
   }
   return {
