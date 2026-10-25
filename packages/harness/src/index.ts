@@ -3,7 +3,6 @@
 // runtime + projection engine + sync loop), the convergence oracle over task-08's `digestModule`,
 // FaultFetch, the raw-wire tamper client, and the CHAOS-01..12 catalog (in `scenarios/`). The
 // harness owns NO protocol logic (T-7) — it WIRES the production packages.
-export const PACKAGE_NAME = '@bolusi/harness' as const;
 
 export { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 export { VirtualDevice, type DeviceIdentity, type ExtraModule } from './device.js';

@@ -52,8 +52,8 @@ export const ScrollView = hostComponent('ScrollView');
 /**
  * Renders every item rather than a window. That is deliberate and its limits must be understood:
  * REAL virtualization is RN's job and is not under test here. What IS under test — and what this
- * double preserves exactly — is that `List` WIRES the windowing contract (`getItemLayout`,
- * `windowSize`, `removeClippedSubviews`) and renders each item through `renderItem`. Those props
+ * double preserves exactly — is that `List` WIRES the windowing configuration (`windowSize`,
+ * `removeClippedSubviews`) and renders each item through `renderItem`. Those props
  * pass through to the host node untouched, so a test can assert them.
  * Windowing behaviour itself belongs to the on-device suite (testing-guide §2.6).
  */

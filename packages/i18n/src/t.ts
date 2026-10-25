@@ -1,5 +1,5 @@
 // The translate entrypoint (07-i18n §6).
-import type { TranslationKey } from './generated/keys.js';
+import type { TranslationKey } from './keys.js';
 import { getI18nInstance, getLocale } from './instance.js';
 import { DEFAULT_LOCALE } from './locale.js';
 import { warnOnce } from './logger.js';
@@ -12,7 +12,7 @@ import { warnOnce } from './logger.js';
 export type TranslationValues = Record<string, string | number>;
 
 /**
- * Translate a catalog key. `key` is the generated union, so a typo is a compile error (§3.4).
+ * Translate a catalog key. `key` is derived from the catalog, so a typo is a compile error (§3.4).
  *
  * Fallback logging (§6): i18next resolves a key missing in the active locale through
  * `fallbackLng: 'id'` and considers it found, so `missingKeyHandler` never fires for that case —

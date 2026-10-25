@@ -1,7 +1,6 @@
 // @bolusi/test-support — golden vectors, determinism kit, fakes, driver-conformance
 // suite (08-stack-and-repo §3.2). TEST-ONLY: shipping source never imports this package
 // (08 §3.3 rule 6) — it appears in test files, the harness, and CI entry points.
-export const PACKAGE_NAME = '@bolusi/test-support' as const;
 
 export { noblePort } from './crypto/noble-port.js';
 export { nodeColumnAead } from './crypto/node-column-aead.js';

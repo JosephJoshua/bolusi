@@ -1,11 +1,7 @@
 import { registerModules } from '@bolusi/core';
 import { describe, expect, test } from 'vitest';
 
-import { ALL_MODULES, PACKAGE_NAME } from './index.js';
-
-test('@bolusi/modules shell wires into the root vitest projects config', () => {
-  expect(PACKAGE_NAME).toBe('@bolusi/modules');
-});
+import { ALL_MODULES } from './index.js';
 
 // ── ALL_MODULES: the ONE registration list both apps fold from (task 90; CLAUDE.md §2.8) ──────────
 //

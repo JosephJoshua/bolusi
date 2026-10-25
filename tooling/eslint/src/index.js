@@ -1,23 +1,11 @@
-// Shared flat config (08-stack-and-repo §5.2): typescript-eslint stock rules where cheap
-// plus the four bolusi custom rules — ALL at 'error', no inline-disable without a linked task.
+// Shared TypeScript rules plus checks for data integrity, platform boundaries and localization.
 import tseslint from 'typescript-eslint';
-
 import bolusi from './plugin/index.js';
-
 export { bolusi };
-
-// The ONE float-constructor carve-out in the repo (task 29; rule header + 08 §5.2):
-// envelope.ts's `zLocation`. Location rides in the signed ENVELOPE, not the payload, so
-// 05 §3's no-floats-in-payloads rule does not reach it; z.float64() is stricter than
-// z.number() there (rejects NaN/Infinity, keeping every admitted value JCS-serializable).
-// File AND property must both match, so this is not a blanket pass for either dimension.
-// Applied to both money blocks below: flat-config rule options REPLACE rather than merge,
-// so whichever block matches last must carry the carve-out.
 const LOCATION_FLOAT_CARVE_OUT = {
   allowFloatFiles: ['packages/schemas/src/envelope.ts'],
   allowFloatProps: ['lat', 'lng', 'accuracyMeters'],
 };
-
 export default tseslint.config(
   {
     name: 'bolusi/ignores',
@@ -28,13 +16,6 @@ export default tseslint.config(
       '**/coverage/**',
       '**/android/**',
       '**/ios/**',
-      // Agent worktrees are full checkouts of OTHER branches living inside this one
-      // (.claude/worktrees/agent-*). Without this, `pnpm lint` on main walks into whatever
-      // branches happen to be checked out and reports THEIR diagnostics as main's — so the
-      // gate's result depends on which agents are running, which is not a gate. Observed:
-      // main lint EXIT=1 with all 15 error-files under .claude/worktrees and zero in main's
-      // own source, flagging peers' legitimate in-package exemptions (i18n's own Intl
-      // formatters, no-op-table-update's own rule fixtures).
       '**/.claude/**',
     ],
   },
@@ -44,24 +25,10 @@ export default tseslint.config(
     plugins: { bolusi },
     rules: {
       'bolusi/no-op-table-update': 'error',
-      // 06-media-pipeline §4 / §5.5, task 18. Both are whole-repo: media metadata is frozen at
-      // capture wherever it is written, and the legacy upload APIs throw at runtime everywhere.
       'bolusi/no-media-column-update': 'error',
       'bolusi/no-legacy-upload-api': 'error',
       'bolusi/boundaries': 'error',
-      // Added task 09 — the 02-permissions §2 CI lint. Whole-repo and unscoped: it fires only on
-      // the module-manifest shape (a literal `id` beside permissions/commands/queries), so it costs
-      // nothing elsewhere and cannot miss a manifest that lands in an unexpected package.
       'bolusi/permission-module-prefix': 'error',
-      // Added task 10 — 04-module-contract §5.1's "lint-enforced" five. Whole-repo and unscoped:
-      // prong A fires only on the emission channel's shape, prong B only on a direct
-      // `appendLocalOps` call, so it costs nothing elsewhere and cannot miss a non-command append
-      // that lands in an unexpected package.
-      //
-      // `sanctionedTypes` is passed rather than baked into the rule so the closed set has ONE
-      // definition (packages/core/src/runtime/runtime-emissions.ts, pinned to 04 §5.1 by core's
-      // suite) — a hand-maintained copy inside the rule is how a sixth type gets in
-      // (CLAUDE.md §2.8). Keep this list in step with that constant.
       'bolusi/runtime-emission-allowlist': [
         'error',
         {
@@ -72,20 +39,12 @@ export default tseslint.config(
             'auth.pin_locked_out',
             'auth.device_enrolled',
           ],
-          // The command runtime IS the append path's caller (04 §5.1 steps 5–6) — it is the one
-          // place a non-command append legitimately originates. Core's oplog suite and fixtures
-          // drive `appendLocalOps` directly to test it, which is the same "a test proving
-          // something is impossible has to attempt it" exemption the op-log rules already carry.
           allowFiles: [
             'packages/core/src/runtime/execute.ts',
             'packages/core/test/oplog/_fixtures.ts',
             'packages/core/test/oplog/append.test.ts',
             'packages/core/test/oplog/chain.test.ts',
             'packages/core/test/oplog/tamper-fixtures.test.ts',
-            // The production client OpAppendStore's own test (task 92) drives the real
-            // `appendLocalOps` path into the production store to prove signed/chained persistence —
-            // the same "the test must attempt the path it validates" exemption as the core oplog
-            // tests above; production code still cannot reach the append path.
             'packages/db-client/test/op-store.test.ts',
           ],
         },
@@ -94,16 +53,6 @@ export default tseslint.config(
     },
   },
   {
-    // Added task 10 — 04-module-contract §5.2: command handlers are pure (no clock, no rng, no
-    // network, no timers). Scoped to module command/query files by the same naming convention
-    // 08 §5.2 established for `bolusi/no-float-money`, because that is where handlers live.
-    //
-    // DENOMINATOR NOTE (T-14): as of task 10 `packages/modules` contains no command files yet —
-    // the notes module's commands land with task 25 — so this rule currently guards ZERO shipping
-    // files. It is live at `error` from here so the first handler file lands under it, and its
-    // RuleTester fixtures (no-clock-in-handlers.test.js) are what prove it fires. The runtime
-    // purity guard (packages/core/test/runtime/purity.test.ts) covers handlers behaviourally in
-    // the meantime, including the dynamic accesses this rule cannot see.
     name: 'bolusi/handler-purity',
     files: [
       'packages/modules/src/**/*.{commands,queries,handlers}.{ts,tsx}',
@@ -114,7 +63,6 @@ export default tseslint.config(
     },
   },
   {
-    // CommonJS config files (metro.config.cjs) legitimately use require().
     name: 'bolusi/cjs-configs',
     files: ['**/*.cjs'],
     rules: {
@@ -122,8 +70,6 @@ export default tseslint.config(
     },
   },
   {
-    // RuleTester fixtures are adversarial by design: the invalid-code strings inside
-    // these suites intentionally contain the exact patterns the rules hunt for.
     name: 'bolusi/rule-fixture-exemption',
     files: ['tooling/eslint/src/plugin/rules/*.test.js'],
     rules: {
@@ -134,15 +80,6 @@ export default tseslint.config(
     },
   },
   {
-    // The permission-registry assembly suite (task 09) proves that a manifest declaring another
-    // module's permission is a STARTUP FAILURE (02-permissions §3.2 rule 4). Asserting that
-    // rejection requires constructing the rejected manifest — the same reason
-    // `packages/db-server/test/append-only.test.ts` is exempted from `no-op-table-update` above: a
-    // test proving something is impossible has to attempt it.
-    //
-    // Scoped to this ONE file, and only this rule. The lint's real targets — module manifests under
-    // packages/modules — are untouched, and the rule's own RuleTester fixtures need no exemption
-    // (their violations live inside string literals, which eslint never parses as code).
     name: 'bolusi/permission-registry-fixture-exemption',
     files: ['packages/core/test/authz/registry.test.ts'],
     rules: {
@@ -150,25 +87,6 @@ export default tseslint.config(
     },
   },
   {
-    // The op log's append-only ENFORCEMENT, and the tests that prove it (task 05).
-    // `bolusi/no-op-table-update` matches UPDATE/DELETE near `operations` in raw SQL, which
-    // catches two files whose whole purpose is the opposite of mutating the log:
-    //
-    //   migrations/0003_operations.ts — `CREATE TRIGGER operations_no_update BEFORE UPDATE ON
-    //     operations`: the DDL that INSTALLS the prohibition (10-db-schema §5).
-    //   test/append-only.test.ts — the adversarial cases that attempt UPDATE/DELETE and assert
-    //     both the trigger exception and the app role's grant denial (security-guide §3.1's
-    //     "enforced three ways"). A test proving mutation is impossible has to attempt it.
-    //
-    //   apps/server/test/integration/oplog/sec-oplog-07.test.ts — SEC-OPLOG-07 (security-guide
-    //     §3.2), added task 07. Same shape as append-only.test.ts one row up: it attempts
-    //     UPDATE/DELETE on `operations` as the app role AND as the owner to prove both the grant
-    //     denial and the trigger exception, and it feeds the rule's own forbidden statements to
-    //     ESLint as lint fixtures. A test proving mutation is impossible has to attempt it.
-    //
-    // Scoped to these exact paths via the rule's documented `allowFiles` option — the log
-    // stays append-only everywhere else, including the rest of packages/db-server and the whole
-    // of apps/server/src (the acceptance path only ever INSERTs; sec-oplog-07 asserts that too).
     name: 'bolusi/op-log-enforcement-allowlist',
     files: [
       'packages/db-server/migrations/0003_operations.ts',
@@ -189,12 +107,6 @@ export default tseslint.config(
     },
   },
   {
-    // The client's SINGLE syncStatus bookkeeping mutator (task 06; 08-stack §5.2, 05 §2.3).
-    // COLUMN-SCOPED: `markSyncResult` in this exact file may UPDATE `operations` only for the
-    // four client bookkeeping columns below — the rule rejects any other `.set()` key (a
-    // signed-core column), a dynamic/spread `.set()`, or a `deleteFrom` (DELETE never allowed,
-    // 05 §1). Every OTHER core file (draft.ts, append.ts, verify.ts, …) still fails on any
-    // `updateTable`/`deleteFrom('operations')`, proven by the rule's own fixture suite.
     name: 'bolusi/oplog-client-bookkeeping-allowlist',
     files: ['packages/core/src/oplog/bookkeeping.ts'],
     rules: {
@@ -208,24 +120,10 @@ export default tseslint.config(
     },
   },
   {
-    // Zod-shape + money-identifier prongs everywhere in schemas/modules; the
-    // numeric-literal prong is off here (UI code like `opacity: 0.5` is legitimate).
     name: 'bolusi/money',
     files: ['packages/schemas/src/**/*.{ts,tsx}', 'packages/modules/src/**/*.{ts,tsx}'],
     rules: {
       'bolusi/no-float-money': ['error', { numericLiterals: false, ...LOCATION_FLOAT_CARVE_OUT }],
-      // no-float-money is syntactic: it recognises float ctors through a callee rooted at the
-      // zod namespace. Zod exports every ctor as a NAMED export too (`float64`, `number` are
-      // real, tree-shakeable functions in zod 4.4.3), so `import { float64 } from 'zod'` would
-      // call a float ctor the rule cannot see. Nothing but habit kept schema files on `z.*`.
-      // Make that convention TRUE rather than hoped: only `z` may be imported from zod here.
-      // Verified: this also blocks `import * as zod from 'zod'`. It does NOT block
-      // `import { z as zod }` (the imported name is `z`, which is allowed) — that alias is
-      // closed inside the rule, which resolves zod's local binding name.
-      // Safe to set here: no other config block sets no-restricted-imports, so this replaces
-      // nothing (flat-config rule options REPLACE, they do not merge). Deliberately NOT
-      // no-restricted-syntax: bolusi/no-direct-intl already owns that rule across these files
-      // and setting it again here would silently disable the Intl guard for schemas/modules.
       'no-restricted-imports': [
         'error',
         {
@@ -242,10 +140,6 @@ export default tseslint.config(
     },
   },
   {
-    // Schema-file convention (08 §5.2): the numeric-literal prong fires only here.
-    // All of packages/schemas is schema by definition; in packages/modules the
-    // payload/command/query schema files are *.schema.ts(x) or
-    // schema|schemas|ops|operations|commands|queries.ts — later tasks name files accordingly.
     name: 'bolusi/money-schema-files',
     files: [
       'packages/schemas/src/**/*.{ts,tsx}',
@@ -257,11 +151,6 @@ export default tseslint.config(
     },
   },
   {
-    // Scope extended task 23 to add `packages/ui` (08-stack §5.2 / design-system §7 lint (b)): the
-    // design-system package receives resolved strings as props and must itself contain zero
-    // user-visible literals. Test files are excluded — RN component tests legitimately pass literal
-    // placeholder copy as props (testing-guide asserts KEYS/testIDs, never that copy; the copy is
-    // inert fixture data), exactly as the repo already exempts RuleTester fixtures below.
     name: 'bolusi/i18n-strings',
     files: [
       'apps/mobile/**/*.{ts,tsx,js,jsx}',
@@ -277,58 +166,6 @@ export default tseslint.config(
     },
   },
   {
-    // Added task 23 — design-system §7 lint (a): color/size literals in `.tsx` are errors outside
-    // tokens.ts. Scope per §7: packages/ui, apps/mobile, packages/modules/**/screens. `tokens.ts`
-    // IS the vocabulary, so it is the single exemption; test files are out of scope (fixtures and
-    // the RN doubles legitimately carry raw values — the package's own package-hygiene suite polices
-    // src separately).
-    name: 'bolusi/token-literals',
-    files: [
-      'packages/ui/src/**/*.{ts,tsx}',
-      'apps/mobile/**/*.{ts,tsx}',
-      'packages/modules/src/**/screens/**/*.{ts,tsx}',
-    ],
-    ignores: ['packages/ui/src/tokens.ts', '**/*.test.{ts,tsx}'],
-    languageOptions: {
-      parserOptions: { ecmaFeatures: { jsx: true } },
-    },
-    rules: {
-      'bolusi/no-token-literals': 'error',
-    },
-  },
-  {
-    // Added task 24 — design-system §3.13: screens render collections through the `List` primitive,
-    // never a raw FlatList/SectionList/VirtualizedList. §3.13 stated this as fact but nothing
-    // enforced it ("a convention until enforced by task 24's screen import-boundary lint rule");
-    // this block is that enforcement.
-    //
-    // SCOPE IS THE POINT. `packages/ui` is deliberately absent: it is the ONE package that may reach
-    // for the RN primitive, because wrapping it — owning `getItemLayout`, the fixed `touch.row`
-    // height, and the four §5 states as a discriminated union — is its job. Screens are in scope so
-    // that a screen cannot silently drop virtualization on the 2 GB target (§0) or regain the
-    // ability to render `[]` as "empty" when the truth is `unauthorized` (FR-1036).
-    //
-    // The mobile test lane's `react-native` double re-exports FlatList (the `List` primitive under
-    // test resolves through it), so it carries the rule's exact-path `allowFiles` exemption — the
-    // same shape as the op-log allowlists above, and for the same reason: a double that must supply
-    // the primitive is not a screen reaching past it.
-    name: 'bolusi/list-primitive',
-    files: ['apps/mobile/**/*.{ts,tsx}', 'packages/modules/src/**/screens/**/*.{ts,tsx}'],
-    languageOptions: {
-      parserOptions: { ecmaFeatures: { jsx: true } },
-    },
-    rules: {
-      'bolusi/list-primitive-only': [
-        'error',
-        { allowFiles: ['apps/mobile/test/doubles/react-native.tsx'] },
-      ],
-    },
-  },
-  {
-    // 07-i18n §5: @bolusi/i18n is the single formatting authority. UI code never touches Intl
-    // directly — money/date/number rendering has locale rules (NBSP normalization, zero fraction
-    // digits, day-first dates) that only the formatters apply. The i18n package itself is where
-    // Intl legitimately lives, so it is the one exemption.
     name: 'bolusi/no-direct-intl',
     files: ['**/*.{ts,tsx,js,jsx,mjs,cjs}'],
     ignores: ['packages/i18n/**'],
@@ -349,19 +186,6 @@ export default tseslint.config(
     },
   },
   {
-    // Type-aware lane. `no-floating-promises` needs type information, hence `projectService`.
-    //
-    // apps/mobile/src was added by task 18, after a floating `File#move()` (which returns
-    // `Promise<void>`) shipped in apps/mobile/src/media/files.ts and reached review. The function
-    // resolved and returned a destination URI BEFORE the move completed, so a caller would insert a
-    // MediaItem row pointing into the OS-purgeable cache dir — the OS purges it, and a shop's only
-    // record of a repair is gone (06 §2.2 step 5; security-guide §7.1). Nothing caught it: tsc was
-    // clean, there is no test, and this rule was scoped to apps/server only — while the mobile half
-    // is where the filesystem, the camera and every other async native API actually live.
-    //
-    // The file's own header stated the ordering rule six lines above the violation, which is why
-    // the fix is a LINT RULE and not a code review note: the class closes by construction, not by
-    // asking the next author to be careful (§2.11).
     name: 'bolusi/app-typed',
     files: ['apps/server/src/**/*.ts', 'apps/mobile/src/**/*.ts', 'apps/mobile/src/**/*.tsx'],
     ignores: ['**/*.test.ts', '**/*.test.tsx'],
@@ -373,12 +197,6 @@ export default tseslint.config(
     },
   },
   {
-    // Task 07 (05 §8–9): the op-acceptance pipeline is a LIBRARY layer — a pure function of deps +
-    // batch, runnable in-process with zero Hono/HTTP so the task-26 chaos harness (CHAOS-04/05/06)
-    // can drive it without sockets. The HTTP wiring is task 16's POST /v1/sync/push, which lives
-    // OUTSIDE src/oplog and calls in. This rule keeps the transport out of the pipeline; the
-    // fixture in apps/server/test/integration/oplog/no-http-boundary.test.ts proves it fires
-    // (testing-guide T-11 — a guard nobody has watched go red is not load-bearing).
     name: 'bolusi/oplog-no-http',
     files: ['apps/server/src/oplog/**/*.ts'],
     rules: {

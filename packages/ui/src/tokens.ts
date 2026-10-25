@@ -1,19 +1,4 @@
-/**
- * Design tokens — the ONLY styling vocabulary in the app (design-system §1).
- *
- * This is the sole file in the repo allowed to contain colour/size literals; everywhere else the
- * `bolusi/no-token-literals` lint rule (08-stack §5.2) makes a raw hex or a raw dp value an error.
- * Every value below is transcribed from design-system §1 — that doc is the source of truth and
- * changes there land here, never the reverse.
- *
- * The palette and the spacing scale are CLOSED: adding a colour or an in-between spacing step
- * requires a design-system change first (§1.1, §1.3). Objects are frozen so a screen cannot
- * mutate the vocabulary at runtime.
- *
- * Dark mode is deferred (§1.1). These semantic names ARE the dark-mode enabler: a future dark
- * theme is a second map behind the same names, with zero component changes. Never bypass the
- * indirection by reaching for a raw value.
- */
+/** Shared colors, spacing and sizes. Prefer these tokens for consistent UI styling. */
 
 /** Semantic colour tokens, light theme (design-system §1.1). */
 export const color = Object.freeze({

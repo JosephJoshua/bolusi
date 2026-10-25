@@ -318,8 +318,7 @@ const styles = StyleSheet.create({
   },
   // Spelled out rather than `StyleSheet.absoluteFill`: RN 0.86 types that as a registered style ID,
   // which cannot be spread into an object style, and the test lane's `StyleSheet` double has no
-  // such registry at all. Four zeroes are exempt from `bolusi/no-token-literals` for exactly this
-  // (they carry no scale meaning) and they behave identically under both.
+  // such registry. Explicit offsets behave identically in both environments.
   prompt: {
     position: 'absolute',
     top: 0,

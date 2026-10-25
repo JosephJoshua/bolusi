@@ -11,7 +11,7 @@ export {
   isLocale,
 } from './locale.js';
 
-export type { TranslationKey, TranslationResources } from './generated/keys.js';
+export type { TranslationKey, TranslationResources } from './keys.js';
 
 export type { InitI18nOptions } from './instance.js';
 export { getI18nInstance, getLocale, humanizeKey, initI18n, setLocale } from './instance.js';

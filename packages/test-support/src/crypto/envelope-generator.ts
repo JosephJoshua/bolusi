@@ -9,6 +9,8 @@
 //
 // Everything derives from a uint32 seed (T-6): the same seed yields byte-identical
 // envelopes on both runtimes, which is what makes cross-runtime comparison meaningful.
+import { OP_SOURCES } from '@bolusi/schemas';
+
 import { mulberry32, pick, randomInt, type Prng } from '../determinism/prng.js';
 
 /** A §2.1 signed core, structurally. Typed loosely so this file stays dependency-light. */
@@ -85,17 +87,6 @@ const OP_TYPES = [
   'platform.user_locale_changed',
 ] as const;
 
-// BOUNDARY-FORCED MIRROR of the canonical `OP_SOURCES` (packages/schemas/src/envelope.ts).
-// This module is bundled INTO the Hermes JCS-vector runner (scripts/hermes-vectors/runner.ts),
-// whose bundle forbids zod (08 §5.6) — and `OP_SOURCES` lives in `envelope.ts`, whose top-level
-// `z.*` calls make ANY import of it pull zod into that bundle. So this cannot be import-deduped
-// and re-declares the set locally; kept EQUAL to the canonical by the parity gate that reddens on
-// divergence (./enum-mirror-parity.test.ts, task 53 — a gated forced mirror is legitimate, §2.11).
-// `export`ed solely so that gate can import the real runtime value and compare it directly (task
-// 190): the test runs in Node, not the Hermes bundle, so it may pull both this and zod-backed
-// `OP_SOURCES`. Exporting adds no import here, so the zod-free Hermes boundary is unchanged.
-export const SOURCES = ['ui', 'agent', 'api', 'system'] as const;
-
 /** A payload whose shape (nesting, key order, value types) varies with the seed. */
 function generatePayload(prng: Prng): Record<string, unknown> {
   const payload: Record<string, unknown> = {
@@ -162,7 +153,7 @@ export function generateSignedCore(prng: Prng, seq: number, deviceId: string): G
             lng: 106.8 + prng() * 0.5,
             accuracyMeters: prng() * 100,
           },
-    source: pick(prng, SOURCES),
+    source: pick(prng, OP_SOURCES),
     agentInitiated: prng() < 0.5,
     agentConversationId: prng() < 0.5 ? null : uuidV4(prng),
     previousHash: seq === 1 ? '0'.repeat(64) : hex(prng, 64),

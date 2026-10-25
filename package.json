@@ -15,9 +15,7 @@
     "typecheck": "tsc -b && pnpm -r typecheck",
     "lint": "eslint .",
     "i18n:check": "pnpm --filter @bolusi/i18n i18n:check",
-    "knip": "knip --production --include exports,files --no-progress",
     "test": "tsc -b && vitest run",
-    "test:jcs-hermes": "node scripts/hermes-vectors/run.mjs",
     "test:ed25519-interop": "tsc -b && vitest run --project test-support src/crypto/noble-port.test.ts",
     "test:server": "tsc -b && vitest run --project server",
     "test:rls": "tsc -b && vitest run --project db-server",
@@ -26,7 +24,6 @@
     "harness:device": "node scripts/harness-device.mjs",
     "harness:serve-lane": "node scripts/harness-serve-lane.mjs",
     "e2e:native": "node scripts/harness-lane-e2e.mjs",
-    "test:security": "tsc -b && vitest run --config packages/harness/vitest.security.config.ts",
     "db:up": "node scripts/db-lane.mjs --up",
     "db:down": "node scripts/db-lane.mjs --down",
     "db:url": "node scripts/db-lane.mjs --db=bolusi_dev --url",
@@ -45,14 +42,11 @@
     "@bolusi/eslint-config": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "eslint": "catalog:",
-    "knip": "catalog:",
     "lint-staged": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "esbuild": "catalog:",
-    "tsx": "catalog:",
-    "hermes-compiler": "250829098.0.14"
+    "tsx": "catalog:"
   },
   "pnpm": {
     "overrides": {

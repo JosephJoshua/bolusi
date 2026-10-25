@@ -9,7 +9,6 @@ export default defineConfig({
     name: 'harness',
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}', 'test/**/*.test.{ts,tsx}', 'scenarios/**/*.test.{ts,tsx}'],
-    exclude: ['test/security/**'],
     testTimeout: CHAOS_TIMEOUT,
     hookTimeout: CHAOS_TIMEOUT,
   },

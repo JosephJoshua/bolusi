@@ -6,7 +6,6 @@ export default defineConfig({
     projects: [
       'apps/*/vitest.config.ts',
       'packages/*/vitest.config.ts',
-      'packages/harness/vitest.security.config.ts',
       'tooling/*/vitest.config.ts',
     ],
   },

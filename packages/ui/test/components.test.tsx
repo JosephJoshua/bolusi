@@ -4,6 +4,7 @@
  * / style value — never rendered copy. Per T-5 there is no snapshot anywhere.
  */
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { View } from 'react-native';
 
 import { Avatar, identityColor } from '../src/components/Avatar.js';
 import { Button } from '../src/components/Button.js';
@@ -392,21 +393,24 @@ describe('List (§3.13) — virtualization and the four mandatory states', () =>
       <List state={{ kind: 'ready', items: ['a', 'b'] }} renderRow={row} keyExtractor={(i) => i} />,
     );
     const list = r.get('ui.list');
-    expect(typeof list.props['getItemLayout']).toBe('function');
     expect(list.props['windowSize']).toBe(7);
     expect(list.props['initialNumToRender']).toBe(10);
     expect(list.props['removeClippedSubviews']).toBe(true);
   });
 
-  test('getItemLayout reports the uniform ListRow height, which is what makes it legal', () => {
+  test('variable-height rows use native measurement instead of fixed offsets', () => {
     const r = render(
-      <List state={{ kind: 'ready', items: ['a'] }} renderRow={row} keyExtractor={(i) => i} />,
+      <List
+        state={{ kind: 'ready', items: ['short', 'tall'] }}
+        renderRow={(item) => (
+          <View testID={`row.${item}`} style={{ height: item === 'short' ? 64 : 188 }} />
+        )}
+        keyExtractor={(item) => item}
+      />,
     );
-    const getItemLayout = r.get('ui.list').props['getItemLayout'] as (
-      d: unknown,
-      i: number,
-    ) => { length: number; offset: number; index: number };
-    expect(getItemLayout(null, 3)).toEqual({ length: touch.row, offset: touch.row * 3, index: 3 });
+    expect(r.get('ui.list').props['getItemLayout']).toBeUndefined();
+    expect(r.get('row.short').props['style']).toEqual({ height: 64 });
+    expect(r.get('row.tall').props['style']).toEqual({ height: 188 });
   });
 
   test('rows render through renderRow', () => {

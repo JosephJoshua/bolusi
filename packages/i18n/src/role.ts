@@ -7,7 +7,7 @@
 // renders whatever `resolveDisplayRoleKeys` returns, so a key with no catalog row — a future custom
 // role — renders NO role line (`null`), not a placeholder, while logging once so the missing row is
 // surfaced rather than silently blank.
-import type { TranslationKey } from './generated/keys.js';
+import type { TranslationKey } from './keys.js';
 import { DEFAULT_LOCALE } from './locale.js';
 import { warnOnce } from './logger.js';
 import { hasKey, t } from './t.js';

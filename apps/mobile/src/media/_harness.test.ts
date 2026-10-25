@@ -4,7 +4,7 @@
 // `apps/mobile`'s lane colocates tests in `src/` (vitest.config.ts `include`), so a non-`.test`
 // helper here would be SHIPPING SOURCE with no production caller — the exact orphan shape task 82
 // exists to clean up, recreated by a test helper. Naming it `.test.ts` keeps it inside the lane's
-// include glob and out of `knip --production`.
+// include glob.
 //
 // ── THE ORACLE IS INTERROGATED, NOT ASSUMED (T-14/§2.11) ────────────────────────────────────────
 // Every fake below is a thing the real assertions depend on, so each carries a test in this file

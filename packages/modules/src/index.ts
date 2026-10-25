@@ -38,8 +38,6 @@ import { authModule, platformModule, type AnyModuleDefinition } from '@bolusi/co
 
 import { notesModule } from './notes/manifest.js';
 
-export const PACKAGE_NAME = '@bolusi/modules' as const;
-
 /**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`
  * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `auth`; a registration list's
