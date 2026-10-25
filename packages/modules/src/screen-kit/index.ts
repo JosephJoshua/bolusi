@@ -2,7 +2,7 @@
 // projection changes (04 §7), verified thumbnail loading (06 §6), per-entity sync statuses and
 // module catalogs. Each module's screens bind these to their own runtime port; nothing here knows
 // about any one module.
-export { useActionRunner, type ActionRunner, type DiscardGuard } from './action.js';
+export { useActionRunner, type ActionRunner, type DiscardGuard, type StepBack } from './action.js';
 export { createRuntimeContext, type RuntimeContext } from './context.js';
 export {
   moduleTranslator,

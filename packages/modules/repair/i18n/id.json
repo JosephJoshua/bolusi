@@ -35,13 +35,14 @@
     "waitForParts": "Menunggu sparepart"
   },
   "assign": {
-    "none": "Belum ada teknisi yang bisa ditugaskan di toko ini."
+    "none": "Belum ada teknisi yang bisa ditugaskan di toko ini.",
+    "load": "{count} servis aktif"
   },
   "board": {
     "emptyHint": "Servis yang diterima atau dikerjakan muncul di sini.",
     "noMatches": "Tidak ada servis yang cocok.",
     "priceChangeWaiting": "Perubahan harga menunggu",
-    "searchHint": "Nama, nomor HP, nomor tiket, IMEI atau tipe",
+    "searchHint": "Cari nama, HP, tiket, IMEI, tipe",
     "title": "Servis",
     "view": {
       "active": "Dikerjakan",
@@ -73,7 +74,8 @@
     "notChecked": "Tidak dicek",
     "notes": "Catatan lain (opsional)",
     "ok": "Baik",
-    "peripherals": "Barang yang ditinggal"
+    "peripherals": "Barang yang ditinggal",
+    "restOk": "Sisanya baik"
   },
   "customer": {
     "change": "Pilih pelanggan lain",
@@ -87,7 +89,9 @@
     "color": "Warna",
     "imei": "IMEI",
     "model": "Tipe",
-    "passcode": "Kode kunci layar (opsional)"
+    "passcode": "Kode kunci layar (opsional)",
+    "colorField": "Warna (opsional)",
+    "imeiField": "IMEI (opsional)"
   },
   "handover": {
     "note": "Catatan (opsional)",
@@ -135,10 +139,10 @@
       "right": "Sisi kanan",
       "top": "Atas"
     },
-    "take": "Ambil foto"
+    "take": "Ambil foto",
+    "takeNext": "Foto {slot}"
   },
   "price": {
-    "addLine": "Tambah ke harga",
     "amount": "Jumlah (Rp)",
     "customerAgreed": "Pelanggan setuju",
     "decisionNote": "Catatan (opsional)",
@@ -157,7 +161,9 @@
       "notAgreed": "Belum dikonfirmasi pelanggan",
       "proposed": "Usulan teknisi"
     },
-    "total": "Total"
+    "total": "Total",
+    "addRow": "Tambah baris harga",
+    "pendingTotal": "Usulan menunggu keputusan: {amount}"
   },
   "problem": {
     "complaint": "Tulis keluhan pelanggan.",
@@ -165,7 +171,8 @@
     "deviceBrand": "Isi merek.",
     "deviceModel": "Isi tipe.",
     "photos": "Keenam foto wajib diambil.",
-    "quoteLines": "Tambahkan minimal satu baris harga."
+    "quoteLines": "Tambahkan minimal satu baris harga.",
+    "incompleteLine": "Isi keterangan untuk setiap baris yang ada jumlahnya."
   },
   "ready": {
     "threeDays": "3 hari lagi",

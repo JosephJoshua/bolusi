@@ -3,7 +3,7 @@
 export { RepairBoard, type RepairBoardProps } from './RepairBoard.js';
 export { TicketDetail, type TicketDetailProps } from './TicketDetail.js';
 export { IntakeWizard, type IntakeWizardProps } from './IntakeWizard.js';
-export type { DiscardGuard } from '../../screen-kit/index.js';
+export type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 export { Handover, type HandoverProps } from './Handover.js';
 export type { RepairChrome } from './parts.js';
 export {

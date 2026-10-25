@@ -130,6 +130,7 @@ export function Handover({
           <View style={repairStyles.gridCell}>
             <PhotoSlot
               label={tn('repair.handover.signature')}
+              emptyIcon="signature"
               actionLabel={tn(
                 signature === null ? 'repair.handover.sign' : 'repair.handover.signAgain',
               )}

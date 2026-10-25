@@ -8,17 +8,22 @@ import { formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Button,
+  Icon,
   List,
-  ListRow,
   SegmentedControl,
   SyncStatusChip,
   TextInput,
+  border,
+  color,
+  size,
   space,
+  touch,
+  type,
   type ListState,
 } from '@bolusi/ui';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { TicketSummaryRow } from '../queries.js';
 import { statusesFor, type EntitySyncStatuses } from '../../screen-kit/index.js';
@@ -32,7 +37,7 @@ import {
   ticketStatus,
   type BoardView,
 } from '../flows.js';
-import { statusLabel } from './labels.js';
+import { StatusChip, repairStyles } from './parts.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 
 const PAGE = 50;
@@ -177,10 +182,9 @@ export function RepairBoard({
             : undefined
         }
         renderRow={(row) => (
-          <ListRow
-            primaryText={`${row.ticketNumber} · ${row.customerName}`}
-            secondaryText={secondaryFor(row)}
-            trailing={
+          <TicketRow
+            row={row}
+            syncChip={
               <SyncStatusChip
                 syncStatuses={statusesFor(loaded?.statuses ?? {}, row.id)}
                 pendingLabel={t('sync.chip.pending')}
@@ -190,7 +194,6 @@ export function RepairBoard({
               />
             }
             onPress={() => onOpenTicket(row.id)}
-            showChevron
             testID={`${testID}.row.${row.id}`}
           />
         )}
@@ -200,18 +203,78 @@ export function RepairBoard({
   );
 }
 
-/** "Samsung Galaxy A14 · In repair · Budi" with a waiting price change called out. */
-function secondaryFor(row: TicketSummaryRow): string {
-  const parts = [
-    `${row.deviceBrand} ${row.deviceModel}`,
-    statusLabel(ticketStatus(row)),
-    row.technicianName ?? tn('repair.ticket.unassigned'),
-    formatMoney(row.quoteTotal),
-  ];
-  if (row.pendingProposals > 0) parts.push(tn('repair.board.priceChangeWaiting'));
-  return parts.join(' · ');
+/**
+ * One repair on the board, readable at a glance: number and status, who it belongs to and what it
+ * costs, the device and its technician, and a price change waiting on the counter. A plain list row
+ * truncated all of that into one line.
+ */
+function TicketRow({
+  row,
+  syncChip,
+  onPress,
+  testID,
+}: {
+  readonly row: TicketSummaryRow;
+  readonly syncChip: ReactNode;
+  readonly onPress: () => void;
+  readonly testID: string;
+}): React.JSX.Element {
+  const device = [row.deviceBrand, row.deviceModel].filter((s) => s !== '').join(' ');
+  const technician = row.technicianName ?? tn('repair.ticket.unassigned');
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={`${row.ticketNumber}, ${row.customerName}, ${device}`}
+      onPress={onPress}
+      android_ripple={{ color: color.surfaceAlt }}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? color.surfaceAlt : color.surface },
+      ]}
+    >
+      <View style={styles.rowBody}>
+        <View style={repairStyles.row}>
+          <Text style={styles.number}>{row.ticketNumber}</Text>
+          <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+        </View>
+        <View style={repairStyles.row}>
+          <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>
+            {row.customerName}
+          </Text>
+          <Text style={styles.amount}>{formatMoney(row.quoteTotal)}</Text>
+        </View>
+        <Text style={repairStyles.muted} numberOfLines={1}>
+          {`${device} · ${technician}`}
+        </Text>
+        <View style={styles.footer}>
+          {row.pendingProposals > 0 ? (
+            <Text style={repairStyles.warning} testID={`${testID}.priceWaiting`}>
+              {tn('repair.board.priceChangeWaiting')}
+            </Text>
+          ) : null}
+          {syncChip}
+        </View>
+      </View>
+      <Icon name="chevron" size={size.iconInline} color={color.textMuted} />
+    </Pressable>
+  );
 }
 
 const styles = StyleSheet.create({
   toolbar: { marginBottom: space.md },
+  row: {
+    minHeight: touch.rowMin,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    borderBottomWidth: border.hairline,
+    borderBottomColor: color.border,
+  },
+  rowBody: { flex: 1, marginRight: space.sm },
+  number: { ...type.caption, color: color.textMuted },
+  customer: { ...type.bodyBold, color: color.text },
+  amount: { ...type.bodySm, color: color.text },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
 });

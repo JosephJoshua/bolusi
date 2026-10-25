@@ -45,3 +45,10 @@ export function useActionRunner(): ActionRunner {
  * dirty-check and confirm, and calls `proceed` only once the user agrees.
  */
 export type DiscardGuard = (proceed: () => void) => void;
+
+/**
+ * A screen's own step back for hardware back (design-system §8.1): it closes an open step or moves
+ * a wizard back one step and returns `true`, or returns `false` when it is already at its first
+ * step and the surface should leave the screen instead.
+ */
+export type StepBack = () => boolean;

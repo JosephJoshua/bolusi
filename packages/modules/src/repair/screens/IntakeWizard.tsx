@@ -4,10 +4,11 @@
  * input in one draft, published on each change so an idle lock never loses a half-done intake
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
-import { formatMoney, t } from '@bolusi/i18n';
+import { formatMoney, formatNumber, t } from '@bolusi/i18n';
 import {
   Button,
   Card,
+  Chip,
   ConfirmSheet,
   ListRow,
   PhotoSlot,
@@ -23,7 +24,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { CHECKLIST_STATES, INTAKE_PHOTO_SLOTS, type ChecklistState } from '../constants.js';
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import {
@@ -34,6 +35,7 @@ import {
   peripheralLabel,
 } from './labels.js';
 import {
+  COMMON_BRANDS,
   INTAKE_CHECKS,
   INTAKE_STEPS,
   PERIPHERALS,
@@ -42,14 +44,18 @@ import {
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
+  nextMissingPhoto,
   parseRupiah,
+  restOfChecksOk,
   signedAmount,
   stepProblems,
   toOpenTicketInput,
   type IntakeDraft,
   type IntakeProblem,
   type IntakeStep,
+  type QuoteLineDraft,
 } from '../flows.js';
+import type { IntakePhotoSlot } from '../constants.js';
 import {
   Field,
   FlowScreen,
@@ -78,6 +84,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   complaint: 'repair.problem.complaint',
   photos: 'repair.problem.photos',
   quoteLines: 'repair.problem.quoteLines',
+  incompleteLine: 'repair.problem.incompleteLine',
 };
 
 const CHECK_STATE_KEY: Readonly<Record<ChecklistState, RepairKey>> = {
@@ -93,6 +100,8 @@ export interface IntakeWizardProps {
   readonly restoredDraft?: IntakeDraft | null | undefined;
   readonly onDraftChange?: ((draft: IntakeDraft | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+  /** Hardware back moves one step back; at the first step it is the surface's leave (with confirm). */
+  readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
   readonly onOpened: (ticketId: string) => void;
   readonly onCancel: () => void;
   readonly testID?: string | undefined;
@@ -104,6 +113,7 @@ export function IntakeWizard({
   restoredDraft,
   onDraftChange,
   onRegisterDiscardGuard,
+  onRegisterStepBack,
   onOpened,
   onCancel,
   testID = 'repair.intake',
@@ -151,7 +161,31 @@ export function IntakeWizard({
     update({ step: index });
   };
 
+  useEffect(() => {
+    onRegisterStepBack?.(() => {
+      if (stepIndex === 0) return false;
+      goTo(stepIndex - 1);
+      return true;
+    });
+    return () => onRegisterStepBack?.(null);
+  });
+
+  const takePhoto = (slot: IntakePhotoSlot): void => {
+    void runner
+      .run(() => runtime.capturePhoto({ title: tn(INTAKE_SLOT_KEY[slot]) }))
+      .then((captured) => {
+        if (captured === undefined || captured === null) return;
+        setDraft((d) => ({ ...d, photos: { ...d.photos, [slot]: captured.mediaRef } }));
+      });
+  };
+  // On the photos step the primary action walks round the phone: it takes the next missing shot.
+  const missingPhoto = step === 'photos' ? nextMissingPhoto(draft) : null;
+
   const next = (): void => {
+    if (missingPhoto !== null) {
+      takePhoto(missingPhoto);
+      return;
+    }
     if (problems.length > 0) {
       setShowProblems(true);
       return;
@@ -178,7 +212,13 @@ export function IntakeWizard({
       chrome={chrome}
       title={tn('repair.action.newIntake')}
       onBack={back}
-      primaryLabel={step === 'review' ? tn('repair.action.openTicket') : tn('repair.action.next')}
+      primaryLabel={
+        missingPhoto !== null
+          ? tn('repair.photo.takeNext', { slot: tn(INTAKE_SLOT_KEY[missingPhoto]) })
+          : step === 'review'
+            ? tn('repair.action.openTicket')
+            : tn('repair.action.next')
+      }
       onPrimary={next}
       busy={runner.busy}
       errorCode={runner.errorCode}
@@ -218,11 +258,14 @@ export function IntakeWizard({
       </View>
       {showProblems && (step === 'photos' || step === 'price' || step === 'review') ? (
         <View style={repairStyles.gap}>
-          {problems.map((problem) => (
-            <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
-              {tn(PROBLEM_KEY[problem])}
-            </Text>
-          ))}
+          {/* A line's own problem shows on its field, so only step-wide ones are listed here. */}
+          {problems
+            .filter((problem) => problem !== 'incompleteLine')
+            .map((problem) => (
+              <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
+                {tn(PROBLEM_KEY[problem])}
+              </Text>
+            ))}
         </View>
       ) : null}
     </FlowScreen>
@@ -259,22 +302,16 @@ export function IntakeWizard({
           />
         );
       case 'photos':
+        return <PhotosStep draft={draft} onTake={takePhoto} testID={`${testID}.photos`} />;
+      case 'price':
         return (
-          <PhotosStep
+          <PriceStep
             draft={draft}
-            onTake={(slot) => {
-              void runner
-                .run(() => runtime.capturePhoto({ title: tn(INTAKE_SLOT_KEY[slot]) }))
-                .then((captured) => {
-                  if (captured === undefined || captured === null) return;
-                  setDraft((d) => ({ ...d, photos: { ...d.photos, [slot]: captured.mediaRef } }));
-                });
-            }}
-            testID={`${testID}.photos`}
+            update={update}
+            lineError={problemText('incompleteLine')}
+            testID={`${testID}.price`}
           />
         );
-      case 'price':
-        return <PriceStep draft={draft} update={update} testID={`${testID}.price`} />;
       case 'review':
         return <ReviewStep draft={draft} onEdit={goTo} testID={`${testID}.review`} />;
     }
@@ -394,6 +431,17 @@ function DeviceStep({
         autoFocus
         testID={`${testID}.brand`}
       />
+      <View style={[styles.chips, styles.suggestions]}>
+        {COMMON_BRANDS.map((brand) => (
+          <ToggleChip
+            key={brand}
+            label={brand}
+            selected={device.brand === brand}
+            onToggle={() => set({ brand })}
+            testID={`${testID}.brandChoice.${brand}`}
+          />
+        ))}
+      </View>
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.device.model')}
@@ -405,7 +453,7 @@ function DeviceStep({
       </View>
       <View style={repairStyles.gap}>
         <TextInput
-          label={tn('repair.device.color')}
+          label={tn('repair.device.colorField')}
           value={device.color}
           onChangeText={(color) => set({ color })}
           testID={`${testID}.color`}
@@ -413,7 +461,7 @@ function DeviceStep({
       </View>
       <View style={repairStyles.gap}>
         <TextInput
-          label={tn('repair.device.imei')}
+          label={tn('repair.device.imeiField')}
           value={device.imei}
           onChangeText={(imei) => set({ imei })}
           keyboardType="number-pad"
@@ -455,7 +503,17 @@ function ConditionStep({
         autoFocus
         testID={`${testID}.complaint`}
       />
-      <Section title={tn('repair.condition.checks')}>
+      <Section
+        title={tn('repair.condition.checks')}
+        action={
+          <Chip
+            label={tn('repair.condition.restOk')}
+            icon="check"
+            onPress={() => update({ checks: restOfChecksOk(draft.checks) })}
+            testID={`${testID}.restOk`}
+          />
+        }
+      >
         {INTAKE_CHECKS.map((item) => (
           <View key={item} style={styles.check}>
             <Text style={repairStyles.body}>{checkLabel(item)}</Text>
@@ -503,7 +561,7 @@ function PhotosStep({
   testID,
 }: {
   readonly draft: IntakeDraft;
-  readonly onTake: (slot: (typeof INTAKE_PHOTO_SLOTS)[number]) => void;
+  readonly onTake: (slot: IntakePhotoSlot) => void;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -540,74 +598,82 @@ function PhotosStep({
   );
 }
 
-function PriceStep({ draft, update, testID }: StepProps): React.JSX.Element {
-  const [kind, setKind] = useState<PriceKind>('part');
-  const [description, setDescription] = useState('');
-  const [amountText, setAmountText] = useState('');
-  const amount = parseRupiah(amountText);
-  const canAdd = description.trim() !== '' && amount !== null;
+const EMPTY_LINE: QuoteLineDraft = { kind: 'part', description: '', amount: 0 };
 
-  const add = (): void => {
-    if (!canAdd) return;
-    update({ lines: [...draft.lines, { kind, description: description.trim(), amount }] });
-    setDescription('');
-    setAmountText('');
-  };
+/** "650.000" for 650000, empty for nothing typed yet: the amount reads as the customer hears it. */
+function amountText(amount: number): string {
+  return amount === 0 ? '' : formatNumber(amount);
+}
+
+/**
+ * Price lines edited where they stand, so nothing typed waits on a separate "add" press to count.
+ * With no lines yet one empty line is shown; it joins the draft only once something is typed.
+ */
+function PriceStep({
+  draft,
+  update,
+  lineError,
+  testID,
+}: StepProps & { readonly lineError: string | undefined }): React.JSX.Element {
+  const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
+  const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
+    update({ lines: lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
 
   return (
     <View>
-      {draft.lines.map((line, index) => (
-        <View key={`${index}:${line.description}`} style={styles.line}>
-          <View style={repairStyles.row}>
-            <Text style={repairStyles.body}>
-              {`${tn(PRICE_KIND_KEY[line.kind])} · ${line.description}`}
-            </Text>
-            <Text style={repairStyles.body}>
-              {formatMoney(signedAmount(line.kind, line.amount))}
-            </Text>
-          </View>
-          <Button
-            label={t('core.action.delete')}
-            variant="secondary"
-            onPress={() => update({ lines: draft.lines.filter((_, i) => i !== index) })}
-            testID={`${testID}.remove.${index}`}
-          />
+      {lines.map((line, index) => (
+        <View key={index} style={index === 0 ? undefined : repairStyles.gap}>
+          <Card testID={`${testID}.line.${index}`}>
+            <SegmentedControl
+              options={PRICE_KINDS.map((value) => ({
+                value,
+                label: tn(PRICE_KIND_KEY[value]),
+              }))}
+              value={line.kind as PriceKind}
+              onChange={(kind) => setLine(index, { kind })}
+              testID={`${testID}.kind.${index}`}
+            />
+            <View style={repairStyles.gap}>
+              <TextInput
+                label={tn('repair.price.description')}
+                value={line.description}
+                onChangeText={(description) => setLine(index, { description })}
+                errorMessage={
+                  line.description.trim() === '' && line.amount !== 0 ? lineError : undefined
+                }
+                testID={`${testID}.description.${index}`}
+              />
+            </View>
+            <View style={repairStyles.gap}>
+              <TextInput
+                label={tn('repair.price.amount')}
+                value={amountText(line.amount)}
+                onChangeText={(text) => setLine(index, { amount: parseRupiah(text) ?? 0 })}
+                keyboardType="number-pad"
+                testID={`${testID}.amount.${index}`}
+              />
+            </View>
+            {lines.length > 1 ? (
+              <View style={styles.remove}>
+                <Chip
+                  label={t('core.action.delete')}
+                  icon="remove"
+                  onPress={() => update({ lines: lines.filter((_, i) => i !== index) })}
+                  testID={`${testID}.remove.${index}`}
+                />
+              </View>
+            ) : null}
+          </Card>
         </View>
       ))}
-      <Card testID={`${testID}.add`}>
-        <SegmentedControl
-          options={PRICE_KINDS.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
-          value={kind}
-          onChange={setKind}
-          testID={`${testID}.kind`}
+      <View style={repairStyles.gap}>
+        <Button
+          label={tn('repair.price.addRow')}
+          variant="secondary"
+          onPress={() => update({ lines: [...lines, EMPTY_LINE] })}
+          testID={`${testID}.addRow`}
         />
-        <View style={repairStyles.gap}>
-          <TextInput
-            label={tn('repair.price.description')}
-            value={description}
-            onChangeText={setDescription}
-            testID={`${testID}.description`}
-          />
-        </View>
-        <View style={repairStyles.gap}>
-          <TextInput
-            label={tn('repair.price.amount')}
-            value={amountText}
-            onChangeText={setAmountText}
-            keyboardType="number-pad"
-            testID={`${testID}.amount`}
-          />
-        </View>
-        <View style={repairStyles.gap}>
-          <Button
-            label={tn('repair.price.addLine')}
-            variant="secondary"
-            onPress={add}
-            disabled={!canAdd}
-            testID={`${testID}.addLine`}
-          />
-        </View>
-      </Card>
+      </View>
       <View style={[repairStyles.row, styles.total]}>
         <Text style={repairStyles.heading}>{tn('repair.price.total')}</Text>
         <Text style={repairStyles.heading} testID={`${testID}.total`}>
@@ -619,6 +685,7 @@ function PriceStep({ draft, update, testID }: StepProps): React.JSX.Element {
           options={READY_CHOICES.map((value) => ({ value, label: tn(READY_KEY[value]) }))}
           value={draft.ready}
           onChange={(ready) => update({ ready })}
+          wrap
           testID={`${testID}.ready`}
         />
       </Section>
@@ -636,50 +703,67 @@ function ReviewStep({
   readonly testID: string;
 }): React.JSX.Element {
   const issues = INTAKE_CHECKS.filter((item) => draft.checks[item] === 'issue');
-  const editButton = (step: IntakeStep): React.JSX.Element => (
-    <Button
-      label={t('core.action.edit')}
-      variant="secondary"
-      onPress={() => onEdit(INTAKE_STEPS.indexOf(step))}
-      testID={`${testID}.edit.${step}`}
-    />
+  const section = (step: IntakeStep, children: React.ReactNode): React.JSX.Element => (
+    <Section
+      title={tn(STEP_KEY[step])}
+      action={
+        <Chip
+          label={t('core.action.edit')}
+          icon="edit"
+          onPress={() => onEdit(INTAKE_STEPS.indexOf(step))}
+          testID={`${testID}.edit.${step}`}
+        />
+      }
+    >
+      {children}
+    </Section>
   );
   return (
     <View>
-      <Section title={tn('repair.intake.step.customer')}>
-        <Text style={repairStyles.body} testID={`${testID}.customer`}>
-          {draft.customer.name}
-        </Text>
-        {draft.customer.phone === null || draft.customer.phone === '' ? null : (
-          <Text style={repairStyles.muted}>{draft.customer.phone}</Text>
-        )}
-        {editButton('customer')}
-      </Section>
-      <Section title={tn('repair.intake.step.device')}>
-        <Text style={repairStyles.body} testID={`${testID}.device`}>
-          {[draft.device.brand, draft.device.model, draft.device.color]
-            .filter((s) => s.trim() !== '')
-            .join(' ')}
-        </Text>
-        {draft.device.imei === '' ? null : (
-          <Field label={tn('repair.device.imei')} value={draft.device.imei} />
-        )}
-        {editButton('device')}
-      </Section>
-      <Section title={tn('repair.intake.step.condition')}>
-        <Text style={repairStyles.body}>{draft.complaint}</Text>
-        {issues.length === 0 ? null : (
-          <Field label={tn('repair.condition.issues')} value={issues.map(checkLabel).join(', ')} />
-        )}
-        {draft.peripherals.length === 0 ? null : (
-          <Field
-            label={tn('repair.condition.peripherals')}
-            value={draft.peripherals.map(peripheralLabel).join(', ')}
-          />
-        )}
-        {editButton('condition')}
-      </Section>
-      <Section title={tn('repair.intake.step.photos')}>
+      {section(
+        'customer',
+        <>
+          <Text style={repairStyles.body} testID={`${testID}.customer`}>
+            {draft.customer.name}
+          </Text>
+          {draft.customer.phone === null || draft.customer.phone === '' ? null : (
+            <Text style={repairStyles.muted}>{draft.customer.phone}</Text>
+          )}
+        </>,
+      )}
+      {section(
+        'device',
+        <>
+          <Text style={repairStyles.body} testID={`${testID}.device`}>
+            {[draft.device.brand, draft.device.model, draft.device.color]
+              .filter((s) => s.trim() !== '')
+              .join(' ')}
+          </Text>
+          {draft.device.imei === '' ? null : (
+            <Field label={tn('repair.device.imei')} value={draft.device.imei} />
+          )}
+        </>,
+      )}
+      {section(
+        'condition',
+        <>
+          <Text style={repairStyles.body}>{draft.complaint}</Text>
+          {issues.length === 0 ? null : (
+            <Field
+              label={tn('repair.condition.issues')}
+              value={issues.map(checkLabel).join(', ')}
+            />
+          )}
+          {draft.peripherals.length === 0 ? null : (
+            <Field
+              label={tn('repair.condition.peripherals')}
+              value={draft.peripherals.map(peripheralLabel).join(', ')}
+            />
+          )}
+        </>,
+      )}
+      {section(
+        'photos',
         <PhotoGrid>
           {INTAKE_PHOTO_SLOTS.map((slot) => {
             const photo = draft.photos[slot];
@@ -692,19 +776,32 @@ function ReviewStep({
               </View>
             );
           })}
-        </PhotoGrid>
-        {editButton('photos')}
-      </Section>
-      <Section title={tn('repair.intake.step.price')}>
-        <View style={repairStyles.row}>
-          <Text style={repairStyles.heading}>{tn('repair.price.total')}</Text>
-          <Text style={repairStyles.heading} testID={`${testID}.total`}>
-            {formatMoney(intakeTotal(draft.lines))}
-          </Text>
-        </View>
-        <Field label={tn('repair.ticket.readyBy')} value={tn(READY_KEY[draft.ready])} />
-        {editButton('price')}
-      </Section>
+        </PhotoGrid>,
+      )}
+      {section(
+        'price',
+        <>
+          {draft.lines
+            .filter((line) => line.description.trim() !== '')
+            .map((line, index) => (
+              <View key={index} style={[repairStyles.row, styles.reviewLine]}>
+                <Text style={[repairStyles.body, repairStyles.rowText]}>
+                  {`${tn(PRICE_KIND_KEY[line.kind])} · ${line.description}`}
+                </Text>
+                <Text style={repairStyles.body}>
+                  {formatMoney(signedAmount(line.kind, line.amount))}
+                </Text>
+              </View>
+            ))}
+          <View style={[repairStyles.row, styles.reviewLine]}>
+            <Text style={repairStyles.heading}>{tn('repair.price.total')}</Text>
+            <Text style={repairStyles.heading} testID={`${testID}.total`}>
+              {formatMoney(intakeTotal(draft.lines))}
+            </Text>
+          </View>
+          <Field label={tn('repair.ticket.readyBy')} value={tn(READY_KEY[draft.ready])} />
+        </>,
+      )}
     </View>
   );
 }
@@ -714,6 +811,8 @@ const styles = StyleSheet.create({
   problem: { ...type.bodySm, color: color.danger, marginBottom: space.xs },
   check: { marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  line: { marginBottom: space.md },
+  suggestions: { marginTop: space.sm },
+  remove: { alignSelf: 'flex-end', marginTop: space.md },
   total: { marginTop: space.lg },
+  reviewLine: { marginBottom: space.xs },
 });

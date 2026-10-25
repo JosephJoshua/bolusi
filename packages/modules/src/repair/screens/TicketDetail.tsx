@@ -6,12 +6,17 @@
  */
 import { formatDateTime, formatMoney, t, translateOpType } from '@bolusi/i18n';
 import { AppShell, Banner, Button, Card, PhotoSlot, space } from '@bolusi/ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { HANDOVER_PHOTO_SLOTS, INTAKE_PHOTO_SLOTS } from '../constants.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
-import { hasRejectedOp, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
+import {
+  hasRejectedOp,
+  useActionRunner,
+  type EntitySyncStatuses,
+  type StepBack,
+} from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import { INTAKE_SLOT_KEY, PRICE_KIND_KEY, checkLabel, peripheralLabel } from './labels.js';
@@ -45,6 +50,7 @@ import {
 } from './TicketSteps.js';
 
 const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
+  decidePrice: 'repair.action.decidePrice',
   claim: 'repair.action.claim',
   start: 'repair.action.start',
   resume: 'repair.action.resume',
@@ -75,6 +81,8 @@ export interface TicketDetailProps {
   readonly onBack: () => void;
   readonly onHandover: (ticketId: string) => void;
   readonly onOpenSyncStatus: () => void;
+  /** Hardware back closes an open step back to the ticket before it leaves the ticket. */
+  readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -89,6 +97,7 @@ export function TicketDetail({
   onBack,
   onHandover,
   onOpenSyncStatus,
+  onRegisterStepBack,
   testID = 'repair.ticket',
 }: TicketDetailProps): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -108,6 +117,17 @@ export function TicketDetail({
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
   const rejected = query.status === 'ready' && hasRejectedOp(query.data.statuses[ticketId] ?? []);
   const closeStep = (): void => setStep({ kind: 'none' });
+  const stepOpen = step.kind !== 'none';
+
+  useEffect(() => {
+    onRegisterStepBack?.(() => {
+      if (!stepOpen) return false;
+      setStep({ kind: 'none' });
+      return true;
+    });
+    return () => onRegisterStepBack?.(null);
+  }, [stepOpen, onRegisterStepBack]);
+
   const stepProps = { chrome, ticketId, onDone: closeStep, onCancel: closeStep };
 
   switch (step.kind) {
@@ -131,6 +151,11 @@ export function TicketDetail({
 
   const perform = (action: TicketAction, row: TicketDetailRow): void => {
     switch (action) {
+      case 'decidePrice': {
+        const line = row.quoteLines.find((candidate) => candidate.status === 'proposed');
+        if (line !== undefined) setStep({ kind: 'proposal', line });
+        return;
+      }
       case 'start':
       case 'resume':
       case 'reopen':
@@ -157,6 +182,12 @@ export function TicketDetail({
     }
   };
 
+  // The likeliest next step is the bottom action, in the thumb zone like every other flow; the
+  // rest sit under the summary, and cancelling is kept apart at the end so it is never hit by habit.
+  const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
+  const [primary, ...others] = actions.filter((action) => action !== 'cancel');
+  const canCancel = actions.includes('cancel');
+
   return (
     <AppShell
       scrollable
@@ -176,6 +207,17 @@ export function TicketDetail({
           />
         ) : undefined
       }
+      bottomAction={
+        ticket === undefined || primary === undefined ? undefined : (
+          <Button
+            label={tn(ACTION_KEY[primary])}
+            onPress={() => perform(primary, ticket)}
+            busy={runner.busy}
+            disabled={runner.busy}
+            testID={`${testID}.action.${primary}`}
+          />
+        )
+      }
       testID={testID}
     >
       <QueryView
@@ -190,8 +232,6 @@ export function TicketDetail({
   );
 
   function renderTicket(row: TicketDetailRow): React.JSX.Element {
-    const actions = ticketActions(row, can, runtime.userId);
-    const [primary, ...others] = actions;
     return (
       <View testID={`${testID}.content`}>
         <ActionErrorBanner
@@ -234,20 +274,13 @@ export function TicketDetail({
           )}
         </Card>
 
-        {primary === undefined ? null : (
+        {others.length === 0 ? null : (
           <View style={styles.actions}>
-            <Button
-              label={tn(ACTION_KEY[primary])}
-              onPress={() => perform(primary, row)}
-              busy={runner.busy}
-              disabled={runner.busy}
-              testID={`${testID}.action.${primary}`}
-            />
             {others.map((action) => (
               <View key={action} style={styles.secondaryAction}>
                 <Button
                   label={tn(ACTION_KEY[action])}
-                  variant={action === 'cancel' ? 'destructive' : 'secondary'}
+                  variant="secondary"
                   onPress={() => perform(action, row)}
                   disabled={runner.busy}
                   testID={`${testID}.action.${action}`}
@@ -269,25 +302,54 @@ export function TicketDetail({
             </Text>
           ))}
         </Section>
+
+        {canCancel ? (
+          <View style={styles.cancel}>
+            <Button
+              label={tn(ACTION_KEY.cancel)}
+              variant="destructive"
+              onPress={() => perform('cancel', row)}
+              disabled={runner.busy}
+              testID={`${testID}.action.cancel`}
+            />
+          </View>
+        ) : null}
       </View>
     );
   }
 
   function renderPrice(row: TicketDetailRow): React.JSX.Element {
+    const pending = row.quoteLines.filter((line) => line.status === 'proposed');
     return (
       <Section title={tn('repair.ticket.price')} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => (
           <View key={line.id} style={styles.line} testID={`${testID}.line.${line.id}`}>
             <View style={repairStyles.row}>
               <Text
-                style={line.status === 'declined' ? repairStyles.muted : repairStyles.body}
+                style={[
+                  line.status === 'intake' || line.status === 'applied'
+                    ? repairStyles.body
+                    : repairStyles.muted,
+                  repairStyles.rowText,
+                ]}
               >{`${tn(PRICE_KIND_KEY[line.kind])} · ${line.description}`}</Text>
-              <Text style={line.status === 'declined' ? repairStyles.muted : repairStyles.body}>
+              <Text
+                style={
+                  line.status === 'intake' || line.status === 'applied'
+                    ? repairStyles.body
+                    : repairStyles.muted
+                }
+              >
                 {formatMoney(line.amount)}
               </Text>
             </View>
             {line.status === 'intake' ? null : (
-              <Text style={repairStyles.caption}>{lineCaption(line)}</Text>
+              <Text
+                style={line.status === 'proposed' ? repairStyles.warning : repairStyles.caption}
+                testID={`${testID}.line.${line.id}.status`}
+              >
+                {lineCaption(line)}
+              </Text>
             )}
             {line.status === 'proposed' && can.quoteChange ? (
               <View style={styles.secondaryAction}>
@@ -307,6 +369,14 @@ export function TicketDetail({
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
+        {pending.length === 0 ? null : (
+          // The total is what the customer agreed to; what a decision would add is said, not summed.
+          <Text style={repairStyles.warning} testID={`${testID}.pendingTotal`}>
+            {tn('repair.price.pendingTotal', {
+              amount: formatMoney(pending.reduce((sum, line) => sum + line.amount, 0)),
+            })}
+          </Text>
+        )}
       </Section>
     );
   }
@@ -415,7 +485,8 @@ function lineCaption(line: QuoteLineRow): string {
 
 const styles = StyleSheet.create({
   device: { marginTop: space.sm },
-  actions: { marginTop: space.lg },
+  actions: { marginTop: space.md },
+  cancel: { marginTop: space.xl },
   secondaryAction: { marginTop: space.sm },
   line: { marginBottom: space.sm },
   total: { marginTop: space.sm },

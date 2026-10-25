@@ -20,6 +20,8 @@ import {
   type RenderResult,
 } from '../../../test/repair-support.js';
 
+import type { SurfaceNav } from '../../navigation/surface.js';
+
 import { RepairHome } from './RepairHome.js';
 
 let h: RepairHarness | null = null;
@@ -84,18 +86,22 @@ describe('counter intake', () => {
     await press(screen, 'repair.intake.condition.peripheral.charger');
     await press(screen, 'repair.intake.primary');
 
-    // All six photos are required.
-    await press(screen, 'repair.intake.photos.slot.front.press');
-    await press(screen, 'repair.intake.primary');
-    expect(screen.query('repair.intake.problem.photos')).not.toBeNull();
-    for (const slot of INTAKE_PHOTO_SLOTS.slice(1)) {
-      await press(screen, `repair.intake.photos.slot.${slot}.press`);
+    // All six photos are required: tapping a slot takes that one, and the primary action walks
+    // round the phone taking whichever shot is still missing until there are six.
+    await press(screen, 'repair.intake.photos.slot.back.press');
+    expect(screen.query('repair.intake.photos.slot.back.done')).not.toBeNull();
+    for (let shot = 0; shot < INTAKE_PHOTO_SLOTS.length - 1; shot += 1) {
+      expect(screen.query('repair.intake.step.photos')).not.toBeNull();
+      await press(screen, 'repair.intake.primary');
+    }
+    for (const slot of INTAKE_PHOTO_SLOTS) {
+      expect(screen.query(`repair.intake.photos.slot.${slot}.done`)).not.toBeNull();
     }
     await press(screen, 'repair.intake.primary');
 
-    type(screen, 'repair.intake.price.description', 'LCD A14');
-    type(screen, 'repair.intake.price.amount', '650.000');
-    await press(screen, 'repair.intake.price.addLine');
+    // A price typed into the line counts without a separate "add" press.
+    type(screen, 'repair.intake.price.description.0', 'LCD A14');
+    type(screen, 'repair.intake.price.amount.0', '650.000');
     await press(screen, 'repair.intake.primary');
     expect(screen.query('repair.intake.step.review')).not.toBeNull();
     await press(screen, 'repair.intake.primary');
@@ -281,5 +287,109 @@ describe('the board', () => {
     await settle();
     expect(screen.query(`repair.board.row.${ticketId}`)).not.toBeNull();
     expect(screen.query('repair.board.views')).toBeNull();
+  });
+});
+
+describe('hardware back', () => {
+  /** Mount with the shell's surface-nav slot captured, and press back the way the shell does. */
+  async function mountWithBack(harness: RepairHarness, userId: string) {
+    let nav: SurfaceNav | null = null;
+    const screen = await mount(harness, userId, {
+      onRegisterSurfaceNav: (next) => {
+        nav = next;
+      },
+    });
+    const back = async (): Promise<boolean | undefined> => {
+      const consumed = (nav as SurfaceNav | null)?.handleBack();
+      await settle();
+      return consumed;
+    };
+    return { screen, back };
+  }
+
+  test('back inside a ticket step returns to the ticket, and only then to the board', async () => {
+    h = await openRepairScreenHarness(5501);
+    const ticketId = await openTicket(h);
+    const { screen, back } = await mountWithBack(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.changePrice');
+    expect(screen.query('repair.price.change')).not.toBeNull();
+
+    expect(await back()).toBe(true);
+    expect(screen.query('repair.price.change')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+
+    expect(await back()).toBe(true);
+    expect(screen.query('repair.board')).not.toBeNull();
+  });
+
+  test('back in the intake goes one step back, and asks before dropping a started intake', async () => {
+    h = await openRepairScreenHarness(5502);
+    const { screen, back } = await mountWithBack(h, h.cashierId);
+    await press(screen, 'repair.board.newIntake');
+    type(screen, 'repair.intake.customer.name', 'Ester');
+    await press(screen, 'repair.intake.primary');
+    expect(screen.query('repair.intake.step.device')).not.toBeNull();
+
+    await back();
+    expect(screen.query('repair.intake.step.customer')).not.toBeNull();
+    expect(screen.query('repair.intake.discard')).toBeNull();
+
+    await back();
+    expect(screen.query('repair.intake.discard')).not.toBeNull();
+    expect(screen.query('repair.intake')).not.toBeNull();
+  });
+});
+
+describe('price and assignment details', () => {
+  test('an amount typed without a description is named instead of silently dropped', async () => {
+    h = await openRepairScreenHarness(5601);
+    const draft: IntakeDraft = {
+      kind: 'intake',
+      step: 4,
+      customer: { kind: 'new', name: 'Ester', phone: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      complaint: 'Mati',
+      intakeNotes: '',
+      checks: {},
+      peripherals: [],
+      photos: {},
+      lines: [],
+      ready: 'tomorrow',
+    };
+    const screen = await mount(h, h.cashierId, { restoredDraft: draft });
+    type(screen, 'repair.intake.price.amount.0', '150000');
+    await press(screen, 'repair.intake.primary');
+    expect(screen.query('repair.intake.step.price')).not.toBeNull();
+    expect(screen.query('repair.intake.price.description.0.error')).not.toBeNull();
+    expect(screen.query('repair.intake.problem.incompleteLine')).toBeNull();
+    expect(text(screen, 'repair.intake.price.total')).toContain('0');
+  });
+
+  test('a proposal waiting on the counter is shown apart from the agreed total', async () => {
+    h = await openRepairScreenHarness(5602);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      h.technicianId,
+    );
+    const screen = await mount(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(text(screen, 'repair.ticket.total')).toContain('750.000');
+    expect(text(screen, 'repair.ticket.pendingTotal')).toContain('150.000');
+  });
+
+  test('the counter sees how many repairs each technician already holds', async () => {
+    h = await openRepairScreenHarness(5603);
+    const first = await openTicket(h);
+    const second = await openTicket(h);
+    await h.run('assignTechnician', { ticketId: first, technicianId: h.technicianId }, h.cashierId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, `repair.board.row.${second}`);
+    // Unassigned, picking a technician is the counter's next step, so it is the bottom action.
+    await press(screen, 'repair.ticket.action.assign');
+    expect(text(screen, `repair.assign.row.${h.technicianId}.secondary`)).toContain('1');
+    expect(text(screen, `repair.assign.row.${h.technician2Id}.secondary`)).toContain('0');
   });
 });

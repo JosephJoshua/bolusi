@@ -178,7 +178,8 @@ export interface RepairChrome {
 
 /**
  * One full-screen step of a flow (design-system §3.10: flows, not modals): a back arrow, the body,
- * the refused-action banner and one primary action at the bottom.
+ * the refused-action banner and one primary action at the bottom. A step whose choices are its rows
+ * (picking a technician) has no primary action.
  */
 export function FlowScreen({
   chrome,
@@ -198,8 +199,8 @@ export function FlowScreen({
   readonly chrome: RepairChrome;
   readonly title: string;
   readonly onBack: () => void;
-  readonly primaryLabel: string;
-  readonly onPrimary: () => void;
+  readonly primaryLabel?: string | undefined;
+  readonly onPrimary?: (() => void) | undefined;
   readonly primaryDisabled?: boolean | undefined;
   readonly primaryVariant?: 'primary' | 'destructive' | undefined;
   readonly busy: boolean;
@@ -220,14 +221,16 @@ export function FlowScreen({
       avatar={chrome.avatar}
       overlay={overlay}
       bottomAction={
-        <Button
-          label={primaryLabel}
-          onPress={onPrimary}
-          variant={primaryVariant ?? 'primary'}
-          disabled={primaryDisabled === true || busy}
-          busy={busy}
-          testID={`${testID}.primary`}
-        />
+        primaryLabel === undefined || onPrimary === undefined ? undefined : (
+          <Button
+            label={primaryLabel}
+            onPress={onPrimary}
+            variant={primaryVariant ?? 'primary'}
+            disabled={primaryDisabled === true || busy}
+            busy={busy}
+            testID={`${testID}.primary`}
+          />
+        )
       }
       testID={testID}
     >
@@ -241,19 +244,24 @@ export function FlowScreen({
   );
 }
 
-/** A captioned group on a detail or review screen. */
+/** A captioned group on a detail or review screen, with an optional compact action beside the title. */
 export function Section({
   title,
+  action,
   children,
   testID,
 }: {
   readonly title: string;
+  readonly action?: ReactNode;
   readonly children: ReactNode;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   return (
     <View style={styles.section} testID={testID}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {action}
+      </View>
       {children}
     </View>
   );
@@ -292,6 +300,9 @@ export const repairStyles = StyleSheet.create({
   heading: { ...type.heading, color: color.text },
   gap: { marginTop: space.md },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  /** The growing side of a `row`: wraps instead of pushing the amount beside it off screen. */
+  rowText: { flexShrink: 1, marginRight: space.md },
+  warning: { ...type.bodySm, color: color.warning },
 });
 
 const styles = StyleSheet.create({
@@ -311,7 +322,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   section: { marginTop: space.lg },
-  sectionTitle: { ...type.bodyBold, color: color.textMuted, marginBottom: space.sm },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: space.sm,
+  },
+  sectionTitle: { ...type.bodyBold, color: color.textMuted, flexShrink: 1 },
   field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
   fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
   fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },

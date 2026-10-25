@@ -13,6 +13,7 @@ import {
   TicketDetail,
   type DiscardGuard,
   type RepairRuntime,
+  type StepBack,
 } from '@bolusi/modules/repair/screens';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -51,11 +52,18 @@ export function RepairHome({
   const [view, setView] = useState<RepairView>(() =>
     restoredDraft === null || restoredDraft === undefined ? { kind: 'board' } : { kind: 'intake' },
   );
-  const chrome = { syncChip, avatar };
+  // Inside a flow the header keeps only the sync chip: the title needs the width, and switching
+  // user or language belongs on the board, not halfway through a step.
+  const chrome = { syncChip, avatar: null };
 
   const discardGuardRef = useRef<DiscardGuard | null>(null);
   const registerDiscardGuard = useCallback((guard: DiscardGuard | null): void => {
     discardGuardRef.current = guard;
+  }, []);
+  // The open screen's own back (an open ticket step, an intake step), tried before leaving it.
+  const stepBackRef = useRef<StepBack | null>(null);
+  const registerStepBack = useCallback((back: StepBack | null): void => {
+    stepBackRef.current = back;
   }, []);
 
   useEffect(() => {
@@ -74,6 +82,7 @@ export function RepairHome({
     };
     onRegisterSurfaceNav?.({
       handleBack: () => {
+        if (stepBackRef.current?.() === true) return true;
         runLeave(backTo);
         return true;
       },
@@ -101,6 +110,7 @@ export function RepairHome({
           restoredDraft={restoredDraft}
           onDraftChange={onDraftChange}
           onRegisterDiscardGuard={registerDiscardGuard}
+          onRegisterStepBack={registerStepBack}
           onOpened={(ticketId) => setView({ kind: 'ticket', ticketId })}
           onCancel={() => setView({ kind: 'board' })}
         />
@@ -113,6 +123,7 @@ export function RepairHome({
           onBack={() => setView({ kind: 'board' })}
           onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
           onOpenSyncStatus={onOpenSyncStatus}
+          onRegisterStepBack={registerStepBack}
         />
       ) : null}
 

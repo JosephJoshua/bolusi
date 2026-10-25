@@ -105,6 +105,7 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
 }
 
 export type TicketAction =
+  | 'decidePrice'
   | 'claim'
   | 'start'
   | 'resume'
@@ -130,7 +131,11 @@ export function ticketActions(
   const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
   const finished = ticket.outcome === 'repaired' || ticket.outcome === 'cancelled';
 
-  if (can.handover && ticket.location === 'in_store' && finished && ticket.pendingProposals === 0) {
+  // Mirrors returnDevice: undecided proposals hold back a repaired phone, not a cancelled one.
+  // A technician's proposal waits on the counter, and on a repaired phone it holds up the handover.
+  if (open && can.quoteChange && ticket.pendingProposals > 0) actions.push('decidePrice');
+  const priceSettled = ticket.outcome === 'cancelled' || ticket.pendingProposals === 0;
+  if (can.handover && ticket.location === 'in_store' && finished && priceSettled) {
     actions.push('handover');
   }
   if (open && can.work) {
@@ -142,9 +147,12 @@ export function ticketActions(
     }
     if (ticket.technicianId !== userId && ticket.outcome !== 'repaired') actions.push('claim');
   }
+  // An unassigned repair waits on the counter to pick a technician, so that comes before pricing.
+  const assignFirst = ticket.technicianId === null;
+  if (open && can.assign && assignFirst) actions.push('assign');
   if (open && can.quoteChange) actions.push('changePrice');
   else if (open && can.work) actions.push('proposePrice');
-  if (open && can.assign) actions.push('assign');
+  if (open && can.assign && !assignFirst) actions.push('assign');
   if (open && can.work && ticket.outcome === 'repaired') actions.push('reopen');
   if (open && can.cancel) actions.push('cancel');
   return actions;
@@ -215,6 +223,17 @@ export const INTAKE_CHECKS = [
 export type IntakeCheck = (typeof INTAKE_CHECKS)[number];
 
 /** Things customers commonly leave with the phone. Stored by key so either language reads them. */
+/** Brands the stores see most, offered as one-tap answers; any other brand is typed. */
+export const COMMON_BRANDS = [
+  'Samsung',
+  'Oppo',
+  'Vivo',
+  'Xiaomi',
+  'Realme',
+  'Infinix',
+  'iPhone',
+] as const;
+
 export const PERIPHERALS = ['charger', 'cable', 'case', 'simCard', 'memoryCard', 'box'] as const;
 export type Peripheral = (typeof PERIPHERALS)[number];
 
@@ -311,7 +330,13 @@ export type IntakeStep = (typeof INTAKE_STEPS)[number];
 
 /** What still blocks a step, as the fields to point at. Empty means the step is complete. */
 export type IntakeProblem =
-  'customerName' | 'deviceBrand' | 'deviceModel' | 'complaint' | 'photos' | 'quoteLines';
+  | 'customerName'
+  | 'deviceBrand'
+  | 'deviceModel'
+  | 'complaint'
+  | 'photos'
+  | 'quoteLines'
+  | 'incompleteLine';
 
 export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProblem[] {
   const problems: IntakeProblem[] = [];
@@ -329,11 +354,13 @@ export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProble
       if (draft.complaint.trim() === '') problems.push('complaint');
       break;
     case 'photos':
-      if (INTAKE_PHOTO_SLOTS.some((slot) => draft.photos[slot] === undefined)) {
-        problems.push('photos');
-      }
+      if (nextMissingPhoto(draft) !== null) problems.push('photos');
       break;
     case 'price':
+      // An amount with no description would be dropped on save, so it is named, not lost.
+      if (draft.lines.some((line) => line.description.trim() === '' && line.amount !== 0)) {
+        problems.push('incompleteLine');
+      }
       if (validLines(draft.lines).length === 0) problems.push('quoteLines');
       break;
     case 'review':
@@ -347,6 +374,21 @@ export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProble
 
 function validLines(lines: readonly QuoteLineDraft[]): QuoteLineDraft[] {
   return lines.filter((line) => line.description.trim() !== '');
+}
+
+/** The first required intake photo still missing, in the order the counter walks round the phone. */
+export function nextMissingPhoto(draft: Pick<IntakeDraft, 'photos'>): IntakePhotoSlot | null {
+  return INTAKE_PHOTO_SLOTS.find((slot) => draft.photos[slot] === undefined) ?? null;
+}
+
+/** Every check not yet answered marked OK, after the counter has called out the ones with issues. */
+export function restOfChecksOk(checks: IntakeDraft['checks']): IntakeDraft['checks'] {
+  return Object.fromEntries(
+    INTAKE_CHECKS.map((item) => [
+      item,
+      checks[item] === undefined || checks[item] === 'not_checked' ? 'ok' : checks[item],
+    ]),
+  );
 }
 
 export function intakeTotal(lines: readonly QuoteLineDraft[]): number {

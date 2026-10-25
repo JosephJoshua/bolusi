@@ -3,7 +3,7 @@
  * a price change and deciding a technician's proposal. Each runs one command, stays put with the
  * refusal shown when it fails, and calls `onDone` when it lands.
  */
-import { formatMoney, t } from '@bolusi/i18n';
+import { formatMoney } from '@bolusi/i18n';
 import {
   Button,
   ListRow,
@@ -26,7 +26,7 @@ import { useActionRunner } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import { PRICE_KIND_KEY } from './labels.js';
-import { capturedThumbnailRef, parseRupiah, signedAmount } from '../flows.js';
+import { boardFilter, capturedThumbnailRef, parseRupiah, signedAmount } from '../flows.js';
 import {
   FlowScreen,
   PhotoGrid,
@@ -227,8 +227,17 @@ export function AssignStep({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
+  // Each technician with how many repairs they already hold, so the counter can spread the work.
   const technicians = useRepairQuery(
-    (rt) => rt.technicians(),
+    async (rt) =>
+      Promise.all(
+        (await rt.technicians()).map(async (tech) => ({
+          ...tech,
+          load: (
+            await rt.query('listTickets', { filter: boardFilter('mine', tech.id), limit: 100 })
+          ).rows.length,
+        })),
+      ),
     `technicians:${String(reloadNonce)}`,
   );
 
@@ -246,8 +255,6 @@ export function AssignStep({
       chrome={chrome}
       title={tn('repair.action.assign')}
       onBack={onCancel}
-      primaryLabel={t('core.action.cancel')}
-      onPrimary={onCancel}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -269,6 +276,7 @@ export function AssignStep({
               <ListRow
                 key={tech.id}
                 primaryText={tech.name}
+                secondaryText={tn('repair.assign.load', { count: tech.load })}
                 trailing={
                   tech.id === currentTechnicianId ? (
                     <Icon name="check" size={size.iconInline} color={color.success} />

@@ -35,13 +35,14 @@
     "waitForParts": "Waiting for parts"
   },
   "assign": {
-    "none": "No technician can be assigned in this store yet."
+    "none": "No technician can be assigned in this store yet.",
+    "load": "{count} active repairs"
   },
   "board": {
     "emptyHint": "Repairs you take in or work on appear here.",
     "noMatches": "No repair matches that search.",
     "priceChangeWaiting": "Price change waiting",
-    "searchHint": "Name, phone, ticket number, IMEI or model",
+    "searchHint": "Name, phone, ticket, IMEI, model",
     "title": "Repairs",
     "view": {
       "active": "In progress",
@@ -73,7 +74,8 @@
     "notChecked": "Not checked",
     "notes": "Other notes (optional)",
     "ok": "OK",
-    "peripherals": "Left with the phone"
+    "peripherals": "Left with the phone",
+    "restOk": "Mark the rest OK"
   },
   "customer": {
     "change": "Choose another customer",
@@ -87,7 +89,9 @@
     "color": "Color",
     "imei": "IMEI",
     "model": "Model",
-    "passcode": "Screen lock code (optional)"
+    "passcode": "Screen lock code (optional)",
+    "colorField": "Colour (optional)",
+    "imeiField": "IMEI (optional)"
   },
   "handover": {
     "note": "Note (optional)",
@@ -135,10 +139,10 @@
       "right": "Right side",
       "top": "Top"
     },
-    "take": "Take photo"
+    "take": "Take photo",
+    "takeNext": "Take {slot}"
   },
   "price": {
-    "addLine": "Add to price",
     "amount": "Amount (Rp)",
     "customerAgreed": "Customer agreed",
     "decisionNote": "Note (optional)",
@@ -157,7 +161,9 @@
       "notAgreed": "Customer not asked yet",
       "proposed": "Proposed by technician"
     },
-    "total": "Total"
+    "total": "Total",
+    "addRow": "Add a price line",
+    "pendingTotal": "Proposed, awaiting a decision: {amount}"
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",
@@ -165,7 +171,8 @@
     "deviceBrand": "Enter the brand.",
     "deviceModel": "Enter the model.",
     "photos": "All six photos are required.",
-    "quoteLines": "Add at least one price line."
+    "quoteLines": "Add at least one price line.",
+    "incompleteLine": "Describe every line that has an amount."
   },
   "ready": {
     "threeDays": "In 3 days",

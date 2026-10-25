@@ -8,10 +8,12 @@ import {
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
+  nextMissingPhoto,
   parseIntakeDraft,
   parseRupiah,
   readyAtFor,
   repairAbilities,
+  restOfChecksOk,
   stepProblems,
   ticketActions,
   toOpenTicketInput,
@@ -39,7 +41,14 @@ function abilitiesOf(harness: RepairHarness, userId: string) {
   );
 }
 
-type State = 'received' | 'in_repair' | 'waiting_for_parts' | 'repaired' | 'cancelled' | 'returned';
+type State =
+  | 'received'
+  | 'in_repair'
+  | 'proposed'
+  | 'waiting_for_parts'
+  | 'repaired'
+  | 'cancelled'
+  | 'returned';
 
 /** A fresh ticket walked into `state` through the real commands. */
 async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
@@ -49,7 +58,21 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   const tech = harness.technicianId;
   const startWork = () =>
     harness.run('startWork', { ticketId, beforePhotos: [harness.photo(7)] }, tech);
-  if (state === 'in_repair' || state === 'repaired' || state === 'returned') await startWork();
+  if (
+    state === 'in_repair' ||
+    state === 'proposed' ||
+    state === 'repaired' ||
+    state === 'returned'
+  ) {
+    await startWork();
+  }
+  if (state === 'proposed') {
+    await harness.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      tech,
+    );
+  }
   if (state === 'waiting_for_parts') {
     await harness.run('markWaitingForParts', { ticketId, note: 'LCD' }, tech);
   }
@@ -74,9 +97,23 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
 }
 
 /** Run the command behind an offered action, the way the screen would. */
-function perform(harness: RepairHarness, action: TicketAction, ticketId: string, userId: string) {
+async function perform(
+  harness: RepairHarness,
+  action: TicketAction,
+  ticketId: string,
+  userId: string,
+) {
   const price = { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'drop' };
   switch (action) {
+    case 'decidePrice': {
+      const ticket = (await harness.query('getTicket', { ticketId }, userId)).rows[0];
+      const line = ticket.quoteLines.find((l: { status: string }) => l.status === 'proposed');
+      return harness.run(
+        'applyProposal',
+        { ticketId, lineId: line.id, customerAgreed: true },
+        userId,
+      );
+    }
     case 'claim':
       return harness.run('claimTicket', { ticketId }, userId);
     case 'start':
@@ -114,6 +151,7 @@ describe('ticket actions', () => {
     const states: State[] = [
       'received',
       'in_repair',
+      'proposed',
       'waiting_for_parts',
       'repaired',
       'cancelled',
@@ -156,7 +194,13 @@ describe('ticket actions', () => {
       'claim',
       'proposePrice',
     ]);
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['changePrice', 'assign', 'cancel']);
+    // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice', 'cancel']);
+    expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
+      'changePrice',
+      'assign',
+      'cancel',
+    ]);
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(
@@ -231,6 +275,32 @@ describe('intake draft', () => {
     expect(intakeDirty(draft)).toBe(false);
     expect(intakeDirty({ ...draft, step: 3 })).toBe(false);
     expect(intakeDirty({ ...draft, complaint: 'x' })).toBe(true);
+  });
+
+  test('an amount with no description is a problem, not a line quietly dropped on save', () => {
+    const draft = {
+      ...emptyIntakeDraft(),
+      lines: [{ kind: 'part' as const, description: ' ', amount: 90_000 }],
+    };
+    expect(stepProblems(draft, 'price')).toEqual(['incompleteLine', 'quoteLines']);
+    // An untouched empty line is ignored rather than flagged.
+    const untouched = {
+      ...emptyIntakeDraft(),
+      lines: [{ kind: 'part' as const, description: '', amount: 0 }],
+    };
+    expect(stepProblems(untouched, 'price')).toEqual(['quoteLines']);
+  });
+
+  test('photos are walked in slot order, and "the rest OK" keeps the issues called out', async () => {
+    h = await openRepairHarness(4105);
+    expect(nextMissingPhoto(emptyIntakeDraft())).toBe('front');
+    expect(nextMissingPhoto({ photos: { front: h.photo(1), back: h.photo(2) } })).toBe('left');
+    expect(nextMissingPhoto(complete(h))).toBeNull();
+
+    const checks = restOfChecksOk({ screen: 'issue', camera: 'not_checked' });
+    expect(checks['screen']).toBe('issue');
+    expect(checks['camera']).toBe('ok');
+    expect(Object.values(checks).filter((state) => state === 'issue')).toHaveLength(1);
   });
 
   test('a complete draft opens a ticket with the discount subtracted', async () => {
