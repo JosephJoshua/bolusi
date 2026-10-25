@@ -57,6 +57,16 @@ export const ICON_GLYPHS = Object.freeze({
    *  an icon without a label), and a user stranded in a locale they cannot read recognises this one
    *  by shape. */
   language: 'translate',
+  /** PhotoSlot: an empty slot asks for a photo. */
+  camera: 'camera-outline',
+  /** ToggleChip / PhotoSlot: selected or done — always beside a label. */
+  check: 'check',
+  /** Search fields: the leading glyph of a search box. */
+  search: 'magnify',
+  /** Repair: a technician's work (queue rows, "start work"). */
+  repair: 'wrench-outline',
+  /** Repair: a customer's phone number. */
+  phone: 'phone-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

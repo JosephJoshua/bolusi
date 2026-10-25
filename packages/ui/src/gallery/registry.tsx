@@ -380,6 +380,102 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  /** One choice from a short set; the selected option is filled AND announced. */
+  SegmentedControl: [
+    {
+      id: 'first-selected',
+      render: (l) => (
+        <componentInventory.SegmentedControl
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+            { value: 'c', label: l.title },
+          ]}
+          value="a"
+          onChange={noop}
+        />
+      ),
+    },
+    {
+      id: 'later-selected',
+      render: (l) => (
+        <componentInventory.SegmentedControl
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+          ]}
+          value="b"
+          onChange={noop}
+        />
+      ),
+    },
+  ],
+
+  ToggleChip: [
+    {
+      id: 'off',
+      render: (l) => (
+        <componentInventory.ToggleChip label={l.primaryText} selected={false} onToggle={noop} />
+      ),
+    },
+    {
+      id: 'on',
+      render: (l) => (
+        <componentInventory.ToggleChip label={l.primaryText} selected onToggle={noop} />
+      ),
+    },
+  ],
+
+  StepHeader: [
+    {
+      id: 'first',
+      render: (l) => (
+        <componentInventory.StepHeader step={1} total={4} progressLabel={l.hint} title={l.title} />
+      ),
+    },
+    {
+      id: 'last',
+      render: (l) => (
+        <componentInventory.StepHeader step={4} total={4} progressLabel={l.hint} title={l.title} />
+      ),
+    },
+  ],
+
+  PhotoSlot: [
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.PhotoSlot
+          label={l.primaryText}
+          image={null}
+          actionLabel={l.action}
+          onPress={noop}
+        />
+      ),
+    },
+    {
+      id: 'filled',
+      render: (l) => (
+        <componentInventory.PhotoSlot
+          label={l.primaryText}
+          image={<Text>{l.secondaryText}</Text>}
+          actionLabel={l.action}
+          onPress={noop}
+        />
+      ),
+    },
+    {
+      id: 'read-only',
+      render: (l) => (
+        <componentInventory.PhotoSlot
+          label={l.primaryText}
+          image={<Text>{l.secondaryText}</Text>}
+          actionLabel={l.action}
+        />
+      ),
+    },
+  ],
+
   Chip: [
     {
       id: 'neutral',

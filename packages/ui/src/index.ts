@@ -53,7 +53,10 @@ export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';
 export type { LoadingStateProps } from './components/LoadingState.js';
+export type { PhotoSlotProps } from './components/PhotoSlot.js';
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
+export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';
+export type { StepHeaderProps } from './components/StepHeader.js';
 export type {
   OperationSyncStatus,
   SyncChipKind,
@@ -61,6 +64,7 @@ export type {
 } from './components/SyncStatusChip.js';
 export type { TextInputProps } from './components/TextInput.js';
 export type { ToastProps, ToastTone } from './components/Toast.js';
+export type { ToggleChipProps } from './components/ToggleChip.js';
 export type { UnauthorizedStateProps } from './components/UnauthorizedState.js';
 export type { AppShellProps } from './shell/AppShell.js';
 export type { AvatarButtonProps } from './shell/AvatarButton.js';
