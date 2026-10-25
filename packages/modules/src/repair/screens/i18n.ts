@@ -77,6 +77,7 @@ export const REPAIR_KEYS = [
   'repair.discardPhotos.message',
   'repair.discardPhotos.title',
   'repair.done.claim',
+  'repair.done.repaired',
   'repair.done.start',
   'repair.handover.cancelled',
   'repair.handover.note',

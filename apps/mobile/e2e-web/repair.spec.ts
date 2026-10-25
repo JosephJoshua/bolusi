@@ -77,7 +77,6 @@ test('the counter decides a proposal and the agreed total grows', async ({ page 
   await tap(page, 'repair.board.row.t-2');
   await expect(page.getByTestId('repair.ticket.pendingTotal')).toBeVisible();
   await tap(page, 'repair.ticket.action.decidePrice');
-  await tap(page, 'repair.proposal.agreed');
   await tap(page, 'repair.proposal.primary');
   await expect(page.getByTestId('repair.ticket.total')).toHaveText('Rp 315.000');
   await expect(page.getByTestId('repair.ticket.pendingTotal')).toHaveCount(0);

@@ -22,7 +22,7 @@
     "changePrice": "Ubah harga",
     "claim": "Ambil servis ini",
     "decidePrice": "Putuskan perubahan harga",
-    "declinePrice": "Tolak perubahan harga",
+    "declinePrice": "Pelanggan menolak",
     "handover": "Serahkan ke pelanggan",
     "markRepaired": "Tandai selesai",
     "newIntake": "Servis baru",
@@ -216,7 +216,8 @@
   },
   "done": {
     "claim": "Tiket ini sekarang kamu kerjakan.",
-    "start": "Servis dimulai."
+    "start": "Servis dimulai.",
+    "repaired": "Ditandai selesai. Siap diserahkan ke pelanggan."
   },
   "passcode": {
     "show": "Lihat",

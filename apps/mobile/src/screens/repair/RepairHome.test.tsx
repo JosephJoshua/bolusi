@@ -169,6 +169,8 @@ describe('technician work', () => {
     expect(screen.all('repair.work.before.primary')[0]!.props['disabled']).toBe(true);
     await press(screen, 'repair.work.before.take.press');
     await press(screen, 'repair.work.before.primary');
+    // Back on the ticket, the fixed banner says what just happened.
+    expect(screen.query('repair.ticket.done')).not.toBeNull();
 
     let ticket = await ticketRow(h, ticketId);
     expect(ticket.outcome).toBe('in_repair');

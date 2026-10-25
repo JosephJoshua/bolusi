@@ -22,7 +22,7 @@
     "changePrice": "Change price",
     "claim": "Take this repair",
     "decidePrice": "Decide price change",
-    "declinePrice": "Decline price change",
+    "declinePrice": "Customer declined",
     "handover": "Hand back to customer",
     "markRepaired": "Mark repaired",
     "newIntake": "New repair",
@@ -216,7 +216,8 @@
   },
   "done": {
     "claim": "This repair is now yours.",
-    "start": "Repair started."
+    "start": "Repair started.",
+    "repaired": "Marked repaired. Ready to hand back."
   },
   "passcode": {
     "show": "Show",

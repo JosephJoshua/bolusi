@@ -161,7 +161,16 @@ export function TicketDetail({
   switch (step.kind) {
     case 'before':
     case 'after':
-      return <WorkPhotosStep {...stepProps} stage={step.kind} />;
+      return (
+        <WorkPhotosStep
+          {...stepProps}
+          stage={step.kind}
+          onDone={() => {
+            closeStep();
+            setDone(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired');
+          }}
+        />
+      );
     case 'waitForParts':
     case 'cancel':
       return <NoteStep {...stepProps} kind={step.kind} />;
