@@ -14,28 +14,27 @@
 // invalidation for the `notes` table. After ops apply (own-device append OR a pulled remote op),
 // `useQuery` re-runs, and the screen re-renders in place — calm, no toast per change (design-system
 // §4.7). Removing that wiring is the falsification: a pulled op then never reaches the mounted list.
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { errorCodeOrUnexpected, type QueryPage } from '@bolusi/core';
+import type { QueryPage } from '@bolusi/core';
 import type { MediaRef } from '@bolusi/schemas';
 import type { OperationSyncStatus } from '@bolusi/ui';
 
 import type { CreateNoteInput, EditNoteBodyInput, ArchiveNoteInput } from '../commands.js';
-import type { ThumbnailRef } from '../media-ref.js';
+import {
+  createRuntimeContext,
+  useLiveQuery,
+  useThumbnailState,
+  type QueryState,
+  type ThumbnailRef,
+  type ThumbnailState,
+} from '../../screen-kit/index.js';
+
+export type { QueryState, ThumbnailState } from '../../screen-kit/index.js';
 import type { GetNoteInput, ListNotesInput, NoteRow } from '../queries.js';
 
 /** The `Operation.syncStatus` of every op backing a note, keyed by note id (design-system §3.5). */
 export type NoteSyncStatuses = Readonly<Record<string, readonly OperationSyncStatus[]>>;
-
-/** One image attachment, resolved for display (06-media-pipeline §6 `RenderableMedia`, screen view). */
-export type ThumbnailState =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly uri: string }
-  /** api/03 §8: a 404 is expected + transient — the op may precede the media. */
-  | { readonly kind: 'unavailable' }
-  /** 06 §6: two fetches disagreed with the signed hash — never shown, always a distinct state. */
-  | { readonly kind: 'mismatch' };
 
 /**
  * What the in-app capture flow (06 §2.1; task 82) hands back — the whole `mediaRef` the note op will
@@ -89,7 +88,7 @@ export interface NotesRuntime {
   loadThumbnail(ref: ThumbnailRef): Promise<ThumbnailState>;
 }
 
-const NotesRuntimeContext = createContext<NotesRuntime | null>(null);
+const NotesRuntimeContext = createRuntimeContext<NotesRuntime>('notes');
 
 export interface NotesRuntimeProviderProps {
   readonly runtime: NotesRuntime;
@@ -101,75 +100,21 @@ export function NotesRuntimeProvider({
   runtime,
   children,
 }: NotesRuntimeProviderProps): React.JSX.Element {
-  return <NotesRuntimeContext.Provider value={runtime}>{children}</NotesRuntimeContext.Provider>;
+  return <NotesRuntimeContext.Provider runtime={runtime}>{children}</NotesRuntimeContext.Provider>;
 }
 
 /** The runtime for the current screen. Throws if a screen is mounted outside the provider (a wiring bug). */
-export function useNotesRuntime(): NotesRuntime {
-  const runtime = useContext(NotesRuntimeContext);
-  if (runtime === null) {
-    throw new Error(
-      'useNotesRuntime: a notes screen was mounted without <NotesRuntimeProvider> (04 §7 wiring).',
-    );
-  }
-  return runtime;
-}
-
-/** A live read (04 §7). Distinguishes the four §5 screen states a screen must render. */
-export type QueryState<TData> =
-  | { readonly status: 'loading' }
-  /** A `PERMISSION_DENIED` read — the §5 Unauthorized state, NEVER an empty list (FR-1036). */
-  | { readonly status: 'unauthorized' }
-  | { readonly status: 'error'; readonly code: string }
-  | { readonly status: 'ready'; readonly data: TData };
+export const useNotesRuntime = NotesRuntimeContext.useRuntime;
 
 /**
- * Run a query and keep it LIVE (04 §7).
- *
- * `run` selects and invokes the query off the runtime; `key` is its dependency identity (re-run when
- * it changes — e.g. the archived filter toggles). The query also re-runs on every notes-projection
- * invalidation, WITHOUT flashing loading (design-system §4.7 — live updates are calm), so a pulled
- * remote op appears in place. A `PERMISSION_DENIED` throw becomes the `unauthorized` state; every
- * other throw becomes `error` with the code, so the screen can render `t('core.errors.'+code)`.
+ * Run a notes query and keep it LIVE (04 §7) — `useLiveQuery` over this screen's runtime. The query
+ * re-runs on every notes-projection invalidation without flashing loading.
  */
 export function useQuery<TData>(
   run: (runtime: NotesRuntime) => Promise<TData>,
   key: string,
 ): QueryState<TData> {
-  const runtime = useNotesRuntime();
-  const [state, setState] = useState<QueryState<TData>>({ status: 'loading' });
-
-  // The latest selector, so the effect's deps stay `[runtime, key]` and a new inline `run` each
-  // render does not re-subscribe (which would thrash the invalidation subscription).
-  const runRef = useRef(run);
-  runRef.current = run;
-
-  useEffect(() => {
-    let active = true;
-    const execute = (): void => {
-      runRef.current(runtime).then(
-        (data) => {
-          if (active) setState({ status: 'ready', data });
-        },
-        (error: unknown) => {
-          if (!active) return;
-          const code = errorCodeOrUnexpected(error);
-          setState(
-            code === 'PERMISSION_DENIED' ? { status: 'unauthorized' } : { status: 'error', code },
-          );
-        },
-      );
-    };
-
-    execute();
-    const unsubscribe = runtime.subscribe(execute);
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [runtime, key]);
-
-  return state;
+  return useLiveQuery(useNotesRuntime(), run, key);
 }
 
 /**
@@ -185,52 +130,7 @@ export function useCommand<TInput, TOutput>(
   return (input: TInput) => select(runtime)(input);
 }
 
-/**
- * Resolve a note's attachment to a displayable, hash-verified thumbnail (06 §6 via the media client).
- * `null` ref ⇒ the note has no attachment and nothing loads. A resolver throw degrades to
- * `unavailable` (api/03 §8: a missing photo is transient, never an error the whole screen dies on).
- *
- * A throw must NEVER degrade to `ready`, and a `mismatch` must never be softened into `unavailable`:
- * both would render bytes, or the absence of a complaint, where 06 §6 requires a distinct and
- * visible failure.
- */
+/** A note's attachment as a displayable, hash-verified thumbnail (06 §6). */
 export function useThumbnail(ref: ThumbnailRef | null): ThumbnailState {
-  const runtime = useNotesRuntime();
-  const [state, setState] = useState<ThumbnailState>(
-    ref === null ? { kind: 'unavailable' } : { kind: 'loading' },
-  );
-
-  // The identity the effect depends on. An object literal rebuilt each render would re-run the
-  // effect (and re-fetch) on every parent re-render; the fields ARE the identity.
-  const refKey =
-    ref === null
-      ? null
-      : ref.kind === 'signed'
-        ? `s:${ref.mediaId}:${ref.sha256}`
-        : `l:${ref.mediaId}`;
-  const refRef = useRef(ref);
-  refRef.current = ref;
-
-  useEffect(() => {
-    const current = refRef.current;
-    if (current === null) {
-      setState({ kind: 'unavailable' });
-      return;
-    }
-    let active = true;
-    setState({ kind: 'loading' });
-    runtime.loadThumbnail(current).then(
-      (resolved) => {
-        if (active) setState(resolved);
-      },
-      () => {
-        if (active) setState({ kind: 'unavailable' });
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [runtime, refKey]);
-
-  return state;
+  return useThumbnailState(useNotesRuntime().loadThumbnail, ref);
 }
