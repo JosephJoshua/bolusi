@@ -9,6 +9,12 @@
 // Delivery is synchronous: the engine fires inside the same tick after a write, so a screen's
 // re-query is scheduled promptly. Listeners must not throw — a throwing listener would abort
 // the fire loop; the engine treats emission as best-effort notification, never a write path.
+//
+// The engine fires while the op's transaction is still open. On the device's one connection a
+// listener reading then would see uncommitted rows, and keep them if the transaction rolls back.
+// So the device bus is given the connection's transaction boundaries and holds what is emitted
+// inside a transaction until it ends, then delivers it: after a commit listeners read the new rows,
+// after a rollback they read the old ones back.
 
 /**
  * The entity one applied op changed. Row data never travels (04 §7); the id lets a cache refresh
@@ -26,9 +32,26 @@ export type InvalidationListener = (tables: ReadonlySet<string>, change?: Entity
 /** Fires when a SPECIFIC table is among those written. */
 export type TableInvalidationListener = () => void;
 
+/** Transaction boundaries on the connection the ops are applied through. */
+export interface TransactionBoundaries {
+  /** True between a begin and its commit or rollback. */
+  readonly inTransaction: boolean;
+  /** Calls `listener` after every commit or rollback. Returns unsubscribe. */
+  onTransactionEnd(listener: () => void): () => void;
+}
+
 export class InvalidationBus {
   private readonly all = new Set<InvalidationListener>();
   private readonly perTable = new Map<string, Set<TableInvalidationListener>>();
+  /** Emitted inside the open transaction, delivered once it ends. */
+  private readonly held: Array<readonly [ReadonlySet<string>, EntityChange | undefined]> = [];
+
+  /** Without `transactions` (the server, tests) every emission is delivered at once. */
+  constructor(private readonly transactions?: TransactionBoundaries) {
+    transactions?.onTransactionEnd(() => {
+      for (const [tables, change] of this.held.splice(0)) this.deliver(tables, change);
+    });
+  }
 
   /** Subscribe to every emission (receives the full written-table set). Returns unsubscribe. */
   subscribe(listener: InvalidationListener): () => void {
@@ -58,6 +81,11 @@ export class InvalidationBus {
    */
   emit(tables: ReadonlySet<string>, change?: EntityChange): void {
     if (tables.size === 0) return;
+    if (this.transactions?.inTransaction === true) this.held.push([tables, change]);
+    else this.deliver(tables, change);
+  }
+
+  private deliver(tables: ReadonlySet<string>, change: EntityChange | undefined): void {
     for (const table of tables) {
       const listeners = this.perTable.get(table);
       if (listeners === undefined) continue;
