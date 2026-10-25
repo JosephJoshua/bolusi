@@ -1,0 +1,17 @@
+{
+  "opType": {
+    "customerRegistered": "Customer added",
+    "customerDetailsCorrected": "Customer details corrected",
+    "ticketOpened": "Repair ticket opened",
+    "ticketClaimed": "Repair claimed",
+    "technicianAssigned": "Technician assigned",
+    "workStarted": "Repair started",
+    "workPaused": "Waiting for parts",
+    "markedRepaired": "Marked repaired",
+    "ticketCancelled": "Repair cancelled",
+    "quoteChangeProposed": "Price change proposed",
+    "quoteChanged": "Price changed",
+    "quoteProposalDeclined": "Price change declined",
+    "deviceReturned": "Device handed back"
+  }
+}

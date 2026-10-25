@@ -7,5 +7,11 @@
   },
   "staff": {
     "name": "Staff"
+  },
+  "cashier": {
+    "name": "Cashier"
+  },
+  "technician": {
+    "name": "Technician"
   }
 }

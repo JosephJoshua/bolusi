@@ -269,6 +269,8 @@ const source = {
       main_owner: { name: 'Pemilik Utama' },
       store_owner: { name: 'Pemilik Toko' },
       staff: { name: 'Staf' },
+      cashier: { name: 'Kasir' },
+      technician: { name: 'Teknisi' },
     },
   },
 };
@@ -555,6 +557,8 @@ export const resources = {
         main_owner: { name: 'Main Owner' },
         store_owner: { name: 'Store Owner' },
         staff: { name: 'Staff' },
+        cashier: { name: 'Cashier' },
+        technician: { name: 'Technician' },
       },
     },
   },

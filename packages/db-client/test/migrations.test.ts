@@ -24,6 +24,11 @@ const SPEC_TABLES = [
   'pin_lockout_events',
   'projection_watermarks',
   'quarantined_ops',
+  'repair_customers',
+  'repair_quote_lines',
+  'repair_ticket_events',
+  'repair_ticket_photos',
+  'repair_tickets',
   'roles_directory',
   'sync_state',
   'user_pin_verifiers',
@@ -41,6 +46,11 @@ const SPEC_INDEXES = [
   'idx_operations_entity_canonical',
   'idx_operations_push_queue',
   'idx_operations_rejected',
+  'idx_repair_quote_lines_ticket',
+  'idx_repair_ticket_events_ticket',
+  'idx_repair_tickets_customer',
+  'idx_repair_tickets_number',
+  'idx_repair_tickets_store_created',
 ];
 
 let driver: DbDriver;
@@ -121,7 +131,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3]);
+    expect(result.applied).toEqual([1, 2, 3, 4]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -130,6 +140,7 @@ describe('runClientMigrations against a fresh database', () => {
       // D22: establishes at-rest column encryption. No DDL — it VACUUMs (post-commit, outside the
       // transaction) so an in-place plaintext→ciphertext conversion leaves no stale cleartext.
       { version: 3, name: 'column_encryption', applied_at: 1_700_000_000_000 },
+      { version: 4, name: 'repair', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -139,11 +150,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3]);
+    expect(first.applied).toEqual([1, 2, 3, 4]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 3 }]);
+    expect(rows.rows).toEqual([{ c: 4 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);

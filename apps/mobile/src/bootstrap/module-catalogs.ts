@@ -4,6 +4,9 @@
 import idNotesCatalog from '@bolusi/modules/notes/i18n/id.json';
 import enNotesCatalog from '@bolusi/modules/notes/i18n/en.json';
 import { registerNotesCatalog } from '@bolusi/modules/notes/screens';
+import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
+import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
+import { registerRepairCatalog } from '@bolusi/modules/repair/screens';
 
 type ModuleCatalogTree = Readonly<Record<string, unknown>>;
 
@@ -21,6 +24,11 @@ export const CLIENT_SCREEN_MODULES: readonly ClientScreenModule[] = [
     moduleId: 'notes',
     register: registerNotesCatalog,
     catalogs: { id: idNotesCatalog, en: enNotesCatalog },
+  },
+  {
+    moduleId: 'repair',
+    register: registerRepairCatalog,
+    catalogs: { id: idRepairCatalog, en: enRepairCatalog },
   },
 ];
 

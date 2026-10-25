@@ -177,6 +177,88 @@ export interface QuarantinedOps {
   signedCoreJcs: string;
 }
 
+export interface RepairCustomers {
+  createdAt: number;
+  createdBy: string;
+  id: string | null;
+  name: string;
+  phone: string | null;
+  storeId: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface RepairQuoteLines {
+  amount: number;
+  createdAt: number;
+  createdBy: string;
+  customerAgreed: number | null;
+  decidedAt: number | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  description: string;
+  id: string | null;
+  kind: string;
+  reason: string | null;
+  status: string;
+  storeId: string;
+  tenantId: string;
+  ticketId: string;
+}
+
+export interface RepairTicketEvents {
+  actorId: string;
+  at: number;
+  detailJson: string;
+  id: string | null;
+  kind: string;
+  storeId: string;
+  tenantId: string;
+  ticketId: string;
+}
+
+export interface RepairTicketPhotos {
+  addedAt: number;
+  addedBy: string;
+  capturedAt: number;
+  mediaId: string;
+  mediaMime: string;
+  mediaSha256: string;
+  slot: string;
+  storeId: string;
+  tenantId: string;
+  ticketId: string;
+}
+
+export interface RepairTickets {
+  checklistJson: string;
+  complaint: string;
+  createdAt: number;
+  createdBy: string;
+  customerId: string;
+  deviceBrand: string;
+  deviceColor: string;
+  deviceImei: string | null;
+  deviceModel: string;
+  devicePasscode: string | null;
+  estimatedReadyAt: number | null;
+  id: string | null;
+  intakeNotes: string;
+  location: string;
+  outcome: string;
+  outcomeNote: string | null;
+  peripheralsJson: string;
+  quoteTotal: number;
+  returnedAt: number | null;
+  returnedBy: string | null;
+  storeId: string;
+  technicianId: string | null;
+  tenantId: string;
+  ticketNumber: string;
+  updatedAt: number;
+}
+
 export interface RolesDirectory {
   id: string | null;
   isSystemDefault: Generated<number>;
@@ -246,6 +328,11 @@ export interface DB {
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   quarantinedOps: QuarantinedOps;
+  repairCustomers: RepairCustomers;
+  repairQuoteLines: RepairQuoteLines;
+  repairTicketEvents: RepairTicketEvents;
+  repairTicketPhotos: RepairTicketPhotos;
+  repairTickets: RepairTickets;
   rolesDirectory: RolesDirectory;
   syncState: SyncState;
   userPinVerifiers: UserPinVerifiers;
