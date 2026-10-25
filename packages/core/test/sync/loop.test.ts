@@ -136,7 +136,12 @@ describe('the §10 transition table is encoded data, and invalid pairs throw (03
     const expected: Record<SyncLoopState, Partial<Record<SyncLoopEvent, SyncLoopState>>> = {
       idle: { trigger: 'pushing', device_revoked: 'idle' },
       pushing: { push_drained: 'pulling', transport_failure: 'backoff', device_revoked: 'idle' },
-      pulling: { pull_drained: 'idle', transport_failure: 'backoff', device_revoked: 'idle' },
+      pulling: {
+        pull_drained: 'idle',
+        pull_paused: 'idle',
+        transport_failure: 'backoff',
+        device_revoked: 'idle',
+      },
       backoff: { timer_elapsed: 'pushing', trigger: 'pushing', device_revoked: 'idle' },
     };
     expect(SYNC_LOOP_MACHINE.transitions).toEqual(expected);
@@ -216,6 +221,51 @@ describe('a full cycle walks idle → pushing → pulling → idle (03 §10)', (
     expect(harness.transport.pulls).toHaveLength(3);
     // Each pull carries the cursor the previous batch committed — the resume point, not an offset.
     expect(harness.transport.pulls.map((p) => p.cursor)).toEqual([0, 10, 20]);
+  });
+
+  it('pause() stops after the committed batch; the next trigger resumes from its cursor', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(
+      () => {
+        loop.pause(); // asked while page one is in flight
+        return { ops: [], nextCursor: 10, hasMore: true, serverTime: 1 };
+      },
+      { ops: [], nextCursor: 20, hasMore: false, serverTime: 2 },
+    );
+    loop.requestSync('manual');
+    await loop.settle();
+
+    // Page one committed, page two never asked for, and the device does not claim to be synced.
+    expect(harness.transport.pulls.map((p) => p.cursor)).toEqual([0]);
+    expect(loop.state).toBe('idle');
+    expect((await syncStateRow()).lastSuccessfulSyncAt).toBeNull();
+
+    loop.requestSync('background');
+    await loop.settle();
+    expect(harness.transport.pulls.map((p) => p.cursor)).toEqual([0, 10]);
+    expect((await syncStateRow()).lastSuccessfulSyncAt).not.toBeNull();
+  });
+
+  it('a pause that lands after the pull drained still suppresses the rerun', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    harness.transport.scriptPull(() => {
+      loop.requestSync('append'); // would normally queue one rerun
+      loop.pause();
+      return { ops: [], nextCursor: 10, hasMore: false, serverTime: 1 };
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+
+    expect(harness.transport.pulls).toHaveLength(1);
+    expect(loop.state).toBe('idle');
+  });
+
+  it('pause() on an idle loop is a no-op', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.pause();
+    loop.requestSync('manual');
+    await loop.settle();
+    expect((await syncStateRow()).lastSuccessfulSyncAt).not.toBeNull();
   });
 
   it('a failed PUSH never touches lastSuccessfulSyncAt (03 §8)', async () => {

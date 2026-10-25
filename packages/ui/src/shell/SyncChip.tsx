@@ -20,6 +20,8 @@ export interface SyncChipProps {
   readonly state: SyncChipState;
   /** Count of `local` ops — rendered in the `pending` state only (§8.1). */
   readonly pendingCount?: number | undefined;
+  /** A new device's first-sync progress, 0–99 — rendered in the `syncing` state only. */
+  readonly progressPercent?: number | null | undefined;
   /**
    * Already-localized accessibility label PER state. The chip announces the entry for its own
    * `state`, so a screen-reader user hears what the icon/dot shows — not one state-invariant string
@@ -73,6 +75,7 @@ const styles = StyleSheet.create({
 export function SyncChip({
   state,
   pendingCount,
+  progressPercent,
   accessibilityLabels,
   onPress,
   testID = 'ui.syncChip',
@@ -99,6 +102,12 @@ export function SyncChip({
       {state === 'pending' && pendingCount !== undefined ? (
         <Text testID={`${testID}.count`} style={[styles.count, { color: tint }]}>
           {pendingCount}
+        </Text>
+      ) : null}
+
+      {state === 'syncing' && progressPercent !== undefined && progressPercent !== null ? (
+        <Text testID={`${testID}.progress`} style={[styles.count, { color: tint }]}>
+          {`${progressPercent}%`}
         </Text>
       ) : null}
 

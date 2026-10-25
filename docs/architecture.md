@@ -62,6 +62,12 @@ behind adapters. Node tests do not establish native performance or correctness.
 - Physical 2 GB Android performance was deferred, not measured. Emulator/Simulator
   results are not hardware benchmarks. Signed iOS and physical iPhone verification
   are also still owed.
+- First sync on a new device replays the store's whole history; there is no
+  snapshot. `pnpm --filter @bolusi/modules bench:first-sync` measures it with
+  realistic repair tickets. On a laptop (Node, October 2026), one year at 50
+  tickets a day is about 122k ops: 22 MB gzipped on the wire, 205 s to pull,
+  verify and apply, and a 555 MB device database (the op log is about 70% of it).
+  Phone timings are still unmeasured.
 - Local confidentiality uses application-layer encryption; SQLCipher is disabled.
   Old comments/report names do not establish whole-database encryption.
 - Extended chaos has unresolved large-workload failures: the recorded October 14

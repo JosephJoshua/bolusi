@@ -12,6 +12,7 @@
 // alone — because the return value is precisely the thing that lies.
 import { describe, expect, test } from 'vitest';
 
+import { fakeBackgroundPlatform as fakePlatform } from '../bootstrap/_background-platform.test.js';
 import { FakeTimer } from './_harness.test.js';
 import {
   BACKGROUND_MINIMUM_INTERVAL_MINUTES,
@@ -22,46 +23,6 @@ import {
   runBoundedDrainPass,
   type BackgroundTaskPlatform,
 } from './background-task.js';
-
-const AVAILABLE = 2;
-
-/**
- * A platform faithful to the SDK's real behaviour, including the silent return.
- *
- * `registerTaskAsync` here does what upstream does: when the status is `Restricted` the app never
- * gets that far (the real function checks first and returns), and when it is not, registration
- * takes. `registrationTakes: false` models the residual case the guard's second half exists for —
- * a status that flipped between the read and the call.
- */
-function fakePlatform(options: {
-  status?: number;
-  registrationTakes?: boolean;
-  throwOnDefine?: boolean;
-}): BackgroundTaskPlatform & {
-  defined: string[];
-  registered: { name: string; minimumInterval: number }[];
-  live: Set<string>;
-} {
-  const defined: string[] = [];
-  const registered: { name: string; minimumInterval: number }[] = [];
-  const live = new Set<string>();
-  return {
-    defined,
-    registered,
-    live,
-    defineTask(name) {
-      if (options.throwOnDefine === true) throw new Error('task manager unavailable');
-      defined.push(name);
-    },
-    getStatusAsync: () => Promise.resolve(options.status ?? AVAILABLE),
-    registerTaskAsync: (name, taskOptions) => {
-      registered.push({ name, minimumInterval: taskOptions.minimumInterval });
-      if (options.registrationTakes !== false) live.add(name);
-      return Promise.resolve();
-    },
-    isTaskRegisteredAsync: (name) => Promise.resolve(live.has(name)),
-  };
-}
 
 function deps(
   platform: BackgroundTaskPlatform,

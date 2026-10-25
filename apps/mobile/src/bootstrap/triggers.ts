@@ -16,20 +16,18 @@
 //       adapter is `ports/netinfo.ts` (a native module, injected like op-sqlite).
 //   (b) debounced 3 s after any local append          — **WIRED**, `scheduler` (04 §5.1 step 7).
 //   (c) periodic every 60 s while online + foreground — **WIRED**, `start()`.
-//   (d) background task, best-effort                  — **NOT BUILT.** The deps are installed, but
-//       `TaskManager.defineTask` is a process-global registration and task 82 owns
-//       "background-task registration" for the media drain. Two files defining tasks independently
-//       is a collision, so this is coordinated rather than raced. 08 §2.2 is explicit that this
-//       trigger is "never a correctness dependency" — the foreground loop is the primary driver —
-//       so its absence costs opportunistic retries, not correctness.
+//   (d) background task, best-effort                  — **WIRED**, background-sync.ts. Defined at
+//       module scope in index.ts, registered by the client's `start()`, one bounded pass over the
+//       live loop. Not run on an Android headless launch of a killed app (no client boots there).
+//       08 §2.2: "never a correctness dependency" — the foreground loop is the primary driver.
 //   (e) manual pull-to-refresh                        — **WIRED**, `requestManual()`.
 //
 // WHY (a) MATTERS, now that it is wired: `EARLY_EXIT_REASONS` (03 §10) is `{manual, connectivity}`,
 // so a device inside a 5-minute backoff resumes the moment the network returns rather than waiting
 // out the timer. Connectivity and a human pressing refresh are the two signals that carry NEW
 // information ("the reason for the wait may be gone"); a periodic tick is deliberately absorbed so a
-// failing server is not hammered every minute. (d)'s remaining absence costs only opportunistic
-// background retries, never data — ops are durable locally the moment they commit (design-system §4).
+// failing server is not hammered every minute. (d) is opportunistic on top; missing a background
+// run costs latency, never data — ops are durable locally the moment they commit (design-system §4).
 import type { SyncSchedulerPort, SyncTriggerReason, TimerPort } from '@bolusi/core';
 
 import { createTriggerLoop } from './trigger-loop.js';

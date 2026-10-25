@@ -62,18 +62,29 @@ export function verifyPulledOp(
   registry: ReadonlyMap<string, DeviceRegistryEntry>,
   crypto: CryptoPort,
 ): PulledOpVerification {
-  const entry = registry.get(op.deviceId);
-  if (entry === undefined) return { ok: false, reason: 'unknown_pubkey' };
-
-  let publicKey: Uint8Array;
-  try {
-    publicKey = base64ToBytes(entry.signingKeyPublic);
-  } catch {
-    return { ok: false, reason: 'unknown_pubkey' };
-  }
+  const publicKey = signerKeyOf(op, registry);
+  if (publicKey === null) return { ok: false, reason: 'unknown_pubkey' };
 
   // Total by contract — `verifyOp` never throws on hostile input (crypto/signed-core.ts).
   return verifyOp(op, publicKey, crypto) ? { ok: true } : { ok: false, reason: 'bad_signature' };
+}
+
+/**
+ * The registry key `op` must verify against, or `null` when the registry holds no usable key for its
+ * device (the `unknown_pubkey` case). Answering that needs no signature check, which matters to the
+ * pull's pre-batch "do we need a fresh sidecar?" probe: it runs over every op in the batch.
+ */
+export function signerKeyOf(
+  op: SignedOperation,
+  registry: ReadonlyMap<string, DeviceRegistryEntry>,
+): Uint8Array | null {
+  const entry = registry.get(op.deviceId);
+  if (entry === undefined) return null;
+  try {
+    return base64ToBytes(entry.signingKeyPublic);
+  } catch {
+    return null;
+  }
 }
 
 /**

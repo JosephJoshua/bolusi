@@ -60,6 +60,7 @@ import {
   readQuarantinedOps,
   reconstructQuarantinedOp,
   signedCoreJcsOf,
+  signerKeyOf,
   verifyPulledOp,
 } from './quarantine.js';
 import { readSyncState, writeSyncState } from './state.js';
@@ -82,6 +83,27 @@ export interface PullPhaseDeps<DB> {
   /** `ProjectionEngine.applyPulledOp` (task 08). Runs INSIDE the batch transaction. */
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   readonly limit?: number;
+  /**
+   * Called after each batch commits, outside the transaction, so a long pull can show progress.
+   * Fire-and-forget like the surface: a throw is swallowed and never fails the pull.
+   */
+  readonly onBatchCommitted?: (batch: PulledBatch) => void;
+  /**
+   * Asked after each committed batch while the server has more. `false` stops the pull there: every
+   * batch so far is committed with its cursor, so the next pull resumes exactly where this one
+   * stopped. Lets a time-limited background run end cleanly instead of being killed mid-batch.
+   */
+  readonly shouldContinue?: () => boolean;
+}
+
+/** What one committed pull batch carried, for progress display. */
+export interface PulledBatch {
+  readonly applied: number;
+  /** Device timestamps of the oldest and newest op in the batch; `null` for an empty batch. */
+  readonly oldestOpAt: number | null;
+  readonly newestOpAt: number | null;
+  readonly serverTime: number;
+  readonly hasMore: boolean;
 }
 
 export interface PullPhaseResult {
@@ -93,6 +115,8 @@ export interface PullPhaseResult {
   /** Forced `devicesDirectoryVersion: 0` re-pulls — at most one per batch (api/01 §4.2). */
   readonly refetches: number;
   readonly serverTime: number | null;
+  /** False when `shouldContinue` stopped the pull before the server ran out of ops. */
+  readonly drained: boolean;
 }
 
 /** An op as it survived (or failed) individual parsing. */
@@ -167,11 +191,15 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
     released += outcome.released;
     serverTime = parsed.envelope.serverTime;
     batches += 1;
+    reportBatch(deps, parsed, outcome.applied);
 
     if (!parsed.envelope.hasMore) break;
+    if (deps.shouldContinue?.() === false) {
+      return { applied, quarantined, released, batches, refetches, serverTime, drained: false };
+    }
   }
 
-  return { applied, quarantined, released, batches, refetches, serverTime };
+  return { applied, quarantined, released, batches, refetches, serverTime, drained: true };
 }
 
 /** Would any op in this batch fail verification for `unknown_pubkey`, given the registry it would see? */
@@ -180,12 +208,9 @@ async function hasUnknownSigner<DB>(
   parsed: { envelope: Omit<PullResponse, 'ops'>; ops: ParsedOp[] },
 ): Promise<boolean> {
   const registry = await effectiveRegistry(deps.db, parsed.envelope.devices);
-  for (const entry of parsed.ops) {
-    if (!entry.ok) continue; // An unparseable op is quarantined on its own terms — no sidecar helps it.
-    const result = verifyPulledOp(entry.op, registry, deps.crypto);
-    if (!result.ok && result.reason === 'unknown_pubkey') return true;
-  }
-  return false;
+  // An unparseable op is quarantined on its own terms — no sidecar helps it. A known signer needs no
+  // signature check here: the batch verifies every op once, inside the transaction.
+  return parsed.ops.some((entry) => entry.ok && signerKeyOf(entry.op, registry) === null);
 }
 
 /**
@@ -467,6 +492,33 @@ async function insertPulledOp<DB>(
       'synced', ${syncedAt}, ${arrivalSeq}
     )
   `.execute(db);
+}
+
+function reportBatch<DB>(
+  deps: PullPhaseDeps<DB>,
+  parsed: { envelope: Omit<PullResponse, 'ops'>; ops: ParsedOp[] },
+  applied: number,
+): void {
+  if (deps.onBatchCommitted === undefined) return;
+  let oldestOpAt: number | null = null;
+  let newestOpAt: number | null = null;
+  for (const entry of parsed.ops) {
+    if (!entry.ok) continue;
+    const at = entry.op.timestamp;
+    if (oldestOpAt === null || at < oldestOpAt) oldestOpAt = at;
+    if (newestOpAt === null || at > newestOpAt) newestOpAt = at;
+  }
+  try {
+    deps.onBatchCommitted({
+      applied,
+      oldestOpAt,
+      newestOpAt,
+      serverTime: parsed.envelope.serverTime,
+      hasMore: parsed.envelope.hasMore,
+    });
+  } catch {
+    // Progress is display only; it must never fail a pull that already committed.
+  }
 }
 
 function emit<DB>(deps: PullPhaseDeps<DB>, event: Parameters<SyncSurfacePort['emit']>[0]): void {

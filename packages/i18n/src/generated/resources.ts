@@ -203,6 +203,14 @@ const source = {
         body: 'Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko.',
       },
       action: { syncNow: 'Kirim Sekarang', pullToRefresh: 'Tarik untuk memperbarui' },
+      firstSync: {
+        title: 'Menyiapkan data toko',
+        progress: 'Riwayat sampai {date} · {percent}%',
+        banner: 'Menyiapkan data toko ({percent}%). Anda tetap bisa bekerja.',
+        chip: 'Menyiapkan data toko {percent}%',
+        explain:
+          'Perangkat baru mengunduh riwayat toko. Bisa dilanjutkan kapan saja; yang sudah terunduh tidak diulang.',
+      },
     },
     conflict: {
       list: { banner: '{count} data bentrok butuh keputusan', title: 'Data Bentrok' },
@@ -482,6 +490,14 @@ export const resources = {
           body: 'Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner.',
         },
         action: { syncNow: 'Sync Now', pullToRefresh: 'Pull to refresh' },
+        firstSync: {
+          title: 'Setting up store data',
+          progress: 'History through {date} · {percent}%',
+          banner: 'Setting up store data ({percent}%). You can keep working.',
+          chip: 'Setting up store data {percent}%',
+          explain:
+            'This new device is downloading the store’s history. It can stop and resume at any time; nothing already downloaded is repeated.',
+        },
       },
       conflict: {
         list: {

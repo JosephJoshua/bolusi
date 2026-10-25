@@ -18,6 +18,8 @@ import {
 
 import {
   bannerCauses,
+  FIRST_SYNC_BANNER_ID,
+  firstSyncPercent,
   isOfflineButHealthy,
   manualSync,
   mediaQueue,
@@ -73,6 +75,7 @@ function input(overrides: Partial<SyncStatusInput> = {}): SyncStatusInput {
     isOffline: false,
     manualSyncBusy: false,
     manualSyncError: null,
+    firstSync: null,
     now: NOW,
     ...overrides,
   };
@@ -513,5 +516,39 @@ describe('the media queue (§8.4 item 5)', () => {
     const given = input({ media: [row('failed')], pendingMediaCount: 1 });
     expect(syncProblems(given)).toEqual([]);
     expect(syncChipState(given)).not.toBe('attention');
+  });
+});
+
+describe('a new device in its first sync', () => {
+  const DAY = 86_400_000;
+  const progress = { historyStart: NOW - 100 * DAY, reachedAt: NOW - 40 * DAY, serverTime: NOW };
+
+  test('percent is how far the applied history reaches toward the server clock', () => {
+    expect(firstSyncPercent(progress)).toBe(60);
+  });
+
+  test('percent never claims completion and never goes out of range', () => {
+    expect(firstSyncPercent({ ...progress, reachedAt: NOW })).toBe(99);
+    expect(firstSyncPercent({ ...progress, reachedAt: NOW + DAY })).toBe(99);
+    expect(firstSyncPercent({ ...progress, reachedAt: progress.historyStart - DAY })).toBe(0);
+    expect(firstSyncPercent({ historyStart: NOW, reachedAt: NOW, serverTime: NOW })).toBe(0);
+  });
+
+  test('shows a calm setup banner instead of the never-synced danger banner', () => {
+    const neverSynced = state({ lastSuccessfulSyncAt: null });
+    expect(selectBanner(bannerCauses(input({ state: neverSynced })))?.variant).toBe('danger');
+
+    const banner = selectBanner(bannerCauses(input({ state: neverSynced, firstSync: progress })));
+    expect(banner?.cause).toStrictEqual({ kind: 'info', id: FIRST_SYNC_BANNER_ID });
+    expect(banner?.variant).toBe('info');
+  });
+
+  test('a real problem still outranks the setup banner', () => {
+    const given = input({
+      state: state({ lastSuccessfulSyncAt: null }),
+      firstSync: progress,
+      rejected: [rejectedRow('SCHEMA_INVALID')],
+    });
+    expect(selectBanner(bannerCauses(given))?.cause.kind).toBe('rejectedOps');
   });
 });

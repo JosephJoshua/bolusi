@@ -174,3 +174,27 @@ describe('the arrival counter is local, gapless and monotonic (D20 §4)', () => 
     expect((await harness.engine.readWatermarks('notes')).appliedServerSeq).toBe(4);
   });
 });
+
+describe('reading the arrival counter does not scan the op log', () => {
+  // Each pulled op numbers itself with MAX(arrival_seq) and advances the watermark with an ordered
+  // walk above it. Without an index both scanned the whole log per op, so a new device replaying a
+  // year of history was quadratic (packages/modules/scripts/first-sync-bench.ts measured it).
+  async function plan(query: ReturnType<typeof sql>): Promise<string> {
+    const result = await sql<{ detail: string }>`EXPLAIN QUERY PLAN ${query}`.execute(harness.db);
+    return result.rows.map((row) => row.detail).join('\n');
+  }
+
+  it('answers the next arrival number from the index', async () => {
+    expect(await plan(sql`SELECT MAX(arrival_seq) FROM operations`)).toContain(
+      'idx_operations_arrival_seq',
+    );
+  });
+
+  it('walks only the rows above the watermark, in index order', async () => {
+    const detail = await plan(
+      sql`SELECT arrival_seq FROM operations WHERE arrival_seq > ${0} ORDER BY arrival_seq`,
+    );
+    expect(detail).toContain('idx_operations_arrival_seq');
+    expect(detail).not.toContain('TEMP B-TREE');
+  });
+});

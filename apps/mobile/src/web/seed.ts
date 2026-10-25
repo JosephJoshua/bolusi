@@ -131,6 +131,7 @@ export function demoSyncInput(overrides: Partial<SyncStatusInput> = {}): SyncSta
     isOffline: false,
     manualSyncBusy: false,
     manualSyncError: null,
+    firstSync: null,
     now: HARNESS_NOW,
     ...overrides,
   };

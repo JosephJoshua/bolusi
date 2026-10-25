@@ -12,7 +12,13 @@
 // The assertion reads the button's public `disabled` prop, never its label — T-4. This mirrors
 // `EnrollmentScreen.test.tsx`'s `enroll-bind` disabled check.
 import { type SyncLoopState, type SyncState } from '@bolusi/core';
-import { formatRelative, getI18nInstance, t, translateRejectionCode } from '@bolusi/i18n';
+import {
+  formatDate,
+  formatRelative,
+  getI18nInstance,
+  t,
+  translateRejectionCode,
+} from '@bolusi/i18n';
 import { describe, expect, test, vi } from 'vitest';
 
 import { render, textsIn } from '../../../../../packages/ui/test/render.js';
@@ -60,6 +66,7 @@ function input(overrides: Partial<SyncStatusInput> = {}): SyncStatusInput {
     isOffline: false,
     manualSyncBusy: false,
     manualSyncError: null,
+    firstSync: null,
     now: NOW,
     ...overrides,
   };
@@ -363,5 +370,28 @@ describe('the rejected row names which change was rejected, not only when (task 
     const when = formatRelative(NOW - (NOW - 60_000));
     expect(knownRow).toContain(when);
     expect(unknownRow).toContain(when);
+  });
+});
+
+describe('a new device in its first sync', () => {
+  const DAY = 86_400_000;
+  const firstSync = { historyStart: NOW - 100 * DAY, reachedAt: NOW - 40 * DAY, serverTime: NOW };
+  const setup = { state: state({ lastSuccessfulSyncAt: null }), loopState: 'pulling' as const };
+
+  test('shows how far setup has come, in the card, banner and header chip', () => {
+    const screen = renderSync({ ...setup, firstSync });
+    expect(textsIn(screen.get('sync-first-sync-progress')).join('')).toBe(
+      t('sync.firstSync.progress', { date: formatDate(NOW - 40 * DAY), percent: 60 }),
+    );
+    expect(textsIn(screen.get('sync-banner')).join('')).toContain(
+      t('sync.firstSync.banner', { percent: 60 }),
+    );
+    expect(textsIn(screen.get('ui.syncChip.progress')).join('')).toBe('60%');
+  });
+
+  test('a device that has synced shows none of it', () => {
+    const screen = renderSync({ loopState: 'pulling' });
+    expect(screen.query('sync-first-sync')).toBeNull();
+    expect(screen.query('ui.syncChip.progress')).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 // THE NATIVE BINDING SITE for the media pipeline (08 §3.2; testing-guide §2.3).
 //
-// Everything here imports a native module — `expo-file-system`, `expo-image-manipulator`,
-// `expo-background-task`, `expo-task-manager` — which is exactly why it is a separate file that
+// Everything here imports a native module — `expo-file-system`, `expo-image-manipulator` (and the
+// shared background-task binding in ports/background-task.ts) — which is exactly why it is a separate file that
 // only `index.ts` imports. `client.ts` and every module it reaches name only INTERFACES, so the
 // whole media client runs under Node in the test lane while this five-function file is the only
 // thing that cannot. Same split, same reason, as `index.ts`'s op-sqlite/NetInfo binding.
@@ -13,10 +13,8 @@
 // rules, the background-registration outcome) all live behind these seams and DO run in the lane.
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import * as BackgroundTask from 'expo-background-task';
-import * as TaskManager from 'expo-task-manager';
 
-import type { BackgroundTaskPlatform } from './background-task.js';
+import { expoBackgroundTaskPlatform } from '../ports/background-task.js';
 import type { CompressedImage, ImageCompressorPort } from './compression.js';
 import { availableDiskSpaceBytes, createEncryptingMediaFileParts } from './files.js';
 import { createMediaClient, type MediaClient, type MediaClientDeps } from './client.js';
@@ -47,34 +45,6 @@ export const expoImageCompressor: ImageCompressorPort = {
       sizeBytes: new File(saved.uri).size,
     };
   },
-};
-
-/**
- * The `expo-background-task` + `expo-task-manager` binding.
- *
- * `defineTask`'s executor is typed `(body) => Promise<any>` upstream; ours takes no body and the
- * wrapper discards it. The `void` return is deliberate: `BackgroundTaskResult` exists (Success = 1,
- * Failed = 2) and returning `Failed` would be the honest thing IF a bounded drain pass could fail —
- * it cannot, by design. The drain loop never throws to its caller (drain.ts); a pass that uploads
- * nothing because the network is down is a NORMAL pass, and reporting `Failed` for it would teach
- * WorkManager to back this task off for a condition that is not an error. So the executor resolves
- * either way and the real failure reporting stays where 06 §8 puts it: `media_items.last_error_code`
- * and the surfacing port.
- */
-export const expoBackgroundTaskPlatform: BackgroundTaskPlatform = {
-  defineTask(name, executor) {
-    // Guarded because `defineTask` is a PROCESS-GLOBAL registration and this function is reachable
-    // from any composition. Defining twice is not idempotent upstream — it replaces the executor —
-    // and a second definition racing the first is the collision `bootstrap/triggers.ts` names when
-    // it explains why trigger (d) was left to this task rather than built in two places.
-    if (TaskManager.isTaskDefined(name)) return;
-    TaskManager.defineTask(name, async () => {
-      await executor();
-    });
-  },
-  getStatusAsync: () => BackgroundTask.getStatusAsync(),
-  registerTaskAsync: (name, options) => BackgroundTask.registerTaskAsync(name, options),
-  isTaskRegisteredAsync: (name) => TaskManager.isTaskRegisteredAsync(name),
 };
 
 /** The deps the composition root still has to supply — the ones that are not expo modules. */

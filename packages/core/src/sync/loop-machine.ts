@@ -24,6 +24,8 @@ export type SyncLoopState = 'idle' | 'pushing' | 'pulling' | 'backoff';
  *  - `trigger`: any api/01-sync §5 trigger — from `idle` or `backoff` only (see the table).
  *  - `push_drained`: all `local` ops pushed · nothing to push · `pushHalted` set mid-push.
  *  - `pull_drained`: `hasMore = false`, error-free.
+ *  - `pull_paused`: the loop was asked to pause and stopped after a committed batch with more left.
+ *    Not a success: `lastSuccessfulSyncAt` is untouched and the next trigger resumes the pull.
  *  - `transport_failure`: network error, timeout, 5xx. Op-level rejections are NOT this (03 §10).
  *  - `timer_elapsed`: the backoff timer fired.
  *  - `device_revoked`: 401 `DEVICE_REVOKED` — from ANY state, to `idle`.
@@ -32,6 +34,7 @@ export type SyncLoopEvent =
   | 'trigger'
   | 'push_drained'
   | 'pull_drained'
+  | 'pull_paused'
   | 'transport_failure'
   | 'timer_elapsed'
   | 'device_revoked';
@@ -63,6 +66,7 @@ export const SYNC_LOOP_MACHINE: StateMachineDefinition<SyncLoopState, SyncLoopEv
     },
     pulling: {
       pull_drained: 'idle',
+      pull_paused: 'idle',
       transport_failure: 'backoff',
       device_revoked: 'idle',
     },

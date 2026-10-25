@@ -38,7 +38,7 @@ import {
   type SyncTransportPort,
   type TimerPort,
 } from './ports.js';
-import { runPullPhase } from './pull.js';
+import { runPullPhase, type PulledBatch } from './pull.js';
 import { runPushPhase } from './push.js';
 import {
   pendingMediaCount,
@@ -88,6 +88,8 @@ export interface SyncLoopOptions<DB> {
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
   readonly pullLimit?: number;
+  /** Passed to the pull phase: called after each committed batch (progress display only). */
+  readonly onPullBatch?: (batch: PulledBatch) => void;
 }
 
 /** Observable cycle counters — for tests and diagnostics; not persisted, not a contract with the UI. */
@@ -107,6 +109,8 @@ export class SyncLoop<DB> {
   private cancelBackoff: CancelTimer | null = null;
   private cycle: Promise<void> = Promise.resolve();
   private hydrated = false;
+  /** Set by `pause()`: the running pull stops at its next batch boundary and no rerun follows. */
+  private pauseRequested = false;
   /** Mirrors of the persisted guards, so the trigger guard needs no `await` (see the header). */
   private syncDisabled = false;
   private pushHalted = false;
@@ -162,8 +166,18 @@ export class SyncLoop<DB> {
     }
 
     // Claim the slot with NO await in between (see the header).
+    this.pauseRequested = false;
     this.transition('trigger');
     this.cycle = this.runCycle();
+  }
+
+  /**
+   * Stop the running cycle at its next committed pull batch, without counting it as a sync. For a
+   * time-limited background run, or handing the database to another owner. The next trigger clears
+   * the pause and resumes from the committed cursor. A no-op when nothing is running.
+   */
+  pause(): void {
+    if (this.loopState === 'pushing' || this.loopState === 'pulling') this.pauseRequested = true;
   }
 
   /** Resolves when the current cycle (and any rerun it chains) has settled. Tests only. */
@@ -225,12 +239,23 @@ export class SyncLoop<DB> {
         clock: this.options.clock,
         applyPulledOp: this.options.applyPulledOp,
         ...(this.options.pullLimit === undefined ? {} : { limit: this.options.pullLimit }),
+        ...(this.options.onPullBatch === undefined
+          ? {}
+          : { onBatchCommitted: this.options.onPullBatch }),
+        shouldContinue: () => !this.pauseRequested,
       });
       this.stats = {
         ...this.stats,
         pulled: this.stats.pulled + pull.applied,
         quarantined: this.stats.quarantined + pull.quarantined,
       };
+      if (!pull.drained) {
+        // Paused mid-pull: what was pulled is committed, but the device is not caught up, so this
+        // is not a successful sync and nothing reruns until the next trigger.
+        this.transition('pull_paused');
+        this.pauseRequested = false;
+        return;
+      }
 
       // ── bundle refresh (once per loop) ──────────────────────────────────────────────────
       // 304 is SUCCESS (api/02-auth §5): a steady-state device gets one every single cycle, and a
@@ -262,13 +287,17 @@ export class SyncLoop<DB> {
       await pendingOperationCount(this.options.db);
       await pendingMediaCount(this.options.db);
     } catch (error) {
+      this.pauseRequested = false;
       await this.handleCycleFailure(error);
       return;
     }
 
+    // A pause that arrived too late to stop the pull still suppresses the rerun.
+    const paused = this.pauseRequested;
+    this.pauseRequested = false;
     // 03 §10: "if the rerun flag is set, immediately re-enter `pushing`". ONE follow-up regardless
     // of how many triggers coalesced into it.
-    if (this.rerun && !this.syncDisabled) {
+    if (this.rerun && !this.syncDisabled && !paused) {
       this.transition('trigger');
       this.cycle = this.runCycle();
     }

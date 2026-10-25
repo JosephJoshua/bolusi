@@ -26,6 +26,7 @@
 import {
   readSyncState,
   SyncLoop,
+  type PulledBatch,
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
@@ -40,6 +41,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDatabase, ClientDb } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
+import type { FirstSyncProgress } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
@@ -48,6 +50,9 @@ import {
   type RealtimeHandle,
   type RealtimeSocketCtor,
 } from './realtime-client.js';
+import type { BackgroundRegistration } from './background-task.js';
+import { registerSyncTask, type BackgroundSyncBinding } from './background-sync.js';
+import { readOldestOpAt } from './sync-status-reads.js';
 import { createFetchSyncTransport } from './transport.js';
 import {
   createSyncTriggers,
@@ -89,6 +94,8 @@ export interface SyncClientDeps {
    * (re)connect only. Absent in loop-only tests (no realtime), which is the honest "no channel" state.
    */
   readonly createRealtime?: (trigger: () => void) => RealtimeHandle;
+  /** Trigger (d): the OS background task, when the platform has one (background-sync.ts). */
+  readonly background?: BackgroundSyncBinding;
 }
 
 /** The live sync client. Owns the loop + triggers and a small reactive view Root renders from. */
@@ -111,6 +118,12 @@ export interface SyncClient {
   start(): Promise<void>;
   /** (e) pull-to-refresh. */
   requestManual(): void;
+  /** (d) one background-task pass. */
+  requestBackground(): void;
+  /** Stop the running cycle at its next committed pull batch, for a background pass out of time. */
+  pause(): void;
+  /** Whether trigger (d) registered, once `start()` has tried; `null` when there is no platform. */
+  backgroundRegistration(): BackgroundRegistration | null;
   /** Cancel every timer + subscription. Idempotent. */
   stop(): void;
   /** The live loop state (03 §10) — Root's `loopState`. */
@@ -119,6 +132,11 @@ export interface SyncClient {
   isOffline(): boolean;
   /** The device's `SyncState`, re-read from `sync_state` after each cycle. Drives the banner (T-19). */
   syncState(): SyncState;
+  /**
+   * A brand-new device's first pull while it runs, else `null`. Progress arrives per committed batch,
+   * so a pull cut short (app closed, network lost) resumes from the last batch and the figure with it.
+   */
+  firstSync(): FirstSyncProgress | null;
   /** Subscribe to loop/connectivity changes (Root re-renders). Returns an unsubscribe. */
   subscribe(listener: () => void): () => void;
   /** Surfacings captured since boot (05 §8 "never silent"); the DB stays the source of truth. */
@@ -136,6 +154,11 @@ class SyncClientImpl implements SyncClient {
   private connected = false;
   private currentSyncState: SyncState;
   private uiNetUnsub: (() => void) | null = null;
+  private firstSyncProgress: FirstSyncProgress | null = null;
+  /** Oldest op time on this device, read once per process when the first pull reports a batch. */
+  private historyStart: Promise<number | null> | null = null;
+  private background: BackgroundRegistration | null = null;
+  private detachBackground: (() => void) | null = null;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -166,6 +189,7 @@ class SyncClientImpl implements SyncClient {
       applyPulledOp: deps.applyPulledOp,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
+      onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
     });
 
     this.triggers = createSyncTriggers({
@@ -202,13 +226,34 @@ class SyncClientImpl implements SyncClient {
     // it is started LAST — a poke now has a hydrated loop to drive. Purely additive (FR-1146): if the
     // channel never connects, the §5 triggers above keep sync converging with no dependency on it.
     this.realtime?.start();
+    // Last, like realtime: a background pass drives the hydrated loop. Attach before registering so a
+    // pass the OS runs the moment registration lands already finds this client.
+    const background = this.deps.background;
+    if (background !== undefined) {
+      this.detachBackground = background.host.attach(this);
+      this.background = await registerSyncTask(background);
+    }
   }
 
   requestManual(): void {
     this.triggers.requestManual();
   }
 
+  requestBackground(): void {
+    this.request('background');
+  }
+
+  pause(): void {
+    this.loop.pause();
+  }
+
+  backgroundRegistration(): BackgroundRegistration | null {
+    return this.background;
+  }
+
   stop(): void {
+    this.detachBackground?.();
+    this.detachBackground = null;
     this.realtime?.stop();
     this.triggers.stop();
     this.uiNetUnsub?.();
@@ -229,6 +274,10 @@ class SyncClientImpl implements SyncClient {
     return this.currentSyncState;
   }
 
+  firstSync(): FirstSyncProgress | null {
+    return this.firstSyncProgress;
+  }
+
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -243,6 +292,7 @@ class SyncClientImpl implements SyncClient {
   async settle(): Promise<void> {
     await this.loop.settle().catch(() => undefined);
     this.currentSyncState = await readSyncState(this.deps.db.db);
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null) this.firstSyncProgress = null;
     this.notify();
   }
 
@@ -273,6 +323,24 @@ class SyncClientImpl implements SyncClient {
     this.request('connectivity');
   }
 
+  /**
+   * Track progress only until the device's first successful sync: after that a pull is routine and
+   * the chip's plain `syncing` says enough. The history start is the oldest op already held, so a
+   * pull resumed after a restart keeps its percentage instead of starting over at 0.
+   */
+  private async noteFirstSyncBatch(batch: PulledBatch): Promise<void> {
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null || batch.newestOpAt === null) return;
+    this.historyStart ??= readOldestOpAt(this.deps.db.db).catch(() => null);
+    const held = await this.historyStart;
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null) return;
+    this.firstSyncProgress = {
+      historyStart: held ?? batch.oldestOpAt ?? batch.newestOpAt,
+      reachedAt: Math.max(batch.newestOpAt, this.firstSyncProgress?.reachedAt ?? batch.newestOpAt),
+      serverTime: batch.serverTime,
+    };
+    this.notify();
+  }
+
   private notify(): void {
     for (const listener of this.listeners) listener();
   }
@@ -283,6 +351,7 @@ class SyncClientImpl implements SyncClient {
     // real column: `lastSuccessfulSyncAt` from a durable write, never a default (T-19).
     await this.loop.settle().catch(() => undefined);
     this.currentSyncState = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null) this.firstSyncProgress = null;
     this.notify();
   }
 }
@@ -316,6 +385,8 @@ export interface SyncClientForAppConfig {
    * the bundle producer's seam stays `undefined` by design.
    */
   readonly onBundleRefreshed?: () => void | Promise<void>;
+  /** Trigger (d)'s native binding and the module-scope host (index.ts). */
+  readonly background?: BackgroundSyncBinding;
 }
 
 /**
@@ -353,6 +424,7 @@ export function createSyncClientForApp(
     appState: config.appState,
     netInfo: config.netInfo,
     initialSyncState: app.syncState,
+    ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT
     // from the same SecureStore reader the sync legs use — never cached. `WebSocket`/`fetch` default to

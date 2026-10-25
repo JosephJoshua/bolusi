@@ -119,7 +119,30 @@ export interface SyncStatusInput {
    * manual sync did not fail.
    */
   readonly manualSyncError: string | null;
+  /** The first pull of a brand-new device, while it runs; `null` once the device has synced. */
+  readonly firstSync: FirstSyncProgress | null;
   readonly now: number;
+}
+
+/**
+ * How far a new device's first pull has come. The server sends history oldest first, so the newest
+ * op time applied so far, between the oldest op and the server's clock, is an honest estimate that
+ * needs no op count from the server and survives a restart mid-pull.
+ */
+export interface FirstSyncProgress {
+  /** Device time of the oldest op this device holds. */
+  readonly historyStart: number;
+  /** Device time of the newest op applied so far. */
+  readonly reachedAt: number;
+  readonly serverTime: number;
+}
+
+/** Whole percent, capped at 99: 100 would claim a finished sync the loop has not reported. */
+export function firstSyncPercent(progress: FirstSyncProgress): number {
+  const span = progress.serverTime - progress.historyStart;
+  if (span <= 0) return 0;
+  const fraction = (progress.reachedAt - progress.historyStart) / span;
+  return Math.min(99, Math.max(0, Math.floor(fraction * 100)));
 }
 
 /**
@@ -215,6 +238,9 @@ export function staleness(input: SyncStatusInput): StalenessLevel {
   return stalenessLevel(input.state, { now: () => input.now });
 }
 
+/** The `info` banner id for a new device's first pull. */
+export const FIRST_SYNC_BANNER_ID = 'firstSync';
+
 /**
  * The §3.6 banner causes this screen contributes. Fed to `@bolusi/ui`'s `selectBanner`, which owns
  * the priority ladder — this function decides WHAT is true, never which one wins.
@@ -230,6 +256,12 @@ export function bannerCauses(input: SyncStatusInput): readonly BannerCause[] {
   for (const problem of syncProblems(input)) {
     if (problem.kind === 'deviceRevoked') causes.push({ kind: 'deviceRevoked' });
     if (problem.kind === 'rejected') causes.push({ kind: 'rejectedOps' });
+  }
+  // A device in its first pull has never synced, so staleness would read "stale" in danger red.
+  // That is expected, not a problem: say how far setup has come instead.
+  if (input.firstSync !== null) {
+    causes.push({ kind: 'info', id: FIRST_SYNC_BANNER_ID });
+    return causes;
   }
   // Staleness always contributes its level; `fresh` raises nothing (selectBanner drops it).
   causes.push({ kind: 'staleness', level: staleness(input) });

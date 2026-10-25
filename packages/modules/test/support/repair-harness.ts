@@ -10,6 +10,7 @@ import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 import {
   assemblePermissionRegistry,
+  bytesToBase64,
   createModuleRuntime,
   createProjectionEngine,
   SearchIndexCache,
@@ -46,6 +47,8 @@ export interface RepairHarness {
   readonly tenantId: string;
   readonly storeId: string;
   readonly deviceId: string;
+  /** The device's Ed25519 public key, base64 — what a server's devices sidecar would carry. */
+  readonly signingKeyPublic: string;
   readonly cashierId: string;
   readonly technicianId: string;
   readonly technician2Id: string;
@@ -165,6 +168,7 @@ export async function openRepairHarness(
     tenantId,
     storeId,
     deviceId,
+    signingKeyPublic: bytesToBase64(keypair.publicKey),
     cashierId: cashierId!,
     technicianId: technicianId!,
     technician2Id: technician2Id!,

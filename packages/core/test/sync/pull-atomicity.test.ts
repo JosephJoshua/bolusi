@@ -39,7 +39,7 @@ import {
   type SyncHarness,
   type TestDevice,
 } from './_fixtures.js';
-import { runPullPhase } from '../../src/index.js';
+import { runPullPhase, type PulledBatch } from '../../src/index.js';
 import { noblePort } from '@bolusi/test-support';
 
 let harness: SyncHarness;
@@ -281,3 +281,53 @@ async function insertRaw(op: SignedOperation, arrivalSeq: number): Promise<void>
     )
   `.execute(harness.db);
 }
+
+describe('batch progress is reported only for committed batches', () => {
+  it('reports the committed batch with its op time range', async () => {
+    scriptBatch();
+    const batches: PulledBatch[] = [];
+    await runPullPhase({
+      ...pullDeps((op) => harness.engine.applyPulledOp(op)),
+      onBatchCommitted: (batch) => batches.push(batch),
+    });
+
+    expect(batches).toStrictEqual([
+      {
+        applied: 5,
+        oldestOpAt: 1_726_000_000_000,
+        newestOpAt: 1_726_000_004_000,
+        serverTime: 1_726_000_500_000,
+        hasMore: false,
+      },
+    ]);
+  });
+
+  it('reports nothing for a batch that rolled back', async () => {
+    scriptBatch();
+    const batches: PulledBatch[] = [];
+    let calls = 0;
+    await expect(
+      runPullPhase({
+        ...pullDeps(async (op) => {
+          calls += 1;
+          if (calls === 3) throw new Error('simulated crash mid-batch');
+          return harness.engine.applyPulledOp(op);
+        }),
+        onBatchCommitted: (batch) => batches.push(batch),
+      }),
+    ).rejects.toThrow();
+    expect(batches).toStrictEqual([]);
+  });
+
+  it('a throwing listener does not fail the pull', async () => {
+    scriptBatch();
+    const result = await runPullPhase({
+      ...pullDeps((op) => harness.engine.applyPulledOp(op)),
+      onBatchCommitted: () => {
+        throw new Error('listener bug');
+      },
+    });
+    expect(result.applied).toBe(5);
+    expect(await cursor()).toBe(BATCH_CURSOR);
+  });
+});

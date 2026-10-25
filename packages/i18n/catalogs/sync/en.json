@@ -38,5 +38,12 @@
   "action": {
     "syncNow": "Sync Now",
     "pullToRefresh": "Pull to refresh"
+  },
+  "firstSync": {
+    "title": "Setting up store data",
+    "progress": "History through {date} · {percent}%",
+    "banner": "Setting up store data ({percent}%). You can keep working.",
+    "chip": "Setting up store data {percent}%",
+    "explain": "This new device is downloading the store’s history. It can stop and resume at any time; nothing already downloaded is repeated."
   }
 }

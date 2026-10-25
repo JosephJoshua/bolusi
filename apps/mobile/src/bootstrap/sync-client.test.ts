@@ -20,11 +20,18 @@ import type {
   PushResponse,
   SignedOperation,
 } from '@bolusi/schemas';
-import { noblePort, nodeColumnAead } from '@bolusi/test-support';
+import { ChainBuilder, makeWorld, noblePort, nodeColumnAead } from '@bolusi/test-support';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
+import { FakeTimer } from '../media/_harness.test.js';
+import { fakeBackgroundPlatform } from './_background-platform.test.js';
+import {
+  createBackgroundSyncHost,
+  SYNC_BACKGROUND_TASK,
+  type BackgroundSyncBinding,
+} from './background-sync.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
 import { APPEND_DEBOUNCE_MS } from './triggers.js';
@@ -54,6 +61,8 @@ class FakeTransport {
   readonly pulls: PullRequest[] = [];
   pushRejects = false;
   pullRejects = false;
+  /** Pages served in order before the drained steady state. */
+  readonly pullPages: PullResponse[] = [];
   push(request: PushRequest): Promise<PushResponse> {
     this.pushes.push(request);
     if (this.pushRejects) {
@@ -70,6 +79,8 @@ class FakeTransport {
         new SyncTransportError('server down', { code: 'INTERNAL', status: 503 }),
       );
     }
+    const page = this.pullPages.shift();
+    if (page !== undefined) return Promise.resolve(page);
     return Promise.resolve({ ops: [], nextCursor: request.cursor, hasMore: false, serverTime: T });
   }
 }
@@ -163,6 +174,7 @@ interface BuildOptions {
   readonly bundleThrows?: boolean;
   readonly pushRejects?: boolean;
   readonly pullRejects?: boolean;
+  readonly background?: BackgroundSyncBinding;
 }
 
 async function build(options: BuildOptions = {}) {
@@ -195,8 +207,48 @@ async function build(options: BuildOptions = {}) {
     appState: activeAppState,
     netInfo: net.port,
     initialSyncState: await readSyncState(db.db),
+    ...(options.background === undefined ? {} : { background: options.background }),
   };
   return { client: createSyncClient(deps), transport, timer, net, bundleCalls: () => bundleCalls };
+}
+
+/**
+ * A store history of four signed ops, a day apart, served as two pages: what a new device pulls.
+ * The devices sidecar on the first page lets every op verify.
+ */
+function historyPages(): PullResponse[] {
+  const world = makeWorld(7, noblePort);
+  const chain = new ChainBuilder(world, noblePort);
+  const DAY = 86_400_000;
+  const start = T - 4 * DAY;
+  const ops = [0, 1, 2, 3].map((day) =>
+    chain.append({
+      type: 'notes.note_created',
+      entityType: 'note',
+      payload: { title: `n${day}`, body: '' },
+      timestamp: start + day * DAY,
+    }),
+  );
+  return [
+    {
+      ops: ops.slice(0, 2),
+      nextCursor: 2,
+      hasMore: true,
+      serverTime: T,
+      devices: [
+        {
+          id: world.deviceId,
+          storeId: world.storeId,
+          kind: 'member',
+          signingKeyPublic: world.publicKeyB64,
+          status: 'active',
+          revokedAt: null,
+        },
+      ],
+      devicesDirectoryVersion: 1,
+    },
+    { ops: ops.slice(2), nextCursor: 4, hasMore: false, serverTime: T },
+  ];
 }
 
 describe('the sync client constructs, starts, and drives a REAL cycle (task 89 acceptance)', () => {
@@ -382,6 +434,100 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
     // Still ONE armed timer: `schedule()` cancels the pending one before arming the next. Three
     // entries here would be a queue — 40 appends would then mean 40 cycles.
     expect(timer.delays()).toStrictEqual([APPEND_DEBOUNCE_MS]);
+    client.stop();
+  });
+});
+
+describe('a new device reports first-sync progress per committed batch', () => {
+  test('progress climbs through the history, then clears once the first sync completes', async () => {
+    const { client, transport } = await build({ online: true });
+    transport.pullPages.push(...historyPages());
+    const seen: Array<number | null> = [];
+    client.subscribe(() => {
+      const progress = client.firstSync();
+      seen.push(progress === null ? null : progress.reachedAt);
+    });
+
+    await client.start();
+    await client.settle();
+
+    const DAY = 86_400_000;
+    // Page one reached day 1 of 4, page two day 3; both were reported before the cycle finished.
+    expect(seen).toContain(T - 3 * DAY);
+    expect(seen).toContain(T - 1 * DAY);
+    expect(client.syncState().lastSuccessfulSyncAt).toBe(T);
+    expect(client.firstSync()).toBeNull();
+    client.stop();
+  });
+
+  test('a first sync cut short keeps its progress for the next attempt', async () => {
+    const { client, transport } = await build({ online: true, bundleThrows: true });
+    transport.pullPages.push(...historyPages());
+
+    await client.start();
+    await client.settle();
+
+    const DAY = 86_400_000;
+    expect(client.syncState().lastSuccessfulSyncAt).toBeNull();
+    expect(client.firstSync()).toStrictEqual({
+      historyStart: T - 4 * DAY,
+      reachedAt: T - 1 * DAY,
+      serverTime: T,
+    });
+    client.stop();
+  });
+
+  test('a device that has synced before shows no first-sync progress', async () => {
+    const { client, transport } = await build({ online: true });
+    await client.start();
+    await client.settle();
+    expect(client.syncState().lastSuccessfulSyncAt).toBe(T);
+
+    transport.pullPages.push(...historyPages());
+    client.requestManual();
+    await client.settle();
+    expect(client.firstSync()).toBeNull();
+    client.stop();
+  });
+});
+
+describe('trigger (d): the OS background task drives the started client', () => {
+  test('start registers the sync task, and a pass runs a real background cycle', async () => {
+    const platform = fakeBackgroundPlatform({});
+    const host = createBackgroundSyncHost(new FakeTimer());
+    const { client, transport } = await build({ online: false, background: { platform, host } });
+    await client.start();
+    expect(client.backgroundRegistration()).toEqual({ kind: 'registered' });
+    expect(platform.registered.map((entry) => entry.name)).toEqual([SYNC_BACKGROUND_TASK]);
+    expect(transport.pulls).toHaveLength(0); // booted offline: no foreground trigger has run
+
+    await platform.executors.get(SYNC_BACKGROUND_TASK)?.();
+    expect(transport.pulls.length).toBeGreaterThan(0);
+    expect((await readSyncState(db.db)).lastSuccessfulSyncAt).toBe(T);
+    client.stop();
+  });
+
+  test('a stopped client is no longer driven by a background pass', async () => {
+    const platform = fakeBackgroundPlatform({});
+    const timer = new FakeTimer();
+    const host = createBackgroundSyncHost(timer);
+    const { client, transport } = await build({ online: false, background: { platform, host } });
+    await client.start();
+    client.stop();
+
+    const pass = host.runPass();
+    timer.runPending(); // no client attaches, so the boot wait expires
+    await pass;
+    expect(transport.pulls).toHaveLength(0);
+  });
+
+  test('a restricted platform is reported, not mistaken for a registration', async () => {
+    const platform = fakeBackgroundPlatform({ status: 1 });
+    const host = createBackgroundSyncHost(new FakeTimer());
+    const { client } = await build({ online: false, background: { platform, host } });
+    await client.start();
+    expect(client.backgroundRegistration()).toEqual({ kind: 'restricted' });
+    expect(platform.registered).toHaveLength(0);
     client.stop();
   });
 });

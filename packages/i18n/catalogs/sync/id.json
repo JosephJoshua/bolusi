@@ -38,5 +38,12 @@
   "action": {
     "syncNow": "Kirim Sekarang",
     "pullToRefresh": "Tarik untuk memperbarui"
+  },
+  "firstSync": {
+    "title": "Menyiapkan data toko",
+    "progress": "Riwayat sampai {date} · {percent}%",
+    "banner": "Menyiapkan data toko ({percent}%). Anda tetap bisa bekerja.",
+    "chip": "Menyiapkan data toko {percent}%",
+    "explain": "Perangkat baru mengunduh riwayat toko. Bisa dilanjutkan kapan saja; yang sudah terunduh tidak diulang."
   }
 }
