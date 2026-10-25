@@ -10,7 +10,7 @@
 import type { SyncLoopState, SyncState } from '@bolusi/core';
 
 import type { DeviceStatus } from '../navigation/zone.js';
-import type { SyncStatusInput } from '../screens/sync-status/model.js';
+import type { FirstSyncProgress, SyncStatusInput } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { NO_SYNC_STATUS_READS, type SyncStatusReads } from './sync-status-reads.js';
@@ -43,6 +43,7 @@ export function syncInput(
   isOffline: boolean,
   now: number,
   reads: SyncStatusReads = NO_SYNC_STATUS_READS,
+  firstSync: FirstSyncProgress | null = null,
 ): SyncStatusInput {
   return {
     state,
@@ -55,6 +56,7 @@ export function syncInput(
     isOffline,
     manualSyncBusy: false,
     manualSyncError: null,
+    firstSync,
     now,
   };
 }
@@ -81,5 +83,6 @@ export function resolveShellInputs(
     : app.deviceId !== null
       ? 'active'
       : 'unenrolled';
-  return { device, sync: syncInput(syncState, loopState, isOffline, now, reads) };
+  const firstSync = sync !== null ? sync.firstSync() : null;
+  return { device, sync: syncInput(syncState, loopState, isOffline, now, reads, firstSync) };
 }

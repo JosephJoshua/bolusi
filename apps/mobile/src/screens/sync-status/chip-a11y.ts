@@ -30,6 +30,8 @@ export interface SyncChipLabelInput {
    * 0 explicitly; its inert `pending` entry is built but never announced.
    */
   readonly pendingCount: number;
+  /** A new device's first-sync percent while it runs; the `syncing` label then says so. */
+  readonly firstSyncPercent?: number | null;
 }
 
 /**
@@ -43,7 +45,10 @@ export function syncChipAccessibilityLabels(
   return {
     synced: t('sync.status.lastSynced', { relative: input.relative ?? '' }),
     pending: t('sync.status.pending', { count: input.pendingCount }),
-    syncing: t('sync.status.syncing'),
+    syncing:
+      input.firstSyncPercent === undefined || input.firstSyncPercent === null
+        ? t('sync.status.syncing')
+        : t('sync.firstSync.chip', { percent: input.firstSyncPercent }),
     offline: t('sync.status.offline'),
     attention: t('sync.chip.rejected'),
   };

@@ -83,6 +83,21 @@ export interface PullPhaseDeps<DB> {
   /** `ProjectionEngine.applyPulledOp` (task 08). Runs INSIDE the batch transaction. */
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   readonly limit?: number;
+  /**
+   * Called after each batch commits, outside the transaction, so a long pull can show progress.
+   * Fire-and-forget like the surface: a throw is swallowed and never fails the pull.
+   */
+  readonly onBatchCommitted?: (batch: PulledBatch) => void;
+}
+
+/** What one committed pull batch carried, for progress display. */
+export interface PulledBatch {
+  readonly applied: number;
+  /** Device timestamps of the oldest and newest op in the batch; `null` for an empty batch. */
+  readonly oldestOpAt: number | null;
+  readonly newestOpAt: number | null;
+  readonly serverTime: number;
+  readonly hasMore: boolean;
 }
 
 export interface PullPhaseResult {
@@ -168,6 +183,7 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
     released += outcome.released;
     serverTime = parsed.envelope.serverTime;
     batches += 1;
+    reportBatch(deps, parsed, outcome.applied);
 
     if (!parsed.envelope.hasMore) break;
   }
@@ -465,6 +481,33 @@ async function insertPulledOp<DB>(
       'synced', ${syncedAt}, ${arrivalSeq}
     )
   `.execute(db);
+}
+
+function reportBatch<DB>(
+  deps: PullPhaseDeps<DB>,
+  parsed: { envelope: Omit<PullResponse, 'ops'>; ops: ParsedOp[] },
+  applied: number,
+): void {
+  if (deps.onBatchCommitted === undefined) return;
+  let oldestOpAt: number | null = null;
+  let newestOpAt: number | null = null;
+  for (const entry of parsed.ops) {
+    if (!entry.ok) continue;
+    const at = entry.op.timestamp;
+    if (oldestOpAt === null || at < oldestOpAt) oldestOpAt = at;
+    if (newestOpAt === null || at > newestOpAt) newestOpAt = at;
+  }
+  try {
+    deps.onBatchCommitted({
+      applied,
+      oldestOpAt,
+      newestOpAt,
+      serverTime: parsed.envelope.serverTime,
+      hasMore: parsed.envelope.hasMore,
+    });
+  } catch {
+    // Progress is display only; it must never fail a pull that already committed.
+  }
 }
 
 function emit<DB>(deps: PullPhaseDeps<DB>, event: Parameters<SyncSurfacePort['emit']>[0]): void {

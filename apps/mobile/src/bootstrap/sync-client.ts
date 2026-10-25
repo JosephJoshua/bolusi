@@ -26,6 +26,7 @@
 import {
   readSyncState,
   SyncLoop,
+  type PulledBatch,
   type BundleRefreshPort,
   type ClockPort,
   type CryptoPort,
@@ -40,6 +41,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDatabase, ClientDb } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
+import type { FirstSyncProgress } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
@@ -48,6 +50,7 @@ import {
   type RealtimeHandle,
   type RealtimeSocketCtor,
 } from './realtime-client.js';
+import { readOldestOpAt } from './sync-status-reads.js';
 import { createFetchSyncTransport } from './transport.js';
 import {
   createSyncTriggers,
@@ -119,6 +122,11 @@ export interface SyncClient {
   isOffline(): boolean;
   /** The device's `SyncState`, re-read from `sync_state` after each cycle. Drives the banner (T-19). */
   syncState(): SyncState;
+  /**
+   * A brand-new device's first pull while it runs, else `null`. Progress arrives per committed batch,
+   * so a pull cut short (app closed, network lost) resumes from the last batch and the figure with it.
+   */
+  firstSync(): FirstSyncProgress | null;
   /** Subscribe to loop/connectivity changes (Root re-renders). Returns an unsubscribe. */
   subscribe(listener: () => void): () => void;
   /** Surfacings captured since boot (05 §8 "never silent"); the DB stays the source of truth. */
@@ -136,6 +144,9 @@ class SyncClientImpl implements SyncClient {
   private connected = false;
   private currentSyncState: SyncState;
   private uiNetUnsub: (() => void) | null = null;
+  private firstSyncProgress: FirstSyncProgress | null = null;
+  /** Oldest op time on this device, read once per process when the first pull reports a batch. */
+  private historyStart: Promise<number | null> | null = null;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -166,6 +177,7 @@ class SyncClientImpl implements SyncClient {
       applyPulledOp: deps.applyPulledOp,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
+      onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
     });
 
     this.triggers = createSyncTriggers({
@@ -229,6 +241,10 @@ class SyncClientImpl implements SyncClient {
     return this.currentSyncState;
   }
 
+  firstSync(): FirstSyncProgress | null {
+    return this.firstSyncProgress;
+  }
+
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -243,6 +259,7 @@ class SyncClientImpl implements SyncClient {
   async settle(): Promise<void> {
     await this.loop.settle().catch(() => undefined);
     this.currentSyncState = await readSyncState(this.deps.db.db);
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null) this.firstSyncProgress = null;
     this.notify();
   }
 
@@ -273,6 +290,24 @@ class SyncClientImpl implements SyncClient {
     this.request('connectivity');
   }
 
+  /**
+   * Track progress only until the device's first successful sync: after that a pull is routine and
+   * the chip's plain `syncing` says enough. The history start is the oldest op already held, so a
+   * pull resumed after a restart keeps its percentage instead of starting over at 0.
+   */
+  private async noteFirstSyncBatch(batch: PulledBatch): Promise<void> {
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null || batch.newestOpAt === null) return;
+    this.historyStart ??= readOldestOpAt(this.deps.db.db).catch(() => null);
+    const held = await this.historyStart;
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null) return;
+    this.firstSyncProgress = {
+      historyStart: held ?? batch.oldestOpAt ?? batch.newestOpAt,
+      reachedAt: Math.max(batch.newestOpAt, this.firstSyncProgress?.reachedAt ?? batch.newestOpAt),
+      serverTime: batch.serverTime,
+    };
+    this.notify();
+  }
+
   private notify(): void {
     for (const listener of this.listeners) listener();
   }
@@ -283,6 +318,7 @@ class SyncClientImpl implements SyncClient {
     // real column: `lastSuccessfulSyncAt` from a durable write, never a default (T-19).
     await this.loop.settle().catch(() => undefined);
     this.currentSyncState = await readSyncState(this.deps.db.db).catch(() => this.currentSyncState);
+    if (this.currentSyncState.lastSuccessfulSyncAt !== null) this.firstSyncProgress = null;
     this.notify();
   }
 }

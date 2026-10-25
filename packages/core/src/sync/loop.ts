@@ -38,7 +38,7 @@ import {
   type SyncTransportPort,
   type TimerPort,
 } from './ports.js';
-import { runPullPhase } from './pull.js';
+import { runPullPhase, type PulledBatch } from './pull.js';
 import { runPushPhase } from './push.js';
 import {
   pendingMediaCount,
@@ -88,6 +88,8 @@ export interface SyncLoopOptions<DB> {
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
   readonly pullLimit?: number;
+  /** Passed to the pull phase: called after each committed batch (progress display only). */
+  readonly onPullBatch?: (batch: PulledBatch) => void;
 }
 
 /** Observable cycle counters — for tests and diagnostics; not persisted, not a contract with the UI. */
@@ -225,6 +227,9 @@ export class SyncLoop<DB> {
         clock: this.options.clock,
         applyPulledOp: this.options.applyPulledOp,
         ...(this.options.pullLimit === undefined ? {} : { limit: this.options.pullLimit }),
+        ...(this.options.onPullBatch === undefined
+          ? {}
+          : { onBatchCommitted: this.options.onPullBatch }),
       });
       this.stats = {
         ...this.stats,

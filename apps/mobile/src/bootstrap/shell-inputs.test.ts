@@ -7,6 +7,7 @@ import { describe, expect, test } from 'vitest';
 import type { Bootstrapped } from './bootstrap.js';
 import { resolveShellInputs } from './shell-inputs.js';
 import type { SyncClient } from './sync-client.js';
+import type { FirstSyncProgress } from '../screens/sync-status/model.js';
 
 function syncState(over: Partial<SyncState> = {}): SyncState {
   return {
@@ -35,6 +36,7 @@ function fakeClient(over: {
   state?: SyncLoopState;
   offline?: boolean;
   syncState?: SyncState;
+  firstSync?: FirstSyncProgress | null;
 }): SyncClient {
   return {
     // `resolveShellInputs` never reads it; it is on the interface because `Root` binds it into the
@@ -46,6 +48,7 @@ function fakeClient(over: {
     state: () => over.state ?? 'idle',
     isOffline: () => over.offline ?? true,
     syncState: () => over.syncState ?? syncState(),
+    firstSync: () => over.firstSync ?? null,
     subscribe: () => () => undefined,
     surfacings: () => [],
     settle: () => Promise.resolve(),

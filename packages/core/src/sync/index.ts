@@ -29,6 +29,7 @@ export {
   runPullPhase,
   type PullPhaseDeps,
   type PullPhaseResult,
+  type PulledBatch,
 } from './pull.js';
 export {
   readPushBatch,

@@ -27,6 +27,7 @@
 import {
   formatRelative,
   t,
+  formatDate,
   translateErrorCode,
   translateOpType,
   translateRejectionCode,
@@ -54,6 +55,7 @@ import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {
   bannerCauses,
+  firstSyncPercent,
   isOfflineButHealthy,
   manualSync,
   mediaQueue,
@@ -115,6 +117,7 @@ export function SyncStatusScreen({
   // whenever anything is wrong, and diverge only when ops are sent while photos are still queued.
   const chip = syncChipState(input);
   const titleState = syncTitleState(input);
+  const setupPercent = input.firstSync === null ? null : firstSyncPercent(input.firstSync);
 
   const rejectedState: ListState<RejectedOpRow> = { kind: 'ready', items: [...input.rejected] };
   const mediaState: ListState<MediaQueueRow> = { kind: 'ready', items: [...queue] };
@@ -134,9 +137,11 @@ export function SyncStatusScreen({
         <SyncChip
           state={chip}
           pendingCount={input.pendingOperationCount}
+          progressPercent={setupPercent}
           accessibilityLabels={syncChipAccessibilityLabels({
             relative: relativeLabel(input),
             pendingCount: input.pendingOperationCount,
+            firstSyncPercent: setupPercent,
           })}
           onPress={onBack}
         />
@@ -187,6 +192,20 @@ export function SyncStatusScreen({
           {reassuranceText(input)}
         </Text>
       </View>
+
+      {input.firstSync !== null && setupPercent !== null ? (
+        // A new device's first pull. Calm on purpose: it is setup, not a fault, and work can go on.
+        <Card testID="sync-first-sync">
+          <Text style={styles.firstSyncTitle}>{t('sync.firstSync.title')}</Text>
+          <Text style={styles.meta} testID="sync-first-sync-progress">
+            {t('sync.firstSync.progress', {
+              date: formatDate(input.firstSync.reachedAt),
+              percent: setupPercent,
+            })}
+          </Text>
+          <Text style={styles.meta}>{t('sync.firstSync.explain')}</Text>
+        </Card>
+      ) : null}
 
       {/* 2 — FRESHNESS. */}
       <Text style={styles.meta} testID="sync-last-synced">
@@ -367,6 +386,9 @@ function reassuranceText(input: SyncStatusInput): string {
 /** The banner's already-localized message for the winning cause. */
 function bannerMessage(input: SyncStatusInput, cause: string): string {
   if (cause === 'deviceRevoked') return t('auth.revoked.body');
+  if (cause === 'info' && input.firstSync !== null) {
+    return t('sync.firstSync.banner', { percent: firstSyncPercent(input.firstSync) });
+  }
   if (cause === 'rejectedOps') return t('sync.rejected.banner', { count: input.rejected.length });
   return staleness(input) === 'stale'
     ? t('sync.banner.stale')
@@ -401,5 +423,6 @@ const styles = StyleSheet.create({
   rejectedDetail: { gap: space.xs, marginBottom: space.md, paddingLeft: space.lg },
   sectionDanger: { ...type.heading, color: color.danger, marginTop: space.xl },
   inlineError: { ...type.bodySm, color: color.danger, marginTop: space.sm },
+  firstSyncTitle: { ...type.body, color: color.text, marginBottom: space.xs },
   disabledReason: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
 });

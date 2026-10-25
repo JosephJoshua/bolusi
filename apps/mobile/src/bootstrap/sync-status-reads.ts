@@ -192,3 +192,12 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
     quarantined,
   };
 }
+
+/** Device time of the oldest op held, for a new device's first-sync progress; `null` when empty. */
+export async function readOldestOpAt(db: Kysely<ClientDatabase>): Promise<number | null> {
+  const row = await db
+    .selectFrom('operations')
+    .select((eb) => eb.fn.min('timestampMs').as('oldest'))
+    .executeTakeFirst();
+  return row?.oldest === undefined || row.oldest === null ? null : Number(row.oldest);
+}
