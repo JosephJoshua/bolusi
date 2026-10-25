@@ -88,6 +88,12 @@ export interface PullPhaseDeps<DB> {
    * Fire-and-forget like the surface: a throw is swallowed and never fails the pull.
    */
   readonly onBatchCommitted?: (batch: PulledBatch) => void;
+  /**
+   * Asked after each committed batch while the server has more. `false` stops the pull there: every
+   * batch so far is committed with its cursor, so the next pull resumes exactly where this one
+   * stopped. Lets a time-limited background run end cleanly instead of being killed mid-batch.
+   */
+  readonly shouldContinue?: () => boolean;
 }
 
 /** What one committed pull batch carried, for progress display. */
@@ -109,6 +115,8 @@ export interface PullPhaseResult {
   /** Forced `devicesDirectoryVersion: 0` re-pulls — at most one per batch (api/01 §4.2). */
   readonly refetches: number;
   readonly serverTime: number | null;
+  /** False when `shouldContinue` stopped the pull before the server ran out of ops. */
+  readonly drained: boolean;
 }
 
 /** An op as it survived (or failed) individual parsing. */
@@ -186,9 +194,12 @@ export async function runPullPhase<DB>(deps: PullPhaseDeps<DB>): Promise<PullPha
     reportBatch(deps, parsed, outcome.applied);
 
     if (!parsed.envelope.hasMore) break;
+    if (deps.shouldContinue?.() === false) {
+      return { applied, quarantined, released, batches, refetches, serverTime, drained: false };
+    }
   }
 
-  return { applied, quarantined, released, batches, refetches, serverTime };
+  return { applied, quarantined, released, batches, refetches, serverTime, drained: true };
 }
 
 /** Would any op in this batch fail verification for `unknown_pubkey`, given the registry it would see? */

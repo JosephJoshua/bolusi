@@ -50,6 +50,8 @@ import {
   type RealtimeHandle,
   type RealtimeSocketCtor,
 } from './realtime-client.js';
+import type { BackgroundRegistration } from './background-task.js';
+import { registerSyncTask, type BackgroundSyncBinding } from './background-sync.js';
 import { readOldestOpAt } from './sync-status-reads.js';
 import { createFetchSyncTransport } from './transport.js';
 import {
@@ -92,6 +94,8 @@ export interface SyncClientDeps {
    * (re)connect only. Absent in loop-only tests (no realtime), which is the honest "no channel" state.
    */
   readonly createRealtime?: (trigger: () => void) => RealtimeHandle;
+  /** Trigger (d): the OS background task, when the platform has one (background-sync.ts). */
+  readonly background?: BackgroundSyncBinding;
 }
 
 /** The live sync client. Owns the loop + triggers and a small reactive view Root renders from. */
@@ -114,6 +118,12 @@ export interface SyncClient {
   start(): Promise<void>;
   /** (e) pull-to-refresh. */
   requestManual(): void;
+  /** (d) one background-task pass. */
+  requestBackground(): void;
+  /** Stop the running cycle at its next committed pull batch, for a background pass out of time. */
+  pause(): void;
+  /** Whether trigger (d) registered, once `start()` has tried; `null` when there is no platform. */
+  backgroundRegistration(): BackgroundRegistration | null;
   /** Cancel every timer + subscription. Idempotent. */
   stop(): void;
   /** The live loop state (03 §10) — Root's `loopState`. */
@@ -147,6 +157,8 @@ class SyncClientImpl implements SyncClient {
   private firstSyncProgress: FirstSyncProgress | null = null;
   /** Oldest op time on this device, read once per process when the first pull reports a batch. */
   private historyStart: Promise<number | null> | null = null;
+  private background: BackgroundRegistration | null = null;
+  private detachBackground: (() => void) | null = null;
 
   constructor(private readonly deps: SyncClientDeps) {
     this.currentSyncState = deps.initialSyncState;
@@ -214,13 +226,34 @@ class SyncClientImpl implements SyncClient {
     // it is started LAST — a poke now has a hydrated loop to drive. Purely additive (FR-1146): if the
     // channel never connects, the §5 triggers above keep sync converging with no dependency on it.
     this.realtime?.start();
+    // Last, like realtime: a background pass drives the hydrated loop. Attach before registering so a
+    // pass the OS runs the moment registration lands already finds this client.
+    const background = this.deps.background;
+    if (background !== undefined) {
+      this.detachBackground = background.host.attach(this);
+      this.background = await registerSyncTask(background);
+    }
   }
 
   requestManual(): void {
     this.triggers.requestManual();
   }
 
+  requestBackground(): void {
+    this.request('background');
+  }
+
+  pause(): void {
+    this.loop.pause();
+  }
+
+  backgroundRegistration(): BackgroundRegistration | null {
+    return this.background;
+  }
+
   stop(): void {
+    this.detachBackground?.();
+    this.detachBackground = null;
     this.realtime?.stop();
     this.triggers.stop();
     this.uiNetUnsub?.();
@@ -352,6 +385,8 @@ export interface SyncClientForAppConfig {
    * the bundle producer's seam stays `undefined` by design.
    */
   readonly onBundleRefreshed?: () => void | Promise<void>;
+  /** Trigger (d)'s native binding and the module-scope host (index.ts). */
+  readonly background?: BackgroundSyncBinding;
 }
 
 /**
@@ -389,6 +424,7 @@ export function createSyncClientForApp(
     appState: config.appState,
     netInfo: config.netInfo,
     initialSyncState: app.syncState,
+    ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT
     // from the same SecureStore reader the sync legs use — never cached. `WebSocket`/`fetch` default to

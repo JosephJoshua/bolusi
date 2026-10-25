@@ -25,12 +25,14 @@ import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
+import { createBackgroundSyncHost, SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
+import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from './src/ports/clock.js';
 import { deviceColumnAead } from './src/ports/aead.js';
 import { quickCryptoPort } from './src/ports/crypto.js';
@@ -152,6 +154,14 @@ function apiBaseUrl(): string {
   return requireApiBaseUrl(process.env['EXPO_PUBLIC_API_URL']);
 }
 
+/**
+ * TRIGGER (d) FOR SYNC, DEFINED AT MODULE SCOPE. An OS launch straight into the background runs this
+ * file and then dispatches the task, so the definition has to exist before any boot. The executor
+ * drives whichever client `createSync` built once it attaches (bootstrap/background-sync.ts).
+ */
+const backgroundSync = createBackgroundSyncHost(systemTimer);
+expoBackgroundTaskPlatform.defineTask(SYNC_BACKGROUND_TASK, () => backgroundSync.runPass());
+
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
@@ -166,6 +176,7 @@ function createSync(
     clock: systemClock,
     appState: appStatePort,
     netInfo: netInfoPort,
+    background: { platform: expoBackgroundTaskPlatform, host: backgroundSync },
     ...(onBundleRefreshed === undefined ? {} : { onBundleRefreshed }),
   });
 }

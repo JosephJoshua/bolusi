@@ -25,6 +25,13 @@ import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
+import { FakeTimer } from '../media/_harness.test.js';
+import { fakeBackgroundPlatform } from './_background-platform.test.js';
+import {
+  createBackgroundSyncHost,
+  SYNC_BACKGROUND_TASK,
+  type BackgroundSyncBinding,
+} from './background-sync.js';
 import type { Bootstrapped } from './bootstrap.js';
 import { createSyncClient, createSyncClientForApp, type SyncClientDeps } from './sync-client.js';
 import { APPEND_DEBOUNCE_MS } from './triggers.js';
@@ -167,6 +174,7 @@ interface BuildOptions {
   readonly bundleThrows?: boolean;
   readonly pushRejects?: boolean;
   readonly pullRejects?: boolean;
+  readonly background?: BackgroundSyncBinding;
 }
 
 async function build(options: BuildOptions = {}) {
@@ -199,6 +207,7 @@ async function build(options: BuildOptions = {}) {
     appState: activeAppState,
     netInfo: net.port,
     initialSyncState: await readSyncState(db.db),
+    ...(options.background === undefined ? {} : { background: options.background }),
   };
   return { client: createSyncClient(deps), transport, timer, net, bundleCalls: () => bundleCalls };
 }
@@ -478,6 +487,47 @@ describe('a new device reports first-sync progress per committed batch', () => {
     client.requestManual();
     await client.settle();
     expect(client.firstSync()).toBeNull();
+    client.stop();
+  });
+});
+
+describe('trigger (d): the OS background task drives the started client', () => {
+  test('start registers the sync task, and a pass runs a real background cycle', async () => {
+    const platform = fakeBackgroundPlatform({});
+    const host = createBackgroundSyncHost(new FakeTimer());
+    const { client, transport } = await build({ online: false, background: { platform, host } });
+    await client.start();
+    expect(client.backgroundRegistration()).toEqual({ kind: 'registered' });
+    expect(platform.registered.map((entry) => entry.name)).toEqual([SYNC_BACKGROUND_TASK]);
+    expect(transport.pulls).toHaveLength(0); // booted offline: no foreground trigger has run
+
+    await platform.executors.get(SYNC_BACKGROUND_TASK)?.();
+    expect(transport.pulls.length).toBeGreaterThan(0);
+    expect((await readSyncState(db.db)).lastSuccessfulSyncAt).toBe(T);
+    client.stop();
+  });
+
+  test('a stopped client is no longer driven by a background pass', async () => {
+    const platform = fakeBackgroundPlatform({});
+    const timer = new FakeTimer();
+    const host = createBackgroundSyncHost(timer);
+    const { client, transport } = await build({ online: false, background: { platform, host } });
+    await client.start();
+    client.stop();
+
+    const pass = host.runPass();
+    timer.runPending(); // no client attaches, so the boot wait expires
+    await pass;
+    expect(transport.pulls).toHaveLength(0);
+  });
+
+  test('a restricted platform is reported, not mistaken for a registration', async () => {
+    const platform = fakeBackgroundPlatform({ status: 1 });
+    const host = createBackgroundSyncHost(new FakeTimer());
+    const { client } = await build({ online: false, background: { platform, host } });
+    await client.start();
+    expect(client.backgroundRegistration()).toEqual({ kind: 'restricted' });
+    expect(platform.registered).toHaveLength(0);
     client.stop();
   });
 });
