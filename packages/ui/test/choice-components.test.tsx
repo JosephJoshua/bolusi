@@ -22,8 +22,15 @@ describe('SegmentedControl', () => {
         onChange={onChange}
       />,
     );
-    expect(r.get('seg.queue').props['accessibilityState']).toEqual({ selected: false });
-    expect(r.get('seg.mine').props['accessibilityState']).toEqual({ selected: true });
+    expect(r.get('seg.queue').props['accessibilityRole']).toBe('radio');
+    expect(r.get('seg.queue').props['accessibilityState']).toEqual({
+      checked: false,
+      selected: false,
+    });
+    expect(r.get('seg.mine').props['accessibilityState']).toEqual({
+      checked: true,
+      selected: true,
+    });
     fire(r.get('seg.queue'), 'onPress');
     expect(onChange).toHaveBeenCalledWith('queue');
   });

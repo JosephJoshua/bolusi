@@ -52,9 +52,10 @@ export function SegmentedControl<V extends string>({
       <Pressable
         key={option.value}
         testID={`${testID}.${option.value}`}
-        accessibilityRole="button"
+        // One choice of several: a radio in a radio group, so a screen reader says "1 of 3, selected".
+        accessibilityRole="radio"
         accessibilityLabel={option.label}
-        accessibilityState={{ selected }}
+        accessibilityState={{ checked: selected, selected }}
         onPress={() => onChange(option.value)}
         style={[
           styles.option,
@@ -72,7 +73,7 @@ export function SegmentedControl<V extends string>({
   });
   if (wrap) {
     return (
-      <View style={styles.wrapped} testID={testID}>
+      <View style={styles.wrapped} accessibilityRole="radiogroup" testID={testID}>
         {items}
       </View>
     );
@@ -83,6 +84,7 @@ export function SegmentedControl<V extends string>({
       showsHorizontalScrollIndicator={false}
       style={styles.scroller}
       contentContainerStyle={styles.row}
+      accessibilityRole="radiogroup"
       testID={testID}
     >
       {items}
