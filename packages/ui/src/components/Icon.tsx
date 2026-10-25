@@ -67,6 +67,12 @@ export const ICON_GLYPHS = Object.freeze({
   repair: 'wrench-outline',
   /** Repair: a customer's phone number. */
   phone: 'phone-outline',
+  /** PhotoSlot: an empty slot that takes the customer's signature, not a photo. */
+  signature: 'draw',
+  /** A compact inline action that removes one row (a price line), always beside a label. */
+  remove: 'close',
+  /** A compact inline action that reopens a section for editing, always beside a label. */
+  edit: 'pencil-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

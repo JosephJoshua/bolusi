@@ -18,6 +18,8 @@ export interface ToggleChipProps {
 
 const styles = StyleSheet.create({
   chip: {
+    // Sized to its label: in a column it would otherwise stretch into something that reads as a field.
+    alignSelf: 'flex-start',
     minHeight: touch.min,
     paddingHorizontal: space.md,
     borderRadius: radius.full,

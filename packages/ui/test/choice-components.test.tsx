@@ -1,4 +1,5 @@
 // Selection and guided-capture components: state is announced and shown with more than colour.
+import { StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
@@ -25,6 +26,37 @@ describe('SegmentedControl', () => {
     expect(r.get('seg.mine').props['accessibilityState']).toEqual({ selected: true });
     fire(r.get('seg.queue'), 'onPress');
     expect(onChange).toHaveBeenCalledWith('queue');
+  });
+
+  // Regression: a ScrollView grows by default, so placed straight in a scrolling screen the
+  // options stretched to the screen's full height (seen on the price-change step).
+  test('the sideways scroller does not grow to fill its parent', () => {
+    const r = render(
+      <SegmentedControl
+        testID="seg"
+        options={[{ value: 'a', label: 'A' }]}
+        value="a"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexGrow: 0 });
+  });
+
+  test('wrap lays the options out on lines instead of scrolling them out of view', () => {
+    const r = render(
+      <SegmentedControl
+        testID="seg"
+        wrap
+        options={[
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' },
+        ]}
+        value="a"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexWrap: 'wrap' });
+    expect(r.get('seg.b')).toBeDefined();
   });
 });
 

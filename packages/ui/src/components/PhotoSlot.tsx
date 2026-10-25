@@ -17,6 +17,8 @@ export interface PhotoSlotProps {
   readonly image: ReactNode | null;
   /** Already-localized; read out with the label, e.g. "Ambil foto" / "Ambil ulang". */
   readonly actionLabel: string;
+  /** What an empty slot asks for; a camera unless the slot takes something else (a signature). */
+  readonly emptyIcon?: 'camera' | 'signature' | undefined;
   /** Absent ⇒ the slot is read-only (a ticket's recorded evidence). */
   readonly onPress?: (() => void) | undefined;
   readonly testID?: string | undefined;
@@ -48,6 +50,7 @@ export function PhotoSlot({
   label,
   image,
   actionLabel,
+  emptyIcon = 'camera',
   onPress,
   testID = 'ui.photoSlot',
 }: PhotoSlotProps): React.JSX.Element {
@@ -57,7 +60,7 @@ export function PhotoSlot({
       {filled ? (
         <View style={styles.image}>{image}</View>
       ) : (
-        <Icon name="camera" size={size.iconState} color={color.textMuted} />
+        <Icon name={emptyIcon} size={size.iconState} color={color.textMuted} />
       )}
       {filled ? (
         <View style={styles.done} testID={`${testID}.done`}>
@@ -90,7 +93,7 @@ export function PhotoSlot({
           {body}
         </Pressable>
       )}
-      <Text style={styles.label} numberOfLines={1}>
+      <Text style={styles.label} numberOfLines={2}>
         {label}
       </Text>
     </View>
