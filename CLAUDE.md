@@ -20,6 +20,8 @@ ideas live in `docs/product-reference/`; read only the relevant sections.
   supplies context, not proof that work landed or verification passed.
 - Add regression tests for bugs and meaningful tests for new behavior. Run checks
   appropriate to the change; report actual results and anything not verified.
+- A UI task is done only after interactive QA: run the real app, use the changed
+  flow, look at screenshots, and report on the PR. Follow `docs/qa.md`.
 - Preserve tenant isolation, authorization, operation integrity, offline recovery,
   and money/stock correctness. Test changes to these directly.
 - Keep secrets out of source and reports. Ask before deployment, destructive data
