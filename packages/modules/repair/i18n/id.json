@@ -408,6 +408,10 @@
     "refund": "Dikembalikan"
   },
   "print": {
+    "askTitle": "Notanya sudah tercetak?",
+    "askMessage": "Cek dulu apakah kertasnya sudah keluar dari printer.",
+    "askYes": "Sudah tercetak",
+    "askNo": "Belum",
     "title": "Cetak nota",
     "print": "Cetak",
     "share": "Kirim PDF",

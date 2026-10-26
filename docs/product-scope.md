@@ -153,8 +153,9 @@ Agreed with the owner before building printing.
 - **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
 - **Phone-only counters** make a PDF to print through the phone's print dialog
   or share (for example on WhatsApp), on A4 or A5 (remembered per phone).
-  Dot-matrix printing is the desktop app's. On Android the print dialog does not
-  report a cancel, so a cancelled print there still counts as printed.
+  Dot-matrix printing is the desktop app's. Android's print dialog does not
+  report a cancel, so the phone asks whether the slip printed before logging it;
+  a cancelled first print never makes the real one read "Cetak ulang".
 - **Logo from the gallery:** the store logo is the one picture that may come from
   the phone's gallery. Evidence photos stay camera-only; the lint rule allows the
   photo picker in exactly one file, which feeds only the slip settings screen.

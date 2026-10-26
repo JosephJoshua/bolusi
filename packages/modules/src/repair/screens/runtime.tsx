@@ -42,8 +42,11 @@ export interface RepairPrinting {
   /** The paper this device last printed on; null before the first print. */
   readPaper(): Promise<PaperSettings | null>;
   writePaper(paper: PaperSettings): Promise<void>;
-  /** Hand the page to the system print dialog, or share it as a PDF. A failure rejects. */
-  output(slip: SlipOutput, how: 'print' | 'share'): Promise<'done' | 'cancelled'>;
+  /**
+   * Hand the page to the system print dialog, or share it as a PDF. A failure rejects.
+   * `unconfirmed` is a dialog that cannot say whether it printed (Android): the screen asks.
+   */
+  output(slip: SlipOutput, how: 'print' | 'share'): Promise<'done' | 'cancelled' | 'unconfirmed'>;
   /** A verified picture (the logo, a signature) as a `data:` URI; null when it is not here yet. */
   imageDataUri(ref: ThumbnailRef): Promise<string | null>;
 }

@@ -3,6 +3,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 
 import type { PrintPlatform } from '../bootstrap/repair-printing.js';
 import type { SlipOutput } from '@bolusi/modules/repair/screens';
@@ -32,8 +33,9 @@ export const expoPrintPlatform: PrintPlatform = {
         orientation:
           size.width > size.height ? Print.Orientation.landscape : Print.Orientation.portrait,
       });
-      // Android hands the job to its print service and never says whether it was cancelled there.
-      return 'done';
+      // Android hands the job to its print service and never says whether it was cancelled there,
+      // so the screen asks rather than counting a cancelled first print as printed.
+      return Platform.OS === 'android' ? 'unconfirmed' : 'done';
     } catch (error) {
       if ((error as { code?: unknown }).code === PRINT_INCOMPLETE) return 'cancelled';
       throw error;

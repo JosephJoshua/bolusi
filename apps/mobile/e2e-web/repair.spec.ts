@@ -426,6 +426,17 @@ test('the counter prints the handover slip, and the next print is a reprint', as
   await expect(slip.getByText('Nota servisan').first()).toBeVisible();
   await slip.screenshot({ path: path.join(ARTIFACTS, 'print-slip-a4.png'), fullPage: true });
   await slip.close();
+  // Nothing is logged until the counter says the paper came out.
+  await expect(page.getByTestId('repair.print.ask')).toBeVisible();
+  await shoot(page, 'print-ask');
+  await tap(page, 'repair.print.ask.cancel');
+  await tap(page, 'repair.print.back');
+  await tap(page, 'repair.ticket.action.print');
+  await expect(page.getByTestId('repair.print.reprint')).toHaveCount(0);
+  const again = page.waitForEvent('popup');
+  await tap(page, 'repair.print.primary');
+  await (await again).close();
+  await tap(page, 'repair.print.ask.confirm');
   await expect(page.getByTestId('repair.ticket.done')).toBeVisible();
   await tap(page, 'repair.ticket.action.print');
   await expect(page.getByTestId('repair.print.reprint')).toBeVisible();

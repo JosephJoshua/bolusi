@@ -408,6 +408,10 @@
     "refund": "Refund"
   },
   "print": {
+    "askTitle": "Did the slip print?",
+    "askMessage": "Check whether the paper came out of the printer.",
+    "askYes": "Printed",
+    "askNo": "Not yet",
     "title": "Print slip",
     "print": "Print",
     "share": "Send PDF",

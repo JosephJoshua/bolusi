@@ -20,8 +20,8 @@ export const PRINT_PAPER_META_KEY = 'print.paper';
 
 /** The native half: expo-print's dialog and PDF writer, the share sheet, and file reads. */
 export interface PrintPlatform {
-  /** The system print dialog. Resolves 'cancelled' where the platform reports it (iOS). */
-  print(slip: SlipOutput): Promise<'done' | 'cancelled'>;
+  /** The system print dialog: 'unconfirmed' where it cannot say whether it printed (Android). */
+  print(slip: SlipOutput): Promise<'done' | 'cancelled' | 'unconfirmed'>;
   /** Write the page as a PDF named after the job and open the share sheet. */
   sharePdf(slip: SlipOutput): Promise<'done' | 'cancelled'>;
   readBase64(uri: string): Promise<string>;

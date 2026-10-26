@@ -4,7 +4,7 @@
  * from the ticket as it reads at that moment, then logged so the next print says "Cetak ulang".
  */
 import { PAPER_PRESETS, renderHtml, type PaperSettings } from '@bolusi/core';
-import { SegmentedControl } from '@bolusi/ui';
+import { ConfirmSheet, SegmentedControl } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -50,6 +50,9 @@ export function PrintStep({
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
   const [paper, setPaper] = useState<PhonePaper>('a4');
+  // The print dialog could not say whether it printed: ask before logging it, so a cancelled first
+  // print does not make the real first slip read "Cetak ulang".
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -100,8 +103,18 @@ export function PrintStep({
         return outcome;
       })
       .then((outcome) => {
-        if (outcome === 'done')
+        if (outcome === 'unconfirmed') setAsking(true);
+        else if (outcome === 'done')
           onDone(how === 'print' ? 'repair.done.printed' : 'repair.done.shared');
+      });
+  };
+
+  const confirmPrinted = (): void => {
+    setAsking(false);
+    void runner
+      .run(() => runtime.run('recordSlipPrinted', { ticketId: ticket.id, slip }))
+      .then((result) => {
+        if (result !== undefined) onDone('repair.done.printed');
       });
   };
 
@@ -122,6 +135,20 @@ export function PrintStep({
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
+      overlay={
+        asking ? (
+          <ConfirmSheet
+            title={tn('repair.print.askTitle')}
+            message={tn('repair.print.askMessage')}
+            confirmLabel={tn('repair.print.askYes')}
+            onConfirm={confirmPrinted}
+            tone="primary"
+            cancelLabel={tn('repair.print.askNo')}
+            onCancel={() => setAsking(false)}
+            testID={`${testID}.ask`}
+          />
+        ) : null
+      }
       testID={testID}
     >
       {slips.length > 1 ? (

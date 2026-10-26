@@ -737,12 +737,13 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       const url = URL.createObjectURL(new Blob([slip.html], { type: 'text/html' }));
       if (how === 'print') {
         window.open(url, '_blank');
-      } else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${slip.jobName}.html`;
-        link.click();
+        // A browser tab cannot say whether it was printed either, so the screen asks.
+        return Promise.resolve('unconfirmed');
       }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${slip.jobName}.html`;
+      link.click();
       return Promise.resolve('done');
     },
     imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
