@@ -90,6 +90,12 @@ test('the scrolling content container grows without being clamped to the viewpor
   expect(container['flex']).toBeUndefined();
 });
 
+test('the plain content slot is held to the space left, so a list inside it windows', () => {
+  // A slot that grew with its content (flexGrow alone) gave a List its full content height: every
+  // loaded row rendered at once and the board slowed to seconds per key at a busy store's volume.
+  expect(shell().styleOf('ui.appShell.content')['flex']).toBe(1);
+});
+
 test('the content keeps its padding in both shapes', () => {
   // The padding moved off the outer view onto the shared container style; losing it in either
   // branch would be a silent regression no other test covers.
