@@ -243,7 +243,6 @@ export function DeviceStep({
         onChangeText={(value) => set({ model: value })}
         onBlur={tidyModel}
         errorMessage={modelError}
-        autoFocus
         revealOnFocus="to-top"
         testID={`${testID}.model`}
       />

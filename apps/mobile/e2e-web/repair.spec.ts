@@ -140,11 +140,13 @@ test('typing a model suggests catalog phones with their picture', async ({ page 
   await tap(page, 'repair.board.newIntake');
   await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
   await tap(page, 'repair.intake.primary');
-  // With the keyboard up, the model field moves to the top so the suggestions fit under it.
-  // The field (label included) settles just under the header. Wait for the scroll to end first:
-  // a scripted focus, as `fill` does, cuts a browser's smooth scroll short (typing on a phone
-  // does not).
+  // Tapping the model field opens the keyboard, and the field moves to the top so the suggestions
+  // fit under it. The field (label included) settles just under the header. Wait for the scroll to
+  // end first: a scripted focus, as `fill` does, cuts a browser's smooth scroll short (typing on a
+  // phone does not).
+  await expect(page.getByTestId('repair.intake.device.model.field')).not.toBeFocused();
   await page.setViewportSize(KEYBOARD_UP);
+  await page.getByTestId('repair.intake.device.model.field').click();
   const header = (await page.getByTestId('repair.intake.header').first().boundingBox())!;
   await expect
     .poll(async () => (await page.getByTestId('repair.intake.device.model').boundingBox())!.y)
