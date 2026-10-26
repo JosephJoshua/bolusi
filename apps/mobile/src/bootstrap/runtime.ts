@@ -25,6 +25,7 @@ import {
   createModuleRuntime,
   SearchIndexCache,
   createDirectorySource,
+  mediaRefsInPayload,
   PermissionEvaluator,
   type ClockPort,
   type CommandRuntime,
@@ -33,12 +34,14 @@ import {
   type IdSource,
   type LocationPort,
   type ModuleRuntime,
+  type ProjectionApply,
   type SigningKeyPort,
   type SyncSchedulerPort,
 } from '@bolusi/core';
 import { createClientOpStore, type ClientDatabase } from '@bolusi/db-client';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { attachMediaToOperation } from '../media/queue.js';
 import { denialAuditDiagnostics } from '../ports/diagnostics.js';
 import { systemTimer } from '../ports/timer.js';
 
@@ -100,6 +103,11 @@ export interface AppRuntime {
    * the evidence (§2.11), that test is.
    */
   bindSyncScheduler(scheduler: SyncSchedulerPort | null): void;
+  /**
+   * Where an append that attached media reports it: the media drain's capture trigger (06 §5.2 b).
+   * Late-bound like the scheduler, because the media client starts after the runtime exists.
+   */
+  bindMediaAttached(notify: (() => void) | null): void;
 }
 
 /**
@@ -115,7 +123,21 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
     createDirectorySource(app.db.db),
   );
   const store = createClientOpStore(app.db);
-  const applyProjection = app.engine.asAppendSeam();
+  const projectAppended = app.engine.asAppendSeam();
+  // 04 §5.1 step 5: a capture is attached to the op that references it inside the append's
+  // transaction, so the media drain only ever uploads evidence a signed op committed to (06 §4).
+  // Pulled ops never pass through here, and a foreign device's media has no local row anyway.
+  let mediaAttached: (() => void) | null = null;
+  const applyProjection: ProjectionApply = async (op) => {
+    await projectAppended(op);
+    const refs = mediaRefsInPayload(op.payload);
+    for (const ref of refs) {
+      await attachMediaToOperation(app.db.db, ref, op);
+    }
+    // Newly attached evidence is drainable for the first time; the trigger is debounced, so it runs
+    // after this transaction commits.
+    if (refs.length > 0) mediaAttached?.();
+  };
   // One live search cache for the app, fed by the engine's applies (search/live-index.ts), so every
   // runtime this composition mints searches the same warm indexes.
   const search = new SearchIndexCache(app.invalidation);
@@ -140,6 +162,9 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
     evaluator,
     bindSyncScheduler(next: SyncSchedulerPort | null): void {
       boundScheduler = next;
+    },
+    bindMediaAttached(notify: (() => void) | null): void {
+      mediaAttached = notify;
     },
     runtimeFor(device: DeviceIdentity): CommandRuntime {
       return this.moduleRuntimeFor(device).commands;

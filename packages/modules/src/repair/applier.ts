@@ -26,8 +26,10 @@ import {
   INTAKE_PHOTO_SLOTS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_TICKET_ENTITY,
+  workPhotoSlot,
   type DeviceLocation,
   type RepairOutcome,
+  type WorkPhotoStage,
 } from './constants.js';
 import type { RepairDatabase } from './schema.js';
 
@@ -400,6 +402,18 @@ export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = asyn
   const { technicianId } = payloadOf<{ technicianId: string }>(op);
   await updateTicket(db, op, { technicianId });
   await recordEvent(db, op, { technicianId });
+};
+
+export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { stage, photos } = payloadOf<{ stage: WorkPhotoStage; photos: MediaRef[] }>(op);
+  if (photos.length > 0) {
+    await insertPhotos(
+      db,
+      op,
+      photos.map((photo) => [workPhotoSlot(stage, photo.mediaId), photo] as const),
+    );
+  }
+  await recordEvent(db, op, { stage, count: photos.length });
 };
 
 export const workStartedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {

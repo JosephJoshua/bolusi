@@ -13,6 +13,7 @@ export {
   isPersistentlyFailing,
   mediaBackoffDelayMs,
 } from './backoff.js';
+export { mediaRefsInPayload } from './op-media.js';
 export {
   MediaDrainLoop,
   mediaErrorLabelKey,

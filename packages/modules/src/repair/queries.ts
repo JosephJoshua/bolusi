@@ -16,6 +16,7 @@ import {
 
 import {
   DEVICE_LOCATIONS,
+  IN_PROGRESS_OUTCOMES,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OUTCOMES,
   REPAIR_PERMISSION,
@@ -491,6 +492,39 @@ export const getTicketQuery = {
   permission: REPAIR_PERMISSION.read,
   input: getTicketInput,
   handler: getTicketHandler,
+} as const;
+
+// ── technicianLoads ────────────────────────────────────────────────────────────────────────────
+
+export const technicianLoadsInput = z.object({}).strict();
+export type TechnicianLoadsInput = z.infer<typeof technicianLoadsInput>;
+
+/** How many repairs each technician holds that are still in the store and being worked on. */
+export async function technicianLoadsHandler(
+  _input: TechnicianLoadsInput,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly technicianId: string; readonly load: number }>> {
+  const rows = await qctx.db
+    .selectFrom('repairTickets')
+    .select((eb) => ['technicianId', eb.fn.countAll<number>().as('load')])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .where('outcome', 'in', IN_PROGRESS_OUTCOMES)
+    .where('location', '=', 'in_store')
+    .where('technicianId', 'is not', null)
+    .groupBy('technicianId')
+    .execute();
+  return {
+    rows: rows.map((row) => ({ technicianId: row.technicianId ?? '', load: Number(row.load) })),
+    nextCursor: null,
+  };
+}
+
+export const technicianLoadsQuery = {
+  name: 'technicianLoads',
+  permission: REPAIR_PERMISSION.read,
+  input: technicianLoadsInput,
+  handler: technicianLoadsHandler,
 } as const;
 
 // ── nextTicketCounter (the openTicket command's read seam) ─────────────────────────────────────

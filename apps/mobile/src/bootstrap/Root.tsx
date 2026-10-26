@@ -75,6 +75,7 @@ import {
   type SyncStatusReads,
 } from './sync-status-reads.js';
 import { useCaptureHost, type CapturePlatform } from '../media/CaptureHost.js';
+import { useSignatureHost } from '../media/SignatureHost.js';
 import type { SyncClient } from './sync-client.js';
 import type { AppStatePort } from './triggers.js';
 import { createIdleTicker } from '../session/idle-ticker.js';
@@ -82,6 +83,8 @@ import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { MediaClient } from '../media/client.js';
 import type { CommandIdentity, PinVerifierUploadPort, TimerPort } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
+import type { RepairRuntime } from '@bolusi/modules/repair/screens';
+import type { PhotoCapture, SignatureCapture } from '@bolusi/modules/screen-kit';
 
 /**
  * The fallback enrollment controller when none is injected (Node-driven Root with no `createEnrollment`).
@@ -189,6 +192,17 @@ export interface RootProps {
     capturePhoto: NotesRuntime['capturePhoto'],
   ) => NotesRuntime;
   /**
+   * Bind the repair surface for an open session, the twin of `createNotes`: the same identity, the
+   * same media client, plus the signature pad for handover. Absent ⇒ `home` stays notes.
+   */
+  readonly createRepair?: (
+    app: Bootstrapped,
+    runtime: AppRuntime,
+    identity: CommandIdentity,
+    media: MediaClient | null,
+    capture: { readonly capturePhoto: PhotoCapture; readonly captureSignature: SignatureCapture },
+  ) => RepairRuntime;
+  /**
    * RN `AppState`, injected — the idle ticker's foreground/resume signal (api/02-auth §6.4).
    *
    * REQUIRED, not optional, and that is the whole point: an optional platform input with a no-op
@@ -252,6 +266,7 @@ export function Root({
   createMedia,
   createSession,
   createNotes,
+  createRepair,
   appState,
   timer,
   createPushRegistration,
@@ -319,6 +334,8 @@ export function Root({
      * and attributed to the CURRENT user, never a carried-over identity.
      */
     readonly setUserLocale: (locale: Locale) => Promise<void>;
+    /** The repair surface for the same user and identity, or null on a build without it. */
+    readonly repair: RepairRuntime | null;
   } | null>(null);
   /**
    * §8.4's derived reads (01 §5.2), re-read on every projection write and every loop tick — see the
@@ -511,6 +528,8 @@ export function Root({
         if (!disposed) setDeviceInfo(info);
         await startSyncIfEnrolled(booted, enroll);
         await startMediaIfEnrolled(booted);
+        // Through the ref, so an append after teardown (ref cleared) notifies nothing.
+        enroll?.runtime.bindMediaAttached(() => mediaRef.current?.notifyAttached());
       } catch (error) {
         consoleDiagnostics.warn('enrolled-services start failed after session open', {
           via,
@@ -654,6 +673,9 @@ export function Root({
     identity: notes?.identity ?? null,
   });
 
+  /** The signature pad (06 §2.3) for handover, stamped with the same session identity. */
+  const signature = useSignatureHost({ media, identity: notes?.identity ?? null });
+
   /**
    * THE IDLE TICK (task 133; api/02-auth §6.4) — the production caller `SessionManager.checkIdle()`
    * never had.
@@ -757,12 +779,26 @@ export function Root({
         // `unavailable`, the failure the `media` state comment describes).
         runtime: createNotes(app, enrollment.runtime, identity, media, capture.capturePhoto),
         setUserLocale: createUserLocaleWriter(enrollment.runtime, identity),
+        repair:
+          createRepair?.(app, enrollment.runtime, identity, media, {
+            capturePhoto: capture.capturePhoto,
+            captureSignature: signature.captureSignature,
+          }) ?? null,
       });
     });
     return () => {
       cancelled = true;
     };
-  }, [app, enrollment, createNotes, sessionUserId, media, capture.capturePhoto]);
+  }, [
+    app,
+    enrollment,
+    createNotes,
+    createRepair,
+    sessionUserId,
+    media,
+    capture.capturePhoto,
+    signature.captureSignature,
+  ]);
 
   /**
    * PROJECTION UPGRADES (04 §4.4). An app update that bumps a module's projectionVersion re-folds that
@@ -843,6 +879,10 @@ export function Root({
     openSession !== null && notes !== null && notes.userId === openSession.userId
       ? notes.runtime
       : undefined;
+  const repairForSession =
+    openSession !== null && notes !== null && notes.userId === openSession.userId
+      ? (notes.repair ?? undefined)
+      : undefined;
 
   return (
     /**
@@ -877,6 +917,7 @@ export function Root({
         now={systemClock.now()}
         session={openSession === null ? null : { userId: openSession.userId }}
         notes={notesForSession}
+        repair={repairForSession}
         // DERIVED, never a literal (task 133). `false` here made an idle lock indistinguishable from
         // a sign-out: `resolveZone` would render the switcher in `choose` mode, with a header back
         // that walks straight into the previous user's session (design-system §8.2).
@@ -895,6 +936,8 @@ export function Root({
         onRetryUsers={() => void session?.refresh()}
         // The in-app capture surface while one is running (06 §2.1), else null.
         capture={capture.surface}
+        // The signature pad while a customer signs at handover (06 §2.3), else null.
+        signature={signature.surface}
         // SEC-AUTH-08 work retention (task 155) — the READ and WRITE halves of task 133's path, which
         // shipped with a producer (`updateWorkspace`) and NO consumer, so a half-typed note was still
         // lost on a real device. `workspace` is the active user's retained work from the shell session

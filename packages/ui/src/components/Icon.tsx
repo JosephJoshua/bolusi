@@ -57,6 +57,30 @@ export const ICON_GLYPHS = Object.freeze({
    *  an icon without a label), and a user stranded in a locale they cannot read recognises this one
    *  by shape. */
   language: 'translate',
+  /** PhotoSlot: an empty slot asks for a photo. */
+  camera: 'camera-outline',
+  /** ToggleChip / PhotoSlot: selected or done — always beside a label. */
+  check: 'check',
+  /** Search fields: the leading glyph of a search box. */
+  search: 'magnify',
+  /** Repair: a technician's work (queue rows, "start work"). */
+  repair: 'wrench-outline',
+  /** Repair: a customer's phone number. */
+  phone: 'phone-outline',
+  /** PhotoSlot: an empty slot that takes the customer's signature, not a photo. */
+  signature: 'draw',
+  /** A compact inline action that removes one row (a price line), always beside a label. */
+  remove: 'close',
+  /** A compact inline action that reopens a section for editing, always beside a label. */
+  edit: 'pencil-outline',
+  /** SearchField: clears what was typed. */
+  clear: 'close-circle',
+  /** PhotoViewer: closes the full-screen view. */
+  close: 'close',
+  /** PhotoViewer: saves or sends the photo through the system share sheet. */
+  share: 'share-variant-outline',
+  /** PhotoStrip: opens every photo at once. */
+  photos: 'image-multiple-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

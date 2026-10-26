@@ -5,15 +5,20 @@
 import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
-import { zMediaRef } from '@bolusi/schemas';
+import { zMediaRef, type MediaRef } from '@bolusi/schemas';
 
 import {
+  MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
+  REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
+  WORK_PHOTOS_MAX,
+  workPhotoStage,
   type QuoteLineKind,
   type RepairOutcome,
+  type WorkPhotoStage,
 } from './constants.js';
 import { zChecklistItem, zDevice, zIntakePhotos } from './operations.js';
 import {
@@ -34,7 +39,7 @@ const zPhone = z
   .max(40)
   .nullable()
   .transform((phone) => (phone === null || phone === '' ? null : phone));
-const zAmountInput = z.number().int().min(-1_000_000_000_000).max(1_000_000_000_000);
+const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
   .object({
@@ -52,6 +57,22 @@ function checkLineSign(kind: QuoteLineKind, amount: number): void {
       'VALIDATION_FAILED',
       { field: 'amount', issue: `${kind} amount has the wrong sign` },
       `a ${kind} line cannot have amount ${amount}`,
+    );
+  }
+}
+
+/**
+ * The agreed price can come down to nothing, but never below: the store would owe the customer.
+ * Only a line that lowers the total is refused, so a total that offline merges already pushed
+ * below zero can still be corrected upwards.
+ */
+function checkTotal(current: number, change: number): void {
+  const total = current + change;
+  if (change < 0 && total < 0) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'amount', issue: 'the total price would be negative' },
+      `the total price cannot be ${total}`,
     );
   }
 }
@@ -209,6 +230,10 @@ export async function openTicketHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<OpenTicketResult>> {
   for (const line of input.quoteLines) checkLineSign(line.kind, line.amount);
+  checkTotal(
+    0,
+    input.quoteLines.reduce((sum, line) => sum + line.amount, 0),
+  );
 
   const ops: OpDraft[] = [];
   let customerId: string;
@@ -290,6 +315,15 @@ export async function assignTechnicianHandler(
   if (ticket.technicianId === input.technicianId) {
     throw invalidTransition(ticket, REPAIR_OP.technicianAssigned, 'already assigned to them');
   }
+  // The picker only lists people who can do repair work; a crafted or stale input must not park a
+  // customer's phone with someone who can never start it.
+  if (!ctx.colleagueHasPermission(input.technicianId, REPAIR_PERMISSION.work)) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'technicianId', issue: 'cannot do repair work in this store' },
+      `user ${input.technicianId} cannot do repair work`,
+    );
+  }
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.technicianAssigned, {
@@ -300,20 +334,51 @@ export async function assignTechnicianHandler(
   };
 }
 
-export const startWorkInput = ticketIdInput;
+const zWorkPhotos = z.array(zMediaRef).max(WORK_PHOTOS_MAX);
+
+export const startWorkInput = z
+  .object({ ticketId: z.string().min(1), beforePhotos: zWorkPhotos.default([]) })
+  .strict();
+export type StartWorkInput = z.input<typeof startWorkInput>;
+
+/** The work-photo op for `photos`, or nothing when the command brought none. */
+function workPhotosOp(
+  ctx: CommandContext,
+  ticketId: string,
+  stage: WorkPhotoStage,
+  photos: readonly MediaRef[],
+): OpDraft[] {
+  return photos.length === 0
+    ? []
+    : [ticketOp(ctx, ticketId, REPAIR_OP.workPhotosAdded, { stage, photos })];
+}
+
+function missingPhotos(stage: WorkPhotoStage, why: string): DomainError {
+  return new DomainError(
+    'VALIDATION_FAILED',
+    { field: `${stage}Photos`, issue: 'at least one photo is required' },
+    why,
+  );
+}
 
 /**
  * Start (or resume, or reopen) work. Starting an unassigned ticket claims it in the same command,
- * so a technician picking a device off the shelf needs one tap.
+ * so a technician picking a device off the shelf needs one tap. The first start needs at least one
+ * `before` photo; a resume keeps the ones already taken and may add more.
  */
 export async function startWorkHandler(
-  input: z.output<typeof ticketIdInput>,
+  input: z.output<typeof startWorkInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOutcome(ticket, REPAIR_OP.workStarted, ['received', 'waiting_for_parts', 'repaired']);
+  const hasBefore = ticket.photos.some((photo) => workPhotoStage(photo.slot) === 'before');
+  if (!hasBefore && input.beforePhotos.length === 0) {
+    throw missingPhotos('before', `ticket ${ticket.ticketNumber} has no before photo yet`);
+  }
   const ops: OpDraft[] = [];
   if (ticket.technicianId === null) ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {}));
+  ops.push(...workPhotosOp(ctx, ticket.id, 'before', input.beforePhotos));
   ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.workStarted, {}));
   return { ops, result: { ticketId: ticket.id } };
 }
@@ -333,16 +398,27 @@ export async function markWaitingForPartsHandler(
   };
 }
 
-export const markRepairedInput = ticketNoteInput;
+export const markRepairedInput = z
+  .object({
+    ticketId: z.string().min(1),
+    note: zText(2000).default(''),
+    afterPhotos: zWorkPhotos.min(1),
+  })
+  .strict();
+export type MarkRepairedInput = z.input<typeof markRepairedInput>;
 
+/** Mark the repair done, with at least one `after` photo each time (owner decision). */
 export async function markRepairedHandler(
-  input: z.output<typeof ticketNoteInput>,
+  input: z.output<typeof markRepairedInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOutcome(ticket, REPAIR_OP.markedRepaired, ['in_repair']);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.markedRepaired, { note: input.note })],
+    ops: [
+      ...workPhotosOp(ctx, ticket.id, 'after', input.afterPhotos),
+      ticketOp(ctx, ticket.id, REPAIR_OP.markedRepaired, { note: input.note }),
+    ],
     result: { ticketId: ticket.id },
   };
 }
@@ -386,6 +462,8 @@ export async function proposeQuoteChangeHandler(
   checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChangeProposed);
+  // A proposal the cashier could never apply would only block handover until declined.
+  checkTotal(ticket.quoteTotal, input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -413,6 +491,7 @@ export async function changeQuoteHandler(
   checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChanged);
+  checkTotal(ticket.quoteTotal, input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -466,6 +545,7 @@ export async function applyProposalHandler(
   const proposal = findProposal(ticket, input.lineId, REPAIR_OP.quoteChanged);
   const amount = input.amount ?? proposal.amount;
   checkLineSign(proposal.kind, amount);
+  checkTotal(ticket.quoteTotal, amount);
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.quoteChanged, {
@@ -515,8 +595,9 @@ export const returnDeviceInput = z
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
 /**
- * Hand the device back. Allowed once it is repaired or cancelled; open technician proposals must
- * be decided first, because they could change what the customer owes.
+ * Hand the device back. Allowed once it is repaired or cancelled. On a repaired ticket open
+ * technician proposals must be decided first, because they could change what the customer owes; on
+ * a cancelled one they can no longer be decided, so they must not keep the phone in the store.
  */
 export async function returnDeviceHandler(
   input: z.output<typeof returnDeviceInput>,
@@ -529,7 +610,7 @@ export async function returnDeviceHandler(
   if (ticket.outcome !== 'repaired' && ticket.outcome !== 'cancelled') {
     throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'repair is not finished');
   }
-  if (ticket.pendingProposals > 0) {
+  if (ticket.outcome === 'repaired' && ticket.pendingProposals > 0) {
     throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'price proposals are undecided');
   }
   return {

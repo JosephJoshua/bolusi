@@ -52,7 +52,11 @@ async function writeJourney(a: RepairHarness): Promise<void> {
     a.cashierId,
   )) as { ticketId: string };
 
-  await a.run('startWork', { ticketId: first.ticketId }, a.technicianId);
+  await a.run(
+    'startWork',
+    { ticketId: first.ticketId, beforePhotos: [a.photo(20)] },
+    a.technicianId,
+  );
   const proposal = (await a.run(
     'proposeQuoteChange',
     {
@@ -81,7 +85,11 @@ async function writeJourney(a: RepairHarness): Promise<void> {
     },
     a.cashierId,
   );
-  await a.run('markRepaired', { ticketId: first.ticketId, note: 'OK' }, a.technicianId);
+  await a.run(
+    'markRepaired',
+    { ticketId: first.ticketId, note: 'OK', afterPhotos: [a.photo(21)] },
+    a.technicianId,
+  );
   await a.run(
     'returnDevice',
     { ticketId: first.ticketId, handoverPhoto: a.photo(7), signature: a.photo(8) },
@@ -151,13 +159,13 @@ test('two devices acting on one ticket offline converge; approval beats a concur
 
   const opened = (await a.run('openTicket', intake(a), a.cashierId)) as { ticketId: string };
   const ticketId = opened.ticketId;
-  await a.run('startWork', { ticketId }, a.technicianId);
+  await a.run('startWork', { ticketId, beforePhotos: [a.photo(20)] }, a.technicianId);
   const proposal = (await a.run(
     'proposeQuoteChange',
     { ticketId, kind: 'part', description: 'Baterai', amount: 200_000, reason: 'Kembung' },
     a.technicianId,
   )) as { lineId: string };
-  await a.run('markRepaired', { ticketId }, a.technicianId);
+  await a.run('markRepaired', { ticketId, afterPhotos: [a.photo(21)] }, a.technicianId);
 
   // Sync A → B, then both go offline.
   let arrivalB = 1;

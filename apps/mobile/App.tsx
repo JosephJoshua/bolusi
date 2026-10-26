@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
+import { RepairHome } from './src/screens/repair/RepairHome.js';
+import { systemClock } from './src/ports/clock.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
 import {
@@ -55,12 +57,16 @@ import {
 import { syncChipAccessibilityLabels } from './src/screens/sync-status/chip-a11y.js';
 import { CaptureScreen } from './src/media/CaptureScreen.js';
 import type { CaptureSurface } from './src/media/CaptureHost.js';
+import type { SignatureSurface } from './src/media/SignatureHost.js';
+import { SignaturePadScreen } from './src/media/SignaturePadScreen.js';
 import type { DeviceInfo, MutablePushCategory } from './src/screens/settings/model.js';
 import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
+import { REPAIR_MODULE_ID, parseIntakeDraft, type IntakeDraft } from '@bolusi/modules/repair';
+import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -104,12 +110,22 @@ export interface AppProps {
    */
   readonly capture?: CaptureSurface | null;
   /**
+   * The signature pad while a customer is signing (06 §2.3), from `useSignatureHost`. Rendered
+   * exactly like `capture`: it wins the screen inside the shell zone only, so a lock still wins.
+   */
+  readonly signature?: SignatureSurface | null;
+  /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
    * session-scoped runtime is wired (the shell is still pre-session — `session` is `null` today), in
    * which case `home` stays the empty shell rather than faking a surface that cannot query.
    */
   readonly notes?: NotesRuntime | undefined;
+  /**
+   * The repair module surface (slice 1). When present it is the `home` surface, ahead of notes,
+   * because the repair ticket is what the stores use the app for.
+   */
+  readonly repair?: RepairRuntime | undefined;
   /**
    * Submit a PIN for `userId`. Resolves TRUE when a session opened (task 119).
    *
@@ -345,6 +361,24 @@ export default function App(props: AppProps): React.JSX.Element {
     [publishWorkspace],
   );
 
+  /** The repair intake in progress, retained across a lock exactly like a notes draft. */
+  const restoredIntakeDraft = useMemo<IntakeDraft | null>(
+    () => (workspace === null ? null : parseIntakeDraft(workspace.drafts[REPAIR_MODULE_ID])),
+    [workspace],
+  );
+
+  const publishIntakeDraft = useCallback(
+    (draft: IntakeDraft | null): void => {
+      publishWorkspace((base) => {
+        const current = base.drafts[REPAIR_MODULE_ID] ?? null;
+        // Structural, for the same reason as `publishNotesDraft`: an equal re-publish is a no-op.
+        if (JSON.stringify(current) === JSON.stringify(draft)) return base;
+        return withDraft(base, REPAIR_MODULE_ID, draft);
+      });
+    },
+    [publishWorkspace],
+  );
+
   // Record where this user is, continuously (never on a lock signal — by then the shell no longer
   // knows whose route it was; `shell-session.ts`'s header states the race in full).
   useEffect(() => {
@@ -461,6 +495,7 @@ export default function App(props: AppProps): React.JSX.Element {
   }, [switching]);
 
   const captureSurface = props.capture ?? null;
+  const signatureSurface = props.signature ?? null;
   const goBack = useCallback((): boolean => {
     // A capture owns the screen while it runs (see the early return below), so back IS its cancel —
     // §8.1's "hardware back always equals the header back action", applied to the surface actually
@@ -468,6 +503,10 @@ export default function App(props: AppProps): React.JSX.Element {
     // the user cannot see, leaving the viewfinder on top of it.
     if (captureSurface !== null) {
       captureSurface.onBack();
+      return true;
+    }
+    if (signatureSurface !== null) {
+      signatureSurface.onBack();
       return true;
     }
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
@@ -513,7 +552,7 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [zone, enrollment, captureSurface]);
+  }, [zone, enrollment, captureSurface, signatureSurface]);
 
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
@@ -578,347 +617,404 @@ export default function App(props: AppProps): React.JSX.Element {
   // at bundle-eval; see `androidStatusBarInset`.
   const shellStyle = [styles.shell, { paddingTop: androidStatusBarInset() }];
 
-  const capture = captureSurface;
-  if (capture !== null && zone.kind === 'shell') {
-    /**
-     * THE CAPTURE SURFACE WINS THE SCREEN — BUT ONLY INSIDE THE SHELL ZONE (06 §2.1; task 130).
-     *
-     * `zone.kind === 'shell'` is the whole security content of this line, and it is here because
-     * the first version of it was wrong in the direction that matters. That version returned on
-     * `capture !== null` alone, with a comment asserting that a mid-capture idle lock would still
-     * lock — which was exactly backwards: `resolveZone` is recomputed on every render (above), but
-     * an unconditional early return never reads it, so a device that locked with the camera open
-     * kept showing a LIVE VIEWFINDER over a locked session. The comment was the guard, and the
-     * guard was false (CLAUDE.md §2.11). Deferring to the zone makes the lock win by construction.
-     * Falsified: dropping this conjunct turns `capture surface yields to an idle lock` red in
-     * `test/live-shell-dead-controls.test.tsx`.
-     *
-     * The pending capture survives the lock for the SAME user only — the host holds the deferred in
-     * `Root`, which does not unmount, so THIS user's PIN unlock returns to the viewfinder with the
-     * notes editor still waiting behind it ("Pekerjaanmu aman", SwitcherScreen.tsx:7-11). If a
-     * DIFFERENT user unlocks (an idle lock ended the session and someone else signed in), the host
-     * cancels the capture rather than handing the incoming user the outgoing user's live camera —
-     * that identity guard lives in `useCaptureHost` (`openedForUserRef`/`stranded`), because it needs
-     * the acting-identity change the zone gate cannot see, and it is covered by
-     * `a pending capture does not survive an idle lock into a different user's session`.
-     *
-     * The chrome comes from here because this is where chrome is built (§8.1: both slots always
-     * present). The sync chip goes to Sync Status the way every other screen's does; the avatar
-     * slot renders empty during a capture — a switcher hop from inside a half-finished photo would
-     * strand the capture behind an identity change, and 06 §4 freezes the capturing user at the
-     * shutter, so the identity must not be switchable between opening the camera and pressing it.
-     */
-    return (
-      <View testID="bolusi-app-shell" style={shellStyle}>
-        <StatusBar style="auto" />
-        <CaptureScreen
-          // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
-          // catalog's own name for this action ("Ambil Foto") — no new key, no hardcoded string.
-          title={t('media.action.takePhoto')}
-          state={capture.state}
-          preview={capture.preview}
-          syncChip={
-            <SyncChip
-              state={chip}
-              pendingCount={props.sync.pendingOperationCount}
-              progressPercent={setupPercent}
-              accessibilityLabels={syncChipAccessibilityLabels({
-                pendingCount: props.sync.pendingOperationCount,
-                firstSyncPercent: setupPercent,
-              })}
-              onPress={openSyncStatus}
-            />
-          }
-          avatar={<View testID="capture-no-avatar" />}
-          onShutter={capture.onShutter}
-          onRetake={capture.onRetake}
-          onUsePhoto={capture.onUsePhoto}
-          onRetry={capture.onRetry}
-          onBack={capture.onBack}
-        />
-      </View>
-    );
-  }
+  // The chrome for a capture or signature surface: the sync chip goes to Sync Status the way every
+  // other screen's does; the avatar slot stays empty so the identity cannot switch mid-capture.
+  const modalSyncChip = (
+    <SyncChip
+      state={chip}
+      pendingCount={props.sync.pendingOperationCount}
+      progressPercent={setupPercent}
+      accessibilityLabels={syncChipAccessibilityLabels({
+        pendingCount: props.sync.pendingOperationCount,
+        firstSyncPercent: setupPercent,
+      })}
+      onPress={openSyncStatus}
+    />
+  );
+
+  /*
+   * THE CAPTURE OR SIGNATURE SURFACE COVERS THE SCREEN, BUT ONLY INSIDE THE SHELL ZONE.
+   *
+   * It is an OVERLAY above the zone, never a replacement for it. The screen that asked for the photo
+   * (a repair step holding the photos taken so far, the intake wizard, the notes editor) awaits the
+   * capture's promise in its own state, so it must stay mounted underneath: returning the camera
+   * INSTEAD of the zone unmounted it, and the photo resolved into a screen that no longer existed.
+   * Guarded by `the screen that asked for the photo stays mounted` in
+   * `test/live-shell-dead-controls.test.tsx`.
+   *
+   * `zone.kind === 'shell'` is the whole security content of this line, and it is here because
+   * the first version of it was wrong in the direction that matters. That version returned on
+   * `capture !== null` alone, with a comment asserting that a mid-capture idle lock would still
+   * lock — which was exactly backwards: `resolveZone` is recomputed on every render (above), but
+   * an unconditional early return never reads it, so a device that locked with the camera open
+   * kept showing a LIVE VIEWFINDER over a locked session. The comment was the guard, and the
+   * guard was false (CLAUDE.md §2.11). Deferring to the zone makes the lock win by construction.
+   * Falsified: dropping this conjunct turns `capture surface yields to an idle lock` red in
+   * `test/live-shell-dead-controls.test.tsx`.
+   *
+   * The pending capture survives the lock for the SAME user only — the host holds the deferred in
+   * `Root`, which does not unmount, so THIS user's PIN unlock returns to the viewfinder with the
+   * notes editor still waiting behind it ("Pekerjaanmu aman", SwitcherScreen.tsx:7-11). If a
+   * DIFFERENT user unlocks (an idle lock ended the session and someone else signed in), the host
+   * cancels the capture rather than handing the incoming user the outgoing user's live camera —
+   * that identity guard lives in `useCaptureHost` (`openedForUserRef`/`stranded`), because it needs
+   * the acting-identity change the zone gate cannot see, and it is covered by
+   * `a pending capture does not survive an idle lock into a different user's session`.
+   *
+   * The chrome comes from here because this is where chrome is built (§8.1: both slots always
+   * present). The sync chip goes to Sync Status the way every other screen's does; the avatar
+   * slot renders empty during a capture — a switcher hop from inside a half-finished photo would
+   * strand the capture behind an identity change, and 06 §4 freezes the capturing user at the
+   * shutter, so the identity must not be switchable between opening the camera and pressing it.
+   */
+  const capture = zone.kind === 'shell' ? captureSurface : null;
+  const signing = zone.kind === 'shell' ? signatureSurface : null;
+  const modal =
+    capture !== null ? (
+      <CaptureScreen
+        // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
+        // catalog's own name for this action ("Ambil Foto") — no new key, no hardcoded string.
+        title={capture.title ?? t('media.action.takePhoto')}
+        state={capture.state}
+        preview={capture.preview}
+        syncChip={modalSyncChip}
+        avatar={<View testID="capture-no-avatar" />}
+        onShutter={capture.onShutter}
+        onRetake={capture.onRetake}
+        onUsePhoto={capture.onUsePhoto}
+        onRetry={capture.onRetry}
+        onBack={capture.onBack}
+      />
+    ) : signing !== null ? (
+      <SignaturePadScreen
+        title={signing.title}
+        state={signing.state}
+        strokes={signing.strokes}
+        syncChip={modalSyncChip}
+        avatar={<View testID="signature-no-avatar" />}
+        onStrokeStart={signing.onStrokeStart}
+        onStrokeMove={signing.onStrokeMove}
+        onStrokeEnd={signing.onStrokeEnd}
+        onClear={signing.onClear}
+        onSave={signing.onSave}
+        onRetry={signing.onRetry}
+        onBack={signing.onBack}
+        onPadLayout={signing.onPadLayout}
+      />
+    ) : null;
 
   return (
     <View testID="bolusi-app-shell" style={shellStyle}>
       <StatusBar style="auto" />
-      {renderZone(zone, {
-        enrollment: (revoked) => (
-          <EnrollmentScreen
-            state={{ ...enrollment, revoked }}
-            onChange={(patch) => setEnrollment((previous) => ({ ...previous, ...patch }))}
-            onLogin={runLogin}
-            onEnroll={runEnroll}
-            // §8.5 step 3: the owner taps Continue on the success step. `finish` fires the deferred
-            // `onEnrolled` (zone flip + loop/push start); resetting the wizard state is just hygiene for
-            // a future re-enroll, since the zone has already handed off to the switcher (task 201).
-            onFinish={() => {
-              props.enrollment.finish();
-              setEnrollment(initialEnrollmentState());
-              // Same re-derivation hazard as the back path: the zone hands off to the switcher, and a
-              // still-set `reenrolling` would immediately pull it back into the wizard (task 168).
-              setReenrolling(false);
-            }}
-            onBack={goBack}
-            discardPrompt={discardPrompt}
-            onConfirmDiscard={() => {
-              setDiscardPrompt(false);
-              setEnrollment(initialEnrollmentState(revoked));
-            }}
-            onCancelDiscard={() => setDiscardPrompt(false)}
-          />
-        ),
-        switcher: (switcherZone) => (
-          <SwitcherScreen
-            state={switcherState(props.users, props.usersError)}
-            mode={switcherZone.mode}
-            // §8.2: the LOCK has no back. `backTarget` is the single source of that rule.
-            onBack={backTarget(switcherZone) === null ? null : goBack}
-            onSelect={(user) => setPinFor(tapTarget(user).userId)}
-            // §8.2's empty-roster recovery, LIVE since task 168 / D27 (which amends D23 §3). D23 §3
-            // removed this control because nothing could service it: reaching Device Enrolment from
-            // an `active` device needed a new input on `resolveZone`, and completing it left the old
-            // registration `active` server-side. Both are now built — `reenrolling` feeds the gate
-            // (device status, lock and pending PIN all still beat it), and the enrol request carries
-            // `replacesDeviceId` so the server revokes the outgoing device in the same transaction.
-            //
-            // Still not a stub: the handler is REAL, and `EmptyState` renders the CTA only because
-            // one exists. §5's "a control that cannot work must not render" is satisfied by the
-            // control now working, not by hiding it.
-            onReenroll={() => setReenrolling(true)}
-            //
-            // §5's Error retry — the real producer (`AppSessionController.refresh`), reached through
-            // Root. This is the read that FAILED; running it again is the only thing that can clear
-            // the state, and until now it was `noop`, so the retry button on a directory failure
-            // left the user with a permanently broken switcher and no way back.
-            onRetry={props.onRetryUsers}
-            // A DIFFERENT function from `onRetry`, which is the point (see SwitcherScreen's prop
-            // doc). Back from the unauthorized state is the shell's ONE back — the same `goBack`
-            // hardware back and the header run, so §8.2's "the lock has no back" holds here too:
-            // `backTarget` returns null for the lock and `goBack` consumes the press rather than
-            // walking into the previous user's session.
-            onUnauthorizedBack={goBack}
-            syncChip={chip}
-            pendingCount={props.sync.pendingOperationCount}
-            onOpenSync={openSyncStatus}
-          />
-        ),
-        pin: (pinZone) => (
-          <PinScreen
-            userId={pinZone.userId}
-            userName={nameOf(props.users, pinZone.userId)}
-            row={props.pinRow(pinZone.userId)}
-            now={props.now}
-            lastAttempt="none"
-            onSubmit={(pin) => {
-              // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
-              // stays exactly where it is (its own `state` renders the failure), which is why this
-              // waits for the result rather than clearing optimistically — an optimistic clear
-              // would drop a failed attempt straight into the shell.
-              const submitted = props.onSubmitPin(pinZone.userId, pin);
-              if (submitted !== undefined) {
-                void submitted.then((opened) => {
-                  if (opened) {
-                    // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
-                    // the pending target AND the switch intent, so the gate lands on the incoming
-                    // user's shell rather than re-rendering the roster over their session (task 143).
-                    setPinFor(null);
-                    setSwitching(false);
-                  }
-                });
-              }
-            }}
-            onSwitchUser={() => setPinFor(null)}
-            syncChip={chip}
-            pendingCount={props.sync.pendingOperationCount}
-            onOpenSync={openSyncStatus}
-          />
-        ),
-        shell: (shellZone) => {
-          if (shellZone.route === 'syncStatus') {
-            return (
-              <SyncStatusScreen
-                input={props.sync}
-                currentUser={currentUser}
-                onBack={() => setRoute('home')}
-                onSyncNow={props.onSyncNow}
-                // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
-                // carries the code's explanation; the tap discloses the server's own words under
-                // `sync.rejected.technicalDetails` (a catalog key that shipped with no consumer).
-                // Tapping the open row closes it — see `rejectedDetailFor`.
-                onOpenRejected={(row) =>
-                  setRejectedDetailFor((current) => (current === row.opId ? null : row.opId))
-                }
-                expandedRejectedOpId={rejectedDetailFor}
-                // 06 §5.2 (e). The row-level chip is per item and the producer is loop-level
-                // (`requestManual` coalesces into one immediate drain pass), which is the honest
-                // shape: the drain is single-flight and processes oldest-evidence-first (§5.1), so
-                // there is no per-item retry to call and pretending otherwise would be a control
-                // that looks more precise than the engine underneath it.
-                onRetryMedia={props.onRetryMedia}
-                onOpenSwitcher={() => setSwitching(true)}
-              />
-            );
-          }
-          if (shellZone.route === 'settings' && currentUser !== null) {
-            return (
-              <SettingsScreen
-                locale={props.locale}
-                onSelectLocale={props.onSelectLocale}
-                onOpenNotificationSettings={(category: MutablePushCategory) =>
-                  openNotificationSettings(channelId(category))
-                }
-                device={props.deviceInfo}
-                currentUser={currentUser}
-                onBack={() => setRoute('home')}
-                onOpenSwitcher={() => setSwitching(true)}
-                onOpenChangePin={() => setRoute('changePin')}
-                // Owner-only (task 186b): the row is offered ONLY when the acting user holds
-                // `auth.pin_unlock`. `undefined` for a non-owner ⇒ SettingsScreen omits the row.
-                onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
-                // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
-                onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
-                syncChip={chip}
-                pendingCount={props.sync.pendingOperationCount}
-                onOpenSync={() => setRoute('syncStatus')}
-              />
-            );
-          }
-          if (shellZone.route === 'changePin') {
-            // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
-            // through the session controller and REJECTS with its DomainError; the screen maps it.
-            // Back / done returns to Settings — the surface it was opened from (see `backTarget`).
-            return (
-              <ChangePinScreen
-                onChangePin={props.onChangePin}
-                onClose={() => setRoute('settings')}
-              />
-            );
-          }
-          if (shellZone.route === 'unlockPin') {
-            // Owner Unlock (api/02-auth §6.5.1; task 186b), reached from the Settings owner-only row.
-            // `canUnlock` drives the §5 Unauthorized state — a non-owner who somehow reaches here fails
-            // closed (core enforces `auth.pin_unlock` too). The target list was loaded on entry (the
-            // effect above); `onReload` re-reads after an error. Back / done returns to Settings.
-            return (
-              <ClearLockoutScreen
-                canUnlock={props.canUnlock}
-                loading={pinTargets.loading}
-                error={pinTargets.error}
-                users={pinTargets.users}
-                onClearLockout={clearLockout}
-                onReload={loadPinTargets}
-                onClose={() => setRoute('settings')}
-              />
-            );
-          }
-          if (shellZone.route === 'resetPin') {
-            // Owner Reset (api/02-auth §6.6; task 186b-2), reached from the Settings owner-only row.
-            // `canReset` drives the §5 Unauthorized state — a non-owner who reaches here fails closed
-            // (core enforces `auth.user_reset_pin` too). Shares the same loaded target list as Unlock;
-            // `actorUserId` excludes the owner from the picker (they change their own PIN via Change PIN).
-            return (
-              <ResetPinScreen
-                canReset={props.canReset}
-                loading={pinTargets.loading}
-                error={pinTargets.error}
-                users={pinTargets.users}
-                actorUserId={sessionUserId ?? ''}
-                onResetPin={resetPin}
-                onReload={loadPinTargets}
-                onClose={() => setRoute('settings')}
-              />
-            );
-          }
-          // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
-          // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
-          // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
-          // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
-          // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
-          // the copy the label catalog exists to prevent (07-i18n).
-          if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
-          return (
-            <NotesHome
-              runtime={props.notes}
+      <View
+        style={styles.zone}
+        // Hidden from touch and screen readers while the overlay covers it, but still mounted.
+        pointerEvents={modal === null ? 'auto' : 'none'}
+        accessibilityElementsHidden={modal !== null}
+        importantForAccessibility={modal === null ? 'auto' : 'no-hide-descendants'}
+      >
+        {renderZone(zone, {
+          enrollment: (revoked) => (
+            <EnrollmentScreen
+              state={{ ...enrollment, revoked }}
+              onChange={(patch) => setEnrollment((previous) => ({ ...previous, ...patch }))}
+              onLogin={runLogin}
+              onEnroll={runEnroll}
+              // §8.5 step 3: the owner taps Continue on the success step. `finish` fires the deferred
+              // `onEnrolled` (zone flip + loop/push start); resetting the wizard state is just hygiene for
+              // a future re-enroll, since the zone has already handed off to the switcher (task 201).
+              onFinish={() => {
+                props.enrollment.finish();
+                setEnrollment(initialEnrollmentState());
+                // Same re-derivation hazard as the back path: the zone hands off to the switcher, and a
+                // still-set `reenrolling` would immediately pull it back into the wizard (task 168).
+                setReenrolling(false);
+              }}
+              onBack={goBack}
+              discardPrompt={discardPrompt}
+              onConfirmDiscard={() => {
+                setDiscardPrompt(false);
+                setEnrollment(initialEnrollmentState(revoked));
+              }}
+              onCancelDiscard={() => setDiscardPrompt(false)}
+            />
+          ),
+          switcher: (switcherZone) => (
+            <SwitcherScreen
+              state={switcherState(props.users, props.usersError)}
+              mode={switcherZone.mode}
+              // §8.2: the LOCK has no back. `backTarget` is the single source of that rule.
+              onBack={backTarget(switcherZone) === null ? null : goBack}
+              onSelect={(user) => setPinFor(tapTarget(user).userId)}
+              // §8.2's empty-roster recovery, LIVE since task 168 / D27 (which amends D23 §3). D23 §3
+              // removed this control because nothing could service it: reaching Device Enrolment from
+              // an `active` device needed a new input on `resolveZone`, and completing it left the old
+              // registration `active` server-side. Both are now built — `reenrolling` feeds the gate
+              // (device status, lock and pending PIN all still beat it), and the enrol request carries
+              // `replacesDeviceId` so the server revokes the outgoing device in the same transaction.
+              //
+              // Still not a stub: the handler is REAL, and `EmptyState` renders the CTA only because
+              // one exists. §5's "a control that cannot work must not render" is satisfied by the
+              // control now working, not by hiding it.
+              onReenroll={() => setReenrolling(true)}
+              //
+              // §5's Error retry — the real producer (`AppSessionController.refresh`), reached through
+              // Root. This is the read that FAILED; running it again is the only thing that can clear
+              // the state, and until now it was `noop`, so the retry button on a directory failure
+              // left the user with a permanently broken switcher and no way back.
+              onRetry={props.onRetryUsers}
+              // A DIFFERENT function from `onRetry`, which is the point (see SwitcherScreen's prop
+              // doc). Back from the unauthorized state is the shell's ONE back — the same `goBack`
+              // hardware back and the header run, so §8.2's "the lock has no back" holds here too:
+              // `backTarget` returns null for the lock and `goBack` consumes the press rather than
+              // walking into the previous user's session.
+              onUnauthorizedBack={goBack}
+              syncChip={chip}
+              pendingCount={props.sync.pendingOperationCount}
+              onOpenSync={openSyncStatus}
+            />
+          ),
+          pin: (pinZone) => (
+            <PinScreen
+              userId={pinZone.userId}
+              userName={nameOf(props.users, pinZone.userId)}
+              row={props.pinRow(pinZone.userId)}
               now={props.now}
-              // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
-              onRegisterSurfaceNav={registerSurfaceNav}
-              // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
-              // locked (owner-checked above, so it is theirs), and the write-back that keeps it
-              // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
-              restoredDraft={restoredNotesDraft}
-              onDraftChange={publishNotesDraft}
-              onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
-              syncChip={
-                <SyncChip
-                  state={chip}
-                  pendingCount={props.sync.pendingOperationCount}
-                  progressPercent={setupPercent}
-                  accessibilityLabels={syncChipAccessibilityLabels({
-                    relative:
-                      props.sync.state.lastSuccessfulSyncAt === null
-                        ? t('core.status.empty')
-                        : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
-                    pendingCount: props.sync.pendingOperationCount,
-                    firstSyncPercent: setupPercent,
-                  })}
-                  onPress={() => leaveHome(() => setRoute('syncStatus'))}
+              lastAttempt="none"
+              onSubmit={(pin) => {
+                // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
+                // stays exactly where it is (its own `state` renders the failure), which is why this
+                // waits for the result rather than clearing optimistically — an optimistic clear
+                // would drop a failed attempt straight into the shell.
+                const submitted = props.onSubmitPin(pinZone.userId, pin);
+                if (submitted !== undefined) {
+                  void submitted.then((opened) => {
+                    if (opened) {
+                      // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
+                      // the pending target AND the switch intent, so the gate lands on the incoming
+                      // user's shell rather than re-rendering the roster over their session (task 143).
+                      setPinFor(null);
+                      setSwitching(false);
+                    }
+                  });
+                }
+              }}
+              onSwitchUser={() => setPinFor(null)}
+              syncChip={chip}
+              pendingCount={props.sync.pendingOperationCount}
+              onOpenSync={openSyncStatus}
+            />
+          ),
+          shell: (shellZone) => {
+            if (shellZone.route === 'syncStatus') {
+              return (
+                <SyncStatusScreen
+                  input={props.sync}
+                  currentUser={currentUser}
+                  onBack={() => setRoute('home')}
+                  onSyncNow={props.onSyncNow}
+                  // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
+                  // carries the code's explanation; the tap discloses the server's own words under
+                  // `sync.rejected.technicalDetails` (a catalog key that shipped with no consumer).
+                  // Tapping the open row closes it — see `rejectedDetailFor`.
+                  onOpenRejected={(row) =>
+                    setRejectedDetailFor((current) => (current === row.opId ? null : row.opId))
+                  }
+                  expandedRejectedOpId={rejectedDetailFor}
+                  // 06 §5.2 (e). The row-level chip is per item and the producer is loop-level
+                  // (`requestManual` coalesces into one immediate drain pass), which is the honest
+                  // shape: the drain is single-flight and processes oldest-evidence-first (§5.1), so
+                  // there is no per-item retry to call and pretending otherwise would be a control
+                  // that looks more precise than the engine underneath it.
+                  onRetryMedia={props.onRetryMedia}
+                  onOpenSwitcher={() => setSwitching(true)}
                 />
-              }
-              avatar={
-                currentUser === null ? (
-                  <View testID="notes-no-avatar" />
-                ) : (
-                  // THE HEADER CHROME (§8.1): the language Chip (the ONLY producer of `route:
-                  // 'settings'`) and the avatar (the producer of the User Switcher).
-                  //
-                  // WHY THE LANGUAGE CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
-                  // toggle, the notification deep-links and the device-identity readout, and until
-                  // task 124 added this node nothing in shipping source ever called
-                  // `setRoute('settings')` — the render arm below was live, typed and tested, and no
-                  // user could open it (CLAUDE.md §2.11's "sound tests, zero callers"). On an
-                  // Indonesian-first product the language rows are the ONLY way out of a wrong locale
-                  // (07-i18n §1.2), so the entry point cannot be folded behind the avatar: the avatar
-                  // opens the User Switcher (a roster of faces), not Settings, so Settings needs its
-                  // own direct control regardless of whether the switcher is reachable.
-                  //
-                  // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
-                  // control before: `resolveZone` returned the shell for every session-open render
-                  // (`session !== null && pinFor === null`), and the only writer was `setPinFor(null)`
-                  // — a no-op in that state — so tapping the avatar left the notes list exactly where
-                  // it was. `setSwitching(true)` is the input the model was missing: it produces the
-                  // switcher zone from a live session, and `backTarget` returns to `home` (this
-                  // surface's route) when the switch is abandoned.
-                  //
-                  // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
-                  // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
-                  // users this product is for) and pads its 28 dp height to the §1.4 48 dp floor. It
-                  // sits in the §8.1 header chrome beside the avatar; §0 only bottom-anchors the
-                  // primary action, so this placement rests on §8.1 (header-right is not a §0 claim).
-                  // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
-                  // outright, taking an open editor's title/body/mediaRef with it and showing no
-                  // confirm — the §8.1 discard gate the editor's own header back has always run.
-                  <View style={styles.headerChrome}>
+              );
+            }
+            if (shellZone.route === 'settings' && currentUser !== null) {
+              return (
+                <SettingsScreen
+                  locale={props.locale}
+                  onSelectLocale={props.onSelectLocale}
+                  onOpenNotificationSettings={(category: MutablePushCategory) =>
+                    openNotificationSettings(channelId(category))
+                  }
+                  device={props.deviceInfo}
+                  currentUser={currentUser}
+                  onBack={() => setRoute('home')}
+                  onOpenSwitcher={() => setSwitching(true)}
+                  onOpenChangePin={() => setRoute('changePin')}
+                  // Owner-only (task 186b): the row is offered ONLY when the acting user holds
+                  // `auth.pin_unlock`. `undefined` for a non-owner ⇒ SettingsScreen omits the row.
+                  onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
+                  // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
+                  onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
+                  syncChip={chip}
+                  pendingCount={props.sync.pendingOperationCount}
+                  onOpenSync={() => setRoute('syncStatus')}
+                />
+              );
+            }
+            if (shellZone.route === 'changePin') {
+              // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
+              // through the session controller and REJECTS with its DomainError; the screen maps it.
+              // Back / done returns to Settings — the surface it was opened from (see `backTarget`).
+              return (
+                <ChangePinScreen
+                  onChangePin={props.onChangePin}
+                  onClose={() => setRoute('settings')}
+                />
+              );
+            }
+            if (shellZone.route === 'unlockPin') {
+              // Owner Unlock (api/02-auth §6.5.1; task 186b), reached from the Settings owner-only row.
+              // `canUnlock` drives the §5 Unauthorized state — a non-owner who somehow reaches here fails
+              // closed (core enforces `auth.pin_unlock` too). The target list was loaded on entry (the
+              // effect above); `onReload` re-reads after an error. Back / done returns to Settings.
+              return (
+                <ClearLockoutScreen
+                  canUnlock={props.canUnlock}
+                  loading={pinTargets.loading}
+                  error={pinTargets.error}
+                  users={pinTargets.users}
+                  onClearLockout={clearLockout}
+                  onReload={loadPinTargets}
+                  onClose={() => setRoute('settings')}
+                />
+              );
+            }
+            if (shellZone.route === 'resetPin') {
+              // Owner Reset (api/02-auth §6.6; task 186b-2), reached from the Settings owner-only row.
+              // `canReset` drives the §5 Unauthorized state — a non-owner who reaches here fails closed
+              // (core enforces `auth.user_reset_pin` too). Shares the same loaded target list as Unlock;
+              // `actorUserId` excludes the owner from the picker (they change their own PIN via Change PIN).
+              return (
+                <ResetPinScreen
+                  canReset={props.canReset}
+                  loading={pinTargets.loading}
+                  error={pinTargets.error}
+                  users={pinTargets.users}
+                  actorUserId={sessionUserId ?? ''}
+                  onResetPin={resetPin}
+                  onReload={loadPinTargets}
+                  onClose={() => setRoute('settings')}
+                />
+              );
+            }
+            // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
+            // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
+            // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
+            // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
+            // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
+            // the copy the label catalog exists to prevent (07-i18n).
+            if (props.notes === undefined && props.repair === undefined) {
+              return <View testID="shell-home" style={FILL} />;
+            }
+            // The header chrome every home surface shares (§8.1).
+            const homeSyncChip = (
+              <SyncChip
+                state={chip}
+                pendingCount={props.sync.pendingOperationCount}
+                progressPercent={setupPercent}
+                accessibilityLabels={syncChipAccessibilityLabels({
+                  relative:
+                    props.sync.state.lastSuccessfulSyncAt === null
+                      ? t('core.status.empty')
+                      : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                  pendingCount: props.sync.pendingOperationCount,
+                  firstSyncPercent: setupPercent,
+                })}
+                onPress={() => leaveHome(() => setRoute('syncStatus'))}
+              />
+            );
+            const homeAvatar =
+              currentUser === null ? (
+                <View testID="notes-no-avatar" />
+              ) : (
+                // THE HEADER CHROME (§8.1): the language Chip (the ONLY producer of `route:
+                // 'settings'`) and the avatar (the producer of the User Switcher).
+                //
+                // WHY THE LANGUAGE CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
+                // toggle, the notification deep-links and the device-identity readout, and until
+                // task 124 added this node nothing in shipping source ever called
+                // `setRoute('settings')` — the render arm below was live, typed and tested, and no
+                // user could open it (CLAUDE.md §2.11's "sound tests, zero callers"). On an
+                // Indonesian-first product the language rows are the ONLY way out of a wrong locale
+                // (07-i18n §1.2), so the entry point cannot be folded behind the avatar: the avatar
+                // opens the User Switcher (a roster of faces), not Settings, so Settings needs its
+                // own direct control regardless of whether the switcher is reachable.
+                //
+                // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
+                // control before: `resolveZone` returned the shell for every session-open render
+                // (`session !== null && pinFor === null`), and the only writer was `setPinFor(null)`
+                // — a no-op in that state — so tapping the avatar left the notes list exactly where
+                // it was. `setSwitching(true)` is the input the model was missing: it produces the
+                // switcher zone from a live session, and `backTarget` returns to `home` (this
+                // surface's route) when the switch is abandoned.
+                //
+                // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
+                // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
+                // users this product is for) and pads its 28 dp height to the §1.4 48 dp floor. It
+                // sits in the §8.1 header chrome beside the avatar; §0 only bottom-anchors the
+                // primary action, so this placement rests on §8.1 (header-right is not a §0 claim).
+                // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
+                // outright, taking an open editor's title/body/mediaRef with it and showing no
+                // confirm — the §8.1 discard gate the editor's own header back has always run.
+                <View style={styles.headerChrome}>
+                  {/* Chip pins itself to `flex-start`; the wrapper centres it on the avatar's axis. */}
+                  <View>
                     <Chip
                       label={t('core.settings.language')}
                       icon="language"
                       onPress={() => leaveHome(() => setRoute('settings'))}
                       testID="shell-open-settings"
                     />
-                    <AvatarButton
-                      userId={currentUser.id}
-                      initials={currentUser.initials}
-                      accessibilityLabel={t('auth.switcher.title')}
-                      onPress={() => leaveHome(() => setSwitching(true))}
-                    />
                   </View>
-                )
-              }
-            />
-          );
-        },
-      })}
+                  <AvatarButton
+                    userId={currentUser.id}
+                    initials={currentUser.initials}
+                    accessibilityLabel={t('auth.switcher.title')}
+                    onPress={() => leaveHome(() => setSwitching(true))}
+                  />
+                </View>
+              );
+            // Repair is the slice-1 home; notes stays the home on a build without it.
+            if (props.repair !== undefined) {
+              return (
+                <RepairHome
+                  runtime={props.repair}
+                  // The clock itself, not this render's reading: an intake can sit open for hours.
+                  now={systemClock.now}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                  restoredDraft={restoredIntakeDraft}
+                  onDraftChange={publishIntakeDraft}
+                  onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
+                  syncChip={homeSyncChip}
+                  avatar={homeAvatar}
+                />
+              );
+            }
+            if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
+            return (
+              <NotesHome
+                runtime={props.notes}
+                now={props.now}
+                // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
+                onRegisterSurfaceNav={registerSurfaceNav}
+                // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
+                // locked (owner-checked above, so it is theirs), and the write-back that keeps it
+                // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
+                restoredDraft={restoredNotesDraft}
+                onDraftChange={publishNotesDraft}
+                onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
+                syncChip={homeSyncChip}
+                avatar={homeAvatar}
+              />
+            );
+          },
+        })}
+      </View>
+      {modal === null ? null : <View style={[StyleSheet.absoluteFill, shellStyle]}>{modal}</View>}
     </View>
   );
 }
@@ -999,6 +1095,7 @@ const styles = StyleSheet.create({
    * need the same measurement and were silently missing it (task 205).
    */
   shell: { flex: 1, paddingBottom: NAV_BAR_INSET },
+  zone: { flex: 1 },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
   headerChrome: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
 });

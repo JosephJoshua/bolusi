@@ -53,7 +53,7 @@ const DIAMETER: Record<AvatarSize, number> = {
 
 const TYPE: Record<AvatarSize, object> = {
   row: type.bodySm,
-  header: type.bodyBold,
+  header: { ...type.bodySm, fontWeight: '600' },
   switcher: type.display,
 };
 

@@ -51,7 +51,12 @@ vi.mock('expo-location', () => ({
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
 
-import { IDLE_LOCK_DEFAULT_SECONDS, markFailed, type StorageBand } from '@bolusi/core';
+import {
+  IDLE_LOCK_DEFAULT_SECONDS,
+  markFailed,
+  operationFromSignedCoreJcs,
+  type StorageBand,
+} from '@bolusi/core';
 import { noblePort } from '@bolusi/test-support';
 import type {
   MediaRef,
@@ -140,6 +145,7 @@ function fakeMediaClient(
     attach: () => Promise.resolve(),
     loadForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
     loadLocalForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
+    notifyAttached: () => undefined,
     requestManual: () => {
       manualRequests.push(Date.now());
     },
@@ -745,6 +751,55 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
     // And the review frame the user confirms from.
     await waitUntil(() => screen.query('capture-review') !== null);
     expect(screen.query('capture-review')).not.toBeNull();
+  });
+
+  test('the screen that asked for the photo stays mounted under the camera and gets the photo back', async () => {
+    // The capture surface used to REPLACE the shell zone, which unmounted the screen awaiting the
+    // photo: the notes editor (and every repair step holding photos) was gone when the camera closed,
+    // and the shot resolved into nothing. It is an overlay now, so the editor and its typed title
+    // survive, and the save carries the captured photo.
+    const media = fakeMediaClient({ band: 'normal', shot: CAPTURED_REF });
+    const screen = await mountRoot(fixture, {
+      createMedia: () => media,
+      capturePlatform: fakeCapturePlatform(),
+    });
+    await signIn(screen);
+    fireCreateNote(screen);
+    await settle();
+    fire(screen.get('notes.editor.title.field'), 'onChangeText', 'Layar retak');
+    await settle();
+    fireOn(screen, 'notes.editor.attach');
+    await settle();
+    expect(await waitUntil(() => screen.query('capture-shutter') !== null)).toBe(true);
+    // Covered, not unmounted.
+    expect(screen.query('notes.editor')).not.toBeNull();
+
+    fireOn(screen, 'capture-shutter');
+    await settle();
+    expect(await waitUntil(() => screen.query('capture-use') !== null)).toBe(true);
+    fireOn(screen, 'capture-use');
+    await settle();
+
+    expect(await waitUntil(() => screen.query('capture-screen') === null)).toBe(true);
+    expect(screen.query('notes.editor')).not.toBeNull();
+    expect(screen.get('notes.editor.title.field').props.value).toBe('Layar retak');
+
+    fireOn(screen, 'notes.editor.save');
+    await settle();
+    const saved = await waitUntil(async () => {
+      const rows = await fixture.app.db.db
+        .selectFrom('operations')
+        .select(['signedCoreJcs', 'hash', 'signature'])
+        .where('type', '=', 'notes.note_created')
+        .execute();
+      // The payload lives only in the signed text since client migration 6.
+      return rows.some((row) =>
+        JSON.stringify(operationFromSignedCoreJcs(row.signedCoreJcs, row).payload).includes(
+          CAPTURED_REF.mediaId,
+        ),
+      );
+    });
+    expect(saved, 'the saved note does not carry the captured photo').toBe(true);
   });
 
   test('06 §7: a `warning` band renders the low-storage banner over the viewfinder', async () => {
