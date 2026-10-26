@@ -236,7 +236,10 @@ function shot(platform, name) {
   mkdirSync(SHOTS, { recursive: true });
   const file = path.join(SHOTS, `${platform}-${name}.png`);
   if (platform === 'android') {
-    writeFileSync(file, execFileSync('adb', ['exec-out', 'screencap', '-p'], { env }));
+    writeFileSync(
+      file,
+      execFileSync('adb', ['exec-out', 'screencap', '-p'], { env, maxBuffer: 64 * 1024 * 1024 }),
+    );
   } else {
     run('xcrun', ['simctl', 'io', simUdid(), 'screenshot', file]);
   }
