@@ -51,7 +51,12 @@ vi.mock('expo-location', () => ({
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
 
-import { IDLE_LOCK_DEFAULT_SECONDS, markFailed, type StorageBand } from '@bolusi/core';
+import {
+  IDLE_LOCK_DEFAULT_SECONDS,
+  markFailed,
+  operationFromSignedCoreJcs,
+  type StorageBand,
+} from '@bolusi/core';
 import { noblePort } from '@bolusi/test-support';
 import type {
   MediaRef,
@@ -783,10 +788,15 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
     const saved = await waitUntil(async () => {
       const rows = await fixture.app.db.db
         .selectFrom('operations')
-        .select('payload')
+        .select(['signedCoreJcs', 'hash', 'signature'])
         .where('type', '=', 'notes.note_created')
         .execute();
-      return rows.some((row) => String(row.payload).includes(CAPTURED_REF.mediaId));
+      // The payload lives only in the signed text since client migration 6.
+      return rows.some((row) =>
+        JSON.stringify(operationFromSignedCoreJcs(row.signedCoreJcs, row).payload).includes(
+          CAPTURED_REF.mediaId,
+        ),
+      );
     });
     expect(saved, 'the saved note does not carry the captured photo').toBe(true);
   });
