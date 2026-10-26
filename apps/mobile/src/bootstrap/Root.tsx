@@ -550,9 +550,9 @@ export function Root({
       // AOSP CI emulator, a de-Googled or location-off phone) `watchPositionAsync` never resolves and
       // the app hangs on a white screen forever (task 199). `getBestFix()` already returns `null` until
       // a fix lands — a late fix stamps the next op, a fix that never arrives is a supported state. The
-      // `.catch` swallows a native rejection (a throwing permission request or a rejecting
+      // `.catch` swallows a native rejection (a throwing permission check or a rejecting
       // `watchPositionAsync`) so a failed start never surfaces as an unhandled rejection; a denied
-      // permission just resolves and takes the port's `if (!granted) return` fast path.
+      // permission (never asked for here) just takes the port's `if (!granted) return` fast path.
       void startLocationWatcher().catch(() => {});
 
       // The data layer. Deliberately NOT wrapped in a try/catch that renders the shell anyway: a

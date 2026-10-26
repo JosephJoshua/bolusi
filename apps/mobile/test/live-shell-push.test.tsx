@@ -530,10 +530,8 @@ describe('the enrollment wizard shows its DONE step before the zone hands off (t
     fireOn(screen, 'enroll-submit');
     await waitUntil(() => screen.query('enroll-device-name') !== null);
 
-    // Step 2 — name the device, confirm the binding, bind.
+    // Step 2 — name the device, then bind (the button names the store).
     fire(screen.get('enroll-device-name.field'), 'onChangeText', 'Kasir 1');
-    await settle();
-    fireOn(screen, 'enroll-confirm-toggle');
     await settle();
     fireOn(screen, 'enroll-bind');
 

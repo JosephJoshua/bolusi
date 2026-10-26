@@ -18,7 +18,7 @@ import {
   type,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 
@@ -38,6 +38,7 @@ import {
   chosenReady,
   intakeTotal,
   acceptsRupiahText,
+  phoneText,
   parseRupiah,
   restOfChecksOk,
   signedAmount,
@@ -103,6 +104,8 @@ export function CustomerStep({
         value={customer.name}
         onChangeText={(name) => update({ customer: { ...customer, name } })}
         errorMessage={nameError}
+        autoCorrect={false}
+        autoCapitalize="words"
         autoFocus
         testID={`${testID}.name`}
       />
@@ -111,7 +114,7 @@ export function CustomerStep({
           label={tn('repair.customer.phone')}
           placeholder={tn('repair.customer.phoneHint')}
           value={customer.phone}
-          onChangeText={(phone) => update({ customer: { ...customer, phone } })}
+          onChangeText={(phone) => update({ customer: { ...customer, phone: phoneText(phone) } })}
           keyboardType="phone-pad"
           testID={`${testID}.phone`}
         />
@@ -163,6 +166,7 @@ export function DeviceStep({
         label={tn('repair.device.brand')}
         value={device.brand}
         onChangeText={(brand) => set({ brand })}
+        autoCorrect={false}
         errorMessage={brandError}
         autoFocus
         testID={`${testID}.brand`}
@@ -186,6 +190,7 @@ export function DeviceStep({
           label={tn('repair.device.model')}
           value={device.model}
           onChangeText={(model) => set({ model })}
+          autoCorrect={false}
           errorMessage={modelError}
           testID={`${testID}.model`}
         />
@@ -195,6 +200,7 @@ export function DeviceStep({
           label={tn('repair.device.colorField')}
           value={device.color}
           onChangeText={(color) => set({ color })}
+          autoCorrect={false}
           testID={`${testID}.color`}
         />
       </View>
@@ -236,6 +242,8 @@ export function ConditionStep({
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
+  const { width, fontScale } = useWindowDimensions();
+  const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
   const togglePeripheral = (item: string): void =>
     update({
       peripherals: draft.peripherals.includes(item)
@@ -266,9 +274,19 @@ export function ConditionStep({
           }
         >
           {options.checks.map((option, index) => (
-            // One line per check: the name on the left (wrapping if long), its state lined up on the
-            // right, so the column of choices reads straight down.
-            <View key={option.id} style={[styles.check, index === 0 ? null : styles.checkDivider]}>
+            // Room allowing, one line per check: the name on the left, its state lined up on the
+            // right, so the column of choices reads straight down. On a narrow phone or a large
+            // system font the three states no longer fit beside the name without clipping ("Tidak"
+            // for "Tidak dicek" on the first Android run), so the name goes on top and the states
+            // share the full width below it.
+            <View
+              key={option.id}
+              style={[
+                stackChecks ? styles.checkStacked : styles.check,
+                index === 0 ? null : styles.checkDivider,
+              ]}
+              testID={`${testID}.checkRow.${option.id}`}
+            >
               <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
               <SegmentedControl
                 options={CHECKLIST_STATES.map((value) => ({
@@ -278,7 +296,8 @@ export function ConditionStep({
                 value={draft.checks[option.id] ?? 'not_checked'}
                 onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
                 size="compact"
-                wrap
+                wrap={!stackChecks}
+                fill={stackChecks}
                 testID={`${testID}.check.${option.id}`}
               />
             </View>
@@ -568,6 +587,15 @@ export function ReviewStep({
   );
 }
 
+/**
+ * When a condition check fits on one line. The text part (a short check name plus the three state
+ * pills at 1x font) needs about 340 dp and grows with the system font; the rest (screen gutters,
+ * gaps) does not. Below that the row stacks instead of clipping a label. A 411 dp phone at normal
+ * font keeps one line; a 360 dp phone, or any phone at a large font, stacks.
+ */
+const CHECK_ROW_TEXT = 340;
+const CHECK_ROW_CHROME = 2 * space.lg + space.md + 2 * space.sm;
+
 const styles = StyleSheet.create({
   check: {
     flexDirection: 'row',
@@ -576,6 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
   },
   checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
+  checkStacked: { paddingVertical: space.sm, rowGap: space.xs },
   checkLabel: { ...type.bodySm, color: color.text, flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },

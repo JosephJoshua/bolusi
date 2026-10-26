@@ -14,6 +14,7 @@ import { describe, expect, test } from 'vitest';
 import {
   bindingSummary,
   canSubmitConfirm,
+  confirmMissing,
   canSubmitCredentials,
   classifyFailure,
   credentialsError,
@@ -101,7 +102,7 @@ describe('the 401 leg says ONE thing — no user/password distinction in copy (�
     // §4.2 goes to the length of a dummy argon2id run so "no such user" and "wrong password" are
     // indistinguishable in latency. Copy that guessed would hand back what that bought.
     const key = failureKey({ kind: 'credentials' });
-    expect(key).toBe('core.errors.NOT_AUTHENTICATED');
+    expect(key).toBe('auth.enroll.wrongCredentials');
     expect(key).not.toMatch(/password|user|identifier/i);
   });
 });
@@ -138,7 +139,7 @@ describe('the 403 leg — the account is fine, it just may not enroll (permissio
     });
     expect(classifyFailure({ code: 'ACTING_USER_INVALID' })).toEqual({ kind: 'notPermitted' });
     // The distinction is the whole point: retyping the password fixes 401 and never fixes 403.
-    expect(failureKey({ kind: 'notPermitted' })).toBe('core.errors.PERMISSION_DENIED');
+    expect(failureKey({ kind: 'notPermitted' })).toBe('auth.enroll.notOwner');
     expect(failureKey({ kind: 'notPermitted' })).not.toBe(failureKey({ kind: 'credentials' }));
   });
 
@@ -173,18 +174,12 @@ describe('the transport leg — the ONE sanctioned "you need internet" in the ap
     // state survives, the retry re-enters the SAME runEnrollment call, which is what lets 14's
     // persisted draft supply the same key. A wizard that reset to step 1 would still be "correct"
     // per its own tests while making 14's guarantee unreachable.
-    //
-    // `confirmed` SURVIVES a transport failure on purpose. The network failed; the user's intent did
-    // not, and the tenant/store they agreed to has not changed. Clearing it would make a flaky shop
-    // hotspot re-ask "is this the right store?" every attempt — which is how a meaningful
-    // confirmation degrades into a reflex tap, defeating the very check §8.5 added it for.
     const failed: EnrollmentState = {
-      ...atConfirm({ confirmed: true }),
+      ...atConfirm(),
       failure: { kind: 'offline' },
       busy: false,
     };
     expect(failed.step).toBe('confirm');
-    expect(failed.confirmed).toBe(true);
     expect(canSubmitConfirm(failed)).toBe(true);
     expect(bindingSummary(failed)).toEqual({
       tenantName: 'Bolusi Jayapura',
@@ -214,19 +209,25 @@ describe('the transport leg — the ONE sanctioned "you need internet" in the ap
   });
 });
 
-describe('step 2 requires an explicit confirmation BEFORE binding (§8.5)', () => {
-  test('a picked store alone is not enough — `confirmed` gates the request', () => {
-    // Wrong-store enrollment is the likely user error, and binding is an operator round trip to
-    // undo (§7.4). The confirmation is the step's whole reason to exist.
-    expect(canSubmitConfirm(atConfirm({ confirmed: false }))).toBe(false);
-    expect(canSubmitConfirm(atConfirm({ confirmed: true }))).toBe(true);
+describe('step 2 binds only to a store that was picked and named (§8.5)', () => {
+  // Wrong-store enrollment is the likely user error, and binding is an operator round trip to undo
+  // (§7.4). The bind button names the picked store, so pressing it is the confirmation; these gates
+  // keep it from binding to nothing or to a store the login did not offer.
+  test('no store picked ⇒ no binding, and the hint asks for the store first', () => {
+    const none = atConfirm({ selectedStoreId: null });
+    expect(canSubmitConfirm(none)).toBe(false);
+    expect(confirmMissing(none)).toBe('store');
+    // Store first even when the name is missing too: it is what the button names.
+    expect(confirmMissing(atConfirm({ selectedStoreId: null, deviceName: '' }))).toBe('store');
   });
 
-  test('no store picked ⇒ no binding, however confirmed', () => {
-    expect(canSubmitConfirm(atConfirm({ selectedStoreId: null, confirmed: true }))).toBe(false);
+  test('POSITIVE CONTROL: a picked store and a device name can bind', () => {
+    expect(confirmMissing(atConfirm())).toBeNull();
+    expect(canSubmitConfirm(atConfirm())).toBe(true);
+    expect(canSubmitConfirm(atConfirm({ busy: true }))).toBe(false);
   });
 
-  test('the summary names the tenant AND the store — both, big, before binding', () => {
+  test('the summary names the tenant AND the store the button will bind to', () => {
     expect(bindingSummary(atConfirm())).toEqual({
       tenantName: 'Bolusi Jayapura',
       storeName: 'Toko Abepura',
@@ -237,19 +238,19 @@ describe('step 2 requires an explicit confirmation BEFORE binding (§8.5)', () =
     });
   });
 
-  test('a store id that is not in the login result renders no summary and cannot bind', () => {
-    const bogus = atConfirm({ selectedStoreId: 'store-999', confirmed: true });
+  test('a store id that is not in the login result cannot bind', () => {
+    const bogus = atConfirm({ selectedStoreId: 'store-999' });
     expect(bindingSummary(bogus)).toBeNull();
-    // The button stays live only because the id is non-null; the screen renders no summary, so
-    // there is nothing to confirm. Assert the summary is the gate a reviewer should look at.
-    expect(bindingSummary(bogus)).toBeNull();
+    expect(confirmMissing(bogus)).toBe('store');
+    expect(canSubmitConfirm(bogus)).toBe(false);
   });
 
   test('the device name is validated against §4.3`s bound before the POST', () => {
     expect(deviceNameError(atConfirm({ deviceName: '' }))).toBe('deviceName');
     expect(deviceNameError(atConfirm({ deviceName: 'x'.repeat(65) }))).toBe('deviceName');
     expect(deviceNameError(atConfirm())).toBeNull();
-    expect(canSubmitConfirm(atConfirm({ deviceName: '', confirmed: true }))).toBe(false);
+    expect(confirmMissing(atConfirm({ deviceName: '  ' }))).toBe('deviceName');
+    expect(canSubmitConfirm(atConfirm({ deviceName: '' }))).toBe(false);
   });
 });
 

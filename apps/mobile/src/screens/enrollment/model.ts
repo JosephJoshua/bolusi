@@ -31,9 +31,11 @@
  * §8.5: "wrong-store enrollment is the likely user error — make it visible". An owner with three
  * stores sees three near-identical names on a 5-inch screen in the sun. Binding is irreversible in
  * practice (§7.4: re-enrollment means a fresh keypair and a fresh deviceId — an operator round
- * trip). So the confirmation is not a checkbox on the login screen; it is a whole step whose only
- * job is showing the tenant and store big enough to read, and whose primary button is the act of
- * agreeing. `confirmed` gates the request — see `canSubmitConfirm`.
+ * trip). So the confirmation is not a checkbox on the login screen; it is a whole step where the
+ * store is picked from a list that shows which one is chosen, and whose ONE primary button names
+ * that store ("Daftarkan ke Toko Utama"). Pressing it is the agreement. A separate "Ya, lanjutkan"
+ * toggle above a "Masuk" button used to stand in for this, and read as two competing actions
+ * (first Android QA run).
  */
 
 /** api/02-auth §4.2's `LoginReq` bounds. Mirrored client-side so a bad field never leaves the device. */
@@ -84,11 +86,11 @@ export type EnrollmentFailure =
 export function failureKey(failure: EnrollmentFailure): string {
   switch (failure.kind) {
     case 'credentials':
-      return 'core.errors.NOT_AUTHENTICATED';
+      return 'auth.enroll.wrongCredentials';
     case 'rateLimited':
       return 'core.errors.RATE_LIMITED';
     case 'notPermitted':
-      return 'core.errors.PERMISSION_DENIED';
+      return 'auth.enroll.notOwner';
     case 'offline':
       return 'auth.enroll.needsConnection';
     case 'unexpected':
@@ -105,8 +107,6 @@ export interface EnrollmentState {
   /** Set after a successful login; carries the tenant/store choices step 2 confirms. */
   readonly login: LoginResult | null;
   readonly selectedStoreId: string | null;
-  /** §8.5: the device is bound only after this is explicitly true. */
-  readonly confirmed: boolean;
   readonly busy: boolean;
   readonly failure: EnrollmentFailure | null;
   /** §8.5: a `revoked` device lands here with the danger banner. */
@@ -121,7 +121,6 @@ export function initialEnrollmentState(revoked = false): EnrollmentState {
     deviceName: '',
     login: null,
     selectedStoreId: null,
-    confirmed: false,
     busy: false,
     failure: null,
     revoked,
@@ -158,19 +157,18 @@ export function deviceNameError(state: EnrollmentState): 'deviceName' | null {
 }
 
 /**
- * Step 2's primary button — the act of binding. Requires a store, a device name, AND the explicit
- * confirmation (§8.5). `confirmed` is a separate input rather than "they pressed the button": the
- * button IS the confirmation, so the screen sets `confirmed` when the user ticks the tenant/store
- * summary, and the button only lights up once they have.
+ * What step 2's primary button is still waiting for, said above it while it is disabled: a store
+ * first (it is what the button names), then a device name. Null when the device can be bound.
  */
+export function confirmMissing(state: EnrollmentState): 'store' | 'deviceName' | null {
+  if (state.login === null || bindingSummary(state) === null) return 'store';
+  if (deviceNameError(state) !== null) return 'deviceName';
+  return null;
+}
+
+/** Step 2's primary button — the act of binding to the store it names (§8.5). */
 export function canSubmitConfirm(state: EnrollmentState): boolean {
-  return (
-    !state.busy &&
-    state.login !== null &&
-    state.selectedStoreId !== null &&
-    state.confirmed &&
-    deviceNameError(state) === null
-  );
+  return !state.busy && confirmMissing(state) === null;
 }
 
 /** The tenant + store the user is about to bind to — what step 2 puts on screen, big. */

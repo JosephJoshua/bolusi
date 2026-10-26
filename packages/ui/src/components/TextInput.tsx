@@ -57,6 +57,13 @@ export interface TextInputProps {
   /** §3.2: numeric fields open numeric keyboards. */
   readonly keyboardType?: KeyboardTypeOptions | undefined;
   readonly secureTextEntry?: boolean | undefined;
+  /**
+   * `false` for names, models and codes: no autocorrect, no suggestions, no spellcheck underline.
+   * The phone's dictionary does not know "Yohana Wenda" or "Redmi", and red squiggles under a
+   * customer's name read as a mistake. Off also turns off iOS spellcheck. Unset keeps the default.
+   */
+  readonly autoCorrect?: boolean | undefined;
+  readonly autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters' | undefined;
   /** First field of a wizard step / PIN screen. Also how the Gallery shows a real `focused` field. */
   readonly autoFocus?: boolean | undefined;
   /**
@@ -103,6 +110,8 @@ export function TextInput({
   readOnly = false,
   keyboardType,
   secureTextEntry = false,
+  autoCorrect,
+  autoCapitalize,
   autoFocus = false,
   multiline = false,
   testID = 'ui.textInput',
@@ -136,6 +145,9 @@ export function TextInput({
         editable={!notEditable}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
+        autoCorrect={autoCorrect}
+        spellCheck={autoCorrect}
+        autoCapitalize={autoCapitalize}
         autoFocus={autoFocus}
         multiline={effectiveMultiline}
         onFocus={() => setFocused(true)}

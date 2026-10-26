@@ -33,6 +33,11 @@ export interface SegmentedControlProps<V extends string> {
    * screen edges, so a pill cut off at the edge shows there are more to swipe to.
    */
   readonly bleed?: boolean | undefined;
+  /**
+   * Share the full width equally, one row, no scrolling: for a short fixed set placed on its own
+   * line (a condition check's state under its name on a narrow phone). Overrides `wrap`.
+   */
+  readonly fill?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -65,6 +70,8 @@ const styles = StyleSheet.create({
   },
   label: { ...type.bodySm },
   compactLabel: { ...type.caption, fontWeight: '600' },
+  filled: { flexDirection: 'row', gap: touch.gap },
+  fillOption: { flex: 1, paddingHorizontal: space.sm },
 });
 
 export function SegmentedControl<V extends string>({
@@ -74,6 +81,7 @@ export function SegmentedControl<V extends string>({
   wrap = false,
   size = 'regular',
   bleed = false,
+  fill = false,
   testID = 'ui.segmented',
 }: SegmentedControlProps<V>): React.JSX.Element {
   const compact = size === 'compact';
@@ -91,13 +99,17 @@ export function SegmentedControl<V extends string>({
         hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
         style={[
           compact ? styles.compactOption : styles.option,
+          fill ? styles.fillOption : null,
           {
             backgroundColor: selected ? color.primary : color.surface,
             borderColor: selected ? color.primary : color.border,
           },
         ]}
       >
+        {/* One line: a pill sized to its label wrapped "Tidak dicek" onto a clipped second line on
+            Android (first QA run), showing only "Tidak". */}
         <Text
+          numberOfLines={1}
           style={[
             compact ? styles.compactLabel : styles.label,
             { color: selected ? color.onPrimary : color.text },
@@ -108,6 +120,17 @@ export function SegmentedControl<V extends string>({
       </Pressable>
     );
   });
+  if (fill) {
+    return (
+      <View
+        style={[styles.filled, compact ? styles.compactRow : null]}
+        accessibilityRole="radiogroup"
+        testID={testID}
+      >
+        {items}
+      </View>
+    );
+  }
   if (wrap) {
     return (
       <View

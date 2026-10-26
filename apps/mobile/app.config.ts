@@ -96,7 +96,7 @@ const config: ExpoConfig = {
     //      channel-name trap). The string is Indonesian because the OS shows the single static value
     //      regardless of device locale (no per-locale InfoPlist.strings in v0).
     //   2. DISABLES the over-declared permissions the autolinked defaults ship: the app requests only
-    //      FOREGROUND location (ports/location.ts → requestForegroundPermissionsAsync) and captures
+    //      FOREGROUND location (ports/location.ts; nothing asks for it yet) and captures
     //      PHOTOS ONLY (media.permission.camera: "ambil foto"). Shipping NSLocationAlways* / NSMotion*
     //      / NSMicrophone* usage strings for permissions the app never requests is an App Store
     //      rejection risk, so each is set `false` (applyPermissions DELETES a key whose value is

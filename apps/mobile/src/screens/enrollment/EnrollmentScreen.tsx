@@ -1,45 +1,47 @@
 /**
  * Device Enrollment wizard (design-system §8.5/§3.10). Renders `model.ts`; the reasoning is there.
  *
- * Three things are visible only here:
+ * Built like the other guided flows (intake): a `StepHeader` with "1 dari 3" and the step's title,
+ * the body, and ONE primary action fixed at the bottom. What is particular to this screen:
  *
- *  - PROGRESS IS TEXT ("1/3"), not a progress bar. §3.10 asks for it, and on this screen it earns
- *    its place: it is the promise that this ends. A supervised, one-time, high-stakes flow with no
- *    visible end is where a nervous owner gives up and calls someone.
+ *  - STEP 2 IS A CHOICE, AND THE BUTTON NAMES IT. The stores are a list whose chosen row is checked,
+ *    and the primary button reads "Daftarkan ke Toko Utama". Wrong-store enrollment is the error
+ *    §8.5 designs against; a button that says the store out loud is the confirmation, so there is
+ *    no separate "Ya, lanjutkan" toggle competing with it (first Android QA run found the toggle
+ *    plus a "Masuk" button confusing).
  *
- *  - STEP 2 LEADS WITH THE BINDING, not with the form. The tenant and store are the biggest text on
- *    the screen, above the device-name field, because they are what the user is being asked to
- *    check — not what they are being asked to fill in. A summary tucked under a form is a summary
- *    nobody reads, and wrong-store enrollment is the error §8.5 says to design against.
+ *  - A REFUSAL GOES IN THE FIXED BANNER SLOT, never a toast (§3.7: toasts vanish before slow
+ *    readers finish, and this reader is nervous), and it stays visible wherever the form scrolled.
  *
- *  - THE FAILURE SLOT IS INLINE AND ALWAYS IN THE SAME PLACE — directly under the primary action,
- *    never a toast (§3.7: toasts vanish before slow readers finish, and this reader is nervous).
+ *  - NO SYNC CHIP. There is no device identity yet, so there is no sync to report on; a permanent
+ *    "offline" cloud here only said something false and alarming.
  */
-import { t } from '@bolusi/i18n';
+import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
   Button,
-  Card,
   ConfirmSheet,
+  Icon,
   ListRow,
-  SyncChip,
+  StepHeader,
   TextInput,
+  border,
   color,
+  radius,
+  size,
   space,
   type,
 } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
-
 import {
+  PASSWORD_MIN,
   bindingSummary,
   canSubmitConfirm,
   canSubmitCredentials,
+  confirmMissing,
   credentialsError,
-  deviceNameError,
-  failureKey,
   type EnrollmentState,
 } from './model.js';
 // `needsDiscardConfirm` is deliberately NOT used here: whether a back press needs the ConfirmSheet
@@ -60,7 +62,7 @@ export interface EnrollmentScreenProps {
   readonly onCancelDiscard: () => void;
 }
 
-/** §3.10: "1/3" in the header. Ordered so the index is the step's position, not a magic number. */
+/** The steps, counted "1 dari 3". Ordered so the index is the step's position. */
 const STEPS = ['credentials', 'confirm', 'done'] as const;
 
 export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Element {
@@ -69,38 +71,13 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
 
   return (
     <AppShell
-      // Card + one ListRow per store + input + actions — plain views, no FlatList; a tenant with
-      // several stores overflows a small viewport (task 206).
+      // A tenant with several stores overflows a small viewport (task 206).
       scrollable
       title={t('auth.enroll.title')}
-      // The progress lives in the accessibility label as well as the visible counter: a screen
-      // reader user needs "2 of 3" as much as a sighted one does.
-      backLabel={t('core.action.back')}
-      syncChip={
-        <SyncChip
-          state="offline"
-          // The chip announces only its own state (`offline`), so the bespoke enrollment copy — "you
-          // need a connection to enroll", not a sync recap — overrides just that entry; the rest of
-          // the map is inert here but the prop requires every state. `pendingCount` is 0 because this
-          // chip is never `pending`, so its (never-announced) count is immaterial.
-          accessibilityLabels={{
-            ...syncChipAccessibilityLabels({ pendingCount: 0 }),
-            offline: t('auth.enroll.needsConnection'),
-          }}
-          onPress={noop}
-        />
-      }
+      syncChip={null}
       avatar={<View testID="enroll-no-avatar" />}
-      banner={
-        state.revoked ? (
-          // §8.5: a revoked device lands here and is told WHY, in danger, before it retries.
-          <Banner
-            variant="danger"
-            message={t('auth.revoked.body')}
-            testID="enroll-revoked-banner"
-          />
-        ) : undefined
-      }
+      banner={<EnrollBanner state={state} />}
+      bottomAction={<BottomAction {...props} />}
       testID="enrollment-screen"
       // OVERLAY slot, not children: this screen is `scrollable`, and inside a ScrollView the sheet's
       // absolute box spans the scrollable height, dropping its buttons below the viewport on a long
@@ -108,20 +85,32 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
       overlay={
         discardPrompt ? (
           <ConfirmSheet
-            title={t('core.action.cancel')}
-            message={t('auth.enroll.instruction')}
-            confirmLabel={t('core.action.confirm')}
+            title={t('auth.enroll.discardTitle')}
+            message={t('auth.enroll.discardMessage')}
+            confirmLabel={t('auth.enroll.discard')}
             onConfirm={onConfirmDiscard}
-            cancelLabel={t('core.action.cancel')}
+            cancelLabel={t('auth.enroll.keepEditing')}
             onCancel={onCancelDiscard}
             testID="enroll-discard-sheet"
           />
         ) : null
       }
     >
-      <Text style={styles.progress} testID="enroll-progress">
-        {`${stepNumber}/${STEPS.length}`}
-      </Text>
+      {state.step === 'done' ? null : (
+        <StepHeader
+          step={stepNumber}
+          total={STEPS.length}
+          progressLabel={t('auth.enroll.progress', { step: stepNumber, total: STEPS.length })}
+          title={
+            state.step === 'credentials'
+              ? t('auth.enroll.credentialsTitle')
+              : (state.login?.stores.length ?? 0) === 1
+                ? t('auth.enroll.nameTitle')
+                : t('auth.enroll.storeTitle')
+          }
+          testID="enroll-progress"
+        />
+      )}
 
       {state.step === 'credentials' ? <CredentialsStep {...props} /> : null}
       {state.step === 'confirm' ? <ConfirmStep {...props} /> : null}
@@ -130,94 +119,151 @@ export function EnrollmentScreen(props: EnrollmentScreenProps): React.JSX.Elemen
   );
 }
 
-function CredentialsStep({ state, onChange, onLogin }: EnrollmentScreenProps): React.JSX.Element {
-  const invalid = credentialsError(state);
+function CredentialsStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Element {
   return (
     <View testID="enroll-step-credentials">
-      <Text style={styles.instruction}>{t('auth.enroll.instruction')}</Text>
+      <Text style={styles.lead}>{t('auth.enroll.instruction')}</Text>
       <TextInput
         label={t('auth.enroll.identifierField')}
         value={state.loginIdentifier}
         onChangeText={(loginIdentifier) => onChange({ loginIdentifier })}
         disabled={state.busy}
+        autoCorrect={false}
+        autoCapitalize="none"
         autoFocus
         testID="enroll-identifier"
-        {...(invalid === 'identifier' && state.loginIdentifier.length > 0
-          ? { errorMessage: t('core.errors.VALIDATION_FAILED') }
-          : {})}
       />
-      <TextInput
-        label={t('auth.enroll.passwordField')}
-        value={state.password}
-        onChangeText={(password) => onChange({ password })}
-        secureTextEntry
-        disabled={state.busy}
-        testID="enroll-password"
-        {...(invalid === 'password' && state.password.length > 0
-          ? { errorMessage: t('core.errors.VALIDATION_FAILED') }
-          : {})}
-      />
-      <Failure state={state} />
-      <Button
-        label={t('auth.enroll.submit')}
-        onPress={onLogin}
-        disabled={!canSubmitCredentials(state)}
-        busy={state.busy}
-        testID="enroll-submit"
-      />
+      <View style={styles.gap}>
+        <TextInput
+          label={t('auth.enroll.passwordField')}
+          value={state.password}
+          onChangeText={(password) => onChange({ password })}
+          secureTextEntry
+          autoCorrect={false}
+          autoCapitalize="none"
+          disabled={state.busy}
+          testID="enroll-password"
+        />
+      </View>
     </View>
   );
 }
 
-function ConfirmStep({ state, onChange, onEnroll }: EnrollmentScreenProps): React.JSX.Element {
-  const summary = bindingSummary(state);
+function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Element {
+  const stores = state.login?.stores ?? [];
   return (
     <View testID="enroll-step-confirm">
-      {/* The binding, first and biggest — this is what the user is here to CHECK. */}
-      {summary !== null ? (
-        <Card testID="enroll-binding-summary">
-          <Text style={styles.bindingLabel}>{t('auth.enroll.title')}</Text>
-          <Text style={styles.bindingValue} testID="enroll-tenant-name">
-            {summary.tenantName}
-          </Text>
-          <Text style={styles.bindingValue} testID="enroll-store-name">
-            {summary.storeName}
-          </Text>
-        </Card>
-      ) : null}
-
-      {(state.login?.stores ?? []).map((store) => (
-        <ListRow
-          key={store.id}
-          primaryText={store.name}
-          onPress={() => onChange({ selectedStoreId: store.id, confirmed: false })}
-          testID={`enroll-store-${store.id}`}
+      {state.login === null ? null : (
+        <Text style={styles.lead} testID="enroll-tenant-name">
+          {t('auth.enroll.account', { tenant: state.login.tenantName })}
+        </Text>
+      )}
+      {stores.length === 1 && stores[0] !== undefined ? (
+        // One store: nothing to choose, so it is stated, not offered as a one-row list. The login
+        // already preselected it (App.tsx runLogin), and the button names it again.
+        <View style={styles.onlyStore} testID={`enroll-store-${stores[0].id}`}>
+          <Text style={styles.onlyStoreLabel}>{t('auth.enroll.storeLabel')}</Text>
+          <Text style={styles.onlyStoreName}>{stores[0].name}</Text>
+        </View>
+      ) : (
+        // Edge to edge, like every list; the chosen store is checked (§6.3: never colour alone).
+        <View style={styles.stores} accessibilityRole="radiogroup">
+          {stores.map((store) => (
+            <ListRow
+              key={store.id}
+              primaryText={store.name}
+              selected={store.id === state.selectedStoreId}
+              onPress={() => onChange({ selectedStoreId: store.id })}
+              testID={`enroll-store-${store.id}`}
+            />
+          ))}
+        </View>
+      )}
+      <View style={styles.section}>
+        <TextInput
+          label={t('auth.enroll.deviceNameField')}
+          placeholder={t('auth.enroll.deviceNamePlaceholder')}
+          value={state.deviceName}
+          onChangeText={(deviceName) => onChange({ deviceName })}
+          disabled={state.busy}
+          autoCorrect={false}
+          testID="enroll-device-name"
         />
-      ))}
+      </View>
+    </View>
+  );
+}
 
-      <TextInput
-        label={t('auth.enroll.identifierField')}
-        value={state.deviceName}
-        onChangeText={(deviceName) => onChange({ deviceName })}
-        disabled={state.busy}
-        testID="enroll-device-name"
-        {...(deviceNameError(state) !== null && state.deviceName.length > 0
-          ? { errorMessage: t('core.errors.VALIDATION_FAILED') }
-          : {})}
-      />
+function DoneStep({ state }: EnrollmentScreenProps): React.JSX.Element {
+  const summary = bindingSummary(state);
+  return (
+    <View style={styles.done} testID="enroll-step-done">
+      <Icon name="success" size={size.iconState} color={color.success} />
+      <Text style={styles.doneTitle} testID="enroll-success">
+        {t('auth.enroll.success')}
+      </Text>
+      {summary === null ? null : (
+        <Text style={styles.doneStore} testID="enroll-store-name">
+          {t('auth.enroll.successStore', { store: summary.storeName })}
+        </Text>
+      )}
+      {/* §4.4: enrollment logs nobody in. Next is the switcher, where the enrolling owner sets
+          their own PIN like everyone else (§6.6). */}
+      <Text style={styles.doneNext}>{t('auth.enroll.successNext')}</Text>
+    </View>
+  );
+}
 
+/**
+ * The step's one action, with what it is still waiting for said above it while disabled (the
+ * same pattern as the repair flows' `primaryHint`).
+ */
+function BottomAction({
+  state,
+  onLogin,
+  onEnroll,
+  onFinish,
+}: EnrollmentScreenProps): React.JSX.Element {
+  if (state.step === 'done') {
+    return <Button label={t('auth.enroll.finish')} onPress={onFinish} testID="enroll-finish" />;
+  }
+  if (state.step === 'credentials') {
+    const tooShort =
+      credentialsError(state) === 'password' &&
+      state.password.length > 0 &&
+      state.password.length < PASSWORD_MIN;
+    return (
+      <View>
+        {tooShort ? (
+          <Text style={styles.hint} testID="enroll-hint">
+            {t('auth.enroll.passwordTooShort', { min: PASSWORD_MIN })}
+          </Text>
+        ) : null}
+        <Button
+          label={t('auth.enroll.submit')}
+          onPress={onLogin}
+          disabled={!canSubmitCredentials(state)}
+          busy={state.busy}
+          testID="enroll-submit"
+        />
+      </View>
+    );
+  }
+  const summary = bindingSummary(state);
+  const missing = confirmMissing(state);
+  return (
+    <View>
+      {missing === null || state.busy ? null : (
+        <Text style={styles.hint} testID="enroll-hint">
+          {missing === 'store' ? t('auth.enroll.pickStoreFirst') : t('auth.enroll.nameDeviceFirst')}
+        </Text>
+      )}
       <Button
-        label={t('core.action.confirm')}
-        variant={state.confirmed ? 'primary' : 'secondary'}
-        onPress={() => onChange({ confirmed: !state.confirmed })}
-        disabled={state.selectedStoreId === null}
-        testID="enroll-confirm-toggle"
-      />
-
-      <Failure state={state} />
-
-      <Button
-        label={t('auth.enroll.submit')}
+        label={
+          summary === null
+            ? t('auth.enroll.bindWithoutStore')
+            : t('auth.enroll.bind', { store: summary.storeName })
+        }
         onPress={onEnroll}
         disabled={!canSubmitConfirm(state)}
         busy={state.busy}
@@ -227,46 +273,59 @@ function ConfirmStep({ state, onChange, onEnroll }: EnrollmentScreenProps): Reac
   );
 }
 
-function DoneStep({ onFinish }: EnrollmentScreenProps): React.JSX.Element {
-  return (
-    <View testID="enroll-step-done">
-      <Text style={styles.done} testID="enroll-success">
-        {t('auth.enroll.success')}
-      </Text>
-      {/* §4.4: enrollment logs nobody in. The next stop is the switcher, where the enrolling owner
-          sets their own PIN like everyone else (§6.6). */}
-      <Button label={t('auth.switcher.title')} onPress={onFinish} testID="enroll-finish" />
-    </View>
-  );
-}
-
-/** The one inline failure slot, always directly under the action that failed (§3.7). */
-function Failure({ state }: { readonly state: EnrollmentState }): React.JSX.Element | null {
+/** The revoked notice (§8.5: told WHY, in danger, before retrying) outranks a failed attempt. */
+function EnrollBanner({ state }: { readonly state: EnrollmentState }): React.JSX.Element | null {
+  if (state.revoked && state.failure === null) {
+    return (
+      <Banner variant="danger" message={t('auth.revoked.body')} testID="enroll-revoked-banner" />
+    );
+  }
   if (state.failure === null) return null;
-  const key = failureKey(state.failure);
   return (
-    <Text style={styles.failure} testID={`enroll-failure-${state.failure.kind}`}>
-      {state.failure.kind === 'rateLimited'
-        ? t('core.errors.RATE_LIMITED')
-        : key === 'auth.enroll.needsConnection'
-          ? t('auth.enroll.needsConnection')
-          : key === 'core.errors.PERMISSION_DENIED'
-            ? t('core.errors.PERMISSION_DENIED')
-            : t('core.errors.NOT_AUTHENTICATED')}
-    </Text>
+    <Banner
+      variant="danger"
+      message={failureMessage(state.failure)}
+      testID={`enroll-failure-${state.failure.kind}`}
+    />
   );
 }
 
-function noop(): void {
-  // The enrollment header's SyncChip is inert: there is no device identity yet, so there is no sync
-  // to inspect and no Sync Status screen to open. It renders `offline` because that is true.
+/** What went wrong, said as the one thing the person can do about it (model.ts's buckets). */
+function failureMessage(failure: NonNullable<EnrollmentState['failure']>): string {
+  switch (failure.kind) {
+    case 'credentials':
+      return t('auth.enroll.wrongCredentials');
+    case 'rateLimited':
+      return t('core.errors.RATE_LIMITED');
+    case 'notPermitted':
+      return t('auth.enroll.notOwner');
+    case 'offline':
+      return t('auth.enroll.needsConnection');
+    case 'unexpected':
+      return translateErrorCode(failure.code);
+  }
 }
 
 const styles = StyleSheet.create({
-  progress: { ...type.caption, color: color.textMuted, marginBottom: space.sm },
-  instruction: { ...type.bodySm, color: color.textMuted, marginBottom: space.lg },
-  bindingLabel: { ...type.caption, color: color.textMuted },
-  bindingValue: { ...type.title, color: color.text },
-  failure: { ...type.bodySm, color: color.danger, marginVertical: space.md },
-  done: { ...type.title, color: color.success, marginBottom: space.xl },
+  lead: { ...type.bodySm, color: color.textMuted, marginTop: space.sm, marginBottom: space.xl },
+  gap: { marginTop: space.md },
+  stores: {
+    marginHorizontal: -space.lg,
+    borderTopWidth: border.hairline,
+    borderTopColor: color.border,
+  },
+  section: { marginTop: space.xl },
+  onlyStore: {
+    backgroundColor: color.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+  },
+  onlyStoreLabel: { ...type.caption, color: color.textMuted },
+  onlyStoreName: { ...type.bodyBold, color: color.text },
+  hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
+  done: { alignItems: 'center', paddingTop: space['3xl'], paddingHorizontal: space.lg },
+  doneTitle: { ...type.title, color: color.text, marginTop: space.lg, textAlign: 'center' },
+  doneStore: { ...type.body, color: color.text, marginTop: space.sm, textAlign: 'center' },
+  doneNext: { ...type.bodySm, color: color.textMuted, marginTop: space.xs, textAlign: 'center' },
 });

@@ -140,6 +140,23 @@ export const Vibration = {
   vibrate: (): void => undefined,
 };
 
+/** Recorded, never real: a sheet dismisses the keyboard as it opens, and tests count that. */
+export const Keyboard = {
+  dismissCount: 0,
+  dismiss(): void {
+    Keyboard.dismissCount += 1;
+  },
+};
+
+/**
+ * Recorded window metrics. A test sets `__windowMetrics` to see a narrow phone or a large system
+ * font; nothing is measured.
+ */
+export const __windowMetrics = { width: 411, height: 914, scale: 2.625, fontScale: 1 };
+export function useWindowDimensions(): typeof __windowMetrics {
+  return { ...__windowMetrics };
+}
+
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };
 
 /**

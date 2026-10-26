@@ -2,6 +2,7 @@
 import { StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
+import { ListRow } from '../src/components/ListRow.js';
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
 import { StepHeader } from '../src/components/StepHeader.js';
@@ -64,6 +65,47 @@ describe('SegmentedControl', () => {
     );
     expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexWrap: 'wrap' });
     expect(r.get('seg.b')).toBeDefined();
+  });
+
+  // Regression: on Android "Tidak dicek" wrapped inside its own pill and the second line was
+  // clipped, leaving "Tidak". The device check is in the QA run; this pins the one-line contract.
+  test('a pill label stays on one line', () => {
+    const r = render(
+      <SegmentedControl
+        testID="seg"
+        wrap
+        size="compact"
+        options={[{ value: 'not_checked', label: 'Tidak dicek' }]}
+        value="not_checked"
+        onChange={vi.fn()}
+      />,
+    );
+    const [label] = r.get('seg.not_checked').queryAll((n) => n.type === 'Text');
+    expect(label?.props['numberOfLines']).toBe(1);
+  });
+});
+
+describe('ListRow as a choice', () => {
+  // The enrolment store list showed no chosen state at all (first Android QA run).
+  test('the chosen row is a checked radio with a check mark; the others are not', () => {
+    const chosen = render(
+      <ListRow testID="r" primaryText="Toko Utama" onPress={vi.fn()} selected />,
+    );
+    expect(chosen.get('r').props['accessibilityRole']).toBe('radio');
+    expect(chosen.get('r').props['accessibilityState']).toEqual({ checked: true, selected: true });
+    expect(chosen.query('r.check')).not.toBeNull();
+
+    const other = render(
+      <ListRow testID="r" primaryText="Toko Kota" onPress={vi.fn()} selected={false} />,
+    );
+    expect(other.get('r').props['accessibilityState']).toEqual({ checked: false, selected: false });
+    expect(other.query('r.check')).toBeNull();
+  });
+
+  test('a plain tappable row stays a button', () => {
+    const r = render(<ListRow testID="r" primaryText="x" onPress={vi.fn()} />);
+    expect(r.get('r').props['accessibilityRole']).toBe('button');
+    expect(r.get('r').props['accessibilityState']).toBeUndefined();
   });
 });
 

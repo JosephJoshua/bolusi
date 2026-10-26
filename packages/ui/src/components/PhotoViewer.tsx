@@ -32,6 +32,7 @@ import {
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
 import { color, radius, size, space, touch, type } from '../tokens.js';
+import { useDismissKeyboard } from './ConfirmSheet.js';
 import { Icon } from './Icon.js';
 
 export interface PhotoViewerItem {
@@ -119,6 +120,8 @@ export function PhotoViewer({
   labels,
   testID = 'ui.photoViewer',
 }: PhotoViewerProps): React.JSX.Element {
+  // A full-screen overlay too: its controls must not open under the keyboard.
+  useDismissKeyboard();
   const [index, setIndex] = useState(initialIndex);
   const [page, setPage] = useState<{ width: number; height: number } | null>(null);
   const [zoomed, setZoomed] = useState(false);

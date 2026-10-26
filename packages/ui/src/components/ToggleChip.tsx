@@ -55,7 +55,9 @@ export function ToggleChip({
       {selected ? (
         <Icon name="check" size={size.iconChip} color={color.info} testID={`${testID}.check`} />
       ) : null}
-      <Text style={[styles.label, { color: selected ? color.info : color.text }]}>{label}</Text>
+      <Text numberOfLines={1} style={[styles.label, { color: selected ? color.info : color.text }]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

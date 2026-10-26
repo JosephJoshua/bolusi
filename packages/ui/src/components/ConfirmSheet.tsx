@@ -9,11 +9,17 @@
  * bottom of the sheet is the thumb's resting position (§0 one-handed use), so the SAFE action gets
  * the position a misfire is most likely to hit. Do not "fix" this to match platform convention.
  *
+ * IT CLOSES THE KEYBOARD AS IT OPENS. A sheet asked for while a field is focused (back pressed on
+ * a half-filled intake) otherwise sat under the keyboard: the confirm was hidden, and the person
+ * could not see what they were about to tap (first Android QA run). Every sheet does this, so no
+ * caller has to remember to.
+ *
  * Rendered as a plain absolute overlay rather than RN `Modal`: the owner mounts it, so there is no
  * second, invisible view hierarchy to reason about. Android hardware-back → cancel is navigation
  * wiring (§8.1), and belongs to the screen (task 24), not here.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { Keyboard, StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
 import { color, overlayOpacity, radius, space, type } from '../tokens.js';
@@ -74,6 +80,7 @@ export function ConfirmSheet({
   onCancel,
   testID = 'ui.confirmSheet',
 }: ConfirmSheetProps): React.JSX.Element {
+  useDismissKeyboard();
   return (
     <View testID={testID} style={styles.root}>
       <View testID={`${testID}.scrim`} style={styles.scrim} />
@@ -106,4 +113,11 @@ export function ConfirmSheet({
       </View>
     </View>
   );
+}
+
+/** Shared with `Sheet`: a sheet never opens under the keyboard (see the header). */
+export function useDismissKeyboard(): void {
+  useEffect(() => {
+    Keyboard.dismiss();
+  }, []);
 }
