@@ -44,6 +44,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 // its import graph never touches `expo-notifications`' listener API — index.ts does, and index.ts is
 // not in this graph.
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),

@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('expo-secure-store', () => ({
   // Mirrors the real module's shape. The constants are re-exported values, not behaviour.
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),
@@ -42,11 +43,12 @@ describe('the options object reaching SecureStore', () => {
   // still correct and load-bearing on iOS, a listed platform, so it must keep reaching SecureStore
   // unchanged. Nothing else in the repo would notice if it silently changed: the constant is
   // exported for every platform, so a wrong-but-well-typed value keeps `tsc` green.
-  test('persistDevicePrivateKey passes WHEN_UNLOCKED_THIS_DEVICE_ONLY', async () => {
+  // The iOS item move and the Android/iOS split are in secure-item.test.ts; this lane runs as Android.
+  test('persistDevicePrivateKey passes AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY', async () => {
     await new SecureStoreKeyStore().persistDevicePrivateKey(SEED);
 
     expect(setItemAsync).toHaveBeenCalledWith('bolusi.device_private_key', SEED_B64, {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
     });
   });
 
@@ -57,7 +59,7 @@ describe('the options object reaching SecureStore', () => {
     await store.loadSigningKey();
     await store.wipe();
 
-    const expected = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
+    const expected = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
     for (const call of [
       ...setItemAsync.mock.calls,
       ...getItemAsync.mock.calls,

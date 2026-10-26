@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from 'vi
 // The Expo native modules App's module graph touches — doubled so their `__DEV__`-dependent real code
 // never loads (same set the live-shell tests mock).
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),

@@ -14,10 +14,10 @@
 // comment to a stronger claim without a doc change.
 //
 // WHAT ENFORCES §7.4 ("a device identity is never resurrected"), PER PLATFORM. Read this before
-// touching OPTIONS below — an earlier version of this comment credited the whole guarantee to
+// touching the storage policy in ports/secure-item.ts — an earlier version of this comment credited the whole guarantee to
 // `keychainAccessible`, which is an **iOS-only option**. Expo's `SecureStoreOptions` docs say
 // "Supported platforms: iOS" for it; on Android the field is accepted and ignored. The constant
-// `WHEN_UNLOCKED_THIS_DEVICE_ONLY` is separately documented as "Supported on Android, iOS, tvOS" —
+// `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY` is separately documented as "Supported on Android, iOS, tvOS" —
 // that is the CONSTANT existing, not the OPTION having an effect. Both statements are true and the
 // composition is a trap: the symbol resolves, `tsc` is green, and Android drops the field. This is
 // an Android-first product (00-product-overview), so the practical answer is the Android one:
@@ -28,8 +28,9 @@
 //     about the outcome: when an entry outlives its Keystore key it logs "there is no corresponding
 //     KeyStore key … Returning null", deletes the entry, and returns null. So a restored phone reads
 //     as UNENROLLED and re-enrolls with a fresh keypair — §7.4's required path, and not a crash.
-//   - iOS: `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` is the leg that does this work —
-//     it keeps the entry out of encrypted backups/restores. Correct and load-bearing; do not remove.
+//   - iOS: `keychainAccessible: AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY` (ports/secure-item.ts) is the
+//     leg that does this work — THIS_DEVICE_ONLY keeps the entry out of encrypted backups/restores.
+//     Correct and load-bearing; do not remove.
 //   - BOTH, by construction: Android auto-backup is configured to carry none of this app's data off
 //     the device (security-guide §6.2:194) — `allowBackup: false` plus expo-secure-store's
 //     `configureAndroidBackup` rules, both asserted against the GENERATED manifest in
@@ -41,9 +42,9 @@
 //
 // `requireAuthentication` (biometric) is NOT set: it is defence-in-depth only and out of v0
 // (security-guide §6.2), and enabling it would block background sync signing.
-import * as SecureStore from 'expo-secure-store';
-
 import { base64ToBytes, bytesToBase64, type KeyStorePort } from '@bolusi/core';
+
+import { secureItem } from './secure-item';
 
 /** The 32-byte Ed25519 seed, base64 (api/02-auth §3). ~44 chars — far inside the 2 KB item limit. */
 const DEVICE_PRIVATE_KEY = 'bolusi.device_private_key';
@@ -53,12 +54,10 @@ const DEVICE_TOKEN = 'bolusi.device_token';
 /** SecureStore's 2 KB per-item limit (api/02-auth §3: "each value < 2 KB"). Enforced, not assumed. */
 const MAX_ITEM_BYTES = 2048;
 
-const OPTIONS: SecureStore.SecureStoreOptions = {
-  // iOS only: Android accepts and ignores this field (see the platform note above). Kept because it
-  // is correct and load-bearing on iOS, which is a listed platform (`app.config.ts` → `platforms`).
-  // Asserted in keystore.test.ts, because nothing else would notice if it silently changed.
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-};
+// Both share ports/secure-item.ts's storage policy, asserted in secure-item.test.ts and
+// keystore.test.ts, because nothing else would notice if it silently changed.
+const privateKeyItem = secureItem(DEVICE_PRIVATE_KEY);
+const tokenItem = secureItem(DEVICE_TOKEN);
 
 function assertUnder2Kb(key: string, value: string): void {
   // The values are a 44-char base64 seed and a ~48-char token, so this can only fire if something
@@ -84,21 +83,21 @@ export class SecureStoreKeyStore implements KeyStorePort {
   async persistDevicePrivateKey(seed: Uint8Array): Promise<void> {
     const encoded = bytesToBase64(seed);
     assertUnder2Kb(DEVICE_PRIVATE_KEY, encoded);
-    await SecureStore.setItemAsync(DEVICE_PRIVATE_KEY, encoded, OPTIONS);
+    await privateKeyItem.set(encoded);
     this.#signingKey = Uint8Array.from(seed);
   }
 
   async persistDeviceToken(token: string): Promise<void> {
     assertUnder2Kb(DEVICE_TOKEN, token);
-    await SecureStore.setItemAsync(DEVICE_TOKEN, token, OPTIONS);
+    await tokenItem.set(token);
   }
 
   async loadDeviceToken(): Promise<string | null> {
-    return SecureStore.getItemAsync(DEVICE_TOKEN, OPTIONS);
+    return tokenItem.get();
   }
 
   async loadSigningKey(): Promise<Uint8Array | null> {
-    const encoded = await SecureStore.getItemAsync(DEVICE_PRIVATE_KEY, OPTIONS);
+    const encoded = await privateKeyItem.get();
     if (encoded === null) return null;
     this.#signingKey = base64ToBytes(encoded);
     return this.#signingKey;
@@ -120,7 +119,7 @@ export class SecureStoreKeyStore implements KeyStorePort {
    */
   async wipe(): Promise<void> {
     this.#signingKey = null;
-    await SecureStore.deleteItemAsync(DEVICE_PRIVATE_KEY, OPTIONS);
-    await SecureStore.deleteItemAsync(DEVICE_TOKEN, OPTIONS);
+    await privateKeyItem.delete();
+    await tokenItem.delete();
   }
 }

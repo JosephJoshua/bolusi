@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 // loads (the same set every live-shell test mocks). Unlike the other lanes, this one binds a REAL
 // `SecureStoreKeyStore`, so the SecureStore double below is backed by a `Map` that actually stores.
 vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
   setItemAsync: vi.fn(async () => undefined),
   getItemAsync: vi.fn(async () => null),
