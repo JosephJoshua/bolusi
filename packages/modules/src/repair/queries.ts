@@ -143,6 +143,7 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly createdBy: string;
   readonly createdByName: string | null;
   readonly returnedBy: string | null;
+  readonly returnedByName: string | null;
   readonly returnedAt: number | null;
   /** A technician has started work on it at least once, so the after-work cancellation fee applies. */
   readonly workStarted: boolean;
@@ -544,6 +545,7 @@ export async function getTicketHandler(
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,
         returnedBy: detail.returnedBy,
+        returnedByName: detail.returnedBy === null ? null : (names.get(detail.returnedBy) ?? null),
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         downPaymentBy: detail.downPaymentBy,

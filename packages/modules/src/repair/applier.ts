@@ -812,24 +812,31 @@ export const storePrintSettingsChangedApplier: ProjectionApplier<RepairDatabase>
     name: string | null;
     address: string;
     phone: string;
-    logo: MediaRef | null;
+    logo?: MediaRef | null;
     logoOnDotMatrix: boolean;
     intakeTerms: string | null;
     handoverTerms: string | null;
   }>(op);
+  const logo =
+    payload.logo === undefined
+      ? {}
+      : {
+          logoMediaId: payload.logo?.mediaId ?? null,
+          logoSha256: payload.logo?.sha256 ?? null,
+          logoMime: payload.logo?.mime ?? null,
+        };
   const values = {
     name: payload.name,
     address: payload.address,
     phone: payload.phone,
-    logoMediaId: payload.logo?.mediaId ?? null,
-    logoSha256: payload.logo?.sha256 ?? null,
-    logoMime: payload.logo?.mime ?? null,
+    ...logo,
     logoOnDotMatrix: payload.logoOnDotMatrix ? 1 : 0,
     intakeTerms: payload.intakeTerms,
     handoverTerms: payload.handoverTerms,
     updatedBy: op.userId,
     updatedAt: op.timestamp,
   };
+  // A logo left out keeps the one already set (none on a store's first settings).
   await db
     .insertInto('repairStorePrintSettings')
     .values({ storeId, tenantId: op.tenantId, ...values })

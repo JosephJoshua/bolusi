@@ -3,7 +3,7 @@
  * a price change and deciding a technician's proposal. Each runs one command, stays put with the
  * refusal shown when it fails, and calls `onDone` when it lands.
  */
-import { formatMoney } from '@bolusi/i18n';
+import { formatMoney, formatNumber } from '@bolusi/i18n';
 import {
   ListRow,
   PhotoSlot,
@@ -361,6 +361,116 @@ export function CancelStep({
   );
 }
 
+// ── down payment ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Record a down payment taken after intake, or (owners) change one already recorded, with the
+ * reason on record. `total` is what the customer owes, so the step can say what is left.
+ */
+export function DownPaymentStep({
+  chrome,
+  ticketId,
+  stale,
+  mode,
+  current,
+  total,
+  onDone,
+  onCancel,
+  testID = 'repair.downPayment',
+}: StepProps & {
+  readonly mode: 'record' | 'correct';
+  /** The down payment recorded now; null when none is. */
+  readonly current: number | null;
+  readonly total: number;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [amountText, setAmountText] = useState(
+    current === null ? '' : groupedAmount(String(current)),
+  );
+  const [reason, setReason] = useState('');
+  const correcting = mode === 'correct';
+  // A correction may bring it to nothing (removing it); a new one is at least Rp 1.
+  const amount = parseRupiah(amountText) ?? (correcting ? null : 0);
+  const aboveTotal = amount !== null && total > 0 && amount > total;
+  const complete =
+    amount !== null &&
+    !aboveTotal &&
+    (correcting ? amount !== current && reason.trim() !== '' : amount > 0);
+
+  const submit = (): void => {
+    if (!complete || amount === null) return;
+    void runner
+      .run(() =>
+        correcting
+          ? runtime.run('correctDownPayment', { ticketId, amount, reason })
+          : runtime.run('recordDownPayment', { ticketId, amount }),
+      )
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tn(correcting ? 'repair.downPayment.correctTitle' : 'repair.downPayment.recordTitle')}
+      onBack={onCancel}
+      primaryLabel={tn('repair.downPayment.save')}
+      onPrimary={submit}
+      primaryDisabled={!complete}
+      primaryHint={tn(
+        aboveTotal
+          ? 'repair.problem.downPaymentAboveTotal'
+          : correcting && amount !== null && amount !== current
+            ? 'repair.hint.reason'
+            : 'repair.hint.downPayment',
+      )}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      stale={stale}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      {correcting && current !== null ? (
+        <View style={styles.proposal} testID={`${testID}.current`}>
+          <Text style={styles.feeLabel}>{tn('repair.downPayment.current')}</Text>
+          <Text style={styles.proposalAmount}>{formatMoney(current)}</Text>
+        </View>
+      ) : null}
+      <View style={correcting ? repairStyles.gap : undefined}>
+        <TextInput
+          label={tn(correcting ? 'repair.downPayment.newAmount' : 'repair.downPayment.amount')}
+          value={amountText}
+          onChangeText={(text) => {
+            if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
+          }}
+          keyboardType="number-pad"
+          autoFocus
+          errorMessage={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
+          testID={`${testID}.amount`}
+        />
+        <Text style={repairStyles.caption} testID={`${testID}.total`}>
+          {tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })}
+        </Text>
+      </View>
+      {correcting ? (
+        <View style={repairStyles.gap}>
+          <TextInput
+            label={tn('repair.downPayment.reason')}
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            testID={`${testID}.reason`}
+          />
+          <Text style={repairStyles.caption}>{tn('repair.downPayment.removeHint')}</Text>
+        </View>
+      ) : null}
+    </FlowScreen>
+  );
+}
+
 // ── assign ────────────────────────────────────────────────────────────────────────────────────
 
 export function AssignStep({
@@ -550,7 +660,7 @@ export function PriceChangeStep({
           label={tn('repair.price.amount')}
           value={amountText}
           onChangeText={(text) => {
-            if (acceptsRupiahText(text)) setAmountText(text);
+            if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
           }}
           keyboardType="number-pad"
           testID={`${testID}.amount`}
@@ -688,3 +798,9 @@ const styles = StyleSheet.create({
   feeLabel: { ...type.caption, color: color.textMuted },
   feeAction: { marginLeft: 'auto', marginRight: -space.sm, marginVertical: -space.md },
 });
+
+/** Typed rupiah shown with thousands dots as it is typed, like the intake prices ("650.000"). */
+function groupedAmount(text: string): string {
+  const digits = text.replace(/\D/g, '');
+  return digits === '' ? '' : formatNumber(Number(digits));
+}

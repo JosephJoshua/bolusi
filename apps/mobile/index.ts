@@ -21,6 +21,7 @@ import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
 import {
   createSessionRepairRuntime,
+  galleryPickerFor,
   repairMediaSeamsFor,
   type RepairMediaSeams,
 } from './src/bootstrap/repair.js';
@@ -36,9 +37,11 @@ import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-cl
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
+import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
+import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from './src/ports/clock.js';
 import { deviceColumnAead } from './src/ports/aead.js';
@@ -360,7 +363,13 @@ function createRepair(
     app,
     runtime,
     identity,
-    media: repairMediaSeamsFor(media, capture, expoSharePlatform),
+    media: repairMediaSeamsFor(
+      media,
+      capture,
+      expoSharePlatform,
+      galleryPickerFor(media, identity, expoGallery),
+    ),
+    print: expoPrintPlatform,
   });
 }
 

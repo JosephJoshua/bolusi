@@ -199,5 +199,18 @@ describe('store slip settings', () => {
       mime: withLogo.logo.mime,
     });
     expect(synced.logoOnDotMatrix).toBe(true);
+
+    // Changing the terms without the logo's ref keeps the logo; null removes it.
+    const { logo, ...withoutLogo } = withLogo;
+    await h.run(
+      'setPrintSettings',
+      { ...withoutLogo, handoverTerms: 'Garansi 7 hari.' },
+      h.ownerId,
+    );
+    const kept = (await h.query('printSettings', {}, h.cashierId)).rows[0];
+    expect(kept.logo?.mediaId).toBe(logo.mediaId);
+    expect(kept.handoverTerms).toBe('Garansi 7 hari.');
+    await h.run('setPrintSettings', { ...withoutLogo, logo: null }, h.ownerId);
+    expect((await h.query('printSettings', {}, h.cashierId)).rows[0].logo).toBeNull();
   });
 });

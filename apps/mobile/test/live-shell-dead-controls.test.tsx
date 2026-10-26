@@ -142,6 +142,7 @@ function fakeMediaClient(
       return Promise.resolve({ kind: 'captured', ref, localPath: '/docs/x.jpg', passes: 1 });
     },
     captureSignature: () => Promise.reject(new Error('not used')),
+    importImage: () => Promise.reject(new Error('not used')),
     attach: () => Promise.resolve(),
     loadForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
     loadLocalForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),

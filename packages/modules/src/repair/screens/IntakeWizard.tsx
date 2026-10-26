@@ -51,7 +51,14 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   quoteLines: 'repair.problem.quoteLines',
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
+  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
 };
+
+/** Problems said on their own field rather than in the step's list. */
+const FIELD_PROBLEMS: ReadonlySet<IntakeProblem> = new Set([
+  'incompleteLine',
+  'downPaymentAboveTotal',
+]);
 
 export interface IntakeWizardProps {
   readonly chrome: RepairChrome;
@@ -290,7 +297,7 @@ export function IntakeWizard({
         <View style={repairStyles.gap}>
           {/* A line's own problem shows on its field, so only step-wide ones are listed here. */}
           {problems
-            .filter((problem) => problem !== 'incompleteLine')
+            .filter((problem) => !FIELD_PROBLEMS.has(problem))
             .map((problem) => (
               <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
                 {tn(PROBLEM_KEY[problem])}
@@ -350,6 +357,12 @@ export function IntakeWizard({
             update={update}
             options={options}
             lineError={problemText('incompleteLine')}
+            // Wrong as soon as it is typed, not merely unfinished, so it shows straight away.
+            downPaymentError={
+              problems.includes('downPaymentAboveTotal')
+                ? tn(PROBLEM_KEY.downPaymentAboveTotal)
+                : undefined
+            }
             testID={`${testID}.price`}
           />
         );

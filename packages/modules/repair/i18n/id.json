@@ -209,7 +209,11 @@
     "alreadyAgreed": "Pelanggan sudah setuju?",
     "changeReason": "Alasan perubahan",
     "waitingEvent": "Perubahan harga menunggu pelanggan",
-    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju."
+    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju.",
+    "downPayment": "DP",
+    "downPaymentInput": "DP dari pelanggan (kalau ada)",
+    "balance": "Sisa bayar",
+    "refund": "Dikembalikan ke pelanggan"
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",
@@ -219,7 +223,8 @@
     "photos": "Masih ada foto yang belum diambil.",
     "quoteLines": "Tambah minimal satu biaya.",
     "incompleteLine": "Biaya ini belum ada keterangannya.",
-    "negativeTotal": "Diskonnya lebih besar dari total biaya."
+    "negativeTotal": "Diskonnya lebih besar dari total biaya.",
+    "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya."
   },
   "ready": {
     "today": "Hari ini",
@@ -257,7 +262,10 @@
   "done": {
     "claim": "Servisan ini sekarang jadi tugasmu.",
     "start": "Servisan mulai dikerjakan.",
-    "repaired": "Selesai! HP siap diambil pelanggan."
+    "repaired": "Selesai! HP siap diambil pelanggan.",
+    "printed": "Nota sudah dikirim ke printer.",
+    "shared": "Nota sudah dibagikan sebagai PDF.",
+    "downPayment": "DP sudah disimpan."
   },
   "passcode": {
     "show": "Lihat",
@@ -269,7 +277,8 @@
     "reason": "Tulis alasannya dulu.",
     "priceLine": "Isi keterangan, harga, dan alasannya dulu.",
     "cancelFee": "Isi biaya pembatalannya dulu.",
-    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan."
+    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan.",
+    "downPayment": "Isi jumlah DP dulu."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -395,6 +404,55 @@
     "terms": {
       "intake": "Bawa nota ini saat mengambil HP.\nBiaya di atas masih perkiraan. Kalau ada biaya tambahan, toko akan konfirmasi ke pelanggan dulu.\nCadangkan data HP sebelum diservis. Toko tidak bertanggung jawab atas data yang hilang.\nKerusakan lain yang baru terlihat saat HP dibongkar akan dikabari sebelum dikerjakan.\nHP yang tidak diambil 30 hari setelah pelanggan dikabari di luar tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi berlaku untuk kerusakan dan sparepart yang sama, dengan menunjukkan nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
-    }
+    },
+    "refund": "Dikembalikan"
+  },
+  "print": {
+    "title": "Cetak nota",
+    "print": "Cetak",
+    "share": "Kirim PDF",
+    "intake": "Tanda terima",
+    "handover": "Nota servisan",
+    "intakeAbout": "Untuk pelanggan waktu HP diterima.",
+    "handoverAbout": "Tagihan dan bukti HP sudah diambil, sekaligus nota pembayaran.",
+    "reprint": "Sudah dicetak {count} kali. Cetakan ini bertanda “Cetak ulang”.",
+    "paper": "Kertas",
+    "paperA4": "A4",
+    "paperA5": "A5"
+  },
+  "downPayment": {
+    "recordTitle": "Catat DP",
+    "correctTitle": "Ubah DP",
+    "change": "Ubah",
+    "save": "Simpan DP",
+    "amount": "Jumlah DP (Rp)",
+    "newAmount": "DP yang benar (Rp)",
+    "current": "DP tercatat",
+    "ofTotal": "Total biaya {amount}",
+    "reason": "Alasan perubahan",
+    "removeHint": "Isi 0 kalau DP-nya batal."
+  },
+  "printSettings": {
+    "title": "Tampilan nota",
+    "summary": "Nama toko, logo dan ketentuan di nota",
+    "intro": "Tampil di tanda terima dan nota servisan, dicetak atau dikirim sebagai PDF.",
+    "header": "Kepala nota",
+    "name": "Nama toko",
+    "nameHint": "Kosongkan untuk pakai “{name}”.",
+    "address": "Alamat",
+    "phone": "No. HP atau WA",
+    "logo": "Logo",
+    "pickLogo": "Pilih logo",
+    "changeLogo": "Ganti",
+    "removeLogo": "Hapus",
+    "logoTitle": "Logo toko",
+    "logoOnDotMatrix": "Logo di printer dot-matrix",
+    "logoOnDotMatrixHint": "Cetakan jadi lebih lambat dan logo kurang tajam di kertas rangkap.",
+    "intakeTerms": "Di tanda terima",
+    "handoverTerms": "Di nota servisan",
+    "terms": "Ketentuan",
+    "termsHint": "Satu ketentuan per baris.",
+    "save": "Simpan",
+    "saved": "Tampilan nota sudah disimpan."
   }
 }

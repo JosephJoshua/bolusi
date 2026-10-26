@@ -14,11 +14,13 @@ import type {
   PrintImage,
 } from '@bolusi/core';
 
+import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
+
 import type { SlipKind } from './constants.js';
-import { ticketStatus } from './flows.js';
+import { balanceAfterDownPayment, photoInSlot, photoThumbnailRef, ticketStatus } from './flows.js';
 import { tn } from './i18n.js';
 import { CHECK_STATE_KEY, PRICE_KIND_KEY, optionLabel, statusLabel } from './labels.js';
-import type { QuoteLineRow, TicketDetailRow } from './queries.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
@@ -106,16 +108,21 @@ function lineRow(line: QuoteLineRow): PrintAmountRow {
   };
 }
 
-/** Total, then DP and what is left, when something was paid up front. */
+/**
+ * Total, then the down payment and what is left to pay, or what the store gives back when the
+ * down payment was more (a cancelled servisan whose fee is below it).
+ */
 function totals(totalLabel: string, total: number, downPayment: number | null): PrintAmountRow[] {
+  const paid = downPayment ?? 0;
   const rows: PrintAmountRow[] = [
-    { label: totalLabel, amount: formatMoney(total), strong: downPayment === null },
+    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 },
   ];
-  if (downPayment !== null && downPayment > 0) {
-    rows.push({ label: tn('repair.slip.downPayment'), amount: formatMoney(-downPayment) });
+  if (paid > 0) {
+    const balance = balanceAfterDownPayment(total, paid);
+    rows.push({ label: tn('repair.slip.downPayment'), amount: formatMoney(-paid) });
     rows.push({
-      label: tn('repair.slip.balance'),
-      amount: formatMoney(Math.max(0, total - downPayment)),
+      label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
+      amount: formatMoney(balance.amount),
       strong: true,
     });
   }
@@ -266,4 +273,58 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     meta,
     { blocks: [{ kind: 'fields', fields }], aside, closing },
   );
+}
+
+/** The pictures a slip shows, to load before building it: the store logo, the handover signature. */
+export function slipPictures(
+  ticket: TicketDetailRow,
+  slip: SlipKind,
+  settings: PrintSettings,
+): { readonly logo: ThumbnailRef | null; readonly signature: ThumbnailRef | null } {
+  const signature = slip === 'handover' ? photoInSlot(ticket, 'signature') : null;
+  return {
+    logo:
+      settings.logo === null
+        ? null
+        : { kind: 'signed', ...settings.logo, mime: settings.logo.mime as MediaRefMime },
+    signature: signature === null ? null : photoThumbnailRef(signature),
+  };
+}
+
+/** Everything besides the ticket that goes on a slip, as the platform resolved it. */
+export interface SlipSources {
+  readonly settings: PrintSettings;
+  /** The store's own name, printed when the owner has not set another. */
+  readonly storeName: string;
+  /** The pictures `slipPictures` named, loaded; null leaves one out. */
+  readonly logo: PrintImage | null;
+  readonly signature: PrintImage | null;
+  readonly printedAt: number;
+  readonly printedByName: string | null;
+}
+
+/** A slip with this store's header and terms: what every platform prints. */
+export function slipDocument(
+  ticket: TicketDetailRow,
+  slip: SlipKind,
+  sources: SlipSources,
+): PrintDocument {
+  const { settings } = sources;
+  const ctx: SlipContext = {
+    header: {
+      name: settings.name ?? sources.storeName,
+      lines: [settings.address, settings.phone].filter((line) => line.trim() !== ''),
+      logo: sources.logo,
+    },
+    terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
+    printedAt: sources.printedAt,
+    printedByName: sources.printedByName,
+  };
+  return slip === 'intake'
+    ? intakeSlip(ticket, ctx)
+    : handoverSlip(ticket, {
+        ...ctx,
+        handedOverByName: ticket.returnedByName,
+        signature: sources.signature,
+      });
 }

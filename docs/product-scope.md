@@ -152,7 +152,12 @@ Agreed with the owner before building printing.
   on dot-matrix only when switched on. The unlock code is never printed.
 - **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
 - **Phone-only counters** make a PDF to print through the phone's print dialog
-  or share (for example on WhatsApp). Dot-matrix printing is the desktop app's.
+  or share (for example on WhatsApp), on A4 or A5 (remembered per phone).
+  Dot-matrix printing is the desktop app's. On Android the print dialog does not
+  report a cancel, so a cancelled print there still counts as printed.
+- **Logo from the gallery:** the store logo is the one picture that may come from
+  the phone's gallery. Evidence photos stay camera-only; the lint rule allows the
+  photo picker in exactly one file, which feeds only the slip settings screen.
 - **Code:** one shared printing layer (core `print`: document model, HTML and
   ESC/P renderers) that POS receipts will reuse; slips are module templates.
 

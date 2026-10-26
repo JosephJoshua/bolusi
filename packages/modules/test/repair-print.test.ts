@@ -72,6 +72,7 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     createdBy: 'u1',
     createdByName: 'Maria Kasir',
     returnedBy: null,
+    returnedByName: null,
     returnedAt: null,
     workStarted: false,
     quoteLines: [

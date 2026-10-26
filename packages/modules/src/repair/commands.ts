@@ -873,7 +873,8 @@ export const setPrintSettingsInput = z
       .transform((name) => (name.trim() === '' ? null : name.trim())),
     address: zText(300),
     phone: zText(100),
-    logo: zMediaRef.nullable(),
+    /** Left out keeps the logo as it is; null removes it. */
+    logo: zMediaRef.nullable().optional(),
     logoOnDotMatrix: z.boolean(),
     /** Empty or null prints the app's default terms. */
     intakeTerms: zOptionalTerms,
@@ -890,7 +891,7 @@ function samePrintSettings(
     current.name === next.name &&
     current.address === next.address &&
     current.phone === next.phone &&
-    (current.logo?.mediaId ?? null) === (next.logo?.mediaId ?? null) &&
+    (next.logo === undefined || (current.logo?.mediaId ?? null) === (next.logo?.mediaId ?? null)) &&
     current.logoOnDotMatrix === next.logoOnDotMatrix &&
     current.intakeTerms === next.intakeTerms &&
     current.handoverTerms === next.handoverTerms

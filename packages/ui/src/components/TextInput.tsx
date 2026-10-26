@@ -65,6 +65,8 @@ export interface TextInputProps {
    * `textAlignVertical` and heights rather than `numberOfLines`.
    */
   readonly multiline?: boolean | undefined;
+  /** The most characters the field takes: what its command accepts, so typing past it is stopped. */
+  readonly maxLength?: number | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -105,6 +107,7 @@ export function TextInput({
   secureTextEntry = false,
   autoFocus = false,
   multiline = false,
+  maxLength,
   testID = 'ui.textInput',
 }: TextInputProps): React.JSX.Element {
   const hasError = errorMessage !== undefined;
@@ -138,6 +141,7 @@ export function TextInput({
         secureTextEntry={secureTextEntry}
         autoFocus={autoFocus}
         multiline={effectiveMultiline}
+        maxLength={maxLength}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={[

@@ -39,6 +39,7 @@ import {
 import { tn, type RepairKey } from '../i18n.js';
 import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
+  downPaymentAction,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -46,11 +47,13 @@ import {
   ticketActions,
   ticketStatus,
   workPhotos,
+  type StaleStep,
   type TicketAction,
   type TicketStep,
 } from '../flows.js';
 import {
   ActionErrorBanner,
+  DownPaymentRows,
   Fact,
   FactGrid,
   QueryView,
@@ -61,9 +64,11 @@ import {
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { PrintStep } from './PrintStep.js';
 import {
   AssignStep,
   CancelStep,
+  DownPaymentStep,
   WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
@@ -97,7 +102,9 @@ const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
 type Step =
   | { readonly kind: 'none' }
   | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
-  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow };
+  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
+  | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
+  | { readonly kind: 'print' };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -187,10 +194,14 @@ export function TicketDetail({
 
   // The ticket keeps reading live under an open step, so a change synced from another device while
   // the user fills the step in is caught here rather than as a refusal once they submit.
-  const stale =
-    step.kind === 'none' || ticket === undefined
+  const stale: StaleStep | null =
+    step.kind === 'none' || step.kind === 'print' || ticket === undefined
       ? null
-      : staleStep(step, ticket, can, runtime.userId);
+      : step.kind === 'downPayment'
+        ? downPaymentAction(ticket, can) === step.mode
+          ? null
+          : { kind: ticket.location === 'returned' ? 'returned' : 'changed' }
+        : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
     ticketId,
@@ -228,6 +239,33 @@ export function TicketDetail({
         <ProposalStep
           {...stepProps}
           line={ticket?.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+        />
+      );
+    case 'downPayment':
+      return (
+        <DownPaymentStep
+          {...stepProps}
+          mode={step.mode}
+          current={ticket?.downPayment ?? null}
+          total={ticket === undefined ? 0 : amountOwed(ticket)}
+          onDone={() => {
+            closeStep();
+            setDone('repair.done.downPayment');
+          }}
+        />
+      );
+    case 'print':
+      if (ticket === undefined || runtime.printing === undefined) break;
+      return (
+        <PrintStep
+          chrome={chrome}
+          ticket={ticket}
+          printing={runtime.printing}
+          onCancel={closeStep}
+          onDone={(notice) => {
+            closeStep();
+            setDone(notice);
+          }}
         />
       );
     case 'none':
@@ -444,8 +482,18 @@ export function TicketDetail({
           )}
         </View>
 
-        {statusActions.length === 0 ? null : (
+        {statusActions.length === 0 && runtime.printing === undefined ? null : (
           <View style={styles.actions}>
+            {runtime.printing === undefined ? null : (
+              <Button
+                label={tn('repair.print.title')}
+                variant="secondary"
+                size="compact"
+                onPress={() => setStep({ kind: 'print' })}
+                disabled={runner.busy}
+                testID={`${testID}.action.print`}
+              />
+            )}
             {statusActions.map((action) => (
               <Button
                 key={action}
@@ -509,6 +557,7 @@ export function TicketDetail({
     // The bottom action already opens the first proposal; per-line buttons only when there are more.
     const perLine = deciding && pending.length > 1;
     const cancelled = row.outcome === 'cancelled';
+    const paymentAction = downPaymentAction(row, can);
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -572,6 +621,33 @@ export function TicketDetail({
             })}
           </Text>
         )}
+        <DownPaymentRows
+          total={amountOwed(row)}
+          downPayment={row.downPayment}
+          action={
+            paymentAction === 'correct' ? (
+              <TextButton
+                label={tn('repair.downPayment.change')}
+                accessibilityLabel={tn('repair.downPayment.correctTitle')}
+                onPress={() => setStep({ kind: 'downPayment', mode: 'correct' })}
+                disabled={runner.busy}
+                testID={`${testID}.downPayment.correct`}
+              />
+            ) : undefined
+          }
+          testID={testID}
+        />
+        {paymentAction === 'record' ? (
+          <View style={styles.lineAction}>
+            <TextButton
+              label={tn('repair.downPayment.recordTitle')}
+              icon="add"
+              onPress={() => setStep({ kind: 'downPayment', mode: 'record' })}
+              disabled={runner.busy}
+              testID={`${testID}.downPayment.record`}
+            />
+          </View>
+        ) : null}
       </Section>
     );
   }
@@ -619,6 +695,11 @@ export function TicketDetail({
       </Section>
     );
   }
+}
+
+/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
+function amountOwed(row: TicketDetailRow): number {
+  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
 }
 
 function lineCaption(line: QuoteLineRow): string {

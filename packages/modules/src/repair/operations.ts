@@ -253,13 +253,16 @@ export const slipPrintedPayload = z.object({ slip: z.enum(SLIP_KINDS) }).strict(
 export const MAX_TERMS = 2000;
 const zTerms = z.string().trim().min(1).max(MAX_TERMS).nullable();
 
-/** Everything a store's slips print besides the servisan, replacing the previous settings. */
+/**
+ * Everything a store's slips print besides the servisan, replacing the previous settings. A logo
+ * left out keeps the one already set, so changing the terms needs no copy of the picture's ref.
+ */
 export const storePrintSettingsChangedPayload = z
   .object({
     name: z.string().trim().min(1).max(100).nullable(),
     address: z.string().trim().max(300),
     phone: z.string().trim().max(100),
-    logo: zMediaRef.nullable(),
+    logo: zMediaRef.nullable().optional(),
     logoOnDotMatrix: z.boolean(),
     intakeTerms: zTerms,
     handoverTerms: zTerms,
