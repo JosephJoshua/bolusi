@@ -28,8 +28,12 @@ interface Opened {
   customerId: string;
 }
 
-async function open(harness: RepairHarness, overrides: Record<string, unknown> = {}) {
-  return (await harness.run('openTicket', intake(harness, overrides), harness.cashierId)) as Opened;
+async function open(
+  harness: RepairHarness,
+  overrides: Record<string, unknown> = {},
+  userId = harness.cashierId,
+) {
+  return (await harness.run('openTicket', intake(harness, overrides), userId)) as Opened;
 }
 
 async function ticket(harness: RepairHarness, ticketId: string, userId = harness.cashierId) {
@@ -90,7 +94,11 @@ describe('intake', () => {
     h = await openRepairHarness(3);
     await expectCode(open(h, { quoteLines: [] }), 'VALIDATION_FAILED');
     await expectCode(
-      open(h, { quoteLines: [{ kind: 'discount', description: 'Diskon', amount: 50_000 }] }),
+      open(
+        h,
+        { quoteLines: [{ kind: 'discount', description: 'Diskon', amount: 50_000 }] },
+        h.storeOwnerId,
+      ),
       'VALIDATION_FAILED',
     );
     await expectCode(
@@ -102,7 +110,11 @@ describe('intake', () => {
   test('the price can come down to nothing but never below zero', async () => {
     h = await openRepairHarness(31);
     await expectCode(
-      open(h, { quoteLines: [{ kind: 'discount', description: 'Diskon', amount: -1 }] }),
+      open(
+        h,
+        { quoteLines: [{ kind: 'discount', description: 'Diskon', amount: -1 }] },
+        h.storeOwnerId,
+      ),
       'VALIDATION_FAILED',
     );
     const { ticketId } = await open(h, {
@@ -116,22 +128,23 @@ describe('intake', () => {
       reason: 'Gratis',
       customerAgreed: true,
     });
-    await expectCode(h.run('changeQuote', discount(-100_001), h.cashierId), 'VALIDATION_FAILED');
+    await expectCode(h.run('changeQuote', discount(-100_001), h.storeOwnerId), 'VALIDATION_FAILED');
+    // Only an owner may propose a discount; the main owner also holds the technician's permission.
     const propose = (amount: number) =>
       h!.run(
         'proposeQuoteChange',
         { ticketId, kind: 'discount', description: 'Diskon', amount, reason: 'Rusak' },
-        h!.technicianId,
+        h!.ownerId,
       ) as Promise<{ lineId: string }>;
-    // A proposal the cashier could never apply is refused when it is made.
+    // A proposal that could never be applied is refused when it is made.
     await expectCode(propose(-150_000), 'VALIDATION_FAILED');
     const proposal = await propose(-60_000);
-    await h.run('changeQuote', discount(-100_000), h.cashierId);
+    await h.run('changeQuote', discount(-100_000), h.storeOwnerId);
     await expectCode(
       h.run(
         'applyProposal',
         { ticketId, lineId: proposal.lineId, customerAgreed: true },
-        h.cashierId,
+        h.storeOwnerId,
       ),
       'VALIDATION_FAILED',
     );
@@ -153,7 +166,10 @@ describe('intake', () => {
       reason: 'Koreksi',
       customerAgreed: true,
     });
-    await expectCode(h.run('changeQuote', line('discount', -1), h.cashierId), 'VALIDATION_FAILED');
+    await expectCode(
+      h.run('changeQuote', line('discount', -1), h.storeOwnerId),
+      'VALIDATION_FAILED',
+    );
     // -50,000 + 20,000 is still below zero, but it moves the right way.
     await h.run('changeQuote', line('labour', 20_000), h.cashierId);
   });
@@ -244,7 +260,11 @@ describe('queue and work', () => {
       h.cashierId,
     );
     // A cancelled repair is no longer being worked on.
-    await h.run('cancelTicket', { ticketId: second.ticketId, reason: 'Batal' }, h.cashierId);
+    await h.run(
+      'cancelTicket',
+      { ticketId: second.ticketId, reason: 'Batal', fee: 0 },
+      h.storeOwnerId,
+    );
 
     const loads = (await h.query('technicianLoads', {}, h.cashierId)).rows as {
       technicianId: string;
@@ -315,6 +335,157 @@ describe('queue and work', () => {
       ]),
     );
     expect(slots).toHaveLength(6 + 4);
+  });
+});
+
+describe('discounts (owners only)', () => {
+  const discountLine = { kind: 'discount', description: 'Diskon', amount: -20_000 };
+
+  test('counter staff cannot lower a price at intake; an owner can', async () => {
+    h = await openRepairHarness(33);
+    const lines = [{ kind: 'labour', description: 'Ganti LCD', amount: 300_000 }, discountLine];
+    await expectCode(open(h, { quoteLines: lines }), 'PERMISSION_DENIED');
+    const opened = await open(h, { quoteLines: lines }, h.storeOwnerId);
+    expect((await ticket(h, opened.ticketId)).quoteTotal).toBe(280_000);
+  });
+
+  test('later, only an owner may change or propose a line that lowers the price', async () => {
+    h = await openRepairHarness(34);
+    const { ticketId } = await open(h);
+    const change = (amount: number, kind = 'discount') => ({
+      ticketId,
+      kind,
+      description: 'Koreksi',
+      amount,
+      reason: 'Langganan',
+      customerAgreed: true,
+    });
+    await expectCode(h.run('changeQuote', change(-20_000), h.cashierId), 'PERMISSION_DENIED');
+    // An adjustment is a discount too when it lowers the price.
+    await expectCode(
+      h.run('changeQuote', change(-20_000, 'adjustment'), h.cashierId),
+      'PERMISSION_DENIED',
+    );
+    await expectCode(
+      h.run(
+        'proposeQuoteChange',
+        { ticketId, kind: 'discount', description: 'Diskon', amount: -20_000, reason: 'Rusak' },
+        h.technicianId,
+      ),
+      'PERMISSION_DENIED',
+    );
+    // Raising the price stays the counter's and the technician's.
+    await h.run('changeQuote', change(15_000, 'adjustment'), h.cashierId);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Drop' },
+      h.technicianId,
+    );
+    await h.run('changeQuote', change(-20_000), h.storeOwnerId);
+    const t = await ticket(h, ticketId);
+    expect(t.quoteLines.filter((l: { amount: number }) => l.amount < 0)).toHaveLength(1);
+  });
+
+  test('a proposal that lowers the price, or is applied lower than nothing, needs an owner to apply', async () => {
+    h = await openRepairHarness(35);
+    const { ticketId } = await open(h);
+    const owners = (await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'discount', description: 'Diskon', amount: -10_000, reason: 'Langganan' },
+      h.ownerId,
+    )) as { lineId: string };
+    await expectCode(
+      h.run(
+        'applyProposal',
+        { ticketId, lineId: owners.lineId, customerAgreed: true },
+        h.cashierId,
+      ),
+      'PERMISSION_DENIED',
+    );
+    const technicians = (await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'adjustment', description: 'Ongkos', amount: 10_000, reason: 'Ekstra' },
+      h.technicianId,
+    )) as { lineId: string };
+    // The counter may settle on a different amount, but not turn the line into a discount.
+    await expectCode(
+      h.run(
+        'applyProposal',
+        { ticketId, lineId: technicians.lineId, customerAgreed: true, amount: -5_000 },
+        h.cashierId,
+      ),
+      'PERMISSION_DENIED',
+    );
+    await h.run(
+      'applyProposal',
+      { ticketId, lineId: owners.lineId, customerAgreed: true },
+      h.storeOwnerId,
+    );
+    await h.run('declineProposal', { ticketId, lineId: technicians.lineId }, h.cashierId);
+    const lines = (await ticket(h, ticketId)).quoteLines as { id: string; status: string }[];
+    expect(lines.find((l) => l.id === owners.lineId)?.status).toBe('applied');
+  });
+});
+
+describe('a price change waits for the customer', () => {
+  test('a change the customer has not agreed to waits, then counts once they agree', async () => {
+    h = await openRepairHarness(36);
+    const { ticketId } = await open(h);
+    const { lineId } = (await h.run(
+      'changeQuote',
+      {
+        ticketId,
+        kind: 'part',
+        description: 'Lem',
+        amount: 20_000,
+        reason: 'Lem lepas',
+        customerAgreed: false,
+      },
+      h.cashierId,
+    )) as { lineId: string };
+    const waiting = await ticket(h, ticketId);
+    expect(waiting.quoteTotal).toBe(750_000);
+    expect(waiting.pendingProposals).toBe(1);
+    expect(waiting.quoteLines.find((l: { id: string }) => l.id === lineId)).toMatchObject({
+      status: 'proposed',
+      customerAgreed: null,
+      createdBy: h.cashierId,
+    });
+
+    // There is no applying it without the customer's yes.
+    await expectCode(
+      h.run('applyProposal', { ticketId, lineId, customerAgreed: false }, h.cashierId),
+      'VALIDATION_FAILED',
+    );
+    await h.run('applyProposal', { ticketId, lineId, customerAgreed: true }, h.cashierId);
+    const agreed = await ticket(h, ticketId);
+    expect(agreed.quoteTotal).toBe(770_000);
+    expect(agreed.pendingProposals).toBe(0);
+    expect(agreed.quoteLines.find((l: { id: string }) => l.id === lineId)).toMatchObject({
+      status: 'applied',
+      customerAgreed: true,
+    });
+  });
+
+  test('a change the customer turns down never counts', async () => {
+    h = await openRepairHarness(37);
+    const { ticketId } = await open(h);
+    const { lineId } = (await h.run(
+      'changeQuote',
+      {
+        ticketId,
+        kind: 'labour',
+        description: 'Ekstra',
+        amount: 50_000,
+        reason: 'Lama',
+        customerAgreed: false,
+      },
+      h.cashierId,
+    )) as { lineId: string };
+    await h.run('declineProposal', { ticketId, lineId, note: 'Tidak mau' }, h.cashierId);
+    const t = await ticket(h, ticketId);
+    expect(t.quoteTotal).toBe(750_000);
+    expect(t.pendingProposals).toBe(0);
   });
 });
 
@@ -399,7 +570,7 @@ describe('price changes', () => {
         reason: 'Pelanggan tetap',
         customerAgreed: true,
       },
-      h.cashierId,
+      h.storeOwnerId,
     );
     const t = await ticket(h, ticketId);
     expect(t.quoteTotal).toBe(700_000);
@@ -465,10 +636,14 @@ describe('cancel and handover', () => {
     h = await openRepairHarness(13);
     const { ticketId } = await open(h);
     await expectCode(
-      h.run('cancelTicket', { ticketId, reason: 'x' }, h.technicianId),
+      h.run('cancelTicket', { ticketId, reason: 'x', fee: 0 }, h.technicianId),
       'PERMISSION_DENIED',
     );
-    await h.run('cancelTicket', { ticketId, reason: 'Biaya terlalu mahal' }, h.cashierId);
+    await h.run(
+      'cancelTicket',
+      { ticketId, reason: 'Biaya terlalu mahal', fee: 0 },
+      h.storeOwnerId,
+    );
 
     const stillHere = await h.query(
       'listTickets',
@@ -478,7 +653,7 @@ describe('cancel and handover', () => {
     expect(stillHere.rows.map((r: { id: string }) => r.id)).toEqual([ticketId]);
     await expectCode(h.run('startWork', { ticketId }, h.technicianId), 'INVALID_TRANSITION');
     await expectCode(
-      h.run('cancelTicket', { ticketId, reason: 'again' }, h.cashierId),
+      h.run('cancelTicket', { ticketId, reason: 'again', fee: 0 }, h.storeOwnerId),
       'INVALID_TRANSITION',
     );
 
@@ -503,7 +678,7 @@ describe('cancel and handover', () => {
       { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
       h.technicianId,
     );
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
     const pending = (await ticket(h, ticketId)).quoteLines.find(
       (l: { status: string }) => l.status === 'proposed',
     );

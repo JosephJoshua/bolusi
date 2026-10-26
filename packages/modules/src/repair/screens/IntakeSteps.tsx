@@ -63,7 +63,7 @@ import {
   useCatalogModel,
 } from './parts.js';
 import { useRepairQuery } from './runtime.js';
-import { PRICE_KINDS, type PriceKind } from './TicketSteps.js';
+import { usePriceKinds, type PriceKind } from './TicketSteps.js';
 
 export interface StepProps {
   readonly draft: IntakeDraft;
@@ -593,6 +593,7 @@ export function PriceStep({
   lineError,
   testID,
 }: StepProps & { readonly lineError: string | undefined }): React.JSX.Element {
+  const kinds = usePriceKinds();
   const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
   const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
     update({ lines: lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
@@ -603,7 +604,7 @@ export function PriceStep({
         <View key={index} style={index === 0 ? undefined : repairStyles.gap}>
           <Card testID={`${testID}.line.${index}`}>
             <SegmentedControl
-              options={PRICE_KINDS.map((value) => ({
+              options={kinds.map((value) => ({
                 value,
                 label: tn(PRICE_KIND_KEY[value]),
               }))}

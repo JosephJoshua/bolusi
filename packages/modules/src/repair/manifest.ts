@@ -4,6 +4,7 @@ import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolus
 import {
   repairCustomersTable,
   repairIntakeOptionsTable,
+  repairStoreCancelFeesTable,
   repairStoreIntakeOptionsTable,
   repairQuoteLinesTable,
   repairTicketEventsTable,
@@ -41,6 +42,8 @@ import {
   registerCustomerInput,
   returnDeviceHandler,
   returnDeviceInput,
+  setCancelFeesHandler,
+  setCancelFeesInput,
   startWorkHandler,
   startWorkInput,
 } from './commands.js';
@@ -48,6 +51,7 @@ import { REPAIR_MODULE_ID, REPAIR_PERMISSION, REPAIR_TABLE } from './constants.j
 import { findDeviceModelQuery, searchDeviceModelsQuery } from './device-models.js';
 import { repairOperations } from './operations.js';
 import {
+  cancelFeesQuery,
   getCustomerQuery,
   getTicketQuery,
   intakeOptionSettingsQuery,
@@ -74,6 +78,7 @@ export const repairModuleManifest = {
       [REPAIR_TABLE.events]: repairTicketEventsTable,
       [REPAIR_TABLE.intakeOptions]: repairIntakeOptionsTable,
       [REPAIR_TABLE.storeIntakeOptions]: repairStoreIntakeOptionsTable,
+      [REPAIR_TABLE.storeCancelFees]: repairStoreCancelFeesTable,
     },
   },
 
@@ -107,8 +112,10 @@ export const repairModuleManifest = {
     },
     [REPAIR_PERMISSION.cancel]: {
       scope: 'store',
-      isDangerous: false,
-      description: 'Can cancel a repair. The device stays in the store until it is handed back.',
+      // Cancelling was how counter staff kept a customer's cash, so only owners hold it.
+      isDangerous: true,
+      description:
+        'Can cancel a repair and set what the customer pays for it. The device stays in the store until it is handed back.',
     },
     [REPAIR_PERMISSION.handover]: {
       scope: 'store',
@@ -126,6 +133,16 @@ export const repairModuleManifest = {
       isDangerous: false,
       description:
         "Can hide intake checks, accessories, photos, brands and ready-by choices the store doesn't use.",
+    },
+    [REPAIR_PERMISSION.discount]: {
+      scope: 'store',
+      isDangerous: true,
+      description: "Can lower a repair's price with a discount, at intake or later.",
+    },
+    [REPAIR_PERMISSION.setCancelFees]: {
+      scope: 'store',
+      isDangerous: false,
+      description: "Can set the store's cancellation fees, before and after work starts.",
     },
   },
 
@@ -210,6 +227,11 @@ export const repairModuleManifest = {
       input: hideIntakeOptionsInput,
       handler: hideIntakeOptionsHandler,
     },
+    setCancelFees: {
+      permission: REPAIR_PERMISSION.setCancelFees,
+      input: setCancelFeesInput,
+      handler: setCancelFeesHandler,
+    },
   },
 
   queries: {
@@ -223,6 +245,7 @@ export const repairModuleManifest = {
     intakeOptionSettings: intakeOptionSettingsQuery,
     searchDeviceModels: searchDeviceModelsQuery,
     findDeviceModel: findDeviceModelQuery,
+    cancelFees: cancelFeesQuery,
   },
 } as const satisfies ModuleManifest<RepairDatabase>;
 

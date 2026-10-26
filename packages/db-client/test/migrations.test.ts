@@ -28,6 +28,7 @@ const SPEC_TABLES = [
   'repair_customers',
   'repair_intake_options',
   'repair_quote_lines',
+  'repair_store_cancel_fees',
   'repair_store_intake_options',
   'repair_ticket_events',
   'repair_ticket_photos',
@@ -135,7 +136,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 8, 9]);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 11]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -149,6 +150,7 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 6, name: 'operations_single_copy', applied_at: 1_700_000_000_000 },
       { version: 8, name: 'phone_models', applied_at: 1_700_000_000_000 },
       { version: 9, name: 'repair_intake_options', applied_at: 1_700_000_000_000 },
+      { version: 11, name: 'repair_cancel_fees', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -158,11 +160,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 8, 9]);
+    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 11]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 8 }]);
+    expect(rows.rows).toEqual([{ c: 9 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
@@ -262,7 +264,7 @@ describe('migration 6 keeps one copy of each op', () => {
 
     const result = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(result.applied).toEqual([6, 8, 9]);
+    expect(result.applied).toEqual([6, 8, 9, 11]);
     const columns = await driver.execute(`SELECT name FROM pragma_table_info('operations')`);
     const names = columns.rows.map((row) => String(row['name']));
     expect(names).not.toContain('payload');

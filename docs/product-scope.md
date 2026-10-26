@@ -102,6 +102,37 @@ Agreed with the owner after slice 1's phone screens.
   Choice chips from lists that grow (colours, quick brands, accessories) scroll
   sideways in one row instead of wrapping.
 
+## Cancelling a servisan (2026-10-26)
+
+Agreed with the owner. Counter staff have kept a customer's cash by marking the
+repair cancelled, so cancelling is an owner decision, as in the old system.
+
+- **Owners only:** the store owner or main owner cancels, always with a reason.
+  Cashiers no longer can; a cashier who needs a cancel asks the owner, who does
+  it on their phone or with their PIN on the counter device.
+- **Any time before handover:** a repaired phone can still be cancelled (the
+  customer won't pay or collect), since only owners can do it.
+- **Cancellation fee:** each store has two fees set by its owner in Settings →
+  Servisan: before work starts and after work has started (a technician has
+  started work on it at least once). Both start at Rp 0. The fee in force is
+  filled in when cancelling and the owner may change it; the record keeps both.
+- **Customer sees it:** the handover of a cancelled phone shows the fee owed
+  ("Biaya pembatalan"), and the customer signs under it. The printed slip will
+  show it too once printing lands.
+- **Owners see every cancel:** a "Dibatalkan" view on the board, for owners
+  only, lists each cancel with who, when, reason and fee, and flags a fee that
+  differs from the store's.
+- **Discounts are owners' too:** any line that lowers a price (a discount, or a
+  negative adjustment) needs an owner, at intake or later. Counter staff and
+  technicians can still raise a price or propose a part or labour; the counter
+  can decline an owner's proposed discount but not apply it.
+- **A price change counts only once the customer agrees:** whether a technician
+  proposes it or the counter enters it, a change waits ("Menunggu persetujuan
+  pelanggan") and is left out of the total until the counter records the
+  customer's yes; a no drops it. There is no applying without asking, and the
+  phone cannot be handed back while a change waits. Technicians keep proposing,
+  since they find the extra fault once the phone is open.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.

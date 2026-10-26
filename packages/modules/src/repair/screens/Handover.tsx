@@ -1,8 +1,8 @@
 /**
  * Handover — giving the device back: a photo of the handover and the customer's signature, both
- * required, then one tap records it. On a repaired phone the price shown is what the customer owes;
- * on a cancelled one the repair price is not charged. Payment itself is still the store's paper cash
- * book in this slice.
+ * required, then one tap records it. The amount shown is what the customer owes and signs for: the
+ * price on a repaired phone, the cancellation fee on a cancelled one. Payment itself is still the
+ * store's paper cash book in this slice.
  */
 import { formatMoney } from '@bolusi/i18n';
 import { Card, PhotoSlot, TextInput, border, color, space, type } from '@bolusi/ui';
@@ -117,9 +117,19 @@ export function Handover({
                 {`${ticket.deviceBrand} ${ticket.deviceModel} · ${ticket.ticketNumber}`}
               </Text>
               {ticket.outcome === 'cancelled' ? (
-                <Text style={[repairStyles.muted, styles.total]} testID={`${testID}.cancelled`}>
-                  {tn('repair.handover.cancelled')}
-                </Text>
+                // What the customer signs for: the cancellation fee, never the repair price. A
+                // ticket cancelled before fees existed charged nothing.
+                <View style={styles.total}>
+                  <View style={repairStyles.row}>
+                    <Text style={styles.totalLabel}>{tn('repair.cancel.fee')}</Text>
+                    <Text style={repairStyles.heading} testID={`${testID}.total`}>
+                      {formatMoney(ticket.cancelFee ?? 0)}
+                    </Text>
+                  </View>
+                  <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
+                    {tn('repair.handover.cancelled')}
+                  </Text>
+                </View>
               ) : (
                 <View style={[repairStyles.row, styles.total]}>
                   <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>

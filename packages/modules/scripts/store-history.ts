@@ -178,7 +178,7 @@ async function writeTicketJourney(
     }
   }
   if (prng() < 0.08) {
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
   } else {
     await h.run('markRepaired', { ticketId, note: 'Sudah dites' }, h.technicianId);
   }

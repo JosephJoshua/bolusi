@@ -83,6 +83,23 @@ async function writeJourney(a: RepairHarness): Promise<void> {
       reason: 'Langganan',
       customerAgreed: true,
     },
+    a.storeOwnerId,
+  );
+  const unconfirmed = (await a.run(
+    'changeQuote',
+    {
+      ticketId: first.ticketId,
+      kind: 'labour',
+      description: 'Bersihkan',
+      amount: 15_000,
+      reason: 'Kotor',
+      customerAgreed: false,
+    },
+    a.cashierId,
+  )) as { lineId: string };
+  await a.run(
+    'applyProposal',
+    { ticketId: first.ticketId, lineId: unconfirmed.lineId, customerAgreed: true },
     a.cashierId,
   );
   await a.run(
@@ -95,7 +112,11 @@ async function writeJourney(a: RepairHarness): Promise<void> {
     { ticketId: first.ticketId, handoverPhoto: a.photo(7), signature: a.photo(8) },
     a.cashierId,
   );
-  await a.run('cancelTicket', { ticketId: second.ticketId, reason: 'Tidak jadi' }, a.cashierId);
+  await a.run(
+    'cancelTicket',
+    { ticketId: second.ticketId, reason: 'Tidak jadi', fee: 25_000 },
+    a.storeOwnerId,
+  );
   await a.run(
     'correctCustomerDetails',
     { customerId: first.customerId, name: 'Yohanis Wenda', phone: '081200000000' },

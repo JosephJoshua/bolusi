@@ -57,6 +57,14 @@ export interface RepairTicketsTable {
    * Null for a ticket opened before the list was editable, which has the six default angles.
    */
   intakePhotosJson: string | null;
+  /**
+   * Integer IDR the customer pays for a cancelled servisan, and the store's fee in force when it was
+   * cancelled. Null when not cancelled, or cancelled before fees existed (nothing was charged then).
+   */
+  cancelFee: number | null;
+  cancelStandardFee: number | null;
+  cancelledBy: string | null;
+  cancelledAt: number | null;
 }
 
 export interface RepairQuoteLinesTable {
@@ -128,6 +136,18 @@ export interface RepairStoreIntakeOptionsTable {
   updatedAt: number;
 }
 
+/** One store's cancellation fees, integer IDR. A store that never set them charges nothing. */
+export interface RepairStoreCancelFeesTable {
+  storeId: string;
+  tenantId: string;
+  /** Before any work started on the phone. */
+  beforeWork: number;
+  /** Once a technician has started work on it. */
+  afterWork: number;
+  updatedBy: string;
+  updatedAt: number;
+}
+
 /**
  * The phone catalog (client migration 8, server migration 0016). Not a repair projection: no op
  * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
@@ -160,4 +180,5 @@ export interface RepairDatabase {
   repairTicketEvents: RepairTicketEventsTable;
   repairIntakeOptions: RepairIntakeOptionsTable;
   repairStoreIntakeOptions: RepairStoreIntakeOptionsTable;
+  repairStoreCancelFees: RepairStoreCancelFeesTable;
 }

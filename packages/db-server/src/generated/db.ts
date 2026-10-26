@@ -321,6 +321,15 @@ export interface RepairQuoteLines {
   ticketId: string;
 }
 
+export interface RepairStoreCancelFees {
+  afterWork: Int8;
+  beforeWork: Int8;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RepairStoreIntakeOptions {
   hiddenJson: string;
   list: string;
@@ -355,6 +364,10 @@ export interface RepairTicketPhotos {
 }
 
 export interface RepairTickets {
+  cancelFee: Int8 | null;
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
+  cancelStandardFee: Int8 | null;
   checklistJson: string;
   complaint: string;
   createdAt: Int8;
@@ -495,6 +508,7 @@ export interface DB {
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreCancelFees: RepairStoreCancelFees;
   repairStoreIntakeOptions: RepairStoreIntakeOptions;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;

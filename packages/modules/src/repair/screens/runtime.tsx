@@ -7,6 +7,7 @@ import type { ModulePort } from '@bolusi/core';
 
 import type { IntakeOptionSettings } from '../intake-options.js';
 import type { DeviceModelPhoto } from '../device-models.js';
+import type { CancelFees } from '../queries.js';
 import type { repairModule } from '../manifest.js';
 import {
   createRuntimeContext,
@@ -77,6 +78,14 @@ export function useRepairThumbnail(ref: ThumbnailRef | null): ThumbnailState {
 }
 
 /** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
+/** This store's cancellation fees; `reloadKey` re-reads them after a failed load. */
+export function useCancelFees(reloadKey = 0): QueryState<CancelFees> {
+  return useRepairQuery(
+    async (rt) => (await rt.query('cancelFees', {})).rows[0]!,
+    `cancelFees:${String(reloadKey)}`,
+  );
+}
+
 export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
   return useRepairQuery(
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
