@@ -1,6 +1,6 @@
 /**
  * IntakeWizard — the counter's one-sitting intake as six short steps: customer, device, condition,
- * the six photos, price and ready date, then a review that opens the ticket. Every step keeps its
+ * the intake photos, price and ready date, then a review that opens the ticket. Every step keeps its
  * input in one draft, published on each change so an idle lock never loses a half-done intake
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import { INTAKE_SLOT_KEY, INTAKE_STEP_KEY } from './labels.js';
+import { INTAKE_STEP_KEY, optionLabel } from './labels.js';
 import {
   INTAKE_STEPS,
   capturedThumbnailRef,
@@ -24,10 +24,14 @@ import {
   type IntakeDraft,
   type IntakeProblem,
 } from '../flows.js';
-import { INTAKE_PHOTO_SLOTS, type IntakePhotoSlot } from '../constants.js';
+import {
+  DEFAULT_INTAKE_OPTIONS,
+  storeIntakeOptions,
+  type IntakeOption,
+} from '../intake-options.js';
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
-import { useRepairRuntime } from './runtime.js';
+import { useIntakeOptionSettings, useRepairRuntime } from './runtime.js';
 
 import {
   ConditionStep,
@@ -111,29 +115,39 @@ export function IntakeWizard({
   }, [restoredOnce, runtime]);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
+  // The store's lists, live: an owner's change that syncs in mid-intake shows at once, and the draft
+  // keeps every answer the new lists still ask for. If the lists cannot be read the old built-in
+  // ones stand in, and the command still checks the photos against the store's current list.
+  const settings = useIntakeOptionSettings();
+  const options = useMemo(
+    () =>
+      settings.status === 'ready' ? storeIntakeOptions(settings.data) : DEFAULT_INTAKE_OPTIONS,
+    [settings],
+  );
+
   const stepIndex = Math.min(draft.step, INTAKE_STEPS.length - 1);
   const step = INTAKE_STEPS[stepIndex]!;
-  const problems = stepProblems(draft, step);
+  const problems = stepProblems(draft, step, options);
   const dirty = intakeDirty(draft);
   const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
   // The review shows the photos as a strip that opens full screen, like a saved ticket.
   const photos = usePhotoBrowser(
     useMemo(
       () =>
-        INTAKE_PHOTO_SLOTS.flatMap((slot) => {
-          const ref = draft.photos[slot];
+        options.photoAngles.flatMap((angle) => {
+          const ref = draft.photos[angle.id];
           return ref === undefined
             ? []
             : [
                 {
-                  key: slot,
-                  label: tn(INTAKE_SLOT_KEY[slot]),
+                  key: angle.id,
+                  label: optionLabel('photoAngles', angle),
                   group: tn('repair.photo.intake'),
                   ref: capturedThumbnailRef(ref),
                 },
               ];
         }),
-      [draft.photos],
+      [draft.photos, options.photoAngles],
     ),
     `${testID}.review.photos`,
   );
@@ -179,16 +193,16 @@ export function IntakeWizard({
     return () => onRegisterStepBack?.(null);
   });
 
-  const takePhoto = (slot: IntakePhotoSlot): void => {
+  const takePhoto = (angle: IntakeOption): void => {
     void runner
-      .run(() => runtime.capturePhoto({ title: tn(INTAKE_SLOT_KEY[slot]) }))
+      .run(() => runtime.capturePhoto({ title: optionLabel('photoAngles', angle) }))
       .then((captured) => {
         if (captured === undefined || captured === null) return;
-        setDraft((d) => ({ ...d, photos: { ...d.photos, [slot]: captured.mediaRef } }));
+        setDraft((d) => ({ ...d, photos: { ...d.photos, [angle.id]: captured.mediaRef } }));
       });
   };
   // On the photos step the primary action walks round the phone: it takes the next missing shot.
-  const missingPhoto = step === 'photos' ? nextMissingPhoto(draft) : null;
+  const missingPhoto = step === 'photos' ? nextMissingPhoto(draft, options.photoAngles) : null;
 
   const next = (): void => {
     if (missingPhoto !== null) {
@@ -204,7 +218,7 @@ export function IntakeWizard({
       return;
     }
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, now())))
+      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now())))
       .then((opened) => {
         if (opened === undefined) return;
         onDraftChange?.(null);
@@ -223,7 +237,7 @@ export function IntakeWizard({
       onBack={back}
       primaryLabel={
         missingPhoto !== null
-          ? tn('repair.photo.takeNext', { slot: tn(INTAKE_SLOT_KEY[missingPhoto]) })
+          ? tn('repair.photo.takeNext', { slot: optionLabel('photoAngles', missingPhoto) })
           : step === 'review'
             ? tn('repair.action.openTicket')
             : tn('repair.action.next')
@@ -270,7 +284,7 @@ export function IntakeWizard({
             {tn('repair.photo.expired')}
           </Text>
         ) : null}
-        {renderStep()}
+        {settings.status === 'loading' ? null : renderStep()}
       </View>
       {showProblems && (step === 'photos' || step === 'price' || step === 'review') ? (
         <View style={repairStyles.gap}>
@@ -294,6 +308,7 @@ export function IntakeWizard({
           <CustomerStep
             draft={draft}
             update={update}
+            options={options}
             nameError={problemText('customerName')}
             testID={`${testID}.customer`}
           />
@@ -303,6 +318,7 @@ export function IntakeWizard({
           <DeviceStep
             draft={draft}
             update={update}
+            options={options}
             brandError={problemText('deviceBrand')}
             modelError={problemText('deviceModel')}
             testID={`${testID}.device`}
@@ -313,17 +329,26 @@ export function IntakeWizard({
           <ConditionStep
             draft={draft}
             update={update}
+            options={options}
             complaintError={problemText('complaint')}
             testID={`${testID}.condition`}
           />
         );
       case 'photos':
-        return <PhotosStep draft={draft} onTake={takePhoto} testID={`${testID}.photos`} />;
+        return (
+          <PhotosStep
+            draft={draft}
+            angles={options.photoAngles}
+            onTake={takePhoto}
+            testID={`${testID}.photos`}
+          />
+        );
       case 'price':
         return (
           <PriceStep
             draft={draft}
             update={update}
+            options={options}
             lineError={problemText('incompleteLine')}
             testID={`${testID}.price`}
           />
@@ -332,6 +357,7 @@ export function IntakeWizard({
         return (
           <ReviewStep
             draft={draft}
+            options={options}
             onEdit={goTo}
             photoStrip={photos.strip}
             testID={`${testID}.review`}

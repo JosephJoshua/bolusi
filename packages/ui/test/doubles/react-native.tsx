@@ -48,6 +48,7 @@ export const Text = hostComponent('Text');
 export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
 export const ScrollView = hostComponent('ScrollView');
+export const Switch = hostComponent('Switch');
 
 /**
  * Renders every item rather than a window. That is deliberate and its limits must be understood:

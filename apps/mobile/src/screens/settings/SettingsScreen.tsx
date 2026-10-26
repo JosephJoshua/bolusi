@@ -33,6 +33,14 @@ import {
   type MutablePushCategory,
 } from './model.js';
 
+/** A module's row in Settings, its copy resolved by the caller. */
+export interface SettingsModuleEntry {
+  readonly section: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly onOpen: () => void;
+}
+
 export interface SettingsScreenProps {
   readonly locale: Locale;
   readonly onSelectLocale: (locale: Locale) => void;
@@ -58,6 +66,13 @@ export interface SettingsScreenProps {
    * user holds `auth.user_reset_pin`, so the row is absent for a non-owner. Optional, like the unlock row.
    */
   readonly onOpenResetPin?: (() => void) | undefined;
+  /**
+   * The owner's intake lists (repair checks, accessories, photos, brands, ready-by) — present ONLY
+   * for someone who may edit them or hide items at this store; core still enforces both. The caller
+   * supplies the repair module's copy, so this screen never imports the module's screens (whose
+   * lists would nest a FlatList in this scrolling shell).
+   */
+  readonly intakeOptions?: SettingsModuleEntry | undefined;
   readonly syncChip: SyncChipState;
   /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
   readonly pendingCount: number;
@@ -75,6 +90,7 @@ export function SettingsScreen({
   onOpenChangePin,
   onOpenUnlockPin,
   onOpenResetPin,
+  intakeOptions,
   syncChip,
   pendingCount,
   onOpenSync,
@@ -158,6 +174,21 @@ export function SettingsScreen({
           }
         />
       ))}
+
+      {intakeOptions !== undefined ? (
+        <>
+          <Text style={styles.section} testID="settings-section-repair">
+            {intakeOptions.section}
+          </Text>
+          <ListRow
+            primaryText={intakeOptions.title}
+            secondaryText={intakeOptions.summary}
+            onPress={intakeOptions.onOpen}
+            showChevron
+            testID="settings-intake-options"
+          />
+        </>
+      ) : null}
 
       <Text style={styles.section} testID="settings-section-security">
         {t('core.settings.security')}

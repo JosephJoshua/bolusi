@@ -35,9 +35,9 @@ export interface RepairTicketsTable {
   devicePasscode: string | null;
   complaint: string;
   intakeNotes: string;
-  /** JSON array of `{ item, state, note }`. */
+  /** JSON array of `{ item, label?, state, note }` (no `label` before intake lists were editable). */
   checklistJson: string;
-  /** JSON array of strings (charger, case, SIM…). */
+  /** JSON array of `{ item, label }`, or of plain item ids before intake lists were editable. */
   peripheralsJson: string;
   estimatedReadyAt: number | null;
   outcome: string;
@@ -52,6 +52,11 @@ export interface RepairTicketsTable {
   updatedAt: number;
   returnedBy: string | null;
   returnedAt: number | null;
+  /**
+   * JSON array of `{ slot, label }`: the intake photo angles asked for, in order, as named then.
+   * Null for a ticket opened before the list was editable, which has the six default angles.
+   */
+  intakePhotosJson: string | null;
 }
 
 export interface RepairQuoteLinesTable {
@@ -102,10 +107,33 @@ export interface RepairTicketEventsTable {
   detailJson: string;
 }
 
+/** The franchise's intake option lists (intake-options.ts), one row per list. */
+export interface RepairIntakeOptionsTable {
+  tenantId: string;
+  list: string;
+  /** JSON array of `{ id, label }`, in the order the counter sees them. */
+  itemsJson: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** The intake options one store hides, one row per list. */
+export interface RepairStoreIntakeOptionsTable {
+  storeId: string;
+  list: string;
+  tenantId: string;
+  /** JSON array of option ids. */
+  hiddenJson: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
 export interface RepairDatabase {
   repairCustomers: RepairCustomersTable;
   repairTickets: RepairTicketsTable;
   repairQuoteLines: RepairQuoteLinesTable;
   repairTicketPhotos: RepairTicketPhotosTable;
   repairTicketEvents: RepairTicketEventsTable;
+  repairIntakeOptions: RepairIntakeOptionsTable;
+  repairStoreIntakeOptions: RepairStoreIntakeOptionsTable;
 }

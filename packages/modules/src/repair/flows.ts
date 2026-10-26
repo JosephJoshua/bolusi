@@ -8,18 +8,17 @@ import { z } from 'zod';
 import type { OpenTicketInput } from './commands.js';
 import {
   CHECKLIST_STATES,
-  INTAKE_PHOTO_SLOTS,
   IN_PROGRESS_OUTCOMES,
   MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_PERMISSION,
   workPhotoStage,
   type ChecklistState,
-  type IntakePhotoSlot,
   type QuoteLineKind,
   type RepairOutcome,
   type WorkPhotoStage,
 } from './constants.js';
+import { readyDays, type IntakeOption, type IntakeOptionLists } from './intake-options.js';
 import type {
   ListTicketsInput,
   TicketDetailRow,
@@ -90,6 +89,10 @@ export interface RepairAbilities {
   readonly quoteChange: boolean;
   readonly cancel: boolean;
   readonly handover: boolean;
+  /** Edit the franchise's intake lists (tenant-wide). */
+  readonly manageIntakeOptions: boolean;
+  /** Hide intake list items at this store. */
+  readonly hideIntakeOptions: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -102,6 +105,8 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     quoteChange: hasPermission(P.quoteChange),
     cancel: hasPermission(P.cancel),
     handover: hasPermission(P.handover),
+    manageIntakeOptions: hasPermission(P.manageIntakeOptions),
+    hideIntakeOptions: hasPermission(P.hideIntakeOptions),
   };
 }
 
@@ -218,42 +223,17 @@ export function signedAmount(kind: QuoteLineKind, amount: number): number {
 }
 
 // ── intake ──────────────────────────────────────────────────────────────────────────────────
+//
+// Every list the counter picks from (checks, accessories, photo angles, brands, ready-by) is the
+// store's current `IntakeOptionLists` (intake-options.ts), handed in by the screen. The draft keys
+// its answers by option id, so a list that syncs in mid-intake keeps whatever still applies.
 
-/** Condition checks offered at intake, in the order a counter person tests them. */
-export const INTAKE_CHECKS = [
-  'screen',
-  'touch',
-  'camera',
-  'speaker',
-  'microphone',
-  'charging',
-  'buttons',
-  'signal',
-  'biometrics',
-] as const;
-export type IntakeCheck = (typeof INTAKE_CHECKS)[number];
-
-/** Brands the stores see most, offered as one-tap answers; any other brand is typed. */
-export const COMMON_BRANDS = [
-  'Samsung',
-  'Oppo',
-  'Vivo',
-  'Xiaomi',
-  'Realme',
-  'Infinix',
-  'iPhone',
-] as const;
-
-/** Things customers commonly leave with the phone. Stored by key so either language reads them. */
-export const PERIPHERALS = ['charger', 'cable', 'case', 'simCard', 'memoryCard', 'box'] as const;
-export type Peripheral = (typeof PERIPHERALS)[number];
-
-export const READY_CHOICES = ['today', 'tomorrow', 'threeDays', 'unknown'] as const;
-export type ReadyChoice = (typeof READY_CHOICES)[number];
-
-/** End of the store day (17:00 device time) for a promised ready date, or null when unknown. */
-export function readyAtFor(choice: ReadyChoice, now: number): number | null {
-  const days = { today: 0, tomorrow: 1, threeDays: 3, unknown: null }[choice];
+/**
+ * End of the store day (17:00 device time) for a ready-by choice, or null when not known yet.
+ * `ready` is a ready-by option id: its number of days.
+ */
+export function readyAtFor(ready: string, now: number): number | null {
+  const days = readyDays(ready);
   if (days === null) return null;
   const date = new Date(now);
   date.setDate(date.getDate() + days);
@@ -271,6 +251,13 @@ const zLineDraft = z.strictObject({
   description: z.string(),
   amount: z.number().int(),
 });
+
+/** The ready-by answers drafts held before the choices were editable, as their option ids. */
+const LEGACY_READY: Readonly<Record<string, string>> = {
+  today: '0',
+  tomorrow: '1',
+  threeDays: '3',
+};
 
 /**
  * An intake in progress. Kept across an idle lock like a notes draft (SEC-AUTH-08), so the shape is
@@ -299,9 +286,11 @@ const zIntakeDraft = z.strictObject({
   intakeNotes: z.string(),
   checks: z.record(z.string(), z.enum(CHECKLIST_STATES)),
   peripherals: z.array(z.string()),
+  /** Photo per angle id. */
   photos: z.record(z.string(), zMediaRef),
   lines: z.array(zLineDraft),
-  ready: z.enum(READY_CHOICES),
+  /** The ready-by option id picked, or '' while the store's default stands. */
+  ready: z.string().transform((ready) => LEGACY_READY[ready] ?? ready),
 });
 
 export type IntakeDraft = z.infer<typeof zIntakeDraft>;
@@ -324,7 +313,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     peripherals: [],
     photos: {},
     lines: [],
-    ready: 'tomorrow',
+    ready: '',
   };
 }
 
@@ -332,6 +321,18 @@ export function emptyIntakeDraft(): IntakeDraft {
 export function intakeDirty(draft: IntakeDraft): boolean {
   const empty = emptyIntakeDraft();
   return JSON.stringify({ ...draft, step: 0 }) !== JSON.stringify(empty);
+}
+
+/**
+ * The ready-by choice in force: the one picked if the store still offers it, otherwise the
+ * store's default, "tomorrow" when offered (what the counter promised most before), else the first.
+ */
+export function chosenReady(
+  draft: Pick<IntakeDraft, 'ready'>,
+  readyBy: readonly IntakeOption[],
+): string {
+  if (readyBy.some((option) => option.id === draft.ready)) return draft.ready;
+  return (readyBy.find((option) => option.id === '1') ?? readyBy[0])?.id ?? '';
 }
 
 export const INTAKE_STEPS = [
@@ -355,7 +356,11 @@ export type IntakeProblem =
   | 'incompleteLine'
   | 'negativeTotal';
 
-export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProblem[] {
+export function stepProblems(
+  draft: IntakeDraft,
+  step: IntakeStep,
+  options: IntakeOptionLists,
+): IntakeProblem[] {
   const problems: IntakeProblem[] = [];
   switch (step) {
     case 'customer':
@@ -371,7 +376,7 @@ export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProble
       if (draft.complaint.trim() === '') problems.push('complaint');
       break;
     case 'photos':
-      if (nextMissingPhoto(draft) !== null) problems.push('photos');
+      if (nextMissingPhoto(draft, options.photoAngles) !== null) problems.push('photos');
       break;
     case 'price':
       // An amount with no description would be dropped on save, so it is named, not lost.
@@ -384,7 +389,7 @@ export function stepProblems(draft: IntakeDraft, step: IntakeStep): IntakeProble
       break;
     case 'review':
       for (const earlier of INTAKE_STEPS.slice(0, -1)) {
-        problems.push(...stepProblems(draft, earlier));
+        problems.push(...stepProblems(draft, earlier, options));
       }
       break;
   }
@@ -395,33 +400,63 @@ function validLines(lines: readonly QuoteLineDraft[]): QuoteLineDraft[] {
   return lines.filter((line) => line.description.trim() !== '');
 }
 
-/** The first required intake photo still missing, in the order the counter walks round the phone. */
-export function nextMissingPhoto(draft: Pick<IntakeDraft, 'photos'>): IntakePhotoSlot | null {
-  return INTAKE_PHOTO_SLOTS.find((slot) => draft.photos[slot] === undefined) ?? null;
+/** The first intake photo still missing, in the order the counter walks round the phone. */
+export function nextMissingPhoto(
+  draft: Pick<IntakeDraft, 'photos'>,
+  angles: readonly IntakeOption[],
+): IntakeOption | null {
+  return angles.find((angle) => draft.photos[angle.id] === undefined) ?? null;
 }
 
 /** Every check not yet answered marked OK, after the counter has called out the ones with issues. */
-export function restOfChecksOk(checks: IntakeDraft['checks']): IntakeDraft['checks'] {
-  return Object.fromEntries(
-    INTAKE_CHECKS.map((item) => [
-      item,
-      checks[item] === undefined || checks[item] === 'not_checked' ? 'ok' : checks[item],
-    ]),
-  );
+export function restOfChecksOk(
+  checks: IntakeDraft['checks'],
+  offered: readonly IntakeOption[],
+): IntakeDraft['checks'] {
+  return {
+    ...checks,
+    ...Object.fromEntries(
+      offered.map(({ id }) => [
+        id,
+        checks[id] === undefined || checks[id] === 'not_checked' ? 'ok' : checks[id],
+      ]),
+    ),
+  };
+}
+
+/** The checks answered with an issue, in list order. */
+export function checksWithIssue(
+  draft: Pick<IntakeDraft, 'checks'>,
+  offered: readonly IntakeOption[],
+): IntakeOption[] {
+  return offered.filter(({ id }) => draft.checks[id] === 'issue');
+}
+
+/** The accessories ticked, in list order (one the list no longer offers is left out). */
+export function chosenAccessories(
+  draft: Pick<IntakeDraft, 'peripherals'>,
+  offered: readonly IntakeOption[],
+): IntakeOption[] {
+  return offered.filter(({ id }) => draft.peripherals.includes(id));
 }
 
 export function intakeTotal(lines: readonly QuoteLineDraft[]): number {
   return validLines(lines).reduce((sum, line) => sum + signedAmount(line.kind, line.amount), 0);
 }
 
-/** The `openTicket` input for a complete draft. Call only when `review` has no problems. */
-export function toOpenTicketInput(draft: IntakeDraft, now: number): OpenTicketInput {
-  const photos = Object.fromEntries(
-    INTAKE_PHOTO_SLOTS.map((slot) => [slot, draft.photos[slot]!]),
-  ) as Record<IntakePhotoSlot, MediaRef>;
-  const checklist = INTAKE_CHECKS.flatMap((item) => {
-    const state: ChecklistState | undefined = draft.checks[item];
-    return state === undefined ? [] : [{ item, state, note: '' }];
+/**
+ * The `openTicket` input for a complete draft, against the lists the counter was shown. Each
+ * check, accessory and photo carries its label as shown, so the ticket keeps it. Call only when
+ * `review` has no problems.
+ */
+export function toOpenTicketInput(
+  draft: IntakeDraft,
+  options: IntakeOptionLists,
+  now: number,
+): OpenTicketInput {
+  const checklist = options.checks.flatMap(({ id, label }) => {
+    const state: ChecklistState | undefined = draft.checks[id];
+    return state === undefined ? [] : [{ item: id, label, state, note: '' }];
   });
   return {
     customer:
@@ -438,13 +473,20 @@ export function toOpenTicketInput(draft: IntakeDraft, now: number): OpenTicketIn
     complaint: draft.complaint.trim(),
     intakeNotes: draft.intakeNotes.trim(),
     checklist,
-    peripherals: [...draft.peripherals],
-    estimatedReadyAt: readyAtFor(draft.ready, now),
+    peripherals: chosenAccessories(draft, options.accessories).map(({ id, label }) => ({
+      item: id,
+      label,
+    })),
+    estimatedReadyAt: readyAtFor(chosenReady(draft, options.readyBy), now),
     quoteLines: validLines(draft.lines).map((line) => ({
       kind: line.kind,
       description: line.description.trim(),
       amount: signedAmount(line.kind, line.amount),
     })),
-    photos,
+    photos: options.photoAngles.map(({ id, label }) => ({
+      slot: id,
+      label,
+      ref: draft.photos[id]!,
+    })),
   };
 }
