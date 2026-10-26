@@ -68,6 +68,7 @@ import type {
 } from '@bolusi/schemas';
 import { sql } from 'kysely';
 import { act, useEffect } from 'react';
+import { View } from 'react-native';
 
 import type { CameraCapturePort, CameraShot } from '../src/media/capture.js';
 import type { CapturePlatform } from '../src/media/CaptureHost.js';
@@ -117,6 +118,9 @@ interface RecordingMediaClient extends MediaClient {
   readonly captureCalls: { readonly identity: { readonly userId: string } }[];
 }
 
+/** Where the fake media client says a decrypted copy of the scripted shot can be rendered from. */
+const RENDERED_SHOT_URI = 'file:///cache/media-render/shot.jpg';
+
 function fakeMediaClient(
   options: { readonly band?: StorageBand; readonly shot?: MediaRef } = {},
 ): RecordingMediaClient {
@@ -143,7 +147,13 @@ function fakeMediaClient(
     },
     captureSignature: () => Promise.reject(new Error('not used')),
     attach: () => Promise.resolve(),
-    loadForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
+    // The captured file is encrypted at rest; rendering it goes through a decrypted copy.
+    loadForRender: (ref) =>
+      Promise.resolve(
+        ref.mediaId === options.shot?.mediaId
+          ? { kind: 'local', uri: RENDERED_SHOT_URI }
+          : { kind: 'unavailable', code: null },
+      ),
     loadLocalForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
     notifyAttached: () => undefined,
     requestManual: () => {
@@ -698,7 +708,7 @@ function fakeCapturePlatform(
     // MOUNTED. So does this: it used to publish when `renderPreview` was merely called, which hid
     // that the warming-up screen never mounted the preview and a real camera never became ready.
     renderPreview: (publish) => <FakePreview publish={publish} camera={camera} />,
-    renderStill: () => null,
+    renderStill: (uri) => <View testID="capture-still" accessibilityLabel={uri} />,
     ...overrides,
   };
   return Object.assign(platform, {
@@ -760,9 +770,11 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
       fixture.userId,
     );
 
-    // And the review frame the user confirms from.
+    // And the review frame the user confirms from, showing a decrypted copy of the photo. The saved
+    // file itself is encrypted, so rendering its path showed an empty frame on Android.
     await waitUntil(() => screen.query('capture-review') !== null);
     expect(screen.query('capture-review')).not.toBeNull();
+    expect(screen.get('capture-still').props.accessibilityLabel).toBe(RENDERED_SHOT_URI);
   });
 
   test('a parent re-render with a fresh camera seam does not rebuild the signed-in screens', async () => {
