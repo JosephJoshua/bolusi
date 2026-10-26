@@ -11,7 +11,9 @@ import {
   MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_CUSTOMER_ENTITY,
+  REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
+  REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
   WORK_PHOTOS_MAX,
@@ -20,10 +22,28 @@ import {
   type RepairOutcome,
   type WorkPhotoStage,
 } from './constants.js';
-import { zChecklistItem, zDevice, zIntakePhotos } from './operations.js';
+import {
+  INTAKE_OPTION_LISTS,
+  MAX_OPTIONS,
+  NON_EMPTY_LISTS,
+  intakeListProblems,
+  sameOptions,
+  storeIntakeOptions,
+  type IntakeOption,
+  type IntakeOptionList,
+  type IntakeOptionSettings,
+} from './intake-options.js';
+import {
+  zChecklistItemV2,
+  zDevice,
+  zIntakePhotosV2,
+  zOptionId,
+  zRecordedOption,
+} from './operations.js';
 import {
   getCustomerQuery,
   getTicketQuery,
+  intakeOptionSettingsQuery,
   nextTicketCounterQuery,
   type TicketDetailRow,
 } from './queries.js';
@@ -210,11 +230,12 @@ export const openTicketInput = z
     }),
     complaint: zRequiredText(2000),
     intakeNotes: zText(2000).default(''),
-    checklist: z.array(zChecklistItem).max(100).default([]),
-    peripherals: z.array(zRequiredText(100)).max(50).default([]),
+    checklist: z.array(zChecklistItemV2).max(100).default([]),
+    peripherals: z.array(zRecordedOption).max(50).default([]),
     estimatedReadyAt: z.number().int().nullable().default(null),
     quoteLines: z.array(zLineInput).min(1).max(100),
-    photos: zIntakePhotos,
+    /** One photo per angle the store asks for, labelled as the counter saw it. */
+    photos: zIntakePhotosV2,
   })
   .strict();
 export type OpenTicketInput = z.input<typeof openTicketInput>;
@@ -234,6 +255,18 @@ export async function openTicketHandler(
     0,
     input.quoteLines.reduce((sum, line) => sum + line.amount, 0),
   );
+  // Every angle this store asks for right now, so a list that changed under an open intake is
+  // caught here rather than producing a ticket short of the evidence the owner wants.
+  const angles = storeIntakeOptions(await loadIntakeOptions(ctx)).photoAngles;
+  const taken = new Set(input.photos.map((photo) => photo.slot));
+  const missing = angles.filter((angle) => !taken.has(angle.id));
+  if (missing.length > 0) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'photos', issue: 'a required intake photo is missing' },
+      `missing intake photos: ${missing.map((angle) => angle.id).join(', ')}`,
+    );
+  }
 
   const ops: OpDraft[] = [];
   let customerId: string;
@@ -622,5 +655,119 @@ export async function returnDeviceHandler(
       }),
     ],
     result: { ticketId: ticket.id },
+  };
+}
+
+// ── intake options (the owner's lists) ────────────────────────────────────────────────────────
+
+async function loadIntakeOptions(ctx: CommandContext): Promise<IntakeOptionSettings> {
+  return (await ctx.query(intakeOptionSettingsQuery, {})).rows[0]!;
+}
+
+function nothingChanged(field: string): DomainError {
+  return new DomainError(
+    'VALIDATION_FAILED',
+    { field, issue: 'nothing changed' },
+    'the saved list is identical to the current one',
+  );
+}
+
+export const changeIntakeOptionsInput = z
+  .object({
+    list: z.enum(INTAKE_OPTION_LISTS),
+    /** The whole list in order. A new item has no id yet; one is minted here. */
+    items: z
+      .array(
+        z
+          .object({
+            id: zOptionId.nullable(),
+            /** What the owner typed; null keeps a built-in item's app name. */
+            label: z.string().trim().max(200).nullable(),
+          })
+          .strict(),
+      )
+      .max(MAX_OPTIONS),
+  })
+  .strict();
+export type ChangeIntakeOptionsInput = z.input<typeof changeIntakeOptionsInput>;
+
+/** Replace one franchise list (tenant-wide: every store's intake follows it after sync). */
+export async function changeIntakeOptionsHandler(
+  input: z.output<typeof changeIntakeOptionsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ list: IntakeOptionList }>> {
+  const items: IntakeOption[] = input.items.map((item) => ({
+    id: item.id ?? ctx.newId(),
+    label: item.label,
+  }));
+  const problems = intakeListProblems(input.list, items);
+  if (problems.length > 0) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'items', issue: problems.join(', ') },
+      `the ${input.list} list cannot be saved: ${problems.join(', ')}`,
+    );
+  }
+  const current = await loadIntakeOptions(ctx);
+  if (sameOptions(current.lists[input.list], items)) throw nothingChanged('items');
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.intakeOptionsChanged,
+        entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
+        entityId: ctx.tenantId,
+        payload: { list: input.list, items: items as unknown as Record<string, unknown>[] },
+      }),
+    ],
+    result: { list: input.list },
+  };
+}
+
+export const hideIntakeOptionsInput = z
+  .object({
+    list: z.enum(INTAKE_OPTION_LISTS),
+    /** Every item this store hides on the list; anything not named shows. */
+    hidden: z.array(zOptionId).max(MAX_OPTIONS),
+  })
+  .strict();
+export type HideIntakeOptionsInput = z.input<typeof hideIntakeOptionsInput>;
+
+/** Replace the set of one list's items this store hides. */
+export async function hideIntakeOptionsHandler(
+  input: z.output<typeof hideIntakeOptionsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ list: IntakeOptionList }>> {
+  if (ctx.storeId === null) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'hidden', issue: 'this device has no store' },
+      'a store-less device cannot hide intake options',
+    );
+  }
+  const current = await loadIntakeOptions(ctx);
+  // Only items on the franchise list, in its order: an id the owner removed meanwhile is dropped.
+  const wanted = new Set(input.hidden);
+  const hidden = current.lists[input.list].filter((item) => wanted.has(item.id)).map((i) => i.id);
+  if (NON_EMPTY_LISTS.has(input.list) && hidden.length === current.lists[input.list].length) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'hidden', issue: 'at least one item must stay' },
+      `a store cannot hide every ${input.list} item`,
+    );
+  }
+  const before = current.hidden[input.list];
+  if (before.length === hidden.length && before.every((id, i) => id === hidden[i])) {
+    throw nothingChanged('hidden');
+  }
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.storeIntakeOptionsChanged,
+        entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+        entityId: ctx.storeId,
+        payload: { list: input.list, hidden },
+      }),
+    ],
+    result: { list: input.list },
   };
 }

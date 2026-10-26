@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
+import { IntakeOptionsRoute } from './src/screens/repair/IntakeOptionsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { systemClock } from './src/ports/clock.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
@@ -65,7 +66,12 @@ import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
-import { REPAIR_MODULE_ID, parseIntakeDraft, type IntakeDraft } from '@bolusi/modules/repair';
+import {
+  REPAIR_MODULE_ID,
+  REPAIR_PERMISSION,
+  parseIntakeDraft,
+  type IntakeDraft,
+} from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
@@ -512,7 +518,11 @@ export default function App(props: AppProps): React.JSX.Element {
     // A module surface at `home` owns an internal stack the pure zone gate cannot see (NotesHome:
     // list→detail→editor). While it has somewhere to go back to, hardware back IS that surface's back
     // — routed through the editor's discard gate — never an app exit (design-system §8.1; task 145).
-    if (zone.kind === 'shell' && zone.route === 'home' && surfaceNavRef.current !== null) {
+    if (
+      zone.kind === 'shell' &&
+      MODULE_SURFACE_ROUTES.has(zone.route) &&
+      surfaceNavRef.current !== null
+    ) {
       return surfaceNavRef.current.handleBack();
     }
     // The wizard asks before discarding typed input (§8.1) — BEFORE any target dispatch, because
@@ -603,6 +613,11 @@ export default function App(props: AppProps): React.JSX.Element {
   };
 
   const chip = useMemo(() => syncChipState(props.sync), [props.sync]);
+  const canSetIntakeOptions =
+    props.repair !== undefined &&
+    (props.repair.hasPermission(REPAIR_PERMISSION.manageIntakeOptions) ||
+      props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
+  const closeIntakeOptions = useCallback(() => setRoute('settings'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   const currentUser = useMemo(() => {
@@ -849,9 +864,32 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
                   // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
                   onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
+                  // Owners and store owners only: whoever may edit the lists or hide items here.
+                  onOpenIntakeOptions={
+                    canSetIntakeOptions ? () => setRoute('intakeOptions') : undefined
+                  }
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
                   onOpenSync={() => setRoute('syncStatus')}
+                />
+              );
+            }
+            if (shellZone.route === 'intakeOptions' && props.repair !== undefined) {
+              return (
+                <IntakeOptionsRoute
+                  runtime={props.repair}
+                  syncChip={
+                    <SyncChip
+                      state={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      accessibilityLabels={syncChipAccessibilityLabels({
+                        pendingCount: props.sync.pendingOperationCount,
+                      })}
+                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
+                    />
+                  }
+                  onClose={closeIntakeOptions}
+                  onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
             }
@@ -1049,6 +1087,12 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 }
 
 const FILL = { flex: 1 } as const;
+
+/**
+ * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
+ * hardware back asks the surface first: the repair/notes home, and the owner's intake lists.
+ */
+const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set(['home', 'intakeOptions']);
 
 /**
  * Fallback status-bar inset (dp) for the rare render where `RNStatusBar.currentHeight` is not yet

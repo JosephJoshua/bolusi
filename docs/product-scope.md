@@ -75,6 +75,13 @@ Agreed with the owner after slice 1's phone screens.
   list they received.
 - **History stays true:** a servisan keeps showing what was recorded at intake,
   even after an item is renamed or removed.
+- **As built:** Settings → Servisan → "Pilihan saat terima HP". Changing a list
+  needs `repair.manage_intake_options` (tenant-wide, main owner); hiding items
+  for a store needs `repair.hide_intake_options` (store owner, or the owner on
+  that store's device). Built-in items keep their translated names until
+  renamed. Every listed photo angle is required at intake, and a store always
+  keeps at least one photo angle and one ready-by choice. Ready-by choices are
+  day counts (0 to 60) plus an optional "Belum tahu". The later save wins.
 - **Phone catalog:** the owner chose to crawl GSMArena, slowly, including phone
   photos, knowingly accepting its terms-of-use and image-copyright risk. Models
   learned from intakes supplement it. The catalog syncs to devices for offline

@@ -6,6 +6,10 @@ export const REPAIR_MODULE_ID = 'repair' as const;
 
 export const REPAIR_CUSTOMER_ENTITY = 'repair_customer' as const;
 export const REPAIR_TICKET_ENTITY = 'repair_ticket' as const;
+/** The franchise's intake option lists: one entity per tenant, keyed by the tenant id. */
+export const REPAIR_INTAKE_OPTIONS_ENTITY = 'repair_intake_options' as const;
+/** One store's hidden intake options: one entity per store, keyed by the store id. */
+export const REPAIR_STORE_INTAKE_OPTIONS_ENTITY = 'repair_store_intake_options' as const;
 
 export const REPAIR_TABLE = {
   customers: 'repair_customers',
@@ -13,6 +17,8 @@ export const REPAIR_TABLE = {
   quoteLines: 'repair_quote_lines',
   photos: 'repair_ticket_photos',
   events: 'repair_ticket_events',
+  intakeOptions: 'repair_intake_options',
+  storeIntakeOptions: 'repair_store_intake_options',
 } as const;
 
 export const REPAIR_OP = {
@@ -30,6 +36,8 @@ export const REPAIR_OP = {
   quoteChanged: 'repair.quote_changed',
   quoteProposalDeclined: 'repair.quote_proposal_declined',
   deviceReturned: 'repair.device_returned',
+  intakeOptionsChanged: 'repair.intake_options_changed',
+  storeIntakeOptionsChanged: 'repair.store_intake_options_changed',
 } as const;
 
 /**
@@ -45,6 +53,10 @@ export const REPAIR_PERMISSION = {
   quoteChange: 'repair.quote_change',
   cancel: 'repair.cancel',
   handover: 'repair.handover',
+  /** Tenant-scoped: edit the intake option lists every store uses. */
+  manageIntakeOptions: 'repair.manage_intake_options',
+  /** Store-scoped: hide intake options this store does not use. */
+  hideIntakeOptions: 'repair.hide_intake_options',
 } as const;
 
 /** What happened to the repair. Tracked separately from where the device is. */
@@ -68,7 +80,10 @@ export const IN_PROGRESS_OUTCOMES = [
 export const DEVICE_LOCATIONS = ['in_store', 'returned'] as const;
 export type DeviceLocation = (typeof DEVICE_LOCATIONS)[number];
 
-/** The six intake photos every ticket requires (owner decision, 2026-10-25). */
+/**
+ * The six intake photos tickets took before the owner could edit the photo list (2026-10-26), and
+ * still the default list. A ticket opened before then has exactly these.
+ */
 export const INTAKE_PHOTO_SLOTS = ['front', 'back', 'left', 'right', 'top', 'bottom'] as const;
 export type IntakePhotoSlot = (typeof INTAKE_PHOTO_SLOTS)[number];
 

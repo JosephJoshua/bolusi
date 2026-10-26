@@ -22,6 +22,8 @@ import {
 } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { tn } from '@bolusi/modules/repair/screens';
+
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
@@ -58,6 +60,11 @@ export interface SettingsScreenProps {
    * user holds `auth.user_reset_pin`, so the row is absent for a non-owner. Optional, like the unlock row.
    */
   readonly onOpenResetPin?: (() => void) | undefined;
+  /**
+   * Open the owner's intake lists (repair checks, accessories, photos, brands, ready-by) — present
+   * ONLY for someone who may edit them or hide items at this store; core still enforces both.
+   */
+  readonly onOpenIntakeOptions?: (() => void) | undefined;
   readonly syncChip: SyncChipState;
   /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
   readonly pendingCount: number;
@@ -75,6 +82,7 @@ export function SettingsScreen({
   onOpenChangePin,
   onOpenUnlockPin,
   onOpenResetPin,
+  onOpenIntakeOptions,
   syncChip,
   pendingCount,
   onOpenSync,
@@ -158,6 +166,21 @@ export function SettingsScreen({
           }
         />
       ))}
+
+      {onOpenIntakeOptions !== undefined ? (
+        <>
+          <Text style={styles.section} testID="settings-section-repair">
+            {tn('repair.board.title')}
+          </Text>
+          <ListRow
+            primaryText={tn('repair.options.title')}
+            secondaryText={tn('repair.options.summary')}
+            onPress={onOpenIntakeOptions}
+            showChevron
+            testID="settings-intake-options"
+          />
+        </>
+      ) : null}
 
       <Text style={styles.section} testID="settings-section-security">
         {t('core.settings.security')}

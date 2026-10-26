@@ -12,7 +12,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const ARTIFACTS = path.join(__dirname, 'artifacts', 'repair');
 
-type Role = 'owner' | 'counter' | 'technician';
+type Role = 'owner' | 'counter' | 'technician' | 'storeOwner';
 
 async function open(page: Page, role: Role): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}`);
@@ -122,4 +122,113 @@ test('a ticket photo opens full screen, zooms on double tap, and "see all" group
   await tap(page, 'repair.ticket.photos.viewer.close');
   // Closing a photo opened from the sheet goes back to the sheet.
   await expect(page.getByTestId('repair.ticket.photos.sheet')).toBeVisible();
+});
+
+async function openIntakeOptions(page: Page, role: Role): Promise<void> {
+  await open(page, role);
+  await tap(page, 'shell-open-settings');
+  await tap(page, 'settings-intake-options');
+  await expect(page.getByTestId('repair.options.open.checks')).toBeVisible();
+}
+
+test('the owner renames, adds and hides condition checks, and the summary follows', async ({
+  page,
+}) => {
+  await openIntakeOptions(page, 'owner');
+  await shoot(page, 'options-overview');
+  await tap(page, 'repair.options.open.checks');
+  await shoot(page, 'options-checks');
+
+  const list = 'repair.options.list.checks';
+  await tap(page, `${list}.row.camera`);
+  await shoot(page, 'options-row-open');
+  await fill(page, `${list}.row.camera.name`, 'Kamera depan & belakang');
+  await tap(page, `${list}.row.camera.up`);
+  await tap(page, `${list}.row.signal`);
+  await tap(page, `${list}.row.signal.used`);
+  await tap(page, `${list}.add`);
+  await fill(page, `${list}.row.new-1.name`, 'Face ID');
+  await shoot(page, 'options-checks-edited');
+  await tap(page, `${list}.primary`);
+
+  await expect(page.getByTestId('repair.options.open.checks')).toContainText(
+    '10 pilihan · 1 tidak dipakai di toko ini',
+  );
+  await tap(page, 'repair.options.open.checks');
+  const rows = page.getByTestId(`${list}.rows`);
+  await expect(rows).toContainText('Kamera depan & belakang');
+  await expect(rows).toContainText('Face ID');
+});
+
+test('a list that cannot be saved says why, and leaving asks before dropping changes', async ({
+  page,
+}) => {
+  await openIntakeOptions(page, 'owner');
+  await tap(page, 'repair.options.open.brands');
+  const list = 'repair.options.list.brands';
+  await tap(page, `${list}.add`);
+  await tap(page, `${list}.row.vivo`);
+  await fill(page, `${list}.row.vivo.name`, 'oppo');
+  await tap(page, `${list}.primary`);
+  // The first row to fix opens; the empty new row says why where it stands.
+  await expect(page.getByTestId(`${list}.row.vivo.name.error`)).toBeVisible();
+  await expect(page.getByTestId(`${list}.row.new-1`)).toContainText(/.+/);
+  await shoot(page, 'options-problems');
+
+  await tap(page, `${list}.back`);
+  await expect(page.getByTestId(`${list}.discard`)).toBeVisible();
+  await shoot(page, 'options-discard');
+});
+
+test('a store owner only chooses what this store uses', async ({ page }) => {
+  await openIntakeOptions(page, 'storeOwner');
+  await tap(page, 'repair.options.open.accessories');
+  const list = 'repair.options.list.accessories';
+  await expect(page.getByTestId(`${list}.add`)).toHaveCount(0);
+  await tap(page, `${list}.row.box.used`);
+  await shoot(page, 'options-store-owner');
+  await tap(page, `${list}.primary`);
+  await expect(page.getByTestId('repair.options.open.accessories')).toContainText(
+    '1 tidak dipakai di toko ini',
+  );
+});
+
+test('intake offers the owner’s lists and the ticket keeps their names', async ({ page }) => {
+  await openIntakeOptions(page, 'owner');
+  await tap(page, 'repair.options.open.checks');
+  await tap(page, 'repair.options.list.checks.add');
+  await fill(page, 'repair.options.list.checks.row.new-1.name', 'Face ID');
+  await tap(page, 'repair.options.list.checks.primary');
+  await tap(page, 'repair.options.open.photoAngles');
+  await tap(page, 'repair.options.list.photoAngles.add');
+  await fill(page, 'repair.options.list.photoAngles.row.new-1.name', 'Stiker IMEI');
+  await tap(page, 'repair.options.list.photoAngles.primary');
+  await expect(page.getByTestId('repair.options.open.photoAngles')).toContainText('7 pilihan');
+
+  // Back home in the same page: the demo runtime lives in memory.
+  await tap(page, 'repair.options.back');
+  await tap(page, 'settings-screen.back');
+  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.device.brandChoice.Oppo');
+  await fill(page, 'repair.intake.device.model', 'A57');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.condition.complaint', 'Face ID mati');
+  await expect(page.getByText('Face ID', { exact: true })).toBeVisible();
+  await shoot(page, 'options-intake-condition');
+  await tap(page, 'repair.intake.condition.restOk');
+  await tap(page, 'repair.intake.primary');
+  for (let shot = 0; shot < 7; shot += 1) await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.primary')).toHaveText('Lanjut');
+  await shoot(page, 'options-intake-photos');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.price.description.0', 'Modul Face ID');
+  await fill(page, 'repair.intake.price.amount.0', '450000');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Ester Mandowen');
+  await expect(page.getByTestId('repair.ticket.photos.strip.front')).toBeVisible();
+  await shoot(page, 'options-ticket');
 });

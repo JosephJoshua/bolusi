@@ -56,7 +56,10 @@ describe('intake', () => {
       technicianId: null,
       quoteTotal: 750_000,
       pendingProposals: 0,
-      peripherals: ['charger', 'case'],
+      peripherals: [
+        { item: 'charger', label: null },
+        { item: 'case', label: null },
+      ],
     });
     expect(t.quoteLines.map((l: { status: string }) => l.status)).toEqual(['intake', 'intake']);
     expect(t.photos.map((p: { slot: string }) => p.slot).sort()).toEqual([
@@ -71,13 +74,12 @@ describe('intake', () => {
     expect(t.createdBy).toBe(h.cashierId);
   });
 
-  test('a ticket without all six photos is refused before anything is written', async () => {
+  test('a ticket missing a photo angle the store asks for is refused before anything is written', async () => {
     h = await openRepairHarness(2);
     const input = intake(h);
-    const fivePhotos: Partial<typeof input.photos> = { ...input.photos };
-    delete fivePhotos.bottom;
+    const fivePhotos = input.photos.filter((p) => p.slot !== 'bottom');
     await expectCode(
-      h.run('openTicket', { ...input, photos: fivePhotos } as never, h.cashierId),
+      h.run('openTicket', { ...input, photos: fivePhotos }, h.cashierId),
       'VALIDATION_FAILED',
     );
     const count = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM repair_tickets`.execute(h.db);

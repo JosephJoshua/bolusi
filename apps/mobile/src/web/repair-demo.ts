@@ -10,7 +10,10 @@ import { FuzzyIndex } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 import {
   IN_PROGRESS_OUTCOMES,
+  DEFAULT_INTAKE_OPTIONS,
+  NOTHING_HIDDEN,
   REPAIR_PERMISSION,
+  type IntakeOptionSettings,
   type QuoteLineRow,
   type RepairOutcome,
   type TicketDetailRow,
@@ -32,6 +35,12 @@ export const DEMO_REPAIR_ROLES = {
     permissions: [P.read, P.intake, P.assign, P.quoteChange, P.cancel, P.handover],
   },
   technician: { userId: 'u-budi', name: 'Budi Santoso', permissions: [P.read, P.work] },
+  /** A store owner: may choose what this store uses, not change the franchise's lists. */
+  storeOwner: {
+    userId: 'u-yosua',
+    name: 'Yosua Wonda',
+    permissions: [P.read, P.intake, P.hideIntakeOptions],
+  },
 } as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
 
@@ -135,12 +144,16 @@ function ticket(spec: {
     devicePasscode: null,
     intakeNotes: 'Ada goresan di sudut kanan bawah.',
     checklist: [
-      { item: 'screen', state: 'issue', note: '' },
-      { item: 'touch', state: 'issue', note: '' },
-      { item: 'speaker', state: 'ok', note: '' },
-      { item: 'charging', state: 'ok', note: '' },
+      { item: 'screen', label: null, state: 'issue', note: '' },
+      { item: 'touch', label: null, state: 'issue', note: '' },
+      { item: 'speaker', label: null, state: 'ok', note: '' },
+      { item: 'charging', label: null, state: 'ok', note: '' },
     ],
-    peripherals: ['charger', 'case'],
+    peripherals: [
+      { item: 'charger', label: null },
+      { item: 'case', label: null },
+    ],
+    intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: null,
     createdBy: 'u-siti',
     createdByName: 'Siti Rahayu',
@@ -256,6 +269,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
   const actor = DEMO_REPAIR_ROLES[role];
   let tickets = seedTickets();
   let counter = 13;
+  let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
+  let optionIds = 0;
   const listeners = new Set<() => void>();
   const notify = (): void => {
     for (const listener of listeners) listener();
@@ -359,6 +374,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       );
     },
     getTicket: (input) => page([find(String(input['ticketId']))]),
+    intakeOptionSettings: () => page([options]),
   };
 
   const commands: Record<string, (input: Input) => unknown> = {
@@ -373,7 +389,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       };
       const existing = tickets.find((t) => t.customerId === customer.customerId);
       const device = input['device'] as { brand: string; model: string; color: string };
-      const photos = input['photos'] as Record<string, MediaRef>;
+      const photos = input['photos'] as { slot: string; label: string | null; ref: MediaRef }[];
       const created = withTotals({
         ...seedTickets()[0]!,
         id,
@@ -400,7 +416,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         complaint: String(input['complaint']),
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
-        peripherals: input['peripherals'] as string[],
+        peripherals: input['peripherals'] as TicketDetailRow['peripherals'],
+        intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
         createdAt: HARNESS_NOW,
         quoteLines: (
@@ -410,7 +427,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
             amount: number;
           }[]
         ).map((l) => line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW })),
-        photos: Object.entries(photos).map(([slot, ref]) => photoRow(slot, ref)),
+        photos: photos.map(({ slot, ref }) => photoRow(slot, ref)),
       });
       tickets = [created, ...tickets];
       notify();
@@ -457,6 +474,24 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     changeQuote: (input) => priceLine(input, 'applied', 'repair.quote_changed'),
     applyProposal: (input) => decide(input, 'applied', 'repair.quote_changed'),
     declineProposal: (input) => decide(input, 'declined', 'repair.quote_proposal_declined'),
+    changeIntakeOptions: (input) => {
+      const list = input['list'] as keyof IntakeOptionSettings['lists'];
+      const items = (input['items'] as { id: string | null; label: string | null }[]).map(
+        (item) => {
+          optionIds += 1;
+          return { id: item.id ?? `opt-${String(optionIds)}`, label: item.label };
+        },
+      );
+      options = { ...options, lists: { ...options.lists, [list]: items } };
+      notify();
+      return { list };
+    },
+    hideIntakeOptions: (input) => {
+      const list = input['list'] as keyof IntakeOptionSettings['lists'];
+      options = { ...options, hidden: { ...options.hidden, [list]: input['hidden'] as string[] } };
+      notify();
+      return { list };
+    },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
       return update(t.id, 'repair.device_returned', {
