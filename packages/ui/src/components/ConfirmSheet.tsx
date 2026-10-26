@@ -18,10 +18,10 @@
  * second, invisible view hierarchy to reason about. Android hardware-back → cancel is navigation
  * wiring (§8.1), and belongs to the screen (task 24), not here.
  */
-import { useEffect } from 'react';
-import { Keyboard, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, space, type } from '../tokens.js';
 import { Button } from './Button.js';
 
@@ -113,11 +113,4 @@ export function ConfirmSheet({
       </View>
     </View>
   );
-}
-
-/** Shared with `Sheet`: a sheet never opens under the keyboard (see the header). */
-export function useDismissKeyboard(): void {
-  useEffect(() => {
-    Keyboard.dismiss();
-  }, []);
 }

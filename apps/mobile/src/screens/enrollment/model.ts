@@ -46,7 +46,7 @@ export const PASSWORD_MAX = 128;
 /** §4.3's `EnrollReq` bound. */
 export const DEVICE_NAME_MAX = 64;
 
-/** The three steps, rendered as "1/3" in the header (§3.10). */
+/** The three steps, counted "1 dari 3" in the step header (§3.10). */
 export type EnrollmentStep = 'credentials' | 'confirm' | 'done';
 
 /** A store the logged-in owner may bind this device to (§4.2 `LoginRes.stores`). */
@@ -171,12 +171,23 @@ export function canSubmitConfirm(state: EnrollmentState): boolean {
   return !state.busy && confirmMissing(state) === null;
 }
 
+/**
+ * The store this device binds to: the one picked, or the account's only store, which needs no
+ * picking (the one-store screen shows it in a box with nothing to tap).
+ */
+export function chosenStoreId(state: EnrollmentState): string | null {
+  if (state.selectedStoreId !== null) return state.selectedStoreId;
+  const stores = state.login?.stores ?? [];
+  return stores.length === 1 ? (stores[0]?.id ?? null) : null;
+}
+
 /** The tenant + store the user is about to bind to — what step 2 puts on screen, big. */
 export function bindingSummary(
   state: EnrollmentState,
 ): { readonly tenantName: string; readonly storeName: string } | null {
-  if (state.login === null || state.selectedStoreId === null) return null;
-  const store = state.login.stores.find((candidate) => candidate.id === state.selectedStoreId);
+  const storeId = chosenStoreId(state);
+  if (state.login === null || storeId === null) return null;
+  const store = state.login.stores.find((candidate) => candidate.id === storeId);
   if (store === undefined) return null;
   return { tenantName: state.login.tenantName, storeName: store.name };
 }

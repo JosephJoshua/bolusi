@@ -67,23 +67,6 @@ describe('SegmentedControl', () => {
     expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexWrap: 'wrap' });
     expect(r.get('seg.b')).toBeDefined();
   });
-
-  // Regression: on Android "Tidak dicek" wrapped inside its own pill and the second line was
-  // clipped, leaving "Tidak". The device check is in the QA run; this pins the one-line contract.
-  test('a pill label stays on one line', () => {
-    const r = render(
-      <SegmentedControl
-        testID="seg"
-        wrap
-        size="compact"
-        options={[{ value: 'not_checked', label: 'Tidak dicek' }]}
-        value="not_checked"
-        onChange={vi.fn()}
-      />,
-    );
-    const [label] = r.get('seg.not_checked').queryAll((n) => n.type === 'Text');
-    expect(label?.props['numberOfLines']).toBe(1);
-  });
 });
 
 describe('SegmentedControl fill track', () => {

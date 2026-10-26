@@ -16,7 +16,7 @@
  *  - NO SYNC CHIP. There is no device identity yet, so there is no sync to report on; a permanent
  *    "offline" cloud here only said something false and alarming.
  */
-import { t, translateErrorCode } from '@bolusi/i18n';
+import { t, translateErrorCode, type TranslationKey } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -42,6 +42,8 @@ import {
   canSubmitCredentials,
   confirmMissing,
   credentialsError,
+  failureKey,
+  type EnrollmentFailure,
   type EnrollmentState,
 } from './model.js';
 // `needsDiscardConfirm` is deliberately NOT used here: whether a back press needs the ConfirmSheet
@@ -173,7 +175,9 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
               key={store.id}
               primaryText={store.name}
               selected={store.id === state.selectedStoreId}
-              onPress={() => onChange({ selectedStoreId: store.id })}
+              // Inert while binding: a tap mid-request would rename the button and the done step
+              // to a store the phone was not bound to (§8.5's wrong-store error, by another route).
+              onPress={state.busy ? undefined : () => onChange({ selectedStoreId: store.id })}
               testID={`enroll-store-${store.id}`}
             />
           ))}
@@ -290,20 +294,15 @@ function EnrollBanner({ state }: { readonly state: EnrollmentState }): React.JSX
   );
 }
 
-/** What went wrong, said as the one thing the person can do about it (model.ts's buckets). */
-function failureMessage(failure: NonNullable<EnrollmentState['failure']>): string {
-  switch (failure.kind) {
-    case 'credentials':
-      return t('auth.enroll.wrongCredentials');
-    case 'rateLimited':
-      return t('core.errors.RATE_LIMITED');
-    case 'notPermitted':
-      return t('auth.enroll.notOwner');
-    case 'offline':
-      return t('auth.enroll.needsConnection');
-    case 'unexpected':
-      return translateErrorCode(failure.code);
-  }
+/**
+ * What went wrong, said as the one thing the person can do about it. The keys come from the model's
+ * buckets (`failureKey`); `rejection-keys.test.ts` proves each exists in every catalog, which is
+ * what makes the cast safe. An unexpected code goes through the error-code translator's fallback.
+ */
+function failureMessage(failure: EnrollmentFailure): string {
+  return failure.kind === 'unexpected'
+    ? translateErrorCode(failure.code)
+    : t(failureKey(failure) as TranslationKey);
 }
 
 const styles = StyleSheet.create({

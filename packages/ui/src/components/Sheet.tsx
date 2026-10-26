@@ -10,8 +10,8 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, touch, type } from '../tokens.js';
-import { useDismissKeyboard } from './ConfirmSheet.js';
 import { Icon } from './Icon.js';
 
 export interface SheetProps {
@@ -83,7 +83,7 @@ export function Sheet({
       <View testID={`${testID}.sheet`} style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={2} testID={`${testID}.title`}>
+          <Text style={styles.title} testID={`${testID}.title`}>
             {title}
           </Text>
           <Pressable

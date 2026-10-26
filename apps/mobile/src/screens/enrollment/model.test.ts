@@ -14,6 +14,7 @@ import { describe, expect, test } from 'vitest';
 import {
   bindingSummary,
   canSubmitConfirm,
+  chosenStoreId,
   confirmMissing,
   canSubmitCredentials,
   classifyFailure,
@@ -225,6 +226,16 @@ describe('step 2 binds only to a store that was picked and named (§8.5)', () =>
     expect(confirmMissing(atConfirm())).toBeNull();
     expect(canSubmitConfirm(atConfirm())).toBe(true);
     expect(canSubmitConfirm(atConfirm({ busy: true }))).toBe(false);
+  });
+
+  test('an account with one store binds to it without a pick; with several, only a pick counts', () => {
+    const one = atConfirm({
+      login: { ...LOGIN, stores: LOGIN.stores.slice(0, 1) },
+      selectedStoreId: null,
+    });
+    expect(chosenStoreId(one)).toBe('store-1');
+    expect(canSubmitConfirm(one)).toBe(true);
+    expect(chosenStoreId(atConfirm({ selectedStoreId: null }))).toBeNull();
   });
 
   test('the summary names the tenant AND the store the button will bind to', () => {

@@ -112,9 +112,64 @@ describe('the store step: one choice, one button that names it (design-system §
     expect(t('auth.enroll.deviceNameField')).not.toBe(t('auth.enroll.identifierField'));
   });
 
-  test('there is no separate confirmation toggle', () => {
-    const screen = renderScreen(onA(), vi.fn());
-    expect(screen.query('enroll-confirm-toggle')).toBeNull();
+  test('store rows are inert while the device is being bound', () => {
+    const onChange = vi.fn();
+    const screen = renderScreen(onA({ busy: true }), onChange);
+    expect(screen.get(`enroll-store-${STORE_B.id}`).props['onPress']).toBeUndefined();
+  });
+
+  test('with one store there is nothing to pick: it is shown, and the button names it', () => {
+    const one = onA({ login: { ...onA().login!, stores: [STORE_A] }, selectedStoreId: null });
+    const screen = renderScreen(one, vi.fn());
+    expect(textsIn(screen.get(`enroll-store-${STORE_A.id}`))).toContain(STORE_A.name);
+    expect(screen.get(`enroll-store-${STORE_A.id}`).props['accessibilityRole']).toBeUndefined();
+    expect(screen.get('enroll-bind').props['disabled']).toBe(false);
+    expect(textsIn(screen.get('enroll-bind'))).toContain(
+      t('auth.enroll.bind', { store: STORE_A.name }),
+    );
+  });
+});
+
+describe('a failed attempt says what to do, in the banner slot', () => {
+  const failing = (failure: EnrollmentState['failure'], revoked = false) =>
+    renderScreen({ ...initialEnrollmentState(revoked), failure }, vi.fn());
+
+  test.each([
+    [{ kind: 'credentials' } as const, 'auth.enroll.wrongCredentials'],
+    [{ kind: 'offline' } as const, 'auth.enroll.needsConnection'],
+    [{ kind: 'notPermitted' } as const, 'auth.enroll.notOwner'],
+    [{ kind: 'rateLimited', retryAfterSeconds: 30 } as const, 'core.errors.RATE_LIMITED'],
+  ])('%o', (failure, key) => {
+    const screen = failing(failure);
+    expect(textsIn(screen.get(`enroll-failure-${failure.kind}`))).toContain(
+      t(key as Parameters<typeof t>[0]),
+    );
+  });
+
+  test('a failure replaces the blocked-phone banner while it is showing', () => {
+    expect(failing(null, true).query('enroll-revoked-banner')).not.toBeNull();
+    const screen = failing({ kind: 'offline' }, true);
+    expect(screen.query('enroll-revoked-banner')).toBeNull();
+    expect(screen.query('enroll-failure-offline')).not.toBeNull();
+  });
+
+  test('a short password says how long it must be', () => {
+    const screen = renderScreen(
+      { ...initialEnrollmentState(), loginIdentifier: 'maju', password: 'abc' },
+      vi.fn(),
+    );
+    expect(textsIn(screen.get('enroll-hint'))).toEqual([
+      t('auth.enroll.passwordTooShort', { min: 10 }),
+    ]);
+  });
+});
+
+describe('the done step', () => {
+  test('names the store the phone joined', () => {
+    const screen = renderScreen(onA({ step: 'done' }), vi.fn());
+    expect(textsIn(screen.get('enroll-store-name'))).toEqual([
+      t('auth.enroll.successStore', { store: STORE_A.name }),
+    ]);
   });
 });
 

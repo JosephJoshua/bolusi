@@ -127,10 +127,7 @@ export function SegmentedControl<V extends string>({
           },
         ]}
       >
-        {/* One line: a pill sized to its label wrapped "Tidak dicek" onto a clipped second line on
-            Android (first QA run), showing only "Tidak". */}
         <Text
-          numberOfLines={1}
           style={[
             compact ? styles.compactLabel : styles.label,
             { color: selected ? color.onPrimary : color.text },

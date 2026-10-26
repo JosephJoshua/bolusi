@@ -31,8 +31,8 @@ import {
 } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, radius, size, space, touch, type } from '../tokens.js';
-import { useDismissKeyboard } from './ConfirmSheet.js';
 import { Icon } from './Icon.js';
 
 export interface PhotoViewerItem {

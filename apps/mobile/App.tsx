@@ -39,6 +39,7 @@ import { EnrollmentScreen } from './src/screens/enrollment/EnrollmentScreen.js';
 import {
   canSubmitConfirm,
   canSubmitCredentials,
+  chosenStoreId,
   classifyFailure,
   initialEnrollmentState,
   needsDiscardConfirm,
@@ -246,6 +247,8 @@ export default function App(props: AppProps): React.JSX.Element {
    * PIN all beat it, so setting this can never render the wizard over a locked device.
    */
   const [reenrolling, setReenrolling] = useState(false);
+  /** True while a login or enroll request is in flight (see `runLogin`). */
+  const enrollRequestRef = useRef(false);
   const [enrollment, setEnrollment] = useState<EnrollmentState>(() =>
     initialEnrollmentState(props.device === 'revoked'),
   );
@@ -591,8 +594,11 @@ export default function App(props: AppProps): React.JSX.Element {
   // Step 1 (§4.2): log in. On success, advance to the confirm step carrying the tenant/store choices;
   // auto-select the store when there is exactly one (nothing to disambiguate). On failure, bucket it
   // into one of the four human actions (`classifyFailure`) — never a raw server string.
+  // `enrollRequestRef` closes the gap between a tap and the re-render that sets `busy`: two quick
+  // taps both saw `busy: false` and fired two requests, and binding cannot be undone.
   const runLogin = (): void => {
-    if (enrollment.busy || !canSubmitCredentials(enrollment)) return;
+    if (enrollRequestRef.current || enrollment.busy || !canSubmitCredentials(enrollment)) return;
+    enrollRequestRef.current = true;
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
       .login({ loginIdentifier: enrollment.loginIdentifier.trim(), password: enrollment.password })
@@ -608,7 +614,10 @@ export default function App(props: AppProps): React.JSX.Element {
       )
       .catch((error: unknown) =>
         setEnrollment((s) => ({ ...s, busy: false, failure: classifyFailure(error) })),
-      );
+      )
+      .finally(() => {
+        enrollRequestRef.current = false;
+      });
   };
 
   // Step 2 (§4.3 + §4.1 steps 4–6): register + genesis + persist. The state is captured BEFORE the
@@ -616,21 +625,29 @@ export default function App(props: AppProps): React.JSX.Element {
   // done step; the enrolled-zone handoff and sync loop wait for the owner's Continue tap (`finish`,
   // §8.5 step 3) so the done step is not unmounted before it renders (task 201).
   const runEnroll = (): void => {
-    if (enrollment.busy || !canSubmitConfirm(enrollment)) return;
-    const { login, selectedStoreId } = enrollment;
-    if (login === null || selectedStoreId === null) return;
+    if (enrollRequestRef.current || enrollment.busy || !canSubmitConfirm(enrollment)) return;
+    const { login } = enrollment;
+    const storeId = chosenStoreId(enrollment);
+    if (login === null || storeId === null) return;
     const deviceName = enrollment.deviceName.trim();
+    enrollRequestRef.current = true;
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
-      .enroll({ login, storeId: selectedStoreId, deviceName })
-      .then(() => setEnrollment((s) => ({ ...s, busy: false, step: 'done' })))
+      .enroll({ login, storeId, deviceName })
+      // The done step names the store from `selectedStoreId`, so it is set to what was bound.
+      .then(() =>
+        setEnrollment((s) => ({ ...s, busy: false, step: 'done', selectedStoreId: storeId })),
+      )
       .catch((error: unknown) =>
         setEnrollment((s) => ({
           ...s,
           busy: false,
           failure: classifyFailure(error),
         })),
-      );
+      )
+      .finally(() => {
+        enrollRequestRef.current = false;
+      });
   };
 
   const chip = useMemo(() => syncChipState(props.sync), [props.sync]);
