@@ -7,6 +7,7 @@ export { SYNC_BACKOFF_SCHEDULE_MS, syncBackoffDelayMs } from './backoff.js';
 export { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } from './devices.js';
 export { SYNC_LOOP_MACHINE, type SyncLoopEvent, type SyncLoopState } from './loop-machine.js';
 export {
+  BUNDLE_REFRESH_INTERVAL_MS,
   SyncLoop,
   type SyncCycleStats,
   type SyncLoopOptions,
