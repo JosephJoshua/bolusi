@@ -494,12 +494,9 @@ describe('intake draft', () => {
     expect(stepProblems(complete(h), 'review', OPTIONS)).toEqual([]);
     // A lock kind chosen with nothing entered (or a too-short pattern, kept as '') blocks the step,
     // where saving would have quietly recorded no lock.
+    const done = complete(h);
     const lock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
-      stepProblems(
-        { ...complete(h), device: { ...complete(h).device, lockKind, passcode } },
-        'device',
-        OPTIONS,
-      );
+      stepProblems({ ...done, device: { ...done.device, lockKind, passcode } }, 'device', OPTIONS);
     expect(lock('pattern', '')).toEqual(['screenLock']);
     expect(lock('pin', '')).toEqual(['screenLock']);
     expect(lock('password', '')).toEqual(['screenLock']);
