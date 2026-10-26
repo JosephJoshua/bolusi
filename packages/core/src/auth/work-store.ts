@@ -6,7 +6,7 @@
 //
 // A draft can hold customer PII (name, phone, the device passcode), so the whole value is sealed
 // with the connection's column cipher, like every other sensitive client column. Platform-free:
-// raw `sql` over the client DDL (client migration 13), generic in `DB`, as auth/repo.ts does.
+// raw `sql` over the client DDL (client migration 15), generic in `DB`, as auth/repo.ts does.
 import { sql, type Kysely } from 'kysely';
 
 import { encryptColumnValue } from '../crypto/column-cipher.js';

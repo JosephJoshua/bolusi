@@ -8,7 +8,7 @@ import { operationsArrivalIndexMigration } from './005-operations-arrival-index.
 import { operationsSingleCopyMigration } from './006-operations-single-copy.js';
 import { repairIntakeOptionsMigration } from './009-repair-intake-options.js';
 import { repairCancelFeesMigration } from './011-repair-cancel-fees.js';
-import { userWorkMigration } from './013-user-work.js';
+import { userWorkMigration } from './015-user-work.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
