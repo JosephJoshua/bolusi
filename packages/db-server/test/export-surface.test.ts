@@ -79,6 +79,11 @@ const EXPECTED_EXPORTS = [
   'createPhoneCatalogWriter',
   'readPhoneModelPhoto',
   'readPhoneModels',
+  // The same over a handle the caller already holds (the harness's PGlite): they consume one, never
+  // produce one.
+  'createPhoneCatalogWriterOn',
+  'readPhoneModelPhotoFrom',
+  'readPhoneModelsFrom',
 ].sort();
 
 test('the package exports exactly the curated surface', () => {

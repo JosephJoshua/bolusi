@@ -69,8 +69,11 @@ export type { PinVerifierRowInput, PinVerifierRowOwner } from './pin-verifier-ro
 // Nothing here hands back a handle, so the `queryish` assertion still holds.
 export {
   createPhoneCatalogWriter,
+  createPhoneCatalogWriterOn,
   readPhoneModelPhoto,
+  readPhoneModelPhotoFrom,
   readPhoneModels,
+  readPhoneModelsFrom,
   type CatalogBrand,
   type ListedPhoneModel,
   type PendingModel,
