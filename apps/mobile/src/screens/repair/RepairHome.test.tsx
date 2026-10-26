@@ -290,7 +290,7 @@ describe('price changes and handover', () => {
     ).toBe(true);
   });
 
-  test('on a cancelled ticket a leftover proposal is history, and handover charges nothing', async () => {
+  test('on a cancelled ticket a leftover proposal is history, and handover charges only the fee', async () => {
     h = await openRepairScreenHarness(5305);
     const ticketId = await openTicket(h);
     await h.run(
@@ -298,7 +298,11 @@ describe('price changes and handover', () => {
       { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
       h.technicianId,
     );
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    await h.run(
+      'cancelTicket',
+      { ticketId, reason: 'Pelanggan batal', fee: 25_000 },
+      h.storeOwnerId,
+    );
 
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.views.pickup');
@@ -307,13 +311,15 @@ describe('price changes and handover', () => {
     expect(screen.query('repair.ticket.pendingTotal')).toBeNull();
     await press(screen, 'repair.ticket.action.handover');
     expect(screen.query('repair.handover.cancelled')).not.toBeNull();
-    expect(screen.query('repair.handover.total')).toBeNull();
+    // What the customer signs for is the cancellation fee, never the repair price.
+    expect(text(screen, 'repair.handover.total')).toContain('25.000');
+    expect(text(screen, 'repair.handover.total')).not.toContain('750.000');
   });
 
   test('leaving the handover after taking a photo asks first', async () => {
     h = await openRepairScreenHarness(5306);
     const ticketId = await openTicket(h);
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.views.pickup');
     await press(screen, `repair.board.row.${ticketId}`);
@@ -351,6 +357,163 @@ describe('price changes and handover', () => {
   });
 });
 
+describe('cancelling (owners only)', () => {
+  test('the counter is never offered a cancel; a store owner is, also on a repaired phone', async () => {
+    h = await openRepairScreenHarness(5501);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(60)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(61)] }, h.technicianId);
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `repair.board.views.pickup`);
+    await press(counter, `repair.board.row.${ticketId}`);
+    expect(counter.query('repair.ticket.action.handover')).not.toBeNull();
+    expect(counter.query('repair.ticket.action.cancel')).toBeNull();
+    expect(counter.query('repair.board.views.cancelled')).toBeNull();
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, `repair.board.views.pickup`);
+    await press(owner, `repair.board.row.${ticketId}`);
+    expect(owner.query('repair.ticket.action.cancel')).not.toBeNull();
+  });
+
+  test('the store’s after-work fee is filled in; a changed fee asks why and both are recorded', async () => {
+    h = await openRepairScreenHarness(5502);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(62)] }, h.technicianId);
+
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    expect(text(screen, 'repair.cancel.feeAmount')).toContain('50.000');
+    expect(screen.query('repair.cancel.feeChangedHint')).toBeNull();
+    // Nothing is cancelled without a reason.
+    expect(screen.all('repair.cancel.primary')[0]!.props['disabled']).toBe(true);
+
+    await press(screen, 'repair.cancel.changeFee');
+    type(screen, 'repair.cancel.feeInput', '20.000');
+    await settle();
+    expect(text(screen, 'repair.cancel.feeAmount')).toContain('20.000');
+    expect(text(screen, 'repair.cancel.feeBasis')).toContain('50.000');
+    expect(screen.query('repair.cancel.feeChangedHint')).not.toBeNull();
+    type(screen, 'repair.cancel.reason', 'Pelanggan langganan, biaya dikurangi');
+    await settle();
+    await press(screen, 'repair.cancel.primary');
+
+    expect(await ticketRow(h, ticketId)).toMatchObject({
+      outcome: 'cancelled',
+      cancelFee: 20_000,
+      cancelStandardFee: 50_000,
+      cancelledBy: h.storeOwnerId,
+    });
+    expect(text(screen, 'repair.ticket.cancelFee')).toContain('20.000');
+  });
+
+  test('the owners’ cancelled view shows who cancelled, why, the fee, and a changed fee', async () => {
+    h = await openRepairScreenHarness(5503);
+    await h.run('setCancelFees', { beforeWork: 10_000, afterWork: 50_000 }, h.storeOwnerId);
+    const kept = await openTicket(h);
+    const changed = await openTicket(h);
+    await h.run(
+      'cancelTicket',
+      { ticketId: kept, reason: 'Tidak jadi', fee: 10_000 },
+      h.storeOwnerId,
+    );
+    await h.run('cancelTicket', { ticketId: changed, reason: 'Gratis', fee: 0 }, h.storeOwnerId);
+
+    const screen = await mount(h, h.storeOwnerId);
+    await press(screen, 'repair.board.views.cancelled');
+    expect(text(screen, `repair.board.row.${kept}.amount`)).toContain('10.000');
+    expect(text(screen, `repair.board.row.${kept}.reason`)).toBe('Tidak jadi');
+    expect(text(screen, `repair.board.row.${kept}`)).toContain(USER_NAMES.storeOwner);
+    expect(screen.query(`repair.board.row.${kept}.feeChanged`)).toBeNull();
+    expect(screen.query(`repair.board.row.${changed}.feeChanged`)).not.toBeNull();
+  });
+});
+
+describe('changing the price', () => {
+  test('a change the customer agreed to counts; one not agreed yet waits until they agree', async () => {
+    h = await openRepairScreenHarness(5701);
+    const ticketId = await openTicket(h);
+    const counter = await mount(h, h.cashierId);
+    const change = async (description: string, answer: 'primary' | 'unconfirmed') => {
+      await press(counter, 'repair.ticket.action.changePrice');
+      // Both answers wait on a complete line, and the screen says what "not yet" does.
+      expect(counter.all('repair.price.change.unconfirmed')[0]!.props['disabled']).toBe(true);
+      expect(counter.query('repair.price.change.waitsHint')).not.toBeNull();
+      type(counter, 'repair.price.change.description', description);
+      type(counter, 'repair.price.change.amount', '20000');
+      type(counter, 'repair.price.change.reason', 'Tambahan');
+      expect(counter.query('repair.price.change.question')).not.toBeNull();
+      await press(counter, `repair.price.change.${answer}`);
+    };
+    await press(counter, `repair.board.row.${ticketId}`);
+    await change('Lem', 'primary');
+    await change('Kabel', 'unconfirmed');
+    const waiting = await ticketRow(h, ticketId);
+    expect(waiting.quoteTotal).toBe(750_000 + 20_000);
+    expect(waiting.pendingProposals).toBe(1);
+
+    // The customer agrees later: the waiting change is decided like a proposal.
+    await press(counter, 'repair.ticket.action.decidePrice');
+    await press(counter, 'repair.proposal.primary');
+    const agreed = await ticketRow(h, ticketId);
+    expect(agreed.quoteTotal).toBe(750_000 + 40_000);
+    expect(agreed.pendingProposals).toBe(0);
+    expect(
+      agreed.quoteLines.every(
+        (l: { status: string; customerAgreed: boolean | null }) =>
+          l.status === 'intake' || l.customerAgreed === true,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('discounts (owners only)', () => {
+  test('only an owner is offered a discount when changing the price', async () => {
+    h = await openRepairScreenHarness(5601);
+    const ticketId = await openTicket(h);
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `repair.board.row.${ticketId}`);
+    await press(counter, 'repair.ticket.action.changePrice');
+    expect(counter.query('repair.price.change.kind.part')).not.toBeNull();
+    expect(counter.query('repair.price.change.kind.discount')).toBeNull();
+    counter.unmount();
+
+    const owner = await mount(h, h.storeOwnerId);
+    await press(owner, `repair.board.row.${ticketId}`);
+    await press(owner, 'repair.ticket.action.changePrice');
+    await press(owner, 'repair.price.change.kind.discount');
+    type(owner, 'repair.price.change.description', 'Pelanggan langganan');
+    type(owner, 'repair.price.change.amount', '50000');
+    type(owner, 'repair.price.change.reason', 'Langganan');
+    await press(owner, 'repair.price.change.primary');
+    expect((await ticketRow(h, ticketId)).quoteTotal).toBe(750_000 - 50_000);
+  });
+
+  test('the counter can decline an owner’s proposed discount but not apply it', async () => {
+    h = await openRepairScreenHarness(5602);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'discount', description: 'Diskon', amount: -20_000, reason: 'Langganan' },
+      h.ownerId,
+    );
+
+    const counter = await mount(h, h.cashierId);
+    await press(counter, `repair.board.row.${ticketId}`);
+    await press(counter, 'repair.ticket.action.decidePrice');
+    expect(counter.query('repair.proposal.primaryHint')).not.toBeNull();
+    expect(counter.all('repair.proposal.primary')[0]!.props['disabled']).toBe(true);
+    await press(counter, 'repair.proposal.decline');
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket.pendingProposals).toBe(0);
+    expect(ticket.quoteTotal).toBe(750_000);
+  });
+});
+
 describe('the board', () => {
   test("a colleague's change re-renders the open ticket in place", async () => {
     h = await openRepairScreenHarness(5401);
@@ -367,7 +530,7 @@ describe('the board', () => {
   test('leaving the handover after typing only a note asks first', async () => {
     h = await openRepairScreenHarness(5307);
     const ticketId = await openTicket(h);
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.views.pickup');
     await press(screen, `repair.board.row.${ticketId}`);
@@ -437,7 +600,7 @@ describe('changes synced from another device', () => {
     expect(screen.query('repair.work.after.stale')).toBeNull();
     expect(screen.get('repair.work.after.body').props['pointerEvents']).toBe('auto');
 
-    await b.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, b.cashierId);
+    await b.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, b.storeOwnerId);
     await pull(a, b);
     await settle();
     // The step says what happened, and its only way on is back to the ticket.
@@ -477,7 +640,7 @@ describe('changes synced from another device', () => {
 
   test('a phone handed back on another device stops the handover', async () => {
     const { a, b, ticketId } = await sharedTicket(5604);
-    await a.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, a.cashierId);
+    await a.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, a.storeOwnerId);
     await pull(b, a);
     const screen = await mount(a, a.cashierId);
     await press(screen, 'repair.board.views.pickup');
@@ -523,7 +686,7 @@ describe('changes synced from another device', () => {
     const { a, ticketId } = await sharedTicket(5605);
     // Hold the command open after it commits, so the ticket's re-read lands while it still runs:
     // the moment the notice must not appear, since the change is the user's own.
-    const base = repairRuntimeFor(a, a.cashierId);
+    const base = repairRuntimeFor(a, a.storeOwnerId);
     let release = (): void => undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -533,18 +696,18 @@ describe('changes synced from another device', () => {
       run: ((command, input) =>
         base.run(command, input).then((result) => held.then(() => result))) as typeof base.run,
     };
-    const screen = await mount(a, a.cashierId, { runtime });
+    const screen = await mount(a, a.storeOwnerId, { runtime });
     await press(screen, `repair.board.row.${ticketId}`);
     await press(screen, 'repair.ticket.action.cancel');
-    type(screen, 'repair.note.cancel.text', 'Pelanggan batal');
-    await press(screen, 'repair.note.cancel.primary');
+    type(screen, 'repair.cancel.reason', 'Pelanggan batal');
+    await press(screen, 'repair.cancel.primary');
     expect((await ticketRow(a, ticketId)).outcome).toBe('cancelled');
-    expect(screen.query('repair.note.cancel')).not.toBeNull();
-    expect(screen.query('repair.note.cancel.stale')).toBeNull();
+    expect(screen.query('repair.cancel')).not.toBeNull();
+    expect(screen.query('repair.cancel.stale')).toBeNull();
 
     release();
     await settle();
-    expect(screen.query('repair.note.cancel')).toBeNull();
+    expect(screen.query('repair.cancel')).toBeNull();
     expect(screen.query('repair.ticket.content')).not.toBeNull();
   });
 });

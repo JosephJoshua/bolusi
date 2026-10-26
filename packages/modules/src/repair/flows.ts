@@ -28,8 +28,25 @@ import type {
 
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
-export const BOARD_VIEWS = ['active', 'mine', 'unassigned', 'pickup', 'returned'] as const;
+export const BOARD_VIEWS = [
+  'active',
+  'mine',
+  'unassigned',
+  'pickup',
+  'returned',
+  'cancelled',
+] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
+
+/** The views this user gets: every cancel, with who and what it charged, is for owners only. */
+export function boardViews(can: RepairAbilities): readonly BoardView[] {
+  return BOARD_VIEWS.filter((view) => view !== 'cancelled' || can.cancel);
+}
+
+/** The cancelled view lists the latest cancel first; every queue lists the newest ticket first. */
+export function boardSort(view: BoardView): ListTicketsInput['sort'] {
+  return view === 'cancelled' ? 'cancelledAt.desc' : 'createdAt.desc';
+}
 
 const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
 
@@ -46,6 +63,8 @@ export function boardFilter(view: BoardView, userId: string): ListTicketsInput['
       return { outcomes: ['repaired', 'cancelled'], location: 'in_store' };
     case 'returned':
       return { location: 'returned' };
+    case 'cancelled':
+      return { outcomes: ['cancelled'] };
   }
 }
 
@@ -88,11 +107,15 @@ export interface RepairAbilities {
   readonly assign: boolean;
   readonly quoteChange: boolean;
   readonly cancel: boolean;
+  /** Lower a price (owners). */
+  readonly discount: boolean;
   readonly handover: boolean;
   /** Edit the franchise's intake lists (tenant-wide). */
   readonly manageIntakeOptions: boolean;
   /** Hide intake list items at this store. */
   readonly hideIntakeOptions: boolean;
+  /** Set this store's cancellation fees. */
+  readonly setCancelFees: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -104,9 +127,11 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     assign: hasPermission(P.assign),
     quoteChange: hasPermission(P.quoteChange),
     cancel: hasPermission(P.cancel),
+    discount: hasPermission(P.discount),
     handover: hasPermission(P.handover),
     manageIntakeOptions: hasPermission(P.manageIntakeOptions),
     hideIntakeOptions: hasPermission(P.hideIntakeOptions),
+    setCancelFees: hasPermission(P.setCancelFees),
   };
 }
 
