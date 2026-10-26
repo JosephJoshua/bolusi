@@ -28,6 +28,7 @@ import {
   REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_TICKET_ENTITY,
   workPhotoSlot,
   type DeviceLocation,
@@ -90,6 +91,9 @@ export const repairTicketsTable: ProjectionTableManifest = {
     cancel_standard_fee: 'integer',
     cancelled_by: 'text',
     cancelled_at: 'integer',
+    down_payment: 'integer',
+    down_payment_by: 'text',
+    down_payment_at: 'integer',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
@@ -202,6 +206,28 @@ export const repairStoreCancelFeesTable: ProjectionTableManifest = {
   projectionVersion: 1,
 };
 
+export const repairStorePrintSettingsTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    tenant_id: 'text',
+    name: 'text',
+    address: 'text',
+    phone: 'text',
+    logo_media_id: 'text',
+    logo_sha256: 'text',
+    logo_mime: 'text',
+    logo_on_dot_matrix: 'integer',
+    intake_terms: 'text',
+    handover_terms: 'text',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id'],
+  entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
 // ── payload shapes the appliers read (validated by operations.ts before any fold) ───────────────
 
 interface QuoteLineDraft {
@@ -307,6 +333,9 @@ async function updateTicket(
     cancelStandardFee: number | null;
     cancelledBy: string;
     cancelledAt: number;
+    downPayment: number | null;
+    downPaymentBy: string;
+    downPaymentAt: number;
   }>,
 ): Promise<void> {
   await db
@@ -477,6 +506,9 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       cancelStandardFee: null,
       cancelledBy: null,
       cancelledAt: null,
+      downPayment: null,
+      downPaymentBy: null,
+      downPaymentAt: null,
     })
     .execute();
 
@@ -693,6 +725,29 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
   await recordEvent(db, op, { note: payload.note });
 };
 
+// ── down payment and printing ─────────────────────────────────────────────────────────────────
+
+/**
+ * A down payment received or corrected: either way the ticket now records this amount (0 removes
+ * it). Two devices writing one concurrently both stand in the history; the later canonical op wins
+ * here, and the shared conflict key puts the clash in front of an owner.
+ */
+export const downPaymentChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { amount, reason } = payloadOf<{ amount: number; reason?: string }>(op);
+  await updateTicket(db, op, {
+    downPayment: amount === 0 ? null : amount,
+    downPaymentBy: op.userId,
+    downPaymentAt: op.timestamp,
+  });
+  await recordEvent(db, op, reason === undefined ? { amount } : { amount, reason });
+};
+
+/** A slip printed or shared: only the ticket's history records it, which is what counts reprints. */
+export const slipPrintedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { slip } = payloadOf<{ slip: string }>(op);
+  await recordEvent(db, op, { slip });
+};
+
 // ── intake options ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -742,6 +797,41 @@ export const storeCancelFeesChangedApplier: ProjectionApplier<RepairDatabase> = 
   const values = { beforeWork, afterWork, updatedBy: op.userId, updatedAt: op.timestamp };
   await db
     .insertInto('repairStoreCancelFees')
+    .values({ storeId, tenantId: op.tenantId, ...values })
+    .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
+    .execute();
+};
+
+export const storePrintSettingsChangedApplier: ProjectionApplier<RepairDatabase> = async (
+  db,
+  op,
+) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const payload = payloadOf<{
+    name: string | null;
+    address: string;
+    phone: string;
+    logo: MediaRef | null;
+    logoOnDotMatrix: boolean;
+    intakeTerms: string | null;
+    handoverTerms: string | null;
+  }>(op);
+  const values = {
+    name: payload.name,
+    address: payload.address,
+    phone: payload.phone,
+    logoMediaId: payload.logo?.mediaId ?? null,
+    logoSha256: payload.logo?.sha256 ?? null,
+    logoMime: payload.logo?.mime ?? null,
+    logoOnDotMatrix: payload.logoOnDotMatrix ? 1 : 0,
+    intakeTerms: payload.intakeTerms,
+    handoverTerms: payload.handoverTerms,
+    updatedBy: op.userId,
+    updatedAt: op.timestamp,
+  };
+  await db
+    .insertInto('repairStorePrintSettings')
     .values({ storeId, tenantId: op.tenantId, ...values })
     .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
     .execute();

@@ -55,6 +55,11 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     cancelledBy: null,
     cancelledByName: null,
     cancelledAt: null,
+    downPayment: null,
+    downPaymentBy: null,
+    downPaymentByName: null,
+    downPaymentAt: null,
+    slipPrints: { intake: 0, handover: 0 },
     devicePasscode: 'pin:975319',
     intakeNotes: 'Ada goresan di bodi belakang.',
     checklist: [
@@ -84,9 +89,7 @@ const ctx: SlipContext = {
   header: { name: 'Bolusi Cell Sorong', lines: ['Jl. Basuki Rahmat 12, Sorong'], logo: null },
   terms: null,
   printedAt: AT + 60_000,
-  printNumber: 1,
   printedByName: 'Maria Kasir',
-  downPayment: null,
 };
 
 function allText(doc: PrintDocument): string {
@@ -120,7 +123,10 @@ describe('intake slip', () => {
 
   it('marks a reprint and shows the down payment and what is left', () => {
     const text = allText(
-      intakeSlip(sampleTicket(), { ...ctx, printNumber: 2, downPayment: 200_000 }),
+      intakeSlip(
+        sampleTicket({ downPayment: 200_000, slipPrints: { intake: 1, handover: 0 } }),
+        ctx,
+      ),
     );
     expect(text).toContain('Cetak ulang ke-2');
     expect(text).toMatch(/DP\s+-Rp 200\.000/);
@@ -184,12 +190,10 @@ describe('handover slip', () => {
       cancelFee: 50_000,
     });
     const text = allText(
-      handoverSlip(cancelled, {
-        ...ctx,
-        handedOverByName: null,
-        signature: null,
-        downPayment: 20_000,
-      }),
+      handoverSlip(
+        { ...cancelled, downPayment: 20_000 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
     );
     expect(text).toContain('Biaya pembatalan');
     expect(text).toContain('Pelanggan tidak jadi');
@@ -252,6 +256,8 @@ describe('slip layout', () => {
     outcome: 'cancelled',
     outcomeNote: filler('cr', 2000),
     cancelFee: 1_000_000_000_000,
+    downPayment: 1_000_000_000_000,
+    slipPrints: { intake: 98, handover: 98 },
     createdByName: filler('cb', 200),
     checklist: Array.from({ length: 100 }, (_, i) => ({
       item: `custom${i}`,
@@ -275,9 +281,7 @@ describe('slip layout', () => {
     },
     terms: filler('t', 2000),
     printedAt: AT,
-    printNumber: 99,
     printedByName: filler('pb', 200),
-    downPayment: 1_000_000_000_000,
   };
   const slips = (): [PrintDocument, PrintDocument] => [
     intakeSlip(longest, longCtx),

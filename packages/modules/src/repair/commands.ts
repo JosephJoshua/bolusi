@@ -15,8 +15,10 @@ import {
   REPAIR_OP,
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
+  SLIP_KINDS,
   WORK_PHOTOS_MAX,
   workPhotoStage,
   type QuoteLineKind,
@@ -35,6 +37,7 @@ import {
   type IntakeOptionSettings,
 } from './intake-options.js';
 import {
+  MAX_TERMS,
   zChecklistItemV2,
   zDevice,
   zIntakePhotosV2,
@@ -47,8 +50,10 @@ import {
   getTicketQuery,
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
+  printSettingsQuery,
   standardCancelFee,
   type CancelFees,
+  type PrintSettings,
   type TicketDetailRow,
 } from './queries.js';
 import { formatTicketNumber } from './ticket-number.js';
@@ -109,6 +114,21 @@ function checkTotal(current: number, change: number): void {
       'VALIDATION_FAILED',
       { field: 'amount', issue: 'the total price would be negative' },
       `the total price cannot be ${total}`,
+    );
+  }
+}
+
+/**
+ * A down payment cannot be more than the price quoted, which catches an extra zero typed at the
+ * counter. With no price yet (a total of 0) any amount is allowed: the customer may pay up front
+ * before the technician has priced the repair.
+ */
+function checkDownPayment(amount: number, total: number): void {
+  if (total > 0 && amount > total) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'downPayment', issue: 'the down payment is more than the price' },
+      `a down payment of ${amount} is more than the total ${total}`,
     );
   }
 }
@@ -252,6 +272,8 @@ export const openTicketInput = z
     quoteLines: z.array(zLineInput).min(1).max(100),
     /** One photo per angle the store asks for, labelled as the counter saw it. */
     photos: zIntakePhotosV2,
+    /** Integer IDR the customer paid up front; 0 when nothing was. */
+    downPayment: z.number().int().min(0).max(MAX_LINE_AMOUNT).default(0),
   })
   .strict();
 export type OpenTicketInput = z.input<typeof openTicketInput>;
@@ -271,10 +293,9 @@ export async function openTicketHandler(
     ctx,
     input.quoteLines.map((line) => line.amount),
   );
-  checkTotal(
-    0,
-    input.quoteLines.reduce((sum, line) => sum + line.amount, 0),
-  );
+  const total = input.quoteLines.reduce((sum, line) => sum + line.amount, 0);
+  checkTotal(0, total);
+  checkDownPayment(input.downPayment, total);
   // Every angle this store asks for right now, so a list that changed under an open intake is
   // caught here rather than producing a ticket short of the evidence the owner wants.
   const angles = storeIntakeOptions(await loadIntakeOptions(ctx)).photoAngles;
@@ -325,6 +346,9 @@ export async function openTicketHandler(
       photos: input.photos,
     }),
   );
+  if (input.downPayment > 0) {
+    ops.push(ticketOp(ctx, ticketId, REPAIR_OP.downPaymentReceived, { amount: input.downPayment }));
+  }
 
   return { ops, result: { ticketId, ticketNumber, customerId } };
 }
@@ -739,6 +763,164 @@ export async function returnDeviceHandler(
       }),
     ],
     result: { ticketId: ticket.id },
+  };
+}
+
+// ── down payment, printing and the store's slip settings ──────────────────────────────────────
+
+export const recordDownPaymentInput = z
+  .object({ ticketId: z.string().min(1), amount: z.number().int().min(1).max(MAX_LINE_AMOUNT) })
+  .strict();
+export type RecordDownPaymentInput = z.input<typeof recordDownPaymentInput>;
+
+/**
+ * Record a down payment taken after intake. Only while the phone is still in the store and only
+ * once: changing an amount already recorded is an owner's correction, since a lower figure is how
+ * cash would go missing.
+ */
+export async function recordDownPaymentHandler(
+  input: z.output<typeof recordDownPaymentInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  if (ticket.location === 'returned') {
+    throw invalidTransition(ticket, REPAIR_OP.downPaymentReceived, 'already returned');
+  }
+  if (ticket.downPayment !== null) {
+    throw invalidTransition(ticket, REPAIR_OP.downPaymentReceived, 'a down payment is recorded');
+  }
+  checkDownPayment(input.amount, ticket.quoteTotal);
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.downPaymentReceived, { amount: input.amount })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const correctDownPaymentInput = z
+  .object({
+    ticketId: z.string().min(1),
+    /** What the down payment should be; 0 removes it. */
+    amount: z.number().int().min(0).max(MAX_LINE_AMOUNT),
+    reason: zRequiredText(2000),
+  })
+  .strict();
+export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
+
+/** An owner corrects a recorded down payment, with a reason, at any time. */
+export async function correctDownPaymentHandler(
+  input: z.output<typeof correctDownPaymentInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  if ((ticket.downPayment ?? 0) === input.amount) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'amount', issue: 'nothing changed' },
+      'the corrected down payment is the one recorded',
+    );
+  }
+  return {
+    ops: [
+      ticketOp(ctx, ticket.id, REPAIR_OP.downPaymentCorrected, {
+        amount: input.amount,
+        reason: input.reason,
+      }),
+    ],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const recordSlipPrintedInput = z
+  .object({ ticketId: z.string().min(1), slip: z.enum(SLIP_KINDS) })
+  .strict();
+export type RecordSlipPrintedInput = z.input<typeof recordSlipPrintedInput>;
+
+/**
+ * Log that a slip was printed or shared, so the next one says "Cetak ulang". The handover slip is
+ * the customer's bill and receipt, so it exists only once the phone is ready to collect or gone.
+ */
+export async function recordSlipPrintedHandler(
+  input: z.output<typeof recordSlipPrintedInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  if (
+    input.slip === 'handover' &&
+    ticket.location !== 'returned' &&
+    ticket.outcome !== 'repaired' &&
+    ticket.outcome !== 'cancelled'
+  ) {
+    throw invalidTransition(ticket, REPAIR_OP.slipPrinted, 'not ready to hand over');
+  }
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.slipPrinted, { slip: input.slip })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+const zOptionalTerms = z
+  .string()
+  .max(MAX_TERMS)
+  .nullable()
+  .transform((terms) => (terms === null || terms.trim() === '' ? null : terms.trim()));
+
+export const setPrintSettingsInput = z
+  .object({
+    /** Empty prints the store's own name. */
+    name: z
+      .string()
+      .max(100)
+      .transform((name) => (name.trim() === '' ? null : name.trim())),
+    address: zText(300),
+    phone: zText(100),
+    logo: zMediaRef.nullable(),
+    logoOnDotMatrix: z.boolean(),
+    /** Empty or null prints the app's default terms. */
+    intakeTerms: zOptionalTerms,
+    handoverTerms: zOptionalTerms,
+  })
+  .strict();
+export type SetPrintSettingsInput = z.input<typeof setPrintSettingsInput>;
+
+function samePrintSettings(
+  current: PrintSettings,
+  next: z.output<typeof setPrintSettingsInput>,
+): boolean {
+  return (
+    current.name === next.name &&
+    current.address === next.address &&
+    current.phone === next.phone &&
+    (current.logo?.mediaId ?? null) === (next.logo?.mediaId ?? null) &&
+    current.logoOnDotMatrix === next.logoOnDotMatrix &&
+    current.intakeTerms === next.intakeTerms &&
+    current.handoverTerms === next.handoverTerms
+  );
+}
+
+/** Set what this store's slips print at the top and in their terms. Printed paper is unchanged. */
+export async function setPrintSettingsHandler(
+  input: z.output<typeof setPrintSettingsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ storeId: string }>> {
+  if (ctx.storeId === null) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'name', issue: 'this device has no store' },
+      'a store-less device cannot set print settings',
+    );
+  }
+  const current = (await ctx.query(printSettingsQuery, {})).rows[0]!;
+  if (samePrintSettings(current, input)) throw nothingChanged('name');
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.storePrintSettingsChanged,
+        entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+        entityId: ctx.storeId,
+        payload: input as unknown as Record<string, unknown>,
+      }),
+    ],
+    result: { storeId: ctx.storeId },
   };
 }
 

@@ -16,7 +16,11 @@
     "deviceReturned": "HP diambil pelanggan",
     "intakeOptionsChanged": "Pilihan saat terima HP diubah",
     "storeIntakeOptionsChanged": "Pilihan di toko ini diubah",
-    "storeCancelFeesChanged": "Biaya pembatalan diubah"
+    "storeCancelFeesChanged": "Biaya pembatalan diubah",
+    "downPaymentReceived": "DP diterima",
+    "downPaymentCorrected": "DP diubah",
+    "slipPrinted": "Nota dicetak",
+    "storePrintSettingsChanged": "Pengaturan cetak diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",

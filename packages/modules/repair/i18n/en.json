@@ -16,7 +16,11 @@
     "deviceReturned": "Device handed back",
     "intakeOptionsChanged": "Intake choices changed",
     "storeIntakeOptionsChanged": "Choices at this store changed",
-    "storeCancelFeesChanged": "Cancellation fees changed"
+    "storeCancelFeesChanged": "Cancellation fees changed",
+    "downPaymentReceived": "Down payment received",
+    "downPaymentCorrected": "Down payment changed",
+    "slipPrinted": "Slip printed",
+    "storePrintSettingsChanged": "Print settings changed"
   },
   "action": {
     "applyPrice": "Apply price change",

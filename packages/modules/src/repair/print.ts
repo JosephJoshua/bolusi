@@ -14,6 +14,7 @@ import type {
   PrintImage,
 } from '@bolusi/core';
 
+import type { SlipKind } from './constants.js';
 import { ticketStatus } from './flows.js';
 import { tn } from './i18n.js';
 import { CHECK_STATE_KEY, PRICE_KIND_KEY, optionLabel, statusLabel } from './labels.js';
@@ -25,11 +26,7 @@ export interface SlipContext {
   /** The store's terms for this slip, one per line; null prints the app's default terms. */
   readonly terms: string | null;
   readonly printedAt: number;
-  /** 1 for the first print of this slip, 2 for the first reprint, and so on. */
-  readonly printNumber: number;
   readonly printedByName: string | null;
-  /** Integer IDR the customer paid up front, or null when nothing was paid. */
-  readonly downPayment: number | null;
 }
 
 export interface HandoverSlipContext extends SlipContext {
@@ -54,6 +51,7 @@ function deviceName(ticket: TicketDetailRow): string {
 function common(
   ticket: TicketDetailRow,
   ctx: SlipContext,
+  slip: SlipKind,
   title: string,
   jobName: string,
   meta: readonly string[],
@@ -71,8 +69,11 @@ function common(
     header: ctx.header,
     title,
     reference: ticket.ticketNumber,
+    // The print log counts earlier prints, so this one is the next.
     meta:
-      ctx.printNumber > 1 ? [...meta, tn('repair.slip.reprint', { count: ctx.printNumber })] : meta,
+      ticket.slipPrints[slip] > 0
+        ? [...meta, tn('repair.slip.reprint', { count: ticket.slipPrints[slip] + 1 })]
+        : meta,
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
     plyNote: tn('repair.slip.plyNote'),
@@ -178,7 +179,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
     {
       kind: 'amounts',
       rows: lines.map(lineRow),
-      totals: totals(tn('repair.slip.estimateTotal'), total, ctx.downPayment),
+      totals: totals(tn('repair.slip.estimateTotal'), total, ticket.downPayment),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
   ];
@@ -194,6 +195,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   return common(
     ticket,
     ctx,
+    'intake',
     tn('repair.slip.intakeTitle'),
     tn('repair.slip.job.intake', { number: ticket.ticketNumber }),
     meta,
@@ -227,7 +229,7 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     ? {
         kind: 'amounts',
         rows: [{ label: tn('repair.cancel.fee'), amount: formatMoney(ticket.cancelFee ?? 0) }],
-        totals: totals(tn('repair.slip.total'), ticket.cancelFee ?? 0, ctx.downPayment),
+        totals: totals(tn('repair.slip.total'), ticket.cancelFee ?? 0, ticket.downPayment),
       }
     : {
         kind: 'amounts',
@@ -235,7 +237,7 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
         rows: ticket.quoteLines
           .filter((line) => line.status === 'intake' || line.status === 'applied')
           .map(lineRow),
-        totals: totals(tn('repair.slip.total'), ticket.quoteTotal, ctx.downPayment),
+        totals: totals(tn('repair.slip.total'), ticket.quoteTotal, ticket.downPayment),
       };
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.costs') },
@@ -258,6 +260,7 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
   return common(
     ticket,
     ctx,
+    'handover',
     tn('repair.slip.handoverTitle'),
     tn('repair.slip.job.handover', { number: ticket.ticketNumber }),
     meta,
