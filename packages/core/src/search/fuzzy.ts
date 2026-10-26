@@ -260,13 +260,16 @@ export function digitScore(query: string, stored: string): number {
   if (stored === '') return 0;
   if (query === stored) return 1;
   const tolerance = digitTolerance(query.length);
-  let best = 0;
-  const whole = alignDistance(query, stored, 'whole', tolerance);
-  if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
-  const suffix = alignDistance(query, stored, 'suffix', tolerance);
-  if (suffix <= tolerance) best = Math.max(best, 0.85 * closeness(suffix, query.length));
+  // An infix alignment is never worse than a suffix or whole one, so a stored number the query is
+  // not even inside cannot match at all: most numbers stop after one alignment instead of three.
   const infix = alignDistance(query, stored, 'infix', tolerance);
-  if (infix <= tolerance) best = Math.max(best, 0.7 * closeness(infix, query.length));
+  if (infix > tolerance) return 0;
+  let best = 0.7 * closeness(infix, query.length);
+  const suffix = alignDistance(query, stored, 'suffix', tolerance);
+  if (suffix > tolerance) return best;
+  best = Math.max(best, 0.85 * closeness(suffix, query.length));
+  const whole = alignDistance(query, stored, 'whole', tolerance);
+  if (whole <= tolerance) best = Math.max(best, 0.95 * closeness(whole, query.length));
   return best;
 }
 
@@ -324,11 +327,12 @@ export function codeScore(query: string, stored: string): number {
   if (query.length < 3 || stored === '') return 0;
   if (query === stored) return 1;
   const tolerance = digitTolerance(query.length);
-  let best = 0;
-  const whole = alignDistance(query, stored, 'whole', tolerance);
-  if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
+  // A suffix alignment is never worse than a whole one (see `digitScore`).
   const suffix = alignDistance(query, stored, 'suffix', tolerance);
-  if (suffix <= tolerance) best = Math.max(best, 0.8 * closeness(suffix, query.length));
+  if (suffix > tolerance) return 0;
+  let best = 0.8 * closeness(suffix, query.length);
+  const whole = alignDistance(query, stored, 'whole', tolerance);
+  if (whole <= tolerance) best = Math.max(best, 0.95 * closeness(whole, query.length));
   return best;
 }
 
