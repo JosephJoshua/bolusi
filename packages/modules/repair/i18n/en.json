@@ -101,7 +101,12 @@
     "passcode": "Screen lock code (optional)",
     "colorField": "Colour (optional)",
     "imeiField": "IMEI (optional)",
-    "passcodeLabel": "Screen lock"
+    "passcodeLabel": "Screen lock",
+    "modelHint": "e.g. Galaxy A55",
+    "released": "Released {year}",
+    "servicedBefore": "Serviced here before",
+    "tablet": "Tablet",
+    "watch": "Smartwatch"
   },
   "handover": {
     "note": "Note (optional)",

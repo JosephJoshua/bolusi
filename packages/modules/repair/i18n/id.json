@@ -101,7 +101,12 @@
     "passcode": "Kunci layar (opsional)",
     "colorField": "Warna (opsional)",
     "imeiField": "IMEI (opsional)",
-    "passcodeLabel": "Kunci layar"
+    "passcodeLabel": "Kunci layar",
+    "modelHint": "Contoh: Galaxy A55",
+    "released": "Rilis {year}",
+    "servicedBefore": "Pernah diservis di sini",
+    "tablet": "Tablet",
+    "watch": "Jam tangan"
   },
   "handover": {
     "note": "Catatan (opsional)",

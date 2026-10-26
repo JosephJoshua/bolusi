@@ -19,14 +19,14 @@ import type { AppRuntime } from './runtime.js';
 export type { RepairMediaSeams };
 
 /**
- * The media seams for repair: the capture and signature hosts as given, and the same thumbnail
- * decision notes makes (a device with no media client shows every photo as not yet available).
+ * The media seams for repair: the capture and signature hosts and the model photo loader as given,
+ * and the same thumbnail decision notes makes (a device with no media client shows every photo as not yet available).
  * Sharing is offered only with a media client and a share platform: without either there is no
  * verified file to hand over.
  */
 export function repairMediaSeamsFor(
   media: MediaClient | null,
-  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
+  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature' | 'loadModelPhoto'>,
   share?: SharePlatform,
 ): RepairMediaSeams {
   const loadThumbnail = notesMediaSeamsFor(media).loadThumbnail;

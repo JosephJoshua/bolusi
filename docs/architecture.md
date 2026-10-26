@@ -31,6 +31,13 @@ anything typed (edit distance over names, digits and codes, never exact). On a
 device the index lives in memory per store, loads once, and reloads only the
 entities the projection engine reports as changed.
 
+The phone catalog is global reference data, not ops: Postgres `phone_models`
+(no RLS; the app role can only read it), crawled by `apps/server/src/catalog`.
+Devices pull rows by `revision` from `GET /v1/catalog/phones` into SQLite
+`phone_models` and fetch a photo from `/v1/catalog/phones/:id/photo` only when
+shown, keeping it in the evictable cache after checking its sha256. Intake model
+search (`repair/device-models.ts`) joins it with models this store took in before.
+
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
 

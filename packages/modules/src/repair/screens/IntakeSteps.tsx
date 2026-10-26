@@ -21,6 +21,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { CHECKLIST_STATES, INTAKE_PHOTO_SLOTS } from '../constants.js';
+import { sameDeviceModel, type DeviceModelRow } from '../device-models.js';
 
 import { tn } from './i18n.js';
 import {
@@ -49,7 +50,16 @@ import {
   type QuoteLineDraft,
 } from '../flows.js';
 import type { IntakePhotoSlot } from '../constants.js';
-import { Field, PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
+import {
+  CatalogPhoto,
+  Field,
+  ModelPhoto,
+  PhotoGrid,
+  PhotoThumb,
+  Section,
+  repairStyles,
+  useCatalogModel,
+} from './parts.js';
 import { useRepairQuery } from './runtime.js';
 import { PRICE_KINDS, type PriceKind } from './TicketSteps.js';
 
@@ -143,6 +153,22 @@ export function CustomerStep({
   );
 }
 
+/** "Samsung · 2024", "Samsung · Tablet · 2024", or "Evercoss · Serviced here before". */
+function modelCaption(row: DeviceModelRow): string {
+  const parts = [row.brand];
+  if (row.kind === 'tablet') parts.push(tn('repair.device.tablet'));
+  if (row.kind === 'watch') parts.push(tn('repair.device.watch'));
+  if (row.learned) parts.push(tn('repair.device.servicedBefore'));
+  else if (row.announcedYear !== null) parts.push(String(row.announcedYear));
+  return parts.join(' · ');
+}
+
+/**
+ * Brand and model, with models from the phone catalog and from earlier intakes suggested as the
+ * model is typed. Picking one fills both fields; a model the catalog knows shows its picture, so
+ * the counter can hold it up against the phone on the desk. Nothing here is required to match: a
+ * model nobody has heard of is typed and kept as it is.
+ */
 export function DeviceStep({
   draft,
   update,
@@ -157,36 +183,84 @@ export function DeviceStep({
   const [passcodeShown, setPasscodeShown] = useState(false);
   const set = (patch: Partial<IntakeDraft['device']>): void =>
     update({ device: { ...device, ...patch } });
+
+  const brand = device.brand.trim();
+  const model = device.model.trim();
+  const searchText = [brand, model].join(' ').trim();
+  const matched = useCatalogModel(brand, model);
+  const suggestions = useRepairQuery(
+    async (rt) =>
+      model === ''
+        ? []
+        : (await rt.query('searchDeviceModels', { text: searchText, limit: 5 })).rows,
+    `deviceModels:${searchText}`,
+  );
+  const current = { brand, model };
+  const picked =
+    matched !== null ||
+    (suggestions.status === 'ready' &&
+      suggestions.data.some((row) => sameDeviceModel(row, current)));
+
   return (
     <View>
       <TextInput
         label={tn('repair.device.brand')}
         value={device.brand}
-        onChangeText={(brand) => set({ brand })}
+        onChangeText={(value) => set({ brand: value })}
         errorMessage={brandError}
         autoFocus
         testID={`${testID}.brand`}
       />
       <View style={[styles.chips, styles.suggestions]}>
-        {COMMON_BRANDS.map((brand) => (
+        {COMMON_BRANDS.map((choice) => (
           <ToggleChip
-            key={brand}
-            label={brand}
-            selected={device.brand === brand}
-            onToggle={() => set({ brand })}
-            testID={`${testID}.brandChoice.${brand}`}
+            key={choice}
+            label={choice}
+            selected={device.brand === choice}
+            onToggle={() => set({ brand: choice })}
+            testID={`${testID}.brandChoice.${choice}`}
           />
         ))}
       </View>
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.device.model')}
+          placeholder={tn('repair.device.modelHint')}
           value={device.model}
-          onChangeText={(model) => set({ model })}
+          onChangeText={(value) => set({ model: value })}
           errorMessage={modelError}
           testID={`${testID}.model`}
         />
       </View>
+      {matched !== null ? (
+        <View style={styles.modelMatch} testID={`${testID}.modelMatch`}>
+          <ModelPhoto photo={matched.photo} large testID={`${testID}.modelMatch.photo`} />
+          <View style={repairStyles.rowText}>
+            <Text style={styles.reviewStrong}>
+              {matched.brand} {matched.model}
+            </Text>
+            {matched.announcedYear === null ? null : (
+              <Text style={repairStyles.muted}>
+                {tn('repair.device.released', { year: String(matched.announcedYear) })}
+              </Text>
+            )}
+          </View>
+        </View>
+      ) : null}
+      {!picked && suggestions.status === 'ready' && suggestions.data.length > 0 ? (
+        <View style={styles.modelList} testID={`${testID}.models`}>
+          {suggestions.data.map((row) => (
+            <ListRow
+              key={row.key}
+              leading={<ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />}
+              primaryText={row.model}
+              secondaryText={modelCaption(row)}
+              onPress={() => set({ brand: row.brand, model: row.model })}
+              testID={`${testID}.model.${row.key}`}
+            />
+          ))}
+        </View>
+      ) : null}
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.device.colorField')}
@@ -492,11 +566,21 @@ export function ReviewStep({
       {section(
         'device',
         <>
-          <Text style={styles.reviewStrong} testID={`${testID}.device`}>
-            {[draft.device.brand, draft.device.model, draft.device.color]
-              .filter((s) => s.trim() !== '')
-              .join(' ')}
-          </Text>
+          <View style={styles.reviewDevice}>
+            <CatalogPhoto
+              brand={draft.device.brand}
+              model={draft.device.model}
+              testID={`${testID}.devicePhoto`}
+            />
+            <Text
+              style={[styles.reviewStrong, styles.reviewDeviceName]}
+              testID={`${testID}.device`}
+            >
+              {[draft.device.brand, draft.device.model, draft.device.color]
+                .filter((s) => s.trim() !== '')
+                .join(' ')}
+            </Text>
+          </View>
           {draft.device.imei === '' ? null : (
             <Field label={tn('repair.device.imei')} value={draft.device.imei} />
           )}
@@ -561,6 +645,15 @@ const styles = StyleSheet.create({
   checkLabel: { ...type.bodySm, color: color.text, flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
+  modelMatch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: space.md,
+    columnGap: space.md,
+  },
+  modelList: { marginTop: space.sm },
+  reviewDevice: { flexDirection: 'row', alignItems: 'center', columnGap: space.md },
+  reviewDeviceName: { flexShrink: 1 },
   remove: { alignSelf: 'flex-end', marginTop: space.md },
   total: { marginTop: space.lg },
   reviewLine: { marginBottom: space.sm },

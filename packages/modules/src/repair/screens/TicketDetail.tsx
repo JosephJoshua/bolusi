@@ -49,6 +49,7 @@ import {
 } from '../flows.js';
 import {
   ActionErrorBanner,
+  CatalogPhoto,
   Fact,
   FactGrid,
   QueryView,
@@ -374,13 +375,21 @@ export function TicketDetail({
             </Pressable>
           )}
           <View style={styles.deviceBox}>
-            <Text style={styles.device} testID={`${testID}.device`}>
-              {device}
-            </Text>
-            <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
-            <Text style={styles.complaint} testID={`${testID}.complaint`}>
-              {row.complaint}
-            </Text>
+            <CatalogPhoto
+              brand={row.deviceBrand}
+              model={row.deviceModel}
+              large
+              testID={`${testID}.devicePhoto`}
+            />
+            <View style={styles.deviceText}>
+              <Text style={styles.device} testID={`${testID}.device`}>
+                {device}
+              </Text>
+              <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
+              <Text style={styles.complaint} testID={`${testID}.complaint`}>
+                {row.complaint}
+              </Text>
+            </View>
           </View>
         </Card>
 
@@ -660,11 +669,15 @@ const styles = StyleSheet.create({
   },
   link: { ...type.bodySm, fontWeight: '600', color: color.primary },
   deviceBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: space.md,
     marginTop: space.sm,
     padding: space.md,
     borderRadius: radius.sm,
     backgroundColor: color.surfaceAlt,
   },
+  deviceText: { flex: 1 },
   device: { ...type.bodyBold, color: color.text },
   complaintLabel: { ...type.caption, color: color.textMuted, marginTop: space.sm },
   complaint: { ...type.bodySm, color: color.text },

@@ -81,6 +81,8 @@ export const ICON_GLYPHS = Object.freeze({
   share: 'share-variant-outline',
   /** PhotoStrip: opens every photo at once. */
   photos: 'image-multiple-outline',
+  /** Repair: a phone model with no picture to show (yet). */
+  device: 'cellphone',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

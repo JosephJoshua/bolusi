@@ -18,6 +18,11 @@ import {
 } from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 
+import {
+  demoFindDeviceModel,
+  demoModelPhoto,
+  demoSearchDeviceModels,
+} from './phone-catalog-demo.js';
 import { HARNESS_NOW } from './seed.js';
 
 const HOUR = 3_600_000;
@@ -336,6 +341,10 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       );
       return page(index.search(String(input['text']), 50).map((hit) => find(hit.id)));
     },
+    searchDeviceModels: (input) =>
+      page(demoSearchDeviceModels(String(input['text']), Number(input['limit'] ?? 6))),
+    findDeviceModel: (input) =>
+      page(demoFindDeviceModel(String(input['brand']), String(input['model']))),
     searchCustomers: (input) => {
       const customers = new Map(tickets.map((t) => [t.customerId, t]));
       const index = new FuzzyIndex(
@@ -531,6 +540,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       Promise.resolve(TECHNICIANS.map((id) => ({ id, name: NAMES.get(id) ?? id }))),
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    loadModelPhoto: demoModelPhoto,
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.

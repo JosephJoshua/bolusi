@@ -26,7 +26,8 @@ import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 
 import { statusLabel } from './labels.js';
 import { statusTone, type TicketStatus } from '../flows.js';
-import { useRepairThumbnail } from './runtime.js';
+import type { DeviceModelPhoto, DeviceModelRow } from '../device-models.js';
+import { useModelPhoto, useRepairQuery, useRepairThumbnail } from './runtime.js';
 
 /**
  * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
@@ -170,6 +171,69 @@ export function PhotoThumb({
         </View>
       );
   }
+}
+
+/** The catalog model a brand and model name are, when the catalog surely has it (findDeviceModel). */
+export function useCatalogModel(brand: string, model: string): DeviceModelRow | null {
+  const query = useRepairQuery(
+    async (rt) =>
+      model.trim() === ''
+        ? null
+        : ((await rt.query('findDeviceModel', { brand: brand.trim(), model: model.trim() }))
+            .rows[0] ?? null),
+    `deviceModel:${brand.trim()}\u0000${model.trim()}`,
+  );
+  return query.status === 'ready' ? query.data : null;
+}
+
+/**
+ * A catalog picture of a phone model, the whole phone shown uncropped. While it loads, or when there
+ * is none (offline, not in the catalog), a plain phone glyph holds its place so rows do not jump.
+ */
+export function ModelPhoto({
+  photo,
+  large = false,
+  testID,
+}: {
+  readonly photo: DeviceModelPhoto | null;
+  /** The confirmation card's size; rows use the small one. */
+  readonly large?: boolean;
+  readonly testID: string;
+}): React.JSX.Element {
+  const uri = useModelPhoto(photo);
+  const frame = large ? styles.modelLarge : styles.modelSmall;
+  return uri === null ? (
+    <View style={[frame, styles.modelEmpty]} testID={`${testID}.none`}>
+      <Icon name="device" size={size.iconInline} color={color.textMuted} />
+    </View>
+  ) : (
+    <Image source={{ uri }} contentFit="contain" style={frame} testID={`${testID}.image`} />
+  );
+}
+
+/** The catalog picture of a ticket's phone, or nothing when the catalog has no picture of it. */
+export function CatalogPhoto({
+  brand,
+  model,
+  large = false,
+  testID,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly large?: boolean;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const uri = useModelPhoto(found?.photo ?? null);
+  if (uri === null) return null;
+  return (
+    <Image
+      source={{ uri }}
+      contentFit="contain"
+      style={large ? styles.modelLarge : styles.modelSmall}
+      testID={`${testID}.image`}
+    />
+  );
 }
 
 /** The chrome every full-screen repair step shares: the shell's sync chip and avatar. */
@@ -404,6 +468,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   full: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  // GSMArena's pictures are 160×212 portraits on white, so the frames keep that shape.
+  modelSmall: { width: 30, height: 40 },
+  modelLarge: { width: 60, height: 80 },
+  modelEmpty: {
+    borderRadius: radius.sm,
+    backgroundColor: color.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   section: { marginTop: space.xl },
   sectionHeader: {
     flexDirection: 'row',

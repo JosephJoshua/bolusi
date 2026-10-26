@@ -102,7 +102,29 @@ export interface RepairTicketEventsTable {
   detailJson: string;
 }
 
+/**
+ * The phone catalog (client migration 8, server migration 0013). Not a repair projection: no op
+ * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
+ * suggest models at intake (device-models.ts). The server's table has the same columns and more.
+ */
+export interface PhoneModelsTable {
+  /** GSMArena's device number. */
+  id: number;
+  brand: string;
+  /** Without the brand: `Galaxy A55`. */
+  name: string;
+  /** `phone`, `tablet` or `watch`. */
+  kind: string;
+  announcedYear: number | null;
+  /** Comma-separated maker codes, '' when unknown. */
+  modelCodes: string;
+  /** Null when there is no photo to show. */
+  photoSha256: string | null;
+  revision: number;
+}
+
 export interface RepairDatabase {
+  phoneModels: PhoneModelsTable;
   repairCustomers: RepairCustomersTable;
   repairTickets: RepairTicketsTable;
   repairQuoteLines: RepairQuoteLinesTable;

@@ -3,6 +3,17 @@ export { repairModule, repairModuleManifest } from './manifest.js';
 export * from './constants.js';
 export type * from './schema.js';
 export * from './search.js';
+export {
+  PHONE_MODELS_TABLE,
+  catalogKeys,
+  sameDeviceModel,
+  deviceModelSearchSource,
+  type DeviceModelKind,
+  type DeviceModelPhoto,
+  type DeviceModelRow,
+  type FindDeviceModelInput,
+  type SearchDeviceModelsInput,
+} from './device-models.js';
 export { deviceCode, formatTicketNumber, ticketCounter } from './ticket-number.js';
 export type {
   CustomerRow,

@@ -4,7 +4,7 @@
 //
 //   GET /v1/catalog/phones?after=<revision>   the models changed after that revision, oldest first
 //   GET /v1/catalog/phones/:id/photo           one model's photo, fetched when the screen shows it
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
 import {
@@ -20,14 +20,15 @@ import { zQuery } from '../middleware/validator-hook.js';
 
 const zModelId = z.coerce.number().int().positive().max(2_147_483_647);
 
+/** Devices only: the catalog is for the intake screen, not for owner control sessions. */
+function requireDevice(c: Context<AppEnv>): void {
+  if (c.get('device') === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
+}
+
 export function createCatalogRouter(deps: ServerDeps) {
   return new Hono<AppEnv>()
-    .use('*', async (c, next) => {
-      // Devices only: the catalog is for the intake screen, not for owner control sessions.
-      if (c.get('device') === undefined) throw new ApiError('AUTH_TOKEN_INVALID');
-      await next();
-    })
     .get('/phones', zQuery(zPhoneCatalogQuery), async (c) => {
+      requireDevice(c);
       const { after, limit } = c.req.valid('query');
       // One extra row says whether another page follows.
       const rows = await deps.phoneCatalog.models(
@@ -38,6 +39,7 @@ export function createCatalogRouter(deps: ServerDeps) {
       return c.json(body);
     })
     .get('/phones/:id/photo', async (c) => {
+      requireDevice(c);
       const id = zModelId.safeParse(c.req.param('id'));
       if (!id.success) throw new ApiError('NOT_FOUND');
       const photo = await deps.phoneCatalog.photo(id.data);

@@ -41,7 +41,7 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
   await tap(page, 'repair.intake.primary');
   await tap(page, 'repair.intake.device.brandChoice.Oppo');
-  await fill(page, 'repair.intake.device.model', 'A57');
+  await fill(page, 'repair.intake.device.model', 'A58');
   await tap(page, 'repair.intake.primary');
   await fill(page, 'repair.intake.condition.complaint', 'Mati total');
   await tap(page, 'repair.intake.condition.restOk');
@@ -50,14 +50,16 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   for (let shot = 0; shot < 6; shot += 1) await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.primary')).toHaveText('Lanjut');
   await tap(page, 'repair.intake.primary');
-  await fill(page, 'repair.intake.price.description.0', 'LCD A57');
+  await fill(page, 'repair.intake.price.description.0', 'LCD A58');
   await fill(page, 'repair.intake.price.amount.0', '650000');
   await expect(page.getByTestId('repair.intake.price.amount.0.field')).toHaveValue('650.000');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.total')).toHaveText('Rp 650.000');
+  await expect(page.getByTestId('repair.intake.review.devicePhoto.image')).toBeVisible();
   await shoot(page, 'intake-review');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Ester Mandowen');
+  await expect(page.getByTestId('repair.ticket.devicePhoto.image')).toBeVisible();
   // Unassigned, picking a technician is the counter's next step.
   await expect(page.getByTestId('repair.ticket.action.assign')).toBeVisible();
   await shoot(page, 'intake-ticket');
@@ -65,6 +67,33 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await tap(page, 'repair.ticket.action.assign');
   await expect(page.locator('[data-testid^="repair.assign.row."]').first()).toBeVisible();
   await expect(page.getByTestId('repair.assign.items.error')).toHaveCount(0);
+});
+
+test('typing a model suggests catalog phones with their picture', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.device.brandChoice.Samsung');
+  // A typo still finds the model, newest phones first among equal matches.
+  await fill(page, 'repair.intake.device.model', 'galaxy a5');
+  await expect(page.getByTestId('repair.intake.device.model.c:12824')).toBeVisible();
+  await expect(page.getByTestId('repair.intake.device.model.c:12824.photo.image')).toBeVisible();
+  await shoot(page, 'device-suggestions');
+
+  await tap(page, 'repair.intake.device.model.c:12824');
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Galaxy A55');
+  await expect(page.getByTestId('repair.intake.device.modelMatch')).toContainText('Rilis 2024');
+  await expect(page.getByTestId('repair.intake.device.models')).toHaveCount(0);
+  await shoot(page, 'device-picked');
+
+  // A phone the catalog lacks, taken in before, is suggested from the store's own intakes.
+  await fill(page, 'repair.intake.device.brand', '');
+  await fill(page, 'repair.intake.device.model', 'evercos xtream');
+  await expect(page.getByTestId('repair.intake.device.models')).toContainText(
+    'Pernah diservis di sini',
+  );
+  await shoot(page, 'device-learned');
 });
 
 test('the price-kind choices stay one row high on the price-change step', async ({ page }) => {

@@ -79,6 +79,9 @@ Agreed with the owner after slice 1's phone screens.
   photos, knowingly accepting its terms-of-use and image-copyright risk. Models
   learned from intakes supplement it. The catalog syncs to devices for offline
   typo-tolerant model search; photos download only when shown.
+  Built with these defaults: one request per 15 s or slower, robots.txt obeyed;
+  phones, tablets and watches all kept; learned models come from the store's
+  own intakes; picking a suggestion fills the catalog's brand name.
 
 ## Decision
 
