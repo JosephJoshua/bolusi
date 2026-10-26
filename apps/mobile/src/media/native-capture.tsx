@@ -30,10 +30,21 @@
 import { Camera, CameraView } from 'expo-camera';
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 import { createExpoCameraCapture, type CameraCapturePort } from './capture.js';
 import type { CapturePlatform } from './CaptureHost.js';
+
+/**
+ * The still size asked of the camera on Android. Without it CameraX takes the HIGHEST size the
+ * sensor offers (12 MP and up), which expo-camera then decodes into a full bitmap only for the
+ * pipeline to shrink it to a 1600 px long edge (06 §2.2): about 50 MB of pixels for nothing on a
+ * 2 GB phone. Asking for 2048x1536 gets the closest size at or below it (else the next one up), so
+ * the photo still covers the 1600 px edge. The emulator also returned black stills at its highest
+ * size while its own camera app saved real ones (October 2026), so this is the first thing to
+ * check there. iOS takes named presets for this prop, so it keeps its default.
+ */
+const CAPTURE_SIZE = Platform.OS === 'android' ? { pictureSize: '2048x1536' } : {};
 
 /** The live viewfinder, publishing its capture port the moment the SDK says it is safe to shoot. */
 function CameraPreview({
@@ -55,6 +66,7 @@ function CameraPreview({
       style={styles.fill}
       // Evidence photography is rear-camera work (06 §2.1: a technician photographing a handset).
       facing="back"
+      {...CAPTURE_SIZE}
       onCameraReady={() => {
         const instance = view.current;
         if (instance === null) return;
