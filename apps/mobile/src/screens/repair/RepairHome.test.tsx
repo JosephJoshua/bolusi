@@ -150,7 +150,8 @@ describe('counter intake', () => {
     const name = screen.get(`repair.intake.condition.checkRow.${id}`).children[0] as {
       props: Record<string, unknown>;
     };
-    expect(StyleSheet.flatten(name.props['style'])['paddingRight']).toBe(240 + 12);
+    const nameStyle = StyleSheet.flatten(name.props['style'] as object) as Record<string, unknown>;
+    expect(nameStyle['paddingRight']).toBe(240 + 12);
 
     // Pills too wide to leave the name a readable column: every row stacks.
     layout(`repair.intake.condition.checkPills.${id}`, 300);
