@@ -91,12 +91,9 @@ test('the scrolling content container grows without being clamped to the viewpor
 });
 
 test('the content keeps its padding in both shapes', () => {
-  // The padding moved off the outer view onto the shared container style; losing it in either
-  // branch would be a silent regression no other test covers.
-  const scrolling = shell(true).get('ui.appShell.content').props['contentContainerStyle'] as Record<
-    string,
-    unknown
-  >;
-  expect(scrolling['padding']).toBe(space.lg);
+  // Losing the padding in either branch would be a silent regression no other test covers.
+  // Scrolling, it sits on the view inside the ScrollView, the one a focused field is measured
+  // against when it is scrolled above the keyboard (shell/keyboard.tsx).
+  expect(shell(true).styleOf('ui.appShell.contentInner')['padding']).toBe(space.lg);
   expect(shell().styleOf('ui.appShell.content')['padding']).toBe(space.lg);
 });

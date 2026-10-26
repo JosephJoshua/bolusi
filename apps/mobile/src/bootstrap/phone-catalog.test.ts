@@ -39,6 +39,7 @@ function model(id: number, patch: Partial<PhoneModel> = {}): PhoneModel {
     announcedYear: 2024,
     modelCodes: '',
     photoSha256: null,
+    specs: {},
     revision: id,
     ...patch,
   };
@@ -110,7 +111,12 @@ test('checks again only when due, and then fetches just the changes', async () =
   state.models = [
     model(1),
     model(2),
-    model(1, { name: 'Galaxy A1 5G', photoSha256: 'c'.repeat(64), revision: 3 }),
+    model(1, {
+      name: 'Galaxy A1 5G',
+      photoSha256: 'c'.repeat(64),
+      specs: { chipset: 'Exynos 850' },
+      revision: 3,
+    }),
   ];
   requests.length = 0;
   expect(await catalog.refreshIfDue()).toBe('updated');
@@ -119,6 +125,7 @@ test('checks again only when due, and then fetches just the changes', async () =
     id: 1,
     name: 'Galaxy A1 5G',
     photoSha256: 'c'.repeat(64),
+    specs: '{"chipset":"Exynos 850"}',
     revision: 3,
   });
 

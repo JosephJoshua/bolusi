@@ -191,6 +191,7 @@ describe('a first run', () => {
     expect(store.models.get(2)!.details).toEqual({
       modelCodes: ['SM-M025F', 'SM-M025G'],
       announcedYear: 2024,
+      specs: {},
     });
   });
 });
@@ -250,6 +251,20 @@ describe('refusals', () => {
     expect(store.brandRows.get('samsung-phones-9.php')!.listedAt).toBeNull();
   });
 
+  test('a refusal doubles the gap between later requests, up to a minute', async () => {
+    const { deps, gets, logs } = harness({
+      ...SITE,
+      [`${ORIGIN}/makers.php3`]: [
+        { status: 429, retryAfterSeconds: 1, body: new Uint8Array() },
+        MAKERS,
+      ],
+    });
+    await crawlPhoneCatalog(deps, { ...OPTIONS, phases: ['list'] });
+    const listing = gets.findIndex((g) => g.url.endsWith('samsung-phones-9.php'));
+    expect(gets[listing + 1]!.at - gets[listing]!.at).toBeGreaterThanOrEqual(20_000);
+    expect(logs).toContain('slowing down to one request every 20 s');
+  });
+
   test('a dropped connection counts as a refusal', async () => {
     const { deps } = harness({ ...SITE });
     const get = deps.get;
@@ -286,6 +301,17 @@ test('robots.txt is honoured', async () => {
   await crawlPhoneCatalog(deps, OPTIONS);
   expect(gets.some((g) => g.url.includes('samsung_galaxy'))).toBe(false);
   expect(store.models.get(1)).toMatchObject({ detailsDone: true, details: null });
+});
+
+test('a robots.txt Crawl-delay slower than ours is kept', async () => {
+  const { deps, gets } = harness({
+    ...SITE,
+    [`${ORIGIN}/robots.txt`]: html('User-agent: *\nCrawl-delay: 30\nDisallow: /search'),
+  });
+  await crawlPhoneCatalog(deps, { ...OPTIONS, phases: ['list'] });
+  for (let i = 2; i < gets.length; i += 1) {
+    expect(gets[i]!.at - gets[i - 1]!.at).toBeGreaterThanOrEqual(30_000);
+  }
 });
 
 test('only the named brands are crawled', async () => {

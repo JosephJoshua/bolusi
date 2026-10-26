@@ -1,0 +1,138 @@
+/**
+ * Keeping a focused field in sight above the on-screen keyboard.
+ *
+ * Android draws apps edge to edge (Expo SDK 54+), so the window no longer shrinks for the
+ * keyboard, and iOS never did: the keyboard simply covers the bottom of the screen. `AppShell`
+ * therefore lifts its content and bottom action above the keyboard (a KeyboardAvoidingView), and a
+ * scrollable shell scrolls the focused field into what is left of the screen, again whenever that
+ * space changes (the keyboard opening after the focus, or switching to the emoji keyboard).
+ *
+ * Fields ask for it with `useRevealOnFocus`. Most only need to be seen ('into-view'). A field whose
+ * suggestions open below it (the phone model at intake) asks to go to the top ('to-top'), so the
+ * suggestions get the room between it and the keyboard.
+ */
+import { createContext, useCallback, useContext, useMemo, useRef, type RefObject } from 'react';
+import type {
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
+
+import { space } from '../tokens.js';
+
+export type RevealMode = 'into-view' | 'to-top';
+
+/** A focused field: its input, and the box to bring into sight (the input with its label). */
+interface Focused {
+  readonly input: TextInput;
+  readonly anchor: View | TextInput;
+  readonly mode: RevealMode;
+}
+
+interface RevealPort {
+  /** A field was focused: scroll it into sight now, and again when the visible area changes. */
+  focused(field: Focused): void;
+}
+
+const RevealContext = createContext<RevealPort | null>(null);
+
+/** Where a focused field should sit: `space.lg` clear of the top or bottom edge. */
+const MARGIN = space.lg;
+
+/** The scrolling half, owned by `AppShell`'s ScrollView. */
+export function useRevealingScroll(): {
+  readonly port: RevealPort;
+  readonly scrollRef: RefObject<ScrollView | null>;
+  readonly contentRef: RefObject<View | null>;
+  readonly onLayout: (event: LayoutChangeEvent) => void;
+  readonly onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+} {
+  const scrollRef = useRef<ScrollView | null>(null);
+  const contentRef = useRef<View | null>(null);
+  const viewport = useRef({ height: 0, offset: 0 });
+  const last = useRef<Focused | null>(null);
+
+  const reveal = useCallback(({ anchor, mode }: Focused) => {
+    const content = contentRef.current;
+    if (content === null || viewport.current.height === 0) return;
+    anchor.measureLayout(
+      content,
+      (_x, y, _width, height) => {
+        const { height: visible, offset } = viewport.current;
+        let target: number | null = null;
+        if (mode === 'to-top' || y - MARGIN < offset) target = y - MARGIN;
+        else if (y + height + MARGIN > offset + visible) target = y + height + MARGIN - visible;
+        if (target !== null)
+          scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: true });
+      },
+      () => undefined,
+    );
+  }, []);
+
+  const port = useMemo<RevealPort>(
+    () => ({
+      focused(field) {
+        last.current = field;
+        reveal(field);
+      },
+    }),
+    [reveal],
+  );
+
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const height = event.nativeEvent.layout.height;
+      if (height === viewport.current.height) return;
+      viewport.current.height = height;
+      // The keyboard opened (or changed) after the focus: bring the field back into sight.
+      const focused = last.current;
+      if (focused !== null && focused.input.isFocused()) reveal(focused);
+    },
+    [reveal],
+  );
+
+  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    viewport.current.offset = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  return { port, scrollRef, contentRef, onLayout, onScroll };
+}
+
+export function RevealProvider({
+  port,
+  children,
+}: {
+  readonly port: RevealPort | null;
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  return <RevealContext.Provider value={port}>{children}</RevealContext.Provider>;
+}
+
+/**
+ * For a field: a ref for the input, an optional ref for the box to keep in sight (the input with
+ * its label; the input alone when absent), and an `onFocus` that reveals it. Outside a scrollable
+ * shell there is nothing to scroll and the focus handler does nothing.
+ */
+export function useRevealOnFocus(mode: RevealMode = 'into-view'): {
+  readonly ref: RefObject<TextInput | null>;
+  readonly anchorRef: RefObject<View | null>;
+  readonly onFocus: () => void;
+} {
+  const port = useContext(RevealContext);
+  const ref = useRef<TextInput | null>(null);
+  const anchorRef = useRef<View | null>(null);
+  const onFocus = useCallback(() => {
+    if (port === null) return;
+    const reveal = (): void => {
+      const input = ref.current;
+      if (input !== null) port.focused({ input, anchor: anchorRef.current ?? input, mode });
+    };
+    // An `autoFocus` field fires its focus while mounting, before its ref is attached.
+    if (ref.current === null) setTimeout(reveal, 0);
+    else reveal();
+  }, [port, mode]);
+  return { ref, anchorRef, onFocus };
+}

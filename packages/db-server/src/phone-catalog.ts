@@ -1,4 +1,4 @@
-// The phone catalog's reads and writes (migration 0013). Global reference data, so these run on
+// The phone catalog's reads and writes (migration 0014). Global reference data, so these run on
 // the plain pool, never through forTenant; the catalog tables hold no tenant rows to leak.
 //
 // Reads serve devices (apps/server routes/catalog.ts) and work as `bolusi_app`, which has SELECT
@@ -6,6 +6,8 @@
 // under `bolusi_app` every write is refused by Postgres. Fixed functions, not a handle: nothing
 // here can reach a tenant table.
 import { sql, type Kysely } from 'kysely';
+
+import type { PhoneSpecs } from '@bolusi/schemas';
 
 import { getDb } from './db.js';
 import type { DB } from './generated/db.js';
@@ -23,6 +25,7 @@ export interface PhoneModelRecord {
   readonly modelCodes: string;
   /** Null until a photo is stored. */
   readonly photoSha256: string | null;
+  readonly specs: PhoneSpecs;
   readonly revision: number;
 }
 
@@ -48,6 +51,7 @@ export async function readPhoneModelsFrom(
       'announcedYear',
       'modelCodes',
       'photoSha256',
+      'specs',
       'revision',
     ])
     .where('revision', '>', String(after))
@@ -57,6 +61,8 @@ export async function readPhoneModelsFrom(
   return rows.map((row) => ({
     ...row,
     kind: row.kind as PhoneModelKind,
+    // Written only by saveDetails below, from parseSpecs' output.
+    specs: row.specs as PhoneSpecs,
     revision: Number(row.revision),
   }));
 }
@@ -90,6 +96,7 @@ export interface ListedPhoneModel {
 export interface PhoneModelDetails {
   readonly modelCodes: readonly string[];
   readonly announcedYear: number | null;
+  readonly specs: PhoneSpecs;
 }
 
 export interface CatalogBrand {
@@ -119,6 +126,12 @@ export interface PhoneCatalogWriter {
   modelsNeedingDetails(limit: number): Promise<PendingModel[]>;
   /** Store the page's details, or record that the page is gone (`null`). */
   saveDetails(modelId: number, details: PhoneModelDetails | null, at: number): Promise<void>;
+}
+
+/** jsonb does not keep key order, so specs are compared key by key. */
+function sameSpecs(a: PhoneSpecs, b: PhoneSpecs): boolean {
+  const keys = Object.keys(a) as (keyof PhoneSpecs)[];
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 }
 
 const nextRevision = sql<string>`nextval('phone_models_revision_seq')`;
@@ -296,17 +309,22 @@ export function createPhoneCatalogWriterOn(db: Kysely<DB>): PhoneCatalogWriter {
       await db.transaction().execute(async (trx) => {
         const old = await trx
           .selectFrom('phoneModels')
-          .select(['modelCodes', 'announcedYear'])
+          .select(['modelCodes', 'announcedYear', 'specs'])
           .where('id', '=', modelId)
           .executeTakeFirst();
         if (old === undefined) return;
         const announcedYear = details.announcedYear ?? old.announcedYear;
-        const synced = old.modelCodes !== modelCodes || old.announcedYear !== announcedYear;
+        const specs = JSON.stringify(details.specs);
+        const synced =
+          old.modelCodes !== modelCodes ||
+          old.announcedYear !== announcedYear ||
+          !sameSpecs(old.specs as PhoneSpecs, details.specs);
         await trx
           .updateTable('phoneModels')
           .set({
             modelCodes,
             announcedYear,
+            specs,
             detailsAt: at,
             updatedAt: at,
             ...(synced ? { revision: nextRevision } : {}),

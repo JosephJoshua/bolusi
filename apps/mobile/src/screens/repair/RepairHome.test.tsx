@@ -112,7 +112,7 @@ describe('counter intake', () => {
     expect(page.rows).toHaveLength(1);
     const ticket = await ticketRow(h, page.rows[0].id);
     expect(ticket.quoteTotal).toBe(650_000);
-    expect(ticket.peripherals).toEqual(['charger']);
+    expect(ticket.peripherals).toEqual([{ item: 'charger', label: null }]);
     expect(ticket.photos).toHaveLength(6);
   });
 

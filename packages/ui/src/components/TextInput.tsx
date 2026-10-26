@@ -30,6 +30,7 @@ import { useState } from 'react';
 import { TextInput as RNTextInput, StyleSheet, Text, View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 
+import { useRevealOnFocus, type RevealMode } from '../shell/keyboard.js';
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
@@ -65,6 +66,12 @@ export interface TextInputProps {
    * `textAlignVertical` and heights rather than `numberOfLines`.
    */
   readonly multiline?: boolean | undefined;
+  /**
+   * Where a focused field is scrolled to above the on-screen keyboard (shell/keyboard.tsx):
+   * just into sight (default), or to the top when something opens below it as the user types.
+   */
+  readonly revealOnFocus?: RevealMode | undefined;
+  readonly onBlur?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -105,8 +112,11 @@ export function TextInput({
   secureTextEntry = false,
   autoFocus = false,
   multiline = false,
+  revealOnFocus = 'into-view',
+  onBlur,
   testID = 'ui.textInput',
 }: TextInputProps): React.JSX.Element {
+  const reveal = useRevealOnFocus(revealOnFocus);
   const hasError = errorMessage !== undefined;
   const [focused, setFocused] = useState(false);
   // Both states are non-editable; only `disabled` greys the value (§6.1 exemption). A read-only field
@@ -120,12 +130,13 @@ export function TextInput({
   const effectiveMultiline = multiline && !secureTextEntry;
 
   return (
-    <View testID={testID}>
+    <View ref={reveal.anchorRef} testID={testID}>
       <Text testID={`${testID}.label`} style={styles.label}>
         {label}
       </Text>
 
       <RNTextInput
+        ref={reveal.ref}
         testID={`${testID}.field`}
         accessibilityLabel={label}
         accessibilityState={{ disabled }}
@@ -138,8 +149,14 @@ export function TextInput({
         secureTextEntry={secureTextEntry}
         autoFocus={autoFocus}
         multiline={effectiveMultiline}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={() => {
+          setFocused(true);
+          reveal.onFocus();
+        }}
+        onBlur={() => {
+          setFocused(false);
+          onBlur?.();
+        }}
         style={[
           styles.field,
           effectiveMultiline ? styles.multilineField : null,

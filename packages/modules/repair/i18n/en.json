@@ -13,7 +13,9 @@
     "quoteChangeProposed": "Price change proposed",
     "quoteChanged": "Price changed",
     "quoteProposalDeclined": "Price change declined",
-    "deviceReturned": "Device handed back"
+    "deviceReturned": "Device handed back",
+    "intakeOptionsChanged": "Intake choices changed",
+    "storeIntakeOptionsChanged": "Choices at this store changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -102,7 +104,7 @@
     "colorField": "Colour (optional)",
     "imeiField": "IMEI (optional)",
     "passcodeLabel": "Screen lock",
-    "modelHint": "e.g. Galaxy A55",
+    "modelHint": "e.g. Galaxy A55, Redmi Note 13",
     "released": "Released {year}",
     "servicedBefore": "Serviced here before",
     "tablet": "Tablet",
@@ -145,7 +147,7 @@
     "before": "Before repair",
     "handover": "Handover",
     "intake": "Intake photos",
-    "intakeHint": "Take all six sides of the phone in front of the customer.",
+    "intakeHint": "Photograph each side of the phone in front of the customer.",
     "retake": "Retake",
     "slot": {
       "back": "Back",
@@ -204,10 +206,10 @@
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero."
   },
   "ready": {
-    "threeDays": "In 3 days",
     "today": "Today",
     "tomorrow": "Tomorrow",
-    "unknown": "Not sure yet"
+    "unknown": "Not sure yet",
+    "inDays": "{count, plural, one {In # day} other {In # days}}"
   },
   "status": {
     "cancelled": "Cancelled",
@@ -256,5 +258,67 @@
     "message": "The photos and notes you’ve added here will be lost.",
     "confirm": "Leave",
     "keep": "Stay"
+  },
+  "options": {
+    "title": "Intake choices",
+    "summary": "Checks, accessories, photos, brands, ready-by",
+    "intro": "These apply to every store. Repairs already taken in stay as they were.",
+    "introStore": "Choose what shows at this store.",
+    "count": "{count, plural, one {# choice} other {# choices}}",
+    "hiddenCount": "{count} hidden",
+    "list": {
+      "checks": "Function checks",
+      "accessories": "Accessories",
+      "photoAngles": "Sides to photograph",
+      "brands": "Quick brand choices",
+      "readyBy": "Ready-by choices"
+    },
+    "hint": {
+      "checks": "Checked at the counter in front of the customer, top to bottom.",
+      "accessories": "Things a customer can leave with the phone.",
+      "photoAngles": "Every side here must be photographed at intake.",
+      "brands": "Shown as one-tap choices. Other brands can still be typed.",
+      "readyBy": "When the repair can be ready, offered at intake."
+    },
+    "add": "Add",
+    "addUnknown": "Add “Not sure yet”",
+    "name": "Name",
+    "days": "Ready in (days)",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "remove": "Remove from all stores",
+    "done": "Done",
+    "showHere": "Show at this store",
+    "showHereCaption": "Other stores stay as they are.",
+    "hiddenHere": "Hidden at this store",
+    "dragHandle": "Drag to reorder",
+    "notSavedYet": "Can be hidden per store once saved.",
+    "save": "Save",
+    "saved": "Saved",
+    "discardTitle": "Discard changes?",
+    "discardMessage": "Changes you haven’t saved will be lost.",
+    "discard": "Discard",
+    "keepEditing": "Keep editing",
+    "problem": {
+      "emptyLabel": "Enter a name first.",
+      "labelTooLong": "60 characters at most.",
+      "duplicate": "Already on the list.",
+      "badReadyBy": "Enter 0 to 60 days.",
+      "empty": "Keep at least one choice.",
+      "tooMany": "40 choices at most.",
+      "hidesAll": "At least one choice must show at this store."
+    }
+  },
+  "spec": {
+    "battery": "Battery",
+    "cardSlot": "Card slot",
+    "chipset": "Chipset",
+    "memory": "Memory",
+    "none": "None",
+    "os": "System",
+    "port": "Port",
+    "screen": "Screen",
+    "sim": "SIM",
+    "title": "Specs"
   }
 }

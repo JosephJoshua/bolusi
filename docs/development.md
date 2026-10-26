@@ -49,9 +49,10 @@ Do not paste provisioning secrets into chats or commit them.
 
 The phone catalog (model names and photos for intake) is crawled from GSMArena by
 a slow, resumable CLI that writes as the table owner, so give it the owner role's
-URL, not the app role's. It honours robots.txt, waits 15 s (with jitter) between
-requests and backs off on 429/503. A first full crawl takes days; try a short run
-first:
+URL, not the app role's. It honours robots.txt (including Crawl-delay), waits 1 s
+(with jitter) between requests, and on 429/503 waits, doubles the gap for the rest
+of the run and stops if refused repeatedly. A first full crawl is about 28k
+requests (listings, photos, spec pages), so most of a day; try a short run first:
 
 ```sh
 DATABASE_URL=<owner url> pnpm --filter @bolusi/server crawl-phone-catalog --max-requests 20

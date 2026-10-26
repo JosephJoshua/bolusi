@@ -75,6 +75,14 @@ export const DEMO_USERS: readonly SwitcherUser[] = [
     needsFirstPin: true,
     roleKeys: ['staff'],
   },
+  {
+    id: 'u-yosua',
+    name: 'Yosua Wonda',
+    photoMediaId: null,
+    lastActiveAt: HARNESS_NOW - 3 * 60 * MINUTE,
+    needsFirstPin: false,
+    roleKeys: ['store_owner'],
+  },
 ];
 
 /** The Settings device block for an enrolled demo device (task 94's real shape, demo values). */

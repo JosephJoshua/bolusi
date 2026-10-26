@@ -25,6 +25,8 @@ import type { MediaRef } from '@bolusi/schemas';
 import {
   INTAKE_PHOTO_SLOTS,
   REPAIR_CUSTOMER_ENTITY,
+  REPAIR_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_TICKET_ENTITY,
   workPhotoSlot,
   type DeviceLocation,
@@ -82,10 +84,12 @@ export const repairTicketsTable: ProjectionTableManifest = {
     updated_at: 'integer',
     returned_by: 'text',
     returned_at: 'integer',
+    intake_photos_json: 'text',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
   entityIdColumn: 'id',
+  // Still 1: the added column is null for every v1 ticket, which is what a re-fold would write.
   projectionVersion: 1,
 };
 
@@ -149,6 +153,35 @@ export const repairTicketEventsTable: ProjectionTableManifest = {
   projectionVersion: 1,
 };
 
+export const repairIntakeOptionsTable: ProjectionTableManifest = {
+  columns: {
+    tenant_id: 'text',
+    list: 'text',
+    items_json: 'text',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['tenant_id', 'list'],
+  entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
+  entityIdColumn: 'tenant_id',
+  projectionVersion: 1,
+};
+
+export const repairStoreIntakeOptionsTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    list: 'text',
+    tenant_id: 'text',
+    hidden_json: 'text',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id', 'list'],
+  entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
 // ── payload shapes the appliers read (validated by operations.ts before any fold) ───────────────
 
 interface QuoteLineDraft {
@@ -158,6 +191,12 @@ interface QuoteLineDraft {
   readonly amount: number;
 }
 
+interface RecordedOption {
+  readonly item: string;
+  readonly label: string | null;
+}
+
+/** `repair.ticket_opened` as v2 carries it; v1 differs only in the three fields named below. */
 export interface TicketOpenedPayload {
   readonly ticketNumber: string;
   readonly customerId: string;
@@ -170,10 +209,20 @@ export interface TicketOpenedPayload {
   };
   readonly complaint: string;
   readonly intakeNotes: string;
-  readonly checklist: readonly { item: string; state: string; note: string }[];
-  readonly peripherals: readonly string[];
+  readonly checklist: readonly (RecordedOption & { state: string; note: string })[];
+  readonly peripherals: readonly RecordedOption[];
   readonly estimatedReadyAt: number | null;
   readonly quoteLines: readonly QuoteLineDraft[];
+  readonly photos: readonly { slot: string; label: string | null; ref: MediaRef }[];
+}
+
+/** v1: checks without labels, accessories as plain keys, exactly the six default photo angles. */
+interface TicketOpenedV1Payload extends Omit<
+  TicketOpenedPayload,
+  'checklist' | 'peripherals' | 'photos'
+> {
+  readonly checklist: readonly { item: string; state: string; note: string }[];
+  readonly peripherals: readonly string[];
   readonly photos: Readonly<Record<(typeof INTAKE_PHOTO_SLOTS)[number], MediaRef>>;
 }
 
@@ -326,8 +375,48 @@ export const customerDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> 
 
 // ── tickets ───────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The rows a v1 ticket has always projected to, unchanged, so tickets opened before the lists were
+ * editable need no rebuild and every device keeps converging on the same bytes.
+ */
+function ticketOpenedRows(op: ProjectionOperation): {
+  payload: Omit<TicketOpenedPayload, 'checklist' | 'peripherals' | 'photos'>;
+  checklist: readonly object[];
+  peripherals: readonly unknown[];
+  photos: readonly { slot: string; ref: MediaRef }[];
+  intakePhotos: readonly { slot: string; label: string | null }[] | null;
+} {
+  switch (op.schemaVersion) {
+    case 1: {
+      const payload = payloadOf<TicketOpenedV1Payload>(op);
+      return {
+        payload,
+        checklist: payload.checklist,
+        peripherals: payload.peripherals,
+        photos: INTAKE_PHOTO_SLOTS.map((slot) => ({ slot, ref: payload.photos[slot] })),
+        intakePhotos: null,
+      };
+    }
+    case 2: {
+      const payload = payloadOf<TicketOpenedPayload>(op);
+      return {
+        payload,
+        checklist: payload.checklist,
+        peripherals: payload.peripherals,
+        photos: payload.photos,
+        intakePhotos: payload.photos.map(({ slot, label }) => ({ slot, label })),
+      };
+    }
+    default:
+      // Fold every historical version forever; refuse loudly what this build cannot (as notes).
+      throw new Error(
+        `repair.ticket_opened is at schemaVersion ${op.schemaVersion}, which this applier does not fold`,
+      );
+  }
+}
+
 export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const payload = payloadOf<TicketOpenedPayload>(op);
+  const { payload, checklist, peripherals, photos, intakePhotos } = ticketOpenedRows(op);
   const storeId = storeIdOf(op);
   await db
     .insertInto('repairTickets')
@@ -344,8 +433,8 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       devicePasscode: payload.device.passcode,
       complaint: payload.complaint,
       intakeNotes: payload.intakeNotes,
-      checklistJson: canonicalJson(payload.checklist),
-      peripheralsJson: canonicalJson(payload.peripherals),
+      checklistJson: canonicalJson(checklist),
+      peripheralsJson: canonicalJson(peripherals),
       estimatedReadyAt: payload.estimatedReadyAt,
       outcome: 'received',
       outcomeNote: null,
@@ -357,6 +446,7 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       updatedAt: op.timestamp,
       returnedBy: null,
       returnedAt: null,
+      intakePhotosJson: intakePhotos === null ? null : canonicalJson(intakePhotos),
     })
     .execute();
 
@@ -388,7 +478,7 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
   await insertPhotos(
     db,
     op,
-    INTAKE_PHOTO_SLOTS.map((slot) => [slot, payload.photos[slot]] as const),
+    photos.map(({ slot, ref }) => [slot, ref] as const),
   );
   await recordEvent(db, op, {});
 };
@@ -550,4 +640,46 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
     ['signature', payload.signature],
   ]);
   await recordEvent(db, op, { note: payload.note });
+};
+
+// ── intake options ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A franchise list replaced. The entity is the tenant itself, so an op naming any other entity is
+ * not one a real device writes and is ignored: folding it would leave rows a re-fold of the tenant
+ * entity could never clear.
+ */
+export const intakeOptionsChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  if (op.entityId !== op.tenantId) return;
+  const { list, items } = payloadOf<{ list: string; items: readonly object[] }>(op);
+  const values = {
+    itemsJson: canonicalJson(items),
+    updatedBy: op.userId,
+    updatedAt: op.timestamp,
+  };
+  await db
+    .insertInto('repairIntakeOptions')
+    .values({ tenantId: op.tenantId, list, ...values })
+    .onConflict((oc) => oc.columns(['tenantId', 'list']).doUpdateSet(values))
+    .execute();
+};
+
+/** A store's hidden items for one list replaced. The entity is the op's own store. */
+export const storeIntakeOptionsChangedApplier: ProjectionApplier<RepairDatabase> = async (
+  db,
+  op,
+) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const { list, hidden } = payloadOf<{ list: string; hidden: readonly string[] }>(op);
+  const values = {
+    hiddenJson: canonicalJson(hidden),
+    updatedBy: op.userId,
+    updatedAt: op.timestamp,
+  };
+  await db
+    .insertInto('repairStoreIntakeOptions')
+    .values({ storeId, list, tenantId: op.tenantId, ...values })
+    .onConflict((oc) => oc.columns(['storeId', 'list']).doUpdateSet(values))
+    .execute();
 };

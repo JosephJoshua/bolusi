@@ -38,3 +38,13 @@ test('allow-all and deny-all', () => {
   expect(RobotsRules.allowAll().allows('/anything')).toBe(true);
   expect(RobotsRules.denyAll().allows('/')).toBe(false);
 });
+
+test('Crawl-delay comes from the chosen group', () => {
+  const text =
+    'User-agent: other\nCrawl-delay: 99\n\nUser-agent: *\nCrawl-delay: 2.5\nDisallow: /x';
+  expect(RobotsRules.parse(text, 'BolusiCatalog').crawlDelayMs).toBe(2500);
+  expect(RobotsRules.parse('User-agent: *\nDisallow: /x', 'BolusiCatalog').crawlDelayMs).toBeNull();
+  expect(
+    RobotsRules.parse('User-agent: *\nCrawl-delay: soon', 'BolusiCatalog').crawlDelayMs,
+  ).toBeNull();
+});

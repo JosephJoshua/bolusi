@@ -48,6 +48,9 @@ export const Text = hostComponent('Text');
 export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
 export const ScrollView = hostComponent('ScrollView');
+export const Switch = hostComponent('Switch');
+/** A host node: lifting content above the keyboard is native layout, not under test here. */
+export const KeyboardAvoidingView = hostComponent('KeyboardAvoidingView');
 
 /**
  * Renders every item rather than a window. That is deliberate and its limits must be understood:
@@ -137,6 +140,11 @@ export const StyleSheet = {
 /** Recorded, never real — PinPad error feedback (design-system §3.3) must be observable in tests. */
 export const Vibration = {
   vibrate: (): void => undefined,
+};
+
+/** Recorded, never real: there is no on-screen keyboard in this lane. */
+export const Keyboard = {
+  dismiss: (): void => undefined,
 };
 
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };

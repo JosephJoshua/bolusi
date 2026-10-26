@@ -74,7 +74,7 @@ const EXPECTED_EXPORTS = [
   // findRule1Candidates — a row-value comparison Postgres must do, over columns the production
   // driver marshals as strings.
   'existsPrecedingOp',
-  // The phone catalog (migration 0013): global reference data. Plain records out, and the writer
+  // The phone catalog (migration 0014): global reference data. Plain records out, and the writer
   // runs fixed statements over the catalog tables only, so D7 and `queryish` are untouched.
   'createPhoneCatalogWriter',
   'readPhoneModelPhoto',

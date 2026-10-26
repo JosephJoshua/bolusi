@@ -6,6 +6,7 @@
 // expected shape, so a changed or hostile page can make the crawl find nothing but never makes it
 // fetch somewhere else.
 import type { ListedPhoneModel, PhoneModelDetails, PhoneModelKind } from '@bolusi/db-server';
+import { PHONE_SPEC_MAX_LENGTH, type PhoneSpecKey, type PhoneSpecs } from '@bolusi/schemas';
 
 export const GSMARENA_ORIGIN = 'https://www.gsmarena.com';
 export const BRANDS_PATH = 'makers.php3';
@@ -155,13 +156,61 @@ function pageNumber(path: string): number {
 
 function spec(html: string, name: string): string | null {
   const match = new RegExp(
-    `<(td|div|span)\\b[^>]*data-spec\\s*=\\s*["']?${name}["']?[^>]*>([\\s\\S]*?)</\\1>`,
+    `<(td|div|span|a)\\b[^>]*data-spec\\s*=\\s*["']?${name}(?=["'\\s>])["']?[^>]*>([\\s\\S]*?)</\\1>`,
     'i',
   ).exec(html);
   return match === null ? null : textOf(match[2]!);
 }
 
-/** What a model's own page adds to the listing: its maker codes and the precise year. */
+/** A spec row found by its label ("Charging"), for the rows GSMArena gives no `data-spec`. */
+function labelledSpec(html: string, label: string): string | null {
+  const match = new RegExp(
+    `<td[^>]*class\\s*=\\s*["']?ttl["']?[^>]*>(?:\\s*<a\\b[^>]*>)?\\s*${label}\\s*(?:</a>\\s*)?</td>\\s*<td[^>]*>([\\s\\S]*?)</td>`,
+    'i',
+  ).exec(html);
+  return match === null ? null : textOf(match[1]!);
+}
+
+/** Where each kept spec is on the page, and how much of it to keep. */
+const SPEC_SOURCES: readonly {
+  readonly key: PhoneSpecKey;
+  readonly read: (html: string) => string | null;
+  /** Keep only what comes before the first comma ("6.7 inches, 110.2 cm2 (...)" → "6.7 inches"). */
+  readonly head?: true;
+}[] = [
+  { key: 'displayType', read: (html) => spec(html, 'displaytype') },
+  { key: 'displaySize', read: (html) => spec(html, 'displaysize'), head: true },
+  { key: 'displayResolution', read: (html) => spec(html, 'displayresolution'), head: true },
+  { key: 'os', read: (html) => spec(html, 'os'), head: true },
+  { key: 'chipset', read: (html) => spec(html, 'chipset') },
+  { key: 'internalMemory', read: (html) => spec(html, 'internalmemory') },
+  { key: 'cardSlot', read: (html) => spec(html, 'memoryslot') },
+  { key: 'battery', read: (html) => spec(html, 'batdescription1'), head: true },
+  { key: 'charging', read: (html) => labelledSpec(html, 'Charging') },
+  { key: 'usb', read: (html) => spec(html, 'usb') },
+  { key: 'sim', read: (html) => spec(html, 'sim') },
+  { key: 'colors', read: (html) => spec(html, 'colors') },
+];
+
+function clip(text: string): string {
+  return text.length <= PHONE_SPEC_MAX_LENGTH
+    ? text
+    : `${text.slice(0, PHONE_SPEC_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+/** The specs a model page gives (see `PHONE_SPEC_KEYS`); a missing or empty cell is left out. */
+export function parseSpecs(html: string): PhoneSpecs {
+  const specs: PhoneSpecs = {};
+  for (const source of SPEC_SOURCES) {
+    let text = source.read(html);
+    if (text !== null && source.head === true) text = text.split(',')[0]!.trim();
+    // GSMArena writes "No" for a missing card slot; that is information. "-" or "" is not.
+    if (text !== null && text !== '' && text !== '-') specs[source.key] = clip(text);
+  }
+  return specs;
+}
+
+/** What a model's own page adds to the listing: its maker codes, the precise year and specs. */
 export function parseModelPage(html: string): PhoneModelDetails {
   const codes = (spec(html, 'models') ?? '')
     .split(/[,;]/)
@@ -171,6 +220,7 @@ export function parseModelPage(html: string): PhoneModelDetails {
   return {
     modelCodes: [...new Set(codes)],
     announcedYear: year === null ? null : Number(year[1]),
+    specs: parseSpecs(html),
   };
 }
 

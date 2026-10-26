@@ -8,6 +8,8 @@
 // reports the `phone_models` table), an intake reloads just its own model.
 import { z } from 'zod';
 
+import { zPhoneSpecs, type PhoneSpecs } from '@bolusi/schemas';
+
 import {
   normalizeText,
   searchIndexFor,
@@ -43,6 +45,8 @@ export interface DeviceModelRow {
   readonly kind: DeviceModelKind | null;
   readonly announcedYear: number | null;
   readonly photo: DeviceModelPhoto | null;
+  /** The spec sheet, from `findDeviceModel` only (search rows leave it empty), or a learned model. */
+  readonly specs: PhoneSpecs;
   /** True when it came from this store's own intakes, not the catalog. */
   readonly learned: boolean;
 }
@@ -94,6 +98,16 @@ function catalogRows(db: Db) {
   return db
     .selectFrom('phoneModels')
     .select(['id', 'brand', 'name', 'kind', 'announcedYear', 'modelCodes', 'photoSha256']);
+}
+
+/** The stored spec sheet, or none when it does not read as one (it came over the wire as JSON). */
+function parseSpecs(text: string): PhoneSpecs {
+  try {
+    const parsed = zPhoneSpecs.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : {};
+  } catch {
+    return {};
+  }
 }
 
 type CatalogRow = Awaited<ReturnType<ReturnType<typeof catalogRows>['execute']>>[number];
@@ -198,7 +212,7 @@ export const searchDeviceModelsInput = z
 
 export type SearchDeviceModelsInput = z.infer<typeof searchDeviceModelsInput>;
 
-function toRow(row: CatalogRow): DeviceModelRow {
+function toRow(row: CatalogRow, specs: PhoneSpecs = {}): DeviceModelRow {
   return {
     key: CATALOG_PREFIX + String(row.id),
     brand: row.brand,
@@ -206,6 +220,7 @@ function toRow(row: CatalogRow): DeviceModelRow {
     kind: row.kind as DeviceModelKind,
     announcedYear: row.announcedYear,
     photo: row.photoSha256 === null ? null : { modelId: row.id, sha256: row.photoSha256 },
+    specs,
     learned: false,
   };
 }
@@ -242,6 +257,7 @@ export async function searchDeviceModelsHandler(
           kind: null,
           announcedYear: null,
           photo: null,
+          specs: {},
           learned: true,
         };
       }
@@ -271,23 +287,46 @@ export const findDeviceModelInput = z
 
 export type FindDeviceModelInput = z.infer<typeof findDeviceModelInput>;
 
+/** How many search hits a brand-less lookup checks for an exact spelling. */
+const BRANDLESS_CANDIDATES = 10;
+
 /**
- * The catalog model a ticket's brand and model name, for showing its photo on the ticket. An
- * exact match on the compacted spelling (see `catalogKeys`): a ticket shows a photo only when it
- * is surely that model, never a near miss.
+ * The catalog model a brand and model name are, with its specs: for the ticket's photo and spec
+ * sheet, and for filling in the brand at intake. An exact match on the compacted spelling (see
+ * `catalogKeys`), never a near miss. With no brand, the model name must name exactly one catalog
+ * model ("Galaxy A55", "Samsung A55", "iPhone 13"); one that several brands share finds nothing.
  */
 export async function findDeviceModelHandler(
   input: FindDeviceModelInput,
   qctx: QueryContext<RepairDatabase>,
 ): Promise<QueryPage<DeviceModelRow>> {
-  const wanted = compact(input.brand, input.model);
-  if (wanted === '') return { rows: [], nextCursor: null };
-  const candidates = await catalogRows(qctx.db)
-    .where((eb) => eb(eb.fn('lower', ['brand']), '=', input.brand.trim().toLowerCase()))
-    .orderBy('announcedYear', 'desc')
-    .execute();
-  const match = candidates.find((row) => catalogKeys(row.brand, row.name).includes(wanted));
-  return { rows: match === undefined ? [] : [toRow(match)], nextCursor: null };
+  const brand = input.brand.trim();
+  const wanted = compact(brand, input.model);
+  if (compact(input.model) === '') return { rows: [], nextCursor: null };
+  const select = () => catalogRows(qctx.db).select('specs');
+  let matches;
+  if (brand !== '') {
+    const candidates = await select()
+      .where((eb) => eb(eb.fn('lower', ['brand']), '=', brand.toLowerCase()))
+      .orderBy('announcedYear', 'desc')
+      .execute();
+    matches = candidates.filter((row) => catalogKeys(row.brand, row.name).includes(wanted));
+  } else {
+    // The search index narrows 13k models to a few, so typing is not a table scan per key press.
+    const index = await searchIndexFor(qctx, deviceModelSearchSource);
+    const ids = index
+      .search(input.model, BRANDLESS_CANDIDATES)
+      .filter((hit) => hit.id.startsWith(CATALOG_PREFIX))
+      .map((hit) => Number(hit.id.slice(CATALOG_PREFIX.length)));
+    const candidates = ids.length === 0 ? [] : await select().where('id', 'in', ids).execute();
+    matches = candidates.filter((row) => catalogKeys(row.brand, row.name).includes(wanted));
+    if (matches.length > 1) return { rows: [], nextCursor: null };
+  }
+  const match = matches[0];
+  return {
+    rows: match === undefined ? [] : [toRow(match, parseSpecs(match.specs))],
+    nextCursor: null,
+  };
 }
 
 export const findDeviceModelQuery = {

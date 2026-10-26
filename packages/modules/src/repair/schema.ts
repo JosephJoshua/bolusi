@@ -35,9 +35,9 @@ export interface RepairTicketsTable {
   devicePasscode: string | null;
   complaint: string;
   intakeNotes: string;
-  /** JSON array of `{ item, state, note }`. */
+  /** JSON array of `{ item, label?, state, note }` (no `label` before intake lists were editable). */
   checklistJson: string;
-  /** JSON array of strings (charger, case, SIM…). */
+  /** JSON array of `{ item, label }`, or of plain item ids before intake lists were editable. */
   peripheralsJson: string;
   estimatedReadyAt: number | null;
   outcome: string;
@@ -52,6 +52,11 @@ export interface RepairTicketsTable {
   updatedAt: number;
   returnedBy: string | null;
   returnedAt: number | null;
+  /**
+   * JSON array of `{ slot, label }`: the intake photo angles asked for, in order, as named then.
+   * Null for a ticket opened before the list was editable, which has the six default angles.
+   */
+  intakePhotosJson: string | null;
 }
 
 export interface RepairQuoteLinesTable {
@@ -102,8 +107,29 @@ export interface RepairTicketEventsTable {
   detailJson: string;
 }
 
+/** The franchise's intake option lists (intake-options.ts), one row per list. */
+export interface RepairIntakeOptionsTable {
+  tenantId: string;
+  list: string;
+  /** JSON array of `{ id, label }`, in the order the counter sees them. */
+  itemsJson: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** The intake options one store hides, one row per list. */
+export interface RepairStoreIntakeOptionsTable {
+  storeId: string;
+  list: string;
+  tenantId: string;
+  /** JSON array of option ids. */
+  hiddenJson: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
 /**
- * The phone catalog (client migration 8, server migration 0013). Not a repair projection: no op
+ * The phone catalog (client migration 8, server migration 0014). Not a repair projection: no op
  * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
  * suggest models at intake (device-models.ts). The server's table has the same columns and more.
  */
@@ -120,6 +146,8 @@ export interface PhoneModelsTable {
   modelCodes: string;
   /** Null when there is no photo to show. */
   photoSha256: string | null;
+  /** The spec sheet as JSON text (`PhoneSpecs`, @bolusi/schemas). */
+  specs: string;
   revision: number;
 }
 
@@ -130,4 +158,6 @@ export interface RepairDatabase {
   repairQuoteLines: RepairQuoteLinesTable;
   repairTicketPhotos: RepairTicketPhotosTable;
   repairTicketEvents: RepairTicketEventsTable;
+  repairIntakeOptions: RepairIntakeOptionsTable;
+  repairStoreIntakeOptions: RepairStoreIntakeOptionsTable;
 }

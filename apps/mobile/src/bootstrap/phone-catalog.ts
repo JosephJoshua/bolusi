@@ -42,9 +42,10 @@ export interface PhoneCatalogRefreshConfig {
 async function savePage(config: PhoneCatalogRefreshConfig, models: readonly PhoneModel[]) {
   await config.db.transaction(async () => {
     for (const model of models) {
+      const specs = JSON.stringify(model.specs);
       await config.db.db
         .insertInto('phoneModels')
-        .values(model)
+        .values({ ...model, specs })
         .onConflict((oc) =>
           oc.column('id').doUpdateSet({
             brand: model.brand,
@@ -53,6 +54,7 @@ async function savePage(config: PhoneCatalogRefreshConfig, models: readonly Phon
             announcedYear: model.announcedYear,
             modelCodes: model.modelCodes,
             photoSha256: model.photoSha256,
+            specs,
             revision: model.revision,
           }),
         )

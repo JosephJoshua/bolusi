@@ -23,11 +23,13 @@
  * Android hardware back must equal `onBack` (§8.1). That binding is navigation's job (task 24);
  * this component only surfaces the affordance.
  */
-import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
+import { RevealProvider, useRevealingScroll } from './keyboard.js';
+import { ScrollLockContext } from './scroll-lock.js';
 
 export interface AppShellProps {
   /** Already-localized screen title. */
@@ -113,6 +115,10 @@ const styles = StyleSheet.create({
    * free to exceed it and scroll.
    */
   contentContainer: { flexGrow: 1, padding: space.lg },
+  // Scrolling, the padding moves onto the measured view inside, so a field's measured position
+  // is its scroll position (keyboard.tsx).
+  scrollContainer: { flexGrow: 1 },
+  contentInner: { flexGrow: 1, padding: space.lg },
   actionBar: {
     padding: space.lg,
     borderTopWidth: border.hairline,
@@ -134,72 +140,107 @@ export function AppShell({
   overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
+  const [locks, setLocks] = useState(0);
+  const scrollLock = useMemo(
+    () => ({
+      lock: () => {
+        setLocks((n) => n + 1);
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          setLocks((n) => n - 1);
+        };
+      },
+    }),
+    [],
+  );
+  const reveal = useRevealingScroll();
   return (
-    <View testID={testID} style={styles.root}>
-      <View testID={`${testID}.header`} style={styles.header}>
-        {onBack === undefined ? null : (
-          <Pressable
-            testID={`${testID}.back`}
-            accessibilityRole="button"
-            accessibilityLabel={backLabel}
-            onPress={onBack}
-            style={styles.back}
+    <ScrollLockContext.Provider value={scrollLock}>
+      {/* The keyboard covers the screen rather than shrinking it (keyboard.tsx), so the shell lifts
+          its content and bottom action above it. `padding` is measured against this view's own
+          frame, so it adds nothing on a platform where the window did shrink. */}
+      <KeyboardAvoidingView behavior="padding" testID={testID} style={styles.root}>
+        <View testID={`${testID}.header`} style={styles.header}>
+          {onBack === undefined ? null : (
+            <Pressable
+              testID={`${testID}.back`}
+              accessibilityRole="button"
+              accessibilityLabel={backLabel}
+              onPress={onBack}
+              style={styles.back}
+            >
+              <Icon name="back" size={size.iconInline} color={color.text} />
+            </Pressable>
+          )}
+
+          <Text
+            testID={`${testID}.title`}
+            // §0: buttons and titles wrap or ellipsize, never silently truncate mid-word; the title
+            // is one line by §8.1 geometry, so tail-ellipsis is the honest fallback.
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
           >
-            <Icon name="back" size={size.iconInline} color={color.text} />
-          </Pressable>
-        )}
+            {title}
+          </Text>
 
-        <Text
-          testID={`${testID}.title`}
-          // §0: buttons and titles wrap or ellipsize, never silently truncate mid-word; the title
-          // is one line by §8.1 geometry, so tail-ellipsis is the honest fallback.
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
-        >
-          {title}
-        </Text>
-
-        <View testID={`${testID}.headerRight`} style={styles.headerRight}>
-          {syncChip}
-          {avatar}
+          <View testID={`${testID}.headerRight`} style={styles.headerRight}>
+            {syncChip}
+            {avatar}
+          </View>
         </View>
-      </View>
 
-      {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
+        {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
 
-      {/*
+        {/*
         The content slot. Plain View by default; a ScrollView only when the screen opts in (task 206
         — see the `scrollable` prop docs for why this is not the default). The slot keeps ONE testID
         either way so navigation and the Maestro flows do not care which shape it took.
       */}
-      {scrollable ? (
-        <ScrollView
-          testID={`${testID}.content`}
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
-          // would read as the whole screen coming loose.
-          bounces={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View testID={`${testID}.content`} style={styles.contentContainer}>
-          {children}
-        </View>
-      )}
+        {scrollable ? (
+          <ScrollView
+            ref={reveal.scrollRef}
+            testID={`${testID}.content`}
+            style={styles.content}
+            contentContainerStyle={styles.scrollContainer}
+            // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
+            // would read as the whole screen coming loose.
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            // A drag inside the content (reordering a list) holds the page still until it ends.
+            scrollEnabled={locks === 0}
+            onLayout={reveal.onLayout}
+            onScroll={reveal.onScroll}
+            scrollEventThrottle={16}
+          >
+            {/* What a focused field is measured against when it is scrolled into sight. */}
+            <View
+              ref={reveal.contentRef}
+              collapsable={false}
+              style={styles.contentInner}
+              testID={`${testID}.contentInner`}
+            >
+              <RevealProvider port={reveal.port}>{children}</RevealProvider>
+            </View>
+          </ScrollView>
+        ) : (
+          <View testID={`${testID}.content`} style={styles.contentContainer}>
+            {children}
+          </View>
+        )}
 
-      {bottomAction === undefined ? null : (
-        <View testID={`${testID}.actionBar`} style={styles.actionBar}>
-          {bottomAction}
-        </View>
-      )}
+        {bottomAction === undefined ? null : (
+          <View testID={`${testID}.actionBar`} style={styles.actionBar}>
+            {bottomAction}
+          </View>
+        )}
 
-      {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
+        {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
           the header and action bar the way a modal must. */}
-      {overlay}
-    </View>
+        {overlay}
+      </KeyboardAvoidingView>
+    </ScrollLockContext.Provider>
   );
 }

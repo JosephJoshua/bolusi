@@ -4,7 +4,8 @@
 // (apps/mobile bootstrap/phone-catalog.ts), with the cursor in `meta_kv`. Public reference data
 // shared by every tenant, so it is neither encrypted nor tenant-scoped, and it is not a projection:
 // no op writes it and a rebuild never touches it. Photos are not stored here; they download when
-// shown. About 13k rows, roughly 1.5 MB.
+// shown. `specs` is the model's spec sheet as JSON (PhoneSpecs, @bolusi/schemas catalog.ts). About
+// 13k rows, roughly 6 MB with specs.
 //
 // (Version 7 belongs to the repair ticket counter index, on its own branch.)
 import type { ClientMigration } from './types.js';
@@ -21,6 +22,7 @@ export const phoneModelsMigration: ClientMigration = {
       announced_year INTEGER,
       model_codes    TEXT NOT NULL,
       photo_sha256   TEXT,
+      specs          TEXT NOT NULL DEFAULT '{}',
       revision       INTEGER NOT NULL
     )`,
   ],

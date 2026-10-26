@@ -33,6 +33,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       kind           text NOT NULL CHECK (kind IN ('phone', 'tablet', 'watch')),
       announced_year integer,
       model_codes    text NOT NULL DEFAULT '',  -- comma-separated: 'SM-A556B, SM-A556E'
+      specs          jsonb NOT NULL DEFAULT '{}',  -- PhoneSpecs (@bolusi/schemas catalog.ts)
       page_path      text NOT NULL,
       photo_url      text,
       photo_sha256   text,                 -- null: no photo stored (yet)

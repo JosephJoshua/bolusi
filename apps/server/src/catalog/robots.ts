@@ -1,5 +1,6 @@
 // A small robots.txt reader for the catalog crawl: the group for our agent (or `*`), its Allow and
-// Disallow prefixes with `*` and `$`, and the longest match deciding, as RFC 9309 describes.
+// Disallow prefixes with `*` and `$`, and the longest match deciding, as RFC 9309 describes. Also
+// the group's Crawl-delay (not in RFC 9309, but sites use it to ask for a pace).
 interface Rule {
   readonly allow: boolean;
   readonly pattern: RegExp;
@@ -15,8 +16,18 @@ function compile(path: string): RegExp {
   return new RegExp(`^${body}${anchored ? '$' : ''}`);
 }
 
+interface Group {
+  readonly agents: string[];
+  readonly rules: Rule[];
+  crawlDelayMs: number | null;
+}
+
 export class RobotsRules {
-  private constructor(private readonly rules: readonly Rule[]) {}
+  private constructor(
+    private readonly rules: readonly Rule[],
+    /** The least time between requests the site asks for, if it does. */
+    readonly crawlDelayMs: number | null = null,
+  ) {}
 
   static allowAll(): RobotsRules {
     return new RobotsRules([]);
@@ -28,8 +39,8 @@ export class RobotsRules {
 
   /** The rules for `agent` (case-insensitive product token), else those for `*`. */
   static parse(text: string, agent: string): RobotsRules {
-    const groups: { agents: string[]; rules: Rule[] }[] = [];
-    let current: { agents: string[]; rules: Rule[] } | null = null;
+    const groups: Group[] = [];
+    let current: Group | null = null;
     let inAgents = false;
     for (const raw of text.split(/\r?\n/)) {
       const line = raw.replace(/#.*$/, '').trim();
@@ -39,7 +50,7 @@ export class RobotsRules {
       const value = line.slice(colon + 1).trim();
       if (field === 'user-agent') {
         if (current === null || !inAgents) {
-          current = { agents: [], rules: [] };
+          current = { agents: [], rules: [], crawlDelayMs: null };
           groups.push(current);
         }
         current.agents.push(value.toLowerCase());
@@ -53,6 +64,10 @@ export class RobotsRules {
           pattern: compile(value),
           length: value.length,
         });
+      } else if (field === 'crawl-delay' && current !== null) {
+        inAgents = false;
+        const seconds = Number(value);
+        if (Number.isFinite(seconds) && seconds > 0) current.crawlDelayMs = seconds * 1000;
       } else {
         inAgents = false;
       }
@@ -60,7 +75,11 @@ export class RobotsRules {
     const token = agent.toLowerCase();
     const own = groups.filter((g) => g.agents.includes(token));
     const chosen = own.length > 0 ? own : groups.filter((g) => g.agents.includes('*'));
-    return new RobotsRules(chosen.flatMap((g) => g.rules));
+    const delays = chosen.flatMap((g) => (g.crawlDelayMs === null ? [] : [g.crawlDelayMs]));
+    return new RobotsRules(
+      chosen.flatMap((g) => g.rules),
+      delays.length === 0 ? null : Math.max(...delays),
+    );
   }
 
   allows(path: string): boolean {

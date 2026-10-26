@@ -21,6 +21,36 @@ export const zPhoneCatalogQuery = z.strictObject({
 });
 export type PhoneCatalogQuery = z.infer<typeof zPhoneCatalogQuery>;
 
+/**
+ * The specs kept from a model's GSMArena page, as GSMArena words them (English, trimmed to the
+ * useful part): what the counter needs to tell variants apart and what a technician needs before
+ * opening the phone. Each is absent when the page does not say.
+ */
+export const PHONE_SPEC_KEYS = [
+  'displayType',
+  'displaySize',
+  'displayResolution',
+  'os',
+  'chipset',
+  'internalMemory',
+  'cardSlot',
+  'battery',
+  'charging',
+  'usb',
+  'sim',
+  'colors',
+] as const;
+export type PhoneSpecKey = (typeof PHONE_SPEC_KEYS)[number];
+
+/** Longest spec text kept; GSMArena's longest useful cells are a few lines. */
+export const PHONE_SPEC_MAX_LENGTH = 300;
+
+export const zPhoneSpecs = z.partialRecord(
+  z.enum(PHONE_SPEC_KEYS),
+  z.string().min(1).max(PHONE_SPEC_MAX_LENGTH),
+);
+export type PhoneSpecs = Partial<Record<PhoneSpecKey, string>>;
+
 export const zPhoneModel = z.strictObject({
   id: z.number().int().positive(),
   brand: z.string().min(1),
@@ -34,6 +64,7 @@ export const zPhoneModel = z.strictObject({
     .string()
     .regex(/^[0-9a-f]{64}$/)
     .nullable(),
+  specs: zPhoneSpecs,
   revision: z.number().int().positive(),
 });
 export type PhoneModel = z.infer<typeof zPhoneModel>;

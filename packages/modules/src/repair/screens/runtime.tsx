@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { ModulePort } from '@bolusi/core';
 
+import type { IntakeOptionSettings } from '../intake-options.js';
 import type { DeviceModelPhoto } from '../device-models.js';
 import type { repairModule } from '../manifest.js';
 import {
@@ -73,6 +74,14 @@ export function useRepairQuery<TData>(
 
 export function useRepairThumbnail(ref: ThumbnailRef | null): ThumbnailState {
   return useThumbnailState(useRepairRuntime().loadThumbnail, ref);
+}
+
+/** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
+export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
+  return useRepairQuery(
+    async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
+    'intakeOptionSettings',
+  );
 }
 
 /** A model photo's uri once loaded; null while loading or when there is none to show. */

@@ -48,7 +48,25 @@ const MODEL_PAGE = `
 <td class="nfo" data-spec="year">2025, March 02</td></tr>
 <tr><td class="ttl">Status</td><td class="nfo" data-spec="status">Available. Released 2025, March 12</td></tr>
 <tr><td class="ttl"><a href="glossary.php3?term=models">Models</a></td>
-<td class="nfo" data-spec="models">SM-A566B, SM-A566B/DS, SM-A566E, SM-A566B</td></tr></table>`;
+<td class="nfo" data-spec="models">SM-A566B, SM-A566B/DS, SM-A566E, SM-A566B</td></tr></table>
+<table><tr><th rowspan="5" scope="row">Display</th>
+<td class="ttl"><a href="glossary.php3?term=display-type">Type</a></td>
+<td class="nfo" data-spec="displaytype">Super AMOLED, 120Hz, 1200 nits (HBM)</td></tr>
+<tr><td class="ttl"><a href="#">Size</a></td>
+<td class="nfo" data-spec="displaysize">6.7 inches, 110.2 cm<sup>2</sup> (~87.5% screen-to-body ratio)</td></tr>
+<tr><td class="ttl"><a href="#">Resolution</a></td>
+<td class="nfo" data-spec="displayresolution">1080 x 2340 pixels, 19.5:9 ratio (~385 ppi density)</td></tr>
+<tr><td class="ttl">&nbsp;</td><td class="nfo" data-spec="displayother"></td></tr></table>
+<table><tr><td class="ttl">OS</td><td class="nfo" data-spec="os">Android 15, up to 6 major Android upgrades, One UI 7</td></tr>
+<tr><td class="ttl">Chipset</td><td class="nfo" data-spec="chipset">Exynos 1580 (4 nm)</td></tr></table>
+<table><tr><td class="ttl">Card slot</td><td class="nfo" data-spec="memoryslot">No</td></tr>
+<tr><td class="ttl">Internal</td><td class="nfo" data-spec="internalmemory">128GB 8GB RAM, 256GB 8GB RAM, 256GB 12GB RAM</td></tr></table>
+<table><tr><td class="ttl">SIM</td><td class="nfo" data-spec="sim">Nano-SIM + Nano-SIM + eSIM</td></tr>
+<tr><td class="ttl">USB</td><td class="nfo" data-spec="usb">USB Type-C 2.0, OTG</td></tr></table>
+<table><tr><td class="ttl">Type</td><td class="nfo" data-spec="batdescription1">Li-Ion 5000 mAh, non-removable</td></tr>
+<tr><td class="ttl"><a href="glossary.php3?term=battery-charging">Charging</a></td>
+<td class="nfo">45W wired, PD3.0, 65% in 30 min</td></tr></table>
+<table><tr><td class="ttl">Colors</td><td class="nfo" data-spec="colors">Awesome Black, Awesome Graphite, Awesome Light Gray, Awesome Pink</td></tr></table>`;
 
 test('brands come from the brand table only, with names before their counts', () => {
   expect(parseBrands(MAKERS)).toEqual([
@@ -102,8 +120,36 @@ test('a model page gives its unique maker codes and year', () => {
   expect(parseModelPage(MODEL_PAGE)).toEqual({
     modelCodes: ['SM-A566B', 'SM-A566B/DS', 'SM-A566E'],
     announcedYear: 2025,
+    specs: {
+      displayType: 'Super AMOLED, 120Hz, 1200 nits (HBM)',
+      displaySize: '6.7 inches',
+      displayResolution: '1080 x 2340 pixels',
+      os: 'Android 15',
+      chipset: 'Exynos 1580 (4 nm)',
+      internalMemory: '128GB 8GB RAM, 256GB 8GB RAM, 256GB 12GB RAM',
+      cardSlot: 'No',
+      battery: 'Li-Ion 5000 mAh',
+      charging: '45W wired, PD3.0, 65% in 30 min',
+      usb: 'USB Type-C 2.0, OTG',
+      sim: 'Nano-SIM + Nano-SIM + eSIM',
+      colors: 'Awesome Black, Awesome Graphite, Awesome Light Gray, Awesome Pink',
+    },
   });
-  expect(parseModelPage('<p>nothing</p>')).toEqual({ modelCodes: [], announcedYear: null });
+  expect(parseModelPage('<p>nothing</p>')).toEqual({
+    modelCodes: [],
+    announcedYear: null,
+    specs: {},
+  });
+});
+
+test('a very long spec cell is clipped, and a data-spec name never matches a longer one', () => {
+  const long = 'x'.repeat(400);
+  const specs = parseModelPage(
+    `<td class="nfo" data-spec="os2">iOS</td><td class="nfo" data-spec="chipset">${long}</td>`,
+  ).specs;
+  expect(specs.os).toBeUndefined();
+  expect(specs.chipset).toHaveLength(300);
+  expect(specs.chipset!.endsWith('…')).toBe(true);
 });
 
 test('titles give the kind and announced year', () => {

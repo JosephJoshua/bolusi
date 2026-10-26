@@ -148,6 +148,7 @@ export interface PhoneModels {
   name: string;
   photoSha256: string | null;
   revision: number;
+  specs: Generated<string>;
 }
 
 export interface PinAttemptState {
@@ -198,6 +199,14 @@ export interface RepairCustomers {
   updatedBy: string;
 }
 
+export interface RepairIntakeOptions {
+  itemsJson: string;
+  list: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface RepairQuoteLines {
   amount: number;
   createdAt: number;
@@ -214,6 +223,15 @@ export interface RepairQuoteLines {
   storeId: string;
   tenantId: string;
   ticketId: string;
+}
+
+export interface RepairStoreIntakeOptions {
+  hiddenJson: string;
+  list: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
 }
 
 export interface RepairTicketEvents {
@@ -254,6 +272,7 @@ export interface RepairTickets {
   estimatedReadyAt: number | null;
   id: string | null;
   intakeNotes: string;
+  intakePhotosJson: string | null;
   location: string;
   outcome: string;
   outcomeNote: string | null;
@@ -339,7 +358,9 @@ export interface DB {
   projectionWatermarks: ProjectionWatermarks;
   quarantinedOps: QuarantinedOps;
   repairCustomers: RepairCustomers;
+  repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreIntakeOptions: RepairStoreIntakeOptions;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

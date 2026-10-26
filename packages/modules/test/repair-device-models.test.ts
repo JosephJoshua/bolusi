@@ -19,6 +19,7 @@ interface CatalogEntry {
   announcedYear?: number | null;
   modelCodes?: string;
   photoSha256?: string | null;
+  specs?: string;
 }
 
 let revision = 0;
@@ -50,8 +51,14 @@ const CATALOG: CatalogEntry[] = [
     announcedYear: 2024,
     modelCodes: 'SM-A556B, SM-A556E',
     photoSha256: 'a'.repeat(64),
+    specs: JSON.stringify({
+      chipset: 'Exynos 1480 (4 nm)',
+      colors: 'Awesome Iceblue, Awesome Navy',
+    }),
   },
-  { id: 12000, brand: 'Samsung', name: 'Galaxy A54', announcedYear: 2023 },
+  { id: 12000, brand: 'Samsung', name: 'Galaxy A54', announcedYear: 2023, specs: '{"bogus":1}' },
+  { id: 12010, brand: 'Infinix', name: 'Note 40', announcedYear: 2024 },
+  { id: 12011, brand: 'Tecno', name: 'Note 40', announcedYear: 2024 },
   { id: 12600, brand: 'Xiaomi', name: 'Redmi Note 13', announcedYear: 2023 },
   { id: 13000, brand: 'Apple', name: 'iPhone 16', announcedYear: 2024 },
 ];
@@ -73,6 +80,7 @@ test('catalog models are found despite typos and by maker code, with their photo
     kind: 'phone',
     announcedYear: 2024,
     photo: { modelId: 12824, sha256: 'a'.repeat(64) },
+    specs: {},
     learned: false,
   });
   expect((await suggest(h, 'redmi note13'))[0]).toMatchObject({ model: 'Redmi Note 13' });
@@ -109,6 +117,7 @@ test('a model taken in once is suggested afterwards, unless the catalog already 
       kind: null,
       announcedYear: null,
       photo: null,
+      specs: {},
       learned: true,
     },
   ]);
@@ -137,6 +146,35 @@ test('a ticket finds its catalog model only by an exact spelling, for its photo'
   expect(await find('SAMSUNG', 'galaxy-a55')).toEqual(['c:12824']);
   expect(await find('Samsung', 'A5')).toEqual([]);
   expect(await find('Samsung', '')).toEqual([]);
+});
+
+test('without a brand, a model name that names one catalog model finds it, for the brand', async () => {
+  const h = await openRepairHarness(506);
+  open.push(h);
+  await download(h, CATALOG);
+  const find = async (model: string) =>
+    (await h.query('findDeviceModel', { brand: '', model }, h.cashierId)).rows;
+
+  expect((await find('Galaxy A55')).map((r) => r.brand)).toEqual(['Samsung']);
+  expect((await find('samsung a55')).map((r) => r.key)).toEqual(['c:12824']);
+  expect((await find('iphone 16')).map((r) => r.brand)).toEqual(['Apple']);
+  // Two brands sell a "Note 40": not one model, so no brand is guessed.
+  expect(await find('Note 40')).toEqual([]);
+  expect(await find('Galaxy A5')).toEqual([]);
+});
+
+test('the found model carries its specs, and a spec sheet that does not parse reads as none', async () => {
+  const h = await openRepairHarness(507);
+  open.push(h);
+  await download(h, CATALOG);
+  const specs = async (brand: string, model: string) =>
+    (await h.query('findDeviceModel', { brand, model }, h.cashierId)).rows[0]!.specs;
+
+  expect(await specs('Samsung', 'Galaxy A55')).toEqual({
+    chipset: 'Exynos 1480 (4 nm)',
+    colors: 'Awesome Iceblue, Awesome Navy',
+  });
+  expect(await specs('Samsung', 'Galaxy A54')).toEqual({});
 });
 
 test('only staff who take in devices get suggestions', async () => {

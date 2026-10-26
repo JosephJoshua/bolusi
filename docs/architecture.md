@@ -35,8 +35,13 @@ The phone catalog is global reference data, not ops: Postgres `phone_models`
 (no RLS; the app role can only read it), crawled by `apps/server/src/catalog`.
 Devices pull rows by `revision` from `GET /v1/catalog/phones` into SQLite
 `phone_models` and fetch a photo from `/v1/catalog/phones/:id/photo` only when
-shown, keeping it in the evictable cache after checking its sha256. Intake model
-search (`repair/device-models.ts`) joins it with models this store took in before.
+shown, keeping it in the evictable cache after checking its sha256. Each row
+carries the model's spec sheet (`PhoneSpecs`). Intake model search
+(`repair/device-models.ts`) joins it with models this store took in before.
+
+Every `AppShell` lifts its content and bottom action above the on-screen keyboard
+and scrolls a focused `TextInput`/`SearchField` into sight (`ui/src/shell/keyboard.tsx`);
+Android is edge to edge, so the window no longer resizes for the keyboard.
 
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.

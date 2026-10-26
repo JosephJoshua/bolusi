@@ -22,6 +22,9 @@ import {
   type TicketAction,
 } from '../src/repair/flows.js';
 import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
+import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
+
+const OPTIONS = DEFAULT_INTAKE_OPTIONS;
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
@@ -291,11 +294,13 @@ describe('money and dates', () => {
 
   test('ready dates land at the end of the store day', () => {
     const now = new Date(2026, 9, 25, 9, 30).getTime();
-    expect(readyAtFor('today', now)).toBe(new Date(2026, 9, 25, 17, 0).getTime());
-    expect(readyAtFor('threeDays', now)).toBe(new Date(2026, 9, 28, 17, 0).getTime());
+    expect(readyAtFor('0', now)).toBe(new Date(2026, 9, 25, 17, 0).getTime());
+    expect(readyAtFor('3', now)).toBe(new Date(2026, 9, 28, 17, 0).getTime());
+    // An owner-added choice is just more days.
+    expect(readyAtFor('14', now)).toBe(new Date(2026, 10, 8, 17, 0).getTime());
     // Taken in after five, "today" is still later than now.
     const evening = new Date(2026, 9, 25, 18, 10).getTime();
-    expect(readyAtFor('today', evening)).toBe(new Date(2026, 9, 25, 20, 0).getTime());
+    expect(readyAtFor('0', evening)).toBe(new Date(2026, 9, 25, 20, 0).getTime());
     expect(readyAtFor('unknown', now)).toBeNull();
   });
 });
@@ -315,16 +320,16 @@ describe('intake draft', () => {
         { kind: 'part', description: 'LCD', amount: 650_000 },
         { kind: 'discount', description: 'Pelanggan lama', amount: 50_000 },
       ],
-      ready: 'tomorrow',
+      ready: '1',
     };
   }
 
   test('each step names what is missing, and review collects them all', async () => {
     h = await openRepairHarness(4103);
     const draft = emptyIntakeDraft();
-    expect(stepProblems(draft, 'customer')).toEqual(['customerName']);
-    expect(stepProblems(draft, 'photos')).toEqual(['photos']);
-    expect(stepProblems(draft, 'review')).toEqual([
+    expect(stepProblems(draft, 'customer', OPTIONS)).toEqual(['customerName']);
+    expect(stepProblems(draft, 'photos', OPTIONS)).toEqual(['photos']);
+    expect(stepProblems(draft, 'review', OPTIONS)).toEqual([
       'customerName',
       'deviceBrand',
       'deviceModel',
@@ -332,7 +337,16 @@ describe('intake draft', () => {
       'photos',
       'quoteLines',
     ]);
-    expect(stepProblems(complete(h), 'review')).toEqual([]);
+    expect(stepProblems(complete(h), 'review', OPTIONS)).toEqual([]);
+    // A store that asks for fewer photo angles has no problem with the ones it does not ask for.
+    const twoAngles = { ...OPTIONS, photoAngles: OPTIONS.photoAngles.slice(0, 2) };
+    expect(
+      stepProblems(
+        { ...draft, photos: { front: h.photo(1), back: h.photo(2) } },
+        'photos',
+        twoAngles,
+      ),
+    ).toEqual([]);
     expect(intakeDirty(draft)).toBe(false);
     expect(intakeDirty({ ...draft, step: 3 })).toBe(false);
     expect(intakeDirty({ ...draft, complaint: 'x' })).toBe(true);
@@ -343,13 +357,13 @@ describe('intake draft', () => {
       ...emptyIntakeDraft(),
       lines: [{ kind: 'part' as const, description: ' ', amount: 90_000 }],
     };
-    expect(stepProblems(draft, 'price')).toEqual(['incompleteLine', 'quoteLines']);
+    expect(stepProblems(draft, 'price', OPTIONS)).toEqual(['incompleteLine', 'quoteLines']);
     // An untouched empty line is ignored rather than flagged.
     const untouched = {
       ...emptyIntakeDraft(),
       lines: [{ kind: 'part' as const, description: '', amount: 0 }],
     };
-    expect(stepProblems(untouched, 'price')).toEqual(['quoteLines']);
+    expect(stepProblems(untouched, 'price', OPTIONS)).toEqual(['quoteLines']);
     // Discounts may bring the price to nothing, never below it (openTicket refuses that).
     const discounted = (discount: number) => ({
       ...emptyIntakeDraft(),
@@ -358,17 +372,20 @@ describe('intake draft', () => {
         { kind: 'discount' as const, description: 'Diskon', amount: discount },
       ],
     });
-    expect(stepProblems(discounted(60_000), 'price')).toEqual(['negativeTotal']);
-    expect(stepProblems(discounted(50_000), 'price')).toEqual([]);
+    expect(stepProblems(discounted(60_000), 'price', OPTIONS)).toEqual(['negativeTotal']);
+    expect(stepProblems(discounted(50_000), 'price', OPTIONS)).toEqual([]);
   });
 
   test('photos are walked in slot order, and "the rest OK" keeps the issues called out', async () => {
     h = await openRepairHarness(4105);
-    expect(nextMissingPhoto(emptyIntakeDraft())).toBe('front');
-    expect(nextMissingPhoto({ photos: { front: h.photo(1), back: h.photo(2) } })).toBe('left');
-    expect(nextMissingPhoto(complete(h))).toBeNull();
+    const angles = OPTIONS.photoAngles;
+    expect(nextMissingPhoto(emptyIntakeDraft(), angles)?.id).toBe('front');
+    expect(nextMissingPhoto({ photos: { front: h.photo(1), back: h.photo(2) } }, angles)?.id).toBe(
+      'left',
+    );
+    expect(nextMissingPhoto(complete(h), angles)).toBeNull();
 
-    const checks = restOfChecksOk({ screen: 'issue', camera: 'not_checked' });
+    const checks = restOfChecksOk({ screen: 'issue', camera: 'not_checked' }, OPTIONS.checks);
     expect(checks['screen']).toBe('issue');
     expect(checks['camera']).toBe('ok');
     expect(Object.values(checks).filter((state) => state === 'issue')).toHaveLength(1);
@@ -380,17 +397,59 @@ describe('intake draft', () => {
     expect(intakeTotal(draft.lines)).toBe(600_000);
     const { ticketId } = (await h.run(
       'openTicket',
-      toOpenTicketInput(draft, Date.now()),
+      toOpenTicketInput(draft, OPTIONS, Date.now()),
       h.cashierId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
     expect(ticket.customerName).toBe('Yohanis Wenda');
     expect(ticket.quoteTotal).toBe(600_000);
-    expect(ticket.peripherals).toEqual(['charger']);
+    expect(ticket.peripherals).toEqual([{ item: 'charger', label: null }]);
     expect(ticket.checklist).toEqual([
-      { item: 'screen', state: 'issue', note: '' },
-      { item: 'speaker', state: 'ok', note: '' },
+      { item: 'screen', label: null, state: 'issue', note: '' },
+      { item: 'speaker', label: null, state: 'ok', note: '' },
     ]);
+    expect(ticket.intakePhotos.map((p: { slot: string }) => p.slot)).toEqual([
+      ...INTAKE_PHOTO_SLOTS,
+    ]);
+  });
+
+  test('a draft opens against the lists the store offers, and records their names', async () => {
+    h = await openRepairHarness(4106);
+    const options = {
+      ...OPTIONS,
+      checks: [
+        { id: 'screen', label: 'LCD' },
+        { id: 'c-face', label: 'Face ID' },
+      ],
+      accessories: [{ id: 'a-pen', label: 'Stylus' }],
+      photoAngles: [
+        { id: 'front', label: null },
+        { id: 'p-imei', label: 'Stiker IMEI' },
+      ],
+      readyBy: [{ id: '7', label: null }],
+    };
+    const draft: IntakeDraft = {
+      ...complete(h),
+      // `speaker` is no longer offered and `charger` no longer listed: neither reaches the ticket.
+      checks: { screen: 'ok', speaker: 'issue', 'c-face': 'issue' },
+      peripherals: ['charger', 'a-pen'],
+      photos: { front: h.photo(1), 'p-imei': h.photo(2), back: h.photo(3) },
+      ready: '1',
+    };
+    expect(stepProblems(draft, 'review', options)).toEqual([]);
+    const now = new Date(2026, 9, 25, 9, 30).getTime();
+    const input = toOpenTicketInput(draft, options, now);
+    expect(input.checklist).toEqual([
+      { item: 'screen', label: 'LCD', state: 'ok', note: '' },
+      { item: 'c-face', label: 'Face ID', state: 'issue', note: '' },
+    ]);
+    expect(input.peripherals).toEqual([{ item: 'a-pen', label: 'Stylus' }]);
+    expect(input.photos.map((p) => [p.slot, p.label])).toEqual([
+      ['front', null],
+      ['p-imei', 'Stiker IMEI'],
+    ]);
+    // "Tomorrow" is not offered any more, so the store's only choice stands.
+    expect(input.estimatedReadyAt).toBe(new Date(2026, 10, 1, 17, 0).getTime());
   });
 
   test('a retained draft round-trips, and a malformed one restores nothing', async () => {
@@ -398,6 +457,9 @@ describe('intake draft', () => {
     const draft = complete(h);
     expect(parseIntakeDraft(JSON.parse(JSON.stringify(draft)))).toEqual(draft);
     expect(parseIntakeDraft({ ...draft, step: 'x' })).toBeNull();
+    // A draft kept from before the ready-by choices were editable still restores, as days.
+    expect(parseIntakeDraft({ ...draft, ready: 'threeDays' })?.ready).toBe('3');
+    expect(parseIntakeDraft({ ...draft, ready: 'unknown' })?.ready).toBe('unknown');
     expect(parseIntakeDraft(null)).toBeNull();
   });
 });

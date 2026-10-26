@@ -17,29 +17,27 @@ import {
   space,
   type,
 } from '@bolusi/ui';
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Keyboard, StyleSheet, Text, View } from 'react-native';
 
-import { CHECKLIST_STATES, INTAKE_PHOTO_SLOTS } from '../constants.js';
+import { CHECKLIST_STATES } from '../constants.js';
 import { sameDeviceModel, type DeviceModelRow } from '../device-models.js';
+import { colourChoices, memoryVariants } from '../device-specs.js';
 
 import { tn } from './i18n.js';
 import {
   CHECK_STATE_KEY,
-  INTAKE_SLOT_KEY,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
-  READY_KEY,
-  checkLabel,
-  peripheralLabel,
+  optionLabel,
+  readyLabel,
 } from './labels.js';
 import {
-  COMMON_BRANDS,
-  INTAKE_CHECKS,
   INTAKE_STEPS,
-  PERIPHERALS,
-  READY_CHOICES,
   capturedThumbnailRef,
+  checksWithIssue,
+  chosenAccessories,
+  chosenReady,
   intakeTotal,
   acceptsRupiahText,
   parseRupiah,
@@ -49,7 +47,7 @@ import {
   type IntakeStep,
   type QuoteLineDraft,
 } from '../flows.js';
-import type { IntakePhotoSlot } from '../constants.js';
+import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
 import {
   CatalogPhoto,
   Field,
@@ -66,6 +64,8 @@ import { PRICE_KINDS, type PriceKind } from './TicketSteps.js';
 export interface StepProps {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
+  /** The lists this store offers (the owner's, without what the store hides). */
+  readonly options: IntakeOptionLists;
   readonly testID: string;
 }
 
@@ -164,14 +164,16 @@ function modelCaption(row: DeviceModelRow): string {
 }
 
 /**
- * Brand and model, with models from the phone catalog and from earlier intakes suggested as the
- * model is typed. Picking one fills both fields; a model the catalog knows shows its picture, so
- * the counter can hold it up against the phone on the desk. Nothing here is required to match: a
- * model nobody has heard of is typed and kept as it is.
+ * The phone being taken in. The model comes first and is all most intakes need: as it is typed,
+ * models from the phone catalog and from earlier intakes are suggested with their picture, and a
+ * model the catalog knows fills in its brand and offers its colours. The field moves to the top
+ * of the screen when focused, so the suggestions get the room above the on-screen keyboard.
+ * Nothing here is required to match: a model nobody has heard of is typed and kept as it is.
  */
 export function DeviceStep({
   draft,
   update,
+  options,
   brandError,
   modelError,
   testID,
@@ -181,13 +183,17 @@ export function DeviceStep({
 }): React.JSX.Element {
   const device = draft.device;
   const [passcodeShown, setPasscodeShown] = useState(false);
+  // The brand this step filled in from the catalog. While the field still holds it, a different
+  // catalog model may replace it; once the user types their own brand, it is theirs.
+  const [autoBrand, setAutoBrand] = useState<string | null>(null);
   const set = (patch: Partial<IntakeDraft['device']>): void =>
     update({ device: { ...device, ...patch } });
 
   const brand = device.brand.trim();
   const model = device.model.trim();
-  const searchText = [brand, model].join(' ').trim();
-  const matched = useCatalogModel(brand, model);
+  const brandIsOurs = brand === '' || device.brand === autoBrand;
+  const searchText = (brandIsOurs ? model : `${brand} ${model}`).trim();
+  const matched = useCatalogModel(brandIsOurs ? '' : brand, model);
   const suggestions = useRepairQuery(
     async (rt) =>
       model === ''
@@ -195,43 +201,63 @@ export function DeviceStep({
         : (await rt.query('searchDeviceModels', { text: searchText, limit: 5 })).rows,
     `deviceModels:${searchText}`,
   );
-  const current = { brand, model };
+
+  useEffect(() => {
+    if (matched === null || !brandIsOurs || device.brand === matched.brand) return;
+    setAutoBrand(matched.brand);
+    set({ brand: matched.brand });
+    // Only a newly found model fills the brand; `set` and the draft are this render's.
+  }, [matched?.key]);
+
+  const pick = (row: DeviceModelRow): void => {
+    setAutoBrand(row.brand);
+    set({ brand: row.brand, model: row.model });
+    Keyboard.dismiss();
+  };
+  // "samsung a55" typed in the model field is the catalog's Galaxy A55: write it the catalog's
+  // way once the user moves on, so the ticket and the search agree on the name.
+  const tidyModel = (): void => {
+    if (matched === null || (device.model === matched.model && device.brand === matched.brand)) {
+      return;
+    }
+    setAutoBrand(matched.brand);
+    set({ brand: matched.brand, model: matched.model });
+  };
+
   const picked =
     matched !== null ||
     (suggestions.status === 'ready' &&
-      suggestions.data.some((row) => sameDeviceModel(row, current)));
+      suggestions.data.some((row) => sameDeviceModel(row, { brand, model })));
+  const memory = matched === null ? [] : memoryVariants(matched.specs.internalMemory);
+  const colours = matched === null ? [] : colourChoices(matched.specs.colors);
 
   return (
     <View>
       <TextInput
-        label={tn('repair.device.brand')}
-        value={device.brand}
-        onChangeText={(value) => set({ brand: value })}
-        errorMessage={brandError}
+        label={tn('repair.device.model')}
+        placeholder={tn('repair.device.modelHint')}
+        value={device.model}
+        onChangeText={(value) => set({ model: value })}
+        onBlur={tidyModel}
+        errorMessage={modelError}
         autoFocus
-        testID={`${testID}.brand`}
+        revealOnFocus="to-top"
+        testID={`${testID}.model`}
       />
-      <View style={[styles.chips, styles.suggestions]}>
-        {COMMON_BRANDS.map((choice) => (
-          <ToggleChip
-            key={choice}
-            label={choice}
-            selected={device.brand === choice}
-            onToggle={() => set({ brand: choice })}
-            testID={`${testID}.brandChoice.${choice}`}
-          />
-        ))}
-      </View>
-      <View style={repairStyles.gap}>
-        <TextInput
-          label={tn('repair.device.model')}
-          placeholder={tn('repair.device.modelHint')}
-          value={device.model}
-          onChangeText={(value) => set({ model: value })}
-          errorMessage={modelError}
-          testID={`${testID}.model`}
-        />
-      </View>
+      {!picked && suggestions.status === 'ready' && suggestions.data.length > 0 ? (
+        <View style={styles.modelList} testID={`${testID}.models`}>
+          {suggestions.data.map((row) => (
+            <ListRow
+              key={row.key}
+              leading={<ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />}
+              primaryText={row.model}
+              secondaryText={modelCaption(row)}
+              onPress={() => pick(row)}
+              testID={`${testID}.model.${row.key}`}
+            />
+          ))}
+        </View>
+      ) : null}
       {matched !== null ? (
         <View style={styles.modelMatch} testID={`${testID}.modelMatch`}>
           <ModelPhoto photo={matched.photo} large testID={`${testID}.modelMatch.photo`} />
@@ -244,23 +270,40 @@ export function DeviceStep({
                 {tn('repair.device.released', { year: String(matched.announcedYear) })}
               </Text>
             )}
+            {memory.length === 0 ? null : (
+              <Text style={repairStyles.muted} testID={`${testID}.modelMatch.memory`}>
+                {memory.join(' · ')}
+              </Text>
+            )}
           </View>
         </View>
       ) : null}
-      {!picked && suggestions.status === 'ready' && suggestions.data.length > 0 ? (
-        <View style={styles.modelList} testID={`${testID}.models`}>
-          {suggestions.data.map((row) => (
-            <ListRow
-              key={row.key}
-              leading={<ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />}
-              primaryText={row.model}
-              secondaryText={modelCaption(row)}
-              onPress={() => set({ brand: row.brand, model: row.model })}
-              testID={`${testID}.model.${row.key}`}
-            />
-          ))}
-        </View>
-      ) : null}
+      <View style={repairStyles.gap}>
+        <TextInput
+          label={tn('repair.device.brand')}
+          value={device.brand}
+          onChangeText={(value) => set({ brand: value })}
+          errorMessage={brandError}
+          testID={`${testID}.brand`}
+        />
+        {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+        {matched !== null ? null : (
+          <View style={[styles.chips, styles.suggestions]}>
+            {options.brands.map((option) => {
+              const choice = optionLabel('brands', option);
+              return (
+                <ToggleChip
+                  key={option.id}
+                  label={choice}
+                  selected={device.brand === choice}
+                  onToggle={() => set({ brand: choice })}
+                  testID={`${testID}.brandChoice.${choice}`}
+                />
+              );
+            })}
+          </View>
+        )}
+      </View>
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.device.colorField')}
@@ -268,6 +311,19 @@ export function DeviceStep({
           onChangeText={(color) => set({ color })}
           testID={`${testID}.color`}
         />
+        {colours.length === 0 ? null : (
+          <View style={[styles.chips, styles.suggestions]} testID={`${testID}.colours`}>
+            {colours.map((colour) => (
+              <ToggleChip
+                key={colour}
+                label={colour}
+                selected={device.color === colour}
+                onToggle={() => set({ color: device.color === colour ? '' : colour })}
+                testID={`${testID}.colour.${colour}`}
+              />
+            ))}
+          </View>
+        )}
       </View>
       <View style={repairStyles.gap}>
         <TextInput
@@ -303,6 +359,7 @@ export function DeviceStep({
 export function ConditionStep({
   draft,
   update,
+  options,
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
@@ -323,49 +380,53 @@ export function ConditionStep({
         autoFocus
         testID={`${testID}.complaint`}
       />
-      <Section
-        title={tn('repair.condition.checks')}
-        action={
-          <TextButton
-            label={tn('repair.condition.restOk')}
-            icon="check"
-            onPress={() => update({ checks: restOfChecksOk(draft.checks) })}
-            testID={`${testID}.restOk`}
-          />
-        }
-      >
-        {INTAKE_CHECKS.map((item, index) => (
-          // One line per check: the name on the left (wrapping if long), its state lined up on the
-          // right, so the column of choices reads straight down.
-          <View key={item} style={[styles.check, index === 0 ? null : styles.checkDivider]}>
-            <Text style={styles.checkLabel}>{checkLabel(item)}</Text>
-            <SegmentedControl
-              options={CHECKLIST_STATES.map((value) => ({
-                value,
-                label: tn(CHECK_STATE_KEY[value]),
-              }))}
-              value={draft.checks[item] ?? 'not_checked'}
-              onChange={(state) => update({ checks: { ...draft.checks, [item]: state } })}
-              size="compact"
-              wrap
-              testID={`${testID}.check.${item}`}
+      {options.checks.length === 0 ? null : (
+        <Section
+          title={tn('repair.condition.checks')}
+          action={
+            <TextButton
+              label={tn('repair.condition.restOk')}
+              icon="check"
+              onPress={() => update({ checks: restOfChecksOk(draft.checks, options.checks) })}
+              testID={`${testID}.restOk`}
             />
-          </View>
-        ))}
-      </Section>
-      <Section title={tn('repair.condition.peripherals')}>
-        <View style={styles.chips}>
-          {PERIPHERALS.map((item) => (
-            <ToggleChip
-              key={item}
-              label={peripheralLabel(item)}
-              selected={draft.peripherals.includes(item)}
-              onToggle={() => togglePeripheral(item)}
-              testID={`${testID}.peripheral.${item}`}
-            />
+          }
+        >
+          {options.checks.map((option, index) => (
+            // One line per check: the name on the left (wrapping if long), its state lined up on the
+            // right, so the column of choices reads straight down.
+            <View key={option.id} style={[styles.check, index === 0 ? null : styles.checkDivider]}>
+              <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
+              <SegmentedControl
+                options={CHECKLIST_STATES.map((value) => ({
+                  value,
+                  label: tn(CHECK_STATE_KEY[value]),
+                }))}
+                value={draft.checks[option.id] ?? 'not_checked'}
+                onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
+                size="compact"
+                wrap
+                testID={`${testID}.check.${option.id}`}
+              />
+            </View>
           ))}
-        </View>
-      </Section>
+        </Section>
+      )}
+      {options.accessories.length === 0 ? null : (
+        <Section title={tn('repair.condition.peripherals')}>
+          <View style={styles.chips}>
+            {options.accessories.map((option) => (
+              <ToggleChip
+                key={option.id}
+                label={optionLabel('accessories', option)}
+                selected={draft.peripherals.includes(option.id)}
+                onToggle={() => togglePeripheral(option.id)}
+                testID={`${testID}.peripheral.${option.id}`}
+              />
+            ))}
+          </View>
+        </Section>
+      )}
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.condition.notes')}
@@ -381,11 +442,13 @@ export function ConditionStep({
 
 export function PhotosStep({
   draft,
+  angles,
   onTake,
   testID,
 }: {
   readonly draft: IntakeDraft;
-  readonly onTake: (slot: IntakePhotoSlot) => void;
+  readonly angles: readonly IntakeOption[];
+  readonly onTake: (angle: IntakeOption) => void;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -393,12 +456,13 @@ export function PhotosStep({
       <Text style={repairStyles.muted}>{tn('repair.photo.intakeHint')}</Text>
       <View style={repairStyles.gap}>
         <PhotoGrid>
-          {INTAKE_PHOTO_SLOTS.map((slot) => {
+          {angles.map((angle) => {
+            const slot = angle.id;
             const photo = draft.photos[slot];
             return (
               <View key={slot} style={repairStyles.gridCell}>
                 <PhotoSlot
-                  label={tn(INTAKE_SLOT_KEY[slot])}
+                  label={optionLabel('photoAngles', angle)}
                   actionLabel={tn(
                     photo === undefined ? 'repair.photo.take' : 'repair.photo.retake',
                   )}
@@ -410,7 +474,7 @@ export function PhotosStep({
                       />
                     )
                   }
-                  onPress={() => onTake(slot)}
+                  onPress={() => onTake(angle)}
                   testID={`${testID}.slot.${slot}`}
                 />
               </View>
@@ -436,6 +500,7 @@ function amountText(amount: number): string {
 export function PriceStep({
   draft,
   update,
+  options,
   lineError,
   testID,
 }: StepProps & { readonly lineError: string | undefined }): React.JSX.Element {
@@ -510,8 +575,8 @@ export function PriceStep({
       </View>
       <Section title={tn('repair.ticket.readyBy')}>
         <SegmentedControl
-          options={READY_CHOICES.map((value) => ({ value, label: tn(READY_KEY[value]) }))}
-          value={draft.ready}
+          options={options.readyBy.map(({ id }) => ({ value: id, label: readyLabel(id) }))}
+          value={chosenReady(draft, options.readyBy)}
           onChange={(ready) => update({ ready })}
           size="compact"
           wrap
@@ -524,17 +589,20 @@ export function PriceStep({
 
 export function ReviewStep({
   draft,
+  options,
   onEdit,
   photoStrip,
   testID,
 }: {
   readonly draft: IntakeDraft;
+  readonly options: IntakeOptionLists;
   readonly onEdit: (step: number) => void;
   /** The captured photos as a strip that opens full screen (the wizard owns the viewer). */
   readonly photoStrip: React.ReactNode;
   readonly testID: string;
 }): React.JSX.Element {
-  const issues = INTAKE_CHECKS.filter((item) => draft.checks[item] === 'issue');
+  const issues = checksWithIssue(draft, options.checks);
+  const accessories = chosenAccessories(draft, options.accessories);
   const section = (step: IntakeStep, children: React.ReactNode): React.JSX.Element => (
     <Section
       title={tn(INTAKE_STEP_KEY[step])}
@@ -593,13 +661,13 @@ export function ReviewStep({
           {issues.length === 0 ? null : (
             <Field
               label={tn('repair.condition.issues')}
-              value={issues.map(checkLabel).join(', ')}
+              value={issues.map((check) => optionLabel('checks', check)).join(', ')}
             />
           )}
-          {draft.peripherals.length === 0 ? null : (
+          {accessories.length === 0 ? null : (
             <Field
               label={tn('repair.condition.peripherals')}
-              value={draft.peripherals.map(peripheralLabel).join(', ')}
+              value={accessories.map((item) => optionLabel('accessories', item)).join(', ')}
             />
           )}
         </>,
@@ -627,7 +695,10 @@ export function ReviewStep({
               {formatMoney(intakeTotal(draft.lines))}
             </Text>
           </View>
-          <Field label={tn('repair.ticket.readyBy')} value={tn(READY_KEY[draft.ready])} />
+          <Field
+            label={tn('repair.ticket.readyBy')}
+            value={readyLabel(chosenReady(draft, options.readyBy))}
+          />
         </>,
       )}
     </View>

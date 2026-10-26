@@ -13,11 +13,11 @@ import {
   type CrawlPhase,
 } from '../catalog/crawl.js';
 
-/** Never faster than this, whatever is asked: the crawl must stay polite. */
-const MIN_DELAY_SECONDS = 5;
-const DEFAULT_DELAY_SECONDS = 15;
+/** Never faster than this, whatever is asked: one request at a time, at most one a second. */
+const MIN_DELAY_SECONDS = 1;
+const DEFAULT_DELAY_SECONDS = 1;
 const ROBOTS_AGENT = 'BolusiCatalog';
-const USER_AGENT = `${ROBOTS_AGENT}/1.0 (phone repair shop software; one request every few seconds)`;
+const USER_AGENT = `${ROBOTS_AGENT}/1.0 (phone repair shop software; about one request a second)`;
 
 const USAGE = `crawl-phone-catalog [--delay-seconds N] [--brands "Samsung,Apple"] [--max-requests N] [--phases list,photos,details]
 

@@ -3,6 +3,8 @@ import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolus
 
 import {
   repairCustomersTable,
+  repairIntakeOptionsTable,
+  repairStoreIntakeOptionsTable,
   repairQuoteLinesTable,
   repairTicketEventsTable,
   repairTicketPhotosTable,
@@ -15,6 +17,10 @@ import {
   assignTechnicianInput,
   cancelTicketHandler,
   cancelTicketInput,
+  changeIntakeOptionsHandler,
+  changeIntakeOptionsInput,
+  hideIntakeOptionsHandler,
+  hideIntakeOptionsInput,
   changeQuoteHandler,
   changeQuoteInput,
   claimTicketHandler,
@@ -44,6 +50,7 @@ import { repairOperations } from './operations.js';
 import {
   getCustomerQuery,
   getTicketQuery,
+  intakeOptionSettingsQuery,
   listTicketsQuery,
   technicianLoadsQuery,
   nextTicketCounterQuery,
@@ -65,6 +72,8 @@ export const repairModuleManifest = {
       [REPAIR_TABLE.quoteLines]: repairQuoteLinesTable,
       [REPAIR_TABLE.photos]: repairTicketPhotosTable,
       [REPAIR_TABLE.events]: repairTicketEventsTable,
+      [REPAIR_TABLE.intakeOptions]: repairIntakeOptionsTable,
+      [REPAIR_TABLE.storeIntakeOptions]: repairStoreIntakeOptionsTable,
     },
   },
 
@@ -105,6 +114,18 @@ export const repairModuleManifest = {
       scope: 'store',
       isDangerous: false,
       description: 'Can hand a device back to its customer, with a photo and signature.',
+    },
+    [REPAIR_PERMISSION.manageIntakeOptions]: {
+      scope: 'tenant',
+      isDangerous: false,
+      description:
+        'Can change the checks, accessories, photos, brands and ready-by choices every store uses at intake.',
+    },
+    [REPAIR_PERMISSION.hideIntakeOptions]: {
+      scope: 'store',
+      isDangerous: false,
+      description:
+        "Can hide intake checks, accessories, photos, brands and ready-by choices the store doesn't use.",
     },
   },
 
@@ -179,6 +200,16 @@ export const repairModuleManifest = {
       input: returnDeviceInput,
       handler: returnDeviceHandler,
     },
+    changeIntakeOptions: {
+      permission: REPAIR_PERMISSION.manageIntakeOptions,
+      input: changeIntakeOptionsInput,
+      handler: changeIntakeOptionsHandler,
+    },
+    hideIntakeOptions: {
+      permission: REPAIR_PERMISSION.hideIntakeOptions,
+      input: hideIntakeOptionsInput,
+      handler: hideIntakeOptionsHandler,
+    },
   },
 
   queries: {
@@ -189,6 +220,7 @@ export const repairModuleManifest = {
     getCustomer: getCustomerQuery,
     nextTicketCounter: nextTicketCounterQuery,
     technicianLoads: technicianLoadsQuery,
+    intakeOptionSettings: intakeOptionSettingsQuery,
     searchDeviceModels: searchDeviceModelsQuery,
     findDeviceModel: findDeviceModelQuery,
   },

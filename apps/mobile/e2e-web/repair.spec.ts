@@ -12,7 +12,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const ARTIFACTS = path.join(__dirname, 'artifacts', 'repair');
 
-type Role = 'owner' | 'counter' | 'technician';
+type Role = 'owner' | 'counter' | 'technician' | 'storeOwner';
 
 async function open(page: Page, role: Role): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}`);
@@ -24,7 +24,38 @@ const fill = (page: Page, testID: string, text: string) =>
   page.getByTestId(`${testID}.field`).fill(text);
 
 async function shoot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`) });
+  // Finished CSS transitions, so a switch just flipped shows its end state, not a blend.
+  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), animations: 'disabled' });
+}
+
+/** Press a drag handle and move it, in small steps like a finger, onto another row's handle. */
+async function drag(
+  page: Page,
+  from: string,
+  onto: string,
+  options: { shoot?: string } = {},
+): Promise<void> {
+  const a = await page.getByTestId(from).boundingBox();
+  const b = await page.getByTestId(onto).boundingBox();
+  if (a === null || b === null) throw new Error('drag handles not on screen');
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2 - 4, { steps: 12 });
+  if (options.shoot !== undefined) {
+    // The other rows slide aside over 150 ms; picture them where they come to rest.
+    await page.waitForTimeout(300);
+    await shoot(page, options.shoot);
+  }
+  await page.mouse.up();
+}
+
+/** The keys of a ReorderableList's rows, top to bottom. */
+async function order(page: Page, listTestID: string): Promise<string[]> {
+  const prefix = `${listTestID}.item.`;
+  const ids = await page
+    .locator(`[data-testid^="${prefix}"]`)
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid') ?? ''));
+  return ids.map((id) => id.slice(prefix.length));
 }
 
 test('a misspelled name finds the ticket', async ({ page }) => {
@@ -40,8 +71,12 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await tap(page, 'repair.board.newIntake');
   await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
   await tap(page, 'repair.intake.primary');
-  await tap(page, 'repair.intake.device.brandChoice.Oppo');
+  // The catalog knows the A58: its brand fills in and its colours are offered.
   await fill(page, 'repair.intake.device.model', 'A58');
+  await expect(page.getByTestId('repair.intake.device.brand.field')).toHaveValue('Oppo');
+  await tap(page, 'repair.intake.device.colour.Glowing Black');
+  await expect(page.getByTestId('repair.intake.device.color.field')).toHaveValue('Glowing Black');
+  await shoot(page, 'device-autofill');
   await tap(page, 'repair.intake.primary');
   await fill(page, 'repair.intake.condition.complaint', 'Mati total');
   await tap(page, 'repair.intake.condition.restOk');
@@ -69,23 +104,47 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await expect(page.getByTestId('repair.assign.items.error')).toHaveCount(0);
 });
 
+/** About what a phone shows above its on-screen keyboard; the browser has no keyboard to open. */
+const KEYBOARD_UP = { width: 390, height: 520 };
+
 test('typing a model suggests catalog phones with their picture', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.newIntake');
   await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
   await tap(page, 'repair.intake.primary');
-  await tap(page, 'repair.intake.device.brandChoice.Samsung');
+  // With the keyboard up, the model field moves to the top so the suggestions fit under it.
+  // The field (label included) settles just under the header. Wait for the scroll to end first:
+  // a scripted focus, as `fill` does, cuts a browser's smooth scroll short (typing on a phone
+  // does not).
+  await page.setViewportSize(KEYBOARD_UP);
+  const header = (await page.getByTestId('repair.intake.header').first().boundingBox())!;
+  await expect
+    .poll(async () => (await page.getByTestId('repair.intake.device.model').boundingBox())!.y)
+    .toBeLessThan(header.y + header.height + 24);
   // A typo still finds the model, newest phones first among equal matches.
   await fill(page, 'repair.intake.device.model', 'galaxy a5');
   await expect(page.getByTestId('repair.intake.device.model.c:12824')).toBeVisible();
   await expect(page.getByTestId('repair.intake.device.model.c:12824.photo.image')).toBeVisible();
-  await shoot(page, 'device-suggestions');
+  await expect(page.getByTestId('repair.intake.device.model.c:12824')).toBeInViewport();
+  await shoot(page, 'device-suggestions-keyboard');
 
   await tap(page, 'repair.intake.device.model.c:12824');
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Galaxy A55');
+  await expect(page.getByTestId('repair.intake.device.brand.field')).toHaveValue('Samsung');
   await expect(page.getByTestId('repair.intake.device.modelMatch')).toContainText('Rilis 2024');
+  await expect(page.getByTestId('repair.intake.device.modelMatch.memory')).toHaveText(
+    '8/128GB · 8/256GB · 12/256GB',
+  );
   await expect(page.getByTestId('repair.intake.device.models')).toHaveCount(0);
   await shoot(page, 'device-picked');
+
+  // Typed with the brand in front, the model is written the catalog's way on leaving the field.
+  await fill(page, 'repair.intake.device.brand', '');
+  await fill(page, 'repair.intake.device.model', 'samsung a55');
+  await page.getByTestId('repair.intake.device.color.field').focus();
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Galaxy A55');
+  await expect(page.getByTestId('repair.intake.device.brand.field')).toHaveValue('Samsung');
 
   // A phone the catalog lacks, taken in before, is suggested from the store's own intakes.
   await fill(page, 'repair.intake.device.brand', '');
@@ -94,6 +153,45 @@ test('typing a model suggests catalog phones with their picture', async ({ page 
     'Pernah diservis di sini',
   );
   await shoot(page, 'device-learned');
+});
+
+test('the technician sees the phone inside out; the counter sees its memory variants', async ({
+  page,
+}) => {
+  await open(page, 'technician');
+  await tap(page, 'repair.board.views.active');
+  await tap(page, 'repair.board.row.t-1');
+  const specs = page.getByTestId('repair.ticket.specs');
+  await specs.scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('repair.ticket.specs.chipset')).toHaveText(
+    'Mediatek Helio G80 (12 nm)',
+  );
+  await expect(page.getByTestId('repair.ticket.specs.screen')).toHaveText('6.6 inci, PLS LCD');
+  await expect(page.getByTestId('repair.ticket.specs.memory')).toHaveText(
+    '4/64GB · 4/128GB · 6/128GB',
+  );
+  await specs.screenshot({ path: path.join(ARTIFACTS, 'ticket-specs-technician.png') });
+
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-1');
+  await expect(page.getByTestId('repair.ticket.specs.memory')).toBeVisible();
+  await expect(page.getByTestId('repair.ticket.specs.chipset')).toHaveCount(0);
+  await page.getByTestId('repair.ticket.specs').screenshot({
+    path: path.join(ARTIFACTS, 'ticket-specs-counter.png'),
+  });
+});
+
+test('a focused field on a long form is scrolled above the keyboard', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await page.setViewportSize(KEYBOARD_UP);
+  // The passcode is the last field: below the fold until focused.
+  await page.getByTestId('repair.intake.device.passcode.field').focus();
+  await expect(page.getByTestId('repair.intake.device.passcode.field')).toBeInViewport();
+  await expect(page.getByTestId('repair.intake.primary')).toBeInViewport();
+  await shoot(page, 'keyboard-last-field');
 });
 
 test('the price-kind choices stay one row high on the price-change step', async ({ page }) => {
@@ -151,4 +249,133 @@ test('a ticket photo opens full screen, zooms on double tap, and "see all" group
   await tap(page, 'repair.ticket.photos.viewer.close');
   // Closing a photo opened from the sheet goes back to the sheet.
   await expect(page.getByTestId('repair.ticket.photos.sheet')).toBeVisible();
+});
+
+async function openIntakeOptions(page: Page, role: Role): Promise<void> {
+  await open(page, role);
+  await tap(page, 'ui.avatarButton');
+  await expect(page.getByTestId('account-menu')).toBeVisible();
+  await shoot(page, `account-menu-${role}`);
+  await tap(page, 'shell-open-settings');
+  await tap(page, 'settings-intake-options');
+  await expect(page.getByTestId('repair.options.open.checks')).toBeVisible();
+}
+
+test('the owner renames, adds and hides condition checks, and the summary follows', async ({
+  page,
+}) => {
+  await openIntakeOptions(page, 'owner');
+  await shoot(page, 'options-overview');
+  await tap(page, 'repair.options.open.checks');
+  await shoot(page, 'options-checks');
+
+  const list = 'repair.options.list.checks';
+  await tap(page, `${list}.row.camera`);
+  await shoot(page, 'options-row-open');
+  await fill(page, `${list}.row.camera.name`, 'Kamera depan & belakang');
+  // Close the row, then drag "Mikrofon" above "Kamera" by its handle.
+  await tap(page, `${list}.row.camera.done`);
+  await drag(page, `${list}.order.handle.microphone`, `${list}.order.handle.camera`, {
+    shoot: 'options-dragging',
+  });
+  expect(await order(page, `${list}.order`)).toEqual([
+    'screen',
+    'touch',
+    'microphone',
+    'camera',
+    'speaker',
+    'charging',
+    'buttons',
+    'signal',
+    'biometrics',
+  ]);
+  await tap(page, `${list}.row.signal`);
+  await tap(page, `${list}.row.signal.shown`);
+  await tap(page, `${list}.add`);
+  await fill(page, `${list}.row.new-1.name`, 'Face ID');
+  await shoot(page, 'options-checks-edited');
+  await tap(page, `${list}.primary`);
+
+  await expect(page.getByTestId('repair.options.open.checks')).toContainText(
+    '10 pilihan · 1 disembunyikan',
+  );
+  await tap(page, 'repair.options.open.checks');
+  const rows = page.getByTestId(`${list}.rows`);
+  await expect(rows).toContainText('Kamera depan & belakang');
+  // The dragged order was saved.
+  expect((await order(page, `${list}.order`)).slice(2, 4)).toEqual(['microphone', 'camera']);
+  await expect(rows).toContainText('Face ID');
+});
+
+test('a list that cannot be saved says why, and leaving asks before dropping changes', async ({
+  page,
+}) => {
+  await openIntakeOptions(page, 'owner');
+  await tap(page, 'repair.options.open.brands');
+  const list = 'repair.options.list.brands';
+  await tap(page, `${list}.add`);
+  await tap(page, `${list}.row.vivo`);
+  await fill(page, `${list}.row.vivo.name`, 'oppo');
+  await tap(page, `${list}.primary`);
+  // The first row to fix opens; the empty new row says why where it stands.
+  await expect(page.getByTestId(`${list}.row.vivo.name.error`)).toBeVisible();
+  await expect(page.getByTestId(`${list}.row.new-1`)).toContainText(/.+/);
+  await shoot(page, 'options-problems');
+
+  await tap(page, `${list}.back`);
+  await expect(page.getByTestId(`${list}.discard`)).toBeVisible();
+  await shoot(page, 'options-discard');
+});
+
+test('a store owner only chooses what this store uses', async ({ page }) => {
+  await openIntakeOptions(page, 'storeOwner');
+  await tap(page, 'repair.options.open.accessories');
+  const list = 'repair.options.list.accessories';
+  await expect(page.getByTestId(`${list}.add`)).toHaveCount(0);
+  await tap(page, `${list}.row.box.shown`);
+  await shoot(page, 'options-store-owner');
+  await tap(page, `${list}.primary`);
+  await expect(page.getByTestId('repair.options.open.accessories')).toContainText(
+    '1 disembunyikan',
+  );
+});
+
+test('intake offers the owner’s lists and the ticket keeps their names', async ({ page }) => {
+  await openIntakeOptions(page, 'owner');
+  await tap(page, 'repair.options.open.checks');
+  await tap(page, 'repair.options.list.checks.add');
+  await fill(page, 'repair.options.list.checks.row.new-1.name', 'Face ID');
+  await tap(page, 'repair.options.list.checks.primary');
+  await tap(page, 'repair.options.open.photoAngles');
+  await tap(page, 'repair.options.list.photoAngles.add');
+  await fill(page, 'repair.options.list.photoAngles.row.new-1.name', 'Stiker IMEI');
+  await tap(page, 'repair.options.list.photoAngles.primary');
+  await expect(page.getByTestId('repair.options.open.photoAngles')).toContainText('7 pilihan');
+
+  // Back home in the same page: the demo runtime lives in memory.
+  await tap(page, 'repair.options.back');
+  await tap(page, 'settings-screen.back');
+  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.device.brandChoice.Oppo');
+  await fill(page, 'repair.intake.device.model', 'A57');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.condition.complaint', 'Face ID mati');
+  await expect(page.getByText('Face ID', { exact: true })).toBeVisible();
+  await shoot(page, 'options-intake-condition');
+  await tap(page, 'repair.intake.condition.restOk');
+  await tap(page, 'repair.intake.primary');
+  for (let shot = 0; shot < 7; shot += 1) await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.primary')).toHaveText('Lanjut');
+  await shoot(page, 'options-intake-photos');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.price.description.0', 'Modul Face ID');
+  await fill(page, 'repair.intake.price.amount.0', '450000');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Ester Mandowen');
+  await expect(page.getByTestId('repair.ticket.photos.strip.front')).toBeVisible();
+  await shoot(page, 'options-ticket');
 });

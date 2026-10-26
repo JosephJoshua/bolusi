@@ -1,4 +1,4 @@
-// The phone catalog store (migration 0013) on real Postgres: revisions move only when a field a
+// The phone catalog store (migration 0014) on real Postgres: revisions move only when a field a
 // device keeps changes, pending work comes newest first, and the app role can read but not write.
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -54,6 +54,7 @@ describe('revisions', () => {
       announcedYear: 2024,
       modelCodes: '',
       photoSha256: null,
+      specs: {},
     });
     expect(rows[1]!.revision).toBeGreaterThan(rows[0]!.revision);
     expect(await read(rows[1]!.revision)).toEqual([]);
@@ -75,12 +76,28 @@ describe('revisions', () => {
   test('the device page year wins over a later listing guess', async () => {
     await writer.saveDetails(
       2,
-      { modelCodes: ['SM-A025F', 'SM-A025G'], announcedYear: 2023 },
+      { modelCodes: ['SM-A025F', 'SM-A025G'], announcedYear: 2023, specs: {} },
       4000,
     );
     await writer.saveListedModels([listed(2, { announcedYear: 2024 })], 5000);
     const row = (await read()).find((r) => r.id === 2)!;
     expect(row).toMatchObject({ announcedYear: 2023, modelCodes: 'SM-A025F, SM-A025G' });
+  });
+
+  test('specs read back as saved and move the revision only when they change', async () => {
+    const specs = { chipset: 'Helio G85', battery: 'Li-Po 5000 mAh', usb: 'USB Type-C' };
+    const details = { modelCodes: ['SM-A025F', 'SM-A025G'], announcedYear: 2023, specs };
+    await writer.saveDetails(2, details, 5500);
+    const saved = (await read()).find((r) => r.id === 2)!;
+    expect(saved.specs).toEqual(specs);
+
+    // Same specs in another key order: nothing a device keeps changed.
+    const reordered = { usb: 'USB Type-C', battery: 'Li-Po 5000 mAh', chipset: 'Helio G85' };
+    await writer.saveDetails(2, { ...details, specs: reordered }, 5600);
+    expect(await revisionOf(2)).toBe(saved.revision);
+
+    await writer.saveDetails(2, { ...details, specs: { ...specs, chipset: 'Helio G88' } }, 5700);
+    expect(await revisionOf(2)).toBeGreaterThan(saved.revision);
   });
 });
 

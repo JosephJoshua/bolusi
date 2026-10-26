@@ -1,15 +1,16 @@
 // The GSMArena crawl: brands, their model listings, then each model's photo and page.
 //
-// Slow and polite by design (the owner asked for it). One request at a time, at least `delayMs`
-// apart plus jitter; robots.txt is honoured; a 429/503 or a dropped connection waits (Retry-After
-// or a growing pause) and a run that keeps being refused stops. Everything is saved as it is
-// read, so a stopped run loses nothing and the next one carries on.
+// Polite by design. One request at a time, at least `delayMs` apart plus jitter (the owner chose
+// about a second), never faster than a robots.txt Crawl-delay. A 429/503 or a dropped connection
+// waits (Retry-After or a growing pause) and doubles the gap between requests for the rest of the
+// run, so the crawl settles at a pace GSMArena accepts; a run that keeps being refused stops.
+// Everything is saved as it is read, so a stopped run loses nothing and the next one carries on.
 //
 // A run walks three phases, each resumable from the database:
 //   list    — the brand list, then each brand's listing pages. A brand walked to the end before
 //             is re-read only until a page brings nothing new (listings are newest first).
 //   photos  — the photo of every model that has none yet, newest models first.
-//   details — each model's own page, for its maker codes (SM-A556B…) and precise year.
+//   details — each model's own page, for its maker codes (SM-A556B…), precise year and specs.
 import { createHash } from 'node:crypto';
 
 import type { PendingModel, PhoneCatalogWriter } from '@bolusi/db-server';
@@ -70,6 +71,8 @@ export interface CrawlSummary {
 
 /** A pause after a refusal: 5, 10, 20, 40 minutes, capped at an hour. */
 const BACKOFF_MS = [5, 10, 20, 40].map((minutes) => minutes * 60_000);
+/** The slowest a refused run slows itself to between requests. */
+const MAX_DELAY_MS = 60_000;
 const MAX_RETRY_AFTER_MS = 60 * 60_000;
 const MAX_PHOTO_BYTES = 512 * 1024;
 const BATCH = 50;
@@ -98,6 +101,7 @@ export async function crawlPhoneCatalog(
   const phases = new Set(options.phases ?? CRAWL_PHASES);
   let requests = 0;
   let lastRequestAt: number | null = null;
+  let delayMs = options.delayMs;
   const robots = new Map<string, RobotsRules>();
   const counts = { brands: 0, newModels: 0, photos: 0, details: 0 };
 
@@ -106,7 +110,7 @@ export async function crawlPhoneCatalog(
       throw new StopCrawl('max-requests');
     }
     if (lastRequestAt !== null) {
-      const due = lastRequestAt + options.delayMs * (1 + deps.random() / 2);
+      const due = lastRequestAt + delayMs * (1 + deps.random() / 2);
       const wait = due - deps.now();
       if (wait > 0) await deps.sleep(wait);
     }
@@ -139,6 +143,10 @@ export async function crawlPhoneCatalog(
         return { kind: 'failed' };
       }
       if (attempt >= BACKOFF_MS.length) throw new StopCrawl('refused');
+      if (delayMs < MAX_DELAY_MS) {
+        delayMs = Math.min(delayMs * 2, MAX_DELAY_MS);
+        deps.log(`slowing down to one request every ${delayMs / 1000} s`);
+      }
       const wait =
         response?.retryAfterSeconds != null
           ? Math.min(response.retryAfterSeconds * 1000, MAX_RETRY_AFTER_MS)
@@ -163,6 +171,10 @@ export async function crawlPhoneCatalog(
             ? RobotsRules.allowAll()
             : RobotsRules.denyAll();
       robots.set(origin, rules);
+      if (rules.crawlDelayMs !== null && rules.crawlDelayMs > delayMs) {
+        delayMs = Math.min(rules.crawlDelayMs, MAX_DELAY_MS);
+        deps.log(`robots.txt asks for ${delayMs / 1000} s between requests`);
+      }
     }
     return rules.allows(pathname + search);
   }

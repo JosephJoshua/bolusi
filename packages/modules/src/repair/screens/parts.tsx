@@ -27,6 +27,8 @@ import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 import { statusLabel } from './labels.js';
 import { statusTone, type TicketStatus } from '../flows.js';
 import type { DeviceModelPhoto, DeviceModelRow } from '../device-models.js';
+import { specFacts, type SpecFactKey } from '../device-specs.js';
+import { tn } from './i18n.js';
 import { useModelPhoto, useRepairQuery, useRepairThumbnail } from './runtime.js';
 
 /**
@@ -233,6 +235,53 @@ export function CatalogPhoto({
       style={large ? styles.modelLarge : styles.modelSmall}
       testID={`${testID}.image`}
     />
+  );
+}
+
+const SPEC_LABEL = {
+  memory: 'repair.spec.memory',
+  screen: 'repair.spec.screen',
+  chipset: 'repair.spec.chipset',
+  battery: 'repair.spec.battery',
+  port: 'repair.spec.port',
+  sim: 'repair.spec.sim',
+  cardSlot: 'repair.spec.cardSlot',
+  os: 'repair.spec.os',
+} as const satisfies Record<SpecFactKey, string>;
+
+/**
+ * The catalog's specs for a ticket's phone, as the viewer needs them (`specFacts`): memory
+ * variants for everyone, the inside of the phone for someone who repairs it. Nothing when the
+ * catalog does not know the model or has no specs for it.
+ */
+export function DeviceSpecs({
+  brand,
+  model,
+  repairs,
+  testID,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly repairs: boolean;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const facts = found === null ? [] : specFacts(found.specs, repairs);
+  if (facts.length === 0) return null;
+  return (
+    <Section title={tn('repair.spec.title')} testID={testID}>
+      <FactGrid>
+        {facts.map((fact) => (
+          <Fact
+            key={fact.key}
+            label={tn(SPEC_LABEL[fact.key])}
+            // GSMArena's "No" for a phone without a card slot.
+            value={fact.value === 'No' ? tn('repair.spec.none') : fact.value}
+            testID={`${testID}.${fact.key}`}
+          />
+        ))}
+      </FactGrid>
+    </Section>
   );
 }
 

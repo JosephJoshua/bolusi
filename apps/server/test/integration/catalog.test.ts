@@ -18,6 +18,7 @@ function model(id: number): PhoneModelRecord {
     announcedYear: 2024,
     modelCodes: '',
     photoSha256: id === 1 ? 'b'.repeat(64) : null,
+    specs: id === 1 ? { chipset: 'Exynos 1480 (4 nm)', usb: 'USB Type-C 2.0' } : {},
     revision: id * 10,
   };
 }

@@ -242,7 +242,7 @@ export const PROBE_REGISTRY: ProbeRegistry = {
   'GET /v1/catalog/phones': {
     crossTenant: {
       kind: 'absent',
-      reason: 'the phone catalog is global reference data with no tenant (migration 0013)',
+      reason: 'the phone catalog is global reference data with no tenant (migration 0014)',
     },
     unassignedStore: { kind: 'absent', reason: 'same — the catalog has no store scope' },
     unauthenticated: UNAUTH_DENIED,

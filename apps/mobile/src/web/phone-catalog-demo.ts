@@ -6,6 +6,7 @@
  * real catalog photo here would pretend otherwise.
  */
 import { FuzzyIndex } from '@bolusi/core';
+import type { PhoneSpecs } from '@bolusi/schemas';
 import {
   catalogKeys,
   sameDeviceModel,
@@ -23,6 +24,7 @@ interface DemoModel {
   readonly kind?: DeviceModelKind;
   /** Body colour of the drawing; none means the catalog has no photo of it. */
   readonly body?: string;
+  readonly specs?: PhoneSpecs;
 }
 
 const MODELS: readonly DemoModel[] = [
@@ -33,6 +35,20 @@ const MODELS: readonly DemoModel[] = [
     year: 2024,
     codes: 'SM-A556B, SM-A556E',
     body: '#c9d6e8',
+    specs: {
+      displayType: 'Super AMOLED, 120Hz, 1000 nits (HBM)',
+      displaySize: '6.6 inches',
+      displayResolution: '1080 x 2340 pixels',
+      os: 'Android 14',
+      chipset: 'Exynos 1480 (4 nm)',
+      internalMemory: '128GB 8GB RAM, 256GB 8GB RAM, 256GB 12GB RAM',
+      cardSlot: 'microSDXC (uses shared SIM slot)',
+      battery: 'Li-Ion 5000 mAh',
+      charging: '25W wired',
+      usb: 'USB Type-C 2.0, OTG',
+      sim: 'Nano-SIM + Nano-SIM',
+      colors: 'Awesome Iceblue, Awesome Lilac, Awesome Navy, Awesome Lemon',
+    },
   },
   {
     id: 12825,
@@ -73,6 +89,19 @@ const MODELS: readonly DemoModel[] = [
     year: 2023,
     codes: 'SM-A145F',
     body: '#3d4450',
+    specs: {
+      displayType: 'PLS LCD',
+      displaySize: '6.6 inches',
+      os: 'Android 13',
+      chipset: 'Mediatek Helio G80 (12 nm)',
+      internalMemory: '64GB 4GB RAM, 128GB 4GB RAM, 128GB 6GB RAM',
+      cardSlot: 'microSDXC (dedicated slot)',
+      battery: 'Li-Po 5000 mAh',
+      charging: '15W wired',
+      usb: 'USB Type-C 2.0',
+      sim: 'Nano-SIM + Nano-SIM',
+      colors: 'Black, Silver, Dark Red, Light Green',
+    },
   },
   {
     id: 13711,
@@ -84,7 +113,26 @@ const MODELS: readonly DemoModel[] = [
   },
   { id: 12589, brand: 'Xiaomi', name: 'Redmi Note 13', year: 2023, body: '#b9d4c8' },
   { id: 12600, brand: 'Xiaomi', name: 'Redmi 13C', year: 2023, body: '#5e7d6f' },
-  { id: 12990, brand: 'Oppo', name: 'A58', year: 2023, body: '#e3c9a7' },
+  {
+    id: 12990,
+    brand: 'Oppo',
+    name: 'A58',
+    year: 2023,
+    body: '#e3c9a7',
+    specs: {
+      displayType: 'IPS LCD, 90Hz',
+      displaySize: '6.72 inches',
+      chipset: 'Mediatek Helio G85 (12 nm)',
+      internalMemory: '128GB 6GB RAM, 128GB 8GB RAM',
+      cardSlot: 'microSDXC (dedicated slot)',
+      battery: 'Li-Po 5000 mAh',
+      charging: '33W wired',
+      usb: 'USB Type-C 2.0, OTG',
+      sim: 'Nano-SIM + Nano-SIM',
+      os: 'Android 13',
+      colors: 'Glowing Black, Dazzling Green',
+    },
+  },
   { id: 12001, brand: 'Oppo', name: 'A57 4G', year: 2022, body: '#2f3b52' },
   { id: 12700, brand: 'Vivo', name: 'Y17s', year: 2023, body: '#7aa3c9' },
   { id: 12800, brand: 'Infinix', name: 'Hot 40 Pro', year: 2023, body: '#c7b46a' },
@@ -133,6 +181,7 @@ function rowOf(model: DemoModel): DeviceModelRow {
     kind: model.kind ?? 'phone',
     announcedYear: model.year,
     photo: photoOf(model),
+    specs: {},
     learned: false,
   };
 }
@@ -145,6 +194,7 @@ function learnedRow([brand, model]: [string, string]): DeviceModelRow {
     kind: null,
     announcedYear: null,
     photo: null,
+    specs: {},
     learned: true,
   };
 }
@@ -171,12 +221,16 @@ export function demoSearchDeviceModels(text: string, limit: number): DeviceModel
 }
 
 export function demoFindDeviceModel(brand: string, model: string): DeviceModelRow[] {
-  // The device's rule: the same brand, and the typed name is one of the catalog's spellings.
+  // The device's rule: the same brand (or, with none, exactly one model) and the typed name is
+  // one of the catalog's spellings.
   const wanted = { brand, model };
-  const match = MODELS.filter((m) => m.brand.toLowerCase() === brand.trim().toLowerCase()).find(
-    (m) => catalogKeys(m.brand, m.name).some((key) => sameKey(key, wanted)),
+  const sameBrand = (m: DemoModel) =>
+    brand.trim() === '' || m.brand.toLowerCase() === brand.trim().toLowerCase();
+  const matches = MODELS.filter(
+    (m) => sameBrand(m) && catalogKeys(m.brand, m.name).some((key) => sameKey(key, wanted)),
   );
-  return match === undefined ? [] : [rowOf(match)];
+  const match = matches.length === 1 || brand.trim() !== '' ? matches[0] : undefined;
+  return match === undefined ? [] : [{ ...rowOf(match), specs: match.specs ?? {} }];
 }
 
 export function demoModelPhoto(photo: DeviceModelPhoto): Promise<string | null> {
