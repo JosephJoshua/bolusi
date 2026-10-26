@@ -23,11 +23,17 @@ const APP_ID = 'com.bolusi.app';
 const AVD = 'bolusi-qa';
 const SIM = 'bolusi-qa';
 const PORT = 3000;
+// One QA run per machine at a time, so threads sharing the QA VPS don't stack emulators.
+const LOCK = path.join(homedir(), '.bolusi-qa.lock');
+// Caps for a shared machine: one emulator with 4 cores and 4 GB, and a gentle build.
+const EMULATOR_CORES = '4';
+const EMULATOR_MEMORY_MB = '4096';
+const GRADLE_WORKERS = '8';
 
 const ANDROID_HOME =
   process.env.ANDROID_HOME ??
   process.env.ANDROID_SDK_ROOT ??
-  path.join(homedir(), 'Library/Android/sdk');
+  path.join(homedir(), process.platform === 'darwin' ? 'Library/Android/sdk' : 'Android/Sdk');
 const STUDIO_JDK = '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
 const env = {
   ...process.env,
@@ -99,7 +105,19 @@ async function androidUp(build) {
   if (!out('adb', ['devices']).includes('emulator-')) {
     const emu = spawn(
       'emulator',
-      ['-avd', AVD, '-no-window', '-no-audio', '-no-boot-anim', '-memory', '2048'],
+      [
+        '-avd',
+        AVD,
+        '-no-window',
+        '-no-audio',
+        '-no-boot-anim',
+        '-gpu',
+        'swiftshader_indirect',
+        '-cores',
+        EMULATOR_CORES,
+        '-memory',
+        EMULATOR_MEMORY_MB,
+      ],
       {
         env,
         detached: true,
@@ -118,7 +136,10 @@ async function androidUp(build) {
       cwd: MOBILE,
       env: buildEnv,
     });
-    run('./gradlew', ['assembleRelease'], { cwd: path.join(MOBILE, 'android'), env: buildEnv });
+    run('./gradlew', ['assembleRelease', `--max-workers=${GRADLE_WORKERS}`], {
+      cwd: path.join(MOBILE, 'android'),
+      env: buildEnv,
+    });
   }
   // The lane server starts empty each time, so start the app from a clean install too.
   try {
@@ -217,13 +238,29 @@ function shot(platform, name) {
   console.log(file);
 }
 
+function takeLock() {
+  try {
+    mkdirSync(LOCK);
+  } catch {
+    const owner = existsSync(path.join(LOCK, 'owner'))
+      ? readFileSync(path.join(LOCK, 'owner'), 'utf8')
+      : '?';
+    throw new Error(
+      `another QA run holds ${LOCK} (${owner.trim()}); wait for it or run qa:mobile down`,
+    );
+  }
+  writeFileSync(path.join(LOCK, 'owner'), `${ROOT} since ${new Date().toISOString()}\n`);
+}
+
 function down() {
+  rmSync(LOCK, { recursive: true, force: true });
   stopServer();
   try {
     run('adb', ['emu', 'kill']);
   } catch {
     // no emulator running
   }
+  if (process.platform !== 'darwin') return;
   try {
     run('xcrun', ['simctl', 'shutdown', 'all']);
   } catch {
@@ -242,6 +279,8 @@ async function main() {
   if (command === 'shot') return shot(platform, rest[0] ?? String(Date.now()));
   if (command !== 'up') throw new Error(`unknown command ${command}`);
 
+  if (platform === 'ios' && process.platform !== 'darwin') throw new Error('iOS QA needs a Mac');
+  takeLock();
   const build = !rest.includes('--no-build');
   if (build) run('pnpm', ['exec', 'tsc', '-b'], { cwd: ROOT });
   const ready = await startServer();

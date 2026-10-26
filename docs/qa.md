@@ -10,45 +10,55 @@ screenshots. Every UI task gets both:
 
 ## Where it runs
 
-| Client                      | Interactive QA                                   | Where                                      |
-| --------------------------- | ------------------------------------------------ | ------------------------------------------ |
-| Mobile (Expo) Android + iOS | Real release build on the emulator and Simulator | Joseph's Mac, through the QA runner thread |
-| Mobile screens, quick look  | react-native-web harness with in-memory fakes    | Any cloud container                        |
-| Desktop (Electron, planned) | Playwright driving the Electron app              | Any cloud container                        |
-| Web (planned)               | Playwright in Chromium                           | Any cloud container                        |
+| Client                      | Interactive QA                                | Where                             |
+| --------------------------- | --------------------------------------------- | --------------------------------- |
+| Mobile (Expo) Android       | Real release build on a headless emulator     | QA VPS, via SSH from Joseph's Mac |
+| Mobile (Expo) iOS           | Real release build on the iOS Simulator       | Joseph's Mac                      |
+| Mobile screens, quick look  | react-native-web harness with in-memory fakes | Any cloud container               |
+| Desktop (Electron, planned) | Playwright driving the Electron app           | Any cloud container               |
+| Web (planned)               | Playwright in Chromium                        | Any cloud container               |
 
 The web harness is a browser approximation with fake data. It is good for layout and copy, but it
 does not count as QA of sync, offline storage, crypto or native behavior. Mobile UI tasks still need
-the Mac run.
+a native run.
 
-## Mobile on the Mac
+## Native mobile QA
 
-Cloud containers cannot run an emulator or Simulator (checked 2026-10-26): they have no `/dev/kvm`
-or CPU virtualization (the kernel reports nested KVM is not enabled for them), no binder for
-container Android, and `dl.google.com` is blocked, so the emulator and system images cannot be
-downloaded either. Threads ask the QA runner thread instead, which starts a Remote Control session on Joseph's Mac. The runner works through requests one at a time and
-builds once per commit. Use a separate git worktree on the Mac so Joseph's own checkout is untouched.
+Cloud containers cannot run an emulator (checked 2026-10-26): no `/dev/kvm` or CPU virtualization,
+no binder for container Android, and their proxy only carries HTTPS to hostnames, so they cannot SSH
+to the VPS either. Threads ask the QA runner thread ("Design automated and exploratory QA"). It
+starts a Remote Control session on Joseph's Mac, which runs iOS locally and SSHes to the QA VPS
+(address in project memory, using Joseph's key) for Android. The runner takes one request at a time and builds
+once per commit.
 
-Needs: Apple Silicon Mac with Xcode, Android Studio (SDK and its bundled JDK), CocoaPods, Node 22,
-pnpm, and Maestro (`curl -Ls "https://get.maestro.mobile.dev" | bash`).
+**QA VPS:** bare-metal Debian 13, 96 threads, 251 GB RAM, KVM. It is shared with other services
+(about 5 load average, many ports in use), so: one emulator at a time (the script takes a lock in
+`~/.bolusi-qa.lock`), capped at 4 cores and 4 GB, Gradle at 8 workers, and nothing listening
+publicly. The lane server binds `127.0.0.1:3000`. Work in `~/bolusi-qa` and never use sudo.
+
+**Mac:** used for iOS only, since its disk is nearly full. Check free space first: an iOS build
+needs about 12 GB.
+
+Tools: Node 22, pnpm, a JDK (17 or newer), the Android SDK command-line tools (VPS) or Xcode and
+CocoaPods (Mac), and Maestro.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm qa:mobile up android       # lane server + headless emulator + fresh release build, clean install
+pnpm qa:mobile up android       # lock + lane server + headless emulator + fresh release build
 pnpm qa:mobile shot android 01-intake-empty
-pnpm qa:mobile down             # stop the server, emulator and Simulator
-pnpm qa:mobile up ios           # same for the iOS Simulator
+pnpm qa:mobile down             # stop everything and release the lock
+pnpm qa:mobile up ios           # Mac only
 ```
 
 `up` starts `scripts/harness-serve-lane.mjs` on `127.0.0.1:3000` (PGlite, empty every start) and
 prints the enrollment login, one-time password and PIN for the provisioned owner. Pass `--no-build`
-to reuse the last build. Screenshots land in `qa-artifacts/`.
+to reuse the last build. Screenshots land in `qa-artifacts/`. Always finish with `down`; if `up`
+fails, `down` also clears the lock.
 
-Drive the app with a mobile MCP server (tap, type, swipe, read the screen) or with small Maestro
-flows (`maestro test <flow>.yaml`, `maestro hierarchy`). Look at every screenshot before deciding the
-next step. Run Android and iOS one after the other to keep memory low. For offline: on Android use
-`adb shell cmd connectivity airplane-mode enable`; on iOS stop the lane server, since the Simulator
-shares the Mac's network.
+Drive the app with `adb` (`shell input tap|text`, `exec-out uiautomator dump /dev/tty`) or small
+Maestro flows (`maestro test <flow>.yaml`, `maestro hierarchy`). Look at every screenshot before
+deciding the next step. For offline: on Android use `adb shell cmd connectivity airplane-mode
+enable`; on iOS stop the lane server, since the Simulator shares the Mac's network.
 
 ## Web harness in a cloud container
 
