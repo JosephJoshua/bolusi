@@ -8,7 +8,7 @@ import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
-import { bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
+import { bootOncePerRealm, bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
@@ -97,7 +97,7 @@ import './src/harness/register.js';
  */
 const APP_VERSION = '';
 
-function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
+function bootDataLayer(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
@@ -139,6 +139,10 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
     },
   });
 }
+
+// Root boots again whenever Android recreates the activity in the same process; the data layer must
+// not (see `bootOncePerRealm`).
+const boot = bootOncePerRealm(bootDataLayer);
 
 /**
  * THE OTHER NATIVE-BINDING SITE (task 89): NetInfo and RN `AppState` are native modules that cannot

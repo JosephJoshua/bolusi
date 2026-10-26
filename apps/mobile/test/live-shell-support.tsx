@@ -78,7 +78,7 @@ export interface Fixture {
   close(): Promise<void>;
 }
 
-function bootAt(location: string): Promise<Bootstrapped> {
+export function bootAt(location: string): Promise<Bootstrapped> {
   return bootstrap({
     driverFactory: openBetterSqlite3Driver,
     keyStore: {
