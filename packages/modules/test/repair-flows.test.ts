@@ -492,6 +492,19 @@ describe('intake draft', () => {
       'quoteLines',
     ]);
     expect(stepProblems(complete(h), 'review', OPTIONS)).toEqual([]);
+    // A lock kind chosen with nothing entered (or a too-short pattern, kept as '') blocks the step,
+    // where saving would have quietly recorded no lock.
+    const lock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      stepProblems(
+        { ...complete(h), device: { ...complete(h).device, lockKind, passcode } },
+        'device',
+        OPTIONS,
+      );
+    expect(lock('pattern', '')).toEqual(['screenLock']);
+    expect(lock('pin', '')).toEqual(['screenLock']);
+    expect(lock('password', '')).toEqual(['screenLock']);
+    expect(lock('pattern', '1478')).toEqual([]);
+    expect(lock('none', '')).toEqual([]);
     // A store that asks for fewer photo angles has no problem with the ones it does not ask for.
     const twoAngles = { ...OPTIONS, photoAngles: OPTIONS.photoAngles.slice(0, 2) };
     expect(

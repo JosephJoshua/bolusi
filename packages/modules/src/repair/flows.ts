@@ -455,6 +455,7 @@ export type IntakeProblem =
   | 'customerName'
   | 'deviceBrand'
   | 'deviceModel'
+  | 'screenLock'
   | 'complaint'
   | 'photos'
   | 'quoteLines'
@@ -476,6 +477,11 @@ export function stepProblems(
     case 'device':
       if (draft.device.brand.trim() === '') problems.push('deviceBrand');
       if (draft.device.model.trim() === '') problems.push('deviceModel');
+      // A chosen lock with nothing entered (a pattern shorter than Android allows is kept as '')
+      // would save as no lock; the counter picks "Tidak ada" for that.
+      if (draft.device.lockKind !== 'none' && draft.device.passcode === '') {
+        problems.push('screenLock');
+      }
       break;
     case 'condition':
       if (draft.complaint.trim() === '') problems.push('complaint');

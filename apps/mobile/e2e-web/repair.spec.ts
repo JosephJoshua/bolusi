@@ -94,6 +94,11 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await tap(page, 'repair.intake.device.lock.kind.pattern');
   const pad = page.getByTestId('repair.intake.device.lock.pattern');
   await pad.scrollIntoViewIfNeeded();
+  // "Pola" chosen with nothing drawn does not move on as if there were no lock.
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.device.lock.pattern.hint')).toHaveText(
+    'Isi kunci layarnya, atau pilih Tidak ada.',
+  );
   await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 2]);
   await expect(page.getByTestId('repair.intake.device.lock')).toContainText('minimal 4 titik');
   await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 7, 8, 9]);

@@ -220,7 +220,8 @@
     "photos": "All six photos are required.",
     "quoteLines": "Add at least one price line.",
     "incompleteLine": "Describe every line that has an amount.",
-    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero."
+    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
+    "screenLock": "Enter the screen lock, or choose None."
   },
   "ready": {
     "today": "Today",

@@ -220,7 +220,8 @@
     "photos": "Masih ada foto yang belum diambil.",
     "quoteLines": "Tambah minimal satu biaya.",
     "incompleteLine": "Biaya ini belum ada keterangannya.",
-    "negativeTotal": "Diskonnya lebih besar dari total biaya."
+    "negativeTotal": "Diskonnya lebih besar dari total biaya.",
+    "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
     "today": "Hari ini",

@@ -180,10 +180,12 @@ export function DeviceStep({
   options,
   brandError,
   modelError,
+  lockError,
   testID,
 }: StepProps & {
   readonly brandError: string | undefined;
   readonly modelError: string | undefined;
+  readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
   // The brand this step filled in from the catalog. While the field still holds it, a different
@@ -243,6 +245,7 @@ export function DeviceStep({
         onChangeText={(value) => set({ model: value })}
         onBlur={tidyModel}
         errorMessage={modelError}
+        autoCorrect={false}
         revealOnFocus="to-top"
         testID={`${testID}.model`}
       />
@@ -286,6 +289,7 @@ export function DeviceStep({
           value={device.brand}
           onChangeText={(value) => set({ brand: value })}
           errorMessage={brandError}
+          autoCorrect={false}
           testID={`${testID}.brand`}
         />
         {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
@@ -344,6 +348,7 @@ export function DeviceStep({
         kind={device.lockKind}
         value={device.passcode}
         onChange={(lockKind, passcode) => set({ lockKind, passcode })}
+        error={lockError}
         testID={`${testID}.lock`}
       />
     </View>
@@ -359,11 +364,14 @@ function ScreenLockField({
   kind,
   value,
   onChange,
+  error,
   testID,
 }: {
   readonly kind: IntakeDraft['device']['lockKind'];
   readonly value: string;
   readonly onChange: (kind: IntakeDraft['device']['lockKind'], value: string) => void;
+  /** Set when a lock kind is chosen but nothing was entered for it. */
+  readonly error: string | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   const [tooShort, setTooShort] = useState(false);
@@ -393,6 +401,7 @@ function ScreenLockField({
             keyboardType="number-pad"
             secureTextEntry
             revealLabels={revealLabels}
+            errorMessage={error}
             autoFocus
             testID={`${testID}.pin`}
           />
@@ -406,6 +415,7 @@ function ScreenLockField({
             onChangeText={(text) => onChange('password', text)}
             secureTextEntry
             revealLabels={revealLabels}
+            errorMessage={error}
             autoFocus
             testID={`${testID}.password`}
           />
@@ -413,8 +423,11 @@ function ScreenLockField({
       ) : null}
       {kind === 'pattern' ? (
         <View style={styles.suggestions}>
-          <Text style={tooShort ? styles.patternProblem : repairStyles.muted}>
-            {tn(tooShort ? 'repair.lock.patternShort' : 'repair.lock.patternHint')}
+          <Text
+            style={tooShort || error !== undefined ? styles.patternProblem : repairStyles.muted}
+            testID={`${testID}.pattern.hint`}
+          >
+            {tooShort ? tn('repair.lock.patternShort') : (error ?? tn('repair.lock.patternHint'))}
           </Text>
           <View style={styles.patternPad}>
             <PatternLock

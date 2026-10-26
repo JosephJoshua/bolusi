@@ -266,6 +266,7 @@ export const REPAIR_KEYS = [
   'repair.problem.negativeTotal',
   'repair.problem.photos',
   'repair.problem.quoteLines',
+  'repair.problem.screenLock',
   'repair.ready.inDays',
   'repair.ready.today',
   'repair.ready.tomorrow',
