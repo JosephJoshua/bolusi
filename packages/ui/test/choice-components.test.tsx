@@ -86,7 +86,10 @@ describe('SegmentedControl inline', () => {
       flexShrink: 0,
     });
     const [label] = r.get('seg.not_checked').queryAll((n) => n.type === 'Text');
-    expect(label?.props['numberOfLines']).toBeUndefined();
+    // One line that clips, never an ellipsis: the width is guaranteed by the layout above, so this
+    // only absorbs Android's draw-time rounding (it wrapped the last word away on device).
+    expect(label?.props['numberOfLines']).toBe(1);
+    expect(label?.props['ellipsizeMode']).toBe('clip');
   });
 });
 

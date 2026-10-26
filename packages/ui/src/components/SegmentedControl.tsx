@@ -108,6 +108,13 @@ export function SegmentedControl<V extends string>({
         ]}
       >
         <Text
+          // A pill is one line by design, and the layout gives it its text's full width (pills never
+          // shrink). On Android the drawn text can still need a pixel or two more than Yoga measured,
+          // and a multi-line TextView then wrapped "Tidak dicek" and hid "dicek" below the pill's
+          // height (second Android QA run: bounds fit one line, the drawing did not). One line with
+          // `clip` makes that rounding cost a sliver of the last glyph instead of a whole word.
+          numberOfLines={1}
+          ellipsizeMode="clip"
           style={[
             compact ? styles.compactLabel : styles.label,
             { color: selected ? color.onPrimary : color.text },
