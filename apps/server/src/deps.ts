@@ -141,6 +141,8 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       return byType.get(type)?.entityType;
     },
 
+    checkRule: (op, ctx) => registry.checkOpRule(op, ctx),
+
     resolve(type, schemaVersion) {
       const declaration = byType.get(type);
       if (declaration === undefined) return { kind: 'unknown' };

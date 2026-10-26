@@ -62,6 +62,7 @@ import {
   seedWorld,
   testScopeOf,
   testEntityTypeOf,
+  testCheckRule,
   testPermissionOf,
   type OplogTestDb,
 } from '../oplog/helpers.js';
@@ -153,6 +154,8 @@ const suiteRegistry: OpRegistry = {
       PLATFORM_OP.userLocaleChanged,
     ].includes(type),
   ),
+  // The production rule per type (a test-only type declares none).
+  checkRule: testCheckRule,
   permissionOf: testPermissionOf((type) =>
     [
       NOTE_CREATED,

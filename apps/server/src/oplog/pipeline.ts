@@ -13,9 +13,11 @@
 //     real op pushed via another device's token attributes to binding, not the crypto gate]
 //   signature verify (recompute JCS from received fields) → BAD_SIGNATURE
 //   chain continuity → CHAIN_GAP | CHAIN_BROKEN(+halt)
+//   clock (timestamp no further ahead of the server than the margin) → CLOCK_AHEAD
 //   scope (tenant/store/user membership + per-type rules) → SCOPE_VIOLATION
 //   registry + zod → UNKNOWN_TYPE | SCHEMA_INVALID
 //   authorization (declared permission, server directory) → PERMISSION_DENIED
+//   the type's rules (state change, targets, minted values; server records) → RULE_VIOLATED
 //   a refusal from scope onward still advances the chain head (refused_operations), so the
 //     device's later ops keep syncing; a re-push of a refused op gets the same refusal
 //   accepted → allocate serverSeq → INSERT (+ clock-skew flag) → APPLY PROJECTIONS → advance head
@@ -30,7 +32,7 @@
 // below, which is exactly why that throw must propagate (task 139), not be mislabeled `duplicate`.
 // A new module is added by appending to the ONE module list (deps.ts) — never by touching this
 // orchestrator.
-import { base64ToBytes } from '@bolusi/core';
+import { base64ToBytes, isAheadOfServer } from '@bolusi/core';
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
 import { sql } from 'kysely';
@@ -45,6 +47,7 @@ import { isClockSkewed } from './skew.js';
 import { classifyChain, type ChainHead } from './steps/chain.js';
 import { findRefusal, isDuplicate } from './steps/dedupe.js';
 import { checkPermission, createAuthorLookup } from './steps/permission.js';
+import { checkRules } from './steps/rules.js';
 import { classifySchema } from './steps/schema.js';
 import { checkScope } from './steps/scope.js';
 import { verifyPushedSignature } from './steps/signature.js';
@@ -271,6 +274,15 @@ export async function processPushBatch(
       // From here on the op is proven to be this device's, at its next chain position, so every
       // refusal below spends that position (`refuse`) instead of stranding the device's later ops.
 
+      // 4a. clock: last-writer-wins orders by device timestamp, so an op stamped in the future would
+      // beat every honest change until then. A clock that far ahead is worth an owner's attention.
+      if (isAheadOfServer(op.timestamp, deps.now())) {
+        const reason = 'timestamp is ahead of the server clock';
+        await anomaly(op, 'CLOCK_SKEW', reason);
+        await refuse(op, 'CLOCK_AHEAD', reason);
+        continue;
+      }
+
       // 5. scope (05 §9): tenant/store/user membership + per-type rules.
       const scope = await checkScope(db, op, device, deps.registry);
       if (scope !== null) {
@@ -294,7 +306,15 @@ export async function processPushBatch(
         continue;
       }
 
-      // Accepted: allocate a gapless serverSeq, flag skew (never reject), insert with verbatim JCS.
+      // 8. the op type's rules, against the server's records as of this op (earlier ops of the
+      // batch are already folded). No anomaly: two people changing one ticket offline is not tamper.
+      const rules = await checkRules(db, op, device, deps.registry, authors);
+      if (rules !== null) {
+        await refuse(op, 'RULE_VIOLATED', rules.reason);
+        continue;
+      }
+
+      // Accepted: allocate a gapless serverSeq, flag skew, insert with verbatim JCS.
       const receivedAt = deps.now();
       const clockSkewFlagged = isClockSkewed(op.timestamp, receivedAt, device.lastSyncAt);
 

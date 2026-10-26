@@ -58,6 +58,15 @@ behind adapters. Node tests do not establish native performance or correctness.
   tenant, store scope still matters; a store owner is not a tenant administrator.
 - Signatures establish device attribution/integrity, not user authorization or
   payment settlement.
+- The server is the authority. Devices sync signed events, and every change type
+  declares a permission and a `rule` (a legal state change, a target in this
+  store, values only this device may mint, or `null` with a reason). The device
+  runs both before saving; the server runs both again against its own records and
+  refuses what fails. The device then re-folds the record without the refused
+  change and lists it under sync problems.
+- A change stamped more than 10 minutes ahead of the server clock is refused, so
+  a wrong clock cannot win last-writer-wins. A device whose last sync found its
+  clock that far ahead saves nothing until the clock is fixed.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
 - Money uses integer IDR. Stock receipt, consumption, shipment, and payment are
   distinct events; business modules need direct tests for their effects.

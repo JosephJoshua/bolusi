@@ -49,6 +49,8 @@ export function createServerProjectionEngine<DB>(
     // The client's `arrival_seq` (10-db §9.2, D20 §4) is a different number and does not exist in
     // this schema, so a mis-wiring here errors rather than answering wrongly.
     seqColumn: 'server_seq',
+    // A refused push never enters the server's log (refused_operations holds the verdict).
+    logKeepsRefusedOps: false,
     makeRebuildStore: () => PUSH_NEVER_REBUILDS,
   });
 }

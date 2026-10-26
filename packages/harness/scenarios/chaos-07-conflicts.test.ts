@@ -52,6 +52,11 @@ import { resolveSeeds, withSeed } from '../src/index.js';
 import { mintSystemDevice, systemSignerKeyStore } from '../src/system-identity.js';
 
 const GENESIS_CLOCK = 1_726_000_000_000;
+/**
+ * The server's now for this scenario: after every scripted fixture timestamp (chaos07Cases bases them
+ * near 1_726_500_000_000), because the server refuses a timestamp ahead of its clock (clock-guard.ts).
+ */
+const SERVER_NOW = 1_726_600_000_000;
 const NOTE_CREATED = 'notes.note_created';
 const NOTE_EDITED = 'notes.note_body_edited';
 const NOTE_ARCHIVED = 'notes.note_archived';
@@ -621,6 +626,7 @@ describe('CHAOS-07 concurrent same-entity edits', () => {
               surfaced.push(c);
             },
           });
+          server.clock.set(SERVER_NOW);
           try {
             const [distinct, tie, archive] = chaos07Cases(seed) as readonly [
               Chaos07Case,
@@ -650,6 +656,7 @@ describe('CHAOS-07 concurrent same-entity edits', () => {
   test('CHAOS-07 positive control: detection DISABLED → the identical colliding push produces ZERO conflicts', async () => {
     const seed = 1;
     const server = await HarnessServer.boot(); // no systemKeyStore ⇒ no detection
+    server.clock.set(SERVER_NOW);
     try {
       const caseData = chaos07Cases(seed)[0]!; // the distinct-timestamps case (3 conflicts WHEN detecting)
       const deviceNames = [...new Set(caseData.ops.map((o) => o.device))];

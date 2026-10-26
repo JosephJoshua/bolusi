@@ -76,6 +76,8 @@ export interface SyncClientDeps {
   readonly bundle: BundleRefreshPort;
   /** `ProjectionEngine.applyPulledOp` — the pull phase folds through it inside the batch txn. */
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
+  readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -190,6 +192,7 @@ class SyncClientImpl implements SyncClient {
       timer: deps.timer,
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
+      refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
       onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
@@ -422,6 +425,7 @@ export function createSyncClientForApp(
     transport,
     bundle,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
+    refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,
     timer: config.timer ?? systemTimer,

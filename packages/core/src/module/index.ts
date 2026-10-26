@@ -31,6 +31,15 @@ export {
 
 export { checkOpType, type OpTypeRejection } from './op-type.js';
 
+export {
+  defineRefusals,
+  refusalKeyOf,
+  RuleRefusal,
+  type OpRule,
+  type OpRuleContext,
+  type Refusals,
+} from './op-rules.js';
+
 export { isStrictSchema, STRICTNESS_PROBE_KEY } from './strict-schema.js';
 
 export {

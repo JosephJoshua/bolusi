@@ -234,6 +234,7 @@
   "ticket": {
     "history": "History",
     "lastNote": "Last note",
+    "numbered": "Repair {number}",
     "price": "Price",
     "readyBy": "Ready by",
     "technician": "Technician",
@@ -340,5 +341,35 @@
     "save": "Save",
     "saved": "Cancellation fees saved.",
     "hint": "Enter both fees first."
+  },
+  "refusal": {
+    "alreadyRecorded": "This was already recorded.",
+    "customerNotFound": "This customer isn’t in this store.",
+    "ticketNotFound": "This repair isn’t in this store.",
+    "priceChangeNotFound": "This price proposal wasn’t found.",
+    "wrongSign": "A discount must lower the price; parts and labour must raise it.",
+    "belowZero": "The total price can’t go below zero.",
+    "numberNotThisDevice": "This repair number wasn’t issued by this device.",
+    "numberUsed": "This repair number is already used.",
+    "returned": "The phone was already picked up.",
+    "cancelled": "This repair was cancelled.",
+    "notStarted": "Work on this repair hasn’t started.",
+    "inRepair": "This repair is being worked on.",
+    "waitingForParts": "This repair is waiting for parts.",
+    "repaired": "This repair is already done.",
+    "notFinished": "This repair isn’t finished yet.",
+    "alreadyYours": "You already have this repair.",
+    "alreadyAssigned": "That technician already has this repair.",
+    "notTechnician": "This person can’t do repairs in this store.",
+    "noTechnician": "No technician has this repair yet.",
+    "needsBeforePhoto": "Take a photo of the phone before starting.",
+    "needsAfterPhoto": "Take a photo of the phone after the repair.",
+    "priceChangeDecided": "This price proposal was already accepted or declined.",
+    "priceChangeDifferent": "This price proposal changed. Check it again first.",
+    "priceChangesPending": "Some price proposals still need a decision.",
+    "invalidOptions": "This list of choices can’t be saved.",
+    "notThisStore": "This setting can only be changed for this device’s store.",
+    "discountOwnerOnly": "Only a store owner can give a discount.",
+    "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again."
   }
 }

@@ -19,7 +19,14 @@ import { DEFAULT_ROLES, type RoleKey } from '../../../src/identity/permissions.j
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { readAnomalies, readOps, seedUser, seedWorld, testId } from '../oplog/helpers.js';
+import {
+  readAnomalies,
+  readOps,
+  seedRepairTicket,
+  seedUser,
+  seedWorld,
+  testId,
+} from '../oplog/helpers.js';
 
 let db: Kysely<DB>;
 let appForTenant: ForTenant;
@@ -71,6 +78,7 @@ async function setupWorld(seed: number): Promise<{ world: ChainWorld; builder: C
   const builder = new ChainBuilder(world, serverCryptoPort);
   const genesis = builder.genesis();
   await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash, grants: 'none' });
+  await seedRepairTicket(db, world, TICKET);
   return { world, builder };
 }
 
