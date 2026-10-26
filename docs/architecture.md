@@ -93,6 +93,13 @@ behind adapters. Node tests do not establish native performance or correctness.
   migration 6 stopped storing each payload twice and compressed the signed text;
   the op log went from 394 MB to 143 MB). Phone timings are still unmeasured; on
   Hermes the compression costs about 0.8 ms per pulled op.
+- Board volume: `pnpm --filter @bolusi/modules bench:board` times the board's
+  reads on a device holding a store's history, and `apps/mobile/e2e-web/board-perf.mjs`
+  times the board itself in throttled Chromium (`?tickets=N` fills the web demo).
+  Screens must keep lists windowed: the `AppShell` content slot is fixed in height
+  so a `List` only renders what is near the screen, and rows should be memoized.
+  The first search of a session builds the search index (about 0.25 s on a laptop
+  for 5k tickets, roughly 1 s or more expected on a cheap phone; unmeasured there).
 - Op-log values are deflated with a frozen preset dictionary
   (`db-client/src/crypto/compression.ts`). Changing the dictionary makes stored
   ops unreadable; a better one needs a new scheme prefix.

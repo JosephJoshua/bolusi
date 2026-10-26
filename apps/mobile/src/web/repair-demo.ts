@@ -311,6 +311,93 @@ function seedTickets(): TicketDetailRow[] {
   ].map(withTotals);
 }
 
+/**
+ * `?tickets=N` on a repair entry fills the store to N tickets, so the board can be timed at a busy
+ * store's volume: the seeded six, then older history, nearly all of it already handed back.
+ */
+export function demoTicketCount(search: string): number {
+  const count = Number(new URLSearchParams(search).get('tickets'));
+  return Number.isInteger(count) && count > 0 ? count : 0;
+}
+
+const HISTORY_FIRST = [
+  'Yohanis',
+  'Maria',
+  'Markus',
+  'Agustina',
+  'Petrus',
+  'Ruth',
+  'Simon',
+  'Dorkas',
+  'Budi',
+  'Dewi',
+];
+const HISTORY_LAST = [
+  'Wenda',
+  'Kogoya',
+  'Tabuni',
+  'Mandacan',
+  'Rumbiak',
+  'Kambu',
+  'Yoku',
+  'Mofu',
+  'Krey',
+  'Sawaki',
+];
+const HISTORY_DEVICES = [
+  ['Samsung', 'Galaxy A14'],
+  ['Oppo', 'A17'],
+  ['Vivo', 'Y17s'],
+  ['Xiaomi', 'Redmi Note 12'],
+  ['Realme', 'C55'],
+  ['Infinix', 'Hot 40'],
+  ['Apple', 'iPhone 11'],
+] as const;
+
+/** Older tickets after the seeded ones, deterministic so timings compare run to run. */
+function historyTickets(count: number): TicketDetailRow[] {
+  let seed = 7;
+  const next = (): number => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed / 2_147_483_648;
+  };
+  const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)]!;
+  return Array.from({ length: count }, (_, i) => {
+    const [brand, model] = pick(HISTORY_DEVICES);
+    // One in twenty is still in the shop; the rest were repaired, or cancelled, and handed back.
+    const open = next() < 0.05;
+    const cancelled = !open && next() < 0.08;
+    return withTotals(
+      ticket({
+        id: `h-${String(i)}`,
+        number: `K7Q-H${String(i).padStart(5, '0')}`,
+        customer: `${pick(HISTORY_FIRST)} ${pick(HISTORY_LAST)}`,
+        phone: `08${String(Math.floor(next() * 1e10)).padStart(10, '0')}`,
+        brand,
+        model,
+        color: 'Hitam',
+        complaint: 'Layar retak',
+        outcome: open ? 'in_repair' : cancelled ? 'cancelled' : 'repaired',
+        technicianId: pick(TECHNICIANS),
+        lines: [line('part', 'LCD', 450_000), line('labour', 'Pasang LCD', 50_000)],
+        hoursAgo: 150 + i * 0.6,
+        location: open ? 'in_store' : 'returned',
+        ...(cancelled
+          ? {
+              cancel: {
+                fee: 0,
+                standardFee: 50_000,
+                by: 'u-andi',
+                reason: 'Batal',
+                hoursAgo: 140 + i * 0.6,
+              },
+            }
+          : {}),
+      }),
+    );
+  });
+}
+
 function withTotals(row: TicketDetailRow): TicketDetailRow {
   const counted = row.quoteLines.filter((l) => l.status === 'intake' || l.status === 'applied');
   return {
@@ -330,9 +417,10 @@ function placeholderUri(mediaId: string): string {
   )}`;
 }
 
-export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime {
+export function demoRepairRuntime(role: DemoRepairRole = 'owner', ticketCount = 0): RepairRuntime {
   let actor: { readonly userId: string; readonly name: string } = DEMO_REPAIR_ROLES[role];
-  let tickets = seedTickets();
+  const seeded = seedTickets();
+  let tickets = [...seeded, ...historyTickets(Math.max(0, ticketCount - seeded.length))];
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
   let optionIds = 0;
@@ -377,6 +465,36 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     ...refs.map((ref) => photoRow(`${stage}:${ref.mediaId}`, ref)),
   ];
   const page = <T>(rows: readonly T[]) => Promise.resolve({ rows, nextCursor: null });
+  // Pages like the device's `listTickets`: `limit` rows, with the next offset as the cursor.
+  const paged = <T>(rows: readonly T[], input: Input) => {
+    const start = Number(input['cursor'] ?? 0);
+    const end = start + Number(input['limit'] ?? 50);
+    return Promise.resolve({
+      rows: rows.slice(start, end),
+      nextCursor: end < rows.length ? String(end) : null,
+    });
+  };
+  // Kept between searches and rebuilt only after a change, as the device's search cache does.
+  let ticketIndex: { readonly of: readonly TicketDetailRow[]; readonly index: FuzzyIndex } | null =
+    null;
+  const ticketSearch = (): FuzzyIndex => {
+    if (ticketIndex?.of !== tickets) {
+      ticketIndex = {
+        of: tickets,
+        index: new FuzzyIndex(
+          tickets.map((t) => ({
+            id: t.id,
+            text: [t.customerName, t.deviceBrand, t.deviceModel],
+            phones: [t.customerPhone],
+            numbers: [t.deviceImei],
+            codes: [t.ticketNumber],
+            rank: t.createdAt,
+          })),
+        ),
+      };
+    }
+    return ticketIndex.index;
+  };
   const summary = (t: TicketDetailRow) => t;
 
   type Input = Record<string, unknown>;
@@ -384,7 +502,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     listTickets: (input) => {
       const f = (input['filter'] ?? {}) as Record<string, unknown>;
       const outcomes = f['outcomes'] as string[] | undefined;
-      return page(
+      return paged(
         tickets
           .filter((t) => outcomes === undefined || outcomes.includes(t.outcome))
           .filter((t) => f['location'] === undefined || t.location === f['location'])
@@ -397,6 +515,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
               : b.createdAt - a.createdAt,
           )
           .map(summary),
+        input,
       );
     },
     technicianLoads: () => {
@@ -409,19 +528,12 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       return page([...loads].map(([technicianId, load]) => ({ technicianId, load })));
     },
     // The same shared fuzzy search the device runs, so typos and spelling variants behave alike.
-    searchTickets: (input) => {
-      const index = new FuzzyIndex(
-        tickets.map((t) => ({
-          id: t.id,
-          text: [t.customerName, t.deviceBrand, t.deviceModel],
-          phones: [t.customerPhone],
-          numbers: [t.deviceImei],
-          codes: [t.ticketNumber],
-          rank: t.createdAt,
-        })),
-      );
-      return page(index.search(String(input['text']), 50).map((hit) => find(hit.id)));
-    },
+    searchTickets: (input) =>
+      page(
+        ticketSearch()
+          .search(String(input['text']), Number(input['limit'] ?? 20))
+          .map((hit) => find(hit.id)),
+      ),
     searchCustomers: (input) => {
       const customers = new Map(tickets.map((t) => [t.customerId, t]));
       const index = new FuzzyIndex(

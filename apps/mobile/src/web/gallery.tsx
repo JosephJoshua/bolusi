@@ -44,7 +44,12 @@ import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
 import type { AppProps } from '../../App.js';
 
-import { DEMO_REPAIR_ROLES, demoRepairRuntime, type DemoRepairRole } from './repair-demo.js';
+import {
+  DEMO_REPAIR_ROLES,
+  demoRepairRuntime,
+  demoTicketCount,
+  type DemoRepairRole,
+} from './repair-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -240,7 +245,12 @@ function AppMode({
   // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
   const [notes] = useState(() => demoNotesRuntime());
   const [repair] = useState(() =>
-    repairRole === undefined ? undefined : demoRepairRuntime(repairRole),
+    repairRole === undefined
+      ? undefined
+      : demoRepairRuntime(
+          repairRole,
+          demoTicketCount(typeof window === 'undefined' ? '' : window.location.search),
+        ),
   );
   return (
     <App
