@@ -7,7 +7,6 @@ import { PhotoSlot } from '../src/components/PhotoSlot.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
 import { StepHeader } from '../src/components/StepHeader.js';
 import { ToggleChip } from '../src/components/ToggleChip.js';
-import { color } from '../src/tokens.js';
 import { fire, render, textsIn } from './render.js';
 
 describe('SegmentedControl', () => {
@@ -69,37 +68,24 @@ describe('SegmentedControl', () => {
   });
 });
 
-describe('SegmentedControl fill track', () => {
-  const track = (value: string) =>
-    render(
+describe('SegmentedControl inline', () => {
+  // Beside a label each pill keeps its text's width: squeezed, "Tidak dicek" showed as "Tidak".
+  test('lays the options in one row whose pills never shrink, and leaves labels uncut', () => {
+    const r = render(
       <SegmentedControl
         testID="seg"
-        fill
-        options={[
-          { value: 'ok', label: 'Normal', tone: 'success' },
-          { value: 'issue', label: 'Rusak', tone: 'danger' },
-          { value: 'not_checked', label: 'Tidak dicek' },
-        ]}
-        value={value}
+        inline
+        size="compact"
+        options={[{ value: 'not_checked', label: 'Tidak dicek' }]}
+        value="not_checked"
         onChange={vi.fn()}
       />,
     );
-
-  test('a chosen segment is tinted by its tone; the others are not', () => {
-    const r = track('issue');
-    expect(StyleSheet.flatten(r.get('seg.issue').props['style'])).toMatchObject({
-      backgroundColor: color.dangerBg,
+    expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexShrink: 0 });
+    expect(StyleSheet.flatten(r.get('seg.not_checked').props['style'])).toMatchObject({
+      flexShrink: 0,
     });
-    expect(StyleSheet.flatten(r.get('seg.ok').props['style'])['backgroundColor']).toBeUndefined();
-    expect(StyleSheet.flatten(track('ok').get('seg.ok').props['style'])).toMatchObject({
-      backgroundColor: color.successBg,
-    });
-  });
-
-  test('segment labels may wrap but are never cut to one line', () => {
-    const [label] = track('ok')
-      .get('seg.not_checked')
-      .queryAll((n) => n.type === 'Text');
+    const [label] = r.get('seg.not_checked').queryAll((n) => n.type === 'Text');
     expect(label?.props['numberOfLines']).toBeUndefined();
   });
 });

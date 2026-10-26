@@ -18,7 +18,7 @@ import {
   type,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 
@@ -242,6 +242,8 @@ export function ConditionStep({
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
+  const { width, fontScale } = useWindowDimensions();
+  const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
   const togglePeripheral = (item: string): void =>
     update({
       peripherals: draft.peripherals.includes(item)
@@ -272,24 +274,31 @@ export function ConditionStep({
           }
         >
           {options.checks.map((option, index) => (
-            // The check's name on its own line and its three states as one full-width track below,
-            // rows split by hairlines. Side by side, the states clipped ("Tidak" for "Tidak dicek")
-            // on the first Android run; stacked they never do, at any width or font size.
+            // One line per check: the name on the left, its state lined up on the right, so the
+            // column of choices reads straight down. On a narrow phone or a large system font the
+            // states do not fit beside the name, and squeezing them cut "Tidak dicek" to "Tidak"
+            // on the first Android run; there the states go under the name instead.
             <View
               key={option.id}
-              style={[styles.check, index === 0 ? null : styles.checkDivider]}
+              style={[
+                styles.check,
+                stackChecks ? styles.checkStacked : null,
+                index === 0 ? null : styles.checkDivider,
+              ]}
               testID={`${testID}.checkRow.${option.id}`}
             >
-              <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
+              <Text style={[styles.checkLabel, stackChecks ? null : styles.checkLabelBeside]}>
+                {optionLabel('checks', option)}
+              </Text>
               <SegmentedControl
                 options={CHECKLIST_STATES.map((value) => ({
                   value,
                   label: tn(CHECK_STATE_KEY[value]),
-                  tone: CHECK_STATE_TONE[value],
                 }))}
                 value={draft.checks[option.id] ?? 'not_checked'}
                 onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
-                fill
+                size="compact"
+                inline
                 testID={`${testID}.check.${option.id}`}
               />
             </View>
@@ -579,13 +588,26 @@ export function ReviewStep({
   );
 }
 
-/** A found problem reads red and a passed check green, at a glance down the list. */
-const CHECK_STATE_TONE = { ok: 'success', issue: 'danger', not_checked: undefined } as const;
+/**
+ * When a condition check fits on one line: its three compact state pills plus a short name need
+ * about 340 dp of text room, which grows with the system font; the gutters and gaps do not. A
+ * 411 dp phone at normal font keeps one line; a 360 dp phone, or a large font, stacks.
+ */
+const CHECK_ROW_TEXT = 340;
+const CHECK_ROW_CHROME = 2 * space.lg + space.md;
 
 const styles = StyleSheet.create({
-  check: { paddingVertical: space.md, rowGap: space.sm },
+  // The divider gets real room on both sides: tight against the pills it read as cramped.
+  check: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: space.md,
+    paddingVertical: space.md,
+  },
+  checkStacked: { flexDirection: 'column', alignItems: 'flex-start', rowGap: space.sm },
   checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
-  checkLabel: { ...type.bodySm, fontWeight: '600', color: color.text },
+  checkLabel: { ...type.bodySm, color: color.text },
+  checkLabelBeside: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
   remove: { alignSelf: 'flex-end', marginTop: space.md },

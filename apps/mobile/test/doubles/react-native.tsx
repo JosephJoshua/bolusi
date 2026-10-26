@@ -36,6 +36,8 @@ export {
   TextInput,
   Vibration,
   View,
+  __windowMetrics,
+  useWindowDimensions,
 } from '../../../../packages/ui/test/doubles/react-native.js';
 
 /**
