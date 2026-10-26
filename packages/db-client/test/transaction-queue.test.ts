@@ -93,3 +93,23 @@ test('a failed BEGIN does not hold the queue', async () => {
   });
   expect(await labels()).toEqual(['next']);
 });
+
+test('a Kysely transaction reports its end, before the next queued transaction begins', async () => {
+  const order: string[] = [];
+  connection.onTransactionEnd(() => order.push(`end:${String(connection.inTransaction)}`));
+
+  let driverSide: Promise<void> = Promise.resolve();
+  const kyselySide = connection.db.transaction().execute(async (trx) => {
+    order.push(`kysely:${String(connection.inTransaction)}`);
+    // Queued while the Kysely transaction is open: it must wait for that one's end.
+    driverSide = connection.transaction(async () => {
+      order.push('driver');
+    });
+    await sql`INSERT INTO t (label) VALUES (${'kysely'})`.execute(trx);
+    await yieldTurn();
+  });
+
+  await kyselySide;
+  await driverSide;
+  expect(order).toEqual(['kysely:true', 'end:false', 'driver', 'end:false']);
+});

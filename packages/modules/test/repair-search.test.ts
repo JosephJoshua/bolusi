@@ -1,5 +1,6 @@
 // Repair search on a device: the live index sees local commands, pulled ops and rebuilds without
 // being reloaded wholesale, and returns fresh rows.
+import { sql } from 'kysely';
 import { afterEach, expect, test } from 'vitest';
 
 import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
@@ -69,4 +70,23 @@ test('tickets pulled from another device become searchable, and a rebuild keeps 
   expect(ids(await b.query('searchTickets', { text: 'wnda' }, b.cashierId))).toEqual([
     opened.ticketId,
   ]);
+});
+
+test('a rebuild batch that rolls back still tells the search index to reload its tables', async () => {
+  const h = await openRepairHarness(404);
+  open.push(h);
+  await h.run('openTicket', intake(h), h.cashierId);
+  const signalled: string[][] = [];
+  h.engine.invalidation.subscribe((tables, change) => {
+    if (change === undefined) signalled.push([...tables].sort());
+  });
+
+  await sql`
+    CREATE TRIGGER fail_ticket BEFORE INSERT ON repair_tickets
+    BEGIN SELECT RAISE(ABORT, 'disk full'); END
+  `.execute(h.db);
+  await expect(h.engine.rebuild('repair')).rejects.toThrow('disk full');
+
+  expect(signalled).toHaveLength(1);
+  expect(signalled[0]).toEqual(expect.arrayContaining(['repair_customers', 'repair_tickets']));
 });

@@ -204,6 +204,14 @@ export async function runRebuild<DB>(
   const tables = new Set(ctx.registry.moduleTableNames(module));
   const version = moduleVersionSignature(module);
 
+  // A read that lands inside a batch transaction (the one connection serves everyone) can see an
+  // entity mid re-fold, which a rollback then undoes. So a failed batch signals the module's tables
+  // too, and listeners re-read what remains. A committed batch is signalled below.
+  const signalRollback = (error: unknown): never => {
+    ctx.invalidation.emit(tables);
+    throw error;
+  };
+
   const existing = await ctx.makeStore(ctx.db).readCursor(moduleId);
   const resumable = existing?.version === version ? existing : null;
   const startedFresh = resumable === null;
@@ -219,7 +227,7 @@ export async function runRebuild<DB>(
 
   while (batches < stopAfterBatches) {
     const expected = cursor;
-    const batch = await ctx.db.transaction().execute(async (trx) => {
+    const transaction = ctx.db.transaction().execute(async (trx) => {
       const store = ctx.makeStore(trx);
       if (!sameCursor(await store.readCursor(moduleId), expected)) return null;
       const entities = await readEntityPage(trx, opTypes, expected.after, batchSize);
@@ -246,6 +254,7 @@ export async function runRebuild<DB>(
       }
       return { entities: entities.length, applied, next, done };
     });
+    const batch = await transaction.catch(signalRollback);
     if (batch === null) break;
     cursor = batch.next;
     if (batch.entities > 0) {
