@@ -135,3 +135,19 @@ test('drift guard: the canonical @bolusi/core permission registry matches the se
     expect(db?.description, `${p.id} description`).toBe(p.description);
   }
 });
+
+test('a deactivated user with the device-read grant still reads nothing: the list asks the shared evaluator', async () => {
+  // Falsification: the old hand-rolled grant join ignored user status and returned 200 here.
+  const { p, storeId, device } = await setup();
+  const former = await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'Former manager',
+    status: 'deactivated',
+    storeIds: [storeId],
+    roleKeys: ['main_owner'],
+  });
+
+  expect(await getDevices(device.token, former)).toBe(403);
+  // Positive control: the same grant on an active user reads the list.
+  expect(await getDevices(device.token, p.ownerUserId)).toBe(200);
+});

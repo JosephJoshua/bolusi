@@ -83,6 +83,7 @@
     "CHAIN_GAP": "Some changes were missing. They’re being resent automatically.",
     "CHAIN_HALTED": "On hold because an earlier change has a problem.",
     "DEVICE_REVOKED": "This device has been revoked, so the change was rejected. Enroll this device again.",
+    "PERMISSION_DENIED": "The person who made this change isn’t allowed to do it in this store, so it wasn’t saved. Ask someone who is allowed to do it again.",
     "SCHEMA_INVALID": "The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.",
     "SCOPE_VIOLATION": "This change doesn’t belong to this store or account, so it was rejected. Report it to the store owner.",
     "UNKNOWN_TYPE": "This device’s app needs an update before this change can be sent."

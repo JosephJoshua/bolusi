@@ -139,7 +139,7 @@ test('create: password requires loginIdentifier (422); globally-unique login col
 test('pin-verifier: out-of-bounds params → 422; stale asOf → applied:false; newer asOf → applied:true + etag flips', async () => {
   const { tenantId, s1, ownerId } = await tenant();
   const device = await seedDevice(h, { tenantId, storeId: s1, enrolledBy: ownerId });
-  // The acting user (owner) sets THEIR OWN verifier (own change → no permission needed). The owner
+  // The acting user (owner) sets THEIR OWN verifier (own change → auth.pin_change). The owner
   // is already in every store from provisioning, so they are usable on this device.
   const url = `http://srv.test/v1/users/${ownerId}/pin-verifier`;
   const hdr = {
@@ -251,3 +251,83 @@ async function bundleEtag(token: string): Promise<string> {
   });
   return ((await res.json()) as { etag: string }).etag;
 }
+
+function verifierBody() {
+  return JSON.stringify({
+    verifierRef: uuidv7(h.clock.now()),
+    verifier: {
+      algorithm: 'argon2id',
+      saltB64: SALT_B64,
+      mKiB: 32768,
+      t: 3,
+      p: 1,
+      hashB64: HASH_B64,
+      asOf: { timestamp: 1000, deviceId: NIL_DEVICE, seq: 0 },
+    },
+  });
+}
+
+test('a deactivated user cannot set their own PIN verifier on a device', async () => {
+  // Falsification: the own-change path used to skip every check, so this returned 200.
+  const { tenantId, s1 } = await tenant();
+  const former = await seedUser(h, {
+    tenantId,
+    name: 'Former',
+    status: 'deactivated',
+    storeIds: [s1],
+    roleKeys: ['staff'],
+  });
+  const active = await seedUser(h, {
+    tenantId,
+    name: 'Active',
+    storeIds: [s1],
+    roleKeys: ['staff'],
+  });
+  const device = await seedDevice(h, { tenantId, storeId: s1 });
+  const post = (userId: string) =>
+    h.app.request(`http://srv.test/v1/users/${userId}/pin-verifier`, {
+      method: 'POST',
+      headers: { ...bearer(device.token), 'X-Acting-User': userId },
+      body: verifierBody(),
+    });
+
+  expect((await post(former)).status).toBe(403);
+  // Positive control: an active staff member sets their own.
+  expect((await post(active)).status).toBe(200);
+});
+
+test('a user with no store can only be edited or deactivated by a tenant-wide holder', async () => {
+  // Falsification: the per-store loop ran zero times for a store-less target and allowed anyone.
+  const { tenantId, s1, ownerId } = await tenant();
+  const storeless = await seedUser(h, {
+    tenantId,
+    name: 'Second owner',
+    storeIds: [],
+    roleKeys: ['main_owner'],
+  });
+  const storeOwner = await seedUser(h, {
+    tenantId,
+    name: 'Store owner',
+    storeIds: [s1],
+    roleKeys: ['store_owner'],
+  });
+  const asStoreOwner = await seedControlSession(h, { tenantId, userId: storeOwner });
+  const asMainOwner = await seedControlSession(h, { tenantId, userId: ownerId });
+
+  const rename = (token: string) =>
+    h.app.request(`http://srv.test/v1/users/${storeless}`, {
+      method: 'PATCH',
+      headers: bearer(token),
+      body: JSON.stringify({ name: 'Renamed' }),
+    });
+  const deactivate = (token: string) =>
+    h.app.request(`http://srv.test/v1/users/${storeless}/deactivate`, {
+      method: 'POST',
+      headers: bearer(token),
+    });
+
+  expect((await rename(asStoreOwner)).status).toBe(403);
+  expect((await deactivate(asStoreOwner)).status).toBe(403);
+  expect((await rename(asMainOwner)).status).toBe(200);
+  expect((await deactivate(asMainOwner)).status).toBe(200);
+});

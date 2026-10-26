@@ -56,6 +56,7 @@ export type AssertRejectionCodeUnion = Expect<
     | 'CHAIN_GAP'
     | 'CHAIN_HALTED'
     | 'DEVICE_REVOKED'
+    | 'PERMISSION_DENIED'
     | 'SCHEMA_INVALID'
     | 'SCOPE_VIOLATION'
     | 'UNKNOWN_TYPE'

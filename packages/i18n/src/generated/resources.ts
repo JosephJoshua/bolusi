@@ -84,6 +84,8 @@ const source = {
         CHAIN_HALTED: 'Ditunda karena perubahan sebelumnya bermasalah.',
         DEVICE_REVOKED:
           'Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.',
+        PERMISSION_DENIED:
+          'Orang yang membuat perubahan ini tidak punya izin di toko ini, jadi perubahannya tidak disimpan. Minta orang yang berwenang untuk mengulanginya.',
         SCHEMA_INVALID:
           'Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.',
         SCOPE_VIOLATION:
@@ -374,6 +376,8 @@ export const resources = {
           CHAIN_HALTED: 'On hold because an earlier change has a problem.',
           DEVICE_REVOKED:
             'This device has been revoked, so the change was rejected. Enroll this device again.',
+          PERMISSION_DENIED:
+            'The person who made this change isn’t allowed to do it in this store, so it wasn’t saved. Ask someone who is allowed to do it again.',
           SCHEMA_INVALID:
             'The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.',
           SCOPE_VIOLATION:

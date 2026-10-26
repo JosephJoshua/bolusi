@@ -10,6 +10,7 @@ import {
   hasPermission,
   isTenantAdmin,
   requirePermission,
+  requirePermissionInStores,
 } from '../auth/permissions.js';
 import { TENANT_ADMIN_PERMISSION } from '../identity/permissions.js';
 import { isUniqueViolation } from '../db-errors.js';
@@ -102,7 +103,7 @@ export function createUsersRouter(deps: ServerDeps) {
               .execute();
             if (roles.length !== body.roleIds.length) throw new ApiError('PERMISSION_DENIED');
             const grantsTenantWide = roles.some((r) => r.scopeType === 'tenant');
-            if (grantsTenantWide && !(await isTenantAdmin(db, acting.userId))) {
+            if (grantsTenantWide && !(await isTenantAdmin(db, acting.tenantId, acting.userId))) {
               // §5.4.2 tenant-grant rule — a handler-declared restriction (not a plain
               // requirePermission miss): only a tenant admin may mint a tenant-wide role, so a
               // store_owner cannot create a main_owner. Declared for the FR-1045 trail (§7).
@@ -211,14 +212,11 @@ export function createUsersRouter(deps: ServerDeps) {
             // Editor must hold auth.user_edit for the target's current stores (and any new ones).
             const currentStores = await targetStoreIds(db, targetUserId);
             const scopeStores = new Set([...currentStores, ...(body.storeIds ?? [])]);
-            for (const storeId of scopeStores) {
-              await requirePermission(db, {
-                userId: acting.userId,
-                tenantId,
-                storeId,
-                permissionId: PERM.userEdit,
-              });
-            }
+            await requirePermissionInStores(
+              db,
+              { userId: acting.userId, tenantId, permissionId: PERM.userEdit },
+              scopeStores,
+            );
 
             const patch: { name?: string; photoMediaId?: string | null } = {};
             if (body.name !== undefined) patch.name = body.name;
@@ -277,19 +275,18 @@ export function createUsersRouter(deps: ServerDeps) {
               .executeTakeFirst();
             if (target === undefined) throw new ApiError('NOT_FOUND');
 
-            for (const storeId of await targetStoreIds(db, targetUserId)) {
-              await requirePermission(db, {
-                userId: acting.userId,
-                tenantId,
-                storeId,
-                permissionId: PERM.userDeactivate,
-              });
-            }
+            await requirePermissionInStores(
+              db,
+              { userId: acting.userId, tenantId, permissionId: PERM.userDeactivate },
+              await targetStoreIds(db, targetUserId),
+            );
 
             // LAST_ADMIN_PROTECTED (§5.4.4): deactivating the sole active tenant admin → 409. Server
             // endpoint check only — no projection guard, no Conflict record.
-            if (await isTenantAdmin(db, targetUserId)) {
-              const remaining = await countActiveTenantAdmins(db, { excludeUserId: targetUserId });
+            if (await isTenantAdmin(db, tenantId, targetUserId)) {
+              const remaining = await countActiveTenantAdmins(db, tenantId, {
+                excludeUserId: targetUserId,
+              });
               if (remaining === 0) throw new IdentityError('LAST_ADMIN_PROTECTED');
             }
 
@@ -330,14 +327,11 @@ export function createUsersRouter(deps: ServerDeps) {
               .where('id', '=', targetUserId)
               .executeTakeFirst();
             if (target === undefined) throw new ApiError('NOT_FOUND');
-            for (const storeId of await targetStoreIds(db, targetUserId)) {
-              await requirePermission(db, {
-                userId: acting.userId,
-                tenantId,
-                storeId,
-                permissionId: PERM.userDeactivate,
-              });
-            }
+            await requirePermissionInStores(
+              db,
+              { userId: acting.userId, tenantId, permissionId: PERM.userDeactivate },
+              await targetStoreIds(db, targetUserId),
+            );
             await db
               .updateTable('users')
               .set({ status: 'active' })
@@ -380,10 +374,18 @@ export function createUsersRouter(deps: ServerDeps) {
               .executeTakeFirst();
             if (target === undefined) throw new ApiError('NOT_FOUND');
 
-            // Own change → no permission; reset of another user → auth.user_reset_pin (+ the
-            // main_owner-target rule, §6.6, enforced here as defense-in-depth in addition to the
-            // op-push validation task 07 owns).
-            if (targetUserId !== acting.userId) {
+            // Own change → auth.pin_change, the same permission its pushed op declares (so a
+            // deactivated user cannot set one either); reset of another user → auth.user_reset_pin
+            // (+ the main_owner-target rule, §6.6, enforced here as defense-in-depth in addition to
+            // the op-push validation task 07 owns).
+            if (targetUserId === acting.userId) {
+              await requirePermission(db, {
+                userId: acting.userId,
+                tenantId,
+                storeId: acting.deviceStoreId,
+                permissionId: PERM.pinChange,
+              });
+            } else {
               await requirePermission(db, {
                 userId: acting.userId,
                 tenantId,

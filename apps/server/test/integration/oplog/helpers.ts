@@ -20,6 +20,8 @@ import { sql, type Kysely, type Selectable } from 'kysely';
 import { expect, inject } from 'vitest';
 import { z } from 'zod';
 
+import { serverOpRegistry } from '../../../src/deps.js';
+import { permissionRegistry } from '../../../src/identity/permissions.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { isFoldableSchemaVersion } from '../../../src/oplog/schema-version.js';
 import type { OpRegistry, OplogPipelineDeps } from '../../../src/oplog/types.js';
@@ -176,8 +178,39 @@ export function testScopeOf(isKnown: (type: string) => boolean): OpRegistry['sco
     isKnown(type) ? (TENANT_SCOPED_OP_TYPES.has(type) ? 'tenant' : 'store') : undefined;
 }
 
+/**
+ * A test registry's `permissionOf`: the PRODUCTION declaration for a type production knows (so a
+ * stub can never quietly drop the authorization step), `null` for a stub-only probe type, and
+ * `undefined` for a type the stub does not know.
+ */
+export function testPermissionOf(isKnown: (type: string) => boolean): OpRegistry['permissionOf'] {
+  return (type) => {
+    if (!isKnown(type)) return undefined;
+    const declared = serverOpRegistry.permissionOf(type);
+    return declared === undefined ? null : declared;
+  };
+}
+
+/**
+ * A test registry's `entityTypeOf`: the PRODUCTION declaration for a type production knows, the
+ * stub's own `probes` entry for a stub-only type, `undefined` for a type the stub does not know.
+ */
+export function testEntityTypeOf(
+  isKnown: (type: string) => boolean,
+  probes: Readonly<Record<string, string>> = {},
+): OpRegistry['entityTypeOf'] {
+  return (type) => {
+    if (!isKnown(type)) return undefined;
+    const declared = serverOpRegistry.entityTypeOf(type) ?? probes[type];
+    if (declared === undefined) throw new Error(`test registry: no entityType for ${type}`);
+    return declared;
+  };
+}
+
 export const testRegistry: OpRegistry = {
   scopeOf: testScopeOf((type) => type in SCHEMAS),
+  permissionOf: testPermissionOf((type) => type in SCHEMAS),
+  entityTypeOf: testEntityTypeOf((type) => type in SCHEMAS),
 
   resolve(type: string, schemaVersion: number) {
     const schema = SCHEMAS[type];
@@ -242,6 +275,12 @@ export interface SeedWorldOptions {
   readonly lastHash?: string | null;
   readonly lastSyncAt?: number | null;
   readonly userStatus?: 'active' | 'deactivated';
+  /**
+   * The world user's grants. Default `'all'`: a tenant-wide role holding every registered
+   * permission, so a suite about something else is not refused by the authorization step. `'none'`
+   * seeds the user with no role, for suites about authorization itself.
+   */
+  readonly grants?: 'all' | 'none';
   /** Seed the tenant_op_counters row at this value (default 1). */
   readonly counterStart?: number;
   readonly createdAt?: number;
@@ -300,6 +339,28 @@ export async function seedWorld(
       createdAt,
     })
     .execute();
+  if ((options.grants ?? 'all') === 'all') {
+    await grantAllPermissions(db, world.tenantId, world.userId);
+  }
+}
+
+/**
+ * Give a user a tenant-wide role holding every registered permission, so a suite about something
+ * other than authorization is never refused by the authorization step. The role id is derived from
+ * the tenant and user, so two seeded users never share or collide on one.
+ */
+export async function grantAllPermissions(
+  db: Kysely<DB>,
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  await grantRole(db, {
+    tenantId,
+    userId,
+    roleId: `${tenantId.slice(0, 24)}${userId.slice(24)}`,
+    roleName: 'test_all_permissions',
+    permissionIds: permissionRegistry.ids(),
+  });
 }
 
 /**
