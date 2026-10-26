@@ -479,7 +479,7 @@ export const resources = {
           needsConnection:
             'Enrolling a phone needs an internet connection. Connect, then try again.',
           wrongCredentials: 'Wrong account name or password. Try again.',
-          notOwner: "This account can't enroll phones. Sign in with the store owner's account.",
+          notOwner: 'This account can’t enroll phones. Sign in with the store owner’s account.',
           success: 'This phone is enrolled',
           successStore: 'Enrolled in {store}.',
           successNext: 'Next, choose who is using this phone.',
