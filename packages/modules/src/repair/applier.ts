@@ -406,8 +406,12 @@ export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = asyn
 
 export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const { stage, photos } = payloadOf<{ stage: WorkPhotoStage; photos: MediaRef[] }>(op);
-  for (const photo of photos) {
-    await insertPhoto(db, op, workPhotoSlot(stage, photo.mediaId), photo);
+  if (photos.length > 0) {
+    await insertPhotos(
+      db,
+      op,
+      photos.map((photo) => [workPhotoSlot(stage, photo.mediaId), photo] as const),
+    );
   }
   await recordEvent(db, op, { stage, count: photos.length });
 };
