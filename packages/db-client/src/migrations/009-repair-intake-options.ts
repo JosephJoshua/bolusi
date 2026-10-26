@@ -1,6 +1,6 @@
 // Client migration 9 — the owner-edited intake lists (repair intake-options.ts).
 //
-// Mirrors server migration 0014. The franchise's lists and each store's hidden items get one row per
+// Mirrors server migration 0013. The franchise's lists and each store's hidden items get one row per
 // list, and a ticket records the photo angles it asked for (null on tickets opened before, which have
 // the six default angles). Versions 7 and 8 belong to other branches; the runner applies by version.
 import type { ClientMigration } from './types.js';
