@@ -11,7 +11,7 @@
 // this file is still the sync-loop lane, so it starts from the persisted state rather than producing
 // it. The falsifications below break each wiring (bundle, transport, the connectivity trigger) and
 // watch the cycle fail LOUDLY (§2.11).
-import { readSyncState, stalenessLevel, SyncTransportError } from '@bolusi/core';
+import { insertOpLogRow, readSyncState, stalenessLevel, SyncTransportError } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import type {
   PullRequest,
@@ -20,8 +20,7 @@ import type {
   PushResponse,
   SignedOperation,
 } from '@bolusi/schemas';
-import { ChainBuilder, makeWorld, noblePort, nodeColumnAead } from '@bolusi/test-support';
-import { sql } from 'kysely';
+import { ChainBuilder, makeWorld, noblePort, nodeColumnAead, opRowOf } from '@bolusi/test-support';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
@@ -152,19 +151,12 @@ async function seedLocalOp(opId: string): Promise<void> {
     agentConversationId: null,
     previousHash: '0'.repeat(64),
   };
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      synced_at, arrival_seq
-    ) VALUES (
-      ${core.id}, ${core.tenantId}, ${core.storeId}, ${core.userId}, ${core.deviceId}, ${core.seq},
-      ${core.type}, ${core.entityType}, ${core.entityId}, ${core.schemaVersion},
-      ${JSON.stringify(core.payload)}, ${core.timestamp}, ${null}, ${core.source}, ${0}, ${null},
-      ${core.previousHash}, ${'hh'}, ${'ss'}, ${JSON.stringify(core)}, ${'local'}, ${null}, ${null}
-    )
-  `.execute(db.db);
+  const op = { ...core, hash: 'hh', signature: 'ss' } as SignedOperation;
+  await insertOpLogRow(db.db, opRowOf(op), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
 }
 
 const clockT = { now: () => T };

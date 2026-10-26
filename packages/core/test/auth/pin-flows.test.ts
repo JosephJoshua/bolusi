@@ -19,6 +19,7 @@ import {
   type PinVerifierUploadPort,
 } from '../../src/index.js';
 import type { ClientDatabase } from '@bolusi/db-client';
+import type { SignedCore } from '@bolusi/schemas';
 
 import { makeFastCrypto, openAuthHarness, spyKdf, type AuthHarness } from './_harness.js';
 
@@ -72,7 +73,7 @@ async function setup(
     pinOps: async () => {
       const rows = await h.db
         .selectFrom('operations')
-        .select(['type', 'userId', 'entityId', 'seq', 'timestampMs', 'deviceId', 'payload'])
+        .select(['type', 'userId', 'entityId', 'seq', 'timestampMs', 'deviceId', 'signedCoreJcs'])
         .where('type', 'in', [
           'auth.pin_changed',
           'auth.pin_reset',
@@ -88,7 +89,7 @@ async function setup(
         seq: r.seq,
         timestamp: r.timestampMs,
         deviceId: r.deviceId,
-        payload: r.payload,
+        payload: JSON.stringify((JSON.parse(r.signedCoreJcs) as SignedCore).payload),
       }));
     },
   };

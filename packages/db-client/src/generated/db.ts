@@ -122,8 +122,6 @@ export interface Operations {
   entityType: string;
   hash: string;
   id: string | null;
-  location: string | null;
-  payload: string;
   previousHash: string;
   rejectionCode: string | null;
   rejectionReason: string | null;

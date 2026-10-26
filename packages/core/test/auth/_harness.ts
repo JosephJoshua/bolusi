@@ -43,6 +43,7 @@ import {
   type OpAppendStore,
   type PinVerifier,
   type SigningKeyPort,
+  operationFromSignedCoreJcs,
 } from '../../src/index.js';
 import { MAIN_OWNER_IDS, STAFF_IDS, STORE_OWNER_IDS, V0_MODULES } from '../authz/_fixtures.js';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
@@ -384,7 +385,17 @@ export async function openAuthHarness(
     ops: async () => {
       const rows = await db
         .selectFrom('operations')
-        .select(['type', 'userId', 'entityId', 'seq', 'payload', 'source', 'previousHash', 'hash'])
+        .select([
+          'type',
+          'userId',
+          'entityId',
+          'seq',
+          'signedCoreJcs',
+          'signature',
+          'source',
+          'previousHash',
+          'hash',
+        ])
         .orderBy('deviceId')
         .orderBy('seq')
         .execute();
@@ -393,7 +404,7 @@ export async function openAuthHarness(
         userId: r.userId,
         entityId: r.entityId,
         seq: r.seq,
-        payload: r.payload,
+        payload: JSON.stringify(operationFromSignedCoreJcs(r.signedCoreJcs, r).payload),
         source: r.source,
         previousHash: r.previousHash,
         hash: r.hash,

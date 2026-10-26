@@ -29,7 +29,7 @@ import {
   type DbDriver,
 } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
-import { noblePort, type Prng } from '@bolusi/test-support';
+import { noblePort, type Prng, opRowOf } from '@bolusi/test-support';
 
 import {
   createSqlWatermarkStore,
@@ -44,6 +44,8 @@ import {
   runPullPhase,
   runPushPhase,
   writeSyncState,
+  insertOpLogRow,
+  type OpSyncStatus,
 } from '../../src/index.js';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import {
@@ -110,22 +112,13 @@ afterEach(async () => {
 async function seedOperation(
   db: Kysely<ClientDatabase>,
   op: SignedOperation,
-  overrides: { syncStatus?: string; arrivalSeq?: number | null } = {},
+  overrides: { syncStatus?: OpSyncStatus; arrivalSeq?: number | null } = {},
 ): Promise<void> {
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status, arrival_seq
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq},
-      ${op.type}, ${op.entityType}, ${op.entityId}, ${op.schemaVersion},
-      ${JSON.stringify(op.payload)}, ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null},
-      ${op.previousHash}, ${op.hash}, ${op.signature},
-      ${JSON.stringify({ ...op, hash: undefined, signature: undefined })},
-      ${overrides.syncStatus ?? 'synced'}, ${overrides.arrivalSeq ?? null}
-    )
-  `.execute(db);
+  await insertOpLogRow(db, opRowOf(op), {
+    syncStatus: overrides.syncStatus ?? 'synced',
+    syncedAt: null,
+    arrivalSeq: overrides.arrivalSeq ?? null,
+  });
 }
 
 function noteOp(seq: number, extra: Partial<{ timestamp: number }> = {}): SignedOperation {

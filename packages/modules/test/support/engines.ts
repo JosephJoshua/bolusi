@@ -18,11 +18,13 @@ import type { SignedOperation } from '@bolusi/schemas';
 import { createClientDialect, runClientMigrations, type DbDriver } from '@bolusi/db-client';
 import {
   createProjectionEngine,
+  insertOpLogRow,
   ProjectionRegistry,
   type AnyModuleDefinition,
   type InvalidationBus,
   type ProjectionEngine,
 } from '@bolusi/core';
+import { opRowOf } from '@bolusi/test-support';
 
 import { notesModule } from '../../src/notes/index.js';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
@@ -112,9 +114,7 @@ async function createNotesTables(db: Kysely<never>): Promise<void> {
     .addColumn('entity_type', 'text', (c) => c.notNull())
     .addColumn('entity_id', 'text', (c) => c.notNull())
     .addColumn('schema_version', 'integer', (c) => c.notNull())
-    .addColumn('payload', 'text', (c) => c.notNull())
     .addColumn('timestamp_ms', 'bigint', (c) => c.notNull())
-    .addColumn('location', 'text')
     .addColumn('source', 'text', (c) => c.notNull())
     .addColumn('agent_initiated', 'integer', (c) => c.notNull())
     .addColumn('agent_conversation_id', 'text')
@@ -168,20 +168,11 @@ export async function insertOp(
   op: SignedOperation,
   arrivalSeq: number | null = null,
 ): Promise<void> {
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      arrival_seq, synced_at
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${op.agentInitiated ? 1 : 0}, ${null},
-      ${op.previousHash}, ${op.hash}, ${op.signature}, ${`jcs:${op.id}`},
-      ${arrivalSeq === null ? 'local' : 'synced'}, ${arrivalSeq}, ${arrivalSeq === null ? null : 1}
-    )
-  `.execute(db);
+  await insertOpLogRow(db, opRowOf(op), {
+    syncStatus: arrivalSeq === null ? 'local' : 'synced',
+    syncedAt: arrivalSeq === null ? null : 1,
+    arrivalSeq,
+  });
 }
 
 /**

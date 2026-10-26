@@ -166,7 +166,7 @@ function buildDeviceRunners(harness: HarnessRunners, nets: ChaosNets): DeviceGat
   const env = createAtRestDeviceEnv(deviceAtRestSeams());
   const { chaos03, chaos06, chaos07 } = nets;
   return {
-    // SEC-DEV-06 L6 — all 11 signed-off columns are ciphertext at rest (the priority, deliverable 1).
+    // SEC-DEV-06 L6 — every signed-off column is ciphertext at rest (the priority, deliverable 1).
     [AT_REST_GATE_ID]: () => harness.runAtRest(env),
     // SEC-AUTH-09 leg 1 — the PIN-verifier material specifically, on the same real seed.
     [VERIFIER_AT_REST_GATE_ID]: () => runVerifierAtRestGate(env),

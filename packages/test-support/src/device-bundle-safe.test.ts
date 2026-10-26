@@ -119,6 +119,6 @@ describe('@bolusi/test-support/device is device-bundle-safe (task 177)', () => {
     expect(typeof deviceEntry.checkControlSeedIsWitnessed).toBe('function');
     expect(typeof deviceEntry.checkDbAtRestIsCiphertext).toBe('function');
     expect(deviceEntry.SEED_200K.totalOps).toBe(200_000);
-    expect(deviceEntry.AT_REST_ENCRYPTED_COLUMNS).toHaveLength(11);
+    expect(deviceEntry.AT_REST_ENCRYPTED_COLUMNS).toHaveLength(9);
   });
 });

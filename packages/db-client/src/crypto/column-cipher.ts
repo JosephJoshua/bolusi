@@ -75,9 +75,11 @@ import {
   bytesToUtf8,
   utf8ToBytes,
   type ColumnCipher,
+  type SealOptions,
 } from '@bolusi/core';
 
 import { AEAD_TAG_BYTES, type AeadCipher } from './aead.js';
+import { compressValue, decompressValue } from './compression.js';
 
 /**
  * The FIXED part of a sealed value's prefix — scheme + version. Anyone can write these bytes, so it
@@ -86,6 +88,13 @@ import { AEAD_TAG_BYTES, type AeadCipher } from './aead.js';
  * needing the key. Leads with U+0001 (not U+0000, which would risk C-string truncation across JSI).
  */
 export const COLUMN_CIPHER_SCHEME_PREFIX = String.fromCharCode(1) + 'gcm1:';
+
+/**
+ * The scheme prefix of a value deflated before sealing (`SealOptions.compress`; compression.ts). Same
+ * key, same keyed suffix, same body framing; only what the sealed bytes hold differs. A distinct
+ * prefix rather than a flag inside the plaintext, so `gcm1` values keep their exact meaning.
+ */
+export const COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX = String.fromCharCode(1) + 'gcz1:';
 
 /** Domain-separation label for the marker derivation — changing it invalidates every stored marker. */
 const MARKER_LABEL = 'bolusi/column-cipher/marker/v1';
@@ -130,6 +139,8 @@ export class Aes256GcmColumnCipher implements ColumnCipher {
   readonly #aead: AeadCipher;
   /** Scheme prefix + this key's derived tag. Deterministic in the key, so it survives a reopen. */
   readonly #marker: string;
+  /** The same, for values deflated before sealing. */
+  readonly #compressedMarker: string;
 
   constructor(key: Uint8Array, aead: AeadCipher) {
     if (key.length !== COLUMN_KEY_BYTES) {
@@ -142,6 +153,7 @@ export class Aes256GcmColumnCipher implements ColumnCipher {
     const subkey = aead.hmacSha256(key, utf8ToBytes(MARKER_SUBKEY_LABEL));
     const tag = aead.hmacSha256(subkey, utf8ToBytes(MARKER_LABEL)).subarray(0, MARKER_TAG_BYTES);
     this.#marker = `${COLUMN_CIPHER_SCHEME_PREFIX}${bytesToBase64(tag)}:`;
+    this.#compressedMarker = `${COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX}${bytesToBase64(tag)}:`;
   }
 
   /** This database's full marker. Exposed so tests can assert the reopen-stability property. */
@@ -149,42 +161,57 @@ export class Aes256GcmColumnCipher implements ColumnCipher {
     return this.#marker;
   }
 
-  encrypt(plaintext: string): string {
+  encrypt(plaintext: string, options?: SealOptions): string {
     // UNCONDITIONAL BY CONSTRUCTION — this method never inspects `plaintext`. See the file header:
     // the shape-sniffing "already sealed?" short-circuit that used to live here stored attacker-shaped
     // PII in the clear. A value that merely LOOKS like ciphertext is still plaintext, and is sealed
     // like any other; it round-trips back byte-identical because the read decrypts exactly once.
+    // Compression is the CALLER's declared choice for the column, never a guess from the value.
+    const compress = options?.compress === true;
+    const bytes = utf8ToBytes(plaintext);
     const nonce = this.#aead.randomBytes(COLUMN_NONCE_BYTES);
-    const sealed = this.#aead.seal(this.#key, nonce, utf8ToBytes(plaintext));
+    const sealed = this.#aead.seal(this.#key, nonce, compress ? compressValue(bytes) : bytes);
     const blob = new Uint8Array(nonce.length + sealed.length);
     blob.set(nonce, 0);
     blob.set(sealed, nonce.length);
-    return this.#marker + bytesToBase64(blob);
+    return (compress ? this.#compressedMarker : this.#marker) + bytesToBase64(blob);
   }
 
   decrypt(stored: string): string {
     // Requires THIS key's marker, not merely the scheme prefix: a value sealed under a different key
     // is not ours to open, and neither is anything an attacker wrote.
-    if (!stored.startsWith(this.#marker)) {
+    const marker = this.#markerOf(stored);
+    if (marker === null) {
       throw new ColumnCipherError('value is not column ciphertext for this key (marker mismatch)');
     }
-    const blob = base64ToBytes(stored.slice(this.#marker.length));
+    const blob = base64ToBytes(stored.slice(marker.length));
     if (blob.length < MIN_BLOB_BYTES) {
       throw new ColumnCipherError('column ciphertext is truncated');
     }
     const nonce = blob.subarray(0, COLUMN_NONCE_BYTES);
     const sealed = blob.subarray(COLUMN_NONCE_BYTES);
     // `open` throws on a wrong key or tamper — that throw is the SEC-DEV-06 signal, propagated as-is.
-    return bytesToUtf8(this.#aead.open(this.#key, nonce, sealed));
+    // Inflating only ever sees bytes GCM has just authenticated as this device's own write.
+    const opened = this.#aead.open(this.#key, nonce, sealed);
+    return bytesToUtf8(marker === this.#compressedMarker ? decompressValue(opened) : opened);
   }
 
   isCiphertext(value: unknown): value is string {
-    if (typeof value !== 'string' || !value.startsWith(this.#marker)) return false;
+    if (typeof value !== 'string') return false;
+    const marker = this.#markerOf(value);
+    if (marker === null) return false;
     try {
-      return base64ToBytes(value.slice(this.#marker.length)).length >= MIN_BLOB_BYTES;
+      return base64ToBytes(value.slice(marker.length)).length >= MIN_BLOB_BYTES;
     } catch {
       // A marker followed by non-base64 is not one of ours — treat as plaintext, do not attempt open.
       return false;
     }
+  }
+
+  /** Which of this key's markers `value` carries, or `null` for neither. */
+  #markerOf(value: string): string | null {
+    if (value.startsWith(this.#marker)) return this.#marker;
+    if (value.startsWith(this.#compressedMarker)) return this.#compressedMarker;
+    return null;
   }
 }

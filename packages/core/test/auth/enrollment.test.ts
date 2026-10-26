@@ -298,7 +298,7 @@ describe('enrollment flow (api/02-auth §4.1)', () => {
     expect(ops[0]!.type).toBe('auth.device_enrolled');
     expect(ops[0]!.userId).toBe(fx.ownerId);
     expect(ops[0]!.previousHash).toBe('0'.repeat(64));
-    const payload = JSON.parse(ops[0]!.payload) as {
+    const payload = (JSON.parse(ops[0]!.signedCoreJcs) as { payload: unknown }).payload as {
       storeId: string;
       deviceName: string;
       devicePublicKeyB64: string;

@@ -30,10 +30,9 @@ import { sql, type Kysely } from 'kysely';
 import type { SignedOperation } from '@bolusi/schemas';
 
 import { base64ToBytes } from '../crypto/bytes.js';
-import { encryptColumnValue } from '../crypto/column-cipher.js';
+import { encryptColumnValue, SIGNED_CORE_SEAL } from '../crypto/column-cipher.js';
 import type { CryptoPort } from '../crypto/port.js';
-import { hashSignedCore, verifyOp } from '../crypto/signed-core.js';
-import type { SignedCore } from '@bolusi/schemas';
+import { operationFromSignedCoreJcs, verifyOp } from '../crypto/signed-core.js';
 import type { DeviceRegistryEntry } from './devices.js';
 import type { QuarantineReason } from './ports.js';
 
@@ -87,35 +86,6 @@ export function signerKeyOf(
   }
 }
 
-/**
- * The verbatim JCS text of a pulled op's signed core (05 §3 verbatim-storage rule).
- *
- * The wire carries the core as parsed JSON, and JCS is a fixpoint under `JSON.parse ∘ canonicalize`
- * — re-canonicalizing recovers the exact bytes the signer hashed. That round-trip is why the pull
- * can persist `signed_core_jcs` at all without the server shipping the text twice.
- *
- * @throws {ZodError | JcsInputError} if the core is not a §2.1 core — callers must have parsed the
- * op through `zSignedOperation` first, so a throw here is a bug, not hostile input.
- */
-export function signedCoreJcsOf(op: SignedOperation, crypto: CryptoPort): string {
-  return hashSignedCore(signedCoreOf(op), crypto).jcs;
-}
-
-/**
- * The §2.1 signed core of an op — the §2.2 derived fields removed.
- *
- * `zSignedCore` is STRICT, so leaving `hash`/`signature` in would fail the parse rather than be
- * ignored — which is the schema doing its job (they are not part of the preimage). Written as an
- * omission rather than a hand-listed field set: a field added to 05 §2.1 must flow through here
- * automatically, and a hand-listed core would silently drop it from the hash.
- */
-function signedCoreOf(op: SignedOperation): SignedCore {
-  const core: Partial<SignedOperation> = { ...op };
-  delete core.hash;
-  delete core.signature;
-  return core as SignedCore;
-}
-
 /** A quarantined op as stored (10-db §9.5). */
 export interface QuarantinedOp {
   readonly id: string;
@@ -142,7 +112,7 @@ export async function insertQuarantinedOp<DB>(db: Kysely<DB>, row: QuarantinedOp
     INSERT OR IGNORE INTO quarantined_ops
       (id, device_id, server_seq, signed_core_jcs, hash, signature, reason, quarantined_at)
     VALUES (${row.id}, ${row.deviceId}, ${row.serverSeq},
-            ${encryptColumnValue(db, row.signedCoreJcs)}, ${row.hash},
+            ${encryptColumnValue(db, row.signedCoreJcs, SIGNED_CORE_SEAL)}, ${row.hash},
             ${row.signature}, ${row.reason}, ${row.quarantinedAt})
   `.execute(db);
 }
@@ -191,6 +161,5 @@ export async function deleteQuarantinedOp<DB>(db: Kysely<DB>, id: string): Promi
  * signature. Re-verification would then reject an op that a corrected directory should release.
  */
 export function reconstructQuarantinedOp(row: QuarantinedOp): SignedOperation {
-  const core = JSON.parse(row.signedCoreJcs) as Record<string, unknown>;
-  return { ...core, hash: row.hash, signature: row.signature } as SignedOperation;
+  return operationFromSignedCoreJcs(row.signedCoreJcs, row);
 }

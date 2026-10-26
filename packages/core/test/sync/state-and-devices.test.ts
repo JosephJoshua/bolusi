@@ -3,7 +3,7 @@
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { noblePort } from '@bolusi/test-support';
+import { noblePort, opRowOf } from '@bolusi/test-support';
 
 import {
   pendingMediaCount,
@@ -12,6 +12,7 @@ import {
   readSyncState,
   runPullPhase,
   writeSyncState,
+  insertOpLogRow,
 } from '../../src/index.js';
 import { poisonAmbientEffects } from '../runtime/_purity.js';
 import {
@@ -169,19 +170,11 @@ describe('pending counts are DERIVED queries, never stored (01 §5.2)', () => {
         entityId: uuidV7(prng, 1_726_000_000_000 + i),
         prng,
       });
-      await sql`
-        INSERT INTO operations (
-          id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-          schema_version, payload, timestamp_ms, location, source, agent_initiated,
-          agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
-        ) VALUES (
-          ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq},
-          ${op.type}, ${op.entityType}, ${op.entityId}, ${op.schemaVersion},
-          ${JSON.stringify(op.payload)}, ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null},
-          ${op.previousHash}, ${op.hash}, ${op.signature}, ${`jcs:${op.id}`},
-          ${i === 3 ? 'synced' : 'local'}
-        )
-      `.execute(harness.db);
+      await insertOpLogRow(harness.db, opRowOf(op), {
+        syncStatus: i === 3 ? 'synced' : 'local',
+        syncedAt: null,
+        arrivalSeq: null,
+      });
     }
 
     expect(await pendingOperationCount(harness.db)).toBe(2); // the `synced` one does not count

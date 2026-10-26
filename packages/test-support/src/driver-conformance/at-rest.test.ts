@@ -33,6 +33,10 @@ function healthyBytes(): Uint8Array {
   return encode('SQLite format 3\0some ciphertext blobs and ids');
 }
 
+function indexOf(cells: readonly SealedCell[], table: string, column: string): number {
+  return cells.findIndex((cell) => cell.table === table && cell.column === column);
+}
+
 /** Every signed-off column, observed and sealed — what a passing device produces. */
 function sealedCells(): SealedCell[] {
   return AT_REST_ENCRYPTED_COLUMNS.map(([table, column]) => ({
@@ -47,7 +51,7 @@ function context(overrides: Partial<AtRestProbeContext> = {}): AtRestProbeContex
     readCopyBytes: () => Promise.resolve(healthyBytes()),
     plaintextMarkers: [MARKER],
     readSealedCells: () => Promise.resolve(sealedCells()),
-    sealedPrefix: SEALED_PREFIX,
+    sealedPrefixes: [SEALED_PREFIX],
     ...overrides,
   };
 }
@@ -77,7 +81,11 @@ describe('checkDbAtRestIsCiphertext (post-D22: sealed COLUMNS, plain-SQLite FILE
 
   test('catches ONE unsealed column among the sealed ones', async () => {
     const cells = sealedCells();
-    cells[4] = { table: 'notes', column: 'body', value: 'dua belas krat — in the clear' };
+    cells[indexOf(cells, 'notes', 'body')] = {
+      table: 'notes',
+      column: 'body',
+      value: 'dua belas krat — in the clear',
+    };
     const findings = await checkDbAtRestIsCiphertext(
       context({ readSealedCells: () => Promise.resolve(cells) }),
     );
@@ -88,13 +96,37 @@ describe('checkDbAtRestIsCiphertext (post-D22: sealed COLUMNS, plain-SQLite FILE
 
   test('a NULL cell is not a finding — nullable columns are legitimately null', async () => {
     const cells = sealedCells();
-    cells[2] = { table: 'operations', column: 'location', value: null };
+    cells[indexOf(cells, 'media_items', 'location')] = {
+      table: 'media_items',
+      column: 'location',
+      value: null,
+    };
     const findings = await checkDbAtRestIsCiphertext(
       context({ readSealedCells: () => Promise.resolve(cells) }),
     );
     // …but it DOES cost coverage for that column, which is the honest outcome: a null proves nothing.
     expect(findings.map((f) => f.check)).toEqual(['every encrypted column was actually probed']);
-    expect(findings[0]?.detail).toContain('operations.location');
+    expect(findings[0]?.detail).toContain('media_items.location');
+  });
+
+  test('accepts every injected seal prefix, and only those', async () => {
+    const COMPRESSED_PREFIX = `${String.fromCharCode(1)}gcz1:AAAAAAAAAAAA:`;
+    const cells = sealedCells();
+    cells[indexOf(cells, 'operations', 'signed_core_jcs')] = {
+      table: 'operations',
+      column: 'signed_core_jcs',
+      value: `${COMPRESSED_PREFIX}c2VhbGVkLWJsb2I=`,
+    };
+    const read = () => Promise.resolve(cells);
+    expect(
+      await checkDbAtRestIsCiphertext(
+        context({ readSealedCells: read, sealedPrefixes: [SEALED_PREFIX, COMPRESSED_PREFIX] }),
+      ),
+    ).toEqual([]);
+    const findings = await checkDbAtRestIsCiphertext(context({ readSealedCells: read }));
+    expect(findings.map((f) => f.detail)).toEqual([
+      expect.stringContaining('operations.signed_core_jcs'),
+    ]);
   });
 
   test('COVERAGE: a device that seeded nothing FAILS instead of passing vacuously', async () => {
@@ -110,12 +142,12 @@ describe('checkDbAtRestIsCiphertext (post-D22: sealed COLUMNS, plain-SQLite FILE
     }
   });
 
-  test('the coverage set is exactly the 11 signed-off columns (D22 addendum 2)', () => {
-    expect(AT_REST_ENCRYPTED_COLUMNS).toHaveLength(11);
+  // D22 addendum 2 signed off 11; client migration 6 dropped `operations.payload` and `.location`,
+  // whose only stored copy is now inside `operations.signed_core_jcs`.
+  test('the coverage set is exactly the 9 signed-off columns still stored', () => {
+    expect(AT_REST_ENCRYPTED_COLUMNS).toHaveLength(9);
     expect(AT_REST_ENCRYPTED_COLUMNS.map(([t, c]) => `${t}.${c}`)).toEqual([
-      'operations.payload',
       'operations.signed_core_jcs',
-      'operations.location',
       'notes.title',
       'notes.body',
       'user_pin_verifiers.salt',

@@ -43,7 +43,6 @@ export {
   QUARANTINE_LABEL_KEY,
   readQuarantinedOps,
   reconstructQuarantinedOp,
-  signedCoreJcsOf,
   verifyPulledOp,
   type PulledOpVerification,
   type QuarantinedOp,
