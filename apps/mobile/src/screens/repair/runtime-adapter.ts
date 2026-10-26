@@ -6,6 +6,7 @@
 import {
   bindModulePort,
   listSwitcherUsers,
+  OP_SYNC_STATUS_TABLE,
   type CommandIdentity,
   type InvalidationBus,
   type ModuleRuntime,
@@ -36,15 +37,17 @@ export interface RepairRuntimeDeps {
   readonly media: RepairMediaSeams;
 }
 
-const REPAIR_TABLES = Object.values(REPAIR_TABLE);
+/** Every repair table, and the op log for each ticket's sync status. */
+const LIVE_TABLES = [...Object.values(REPAIR_TABLE), OP_SYNC_STATUS_TABLE];
 
 export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
   const port = bindModulePort(repairModule, deps.runtime, deps.identity);
   return {
     ...port,
     // Every repair table, not one: a ticket row joins its customer, lines and photos, and a pulled
-    // change to any of them must re-render the open screen (04 §7).
-    subscribe: (listener) => deps.invalidation.subscribeTables(REPAIR_TABLES, listener),
+    // change to any of them must re-render the open screen (04 §7). The op log too, since each
+    // screen shows its tickets' sync status.
+    subscribe: (listener) => deps.invalidation.subscribeTables(LIVE_TABLES, listener),
     ticketSyncStatuses: (ids) => readEntitySyncStatuses(deps.db, REPAIR_TICKET_ENTITY, ids),
     technicians: async () =>
       (await listSwitcherUsers(deps.db))

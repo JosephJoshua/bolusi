@@ -31,6 +31,17 @@ anything typed (edit distance over names, digits and codes, never exact). On a
 device the index lives in memory per store, loads once, and reloads only the
 entities the projection engine reports as changed.
 
+Screens are live the same way: a module's screen reads through `useLiveQuery`
+(`packages/modules/src/screen-kit/live.ts`), which re-reads whenever the
+projection engine's invalidation bus reports a write to the module's tables, or
+a push changes op sync status (`OP_SYNC_STATUS_TABLE`). Local commands and
+pulled operations take the same path, so another device's change shows on an
+open screen with no extra wiring. A device pushes 1 s after a local change and
+pulls on the server's realtime poke, so a colleague's change normally reaches
+other screens in the store within a couple of seconds online. A step a user has
+open re-checks its ticket against the same rule that offered it and says so when
+a synced change has made it impossible to finish.
+
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
 
@@ -98,10 +109,12 @@ fails a build, a boot or a test rather than waiting for review:
   ops unreadable; a better one needs a new scheme prefix.
 - Local confidentiality uses application-layer encryption; SQLCipher is disabled.
   Old comments/report names do not establish whole-database encryption.
-- Extended chaos has unresolved large-workload failures: the recorded October 14
-  run hit rate limits in CHAOS-03 and timeouts in CHAOS-08; later nightly runs also
-  failed. Removing the schedule does not resolve them. Reproduce a bounded seed
-  before attributing a failure to the application or test workload.
+- Extended chaos (`pnpm chaos:extended`) failed from October 14 to 24 in CHAOS-03
+  (HTTP 429) and CHAOS-08 (timeout). Both were harness problems, fixed October 26:
+  the harness server's fake clock never advanced, so its per-device rate limit
+  never refilled, and CHAOS-08's timeout had no room for four workers sharing a
+  box. Reproduce a bounded seed before attributing a failure to the application
+  or test workload.
 - A future rekey/pre-key-tag fleet migration may need verified key-tag backfill.
   It was deferred because current creation tags the DB before enrollment. Add a
   migration when a real upgrade needs it, not to satisfy a historical task entry.

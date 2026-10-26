@@ -24,6 +24,7 @@
 // every connectivity change. `syncState()` is RE-READ from `sync_state` after each cycle, so the
 // banner clears from the real column (T-19), never a `?? Date.now()`.
 import {
+  OP_SYNC_STATUS_TABLE,
   readSyncState,
   SyncLoop,
   type PulledBatch,
@@ -86,6 +87,8 @@ export interface SyncClientDeps {
   readonly surface?: SyncSurfacePort;
   readonly pushBatchSize?: number;
   readonly pullLimit?: number;
+  /** After a push changed ops' sync status (see `SyncLoopOptions.onPushed`). */
+  readonly onPushed?: () => void;
   /**
    * Task 105: given the loop's trigger, build the realtime controller (task 20). Its `start`/`stop`
    * RIDE the loop's — started after `hydrate()` (a trigger before hydrate throws), stopped on teardown —
@@ -190,6 +193,7 @@ class SyncClientImpl implements SyncClient {
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
       onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
+      ...(deps.onPushed === undefined ? {} : { onPushed: deps.onPushed }),
     });
 
     this.triggers = createSyncTriggers({
@@ -424,6 +428,9 @@ export function createSyncClientForApp(
     appState: config.appState,
     netInfo: config.netInfo,
     initialSyncState: app.syncState,
+    // Pushed ops changed status without a projection write: say so on the bus the screens read, so
+    // a ticket's "waiting to sync" chip or rejected banner updates as the push lands.
+    onPushed: () => app.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE])),
     ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT

@@ -39,7 +39,8 @@
     "agreeApply": "Agrees",
     "applyUnasked": "Apply without the customer’s agreement",
     "assignShort": "Choose",
-    "reassignShort": "Change"
+    "reassignShort": "Change",
+    "backToTicket": "Back to the repair"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -303,5 +304,13 @@
       "tooMany": "40 choices at most.",
       "hidesAll": "At least one choice must show at this store."
     }
+  },
+  "stale": {
+    "cancelled": "This repair was just cancelled on another device.",
+    "returned": "This phone was already recorded as handed back on another device.",
+    "proposalApplied": "This price change was already approved on another device.",
+    "proposalDeclined": "This price change was already declined on another device.",
+    "proposalPending": "A new price change needs confirming. Check it before handing the phone back.",
+    "changed": "This repair was just changed on another device, so this step can’t go on."
   }
 }
