@@ -117,10 +117,10 @@ The owner chose an actual repair business outcome rather than stock control alon
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
 - Pursue authorized GSMArena access; in parallel evaluate a lawful alternative model/specification source against fields, Indonesian device coverage, lookup/IMEI capabilities, cost, attribution, offline caching and retention rights. Choose and validate at least one source before promising model lookup for v1; GSMArena specifically is preferred, not a launch gate.
 
-Changing the roadmap does not resolve the existing extended-chaos failures or
-establish physical-device performance; see [architecture](architecture.md) for
-current limits. Resolve relevant open choices and record a concise agreement as
-each repair slice is selected. The former phase/task workflow is retired.
+Changing the roadmap does not establish physical-device performance; see
+[architecture](architecture.md) for current limits. Resolve relevant open choices
+and record a concise agreement as each repair slice is selected. The former
+phase/task workflow is retired.
 
 ## Deferred and excluded scope
 

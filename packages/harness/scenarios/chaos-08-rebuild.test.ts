@@ -64,6 +64,10 @@ const CLOCK_BASE = 1_726_100_000_000;
 const HISTORY = activeVolumes().rebuildHistory; // 20,000 at CI scale (§3.6) — the meta-test pins it.
 const INTERLEAVED = activeVolumes().rebuildInterleaved; // 500 mid-stream ops.
 const REBUILD_BATCH = 500; // DEFAULT_REBUILD_BATCH_SIZE → 40 batches over 20,000.
+/** Cost is proportional to volume. At ×4 one seed took 207 s alone (2026-10-26) but 293–559 s in the
+ *  extended run, where four workers share the box; the default 120 s × scale timed the slowest out.
+ *  Five minutes per unit of scale leaves room for that contention while a real hang still fails. */
+const TIMEOUT_MS = 300_000 * activeVolumes().scale;
 
 /** Author `count` real signed ops (creates + edits) on a device — the incremental control's history. */
 async function author(
@@ -96,7 +100,7 @@ async function loadLogOnly(
   return seq;
 }
 
-describe('CHAOS-08 projection rebuild mid-stream', () => {
+describe('CHAOS-08 projection rebuild mid-stream', { timeout: TIMEOUT_MS }, () => {
   for (const seed of chaos08Seeds()) {
     test(`CHAOS-08 kill+resume at 25/50/75% then mid-stream ops: rebuilt == control == canonical fold [seed ${seed}]`, async () => {
       await withSeed(
