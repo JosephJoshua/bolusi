@@ -83,6 +83,9 @@ fails a build, a boot or a test rather than waiting for review:
   subscribes the module runtime to the module's tables, so a pulled change re-runs
   every open read.
 - Typed search goes through a `SearchSource` and `searchIndexFor`, which match fuzzily.
+- A step that stays open (a form, photos, a signature) re-checks its target against
+  the same rule that offered it, and says why it can no longer finish. See repair's
+  `staleStep` in `flows.ts` and the `stale` prop on `FlowScreen`.
 
 ## Limits to carry into repair work
 
