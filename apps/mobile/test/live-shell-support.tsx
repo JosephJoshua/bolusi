@@ -534,6 +534,8 @@ export interface MountOptions {
   readonly createPushRegistration?: RootProps['createPushRegistration'];
   /** The notification-tap seam (api/04-push §4/§6; task 135). Omitted by default (no listener). */
   readonly pushRouter?: RootProps['pushRouter'];
+  /** The notification permission seam; default undefined (never asks). */
+  readonly notificationPermission?: RootProps['notificationPermission'];
   /**
    * The enrollment factory (api/02-auth §4; task 92). Omitted by default, so the pre-enrolled tests use
    * the rejecting stub below (the device is already enrolled — the transports are never called). The
@@ -659,6 +661,7 @@ export async function mountRoot(
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
+      notificationPermission={options.notificationPermission}
     />,
   );
   await settle();

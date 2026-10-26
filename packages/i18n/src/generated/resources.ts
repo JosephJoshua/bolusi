@@ -296,6 +296,13 @@ const source = {
         title: 'Peringatan perangkat',
         body: 'Ada masalah pada salah satu perangkat toko. Ketuk untuk memeriksa.',
       },
+      permission: {
+        title: 'Nyalakan notifikasi?',
+        message:
+          'Biar kamu langsung tahu kalau ada data yang perlu dicek atau masalah di perangkat toko, walau aplikasinya sedang ditutup.',
+        allow: 'Nyalakan notifikasi',
+        later: 'Nanti saja',
+      },
     },
     permission: {},
     role: {
@@ -617,6 +624,13 @@ export const resources = {
         device: {
           title: 'Device alert',
           body: 'Something needs attention on one of your store’s devices. Tap to check.',
+        },
+        permission: {
+          title: 'Turn on notifications?',
+          message:
+            'So you know right away when data needs checking or a store device has a problem, even when the app is closed.',
+          allow: 'Turn on notifications',
+          later: 'Not now',
         },
       },
       permission: {},

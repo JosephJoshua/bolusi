@@ -3,6 +3,7 @@
  */
 import {
   AvatarButton,
+  ConfirmSheet,
   Icon,
   ListRow,
   NAV_BAR_INSET,
@@ -227,6 +228,11 @@ export interface AppProps {
    * fake. Both reject on failure, and the wizard buckets it (`classifyFailure`).
    */
   readonly enrollment: EnrollmentController;
+  /**
+   * Set while this device should be asked, once, to allow notifications (`push/permission.ts`):
+   * `true` is "Nyalakan" (the OS prompt follows), `false` is "Nanti saja". Null when not asking.
+   */
+  readonly onAnswerNotifications?: ((allow: boolean) => void) | null | undefined;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
@@ -1119,6 +1125,22 @@ export default function App(props: AppProps): React.JSX.Element {
             />
           </View>
         </Sheet>
+      ) : null}
+      {props.onAnswerNotifications != null &&
+      zone.kind === 'shell' &&
+      !accountMenu &&
+      modal === null ? (
+        // On the work screen, after unlock, with the reason before the OS asks (never at boot).
+        <ConfirmSheet
+          tone="primary"
+          title={t('push.permission.title')}
+          message={t('push.permission.message')}
+          confirmLabel={t('push.permission.allow')}
+          onConfirm={() => props.onAnswerNotifications?.(true)}
+          cancelLabel={t('push.permission.later')}
+          onCancel={() => props.onAnswerNotifications?.(false)}
+          testID="notification-ask"
+        />
       ) : null}
       {modal === null ? null : <View style={[StyleSheet.absoluteFill, shellStyle]}>{modal}</View>}
     </View>

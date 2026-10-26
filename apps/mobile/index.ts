@@ -24,6 +24,7 @@ import {
   repairMediaSeamsFor,
   type RepairMediaSeams,
 } from './src/bootstrap/repair.js';
+import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
@@ -430,6 +431,25 @@ const expoPushRouter: PushRouterPort = {
   },
 };
 
+/**
+ * THE NOTIFICATION PERMISSION SEAM (`src/push/permission.ts`), bound over `expo-notifications` here
+ * like the tap router. The "already asked" flag shares the prefs file the push token uses: UI state,
+ * not a secret.
+ */
+const NOTIFICATIONS_ASKED_KEY = 'bolusi.notifications_asked';
+
+const expoNotificationPermission: NotificationPermissionPort = {
+  async status() {
+    const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
+    return { granted, canAskAgain };
+  },
+  async request() {
+    await Notifications.requestPermissionsAsync();
+  },
+  readAsked: async () => (await fileLocaleStore.read(NOTIFICATIONS_ASKED_KEY)) !== null,
+  writeAsked: () => fileLocaleStore.write(NOTIFICATIONS_ASKED_KEY, '1'),
+};
+
 function Bootstrapped(): React.JSX.Element | null {
   return Root({
     boot,
@@ -445,6 +465,7 @@ function Bootstrapped(): React.JSX.Element | null {
     // notification deep-links into the reachable shell route.
     createPushRegistration,
     pushRouter: expoPushRouter,
+    notificationPermission: expoNotificationPermission,
     // THE PIN-VERIFIER POST TRANSPORT (api/02-auth §5.4; task 186a-2). Bound here for the same reason
     // `postToken` is: the fetch wire + the SecureStore device bearer, neither Node-safe. `Root` drains
     // it on `onBundleRefreshed` (online-only), so a locally-applied PIN change reaches the server and

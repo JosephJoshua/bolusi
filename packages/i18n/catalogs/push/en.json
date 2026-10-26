@@ -6,5 +6,11 @@
   "device": {
     "title": "Device alert",
     "body": "Something needs attention on one of your store’s devices. Tap to check."
+  },
+  "permission": {
+    "title": "Turn on notifications?",
+    "message": "So you know right away when data needs checking or a store device has a problem, even when the app is closed.",
+    "allow": "Turn on notifications",
+    "later": "Not now"
   }
 }
