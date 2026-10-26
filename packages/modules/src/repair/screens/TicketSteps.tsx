@@ -5,7 +5,6 @@
  */
 import { formatMoney } from '@bolusi/i18n';
 import {
-  Button,
   ListRow,
   PhotoSlot,
   SegmentedControl,
@@ -472,8 +471,14 @@ export function ProposalStep({
       chrome={chrome}
       title={tn('repair.price.proposalTitle')}
       onBack={onCancel}
+      question={tn('repair.price.customerAgrees')}
       primaryLabel={tn('repair.action.agreeApply')}
       onPrimary={() => decide('agreed')}
+      secondary={{
+        label: tn('repair.action.declinePrice'),
+        onPress: () => decide('declined'),
+        testID: `${testID}.decline`,
+      }}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -500,24 +505,14 @@ export function ProposalStep({
           testID={`${testID}.note`}
         />
       </View>
-      <View style={styles.decline}>
-        <Button
-          label={tn('repair.action.declinePrice')}
-          variant="secondary"
-          size="compact"
-          onPress={() => decide('declined')}
+      {/* Rare and riskier than either answer, so it stays a link in the body, off the answer row. */}
+      <View style={styles.unasked}>
+        <TextButton
+          label={tn('repair.action.applyUnasked')}
+          onPress={() => decide('unasked')}
           disabled={runner.busy}
-          testID={`${testID}.decline`}
+          testID={`${testID}.applyUnasked`}
         />
-        {/* Rare and riskier, so it reads as a link under the answer, its text on the content edge. */}
-        <View style={styles.unasked}>
-          <TextButton
-            label={tn('repair.action.applyUnasked')}
-            onPress={() => decide('unasked')}
-            disabled={runner.busy}
-            testID={`${testID}.applyUnasked`}
-          />
-        </View>
       </View>
     </FlowScreen>
   );
@@ -538,7 +533,6 @@ const styles = StyleSheet.create({
   },
   proposalLabel: { ...type.caption, color: color.textMuted, marginTop: space.md },
   proposalReason: { ...type.bodySm, color: color.text },
-  decline: { alignItems: 'flex-start', gap: space.md, marginTop: space.xl },
-  unasked: { marginLeft: -space.sm },
+  unasked: { alignItems: 'flex-start', marginTop: space.lg, marginLeft: -space.sm },
   consequence: { marginBottom: space.md },
 });

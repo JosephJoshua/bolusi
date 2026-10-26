@@ -22,7 +22,7 @@
     "changePrice": "Change price",
     "claim": "Take this repair",
     "decidePrice": "Confirm price",
-    "declinePrice": "Customer declined",
+    "declinePrice": "Doesn’t agree",
     "handover": "Hand back to customer",
     "markRepaired": "Mark repaired",
     "newIntake": "New repair",
@@ -34,7 +34,7 @@
     "start": "Start repair",
     "waitForParts": "Mark waiting for parts",
     "reassign": "Change technician",
-    "agreeApply": "Customer agreed, apply",
+    "agreeApply": "Agrees",
     "applyUnasked": "Apply without the customer’s agreement",
     "assignShort": "Choose",
     "reassignShort": "Change"
@@ -184,7 +184,8 @@
     "total": "Total",
     "addRow": "Add a price line",
     "pendingTotal": "Not yet confirmed by the customer: {amount}",
-    "technicianReason": "Technician’s reason"
+    "technicianReason": "Technician’s reason",
+    "customerAgrees": "Does the customer agree to this price?"
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",

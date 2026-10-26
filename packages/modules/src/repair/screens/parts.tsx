@@ -181,7 +181,8 @@ export interface RepairChrome {
 /**
  * One full-screen step of a flow (design-system §3.10: flows, not modals): a back arrow, the body,
  * the refused-action banner and one primary action at the bottom. A step whose choices are its rows
- * (picking a technician) has no primary action.
+ * (picking a technician) has no primary action. A step that asks a yes/no question (did the customer
+ * agree?) puts the question over both answers, the "no" beside the primary as its equal.
  */
 export function FlowScreen({
   chrome,
@@ -192,6 +193,8 @@ export function FlowScreen({
   primaryDisabled,
   primaryHint,
   primaryVariant,
+  secondary,
+  question,
   busy,
   errorCode,
   onClearError,
@@ -208,6 +211,11 @@ export function FlowScreen({
   /** Said above a disabled primary, so the user knows what it is waiting for. */
   readonly primaryHint?: string | undefined;
   readonly primaryVariant?: 'primary' | 'destructive' | undefined;
+  /** The other answer to `question`, drawn beside the primary. */
+  readonly secondary?:
+    { readonly label: string; readonly onPress: () => void; readonly testID: string } | undefined;
+  /** Already-localized question the bottom answers reply to. */
+  readonly question?: string | undefined;
   readonly busy: boolean;
   readonly errorCode: string | null;
   readonly onClearError: () => void;
@@ -244,14 +252,34 @@ export function FlowScreen({
                 {primaryHint}
               </Text>
             ) : null}
-            <Button
-              label={primaryLabel}
-              onPress={onPrimary}
-              variant={primaryVariant ?? 'primary'}
-              disabled={primaryDisabled === true || busy}
-              busy={busy}
-              testID={`${testID}.primary`}
-            />
+            {question === undefined ? null : (
+              <Text style={styles.question} testID={`${testID}.question`}>
+                {question}
+              </Text>
+            )}
+            <View style={styles.answers}>
+              {secondary === undefined ? null : (
+                <View style={styles.answer}>
+                  <Button
+                    label={secondary.label}
+                    onPress={secondary.onPress}
+                    variant="secondary"
+                    disabled={busy}
+                    testID={secondary.testID}
+                  />
+                </View>
+              )}
+              <View style={styles.answer}>
+                <Button
+                  label={primaryLabel}
+                  onPress={onPrimary}
+                  variant={primaryVariant ?? 'primary'}
+                  disabled={primaryDisabled === true || busy}
+                  busy={busy}
+                  testID={`${testID}.primary`}
+                />
+              </View>
+            </View>
           </View>
         )
       }
@@ -357,6 +385,9 @@ export const repairStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
+  question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
+  answers: { flexDirection: 'row', gap: space.md },
+  answer: { flex: 1 },
   thumb: {
     width: '100%',
     aspectRatio: 1,

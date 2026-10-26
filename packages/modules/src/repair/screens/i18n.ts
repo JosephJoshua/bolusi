@@ -155,6 +155,7 @@ export const REPAIR_KEYS = [
   'repair.price.addRow',
   'repair.price.amount',
   'repair.price.customerAgreed',
+  'repair.price.customerAgrees',
   'repair.price.decisionNote',
   'repair.price.description',
   'repair.price.kind.adjustment',

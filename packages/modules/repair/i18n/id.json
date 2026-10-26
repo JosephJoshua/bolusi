@@ -22,7 +22,7 @@
     "changePrice": "Ubah harga",
     "claim": "Ambil servisan ini",
     "decidePrice": "Konfirmasi harga",
-    "declinePrice": "Pelanggan tidak setuju",
+    "declinePrice": "Tidak setuju",
     "handover": "Serahkan HP",
     "markRepaired": "Selesai dikerjakan",
     "newIntake": "Servisan baru",
@@ -34,7 +34,7 @@
     "start": "Mulai kerjakan",
     "waitForParts": "Tunggu sparepart",
     "reassign": "Ganti teknisi",
-    "agreeApply": "Pelanggan setuju",
+    "agreeApply": "Setuju",
     "applyUnasked": "Pakai tanpa konfirmasi pelanggan",
     "assignShort": "Pilih",
     "reassignShort": "Ganti"
@@ -184,7 +184,8 @@
     "total": "Total",
     "addRow": "Tambah biaya",
     "pendingTotal": "Belum dikonfirmasi pelanggan: {amount}",
-    "technicianReason": "Alasan teknisi"
+    "technicianReason": "Alasan teknisi",
+    "customerAgrees": "Pelanggan setuju dengan harga ini?"
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",
