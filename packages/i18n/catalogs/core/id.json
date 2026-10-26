@@ -87,5 +87,9 @@
     "SCHEMA_INVALID": "Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.",
     "SCOPE_VIOLATION": "Perubahan ini bukan untuk toko atau akun ini, jadi ditolak. Laporkan ke pemilik toko.",
     "UNKNOWN_TYPE": "Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim."
+  },
+  "account": {
+    "menu": "Menu akun",
+    "switchUser": "Ganti pengguna"
   }
 }

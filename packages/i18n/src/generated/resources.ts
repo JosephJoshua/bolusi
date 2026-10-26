@@ -93,6 +93,7 @@ const source = {
         UNKNOWN_TYPE:
           'Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim.',
       },
+      account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
     },
     auth: {
       switcher: {
@@ -384,6 +385,7 @@ export const resources = {
             'This change doesn’t belong to this store or account, so it was rejected. Report it to the store owner.',
           UNKNOWN_TYPE: 'This device’s app needs an update before this change can be sent.',
         },
+        account: { menu: 'Account menu', switchUser: 'Switch user' },
       },
       auth: {
         switcher: {

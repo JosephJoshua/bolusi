@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import type { ModulePort } from '@bolusi/core';
 
+import type { IntakeOptionSettings } from '../intake-options.js';
 import type { repairModule } from '../manifest.js';
 import {
   createRuntimeContext,
@@ -67,4 +68,12 @@ export function useRepairQuery<TData>(
 
 export function useRepairThumbnail(ref: ThumbnailRef | null): ThumbnailState {
   return useThumbnailState(useRepairRuntime().loadThumbnail, ref);
+}
+
+/** The franchise's intake lists and this store's hidden items, kept live as either syncs in. */
+export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
+  return useRepairQuery(
+    async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
+    'intakeOptionSettings',
+  );
 }

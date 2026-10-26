@@ -263,6 +263,14 @@ export interface RepairCustomers {
   updatedBy: string;
 }
 
+export interface RepairIntakeOptions {
+  itemsJson: string;
+  list: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RepairQuoteLines {
   amount: Int8;
   createdAt: Int8;
@@ -279,6 +287,15 @@ export interface RepairQuoteLines {
   storeId: string;
   tenantId: string;
   ticketId: string;
+}
+
+export interface RepairStoreIntakeOptions {
+  hiddenJson: string;
+  list: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
 }
 
 export interface RepairTicketEvents {
@@ -319,6 +336,7 @@ export interface RepairTickets {
   estimatedReadyAt: Int8 | null;
   id: string;
   intakeNotes: string;
+  intakePhotosJson: string | null;
   location: string;
   outcome: string;
   outcomeNote: string | null;
@@ -440,7 +458,9 @@ export interface DB {
   pushTokens: PushTokens;
   refusedOperations: RefusedOperations;
   repairCustomers: RepairCustomers;
+  repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreIntakeOptions: RepairStoreIntakeOptions;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

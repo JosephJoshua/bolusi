@@ -20,25 +20,22 @@ import {
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { CHECKLIST_STATES, INTAKE_PHOTO_SLOTS } from '../constants.js';
+import { CHECKLIST_STATES } from '../constants.js';
 
 import { tn } from './i18n.js';
 import {
   CHECK_STATE_KEY,
-  INTAKE_SLOT_KEY,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
-  READY_KEY,
-  checkLabel,
-  peripheralLabel,
+  optionLabel,
+  readyLabel,
 } from './labels.js';
 import {
-  COMMON_BRANDS,
-  INTAKE_CHECKS,
   INTAKE_STEPS,
-  PERIPHERALS,
-  READY_CHOICES,
   capturedThumbnailRef,
+  checksWithIssue,
+  chosenAccessories,
+  chosenReady,
   intakeTotal,
   acceptsRupiahText,
   parseRupiah,
@@ -48,7 +45,7 @@ import {
   type IntakeStep,
   type QuoteLineDraft,
 } from '../flows.js';
-import type { IntakePhotoSlot } from '../constants.js';
+import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
 import { Field, PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
 import { useRepairQuery } from './runtime.js';
 import { PRICE_KINDS, type PriceKind } from './TicketSteps.js';
@@ -56,6 +53,8 @@ import { PRICE_KINDS, type PriceKind } from './TicketSteps.js';
 export interface StepProps {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
+  /** The lists this store offers (the owner's, without what the store hides). */
+  readonly options: IntakeOptionLists;
   readonly testID: string;
 }
 
@@ -146,6 +145,7 @@ export function CustomerStep({
 export function DeviceStep({
   draft,
   update,
+  options,
   brandError,
   modelError,
   testID,
@@ -168,15 +168,18 @@ export function DeviceStep({
         testID={`${testID}.brand`}
       />
       <View style={[styles.chips, styles.suggestions]}>
-        {COMMON_BRANDS.map((brand) => (
-          <ToggleChip
-            key={brand}
-            label={brand}
-            selected={device.brand === brand}
-            onToggle={() => set({ brand })}
-            testID={`${testID}.brandChoice.${brand}`}
-          />
-        ))}
+        {options.brands.map((option) => {
+          const brand = optionLabel('brands', option);
+          return (
+            <ToggleChip
+              key={option.id}
+              label={brand}
+              selected={device.brand === brand}
+              onToggle={() => set({ brand })}
+              testID={`${testID}.brandChoice.${brand}`}
+            />
+          );
+        })}
       </View>
       <View style={repairStyles.gap}>
         <TextInput
@@ -229,6 +232,7 @@ export function DeviceStep({
 export function ConditionStep({
   draft,
   update,
+  options,
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
@@ -249,49 +253,53 @@ export function ConditionStep({
         autoFocus
         testID={`${testID}.complaint`}
       />
-      <Section
-        title={tn('repair.condition.checks')}
-        action={
-          <TextButton
-            label={tn('repair.condition.restOk')}
-            icon="check"
-            onPress={() => update({ checks: restOfChecksOk(draft.checks) })}
-            testID={`${testID}.restOk`}
-          />
-        }
-      >
-        {INTAKE_CHECKS.map((item, index) => (
-          // One line per check: the name on the left (wrapping if long), its state lined up on the
-          // right, so the column of choices reads straight down.
-          <View key={item} style={[styles.check, index === 0 ? null : styles.checkDivider]}>
-            <Text style={styles.checkLabel}>{checkLabel(item)}</Text>
-            <SegmentedControl
-              options={CHECKLIST_STATES.map((value) => ({
-                value,
-                label: tn(CHECK_STATE_KEY[value]),
-              }))}
-              value={draft.checks[item] ?? 'not_checked'}
-              onChange={(state) => update({ checks: { ...draft.checks, [item]: state } })}
-              size="compact"
-              wrap
-              testID={`${testID}.check.${item}`}
+      {options.checks.length === 0 ? null : (
+        <Section
+          title={tn('repair.condition.checks')}
+          action={
+            <TextButton
+              label={tn('repair.condition.restOk')}
+              icon="check"
+              onPress={() => update({ checks: restOfChecksOk(draft.checks, options.checks) })}
+              testID={`${testID}.restOk`}
             />
-          </View>
-        ))}
-      </Section>
-      <Section title={tn('repair.condition.peripherals')}>
-        <View style={styles.chips}>
-          {PERIPHERALS.map((item) => (
-            <ToggleChip
-              key={item}
-              label={peripheralLabel(item)}
-              selected={draft.peripherals.includes(item)}
-              onToggle={() => togglePeripheral(item)}
-              testID={`${testID}.peripheral.${item}`}
-            />
+          }
+        >
+          {options.checks.map((option, index) => (
+            // One line per check: the name on the left (wrapping if long), its state lined up on the
+            // right, so the column of choices reads straight down.
+            <View key={option.id} style={[styles.check, index === 0 ? null : styles.checkDivider]}>
+              <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
+              <SegmentedControl
+                options={CHECKLIST_STATES.map((value) => ({
+                  value,
+                  label: tn(CHECK_STATE_KEY[value]),
+                }))}
+                value={draft.checks[option.id] ?? 'not_checked'}
+                onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
+                size="compact"
+                wrap
+                testID={`${testID}.check.${option.id}`}
+              />
+            </View>
           ))}
-        </View>
-      </Section>
+        </Section>
+      )}
+      {options.accessories.length === 0 ? null : (
+        <Section title={tn('repair.condition.peripherals')}>
+          <View style={styles.chips}>
+            {options.accessories.map((option) => (
+              <ToggleChip
+                key={option.id}
+                label={optionLabel('accessories', option)}
+                selected={draft.peripherals.includes(option.id)}
+                onToggle={() => togglePeripheral(option.id)}
+                testID={`${testID}.peripheral.${option.id}`}
+              />
+            ))}
+          </View>
+        </Section>
+      )}
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.condition.notes')}
@@ -307,11 +315,13 @@ export function ConditionStep({
 
 export function PhotosStep({
   draft,
+  angles,
   onTake,
   testID,
 }: {
   readonly draft: IntakeDraft;
-  readonly onTake: (slot: IntakePhotoSlot) => void;
+  readonly angles: readonly IntakeOption[];
+  readonly onTake: (angle: IntakeOption) => void;
   readonly testID: string;
 }): React.JSX.Element {
   return (
@@ -319,12 +329,13 @@ export function PhotosStep({
       <Text style={repairStyles.muted}>{tn('repair.photo.intakeHint')}</Text>
       <View style={repairStyles.gap}>
         <PhotoGrid>
-          {INTAKE_PHOTO_SLOTS.map((slot) => {
+          {angles.map((angle) => {
+            const slot = angle.id;
             const photo = draft.photos[slot];
             return (
               <View key={slot} style={repairStyles.gridCell}>
                 <PhotoSlot
-                  label={tn(INTAKE_SLOT_KEY[slot])}
+                  label={optionLabel('photoAngles', angle)}
                   actionLabel={tn(
                     photo === undefined ? 'repair.photo.take' : 'repair.photo.retake',
                   )}
@@ -336,7 +347,7 @@ export function PhotosStep({
                       />
                     )
                   }
-                  onPress={() => onTake(slot)}
+                  onPress={() => onTake(angle)}
                   testID={`${testID}.slot.${slot}`}
                 />
               </View>
@@ -362,6 +373,7 @@ function amountText(amount: number): string {
 export function PriceStep({
   draft,
   update,
+  options,
   lineError,
   testID,
 }: StepProps & { readonly lineError: string | undefined }): React.JSX.Element {
@@ -436,8 +448,8 @@ export function PriceStep({
       </View>
       <Section title={tn('repair.ticket.readyBy')}>
         <SegmentedControl
-          options={READY_CHOICES.map((value) => ({ value, label: tn(READY_KEY[value]) }))}
-          value={draft.ready}
+          options={options.readyBy.map(({ id }) => ({ value: id, label: readyLabel(id) }))}
+          value={chosenReady(draft, options.readyBy)}
           onChange={(ready) => update({ ready })}
           size="compact"
           wrap
@@ -450,17 +462,20 @@ export function PriceStep({
 
 export function ReviewStep({
   draft,
+  options,
   onEdit,
   photoStrip,
   testID,
 }: {
   readonly draft: IntakeDraft;
+  readonly options: IntakeOptionLists;
   readonly onEdit: (step: number) => void;
   /** The captured photos as a strip that opens full screen (the wizard owns the viewer). */
   readonly photoStrip: React.ReactNode;
   readonly testID: string;
 }): React.JSX.Element {
-  const issues = INTAKE_CHECKS.filter((item) => draft.checks[item] === 'issue');
+  const issues = checksWithIssue(draft, options.checks);
+  const accessories = chosenAccessories(draft, options.accessories);
   const section = (step: IntakeStep, children: React.ReactNode): React.JSX.Element => (
     <Section
       title={tn(INTAKE_STEP_KEY[step])}
@@ -509,13 +524,13 @@ export function ReviewStep({
           {issues.length === 0 ? null : (
             <Field
               label={tn('repair.condition.issues')}
-              value={issues.map(checkLabel).join(', ')}
+              value={issues.map((check) => optionLabel('checks', check)).join(', ')}
             />
           )}
-          {draft.peripherals.length === 0 ? null : (
+          {accessories.length === 0 ? null : (
             <Field
               label={tn('repair.condition.peripherals')}
-              value={draft.peripherals.map(peripheralLabel).join(', ')}
+              value={accessories.map((item) => optionLabel('accessories', item)).join(', ')}
             />
           )}
         </>,
@@ -543,7 +558,10 @@ export function ReviewStep({
               {formatMoney(intakeTotal(draft.lines))}
             </Text>
           </View>
-          <Field label={tn('repair.ticket.readyBy')} value={tn(READY_KEY[draft.ready])} />
+          <Field
+            label={tn('repair.ticket.readyBy')}
+            value={readyLabel(chosenReady(draft, options.readyBy))}
+          />
         </>,
       )}
     </View>

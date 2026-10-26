@@ -13,7 +13,9 @@
     "quoteChangeProposed": "Teknisi mengajukan perubahan harga",
     "quoteChanged": "Harga diubah",
     "quoteProposalDeclined": "Perubahan harga ditolak",
-    "deviceReturned": "HP diambil pelanggan"
+    "deviceReturned": "HP diambil pelanggan",
+    "intakeOptionsChanged": "Pilihan saat terima HP diubah",
+    "storeIntakeOptionsChanged": "Pilihan di toko ini diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -140,7 +142,7 @@
     "before": "Foto sebelum",
     "handover": "Foto serah terima",
     "intake": "Foto saat diterima",
-    "intakeHint": "Foto keenam sisi HP di depan pelanggan.",
+    "intakeHint": "Foto setiap sisi HP di depan pelanggan.",
     "retake": "Foto ulang",
     "slot": {
       "back": "Belakang",
@@ -199,10 +201,10 @@
     "negativeTotal": "Diskonnya lebih besar dari total biaya."
   },
   "ready": {
-    "threeDays": "3 hari",
     "today": "Hari ini",
     "tomorrow": "Besok",
-    "unknown": "Belum pasti"
+    "unknown": "Belum pasti",
+    "inDays": "{count} hari"
   },
   "status": {
     "cancelled": "Dibatalkan",
@@ -251,5 +253,55 @@
     "message": "Foto dan catatan yang sudah kamu isi di sini akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
+  },
+  "options": {
+    "title": "Pilihan saat terima HP",
+    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi",
+    "intro": "Berlaku di semua toko. Servisan yang sudah masuk tidak ikut berubah.",
+    "introStore": "Pilih yang tampil di toko ini.",
+    "count": "{count} pilihan",
+    "hiddenCount": "{count} disembunyikan",
+    "list": {
+      "checks": "Cek fungsi",
+      "accessories": "Kelengkapan",
+      "photoAngles": "Sisi HP yang difoto",
+      "brands": "Merek pilihan cepat",
+      "readyBy": "Estimasi selesai"
+    },
+    "hint": {
+      "checks": "Dicek kasir di depan pelanggan, urut dari atas.",
+      "accessories": "Barang yang bisa dititipkan bersama HP.",
+      "photoAngles": "Semua sisi di sini wajib difoto saat terima HP.",
+      "brands": "Tampil sebagai pilihan cepat. Merek lain tetap bisa diketik.",
+      "readyBy": "Pilihan estimasi selesai saat terima HP."
+    },
+    "add": "Tambah",
+    "addUnknown": "Tambah “Belum tahu”",
+    "name": "Nama",
+    "days": "Selesai dalam (hari)",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "remove": "Hapus dari semua toko",
+    "done": "Selesai",
+    "showHere": "Tampil di toko ini",
+    "showHereCaption": "Toko lain tidak ikut berubah.",
+    "hiddenHere": "Disembunyikan di toko ini",
+    "dragHandle": "Geser untuk mengubah urutan",
+    "notSavedYet": "Bisa disembunyikan per toko setelah disimpan.",
+    "save": "Simpan",
+    "saved": "Tersimpan",
+    "discardTitle": "Buang perubahan?",
+    "discardMessage": "Perubahan yang belum disimpan akan hilang.",
+    "discard": "Buang",
+    "keepEditing": "Lanjut ubah",
+    "problem": {
+      "emptyLabel": "Isi namanya dulu.",
+      "labelTooLong": "Maksimal 60 huruf.",
+      "duplicate": "Sudah ada di daftar.",
+      "badReadyBy": "Isi 0 sampai 60 hari.",
+      "empty": "Sisakan minimal satu pilihan.",
+      "tooMany": "Maksimal 40 pilihan.",
+      "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
+    }
   }
 }

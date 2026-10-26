@@ -452,6 +452,45 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  SwitchRow: [
+    {
+      id: 'on',
+      render: (l) => (
+        <componentInventory.SwitchRow label={l.primaryText} value onValueChange={noop} />
+      ),
+    },
+    {
+      id: 'off',
+      render: (l) => (
+        <componentInventory.SwitchRow
+          label={l.primaryText}
+          caption={l.hint}
+          value={false}
+          onValueChange={noop}
+        />
+      ),
+    },
+  ],
+
+  ReorderableList: [
+    {
+      id: 'rows',
+      render: (l) => (
+        <componentInventory.ReorderableList
+          items={[l.primaryText, l.title, l.hint]}
+          keyOf={(item) => item}
+          renderItem={(item, handle) => (
+            <componentInventory.ListRow primaryText={item} trailing={handle} />
+          )}
+          onMove={noop}
+          handleLabel={l.primaryText}
+          moveUpLabel={l.primaryText}
+          moveDownLabel={l.primaryText}
+        />
+      ),
+    },
+  ],
+
   StepHeader: [
     {
       id: 'first',

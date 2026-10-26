@@ -9,6 +9,8 @@ import type { OperationDeclaration } from '@bolusi/core';
 import { zMediaRef, zMoneyIdr, zMsEpoch, zUuid, zUuidV7 } from '@bolusi/schemas';
 
 import {
+  intakeOptionsChangedApplier,
+  storeIntakeOptionsChangedApplier,
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
@@ -26,6 +28,7 @@ import {
 } from './applier.js';
 import {
   CHECKLIST_STATES,
+  HANDOVER_PHOTO_SLOTS,
   QUOTE_LINE_KINDS,
   REPAIR_CONFLICT_KEY,
   REPAIR_CUSTOMER_ENTITY,
@@ -35,6 +38,7 @@ import {
   WORK_PHOTO_STAGES,
   WORK_PHOTOS_MAX,
 } from './constants.js';
+import { INTAKE_OPTION_LISTS, MAX_LABEL, MAX_OPTIONS } from './intake-options.js';
 import type { RepairDatabase } from './schema.js';
 
 const MAX_TEXT = 2000;
@@ -51,6 +55,44 @@ export const zChecklistItem = z
     note: zShortText,
   })
   .strict();
+
+/**
+ * An intake option's id: a built-in key ("screen") or a generated id. No `:`, so an intake photo
+ * angle can never be read as a work photo slot (`before:<mediaId>`), and never a handover slot.
+ */
+export const zOptionId = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/)
+  .refine((id) => !(HANDOVER_PHOTO_SLOTS as readonly string[]).includes(id), {
+    message: 'reserved for handover photos',
+  });
+
+/** The name an option showed at intake; null for a built-in shown under its app name. */
+const zRecordedLabel = z.string().trim().min(1).max(MAX_LABEL).nullable();
+
+export const zChecklistItemV2 = z
+  .object({
+    item: zOptionId,
+    label: zRecordedLabel,
+    state: z.enum(CHECKLIST_STATES),
+    note: zShortText,
+  })
+  .strict();
+
+export const zRecordedOption = z.object({ item: zOptionId, label: zRecordedLabel }).strict();
+
+export const zIntakePhoto = z
+  .object({ slot: zOptionId, label: zRecordedLabel, ref: zMediaRef })
+  .strict();
+
+/** Intake photos as taken, one per angle; at least one, so every ticket has evidence. */
+export const zIntakePhotosV2 = z
+  .array(zIntakePhoto)
+  .min(1)
+  .max(MAX_OPTIONS)
+  .refine((photos) => new Set(photos.map((p) => p.slot)).size === photos.length, {
+    message: 'one photo per angle',
+  });
 
 export const zQuoteLineDraft = z
   .object({
@@ -88,7 +130,8 @@ export const customerRegisteredPayload = z
 
 export const customerDetailsCorrectedPayload = customerRegisteredPayload;
 
-export const ticketOpenedPayload = z
+/** `repair.ticket_opened` v1, before intake lists were editable: six fixed photos, keys only. */
+export const ticketOpenedPayloadV1 = z
   .object({
     ticketNumber: z.string().min(1).max(40),
     customerId: zUuid,
@@ -100,6 +143,34 @@ export const ticketOpenedPayload = z
     estimatedReadyAt: zMsEpoch.nullable(),
     quoteLines: z.array(zQuoteLineDraft).min(1).max(100),
     photos: zIntakePhotos,
+  })
+  .strict();
+
+/**
+ * `repair.ticket_opened` v2: checks, accessories and photos carry the label the counter saw, and
+ * the photos are whichever angles the store asked for, in order.
+ */
+export const ticketOpenedPayload = ticketOpenedPayloadV1
+  .extend({
+    checklist: z.array(zChecklistItemV2).max(100),
+    peripherals: z.array(zRecordedOption).max(50),
+    photos: zIntakePhotosV2,
+  })
+  .strict();
+
+/** The whole of one franchise list, replacing the previous one (last save wins). */
+export const intakeOptionsChangedPayload = z
+  .object({
+    list: z.enum(INTAKE_OPTION_LISTS),
+    items: z.array(z.object({ id: zOptionId, label: zRecordedLabel }).strict()).max(MAX_OPTIONS),
+  })
+  .strict();
+
+/** The whole set of one list's items a store hides, replacing the previous set. */
+export const storeIntakeOptionsChangedPayload = z
+  .object({
+    list: z.enum(INTAKE_OPTION_LISTS),
+    hidden: z.array(zOptionId).max(MAX_OPTIONS),
   })
   .strict();
 
@@ -157,8 +228,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
   [REPAIR_OP.ticketOpened]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: ticketOpenedPayload,
+    payloadByVersion: { 1: ticketOpenedPayloadV1 },
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
@@ -259,5 +331,21 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     permission: REPAIR_PERMISSION.handover,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.intakeOptionsChanged]: {
+    schemaVersion: 1,
+    payload: intakeOptionsChangedPayload,
+    reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
+    apply: intakeOptionsChangedApplier,
+    // One list for the whole franchise, on every device, whichever store edited it. No conflict
+    // key: the entity holds all five lists, so saving two different lists would read as a clash,
+    // and two owners saving the same list is settled by the later save, as for a locale.
+    scope: 'tenant',
+  },
+  [REPAIR_OP.storeIntakeOptionsChanged]: {
+    schemaVersion: 1,
+    payload: storeIntakeOptionsChangedPayload,
+    reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
+    apply: storeIntakeOptionsChangedApplier,
   },
 };
