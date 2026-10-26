@@ -63,6 +63,8 @@ import {
   readPinAttempt,
   readVerifier,
   SessionManager,
+  createWorkStore,
+  deleteWorkExcept,
   verifyPin,
   type ActiveSession,
   type ClockPort,
@@ -76,10 +78,11 @@ import {
 import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
 
+import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { PinTargetUser } from '../screens/pin/pin-target.js';
 import type { SwitcherUser } from '../screens/switcher/model.js';
 import { ShellSession, type LockReason } from '../session/shell-session.js';
-import type { UserWorkspace } from '../state/user-workspaces.js';
+import { parseUserWorkspace, type UserWorkspace } from '../state/user-workspaces.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { readDeviceIdentity } from './notes.js';
@@ -227,6 +230,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   if (device === null) return null;
 
   const db = deps.app.db.db;
+  const reportWorkStoreError = (error: unknown): void =>
+    consoleDiagnostics.warn('saved work store failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   // The command runtime session ops are emitted through — the SAME composition the genesis and every
   // note write use, so a session op joins the one hash chain rather than a second one.
   const commands = deps.runtime.runtimeFor(device);
@@ -242,6 +249,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     // Omitting this — which is what happened until task 133 — silently pinned every device to the
     // 300 s default, so a shop that tightened the lock to 60 s got 300 s and never knew.
     idleLockSeconds: await readIdleLockSeconds(db),
+    // Each user's drafts also go to disk (sealed), so a half-entered servisan survives Android
+    // recreating the activity or killing the app; only that user's next PIN unlock reads it back.
+    workStore: createWorkStore(db, parseUserWorkspace, () => deps.clock.now()),
+    onWorkStoreError: reportWorkStoreError,
   });
   const lockedOut = createLockedOutEmitter(commands);
   // The pending-verifier queue (api/02-auth §5.4): a PIN change computes the verifier offline and
@@ -359,6 +370,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     async refresh(): Promise<void> {
       try {
         const directory = await listSwitcherUsers(db);
+        // Someone who left the roster can never unlock again: drop their saved drafts. Best
+        // effort, so a failed delete never costs the switcher its list.
+        await deleteWorkExcept(
+          db,
+          directory.map((user) => user.id),
+        ).catch(reportWorkStoreError);
         users = await Promise.all(
           directory.map(async (user) => {
             const [verifier, lastActiveAt, roleKeys] = await Promise.all([

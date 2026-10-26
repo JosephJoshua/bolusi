@@ -161,6 +161,64 @@ describe('counter intake', () => {
   });
 });
 
+describe('an intake restored after the app died mid-submit', () => {
+  const restored = (ticketId: string): IntakeDraft => ({
+    kind: 'intake',
+    step: 5,
+    customer: { kind: 'new', name: 'Yohanis Wenda', phone: '0812-4455-6677' },
+    device: { brand: 'Samsung', model: 'Galaxy A14', color: '', imei: '', passcode: '' },
+    complaint: 'Layar retak',
+    intakeNotes: '',
+    checks: {},
+    peripherals: [],
+    photos: {},
+    lines: [],
+    ready: '',
+    ticketId,
+  });
+
+  test('whose ticket was already opened shows that ticket and clears the draft', async () => {
+    h = await openRepairScreenHarness(5104);
+    const ticketId = '01920000-0000-7000-8000-00000000a151';
+    await h.run('openTicket', { ...intake(h), ticketId }, h.cashierId);
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: restored(ticketId),
+      onDraftChange,
+    });
+    await settle();
+
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+    expect(screen.query('repair.intake.step.review')).toBeNull();
+    expect(onDraftChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test('whose ticket was never opened stays on the intake with its id kept', async () => {
+    h = await openRepairScreenHarness(5105);
+    const ticketId = '01920000-0000-7000-8000-00000000a152';
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: restored(ticketId),
+      onDraftChange,
+    });
+    await settle();
+
+    expect(screen.query('repair.intake.step.review')).not.toBeNull();
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({ ticketId }));
+  });
+
+  test('a new intake takes its ticket id up front, so the saved draft carries it', async () => {
+    h = await openRepairScreenHarness(5106);
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, { onDraftChange });
+    await press(screen, 'repair.board.newIntake');
+    type(screen, 'repair.intake.customer.name', 'Ester');
+    await settle();
+    const saved = onDraftChange.mock.lastCall?.[0] as IntakeDraft;
+    expect(saved.ticketId).toEqual(expect.any(String));
+  });
+});
+
 describe('technician work', () => {
   test('starting needs a before photo and marking repaired needs an after photo', async () => {
     h = await openRepairScreenHarness(5201);

@@ -42,6 +42,13 @@ other screens in the store within a couple of seconds online. A step a user has
 open re-checks its ticket against the same rule that offered it and says so when
 a synced change has made it impossible to finish.
 
+Unfinished work is kept per user. Each screen writes its draft (and where the user
+was) through `SessionManager.saveWork`, which also stores it sealed in the device's
+`user_work` table, so it survives a lock, Android recreating the activity, or the app
+being killed. Only that user's next PIN unlock reads it back. Saved work of users who
+leave the roster is deleted. Modules get this by publishing drafts into the workspace;
+they need no storage of their own.
+
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
 

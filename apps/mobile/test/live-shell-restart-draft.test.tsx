@@ -1,0 +1,203 @@
+/**
+ * A half-entered servisan survives the app being torn down: Android recreating the activity (the
+ * React tree remounts in the same JS context) or killing the process (the same, plus a fresh boot of
+ * the database). Either way `Root` mounts again, boots the database from disk, and opens at the
+ * switcher; the work comes back only when the user who typed it unlocks with their PIN.
+ *
+ * Drives the real `Root`, the real repair intake and real PIN verifies over a file-backed database
+ * with the production column cipher. Node lane: it proves the composition, not that a device
+ * delivers its lifecycle events (device QA covers that).
+ */
+import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
+import { sql } from 'kysely';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+vi.mock('expo-secure-store', () => ({
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
+  setItemAsync: vi.fn(async () => undefined),
+  getItemAsync: vi.fn(async () => null),
+  deleteItemAsync: vi.fn(async () => undefined),
+}));
+
+vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+
+vi.mock('expo-notifications', () => ({
+  AndroidImportance: { HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
+  setNotificationChannelAsync: vi.fn(async () => undefined),
+  getNotificationChannelsAsync: vi.fn(async () => []),
+}));
+
+vi.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
+  requestForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied' })),
+  getForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied' })),
+  watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
+}));
+
+import { fire, textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
+import { createSessionRepairRuntime, repairMediaSeamsFor } from '../src/bootstrap/repair.js';
+import type { AppSessionController } from '../src/bootstrap/session.js';
+import {
+  bootFixture,
+  closeClientDb,
+  enrolledDevice,
+  fireOn,
+  mountRoot,
+  NOTES_PERMISSIONS,
+  seedTwoUsers,
+  settle,
+  submitPin,
+  waitUntil,
+  SECOND_USER_ID,
+  TEST_PIN,
+  type Fixture,
+  type MountOptions,
+} from './live-shell-support.js';
+
+const COUNTER_PERMISSIONS = [...NOTES_PERMISSIONS, ...Object.values(REPAIR_PERMISSION)];
+
+const CUSTOMER = 'Yohanis Wenda';
+const PHONE = '0812-4455-6677';
+const PASSCODE = '246810';
+
+let fixture: Fixture | null = null;
+let screen: RenderResult | null = null;
+
+beforeEach(async () => {
+  await closeClientDb();
+});
+
+afterEach(async () => {
+  screen?.unmount();
+  screen = null;
+  await fixture?.close();
+  fixture = null;
+  await closeClientDb();
+});
+
+const withRepair: MountOptions['createRepair'] = (app, runtime, identity, media, capture) =>
+  createSessionRepairRuntime({
+    app,
+    runtime,
+    identity,
+    media: repairMediaSeamsFor(media, capture),
+  });
+
+/** Mount the live `Root` over the fixture's database file, as a fresh app start does. */
+async function start(target: Fixture): Promise<{
+  readonly screen: RenderResult;
+  readonly controller: AppSessionController;
+}> {
+  let controller: AppSessionController | null = null;
+  const mounted = await mountRoot(target, {
+    createRepair: withRepair,
+    onSessionController: (c) => {
+      controller = c;
+    },
+  });
+  if (controller === null) throw new Error('Root composed no session controller');
+  return { screen: mounted, controller };
+}
+
+async function unlockAs(target: RenderResult, userId: string): Promise<boolean> {
+  fireOn(target, `switcher-user-${userId}`);
+  await settle();
+  return submitPin(target, TEST_PIN);
+}
+
+async function press(target: RenderResult, testID: string): Promise<void> {
+  fire(target.all(testID)[0]!, 'onPress');
+  await settle();
+}
+
+async function type(target: RenderResult, testID: string, text: string): Promise<void> {
+  fire(target.get(`${testID}.field`), 'onChangeText', text);
+  await settle();
+}
+
+function valueOf(target: RenderResult, testID: string): unknown {
+  return target.get(`${testID}.field`).props['value'];
+}
+
+/** The saved row, decrypted by the connection's cipher, or null when nothing reached disk yet. */
+async function savedWork(target: Fixture, userId: string): Promise<string | null> {
+  const result = await sql<{ work: string }>`
+    SELECT work FROM user_work WHERE user_id = ${userId}
+  `.execute(target.app.db.db);
+  return result.rows[0]?.work ?? null;
+}
+
+/** Start an intake as `fixture.userId` and fill the customer and part of the device step. */
+async function typeHalfAnIntake(target: Fixture): Promise<void> {
+  const app = await start(target);
+  screen = app.screen;
+  expect(await unlockAs(app.screen, target.userId)).toBe(true);
+  expect(await waitUntil(() => app.screen.query('repair.board.newIntake') !== null)).toBe(true);
+  await press(app.screen, 'repair.board.newIntake');
+  await type(app.screen, 'repair.intake.customer.name', CUSTOMER);
+  await type(app.screen, 'repair.intake.customer.phone', PHONE);
+  await press(app.screen, 'repair.intake.primary');
+  await type(app.screen, 'repair.intake.device.brand', 'Samsung');
+  await type(app.screen, 'repair.intake.device.passcode', PASSCODE);
+  // Denominator: the draft is on disk before the app goes away, so a pass below is a real restore.
+  expect(
+    await waitUntil(
+      async () => (await savedWork(target, target.userId))?.includes(PASSCODE) === true,
+    ),
+  ).toBe(true);
+  // Activity recreation or process death: the tree goes away with nothing flushed on the way out.
+  app.screen.unmount();
+  screen = null;
+}
+
+describe('a half-entered servisan survives the app being torn down', () => {
+  test('the same user unlocks after a restart and is back on the step they left, fields intact', async () => {
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedTwoUsers(fixture, 300, COUNTER_PERMISSIONS);
+    await typeHalfAnIntake(fixture);
+
+    const app = await start(fixture);
+    screen = app.screen;
+    // The restart opens at the switcher, and nothing of the draft shows before a PIN.
+    expect(app.controller.snapshot().session).toBeNull();
+    expect(textsIn(app.screen.container).some((s) => s.includes(CUSTOMER))).toBe(false);
+
+    expect(await unlockAs(app.screen, fixture.userId)).toBe(true);
+    expect(await waitUntil(() => app.screen.query('repair.intake.step.device') !== null)).toBe(
+      true,
+    );
+    expect(valueOf(app.screen, 'repair.intake.device.brand')).toBe('Samsung');
+    expect(valueOf(app.screen, 'repair.intake.device.passcode')).toBe(PASSCODE);
+    expect(app.controller.snapshot().workspace?.drafts['repair']).toMatchObject({
+      customer: { name: CUSTOMER, phone: PHONE },
+    });
+  });
+
+  test('a different user unlocking after the restart sees none of it, and the owner still gets it back', async () => {
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedTwoUsers(fixture, 300, COUNTER_PERMISSIONS);
+    await typeHalfAnIntake(fixture);
+
+    const first = await start(fixture);
+    screen = first.screen;
+    expect(await unlockAs(first.screen, SECOND_USER_ID)).toBe(true);
+    expect(await waitUntil(() => first.screen.query('repair.board.newIntake') !== null)).toBe(true);
+    expect(first.screen.query('repair.intake.step.device')).toBeNull();
+    expect(first.controller.snapshot().workspace?.ownerUserId).toBe(SECOND_USER_ID);
+    expect(first.controller.snapshot().workspace?.drafts['repair'] ?? null).toBeNull();
+    const shown = textsIn(first.screen.container);
+    expect(shown.some((s) => s.includes(CUSTOMER) || s.includes(PASSCODE))).toBe(false);
+
+    // B's session did not overwrite A's saved work: after another restart A gets it back.
+    first.screen.unmount();
+    const second = await start(fixture);
+    screen = second.screen;
+    expect(await unlockAs(second.screen, fixture.userId)).toBe(true);
+    expect(await waitUntil(() => second.screen.query('repair.intake.step.device') !== null)).toBe(
+      true,
+    );
+    expect(valueOf(second.screen, 'repair.intake.device.passcode')).toBe(PASSCODE);
+  });
+});

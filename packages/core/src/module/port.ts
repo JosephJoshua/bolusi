@@ -62,6 +62,12 @@ export interface ModulePort<M extends ModuleOperations> {
    * technician". Same evaluator and scope as `hasPermission`, only for another user.
    */
   colleagueHasPermission(userId: string, permissionId: string): boolean;
+  /**
+   * A fresh id from the runtime's id source. A form takes one up front for the record it will
+   * create and keeps it in its draft, so a draft restored after the app died mid-submit cannot
+   * create that record twice.
+   */
+  newId(): string;
 }
 
 export function bindModulePort<M extends ModuleOperations, DB>(
@@ -93,5 +99,6 @@ export function bindModulePort<M extends ModuleOperations, DB>(
       runtime.commands.enforcementPoint.hasPermission(identity, permissionId),
     colleagueHasPermission: (userId, permissionId) =>
       runtime.commands.enforcementPoint.hasPermission({ ...identity, userId }, permissionId),
+    newId: () => ctx.newId(),
   };
 }
