@@ -43,6 +43,8 @@ function sampleDoc(overrides: Partial<PrintDocument> = {}): PrintDocument {
       },
       { kind: 'heading', text: 'Kondisi saat diterima' },
       { kind: 'list', items: ['Layar: Rusak', 'Kamera: OK', 'Speaker: OK', 'Cas: OK'] },
+    ],
+    aside: [
       {
         kind: 'amounts',
         rows: [
@@ -52,6 +54,8 @@ function sampleDoc(overrides: Partial<PrintDocument> = {}): PrintDocument {
         totals: [{ label: 'Estimasi total', amount: 'Rp 950.000', strong: true }],
       },
       { kind: 'terms', items: ['Bawa nota ini saat mengambil HP.', 'Biaya masih perkiraan.'] },
+    ],
+    closing: [
       {
         kind: 'signatures',
         slots: [
@@ -91,9 +95,11 @@ describe('paper geometry', () => {
       pitch: 10,
       columns: 80,
       leftMargin: 8,
+      linesPerInch: 6,
       pageLines: 66,
     });
     expect(textGeometry(PAPER_PRESETS.continuous_half).pageLines).toBe(33);
+    expect(textGeometry(PAPER_PRESETS.continuous_half, 8).pageLines).toBe(44);
   });
 
   it('switches to a smaller pitch on narrow paper so a line still holds labels and amounts', () => {
@@ -105,12 +111,9 @@ describe('paper geometry', () => {
 });
 
 describe('text-mode layout', () => {
-  const papers = [
-    PAPER_PRESETS.continuous_full,
-    PAPER_PRESETS.continuous_half,
-    PAPER_PRESETS.a4,
-    PAPER_PRESETS.a5,
-    { ...PAPER_PRESETS.a5, preset: 'custom' as const, widthMm: 80, heightMm: 120 },
+  const papers: PaperSettings[] = [
+    ...Object.values(PAPER_PRESETS),
+    { ...PAPER_PRESETS.a5, preset: 'custom', widthMm: 80, heightMm: 120 },
   ];
 
   it.each(papers)(
@@ -159,6 +162,53 @@ describe('text-mode layout', () => {
     ).toBe(true);
     // A continuation page says which document it belongs to.
     expect(pages[1]?.[0]).toMatch(/K7Q-0042 \(2\)$/);
+  });
+
+  it('sets the money and terms beside the body on landscape paper, and under it on portrait', () => {
+    const beside = (rows: string[]): boolean =>
+      rows.some((r) => r.startsWith('Pelanggan') && r.includes('Ganti LCD'));
+    expect(beside(textRows(PAPER_PRESETS.continuous_half)[0] ?? [])).toBe(true);
+    expect(beside(textRows(PAPER_PRESETS.a5_landscape)[0] ?? [])).toBe(true);
+    expect(beside(textRows(PAPER_PRESETS.continuous_full)[0] ?? [])).toBe(false);
+    expect(beside(textRows(PAPER_PRESETS.a4)[0] ?? [])).toBe(false);
+  });
+
+  it('keeps bold to its own column when two columns share a line', () => {
+    const doc = sampleDoc({ aside: [{ kind: 'heading', text: 'Biaya' }, ...sampleDoc().aside] });
+    const row = layoutGrid(doc, PAPER_PRESETS.continuous_half)
+      .pages.flat()
+      .find((r) => r.kind === 'text' && r.text.includes('BIAYA'));
+    expect(row?.kind === 'text' && row.spans).toEqual([
+      { text: expect.stringMatching(/^Pelanggan .* {3,}$/) as string, bold: false },
+      { text: 'BIAYA', bold: true },
+    ]);
+    const bytes = new TextDecoder('latin1').decode(renderEscp(doc, PAPER_PRESETS.continuous_half));
+    expect(bytes).toMatch(/Pelanggan[^\x1b\r]* {3,}\x1bEBIAYA\x1bF\r\n/);
+  });
+
+  it('tightens the line spacing before spilling onto a second form', () => {
+    const paper = PAPER_PRESETS.continuous_half;
+    expect(layoutGrid(sampleDoc(), paper).geometry.linesPerInch).toBe(6);
+    const longer = sampleDoc({
+      blocks: [
+        ...sampleDoc().blocks,
+        // Typed on separate lines, which text mode keeps.
+        {
+          kind: 'paragraph',
+          text: Array.from({ length: 22 }, (_, i) => `Catatan ${i}`).join('\n'),
+        },
+      ],
+    });
+    const { geometry, pages } = layoutGrid(longer, paper);
+    expect(pages).toHaveLength(1);
+    expect(geometry.linesPerInch).toBe(8);
+    const rows = (pages[0] ?? []).flatMap((r) => (r.kind === 'text' ? [r.text] : []));
+    expect(rows).toContain('Catatan 0');
+    expect(rows).toContain('Catatan 21');
+    const bytes = [...renderEscp(longer, paper)];
+    // ESC 0 (1/8") set before ESC C 44, the form length in those lines.
+    const at = bytes.indexOf(0x43, 5);
+    expect(bytes.slice(at - 3, at + 2)).toEqual([0x1b, 0x30, 0x1b, 0x43, 44]);
   });
 
   it('puts the title and the reference on one line', () => {

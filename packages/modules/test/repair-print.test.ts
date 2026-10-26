@@ -215,3 +215,120 @@ describe('handover slip', () => {
     }
   });
 });
+
+describe('slip layout', () => {
+  const papers = Object.values(PAPER_PRESETS);
+
+  it('fits an ordinary intake slip on one short landscape form, the money beside the phone', () => {
+    const { pages } = layoutGrid(intakeSlip(sampleTicket(), ctx), PAPER_PRESETS.continuous_half);
+    expect(pages).toHaveLength(1);
+    const rows = (pages[0] ?? []).flatMap((row) => (row.kind === 'text' ? [row.text] : []));
+    expect(rows.some((r) => r.includes('Pelanggan') && r.includes('Ganti LCD'))).toBe(false);
+    expect(rows.some((r) => /^(?=.*\S {3,}\S)(?=.*ESTIMASI BIAYA)/.test(r))).toBe(true);
+  });
+
+  /** Distinct short words up to `max` characters, so a cut or a dropped word shows up. */
+  function filler(prefix: string, max: number): string {
+    let out = '';
+    for (let i = 1; ; i += 1) {
+      const word = `${prefix}${i}`;
+      const next = out === '' ? word : `${out} ${word}`;
+      if (next.length > max) return out;
+      out = next;
+    }
+  }
+
+  // Every user-entered field at the longest its operation accepts.
+  const longest = sampleTicket({
+    ticketNumber: filler('n', 40).replace(/ /g, '-'),
+    customerName: filler('cn', 200),
+    customerPhone: filler('cp', 40),
+    deviceBrand: filler('db', 100),
+    deviceModel: filler('dm', 100),
+    deviceColor: filler('dc', 200),
+    deviceImei: filler('im', 40),
+    complaint: filler('co', 2000),
+    intakeNotes: filler('in', 2000),
+    outcome: 'cancelled',
+    outcomeNote: filler('cr', 2000),
+    cancelFee: 1_000_000_000_000,
+    createdByName: filler('cb', 200),
+    checklist: Array.from({ length: 100 }, (_, i) => ({
+      item: `custom${i}`,
+      label: filler(`k${i}x`, 60),
+      state: 'issue' as const,
+      note: filler(`kn${i}x`, 200),
+    })),
+    peripherals: Array.from({ length: 50 }, (_, i) => ({
+      item: `acc${i}`,
+      label: filler(`a${i}x`, 60),
+    })),
+    quoteLines: Array.from({ length: 100 }, (_, i) =>
+      line({ id: `l${i}`, description: filler(`q${i}x`, 200), amount: 1_000_000_000_000 }),
+    ),
+  });
+  const longCtx: SlipContext = {
+    header: {
+      name: filler('sn', 100),
+      lines: [filler('sa', 300), filler('sp', 100)],
+      logo: null,
+    },
+    terms: filler('t', 2000),
+    printedAt: AT,
+    printNumber: 99,
+    printedByName: filler('pb', 200),
+    downPayment: 1_000_000_000_000,
+  };
+  const slips = (): [PrintDocument, PrintDocument] => [
+    intakeSlip(longest, longCtx),
+    handoverSlip(longest, { ...longCtx, handedOverByName: filler('hb', 200), signature: null }),
+  ];
+  const words = (value: string): string[] => value.split(/[\s():,.-]+/).filter((w) => w !== '');
+  const expected = (intake: boolean): string[] =>
+    [
+      longCtx.header.name,
+      ...longCtx.header.lines,
+      longCtx.terms ?? '',
+      longCtx.printedByName ?? '',
+      longest.customerName,
+      longest.customerPhone ?? '',
+      longest.deviceColor,
+      longest.deviceImei ?? '',
+      ...(intake
+        ? [
+            longest.complaint,
+            longest.intakeNotes,
+            longest.createdByName ?? '',
+            ...longest.checklist.flatMap((c) => [c.label ?? '', c.note]),
+            ...longest.peripherals.map((p) => p.label ?? ''),
+            ...longest.quoteLines.map((l) => l.description),
+          ]
+        : [longest.outcomeNote ?? '']),
+    ].flatMap(words);
+
+  it.each(papers)('prints every word of the longest values inside the paper ($preset)', (paper) => {
+    for (const [i, doc] of slips().entries()) {
+      const { geometry, pages } = layoutGrid(doc, paper);
+      const printed = new Set<string>();
+      for (const page of pages) {
+        expect(page.length).toBeLessThanOrEqual(geometry.pageLines - 2);
+        for (const row of page) {
+          if (row.kind !== 'text') continue;
+          expect(row.text.length).toBeLessThanOrEqual(geometry.columns);
+          expect(row.spans.map((s) => s.text).join('')).toBe(row.text);
+          for (const word of words(row.text)) printed.add(word);
+        }
+      }
+      const missing = expected(i === 0).filter((word) => !printed.has(word));
+      expect(missing).toEqual([]);
+    }
+  });
+
+  it.each(papers)('keeps every word of the longest values on plain paper ($preset)', (paper) => {
+    for (const [i, doc] of slips().entries()) {
+      const html = renderHtml(doc, paper);
+      const printed = new Set(words(html.replace(/<[^>]+>/g, ' ')));
+      expect(expected(i === 0).filter((word) => !printed.has(word))).toEqual([]);
+    }
+  });
+});

@@ -18,16 +18,18 @@ const PUNCTUATION: Readonly<Record<string, string>> = {
 /**
  * Printable ASCII only. Dot-matrix code pages differ between models, and ASCII is the part every
  * Epson-compatible printer agrees on: accents are dropped ("é" → "e"), typographic punctuation
- * becomes its ASCII look-alike, and anything else becomes "?".
+ * becomes its ASCII look-alike, and anything else becomes "?". Line breaks become spaces, or with
+ * `keepLineBreaks` stay as `\n` for running text that `wrapText` lays out.
  */
-export function toPrinterAscii(text: string): string {
+export function toPrinterAscii(text: string, keepLineBreaks = false): string {
   let out = '';
-  for (const ch of text.normalize('NFKD')) {
+  for (const ch of text.replace(/\r\n?/g, '\n').normalize('NFKD')) {
     const code = ch.codePointAt(0) ?? 0;
     // Combining accents (0300-036F), split off by NFKD, are dropped.
     if (code >= 0x300 && code <= 0x36f) continue;
     if (code >= 0x20 && code <= 0x7e) out += ch;
-    else if (ch === '\t' || ch === '\n' || ch === '\r') out += ' ';
+    else if (ch === '\n') out += keepLineBreaks ? '\n' : ' ';
+    else if (ch === '\t') out += ' ';
     else out += PUNCTUATION[ch] ?? '?';
   }
   return out;

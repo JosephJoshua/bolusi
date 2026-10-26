@@ -1,12 +1,12 @@
 // ESC/P bytes for an Epson-compatible dot-matrix printer in text mode.
 //
 // Only commands from the basic ESC/P set that 9-pin (LX) and 24-pin (LQ) Epsons and their clones all
-// accept: reset, draft quality, pitch, 1/6" line spacing, form length, left margin, bold, 8-dot bit
-// image and form feed. The desktop app sends these bytes as a RAW job to the installed printer.
+// accept: reset, draft quality, pitch, 1/6" or 1/8" line spacing, form length, left margin, bold,
+// 8-dot bit image and form feed. The desktop app sends these bytes as a RAW job to the installed printer.
 import type { MonoBitmap } from './bitmap.js';
 import type { PrintDocument } from './document.js';
 import { layoutGrid, type GridRow } from './layout.js';
-import type { PaperSettings, Pitch } from './paper.js';
+import type { LinesPerInch, PaperSettings, Pitch } from './paper.js';
 
 const ESC = 0x1b;
 const CR = 0x0d;
@@ -20,6 +20,11 @@ const PITCH_BYTES: Readonly<Record<Pitch, readonly number[]>> = {
   17: [ESC, 0x50, SI], // pica + SI: condensed
 };
 
+const LINE_SPACING_BYTES: Readonly<Record<LinesPerInch, readonly number[]>> = {
+  6: [ESC, 0x32], // ESC 2: 1/6"
+  8: [ESC, 0x30], // ESC 0: 1/8"
+};
+
 function asciiBytes(text: string, out: number[]): void {
   for (let i = 0; i < text.length; i += 1) {
     const code = text.charCodeAt(i);
@@ -28,7 +33,12 @@ function asciiBytes(text: string, out: number[]): void {
 }
 
 /** 8-dot bands, each a column byte per dot (top dot = bit 7), at ESC * 1 (120 dpi). */
-function imageBytes(bitmap: MonoBitmap, offset: number, out: number[]): void {
+function imageBytes(
+  bitmap: MonoBitmap,
+  offset: number,
+  spacing: readonly number[],
+  out: number[],
+): void {
   out.push(ESC, 0x33, 24); // ESC 3 24: 24/216" = 8 dots per band, so bands touch
   for (let top = 0; top < bitmap.height; top += 8) {
     asciiBytes(' '.repeat(offset), out);
@@ -43,17 +53,19 @@ function imageBytes(bitmap: MonoBitmap, offset: number, out: number[]): void {
     }
     out.push(CR, LF);
   }
-  out.push(ESC, 0x32); // back to 1/6"
+  out.push(...spacing); // back to text line spacing
 }
 
-function rowBytes(row: GridRow, out: number[]): void {
+function rowBytes(row: GridRow, spacing: readonly number[], out: number[]): void {
   if (row.kind === 'image') {
-    imageBytes(row.bitmap, row.offset, out);
+    imageBytes(row.bitmap, row.offset, spacing, out);
     return;
   }
-  if (row.bold) out.push(ESC, 0x45); // ESC E
-  asciiBytes(row.text, out);
-  if (row.bold) out.push(ESC, 0x46); // ESC F
+  for (const span of row.spans) {
+    if (span.bold) out.push(ESC, 0x45); // ESC E
+    asciiBytes(span.text, out);
+    if (span.bold) out.push(ESC, 0x46); // ESC F
+  }
   out.push(CR, LF);
 }
 
@@ -65,11 +77,12 @@ export function renderEscp(doc: PrintDocument, paper: PaperSettings): Uint8Array
   const { geometry, pages } = layoutGrid(doc, paper);
   const out: number[] = [ESC, 0x40, ESC, 0x78, 0]; // ESC @ reset, ESC x 0 draft (fast, carbon-friendly)
   out.push(...PITCH_BYTES[geometry.pitch]);
-  out.push(ESC, 0x32); // ESC 2: 1/6" lines
-  out.push(ESC, 0x43, geometry.pageLines); // ESC C n: form length in lines
+  const spacing = LINE_SPACING_BYTES[geometry.linesPerInch];
+  out.push(...spacing);
+  out.push(ESC, 0x43, geometry.pageLines); // ESC C n: form length in lines of that spacing
   out.push(ESC, 0x6c, geometry.leftMargin); // ESC l n: left margin in columns
   for (const page of pages) {
-    for (const row of page) rowBytes(row, out);
+    for (const row of page) rowBytes(row, spacing, out);
     out.push(FF);
   }
   out.push(ESC, 0x40);

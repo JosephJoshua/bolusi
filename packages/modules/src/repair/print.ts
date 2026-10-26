@@ -57,7 +57,7 @@ function common(
   title: string,
   jobName: string,
   meta: readonly string[],
-  blocks: readonly PrintBlock[],
+  parts: Pick<PrintDocument, 'blocks' | 'aside' | 'closing'>,
 ): PrintDocument {
   const printed =
     ctx.printedByName === null
@@ -73,7 +73,7 @@ function common(
     reference: ticket.ticketNumber,
     meta:
       ctx.printNumber > 1 ? [...meta, tn('repair.slip.reprint', { count: ctx.printNumber })] : meta,
-    blocks,
+    ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
     plyNote: tn('repair.slip.plyNote'),
     footer: printed,
@@ -173,7 +173,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
       ? { kind: 'paragraph', text: tn('repair.slip.noAccessories') }
       : { kind: 'list', items: accessories },
   );
-  blocks.push(
+  const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.estimate') },
     {
       kind: 'amounts',
@@ -181,6 +181,8 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
       totals: totals(tn('repair.slip.estimateTotal'), total, ctx.downPayment),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
+  ];
+  const closing: PrintBlock[] = [
     {
       kind: 'signatures',
       slots: [
@@ -188,14 +190,14 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
         { role: tn('repair.slip.sign.staff'), name: ticket.createdByName, image: null },
       ],
     },
-  );
+  ];
   return common(
     ticket,
     ctx,
     tn('repair.slip.intakeTitle'),
     tn('repair.slip.job.intake', { number: ticket.ticketNumber }),
     meta,
-    blocks,
+    { blocks, aside, closing },
   );
 }
 
@@ -235,11 +237,12 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
           .map(lineRow),
         totals: totals(tn('repair.slip.total'), ticket.quoteTotal, ctx.downPayment),
       };
-  const blocks: PrintBlock[] = [
-    { kind: 'fields', fields },
+  const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.costs') },
     amounts,
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.handover')),
+  ];
+  const closing: PrintBlock[] = [
     {
       kind: 'signatures',
       slots: [
@@ -258,6 +261,6 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     tn('repair.slip.handoverTitle'),
     tn('repair.slip.job.handover', { number: ticket.ticketNumber }),
     meta,
-    blocks,
+    { blocks: [{ kind: 'fields', fields }], aside, closing },
   );
 }

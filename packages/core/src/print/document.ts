@@ -72,7 +72,15 @@ export interface PrintDocument {
   readonly reference: string;
   /** Short lines under the title: dates, "Cetak ulang ke-2". */
   readonly meta: readonly string[];
+  /** The body: what the paper is about (the customer, the phone, its condition). */
   readonly blocks: readonly PrintBlock[];
+  /**
+   * Secondary sections (money, terms). On landscape paper they sit in a column beside the body, so
+   * a slip fits one short form; on portrait paper they follow it.
+   */
+  readonly aside: readonly PrintBlock[];
+  /** Full width under everything, kept on one page: the signatures. */
+  readonly closing: readonly PrintBlock[];
   /**
    * One label per copy, e.g. ["Untuk toko", "Untuk pelanggan"]. On carbonless paper the printer
    * makes every copy in one pass, so `plyNote` is printed instead of separate labelled copies.

@@ -128,9 +128,14 @@ Agreed with the owner before building printing.
 - **Paper:** two-ply carbonless continuous paper (pink kept by the store, yellow
   for the customer) on whatever Epson-compatible dot-matrix the store has, or
   plain paper. No printer model is assumed: text mode uses the basic ESC/P set,
-  and the store picks a paper preset (9.5" continuous full or half form, A4, A5)
-  or types a size, then checks it with a test page. Windows printing cannot
-  report the paper, so it is never auto-detected.
+  and the store picks a paper preset (9.5" continuous half form, the landscape
+  default, or full form; A4 or A5 either way round) or types a size, then checks
+  it with a test page. Windows printing cannot report the paper, so it is never
+  auto-detected.
+- **Layout:** on landscape paper the money and terms sit beside the customer and
+  phone details. Every field is printed whole at its longest allowed length,
+  wrapping rather than cutting. Dot-matrix slips tighten to 8 lines per inch
+  before spilling onto a second form; plain paper gets more spacing.
 - **Two documents:** the intake receipt ("Tanda terima servisan") and the
   handover slip ("Nota servisan") for a pickup or a cancel, which is also the
   customer's receipt. No technician job sheet. Repair counters have no separate

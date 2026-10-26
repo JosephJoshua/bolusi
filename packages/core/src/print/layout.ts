@@ -1,15 +1,34 @@
 // Lays a document out on a fixed-pitch character grid: the dot-matrix page before it becomes bytes.
 // Every decision about what goes where in text mode lives here, so `escp.ts` only encodes, and the
 // layout can be read in tests as plain lines.
+//
+// Every string can be as long as its field allows, so nothing is cut: labels, values, names and
+// amounts all wrap inside their own cell. On landscape paper the secondary sections sit in a column
+// beside the body; the layout that needs the fewest forms wins.
 import type { MonoBitmap } from './bitmap.js';
 import type { PrintBlock, PrintDocument, PrintField } from './document.js';
-import { textGeometry, type PaperSettings, type TextGeometry } from './paper.js';
+import {
+  isLandscape,
+  textGeometry,
+  type LinesPerInch,
+  type PaperSettings,
+  type TextGeometry,
+} from './paper.js';
 import { center, padLeft, padRight, toPrinterAscii, wrapText } from './text.js';
 
+/** A run of characters printed bold or not. */
+export interface GridSpan {
+  readonly text: string;
+  readonly bold: boolean;
+}
+
 export type GridRow =
-  | { readonly kind: 'text'; readonly text: string; readonly bold: boolean }
+  /** `text` is the whole line; `spans` are the same characters split where bold starts or stops. */
+  | { readonly kind: 'text'; readonly text: string; readonly spans: readonly GridSpan[] }
   /** A picture printed `offset` characters in, in 8-dot bands. */
   | { readonly kind: 'image'; readonly bitmap: MonoBitmap; readonly offset: number };
+
+type TextRow = Extract<GridRow, { kind: 'text' }>;
 
 /** One printed sheet (one perforated form on continuous paper). */
 export type GridPage = readonly GridRow[];
@@ -28,61 +47,123 @@ interface Group {
   readonly keepWithNext: boolean;
 }
 
-/** In 1/216 inch, ESC/P's finest line-feed unit: a text line is 1/6", an image band 8 dots at 72 dpi. */
-const TEXT_ROW_UNITS = 36;
+/** In 1/216 inch, ESC/P's finest line-feed unit: an image band is 8 dots at 72 dpi. */
 const IMAGE_BAND_UNITS = 24;
 /** Lines left blank above each perforation, so nothing prints across the tear. */
 const BOTTOM_LINES = 2;
-const BLOCK_GAP: GridRow = text('');
+/** Characters between side-by-side columns. */
+const COLUMN_GAP = 3;
+/** Narrower than this and a body column beside an aside gets too cramped to read. */
+const MIN_TWO_COLUMN_WIDTH = 76;
+/** The body's share of the width beside an aside. */
+const BODY_SHARE = 0.56;
 
-function text(value: string, bold = false): GridRow {
-  return { kind: 'text', text: value.replace(/\s+$/, ''), bold };
+function text(value: string, bold = false): TextRow {
+  const trimmed = value.replace(/\s+$/, '');
+  return { kind: 'text', text: trimmed, spans: trimmed === '' ? [] : [{ text: trimmed, bold }] };
 }
 
-function rowUnits(row: GridRow): number {
-  return row.kind === 'text' ? TEXT_ROW_UNITS : Math.ceil(row.bitmap.height / 8) * IMAGE_BAND_UNITS;
+const blank = (): TextRow => text('');
+
+/** Text rows laid next to each other, each cell padded to its width. Bold stays per cell. */
+function joinCells(cells: readonly { row: TextRow | undefined; width: number }[]): TextRow {
+  const spans: GridSpan[] = [];
+  const push = (span: GridSpan): void => {
+    if (span.text === '') return;
+    const last = spans[spans.length - 1];
+    if (last !== undefined && last.bold === span.bold) {
+      spans[spans.length - 1] = { text: last.text + span.text, bold: span.bold };
+    } else {
+      spans.push(span);
+    }
+  };
+  cells.forEach(({ row, width }, i) => {
+    if (i > 0) push({ text: ' '.repeat(COLUMN_GAP), bold: false });
+    for (const span of row?.spans ?? []) push(span);
+    const used = row?.text.length ?? 0;
+    if (i < cells.length - 1) push({ text: ' '.repeat(Math.max(0, width - used)), bold: false });
+  });
+  // Trailing spaces print nothing; drop them so a line's length is what it shows.
+  while (spans.length > 0) {
+    const last = spans[spans.length - 1] as GridSpan;
+    const kept = last.text.replace(/\s+$/, '');
+    if (kept !== '') {
+      spans[spans.length - 1] = { text: kept, bold: last.bold };
+      break;
+    }
+    spans.pop();
+  }
+  return { kind: 'text', text: spans.map((s) => s.text).join(''), spans };
 }
 
-function groupUnits(rows: readonly GridRow[]): number {
-  return rows.reduce((sum, row) => sum + rowUnits(row), 0);
+/** Two columns of rows side by side, as long as the longer one. */
+function zipColumns(
+  left: readonly TextRow[],
+  leftWidth: number,
+  right: readonly TextRow[],
+  rightWidth: number,
+): TextRow[] {
+  return Array.from({ length: Math.max(left.length, right.length) }, (_, i) =>
+    joinCells([
+      { row: left[i], width: leftWidth },
+      { row: right[i], width: rightWidth },
+    ]),
+  );
 }
 
-/** `left` and `right` on one line when both fit, else on two. */
-function sideBySide(left: string, right: string, width: number, bold = false): GridRow[] {
+/** A text line's height in 1/216 inch. */
+function lineUnits(geometry: TextGeometry): number {
+  return 216 / geometry.linesPerInch;
+}
+
+function rowUnits(row: GridRow, line: number): number {
+  return row.kind === 'text' ? line : Math.ceil(row.bitmap.height / 8) * IMAGE_BAND_UNITS;
+}
+
+function groupUnits(rows: readonly GridRow[], line: number): number {
+  return rows.reduce((sum, row) => sum + rowUnits(row, line), 0);
+}
+
+/** `left` and `right` on one line when both fit, else `left` wrapped and `right` under it. */
+function sideBySide(left: string, right: string, width: number, bold = false): TextRow[] {
   if (right === '') return wrapText(left, width).map((line) => text(line, bold));
   if (left.length + right.length + 2 <= width) {
     return [text(padRight(left, width - right.length) + right, bold)];
   }
   return [
     ...wrapText(left, width).map((line) => text(line, bold)),
-    text(padLeft(right, width), bold),
+    ...wrapText(right, width).map((line) => text(padLeft(line, width), bold)),
   ];
 }
 
+/** A label and its value, each wrapping in its own column: `Label : value`. */
 function fieldLines(field: PrintField, labelWidth: number, width: number): string[] {
   const valueWidth = Math.max(8, width - labelWidth - 3);
-  return wrapText(field.value, valueWidth).map((line, i) =>
-    i === 0
-      ? `${padRight(field.label, labelWidth)} : ${line}`
-      : `${' '.repeat(labelWidth + 3)}${line}`,
+  const labels = wrapText(field.label, labelWidth);
+  const values = wrapText(field.value, valueWidth);
+  return Array.from(
+    { length: Math.max(labels.length, values.length) },
+    (_, i) =>
+      `${padRight(labels[i] ?? '', labelWidth)}${i === 0 ? ' : ' : '   '}${values[i] ?? ''}`,
   );
 }
 
-function fieldRows(fields: readonly PrintField[], width: number): GridRow[] {
+function fieldRows(fields: readonly PrintField[], width: number): TextRow[] {
   const longest = fields.reduce((max, f) => Math.max(max, f.label.length), 0);
   const twoColumns = width >= 72 && fields.length > 1;
-  const colWidth = twoColumns ? Math.floor((width - 3) / 2) : width;
-  const labelWidth = Math.min(longest, twoColumns ? 13 : 16);
+  const colWidth = twoColumns ? Math.floor((width - COLUMN_GAP) / 2) : width;
+  // Labels are short words; a label longer than this wraps rather than squeezing the value.
+  const labelWidth = Math.max(1, Math.min(longest, twoColumns ? 13 : 16, Math.floor(width / 3)));
   const fitsHalf = (f: PrintField): boolean =>
     twoColumns && f.value.length <= colWidth - labelWidth - 3;
-  const rows: GridRow[] = [];
+  const rows: TextRow[] = [];
   for (let i = 0; i < fields.length; i += 1) {
     const field = fields[i] as PrintField;
     const next = fields[i + 1];
     if (next !== undefined && fitsHalf(field) && fitsHalf(next)) {
-      const left = fieldLines(field, labelWidth, colWidth);
-      const right = fieldLines(next, labelWidth, colWidth);
-      left.forEach((line, j) => rows.push(text(`${padRight(line, colWidth)}   ${right[j] ?? ''}`)));
+      const left = fieldLines(field, labelWidth, colWidth).map((line) => text(line));
+      const right = fieldLines(next, labelWidth, colWidth).map((line) => text(line));
+      rows.push(...zipColumns(left, colWidth, right, colWidth));
       i += 1;
     } else {
       for (const line of fieldLines(field, labelWidth, width)) rows.push(text(line));
@@ -91,25 +172,36 @@ function fieldRows(fields: readonly PrintField[], width: number): GridRow[] {
   return rows;
 }
 
-/** Short items packed into up to three columns, filled across then down. */
-function listRows(items: readonly string[], width: number): GridRow[] {
-  const longest = items.reduce((max, item) => Math.max(max, item.length + 2), 0);
-  const columns = Math.max(1, Math.min(3, Math.floor((width + 3) / (longest + 3))));
-  if (columns === 1) {
-    return items.flatMap((item) =>
-      wrapText(item, width - 2).map((line, i) => text(`${i === 0 ? '- ' : '  '}${line}`)),
-    );
-  }
-  const colWidth = Math.floor((width - (columns - 1) * 3) / columns);
-  const rows: GridRow[] = [];
+/**
+ * Items packed into up to three columns, filled across then down, when most of them fit a column;
+ * an item longer than its column wraps inside it.
+ */
+function listRows(items: readonly string[], width: number): TextRow[] {
+  const bulleted = (item: string, cellWidth: number): TextRow[] =>
+    wrapText(item, cellWidth - 2).map((line, i) => text(`${i === 0 ? '- ' : '  '}${line}`));
+  const colWidth = (columns: number): number =>
+    Math.floor((width - (columns - 1) * COLUMN_GAP) / columns);
+  const columns =
+    [3, 2].find(
+      (count) =>
+        colWidth(count) >= 12 &&
+        items.length >= count &&
+        items.filter((item) => item.length + 2 <= colWidth(count)).length >= items.length * 0.75,
+    ) ?? 1;
+  if (columns === 1) return items.flatMap((item) => bulleted(item, width));
+  const cellWidth = colWidth(columns);
+  const rows: TextRow[] = [];
   for (let i = 0; i < items.length; i += columns) {
-    const cells = items.slice(i, i + columns).map((item) => padRight(`- ${item}`, colWidth));
-    rows.push(text(cells.join('   ')));
+    const cells = items.slice(i, i + columns).map((item) => bulleted(item, cellWidth));
+    const height = Math.max(...cells.map((lines) => lines.length));
+    for (let line = 0; line < height; line += 1) {
+      rows.push(joinCells(cells.map((lines) => ({ row: lines[line], width: cellWidth }))));
+    }
   }
   return rows;
 }
 
-function termRows(items: readonly string[], width: number): GridRow[] {
+function termRows(items: readonly string[], width: number): TextRow[] {
   const numberWidth = `${items.length}.`.length + 1;
   return items.flatMap((item, n) =>
     wrapText(item, width - numberWidth).map((line, i) =>
@@ -118,59 +210,85 @@ function termRows(items: readonly string[], width: number): GridRow[] {
   );
 }
 
-function amountRows(block: Extract<PrintBlock, { kind: 'amounts' }>, width: number): GridRow[] {
-  const amountWidth = [...block.rows, ...block.totals].reduce(
-    (max, row) => Math.max(max, row.amount.length),
-    0,
+function amountRows(block: Extract<PrintBlock, { kind: 'amounts' }>, width: number): TextRow[] {
+  // An amount keeps to one line where it can: it is what the customer pays. Its label wraps.
+  const amountWidth = Math.min(
+    width - 8,
+    [...block.rows, ...block.totals].reduce((max, row) => Math.max(max, row.amount.length), 0),
   );
   const labelWidth = width - amountWidth - 2;
-  const rows: GridRow[] = [];
-  for (const row of block.rows) {
-    wrapText(row.label, labelWidth).forEach((line, i) =>
-      rows.push(
-        text(
-          `${padRight(line, labelWidth)}  ${i === 0 ? padLeft(row.amount, amountWidth) : ''}`,
-          row.strong === true,
-        ),
-      ),
-    );
-  }
+  const priced = (
+    label: string,
+    amount: string,
+    strong: boolean,
+    alignRight: boolean,
+  ): TextRow[] => {
+    const labels = wrapText(label, labelWidth);
+    const amounts = wrapText(amount, amountWidth);
+    return Array.from({ length: Math.max(labels.length, amounts.length) }, (_, i) => {
+      const line = labels[i] ?? '';
+      return text(
+        `${alignRight ? padLeft(line, labelWidth) : padRight(line, labelWidth)}  ${padLeft(
+          amounts[i] ?? '',
+          amountWidth,
+        )}`,
+        strong,
+      );
+    });
+  };
+  const rows: TextRow[] = block.rows.flatMap((row) =>
+    priced(row.label, row.amount, row.strong === true, false),
+  );
   if (block.totals.length > 0) {
     if (block.rows.length > 0) rows.push(text(padLeft('-'.repeat(amountWidth + 2), width)));
     for (const total of block.totals) {
-      rows.push(
-        text(
-          `${padLeft(total.label, labelWidth)}  ${padLeft(total.amount, amountWidth)}`,
-          total.strong === true,
-        ),
-      );
+      rows.push(...priced(total.label, total.amount, total.strong === true, true));
     }
   }
   return rows;
+}
+
+/** Each cell's lines centred in its slot, slots side by side. */
+function centredCells(cells: readonly string[], slotWidth: number, gap: number): TextRow[] {
+  const wrapped = cells.map((cell) => (cell === '' ? [] : wrapText(cell, slotWidth)));
+  const height = Math.max(1, ...wrapped.map((lines) => lines.length));
+  return Array.from({ length: height }, (_, i) =>
+    text(wrapped.map((lines) => center(lines[i] ?? '', slotWidth)).join(' '.repeat(gap))),
+  );
 }
 
 function signatureRows(
   block: Extract<PrintBlock, { kind: 'signatures' }>,
   width: number,
   compact: boolean,
-): GridRow[] {
+): TextRow[] {
   const count = Math.max(1, block.slots.length);
   const gap = 4;
-  const slotWidth = Math.floor((width - (count - 1) * gap) / count);
-  const line = (cells: readonly string[]): GridRow =>
-    text(cells.map((cell) => center(cell, slotWidth)).join(' '.repeat(gap)));
+  const slotWidth = Math.max(1, Math.floor((width - (count - 1) * gap) / count));
   // Room to sign: three lines (half an inch), two when squeezing onto one form.
-  const space = Array.from({ length: compact ? 2 : 3 }, () => line([]));
+  const space = Array.from({ length: compact ? 2 : 3 }, blank);
   return [
-    line(block.slots.map((slot) => slot.role)),
+    ...centredCells(
+      block.slots.map((slot) => slot.role),
+      slotWidth,
+      gap,
+    ),
     ...space,
-    line(block.slots.map(() => '_'.repeat(Math.max(4, slotWidth - 4)))),
-    line(block.slots.map((slot) => slot.name ?? '')),
+    ...centredCells(
+      block.slots.map(() => '_'.repeat(Math.max(4, slotWidth - 4))),
+      slotWidth,
+      gap,
+    ),
+    ...centredCells(
+      block.slots.map((slot) => slot.name ?? ''),
+      slotWidth,
+      gap,
+    ),
   ];
 }
 
 /** Column numbers across the printable width: shows at a glance whether the paper is set right. */
-function rulerRows(caption: string, width: number): GridRow[] {
+function rulerRows(caption: string, width: number): TextRow[] {
   let digits = '';
   let tens = '';
   for (let col = 1; col <= width; col += 1) {
@@ -186,27 +304,24 @@ function rulerRows(caption: string, width: number): GridRow[] {
 }
 
 function blockGroup(block: PrintBlock, width: number, compact: boolean): Group {
+  const flowing = (rows: GridRow[]): Group => ({ rows, keepTogether: false, keepWithNext: false });
   switch (block.kind) {
     case 'heading':
       return {
-        rows: [text(block.text.toUpperCase(), true)],
+        rows: wrapText(block.text.toUpperCase(), width).map((line) => text(line, true)),
         keepTogether: true,
         keepWithNext: true,
       };
     case 'fields':
-      return { rows: fieldRows(block.fields, width), keepTogether: false, keepWithNext: false };
+      return flowing(fieldRows(block.fields, width));
     case 'paragraph':
-      return {
-        rows: wrapText(block.text, width).map((line) => text(line)),
-        keepTogether: false,
-        keepWithNext: false,
-      };
+      return flowing(wrapText(block.text, width).map((line) => text(line)));
     case 'list':
-      return { rows: listRows(block.items, width), keepTogether: false, keepWithNext: false };
+      return flowing(listRows(block.items, width));
     case 'terms':
-      return { rows: termRows(block.items, width), keepTogether: false, keepWithNext: false };
+      return flowing(termRows(block.items, width));
     case 'amounts':
-      return { rows: amountRows(block, width), keepTogether: false, keepWithNext: false };
+      return flowing(amountRows(block, width));
     case 'signatures':
       return {
         rows: signatureRows(block, width, compact),
@@ -218,9 +333,62 @@ function blockGroup(block: PrintBlock, width: number, compact: boolean): Group {
   }
 }
 
+/** A run of blocks, with a blank line between them except right after a heading. */
+function blockGroups(blocks: readonly PrintBlock[], width: number, compact: boolean): Group[] {
+  return blocks.map((block, i) => {
+    const group = blockGroup(block, width, compact);
+    const prev = blocks[i - 1];
+    const gap = !compact && i > 0 && prev?.kind !== 'heading';
+    return gap ? { ...group, rows: [blank(), ...group.rows] } : group;
+  });
+}
+
+/** A column's rows; the blocks never lay out to images, so every row is text. */
+function columnRows(blocks: readonly PrintBlock[], width: number, compact: boolean): TextRow[] {
+  return blockGroups(blocks, width, compact).flatMap((group) =>
+    group.rows.filter((row): row is TextRow => row.kind === 'text'),
+  );
+}
+
 /** Every string a printer will see, in printer-safe ASCII. */
+function asciiBlock(block: PrintBlock): PrintBlock {
+  const a = (value: string, keepLineBreaks = false): string =>
+    toPrinterAscii(value, keepLineBreaks);
+  switch (block.kind) {
+    case 'heading':
+      return { ...block, text: a(block.text) };
+    case 'paragraph':
+      return { ...block, text: a(block.text, true) };
+    case 'fields':
+      return {
+        ...block,
+        fields: block.fields.map((f) => ({ label: a(f.label), value: a(f.value) })),
+      };
+    case 'list':
+    case 'terms':
+      return { ...block, items: block.items.map((item) => a(item)) };
+    case 'amounts':
+      return {
+        ...block,
+        rows: block.rows.map((r) => ({ ...r, label: a(r.label), amount: a(r.amount) })),
+        totals: block.totals.map((r) => ({ ...r, label: a(r.label), amount: a(r.amount) })),
+      };
+    case 'signatures':
+      return {
+        ...block,
+        slots: block.slots.map((s) => ({
+          ...s,
+          role: a(s.role),
+          name: s.name === null ? null : a(s.name),
+        })),
+      };
+    case 'ruler':
+      return { ...block, caption: a(block.caption) };
+  }
+}
+
 function asciiDocument(doc: PrintDocument): PrintDocument {
-  const a = toPrinterAscii;
+  const a = (value: string): string => toPrinterAscii(value);
   return {
     ...doc,
     header: { ...doc.header, name: a(doc.header.name), lines: doc.header.lines.map(a) },
@@ -230,38 +398,9 @@ function asciiDocument(doc: PrintDocument): PrintDocument {
     copies: doc.copies.map(a),
     plyNote: doc.plyNote === null ? null : a(doc.plyNote),
     footer: doc.footer === null ? null : a(doc.footer),
-    blocks: doc.blocks.map((block): PrintBlock => {
-      switch (block.kind) {
-        case 'heading':
-        case 'paragraph':
-          return { ...block, text: a(block.text) };
-        case 'fields':
-          return {
-            ...block,
-            fields: block.fields.map((f) => ({ label: a(f.label), value: a(f.value) })),
-          };
-        case 'list':
-        case 'terms':
-          return { ...block, items: block.items.map(a) };
-        case 'amounts':
-          return {
-            ...block,
-            rows: block.rows.map((r) => ({ ...r, label: a(r.label), amount: a(r.amount) })),
-            totals: block.totals.map((r) => ({ ...r, label: a(r.label), amount: a(r.amount) })),
-          };
-        case 'signatures':
-          return {
-            ...block,
-            slots: block.slots.map((s) => ({
-              ...s,
-              role: a(s.role),
-              name: s.name === null ? null : a(s.name),
-            })),
-          };
-        case 'ruler':
-          return { ...block, caption: a(block.caption) };
-      }
-    }),
+    blocks: doc.blocks.map(asciiBlock),
+    aside: doc.aside.map(asciiBlock),
+    closing: doc.closing.map(asciiBlock),
   };
 }
 
@@ -274,7 +413,7 @@ function headerGroup(doc: PrintDocument, copy: string | null, geometry: TextGeom
   if (logo !== null && logoCols <= width) {
     rows.push({ kind: 'image', bitmap: logo, offset: Math.floor((width - logoCols) / 2) });
   }
-  rows.push(text(center(doc.header.name, width), true));
+  for (const line of wrapText(doc.header.name, width)) rows.push(text(center(line, width), true));
   for (const line of doc.header.lines) {
     for (const wrapped of wrapText(line, width)) rows.push(text(center(wrapped, width)));
   }
@@ -298,6 +437,7 @@ function footerGroup(
   const lines = compact ? [notes.join('. ')] : notes;
   return {
     rows: [
+      blank(),
       ...(compact ? [] : [text('-'.repeat(width))]),
       ...lines.flatMap((line) => wrapText(line, width).map((l) => text(l))),
     ],
@@ -308,75 +448,144 @@ function footerGroup(
 
 /** Fill pages with groups, breaking only where the groups allow. */
 function paginate(groups: readonly Group[], geometry: TextGeometry, reference: string): GridPage[] {
-  const capacity = (geometry.pageLines - BOTTOM_LINES) * TEXT_ROW_UNITS;
+  const line = lineUnits(geometry);
+  const capacity = (geometry.pageLines - BOTTOM_LINES) * line;
   const pages: GridRow[][] = [[]];
   let used = 0;
   const newPage = (): void => {
     pages.push([]);
     const marker = text(padLeft(`${reference} (${pages.length})`, geometry.columns));
-    (pages[pages.length - 1] as GridRow[]).push(marker, BLOCK_GAP);
-    used = 2 * TEXT_ROW_UNITS;
+    (pages[pages.length - 1] as GridRow[]).push(marker, blank());
+    used = 2 * line;
   };
   const place = (row: GridRow): void => {
-    if (used + rowUnits(row) > capacity && used > 2 * TEXT_ROW_UNITS) newPage();
+    if (used + rowUnits(row, line) > capacity && used > 2 * line) newPage();
     (pages[pages.length - 1] as GridRow[]).push(row);
-    used += rowUnits(row);
+    used += rowUnits(row, line);
   };
   groups.forEach((group, i) => {
-    const units = groupUnits(group.rows);
+    const units = groupUnits(group.rows, line);
     const next = groups[i + 1];
     // A heading also needs room for the first two rows of what follows it.
     const needed =
       group.keepWithNext && next !== undefined
-        ? units + groupUnits(next.rows.slice(0, 2))
+        ? units + groupUnits(next.rows.slice(0, 2), line)
         : group.keepTogether
           ? units
-          : groupUnits(group.rows.slice(0, 1));
-    if (used + needed > capacity && needed <= capacity - 2 * TEXT_ROW_UNITS && used > 0) newPage();
+          : groupUnits(group.rows.slice(0, 1), line);
+    if (used + needed > capacity && needed <= capacity - 2 * line && used > 0) newPage();
     group.rows.forEach(place);
   });
   return pages;
+}
+
+interface Variant {
+  readonly linesPerInch: LinesPerInch;
+  /** The aside in a column beside the body. */
+  readonly sideBySide: boolean;
+  /**
+   * The signatures under the aside rather than under everything. Only taken when it makes the
+   * paper one form: on a longer document they belong at its end.
+   */
+  readonly closingBeside: boolean;
+  /** No blank lines between sections and less signing room. */
+  readonly compact: boolean;
+}
+
+/**
+ * The body and aside as columns, the closing (signatures) full width underneath, or at the foot of
+ * the aside column when `closingBeside` and the aside still ends above the body.
+ */
+function columnGroups(
+  doc: PrintDocument,
+  width: number,
+  compact: boolean,
+  closingBeside: boolean,
+): Group[] {
+  const bodyWidth = Math.floor((width - COLUMN_GAP) * BODY_SHARE);
+  const asideWidth = width - COLUMN_GAP - bodyWidth;
+  const body = columnRows(doc.blocks, bodyWidth, compact);
+  const aside = columnRows(doc.aside, asideWidth, compact);
+  const beside = [blank(), ...columnRows(doc.closing, asideWidth, compact)];
+  const fitsBeside =
+    closingBeside && doc.closing.length > 0 && aside.length + beside.length <= body.length;
+  const columns: Group = {
+    rows: zipColumns(body, bodyWidth, fitsBeside ? [...aside, ...beside] : aside, asideWidth),
+    keepTogether: false,
+    keepWithNext: false,
+  };
+  if (fitsBeside) return [columns];
+  const closing = blockGroups(doc.closing, width, compact);
+  return [
+    columns,
+    ...closing.map((group, i) =>
+      compact || i > 0 ? group : { ...group, rows: [blank(), ...group.rows] },
+    ),
+  ];
 }
 
 function layoutCopy(
   doc: PrintDocument,
   copy: string | null,
   paper: PaperSettings,
-  geometry: TextGeometry,
-  compact: boolean,
+  variant: Variant,
 ): GridPage[] {
+  const geometry = textGeometry(paper, variant.linesPerInch);
   const width = geometry.columns;
-  const gap = compact ? [] : [BLOCK_GAP];
+  const { compact } = variant;
   const groups: Group[] = [headerGroup(doc, copy, geometry)];
-  doc.blocks.forEach((block, i) => {
-    const group = blockGroup(block, width, compact);
-    // A blank line between blocks, except right after a heading.
-    const prev = doc.blocks[i - 1];
-    groups.push({
-      ...group,
-      rows: [...(i > 0 && prev?.kind !== 'heading' ? gap : []), ...group.rows],
-    });
-  });
+  if (variant.sideBySide) {
+    groups.push(...columnGroups(doc, width, compact, variant.closingBeside));
+  } else {
+    // Stacked: the aside and the closing continue the body as more blocks.
+    groups.push(...blockGroups([...doc.blocks, ...doc.aside, ...doc.closing], width, compact));
+  }
   const footer = footerGroup(doc, paper.carbonless, width, compact);
-  if (footer !== null) groups.push({ ...footer, rows: [BLOCK_GAP, ...footer.rows] });
+  if (footer !== null) groups.push(footer);
   return paginate(groups, geometry, doc.reference);
 }
 
 /**
- * The document on the paper's character grid, one run of pages per copy (one on carbonless). When
- * the roomy layout spills onto another form, a tighter one (no blank lines between sections, less
- * signing room) is used if it needs fewer forms: paper the customer carries home should be one sheet.
+ * The document on the paper's character grid, one run of pages per copy (one on carbonless).
+ *
+ * Paper the customer carries home should be one sheet, so layouts are tried roomiest first and the
+ * first that needs the fewest forms wins. On landscape paper wide enough, the aside goes beside the
+ * body (signatures under everything, then under the aside), else everything is stacked; each first
+ * with blank lines between sections, then without; all at 6 lines per inch, then at 8.
  */
 export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLayout {
   const doc = asciiDocument(source);
-  const geometry = textGeometry(paper);
+  const columnsFit =
+    isLandscape(paper) &&
+    doc.aside.length > 0 &&
+    textGeometry(paper).columns >= MIN_TWO_COLUMN_WIDTH;
+  const arrangements: Pick<Variant, 'sideBySide' | 'closingBeside'>[] = [
+    ...(columnsFit
+      ? [
+          { sideBySide: true, closingBeside: false },
+          { sideBySide: true, closingBeside: true },
+        ]
+      : []),
+    { sideBySide: false, closingBeside: false },
+  ];
+  const variants: Variant[] = ([6, 8] as const).flatMap((linesPerInch) =>
+    [false, true].flatMap((compact) =>
+      arrangements.map((arrangement) => ({ ...arrangement, linesPerInch, compact })),
+    ),
+  );
   const copies: (string | null)[] =
     paper.carbonless || doc.copies.length === 0 ? [null] : [...doc.copies];
-  const pages = copies.flatMap((copy) => {
-    const roomy = layoutCopy(doc, copy, paper, geometry, false);
-    if (roomy.length === 1) return roomy;
-    const compact = layoutCopy(doc, copy, paper, geometry, true);
-    return compact.length < roomy.length ? compact : roomy;
-  });
-  return { geometry, pages };
+  // Every copy uses the layout the first one needed, so the job keeps one line spacing.
+  let best: { variant: Variant; pages: GridPage[] } | null = null;
+  for (const variant of variants) {
+    const pages = layoutCopy(doc, copies[0] ?? null, paper, variant);
+    if (variant.closingBeside && pages.length > 1) continue;
+    if (best === null || pages.length < best.pages.length) best = { variant, pages };
+    if (best.pages.length === 1) break;
+  }
+  const chosen = (best as { variant: Variant }).variant;
+  return {
+    geometry: textGeometry(paper, chosen.linesPerInch),
+    pages: copies.flatMap((copy) => layoutCopy(doc, copy, paper, chosen)),
+  };
 }
