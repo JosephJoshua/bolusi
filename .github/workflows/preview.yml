@@ -42,7 +42,7 @@ jobs:
         if: env.BUILD == 'true'
         env:
           EXPO_BASE_URL: /${{ github.event.repository.name }}${{ github.event_name == 'pull_request' && format('/pr-preview/pr-{0}', github.event.number) || '' }}
-          EXPO_PUBLIC_PREVIEW_LABEL: ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }}
+          EXPO_PUBLIC_PREVIEW_LABEL: "${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }}"
         run: |
           export EXPO_PUBLIC_PREVIEW_LABEL="$EXPO_PUBLIC_PREVIEW_LABEL · ${SHA::7} · $(date -u '+%Y-%m-%d %H:%M UTC')"
           pnpm --filter @bolusi/mobile build:web
