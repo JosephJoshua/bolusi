@@ -12,9 +12,12 @@ import {
   TextInput,
   ToggleChip,
   Icon,
+  TextButton,
   color,
+  radius,
   size,
   space,
+  type,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useState } from 'react';
@@ -476,11 +479,19 @@ export function ProposalStep({
       onClearError={runner.clearError}
       testID={testID}
     >
-      <Text style={repairStyles.heading}>{line.description}</Text>
-      <Text style={repairStyles.body} testID={`${testID}.amount`}>
-        {`${tn(PRICE_KIND_KEY[line.kind])} · ${formatMoney(line.amount)}`}
-      </Text>
-      {line.reason === null ? null : <Text style={repairStyles.muted}>{line.reason}</Text>}
+      <View style={styles.proposal}>
+        <Text style={repairStyles.caption}>{tn(PRICE_KIND_KEY[line.kind])}</Text>
+        <Text style={styles.proposalDescription}>{line.description}</Text>
+        <Text style={styles.proposalAmount} testID={`${testID}.amount`}>
+          {formatMoney(line.amount)}
+        </Text>
+        {line.reason === null ? null : (
+          <>
+            <Text style={styles.proposalLabel}>{tn('repair.price.technicianReason')}</Text>
+            <Text style={styles.proposalReason}>{line.reason}</Text>
+          </>
+        )}
+      </View>
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.price.decisionNote')}
@@ -493,25 +504,41 @@ export function ProposalStep({
         <Button
           label={tn('repair.action.declinePrice')}
           variant="secondary"
+          size="compact"
           onPress={() => decide('declined')}
           disabled={runner.busy}
           testID={`${testID}.decline`}
         />
-      </View>
-      <View style={repairStyles.gap}>
-        <Button
-          label={tn('repair.action.applyUnasked')}
-          variant="secondary"
-          onPress={() => decide('unasked')}
-          disabled={runner.busy}
-          testID={`${testID}.applyUnasked`}
-        />
+        {/* Rare and riskier, so it reads as a link under the answer, its text on the content edge. */}
+        <View style={styles.unasked}>
+          <TextButton
+            label={tn('repair.action.applyUnasked')}
+            onPress={() => decide('unasked')}
+            disabled={runner.busy}
+            testID={`${testID}.applyUnasked`}
+          />
+        </View>
       </View>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  decline: { marginTop: space.xl },
+  proposal: {
+    padding: space.md,
+    borderRadius: radius.sm,
+    backgroundColor: color.surfaceAlt,
+  },
+  proposalDescription: { ...type.bodyBold, color: color.text, marginTop: space.xs },
+  proposalAmount: {
+    ...type.title,
+    color: color.text,
+    marginTop: space.xs,
+    fontVariant: ['tabular-nums'],
+  },
+  proposalLabel: { ...type.caption, color: color.textMuted, marginTop: space.md },
+  proposalReason: { ...type.bodySm, color: color.text },
+  decline: { alignItems: 'flex-start', gap: space.md, marginTop: space.xl },
+  unasked: { marginLeft: -space.sm },
   consequence: { marginBottom: space.md },
 });

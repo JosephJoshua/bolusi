@@ -21,7 +21,7 @@
     "cancel": "Cancel repair",
     "changePrice": "Change price",
     "claim": "Take this repair",
-    "decidePrice": "Decide price change",
+    "decidePrice": "Confirm price",
     "declinePrice": "Customer declined",
     "handover": "Hand back to customer",
     "markRepaired": "Mark repaired",
@@ -46,7 +46,7 @@
   "board": {
     "emptyHint": "Repairs you take in or work on appear here.",
     "noMatches": "No repair matches that search.",
-    "priceChangeWaiting": "Price change waiting",
+    "priceChangeWaiting": "Price needs confirming",
     "searchHint": "Name, phone, ticket, IMEI, model",
     "title": "Repairs",
     "view": {
@@ -183,7 +183,8 @@
     },
     "total": "Total",
     "addRow": "Add a price line",
-    "pendingTotal": "Proposed, awaiting a decision: {amount}"
+    "pendingTotal": "Not yet confirmed by the customer: {amount}",
+    "technicianReason": "Technician’s reason"
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",

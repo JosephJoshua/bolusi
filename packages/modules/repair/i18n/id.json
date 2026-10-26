@@ -10,9 +10,9 @@
     "workPaused": "Tunggu sparepart",
     "markedRepaired": "Selesai dikerjakan",
     "ticketCancelled": "Servisan dibatalkan",
-    "quoteChangeProposed": "Teknisi usul ubah harga",
+    "quoteChangeProposed": "Teknisi mengajukan perubahan harga",
     "quoteChanged": "Harga diubah",
-    "quoteProposalDeclined": "Usulan harga ditolak",
+    "quoteProposalDeclined": "Perubahan harga ditolak",
     "deviceReturned": "HP diambil pelanggan"
   },
   "action": {
@@ -21,21 +21,21 @@
     "cancel": "Batalkan servisan",
     "changePrice": "Ubah harga",
     "claim": "Ambil servisan ini",
-    "decidePrice": "Cek usulan harga",
+    "decidePrice": "Konfirmasi harga",
     "declinePrice": "Pelanggan tidak setuju",
     "handover": "Serahkan HP",
     "markRepaired": "Selesai dikerjakan",
     "newIntake": "Servisan baru",
     "next": "Lanjut",
     "openTicket": "Simpan servisan",
-    "proposePrice": "Usul ubah harga",
+    "proposePrice": "Ajukan perubahan harga",
     "reopen": "Kerjakan lagi",
     "resume": "Lanjut kerjakan",
     "start": "Mulai kerjakan",
     "waitForParts": "Tunggu sparepart",
     "reassign": "Ganti teknisi",
     "agreeApply": "Pelanggan setuju",
-    "applyUnasked": "Pakai tanpa tanya pelanggan",
+    "applyUnasked": "Pakai tanpa konfirmasi pelanggan",
     "assignShort": "Pilih",
     "reassignShort": "Ganti"
   },
@@ -45,8 +45,8 @@
   },
   "board": {
     "emptyHint": "Servisan yang masuk akan muncul di sini.",
-    "noMatches": "Servisan nggak ketemu. Coba kata lain.",
-    "priceChangeWaiting": "Ada usulan harga",
+    "noMatches": "Servisan tidak ditemukan. Coba kata lain.",
+    "priceChangeWaiting": "Harga perlu dikonfirmasi",
     "searchHint": "Cari nama, no. HP, no. servisan",
     "title": "Servisan",
     "view": {
@@ -60,7 +60,7 @@
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
-    "consequence": "Servisan berhenti dan biaya perbaikan tidak ditagih. HP tetap di toko sampai diambil pelanggan."
+    "consequence": "Servisan dihentikan dan biaya perbaikan tidak ditagih. HP tetap di toko sampai diambil pelanggan."
   },
   "check": {
     "biometrics": "Sidik jari & wajah",
@@ -81,7 +81,7 @@
     "notChecked": "Tidak dicek",
     "notes": "Catatan (opsional)",
     "ok": "Normal",
-    "peripherals": "Kelengkapan yang dititip",
+    "peripherals": "Kelengkapan yang dititipkan",
     "restOk": "Sisanya normal",
     "notesLabel": "Catatan"
   },
@@ -173,17 +173,18 @@
       "labour": "Jasa",
       "part": "Sparepart"
     },
-    "proposalTitle": "Usulan harga",
+    "proposalTitle": "Perubahan harga",
     "reason": "Alasan",
     "status": {
       "agreed": "Disetujui pelanggan",
-      "declined": "Ditolak",
-      "notAgreed": "Belum ditanyakan ke pelanggan",
-      "proposed": "Usulan teknisi"
+      "declined": "Ditolak pelanggan",
+      "notAgreed": "Belum dikonfirmasi ke pelanggan",
+      "proposed": "Diajukan teknisi"
     },
     "total": "Total",
     "addRow": "Tambah biaya",
-    "pendingTotal": "Usulan belum diputuskan: {amount}"
+    "pendingTotal": "Belum dikonfirmasi pelanggan: {amount}",
+    "technicianReason": "Alasan teknisi"
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",
@@ -229,8 +230,8 @@
     "repairNote": "Apa yang diperbaiki? (opsional)"
   },
   "done": {
-    "claim": "Servisan ini sekarang kamu pegang.",
-    "start": "Mulai dikerjakan.",
+    "claim": "Servisan ini sekarang jadi tugasmu.",
+    "start": "Servisan mulai dikerjakan.",
     "repaired": "Selesai! HP siap diambil pelanggan."
   },
   "passcode": {

@@ -168,6 +168,7 @@ export const REPAIR_KEYS = [
   'repair.price.status.declined',
   'repair.price.status.notAgreed',
   'repair.price.status.proposed',
+  'repair.price.technicianReason',
   'repair.price.total',
   'repair.problem.complaint',
   'repair.problem.customerName',
