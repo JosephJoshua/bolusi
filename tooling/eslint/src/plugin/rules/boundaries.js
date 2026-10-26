@@ -14,7 +14,7 @@
 //      TEST/TOOLING files only — it is the in-process Postgres the applier-conformance suite runs,
 //      a test-only engine that must never reach shipping source any more than better-sqlite3 does)
 //   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
-//   3. */screens subpaths importable only from apps/mobile
+//   3. */screens subpaths importable only from apps/mobile; */desktop only from apps/desktop
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
 //   5. nothing imports @bolusi/mobile
 //   6. §3.4 platform-free deny prefixes for core/schemas/i18n/modules-manifest
@@ -259,6 +259,8 @@ export default {
         "'{{source}}': @bolusi/ui may import @bolusi/schemas TYPE-ONLY (08-stack-and-repo §3.3 hard rule 8) — the design system reuses the canonical enum types (e.g. SyncStatus) but must stay platform-free and pull no zod. Use `import type`; a value import would put a runtime edge to schemas (and its zod) into ui's emit.",
       screensOutsideMobile:
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
+      desktopOutsideApp:
+        "'{{source}}': */desktop subpaths are React DOM screens and may be imported only from apps/desktop.",
       serverImport:
         "'{{source}}': @bolusi/server may be value-imported only by @bolusi/harness; the sole app→app edge is a type-only import of '@bolusi/server/client' (08-stack-and-repo §4.3).",
       stylingLib: "'{{source}}' is forbidden: {{reason}}.",
@@ -361,6 +363,11 @@ export default {
       // 3. */screens subpaths only from apps/mobile.
       if (/\/screens(\/|$)/.test(source) && workspace !== 'apps/mobile') {
         context.report({ node, messageId: 'screensOutsideMobile', data: { source } });
+        return;
+      }
+      // 3b. */desktop subpaths only from apps/desktop (the counter PC app's React DOM screens).
+      if (/^@bolusi\/[^/]+\/.*\/desktop(\/|$)/.test(source) && workspace !== 'apps/desktop') {
+        context.report({ node, messageId: 'desktopOutsideApp', data: { source } });
         return;
       }
       // 4. @bolusi/server: harness-only value import; type-only ./client subpath elsewhere.

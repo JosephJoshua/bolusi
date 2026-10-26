@@ -21,12 +21,7 @@ import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import {
-  REPAIR_PERMISSION,
-  WORK_PHOTOS_MAX,
-  type QuoteLineKind,
-  type WorkPhotoStage,
-} from '../constants.js';
+import { REPAIR_PERMISSION, WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
 import { standardCancelFee, type QuoteLineRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
@@ -36,7 +31,9 @@ import {
   acceptsRupiahText,
   capturedThumbnailRef,
   parseRupiah,
+  priceKinds,
   signedAmount,
+  type PriceKind,
   type StaleStep,
 } from '../flows.js';
 import {
@@ -48,7 +45,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useCancelFees, useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useCancelFees, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 interface StepProps {
   readonly chrome: RepairChrome;
@@ -446,19 +443,13 @@ export function AssignStep({
 
 // ── price changes ─────────────────────────────────────────────────────────────────────────────
 
-/** Kinds offered on the phone. Adjustments (either sign) stay a desktop/back-office tool. */
-export const PRICE_KINDS = [
-  'part',
-  'labour',
-  'discount',
-] as const satisfies readonly QuoteLineKind[];
-export type PriceKind = (typeof PRICE_KINDS)[number];
+export { PRICE_KINDS, type PriceKind } from '../flows.js';
 
 /** The kinds this user may add: a discount lowers the price, so only owners see it. */
 export function usePriceKinds(): readonly PriceKind[] {
   const runtime = useRepairRuntime();
   const discount = runtime.hasPermission(REPAIR_PERMISSION.discount);
-  return useMemo(() => PRICE_KINDS.filter((kind) => kind !== 'discount' || discount), [discount]);
+  return useMemo(() => priceKinds(discount), [discount]);
 }
 
 /**

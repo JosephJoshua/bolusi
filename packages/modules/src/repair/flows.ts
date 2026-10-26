@@ -313,6 +313,19 @@ export function acceptsRupiahText(text: string): boolean {
   return text.replace(/\D/g, '') === '' || parseRupiah(text) !== null;
 }
 
+/** Kinds offered when adding a price line. Adjustments (either sign) stay a back-office tool. */
+export const PRICE_KINDS = [
+  'part',
+  'labour',
+  'discount',
+] as const satisfies readonly QuoteLineKind[];
+export type PriceKind = (typeof PRICE_KINDS)[number];
+
+/** The kinds a user may add: a discount lowers the price, so only those who may discount see it. */
+export function priceKinds(discount: boolean): readonly PriceKind[] {
+  return PRICE_KINDS.filter((kind) => kind !== 'discount' || discount);
+}
+
 /** The signed amount a line contributes: discounts subtract. Adjustments are entered signed. */
 export function signedAmount(kind: QuoteLineKind, amount: number): number {
   return kind === 'discount' ? -Math.abs(amount) : amount;

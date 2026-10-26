@@ -4,7 +4,7 @@
  * own full-screen step (TicketSteps.tsx); the rest run in place. The rejected-op banner shows here,
  * where the change was made (05-operation-log §8).
  */
-import { formatDateTime, formatMoney, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -60,7 +60,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
-import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 import {
   AssignStep,
   CancelStep,
@@ -381,7 +381,7 @@ export function TicketDetail({
               testID={`${testID}.phone`}
             >
               <Icon name="phone" size={size.iconChip} color={color.primary} />
-              <Text style={styles.link}>{row.customerPhone}</Text>
+              <Text style={styles.link}>{formatPhone(row.customerPhone)}</Text>
             </Pressable>
           )}
           <View style={styles.deviceBox}>

@@ -1,27 +1,35 @@
 /**
- * A `RepairRuntime` over in-memory demo tickets for the browser harness, the repair twin of
- * `demoNotesRuntime`. The real runtime needs SQLite, which a browser cannot load, so the harness
- * renders the REAL repair screens over this fake. Commands mutate the demo data and notify, so the
- * flows (intake, start, repaired, price change, handover) genuinely move a ticket along.
+ * A `RepairRuntime` over in-memory demo tickets for the browser harnesses (the phone screens on
+ * react-native-web, the desktop app's demo mode), the repair twin of `demoNotesRuntime`. The real
+ * runtime needs SQLite, so the harnesses render the REAL repair screens over this fake. Commands
+ * mutate the demo data and notify, so the flows (intake, start, repaired, price change, handover)
+ * genuinely move a ticket along. Dev tooling only: no shipping screen imports it.
  *
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
 import { FuzzyIndex } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
+
+import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
 import {
-  IN_PROGRESS_OUTCOMES,
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
-  REPAIR_PERMISSION,
   type IntakeOptionSettings,
-  type QuoteLineRow,
-  type RepairOutcome,
-  type TicketDetailRow,
-  type TicketPhotoRow,
-} from '@bolusi/modules/repair';
-import type { RepairRuntime } from '@bolusi/modules/repair/screens';
+} from './intake-options.js';
+import type { QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
+import type { RepairRuntime } from './runtime.js';
 
-import { HARNESS_NOW } from './seed.js';
+/** The phone harness's fixed clock, so its screenshots never change. */
+export const DEMO_NOW = Date.UTC(2026, 6, 21, 3, 0, 0);
+
+/** "Now" for the runtime being built; a live demo passes the real clock. */
+let HARNESS_NOW = DEMO_NOW;
+
+/** The browser globals the harness touches, without a DOM lib in this package. */
+const browser = globalThis as unknown as {
+  window?: Record<string, unknown>;
+  document?: { createElement(tag: 'a'): { href: string; download: string; click(): void } };
+};
 
 const HOUR = 3_600_000;
 const P = REPAIR_PERMISSION;
@@ -311,6 +319,102 @@ function seedTickets(): TicketDetailRow[] {
   ].map(withTotals);
 }
 
+const CUSTOMERS = [
+  'Agustina Rumbiak',
+  'Benny Kambu',
+  'Corneles Waromi',
+  'Debora Yoku',
+  'Elias Mofu',
+  'Fransina Ayomi',
+  'Gerson Rumbewas',
+  'Hana Sawaki',
+  'Isak Kafiar',
+  'Juliana Wanma',
+  'Kornelius Mansawan',
+  'Lea Rumaropen',
+  'Markus Wamafma',
+  'Novi Rumbrawer',
+  'Obeth Inggamer',
+  'Priska Mayor',
+  'Rudi Hamadi',
+  'Sarlota Rumere',
+  'Thomas Indey',
+  'Yuliana Sroyer',
+  'Wempi Fonataba',
+  'Siti Nurhaliza',
+  'Ahmad Fauzi',
+  'Rina Wulandari',
+  'Budi Hartono',
+];
+const DEVICES: readonly (readonly [string, string, string])[] = [
+  ['Samsung', 'Galaxy A15', 'Hitam'],
+  ['Samsung', 'Galaxy A05s', 'Hijau'],
+  ['Oppo', 'A18', 'Biru'],
+  ['Oppo', 'Reno 8', 'Hitam'],
+  ['Vivo', 'Y17s', 'Ungu'],
+  ['Xiaomi', 'Redmi 13C', 'Hitam'],
+  ['Xiaomi', 'Redmi Note 13', 'Biru'],
+  ['Realme', 'C53', 'Emas'],
+  ['Infinix', 'Hot 40i', 'Hijau'],
+  ['iPhone', '11', 'Putih'],
+  ['Tecno', 'Spark 20', 'Hitam'],
+];
+const PROBLEMS: readonly (readonly [string, string, number, string, number])[] = [
+  ['LCD pecah, ada garis hijau', 'LCD original', 550_000, 'Pasang LCD', 100_000],
+  ['Baterai cepat habis', 'Baterai', 180_000, 'Ganti baterai', 50_000],
+  ['Tidak bisa cas', 'Konektor cas', 75_000, 'Servis konektor', 50_000],
+  ['Speaker sember', 'Speaker', 70_000, 'Pasang speaker', 40_000],
+  ['Kamera belakang tidak fokus', 'Kamera belakang', 210_000, 'Pasang kamera', 50_000],
+  ['Mati total habis jatuh', 'IC power', 250_000, 'Servis mesin', 150_000],
+  ['Lupa pola kunci layar', 'Flash ulang', 0, 'Reset dan flash', 100_000],
+  ['Tombol volume macet', 'Fleksibel volume', 60_000, 'Pasang fleksibel', 40_000],
+];
+const OUTCOMES: readonly RepairOutcome[] = [
+  'received',
+  'in_repair',
+  'in_repair',
+  'waiting_for_parts',
+  'repaired',
+  'received',
+  'in_repair',
+];
+
+/** A store's worth of extra tickets, dated over the past two weeks, spread over every queue. */
+function storeTickets(): TicketDetailRow[] {
+  return Array.from({ length: 48 }, (_, i) => {
+    const [brand, model, colour] = DEVICES[(i * 7) % DEVICES.length]!;
+    const [complaint, part, partPrice, labour, labourPrice] = PROBLEMS[(i * 5) % PROBLEMS.length]!;
+    const outcome = OUTCOMES[i % OUTCOMES.length]!;
+    const returned = i % 11 === 10;
+    const unassigned = outcome === 'received' && i % 3 === 0;
+    const lines = [
+      ...(partPrice > 0 ? [line('part', part, partPrice)] : []),
+      line('labour', labour, labourPrice),
+    ];
+    return withTotals(
+      ticket({
+        id: `t-s${String(i)}`,
+        number: `K7P-${String(200 - i).padStart(4, '0')}`,
+        customer: CUSTOMERS[i % CUSTOMERS.length]!,
+        phone:
+          i % 4 === 3
+            ? null
+            : `08${String(11 + (i % 9))}-${String(4000 + i * 37)}-${String(5100 + i * 53)}`,
+        brand,
+        model,
+        color: colour,
+        complaint,
+        outcome: returned ? 'repaired' : outcome,
+        technicianId: unassigned ? null : TECHNICIANS[i % TECHNICIANS.length]!,
+        lines,
+        hoursAgo: 3 + i * 6,
+        ...(outcome === 'received' ? {} : { extraPhotos: [photoRow(`before:s${String(i)}`)] }),
+        ...(returned ? { location: 'returned' as const } : {}),
+      }),
+    );
+  });
+}
+
 function withTotals(row: TicketDetailRow): TicketDetailRow {
   const counted = row.quoteLines.filter((l) => l.status === 'intake' || l.status === 'applied');
   return {
@@ -330,9 +434,20 @@ function placeholderUri(mediaId: string): string {
   )}`;
 }
 
-export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime {
+export interface DemoRepairOptions {
+  /** The clock the tickets are dated against; the phone harness keeps its fixed one. */
+  readonly now?: number | undefined;
+  /** `store` adds a few dozen more tickets, so lists are seen at a real store's volume. */
+  readonly volume?: 'sample' | 'store' | undefined;
+}
+
+export function demoRepairRuntime(
+  role: DemoRepairRole = 'owner',
+  { now = DEMO_NOW, volume = 'sample' }: DemoRepairOptions = {},
+): RepairRuntime {
+  HARNESS_NOW = now;
   let actor: { readonly userId: string; readonly name: string } = DEMO_REPAIR_ROLES[role];
-  let tickets = seedTickets();
+  let tickets = volume === 'store' ? [...seedTickets(), ...storeTickets()] : seedTickets();
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
   let optionIds = 0;
@@ -433,7 +548,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         })),
       );
       return page(
-        index.search(String(input['text']), 10).map((hit) => {
+        index.search(String(input['text']), Number(input['limit'] ?? 10)).map((hit) => {
           const t = customers.get(hit.id)!;
           return {
             id: t.customerId,
@@ -646,8 +761,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       actor = self;
     }
   };
-  if (typeof window !== 'undefined') {
-    (window as unknown as Record<string, unknown>)[DEMO_COLLEAGUE_HOOK] = { run: colleague };
+  if (browser.window !== undefined) {
+    browser.window[DEMO_COLLEAGUE_HOOK] = { run: colleague };
   }
 
   const permitted = new Set<string>(DEMO_REPAIR_ROLES[role].permissions);
@@ -677,8 +792,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.
     sharePhoto: (ref: ThumbnailRef) => {
-      if (typeof document === 'undefined') return Promise.resolve('failed');
-      const link = document.createElement('a');
+      if (browser.document === undefined) return Promise.resolve('failed');
+      const link = browser.document.createElement('a');
       link.href = placeholderUri(ref.mediaId);
       link.download = `${ref.mediaId}.svg`;
       link.click();

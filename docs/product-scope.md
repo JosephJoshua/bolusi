@@ -49,7 +49,7 @@ overrides the earlier "foundations first" ordering in product direction.
 - **Handover:** photo, signature and a printed final document.
 - **Clients:** three over time sharing the offline core, logic and translations:
   the Expo mobile app (technicians, phone-only counters); an **Electron** desktop
-  app for Windows counter PCs with its own DOM UI (shadcn/Radix + Tailwind); and
+  app for Windows counter PCs with its own DOM UI (see Counter PC app below); and
   a web app later for back-office work. A pure web counter was rejected: browsers
   cannot send raw output to dot-matrix printers and their offline storage is
   less durable.
@@ -62,6 +62,34 @@ overrides the earlier "foundations first" ordering in product direction.
 - **UX:** screens follow user flows, not record editing; guided photo capture;
   search-first finding. Admin grids later get Excel-like in-place bulk editing.
 - **No paid components:** use high-quality open-source libraries or build it.
+
+## Counter PC app (2026-10-26)
+
+Agreed with the owner before building the Electron app.
+
+- **Its own desktop UI.** The counter is used all day, so the PC must not feel
+  like a phone app in a window: real tables, mouse and keyboard, side-by-side
+  panes. Screens are React DOM (Radix, Tailwind, TanStack Table); repair rules,
+  queries, commands, search and translations stay shared with the phone. A test
+  of the phone screens in a desktop browser was fast enough but read as a
+  stretched phone list. The later web back office reuses the desktop parts.
+- **Counter first.** v1 covers what the phone does today: enrolment, PIN
+  switching, the board, intake, ticket, handover, settings, plus printing.
+  Back-office screens belong to the web app later.
+- **One-page intake** with sections (customer, device, condition, price,
+  photos) instead of the phone's wizard, so keyboard users can Tab through.
+- **Camera:** use the PC's webcam when present, otherwise hand the step to a
+  store phone by QR.
+- **Enrolment** works like a phone: an owner signs in once and picks the store,
+  then staff switch by PIN. One PC belongs to one store.
+- **Windows 10 and 11 only.** Electron and Chrome dropped Windows 7/8 in 2023;
+  a store still on Windows 7 upgrades or uses a phone at the counter. Must stay
+  responsive on 4 GB machines.
+- **Install and updates:** a normal installer that updates itself from GitHub
+  Releases. Unsigned for the pilot (Windows warns on first install).
+- **Printing:** dot-matrix printers are USB and installed in Windows; the app
+  sends raw ESC/P through the Windows spooler and HTML pages through normal
+  printing. Templates are shared code owned by the printing work.
 
 ## Configurable intake lists and phone catalog (2026-10-26)
 

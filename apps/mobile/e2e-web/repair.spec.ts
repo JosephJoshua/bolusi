@@ -1,6 +1,6 @@
 /**
  * The repair flows driven through the real screens in a browser, over the in-memory demo runtime
- * (`src/web/repair-demo.ts`): each test taps through a flow the way a counter person or technician
+ * (`packages/modules/src/repair/demo.ts`): each test taps through a flow the way a counter person or technician
  * would and asserts what the screen shows, with a screenshot per flow into `artifacts/repair/`.
  *
  * HONEST CEILING: a browser approximation of the phone screens. Device QA (camera, signature pad,

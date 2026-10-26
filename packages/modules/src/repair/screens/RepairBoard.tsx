@@ -39,7 +39,7 @@ import {
 } from '../flows.js';
 import { statusLabel } from '../labels.js';
 import { StatusChip, repairStyles } from './parts.js';
-import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 const PAGE = 50;
 /** Search is ranked, so its best matches come first and one page is enough. */

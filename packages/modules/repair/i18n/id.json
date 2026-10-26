@@ -392,5 +392,36 @@
       "intake": "Bawa nota ini saat mengambil HP.\nBiaya di atas masih perkiraan. Kalau ada biaya tambahan, toko akan konfirmasi ke pelanggan dulu.\nCadangkan data HP sebelum diservis. Toko tidak bertanggung jawab atas data yang hilang.\nKerusakan lain yang baru terlihat saat HP dibongkar akan dikabari sebelum dikerjakan.\nHP yang tidak diambil 30 hari setelah pelanggan dikabari di luar tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi berlaku untuk kerusakan dan sparepart yang sama, dengan menunjukkan nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     }
+  },
+  "desk": {
+    "checksOk": "Berfungsi normal",
+    "closeTicket": "Tutup detail",
+    "col": {
+      "customer": "Pelanggan",
+      "device": "HP",
+      "number": "No.",
+      "status": "Status",
+      "technician": "Teknisi",
+      "received": "Diterima",
+      "cancelledBy": "Dibatalkan oleh",
+      "cancelledAt": "Dibatalkan"
+    },
+    "copied": "Nomor disalin",
+    "copyPhone": "Salin nomor HP",
+    "currency": "Rp",
+    "done": {
+      "handover": "HP sudah diserahkan ke pelanggan."
+    },
+    "photoCount": "{taken} dari {total}",
+    "photoDownload": "Simpan foto",
+    "photoMismatch": "Foto rusak",
+    "photoNext": "Foto berikutnya",
+    "photoPrevious": "Foto sebelumnya",
+    "photoUnavailable": "Belum ada di PC ini",
+    "priceKind": "Jenis",
+    "receivedBy": "Diterima {name} · {at}",
+    "results": "{count} servisan ditemukan",
+    "useCustomer": "Pakai",
+    "copyFailed": "Nomor belum bisa disalin"
   }
 }

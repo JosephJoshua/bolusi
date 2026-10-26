@@ -2,7 +2,7 @@
  * The six intake steps the wizard walks through (IntakeWizard.tsx): each edits its part of the one
  * draft through `update` and shows the problems the wizard hands it.
  */
-import { formatMoney, formatNumber, t } from '@bolusi/i18n';
+import { formatMoney, formatNumber, formatPhone, t } from '@bolusi/i18n';
 import {
   Button,
   Card,
@@ -47,7 +47,7 @@ import {
 } from '../flows.js';
 import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
 import { Field, PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
-import { useRepairQuery } from './runtime.js';
+import { useRepairQuery } from '../runtime.js';
 import { usePriceKinds, type PriceKind } from './TicketSteps.js';
 
 export interface StepProps {
@@ -83,7 +83,9 @@ export function CustomerStep({
     return (
       <Card testID={`${testID}.picked`}>
         <Text style={repairStyles.heading}>{customer.name}</Text>
-        {customer.phone === null ? null : <Text style={repairStyles.muted}>{customer.phone}</Text>}
+        {customer.phone === null ? null : (
+          <Text style={repairStyles.muted}>{formatPhone(customer.phone)}</Text>
+        )}
         <View style={repairStyles.gap}>
           <Button
             label={tn('repair.customer.change')}
@@ -122,7 +124,7 @@ export function CustomerStep({
             <ListRow
               key={row.id}
               primaryText={row.name}
-              secondaryText={row.phone ?? undefined}
+              secondaryText={row.phone === null ? undefined : formatPhone(row.phone)}
               onPress={() =>
                 update({
                   customer: {
@@ -501,7 +503,7 @@ export function ReviewStep({
             {draft.customer.name}
           </Text>
           {draft.customer.phone === null || draft.customer.phone === '' ? null : (
-            <Text style={repairStyles.muted}>{draft.customer.phone}</Text>
+            <Text style={repairStyles.muted}>{formatPhone(draft.customer.phone)}</Text>
           )}
         </>,
       )}

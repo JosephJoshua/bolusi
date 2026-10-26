@@ -44,7 +44,11 @@ import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
 import type { AppProps } from '../../App.js';
 
-import { DEMO_REPAIR_ROLES, demoRepairRuntime, type DemoRepairRole } from './repair-demo.js';
+import {
+  DEMO_REPAIR_ROLES,
+  demoRepairRuntime,
+  type DemoRepairRole,
+} from '@bolusi/modules/repair/demo';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,

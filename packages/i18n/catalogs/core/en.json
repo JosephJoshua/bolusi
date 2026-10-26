@@ -91,5 +91,8 @@
   "account": {
     "menu": "Account menu",
     "switchUser": "Switch user"
+  },
+  "nav": {
+    "main": "Main menu"
   }
 }

@@ -91,5 +91,8 @@
   "account": {
     "menu": "Menu akun",
     "switchUser": "Ganti pengguna"
+  },
+  "nav": {
+    "main": "Menu utama"
   }
 }

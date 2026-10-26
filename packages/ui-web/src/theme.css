@@ -1,0 +1,74 @@
+/*
+ * Tailwind theme for desktop and web, over the variables `applyTheme()` installs from the shared
+ * tokens. Import after `tailwindcss` in the app stylesheet. The spacing scale is Tailwind's 4 px
+ * grid; use only 1, 2, 3, 4, 6, 8 and 12 (4, 8, 12, 16, 24, 32, 48 px) like the phone.
+ */
+@theme inline {
+  --color-primary: var(--b-primary);
+  --color-primary-pressed: var(--b-primary-pressed);
+  --color-on-primary: var(--b-on-primary);
+  --color-success: var(--b-success);
+  --color-success-bg: var(--b-success-bg);
+  --color-on-success-bg: var(--b-on-success-bg);
+  --color-warning: var(--b-warning);
+  --color-warning-bg: var(--b-warning-bg);
+  --color-danger: var(--b-danger);
+  --color-danger-pressed: var(--b-danger-pressed);
+  --color-danger-bg: var(--b-danger-bg);
+  --color-on-danger-bg: var(--b-on-danger-bg);
+  --color-on-danger: var(--b-on-danger);
+  --color-info: var(--b-info);
+  --color-info-bg: var(--b-info-bg);
+  --color-surface: var(--b-surface);
+  --color-surface-alt: var(--b-surface-alt);
+  --color-border: var(--b-border);
+  --color-text: var(--b-text);
+  --color-text-muted: var(--b-text-muted);
+  --color-text-disabled: var(--b-text-disabled);
+  --color-overlay: var(--b-overlay);
+
+  --radius-xs: var(--b-radius-xs);
+  --radius-sm: var(--b-radius-sm);
+  --radius-md: var(--b-radius-md);
+
+  --text-display: var(--b-text-display);
+  --text-display--line-height: var(--b-text-display-line);
+  --text-title: var(--b-text-title);
+  --text-title--line-height: var(--b-text-title-line);
+  --text-heading: var(--b-text-heading);
+  --text-heading--line-height: var(--b-text-heading-line);
+  --text-body: var(--b-text-body);
+  --text-body--line-height: var(--b-text-body-line);
+  --text-small: var(--b-text-small);
+  --text-small--line-height: var(--b-text-small-line);
+
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--b-surface);
+    color: var(--b-text);
+    font-family: var(--font-sans);
+    font-size: var(--b-text-body);
+    line-height: var(--b-text-body-line);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--b-primary);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--b-info-bg);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}

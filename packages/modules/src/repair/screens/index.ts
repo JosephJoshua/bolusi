@@ -13,7 +13,7 @@ export {
   useRepairRuntime,
   type RepairRuntime,
   type RepairTechnician,
-} from './runtime.js';
+} from '../runtime.js';
 export {
   REPAIR_KEYS,
   registerRepairCatalog,

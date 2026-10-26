@@ -392,5 +392,36 @@
       "intake": "Bring this receipt to collect the phone.\nThe price above is an estimate. The store will check with the customer before adding any cost.\nBack up the phone’s data before the repair. The store is not responsible for lost data.\nOther faults found once the phone is opened will be reported before any work on them.\nThe store is not responsible for a phone left uncollected 30 days after the customer is told it is ready.",
       "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and the parts replaced, on showing this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
     }
+  },
+  "desk": {
+    "checksOk": "Working",
+    "closeTicket": "Close details",
+    "col": {
+      "customer": "Customer",
+      "device": "Phone",
+      "number": "No.",
+      "status": "Status",
+      "technician": "Technician",
+      "received": "Received",
+      "cancelledBy": "Cancelled by",
+      "cancelledAt": "Cancelled"
+    },
+    "copied": "Number copied",
+    "copyPhone": "Copy phone number",
+    "currency": "Rp",
+    "done": {
+      "handover": "Handed back to the customer."
+    },
+    "photoCount": "{taken} of {total}",
+    "photoDownload": "Save photo",
+    "photoMismatch": "Photo damaged",
+    "photoNext": "Next photo",
+    "photoPrevious": "Previous photo",
+    "photoUnavailable": "Not on this PC yet",
+    "priceKind": "Type",
+    "receivedBy": "Received by {name} · {at}",
+    "results": "{count, plural, one {# repair found} other {# repairs found}}",
+    "useCustomer": "Use",
+    "copyFailed": "Couldn’t copy the number"
   }
 }

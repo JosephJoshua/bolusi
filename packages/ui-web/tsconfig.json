@@ -1,0 +1,7 @@
+{
+  "extends": "@bolusi/tsconfig/dom.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

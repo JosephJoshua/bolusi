@@ -1,0 +1,10 @@
+{
+  "extends": "@bolusi/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../dist/main",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["."]
+}

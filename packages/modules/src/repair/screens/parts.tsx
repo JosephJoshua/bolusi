@@ -27,7 +27,7 @@ import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';
 import { staleStepMessage, statusLabel } from '../labels.js';
 import { statusTone, type StaleStep, type TicketStatus } from '../flows.js';
-import { useRepairThumbnail } from './runtime.js';
+import { useRepairThumbnail } from '../runtime.js';
 
 /**
  * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
