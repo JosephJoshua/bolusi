@@ -426,4 +426,42 @@ describe('every module`s ops are judged by their rules, not only repair', () => 
       reason: 'platform.refusal.conflictNotFound',
     });
   });
+  test('repair intake options: a store hides options only for itself, and a list must be valid', async () => {
+    const { world, builder } = await setupWorld(3323);
+    const hide = (entityId: string) =>
+      builder.append({
+        type: 'repair.store_intake_options_changed',
+        entityType: 'repair_store_intake_options',
+        entityId,
+        storeId: world.storeId,
+        payload: { list: 'brands', hidden: [] },
+      });
+    const saveList = (items: readonly { id: string; label: string | null }[]) =>
+      builder.append({
+        type: 'repair.intake_options_changed',
+        entityType: 'repair_intake_options',
+        entityId: world.tenantId,
+        storeId: null,
+        payload: { list: 'brands', items },
+      });
+
+    const result = await push(world, [
+      hide(testId(3324)), // another store's record
+      hide(world.storeId),
+      saveList([]), // brands may be empty
+      saveList([
+        { id: testId(3325), label: 'Oppo' },
+        { id: testId(3326), label: 'oppo' }, // the same name twice
+      ]),
+    ]);
+
+    expect(result.results.map((r) => r.status)).toEqual([
+      'rejected',
+      'accepted',
+      'accepted',
+      'rejected',
+    ]);
+    expect(result.results[0]).toMatchObject({ reason: 'repair.refusal.notThisStore' });
+    expect(result.results[3]).toMatchObject({ reason: 'repair.refusal.invalidOptions' });
+  });
 });
