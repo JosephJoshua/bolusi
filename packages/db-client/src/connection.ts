@@ -135,10 +135,67 @@ export interface ClientDb {
   readonly columnCipherMarker: string;
   /** Runs `fn` between begin/commit, rolling back on any throw. */
   transaction<T>(fn: (driver: DbDriver) => Promise<T>): Promise<T>;
+  /** True between a `driver.begin()` and its commit or rollback. */
+  readonly inTransaction: boolean;
+  /**
+   * Calls `listener` after every commit or rollback of a `driver` transaction, so core's
+   * `InvalidationBus` can hold what a transaction emits until its rows are final.
+   * Returns unsubscribe.
+   */
+  onTransactionEnd(listener: () => void): () => void;
   close(): Promise<void>;
 }
 
 let current: ClientDb | null = null;
+
+/**
+ * Wraps the driver so the connection knows when a transaction is open. Every client transaction
+ * (`ClientDb.transaction`, the op store) goes through these three calls on this one driver.
+ */
+function trackTransactions(driver: DbDriver) {
+  let open = false;
+  const listeners = new Set<() => void>();
+  const end = (): void => {
+    open = false;
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch {
+        // A listener must not turn a committed transaction into a reported failure.
+      }
+    }
+  };
+  const tracked: DbDriver = {
+    execute: (text, params) => driver.execute(text, params),
+    executeBatch: (commands) => driver.executeBatch(commands),
+    prepare: (text) => driver.prepare(text),
+    async begin() {
+      await driver.begin();
+      open = true;
+    },
+    async commit() {
+      // A failed commit leaves the transaction open; the caller's rollback ends it.
+      await driver.commit();
+      end();
+    },
+    async rollback() {
+      try {
+        await driver.rollback();
+      } finally {
+        end();
+      }
+    },
+    close: () => driver.close(),
+  };
+  return {
+    driver: tracked,
+    isOpen: () => open,
+    onEnd(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
 
 /**
  * Scrubs the key out of text before it can reach an error message or a log line.
@@ -202,15 +259,17 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
     throw sanitizeOpenFailure(error, encryptionKey);
   }
 
-  let driver: DbDriver;
+  let rawDriver: DbDriver;
   try {
-    driver = await options.driverFactory({
+    rawDriver = await options.driverFactory({
       name: options.name ?? DEFAULT_DATABASE_NAME,
       location: options.location,
     });
   } catch (error) {
     throw sanitizeOpenFailure(error, encryptionKey);
   }
+  const transactions = trackTransactions(rawDriver);
+  const driver = transactions.driver;
 
   try {
     for (const pragma of CLIENT_PRAGMAS) {
@@ -264,6 +323,10 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
         throw toDbError(error);
       }
     },
+    get inTransaction(): boolean {
+      return transactions.isOpen();
+    },
+    onTransactionEnd: (listener) => transactions.onEnd(listener),
     async close(): Promise<void> {
       // Kysely first (its dialect close is inert — see dialect/index.ts), then the driver
       // exactly once. The connection owns the handle's lifecycle.

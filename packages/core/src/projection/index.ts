@@ -62,6 +62,7 @@ export {
   type EntityChange,
   type InvalidationListener,
   type TableInvalidationListener,
+  type TransactionBoundaries,
 } from './invalidation.js';
 
 export { ProjectionStats, type ProjectionStatsSnapshot } from './stats.js';
