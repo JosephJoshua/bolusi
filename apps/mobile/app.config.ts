@@ -144,6 +144,9 @@ const config: ExpoConfig = {
     // but its config loader does NOT transpile a `.ts` imported into app.config.ts (require resolves
     // only `.js`). The plugin's exports are still typechecked + unit-tested via test/harness-activity-plugin.
     './plugins/withHarnessActivity',
+    // A system font-size or display-size change must not restart the activity (it blanked the app
+    // and lost the intake in progress). See withActivityConfigChanges.ts.
+    './plugins/withActivityConfigChanges',
   ],
 };
 
