@@ -6,7 +6,13 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { mulberry32, shuffle } from '@bolusi/test-support';
 
-import { hasNewerEntityOp, readCanonicalPage, readEntityOps, sortCanonical } from '../index.js';
+import {
+  hasNewerEntityOp,
+  readEntitiesOps,
+  readEntityOps,
+  readEntityPage,
+  sortCanonical,
+} from '../index.js';
 import {
   insertOpRow,
   openProjectionHarness,
@@ -33,37 +39,36 @@ test('SQL canonical order equals the shared comparator, whatever the insert orde
   // Populate the log in a SHUFFLED order — the SQL ORDER BY must undo it deterministically.
   for (const op of shuffle(mulberry32(42), ops)) await insertOpRow(harness.db, op, null);
 
-  const page = await readCanonicalPage(harness.db, NOTES_TYPES, null, 10_000);
-  expect(page.map((o) => o.id)).toEqual(sortCanonical(ops).map((o) => o.id));
-
-  // ...and per entity, the same equivalence.
+  // Per entity, one read for all of them, and one read each.
   const entityIds = [...new Set(ops.map((o) => o.entityId))];
   expect(entityIds.length).toBeGreaterThan(1); // fixture is non-trivial (T-14b)
+  const batched = await readEntitiesOps(harness.db, 'note', entityIds);
+  expect([...batched.keys()].sort()).toEqual([...entityIds].sort());
   for (const entityId of entityIds) {
-    const entityOps = ops.filter((o) => o.entityId === entityId);
+    const expected = sortCanonical(ops.filter((o) => o.entityId === entityId)).map((o) => o.id);
+    expect(batched.get(entityId)?.map((o) => o.id)).toEqual(expected);
     const read = await readEntityOps(harness.db, 'note', entityId);
-    expect(read.map((o) => o.id)).toEqual(sortCanonical(entityOps).map((o) => o.id));
+    expect(read.map((o) => o.id)).toEqual(expected);
   }
 });
 
-test('readCanonicalPage resumes strictly after a cursor', async () => {
+test('readEntityPage walks distinct entities in order and resumes strictly after a cursor', async () => {
   const ops = generateNotesScript(7, { deviceCount: 3, opsPerDevice: 20 }).map((g) => g.op);
   for (const op of ops) await insertOpRow(harness.db, op, null);
-  const all = await readCanonicalPage(harness.db, NOTES_TYPES, null, 10_000);
+  const entityIds = [...new Set(ops.map((o) => o.entityId))].sort();
+  expect(entityIds.length).toBeGreaterThan(3); // T-14b
 
-  const firstPage = await readCanonicalPage(harness.db, NOTES_TYPES, null, 10);
-  expect(firstPage.map((o) => o.id)).toEqual(all.slice(0, 10).map((o) => o.id));
+  const all = await readEntityPage(harness.db, NOTES_TYPES, null, 10_000);
+  expect(all).toEqual(entityIds.map((entityId) => ({ entityType: 'note', entityId })));
 
-  const tenth = firstPage[9];
-  if (tenth === undefined) throw new Error('fixture must yield at least 10 ops');
-  const rest = await readCanonicalPage(
-    harness.db,
-    NOTES_TYPES,
-    { timestamp: tenth.timestamp, deviceId: tenth.deviceId, seq: tenth.seq },
-    10_000,
-  );
-  // Strictly after: the cursor op itself is excluded, and no earlier op reappears.
-  expect(rest.map((o) => o.id)).toEqual(all.slice(10).map((o) => o.id));
+  const firstPage = await readEntityPage(harness.db, NOTES_TYPES, null, 3);
+  expect(firstPage).toEqual(all.slice(0, 3));
+  const rest = await readEntityPage(harness.db, NOTES_TYPES, firstPage[2]!, 10_000);
+  // Strictly after: the cursor entity itself is excluded, and no earlier entity reappears.
+  expect(rest).toEqual(all.slice(3));
+
+  // Only entities with an op of the given types are walked.
+  expect(await readEntityPage(harness.db, ['notes.no_such_type'], null, 10)).toEqual([]);
 });
 
 test('hasNewerEntityOp reports whether a canonically-newer op is already present', async () => {

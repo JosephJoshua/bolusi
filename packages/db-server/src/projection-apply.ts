@@ -50,6 +50,5 @@ export function createServerProjectionEngine<DB>(
     // this schema, so a mis-wiring here errors rather than answering wrongly.
     seqColumn: 'server_seq',
     makeRebuildStore: () => PUSH_NEVER_REBUILDS,
-    invalidateRebuildCursor: async () => {},
   });
 }

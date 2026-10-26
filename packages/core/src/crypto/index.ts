@@ -6,6 +6,7 @@ export {
   bytesToUtf8,
   concatBytes,
   hexToBytes,
+  isCanonicalBase64,
   utf8ToBytes,
 } from './bytes.js';
 export {

@@ -18,9 +18,11 @@ export {
   cursorOf,
   hasNewerEntityOp,
   highestContiguousSeq,
-  readCanonicalPage,
+  readEntitiesOps,
   readEntityOps,
+  readEntityPage,
   type CanonicalCursor,
+  type EntityCursor,
   type OpSeqColumn,
 } from './oplog-source.js';
 
@@ -49,6 +51,7 @@ export { createSqlWatermarkStore, type WatermarkState, type WatermarkStore } fro
 export {
   createSqlRebuildStore,
   DEFAULT_REBUILD_BATCH_SIZE,
+  refoldEntities,
   runRebuild,
   type RebuildCursorState,
   type RebuildOutcome,

@@ -258,26 +258,29 @@ async function refreshQuoteTotal(db: Db, op: ProjectionOperation): Promise<void>
     .execute();
 }
 
-async function insertPhoto(
+/** One statement for all of an op's photos: every statement costs a few hundred µs on a phone. */
+async function insertPhotos(
   db: Db,
   op: ProjectionOperation,
-  slot: string,
-  ref: MediaRef,
+  photos: readonly (readonly [slot: string, ref: MediaRef])[],
 ): Promise<void> {
+  const storeId = storeIdOf(op);
   await db
     .insertInto('repairTicketPhotos')
-    .values({
-      ticketId: op.entityId,
-      slot,
-      tenantId: op.tenantId,
-      storeId: storeIdOf(op),
-      mediaId: ref.mediaId,
-      mediaSha256: ref.sha256,
-      mediaMime: ref.mime,
-      capturedAt: ref.capturedAt,
-      addedBy: op.userId,
-      addedAt: op.timestamp,
-    })
+    .values(
+      photos.map(([slot, ref]) => ({
+        ticketId: op.entityId,
+        slot,
+        tenantId: op.tenantId,
+        storeId,
+        mediaId: ref.mediaId,
+        mediaSha256: ref.sha256,
+        mediaMime: ref.mime,
+        capturedAt: ref.capturedAt,
+        addedBy: op.userId,
+        addedAt: op.timestamp,
+      })),
+    )
     // Two devices recording the same handover keep the first (canonical) evidence.
     .onConflict((oc) => oc.columns(['ticketId', 'slot']).doNothing())
     .execute();
@@ -357,30 +360,36 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
     })
     .execute();
 
-  for (const line of payload.quoteLines) {
+  if (payload.quoteLines.length > 0) {
     await db
       .insertInto('repairQuoteLines')
-      .values({
-        id: line.lineId,
-        tenantId: op.tenantId,
-        storeId,
-        ticketId: op.entityId,
-        kind: line.kind,
-        description: line.description,
-        amount: line.amount,
-        status: 'intake',
-        reason: null,
-        customerAgreed: null,
-        createdBy: op.userId,
-        createdAt: op.timestamp,
-        decidedBy: null,
-        decidedAt: null,
-        decisionNote: null,
-      })
+      .values(
+        payload.quoteLines.map((line) => ({
+          id: line.lineId,
+          tenantId: op.tenantId,
+          storeId,
+          ticketId: op.entityId,
+          kind: line.kind,
+          description: line.description,
+          amount: line.amount,
+          status: 'intake',
+          reason: null,
+          customerAgreed: null,
+          createdBy: op.userId,
+          createdAt: op.timestamp,
+          decidedBy: null,
+          decidedAt: null,
+          decisionNote: null,
+        })),
+      )
       .execute();
   }
 
-  for (const slot of INTAKE_PHOTO_SLOTS) await insertPhoto(db, op, slot, payload.photos[slot]);
+  await insertPhotos(
+    db,
+    op,
+    INTAKE_PHOTO_SLOTS.map((slot) => [slot, payload.photos[slot]] as const),
+  );
   await recordEvent(db, op, {});
 };
 
@@ -532,7 +541,9 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
     returnedBy: op.userId,
     returnedAt: op.timestamp,
   });
-  await insertPhoto(db, op, 'handover', payload.handoverPhoto);
-  await insertPhoto(db, op, 'signature', payload.signature);
+  await insertPhotos(db, op, [
+    ['handover', payload.handoverPhoto],
+    ['signature', payload.signature],
+  ]);
   await recordEvent(db, op, { note: payload.note });
 };

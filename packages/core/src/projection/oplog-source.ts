@@ -85,46 +85,64 @@ export async function readEntityOps<DB>(
   entityType: string,
   entityId: string,
 ): Promise<SignedOperation[]> {
-  const result = await sql<RawOpRow>`
-    SELECT ${OP_COLUMNS} FROM operations
-    WHERE entity_type = ${entityType} AND entity_id = ${entityId}
-    ORDER BY timestamp_ms, device_id, seq
-  `.execute(db);
-  return result.rows.map(reconstructOperation);
+  return (await readEntitiesOps(db, entityType, [entityId])).get(entityId) ?? [];
+}
+
+/** An entity's position in the rebuild walk: `(entityType, entityId)` order (04 §4.3). */
+export interface EntityCursor {
+  readonly entityType: string;
+  readonly entityId: string;
 }
 
 /**
- * One canonical-order page of the whole log restricted to `opTypes`, strictly AFTER `after`
- * (null = from the start). This is the rebuild scan (04 §4.3): iterate the canonical index,
- * apply each op (all head-case, since canonical order means each is newest-so-far for its
- * entity), checkpointing `after` per page so an interrupted rebuild resumes without
- * re-applying anything at or below the cursor.
+ * The next `limit` distinct entities, in `(entityType, entityId)` order strictly AFTER `after` (null =
+ * from the start), that have at least one op of `opTypes` in the log. This is the rebuild walk
+ * (04 §4.3): the rebuild re-folds entity by entity, checkpointing the last entity of each page.
  */
-export async function readCanonicalPage<DB>(
+export async function readEntityPage<DB>(
   db: Kysely<DB>,
   opTypes: readonly string[],
-  after: CanonicalCursor | null,
+  after: EntityCursor | null,
   limit: number,
-): Promise<SignedOperation[]> {
+): Promise<EntityCursor[]> {
   if (opTypes.length === 0) return [];
   const typeList = sql.join(opTypes.map((t) => sql`${t}`));
-  const query =
+  const afterClause =
     after === null
-      ? sql<RawOpRow>`
-          SELECT ${OP_COLUMNS} FROM operations
-          WHERE type IN (${typeList})
-          ORDER BY timestamp_ms, device_id, seq
-          LIMIT ${limit}
-        `
-      : sql<RawOpRow>`
-          SELECT ${OP_COLUMNS} FROM operations
-          WHERE type IN (${typeList})
-            AND (timestamp_ms, device_id, seq) > (${after.timestamp}, ${after.deviceId}, ${after.seq})
-          ORDER BY timestamp_ms, device_id, seq
-          LIMIT ${limit}
-        `;
-  const result = await query.execute(db);
-  return result.rows.map(reconstructOperation);
+      ? sql``
+      : sql`AND (entity_type, entity_id) > (${after.entityType}, ${after.entityId})`;
+  const result = await sql<EntityCursor>`
+    SELECT DISTINCT entity_type AS "entityType", entity_id AS "entityId" FROM operations
+    WHERE type IN (${typeList}) ${afterClause}
+    ORDER BY entity_type, entity_id
+    LIMIT ${limit}
+  `.execute(db);
+  return result.rows.map((row) => ({ entityType: row.entityType, entityId: row.entityId }));
+}
+
+/**
+ * Every op of several entities of one type, grouped by entity id, each group in canonical order: the
+ * re-fold input for a batch of entities in one query (§4.2, §4.3).
+ */
+export async function readEntitiesOps<DB>(
+  db: Kysely<DB>,
+  entityType: string,
+  entityIds: readonly string[],
+): Promise<Map<string, SignedOperation[]>> {
+  const byEntity = new Map<string, SignedOperation[]>();
+  if (entityIds.length === 0) return byEntity;
+  const result = await sql<RawOpRow>`
+    SELECT ${OP_COLUMNS} FROM operations
+    WHERE entity_type = ${entityType} AND entity_id IN (${sql.join(entityIds.map((id) => sql`${id}`))})
+    ORDER BY entity_id, timestamp_ms, device_id, seq
+  `.execute(db);
+  for (const row of result.rows) {
+    const op = reconstructOperation(row);
+    const ops = byEntity.get(op.entityId);
+    if (ops === undefined) byEntity.set(op.entityId, [op]);
+    else ops.push(op);
+  }
+  return byEntity;
 }
 
 /**
