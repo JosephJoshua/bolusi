@@ -103,8 +103,9 @@ async function compileAndroidManifest(): Promise<string> {
     // The package-rename mod reads these off disk; they carry the config's `android.package`.
     'android/app/src/main/java/com/bolusi/app/MainApplication.kt':
       'package com.bolusi.app\nclass MainApplication\n',
+    // The font scale sync (withActivityConfigChanges) also adds code inside the activity class.
     'android/app/src/main/java/com/bolusi/app/MainActivity.kt':
-      'package com.bolusi.app\nclass MainActivity\n',
+      'package com.bolusi.app\nclass MainActivity : ReactActivity() {\n}\n',
     'android/app/proguard-rules.pro': '# template\n',
     'android/gradle.properties': 'android.useAndroidX=true\n',
     'android/build.gradle': 'buildscript { ext { minSdkVersion = 24 } }\n',
