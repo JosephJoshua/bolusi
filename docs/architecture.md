@@ -90,10 +90,12 @@ behind adapters. Node tests do not establish native performance or correctness.
   ops unreadable; a better one needs a new scheme prefix.
 - Local confidentiality uses application-layer encryption; SQLCipher is disabled.
   Old comments/report names do not establish whole-database encryption.
-- Extended chaos has unresolved large-workload failures: the recorded October 14
-  run hit rate limits in CHAOS-03 and timeouts in CHAOS-08; later nightly runs also
-  failed. Removing the schedule does not resolve them. Reproduce a bounded seed
-  before attributing a failure to the application or test workload.
+- Extended chaos (`pnpm chaos:extended`) failed from October 14 to 24 in CHAOS-03
+  (HTTP 429) and CHAOS-08 (timeout). Both were harness problems, fixed October 26:
+  the harness server's fake clock never advanced, so its per-device rate limit
+  never refilled, and CHAOS-08's timeout had no room for four workers sharing a
+  box. Reproduce a bounded seed before attributing a failure to the application
+  or test workload.
 - A future rekey/pre-key-tag fleet migration may need verified key-tag backfill.
   It was deferred because current creation tags the DB before enrollment. Add a
   migration when a real upgrade needs it, not to satisfy a historical task entry.
