@@ -5,6 +5,7 @@
  * the green emulator lane could not disprove them. The assertions below are therefore about
  * GEOMETRY — what the layout actually reserves — not about presence.
  */
+import { useEffect } from 'react';
 import { expect, test } from 'vitest';
 
 import { AppShell } from '../src/shell/AppShell.js';
@@ -99,4 +100,28 @@ test('the content keeps its padding in both shapes', () => {
   >;
   expect(scrolling['padding']).toBe(space.lg);
   expect(shell().styleOf('ui.appShell.content')['padding']).toBe(space.lg);
+});
+
+// ── a wizard's next step opens at the top, not at the last step's scroll position ────────────────
+
+test('a new scrollKey starts the scrolled content over; the same key keeps it', () => {
+  // On Android the intake's last step opened at the previous step's offset, with its header
+  // scrolled out of view. A fresh ScrollView per key is what puts the next step at the top.
+  let mounts = 0;
+  function Content(): null {
+    useEffect(() => {
+      mounts += 1;
+    }, []);
+    return null;
+  }
+  const at = (scrollKey: string) => (
+    <AppShell title="t" syncChip={null} avatar={null} scrollable scrollKey={scrollKey}>
+      <Content />
+    </AppShell>
+  );
+  const screen = render(at('photos'));
+  screen.rerender(at('photos'));
+  expect(mounts).toBe(1);
+  screen.rerender(at('review'));
+  expect(mounts).toBe(2);
 });

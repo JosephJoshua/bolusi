@@ -71,6 +71,12 @@ export interface AppShellProps {
    */
   readonly scrollable?: boolean | undefined;
   /**
+   * With `scrollable`, the content starts again at the top whenever this changes. A wizard passes
+   * its step, so a new step does not open at the previous step's scroll position with its header
+   * scrolled out of view.
+   */
+  readonly scrollKey?: string | number | undefined;
+  /**
    * Screen-covering overlays — today only `ConfirmSheet` (§3.10, the one sanctioned modal).
    *
    * They render as a SIBLING of the content slot, never inside it, and that placement is the whole
@@ -132,6 +138,7 @@ export function AppShell({
   children,
   bottomAction,
   scrollable = false,
+  scrollKey,
   overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
@@ -192,6 +199,7 @@ export function AppShell({
       */}
         {scrollable ? (
           <ScrollView
+            key={scrollKey}
             testID={`${testID}.content`}
             style={styles.content}
             contentContainerStyle={styles.contentContainer}

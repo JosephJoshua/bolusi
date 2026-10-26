@@ -201,6 +201,7 @@ export function FlowScreen({
   onClearError,
   overlay,
   stale,
+  scrollKey,
   testID,
   children,
 }: {
@@ -229,6 +230,8 @@ export function FlowScreen({
    * and the step's `onDone` closes it in the same batched update, so the notice never shows.
    */
   readonly stale?: StaleStep | null | undefined;
+  /** A multi-step flow's step: each step opens scrolled to the top (AppShell `scrollKey`). */
+  readonly scrollKey?: string | number | undefined;
   readonly testID: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -236,6 +239,7 @@ export function FlowScreen({
   return (
     <AppShell
       scrollable
+      scrollKey={scrollKey}
       title={title}
       titleVariant="detail"
       onBack={onBack}
