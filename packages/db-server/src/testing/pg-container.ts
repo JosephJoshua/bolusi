@@ -640,3 +640,24 @@ export async function setupPgLane(project: LaneGlobalSetupProject): Promise<() =
     await lane.container.stop();
   };
 }
+
+/** A single raw connection for tooling that runs plain SQL (seeding, statistics). */
+export interface RawSqlConnection {
+  readonly query: <Row>(text: string, params?: readonly unknown[]) => Promise<Row[]>;
+  readonly close: () => Promise<void>;
+}
+
+/**
+ * Opens one plain connection to `uri` for scripts that seed or inspect a disposable database, such
+ * as the sync load test, so they reach PostgreSQL without importing `pg` themselves (08 §3.3). Not
+ * for tests: those use `createTestDatabase`.
+ */
+export async function connectRawSql(uri: string): Promise<RawSqlConnection> {
+  const client = new pg.Client({ connectionString: uri });
+  await client.connect();
+  return {
+    query: async <Row>(text: string, params: readonly unknown[] = []) =>
+      (await client.query(text, [...params])).rows as Row[],
+    close: () => client.end(),
+  };
+}

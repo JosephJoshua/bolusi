@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@bolusi/db-client": "workspace:*",
+    "@bolusi/db-server": "workspace:*",
     "@bolusi/test-support": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
     "@bolusi/ui": "workspace:*",
@@ -68,6 +69,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsc -b ../db-client/tsconfig.build.json ../test-support/tsconfig.build.json ../i18n/tsconfig.build.json ../ui/tsconfig.build.json ../sqlite-test-driver/tsconfig.build.json && vitest run",
-    "bench:first-sync": "tsx scripts/first-sync-bench.ts"
+    "bench:first-sync": "tsx scripts/first-sync-bench.ts",
+    "bench:sync-load": "tsx scripts/sync-load/main.ts"
   }
 }
