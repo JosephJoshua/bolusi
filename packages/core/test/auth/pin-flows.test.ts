@@ -1,6 +1,7 @@
 // SEC-AUTH-06 (PIN reset authorization, client arm) + SEC-AUTH-11 (privileged-target, client arm) +
 // the PIN set/change/reset flows + the verifier-POST queue. The forged-op push rejection
 // (SCOPE_VIOLATION) is the SERVER arm — tasks 13/16 — cross-referenced here, never implemented.
+import { sql } from 'kysely';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -439,6 +440,22 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
     const second = await drainPendingVerifiers(s.h.db, staleServer);
     expect(second).toHaveLength(0);
     expect(sent).toHaveLength(1);
+  });
+
+  it('a PIN change whose upload cannot be queued does not land at all (one transaction)', async () => {
+    const s = await setup(13, { staff: '111111' });
+    const before = await readVerifier(s.h.db, s.h.staffId);
+    // Stand-in for the app dying mid-change: the queue write fails after the op row is inserted.
+    await sql`DROP TABLE pending_pin_verifiers`.execute(s.h.db);
+
+    await expect(
+      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '111111', newPin: '222222' }),
+    ).rejects.toThrow();
+    expect(
+      (await s.pinOps()).filter((o) => o.type === 'auth.pin_changed'),
+      'no PIN op is left to sync without its verifier',
+    ).toHaveLength(0);
+    expect(await readVerifier(s.h.db, s.h.staffId), 'the old PIN still stands').toEqual(before);
   });
 
   it('a transport error re-queues; the idempotent replay then converges', async () => {

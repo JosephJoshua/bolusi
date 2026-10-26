@@ -15,6 +15,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import { utf8ToBytes } from '../crypto/bytes.js';
+import type { AppendedOp } from '../oplog/append.js';
 import type { CryptoPort, KdfParams } from '../crypto/port.js';
 import { DomainError } from '../errors/domain-error.js';
 import type { CommandContext, InputParser } from '../runtime/ctx.js';
@@ -412,9 +413,9 @@ export async function clearPinLockoutFlow<DB>(
 }
 
 /**
- * The shared change/reset body: hash the new PIN, mint the `verifierRef`, run the command (append the
- * op), place the verifier at the op's canonical `asOf` (§5.3), queue the POST, merge it locally
- * (greatest-`asOf`), and clear the target's lockout (§6.5).
+ * The shared change/reset body: hash the new PIN, mint the `verifierRef`, and run the command. In the
+ * op's own transaction, place the verifier at the op's canonical `asOf` (§5.3), queue the POST and
+ * merge it locally (greatest-`asOf`). Then clear the target's lockout (§6.5).
  */
 async function emitVerifierChange<DB>(
   deps: PinFlowDeps<DB>,
@@ -425,9 +426,7 @@ async function emitVerifierChange<DB>(
     readonly command: CommandDefinition<PinChangeInput>;
   },
 ): Promise<PendingVerifier> {
-  // The KDF runs BEFORE the op is appended, so the gap between the op landing and the pending row
-  // landing is two small writes, not the ~300 ms of argon2id. A kill inside that gap is the one way
-  // the op can sync without its verifier.
+  // The KDF runs BEFORE the command, so the expensive part is done when the transaction opens.
   const salt = deps.crypto.randomBytes(PIN_KDF_BOUNDS.saltBytes); // 16 FRESH bytes (SEC-AUTH-06)
   const material = await hashNewPin(
     deps.crypto,
@@ -437,26 +436,34 @@ async function emitVerifierChange<DB>(
   );
   const verifierRef = deps.idSource();
   const ctx = deps.runtime.createContext(args.actorUserId);
-  const outcome = await deps.runtime.execute(
-    args.command,
-    { targetUserId: args.targetUserId, verifierRef },
-    ctx,
-  );
-  const verifier: PinVerifier = { ...material, asOf: refFromAppended(outcome) };
+  const placed: { pending?: PendingVerifier } = {};
+  await deps.runtime.execute(args.command, { targetUserId: args.targetUserId, verifierRef }, ctx, {
+    // The queued upload and the local verifier commit WITH the op. The op syncs on its own, so an
+    // op that landed without its queued verifier would give the server a PIN change it can never
+    // apply, and no other device would learn the new PIN.
+    withinAppend: async (ops) => {
+      const verifier: PinVerifier = { ...material, asOf: refFromAppended(ops) };
+      const pending = {
+        userId: args.targetUserId,
+        actorUserId: args.actorUserId,
+        verifierRef,
+        verifier,
+      };
+      placed.pending = pending;
+      await enqueuePendingVerifier(deps.db, pending);
+      const existing = await readVerifier(deps.db, args.targetUserId);
+      await writeVerifier(
+        deps.db,
+        args.targetUserId,
+        chooseEffectiveVerifier(existing, verifier) ?? verifier,
+      );
+    },
+  });
+  const { pending } = placed;
+  if (pending === undefined) {
+    throw new Error('expected the PIN op to be appended (api/02-auth §6.6)');
+  }
 
-  const pending: PendingVerifier = {
-    userId: args.targetUserId,
-    actorUserId: args.actorUserId,
-    verifierRef,
-    verifier,
-  };
-  // Queue the POST first: if the app dies before the local write below, the server still gets the
-  // verifier and the next bundle refresh brings it back to this device.
-  await enqueuePendingVerifier(deps.db, pending);
-
-  const existing = await readVerifier(deps.db, args.targetUserId);
-  const winner = chooseEffectiveVerifier(existing, verifier) ?? verifier;
-  await writeVerifier(deps.db, args.targetUserId, winner);
   // A new verifier clears the target's lockout and counter (§6.5) — the auth runtime, not an applier,
   // touches pin_attempt_state (03 §9.2). Under the SAME attempt lock as `verifyPin`: this reset would
   // otherwise clobber (or be clobbered by) a concurrent losing attempt's counter write — the same
@@ -467,13 +474,13 @@ async function emitVerifierChange<DB>(
   return pending;
 }
 
-function refFromAppended(outcome: CommandOutcome): CanonicalRef {
-  const appended = outcome.ops[0];
+function refFromAppended(ops: readonly AppendedOp[]): CanonicalRef {
+  const appended = ops[0];
   if (appended === undefined || appended.status !== 'appended') {
     throw new Error('expected the PIN op to be appended (api/02-auth §6.6)');
   }
   return refFromOp({
-    timestamp: outcome.timestamp,
+    timestamp: appended.op.timestamp,
     deviceId: appended.op.deviceId,
     seq: appended.seq,
   });

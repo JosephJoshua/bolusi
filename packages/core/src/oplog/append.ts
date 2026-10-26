@@ -68,6 +68,11 @@ export interface AppendLocalOpsOptions {
   /** Resolved best-available fix, or null; never blocks (04 §5.1 / 05 §2.1). */
   readonly location: Location | null;
   readonly applyProjection: ProjectionApply;
+  /**
+   * Runs once after every draft is inserted and applied, inside the same transaction, for a local
+   * write that must land with the ops or not at all. A throw rolls the whole command back.
+   */
+  readonly withinAppend?: (ops: readonly AppendedOp[]) => Promise<void>;
 }
 
 export type AppendedOp =
@@ -147,6 +152,7 @@ export async function appendLocalOps(
       });
     }
 
+    await options.withinAppend?.(appended);
     return { ops: appended };
   });
 }
