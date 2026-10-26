@@ -58,6 +58,14 @@ export interface DirectoryGrantRow {
 export const DEVICE_ID_META_KEY = 'deviceId';
 
 /**
+ * `meta_kv` key naming the ONE user who may make their own first PIN on this device: the owner who
+ * just enrolled it, whose password the server checked minutes ago. Everyone else gets a first PIN
+ * from an owner (`resetPin`), because a stale phone could still show "no PIN" for a colleague who
+ * already has one, and a self-made PIN would then take over their account. Cleared once used.
+ */
+export const FIRST_PIN_USER_META_KEY = 'auth.firstPinUserId';
+
+/**
  * `meta_kv` key holding the device's bound store id (10-db §9.1 names it). Written once by
  * enrollment from the ENROLL RESPONSE, never by `applyBundle`: §7.4's store binding is irreversible,
  * and a bundle refresh must not be able to silently re-bind the device's store (bundle-apply.ts).

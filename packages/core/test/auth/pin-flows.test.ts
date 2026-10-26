@@ -13,12 +13,16 @@ import {
   readVerifier,
   resetPin,
   setFirstPin,
+  writeMeta,
+  FIRST_PIN_USER_META_KEY,
+  firstPinUserOnThisDevice,
   verifyPin,
   writePinAttempt,
   type PinFlowDeps,
   type PinVerifierUploadPort,
 } from '../../src/index.js';
 import type { ClientDatabase } from '@bolusi/db-client';
+import type { Kysely } from 'kysely';
 import type { SignedCore } from '@bolusi/schemas';
 
 import { makeFastCrypto, openAuthHarness, spyKdf, type AuthHarness } from './_harness.js';
@@ -308,6 +312,7 @@ describe('SEC-AUTH-11 client arm — privileged-target PIN reset (api/02-auth §
 describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh salt', () => {
   it('first-PIN: forced setup, current-PIN check skipped, local write at the op asOf, fresh salt', async () => {
     const s = await setup(7); // staff has NO verifier by default → first-PIN territory
+    await enrolledBy(s, s.h.staffId);
     const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
 
     const [op] = (await s.pinOps()).filter((o) => o.type === 'auth.pin_changed');
@@ -337,6 +342,16 @@ describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh 
         )
       ).ok,
     ).toBe(true);
+  });
+
+  it('first-PIN: refused for a user who already has a PIN, so it cannot overwrite one', async () => {
+    const s = await setup(7, { staff: '111111' });
+    await enrolledBy(s, s.h.staffId);
+    await expectDomain(
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' }),
+      'INVALID_TRANSITION',
+    );
+    expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_changed')).toHaveLength(0);
   });
 
   it('change: the current PIN is verified before execution; a wrong current PIN is refused', async () => {
@@ -391,9 +406,49 @@ describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh 
   });
 });
 
+describe('first PIN is only for the owner who enrolled this device', () => {
+  it('refused for anyone else, even with no PIN: a stale phone cannot hand out a colleague’s account', async () => {
+    const s = await setup(7);
+    await enrolledBy(s, s.h.ownerId);
+    expect(await firstPinUserOnThisDevice(s.h.db)).not.toBe(s.h.staffId);
+    await expectDomain(
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' }),
+      'INVALID_TRANSITION',
+    );
+    expect(await readVerifier(s.h.db, s.h.staffId)).toBeNull();
+  });
+
+  it('works once: after the enrolling owner makes theirs, nobody can use the path again', async () => {
+    const s = await setup(7);
+    await enrolledBy(s, s.h.staffId);
+    expect(await firstPinUserOnThisDevice(s.h.db)).toBe(s.h.staffId);
+    await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
+    expect(await firstPinUserOnThisDevice(s.h.db)).toBeNull();
+  });
+
+  it('two quick submits make one PIN: the second is refused, not a second op', async () => {
+    const s = await setup(7);
+    await enrolledBy(s, s.h.staffId);
+    const first = setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
+    const second = setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '654321' });
+    await first;
+    await expectDomain(second, 'INVALID_TRANSITION', 'pin_already_set');
+    expect(s.queue.size).toBe(1);
+  });
+
+  it('a device with no enrolling owner on record allows nobody', async () => {
+    const s = await setup(7);
+    await expectDomain(
+      setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' }),
+      'INVALID_TRANSITION',
+    );
+  });
+});
+
 describe('verifier-POST queue (api/02-auth §5.4)', () => {
   it('drains on next contact with the op’s verifierRef; applied:false is terminal (no retry)', async () => {
     const s = await setup(10);
+    await enrolledBy(s, s.h.staffId);
     const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
     expect(s.queue.size).toBe(1);
 
@@ -421,6 +476,7 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
 
   it('a transport error re-queues; the idempotent replay then converges', async () => {
     const s = await setup(11);
+    await enrolledBy(s, s.h.staffId);
     await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
 
     let attempts = 0;
@@ -445,4 +501,12 @@ function atobLen(b64: string): ArrayLike<number> {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+/** Record `userId` as the owner who enrolled this device, as `runEnrollment` does. */
+async function enrolledBy(
+  s: { readonly h: { readonly db: Kysely<ClientDatabase> } },
+  userId: string,
+) {
+  await writeMeta(s.h.db, FIRST_PIN_USER_META_KEY, userId);
 }

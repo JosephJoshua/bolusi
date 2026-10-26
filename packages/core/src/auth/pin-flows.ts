@@ -38,7 +38,10 @@ import {
 } from './pin-verify.js';
 import type { PinVerifierUploadPort, PinVerifierUploadResult } from './ports.js';
 import {
+  deleteMeta,
+  FIRST_PIN_USER_META_KEY,
   holdsMainOwnerRole,
+  readMeta,
   readPinAttempt,
   readVerifier,
   refFromOp,
@@ -250,18 +253,58 @@ export interface PinFlowDeps<DB> {
  * First PIN (api/02-auth §6.6): the bundle row had `pinVerifier: null`. The current-PIN check is
  * SKIPPED (no verifier exists at any `asOf`). Emits `auth.pin_changed`, writes the local verifier,
  * queues the POST.
+ *
+ * Only for the owner who enrolled this device (`FIRST_PIN_USER_META_KEY`). A phone that is offline or
+ * behind can show "no PIN" for a colleague who made one elsewhere; a self-made PIN there would sign a
+ * coworker in as them and, once synced, replace their real PIN. So every other first PIN comes from an
+ * owner through `resetPin`, typed by the colleague.
  */
+let firstPinChain: Promise<void> = Promise.resolve();
+
 export async function setFirstPin<DB>(
   deps: PinFlowDeps<DB>,
   input: { readonly userId: string; readonly pin: string },
 ): Promise<PendingVerifier> {
-  assertPinFormat(input.pin);
-  return emitVerifierChange(deps, {
-    actorUserId: input.userId,
-    targetUserId: input.userId,
-    newPin: input.pin,
-    command: changePinCommand,
+  // Serialized, so two quick taps cannot both pass the checks below and emit two first PINs. Not the
+  // attempt lock: `emitVerifierChange` takes that one inside, and it does not nest.
+  const run = firstPinChain.then(async () => {
+    assertPinFormat(input.pin);
+    // Only a user with NO PIN yet. Without this, anyone at the counter could replace a colleague's PIN
+    // through the first-PIN path and sign in as them; an existing PIN changes only via `changePin`
+    // (knowing the current one) or an owner's `resetPin`.
+    if ((await readVerifier(deps.db, input.userId)) !== null) {
+      throw new DomainError(
+        'INVALID_TRANSITION',
+        { reason: 'pin_already_set' },
+        'this user already has a PIN — use change or owner reset (api/02-auth §6.6)',
+      );
+    }
+    if ((await readMeta(deps.db, FIRST_PIN_USER_META_KEY)) !== input.userId) {
+      throw new DomainError(
+        'INVALID_TRANSITION',
+        { reason: 'first_pin_needs_owner' },
+        'only the enrolling owner makes their own first PIN; an owner makes everyone else’s',
+      );
+    }
+    const pending = await emitVerifierChange(deps, {
+      actorUserId: input.userId,
+      targetUserId: input.userId,
+      newPin: input.pin,
+      command: changePinCommand,
+    });
+    await deleteMeta(deps.db, FIRST_PIN_USER_META_KEY);
+    return pending;
   });
+  firstPinChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/** The one user who may make their own first PIN on this device, if any (see `setFirstPin`). */
+export function firstPinUserOnThisDevice<DB>(db: Kysely<DB>): Promise<string | null> {
+  return readMeta(db, FIRST_PIN_USER_META_KEY);
 }
 
 /**
