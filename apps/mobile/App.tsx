@@ -72,7 +72,7 @@ import {
   parseIntakeDraft,
   type IntakeDraft,
 } from '@bolusi/modules/repair';
-import type { RepairRuntime } from '@bolusi/modules/repair/screens';
+import { tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -865,8 +865,15 @@ export default function App(props: AppProps): React.JSX.Element {
                   // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
                   onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
                   // Owners and store owners only: whoever may edit the lists or hide items here.
-                  onOpenIntakeOptions={
-                    canSetIntakeOptions ? () => setRoute('intakeOptions') : undefined
+                  intakeOptions={
+                    canSetIntakeOptions
+                      ? {
+                          section: tn('repair.board.title'),
+                          title: tn('repair.options.title'),
+                          summary: tn('repair.options.summary'),
+                          onOpen: () => setRoute('intakeOptions'),
+                        }
+                      : undefined
                   }
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}

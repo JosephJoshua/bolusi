@@ -22,8 +22,6 @@ import {
 } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { tn } from '@bolusi/modules/repair/screens';
-
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
@@ -34,6 +32,14 @@ import {
   type DeviceInfo,
   type MutablePushCategory,
 } from './model.js';
+
+/** A module's row in Settings, its copy resolved by the caller. */
+export interface SettingsModuleEntry {
+  readonly section: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly onOpen: () => void;
+}
 
 export interface SettingsScreenProps {
   readonly locale: Locale;
@@ -61,10 +67,12 @@ export interface SettingsScreenProps {
    */
   readonly onOpenResetPin?: (() => void) | undefined;
   /**
-   * Open the owner's intake lists (repair checks, accessories, photos, brands, ready-by) — present
-   * ONLY for someone who may edit them or hide items at this store; core still enforces both.
+   * The owner's intake lists (repair checks, accessories, photos, brands, ready-by) — present ONLY
+   * for someone who may edit them or hide items at this store; core still enforces both. The caller
+   * supplies the repair module's copy, so this screen never imports the module's screens (whose
+   * lists would nest a FlatList in this scrolling shell).
    */
-  readonly onOpenIntakeOptions?: (() => void) | undefined;
+  readonly intakeOptions?: SettingsModuleEntry | undefined;
   readonly syncChip: SyncChipState;
   /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
   readonly pendingCount: number;
@@ -82,7 +90,7 @@ export function SettingsScreen({
   onOpenChangePin,
   onOpenUnlockPin,
   onOpenResetPin,
-  onOpenIntakeOptions,
+  intakeOptions,
   syncChip,
   pendingCount,
   onOpenSync,
@@ -167,15 +175,15 @@ export function SettingsScreen({
         />
       ))}
 
-      {onOpenIntakeOptions !== undefined ? (
+      {intakeOptions !== undefined ? (
         <>
           <Text style={styles.section} testID="settings-section-repair">
-            {tn('repair.board.title')}
+            {intakeOptions.section}
           </Text>
           <ListRow
-            primaryText={tn('repair.options.title')}
-            secondaryText={tn('repair.options.summary')}
-            onPress={onOpenIntakeOptions}
+            primaryText={intakeOptions.title}
+            secondaryText={intakeOptions.summary}
+            onPress={intakeOptions.onOpen}
             showChevron
             testID="settings-intake-options"
           />
