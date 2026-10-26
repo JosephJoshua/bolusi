@@ -389,14 +389,15 @@ describe('cancelling (owners only)', () => {
 });
 
 describe('changing the price', () => {
-  test('the counter saves a change as agreed, or as not confirmed yet; both count', async () => {
+  test('a change the customer agreed to counts; one not agreed yet waits until they agree', async () => {
     h = await openRepairScreenHarness(5701);
     const ticketId = await openTicket(h);
     const counter = await mount(h, h.cashierId);
     const change = async (description: string, answer: 'primary' | 'unconfirmed') => {
       await press(counter, 'repair.ticket.action.changePrice');
-      // Both answers wait on a complete line.
+      // Both answers wait on a complete line, and the screen says what "not yet" does.
       expect(counter.all('repair.price.change.unconfirmed')[0]!.props['disabled']).toBe(true);
+      expect(counter.query('repair.price.change.waitsHint')).not.toBeNull();
       type(counter, 'repair.price.change.description', description);
       type(counter, 'repair.price.change.amount', '20000');
       type(counter, 'repair.price.change.reason', 'Tambahan');
@@ -406,23 +407,22 @@ describe('changing the price', () => {
     await press(counter, `repair.board.row.${ticketId}`);
     await change('Lem', 'primary');
     await change('Kabel', 'unconfirmed');
-    const ticket = await ticketRow(h, ticketId);
-    expect(ticket.quoteTotal).toBe(750_000 + 40_000);
-    const agreed = (d: string) =>
-      ticket.quoteLines.find((l: { description: string }) => l.description === d).customerAgreed;
-    expect(agreed('Lem')).toBe(true);
-    expect(agreed('Kabel')).toBe(false);
+    const waiting = await ticketRow(h, ticketId);
+    expect(waiting.quoteTotal).toBe(750_000 + 20_000);
+    expect(waiting.pendingProposals).toBe(1);
 
-    // The customer agrees later: the line offers it, and only that line.
-    const line = (d: string) =>
-      ticket.quoteLines.find((l: { description: string }) => l.description === d).id as string;
-    expect(counter.query(`repair.ticket.confirm.${line('Lem')}`)).toBeNull();
-    await press(counter, `repair.ticket.confirm.${line('Kabel')}`);
-    const after = await ticketRow(h, ticketId);
+    // The customer agrees later: the waiting change is decided like a proposal.
+    await press(counter, 'repair.ticket.action.decidePrice');
+    await press(counter, 'repair.proposal.primary');
+    const agreed = await ticketRow(h, ticketId);
+    expect(agreed.quoteTotal).toBe(750_000 + 40_000);
+    expect(agreed.pendingProposals).toBe(0);
     expect(
-      after.quoteLines.find((l: { id: string }) => l.id === line('Kabel')).customerAgreed,
+      agreed.quoteLines.every(
+        (l: { status: string; customerAgreed: boolean | null }) =>
+          l.status === 'intake' || l.customerAgreed === true,
+      ),
     ).toBe(true);
-    expect(counter.query(`repair.ticket.confirm.${line('Kabel')}`)).toBeNull();
   });
 });
 
@@ -463,7 +463,6 @@ describe('discounts (owners only)', () => {
     await press(counter, 'repair.ticket.action.decidePrice');
     expect(counter.query('repair.proposal.primaryHint')).not.toBeNull();
     expect(counter.all('repair.proposal.primary')[0]!.props['disabled']).toBe(true);
-    expect(counter.all('repair.proposal.applyUnasked')[0]!.props['disabled']).toBe(true);
     await press(counter, 'repair.proposal.decline');
     const ticket = await ticketRow(h, ticketId);
     expect(ticket.pendingProposals).toBe(0);
@@ -557,7 +556,7 @@ describe('changes synced from another device', () => {
     expect(screen.query('repair.work.after.stale')).toBeNull();
     expect(screen.get('repair.work.after.body').props['pointerEvents']).toBe('auto');
 
-    await b.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, b.cashierId);
+    await b.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, b.storeOwnerId);
     await pull(a, b);
     await settle();
     // The step says what happened, and its only way on is back to the ticket.
@@ -597,7 +596,7 @@ describe('changes synced from another device', () => {
 
   test('a phone handed back on another device stops the handover', async () => {
     const { a, b, ticketId } = await sharedTicket(5604);
-    await a.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, a.cashierId);
+    await a.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, a.storeOwnerId);
     await pull(b, a);
     const screen = await mount(a, a.cashierId);
     await press(screen, 'repair.board.views.pickup');
@@ -643,7 +642,7 @@ describe('changes synced from another device', () => {
     const { a, ticketId } = await sharedTicket(5605);
     // Hold the command open after it commits, so the ticket's re-read lands while it still runs:
     // the moment the notice must not appear, since the change is the user's own.
-    const base = repairRuntimeFor(a, a.cashierId);
+    const base = repairRuntimeFor(a, a.storeOwnerId);
     let release = (): void => undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -653,18 +652,18 @@ describe('changes synced from another device', () => {
       run: ((command, input) =>
         base.run(command, input).then((result) => held.then(() => result))) as typeof base.run,
     };
-    const screen = await mount(a, a.cashierId, { runtime });
+    const screen = await mount(a, a.storeOwnerId, { runtime });
     await press(screen, `repair.board.row.${ticketId}`);
     await press(screen, 'repair.ticket.action.cancel');
-    type(screen, 'repair.note.cancel.text', 'Pelanggan batal');
-    await press(screen, 'repair.note.cancel.primary');
+    type(screen, 'repair.cancel.reason', 'Pelanggan batal');
+    await press(screen, 'repair.cancel.primary');
     expect((await ticketRow(a, ticketId)).outcome).toBe('cancelled');
-    expect(screen.query('repair.note.cancel')).not.toBeNull();
-    expect(screen.query('repair.note.cancel.stale')).toBeNull();
+    expect(screen.query('repair.cancel')).not.toBeNull();
+    expect(screen.query('repair.cancel.stale')).toBeNull();
 
     release();
     await settle();
-    expect(screen.query('repair.note.cancel')).toBeNull();
+    expect(screen.query('repair.cancel')).toBeNull();
     expect(screen.query('repair.ticket.content')).not.toBeNull();
   });
 });

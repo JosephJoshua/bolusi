@@ -24,8 +24,6 @@ import {
   hideIntakeOptionsInput,
   changeQuoteHandler,
   changeQuoteInput,
-  confirmQuoteLineHandler,
-  confirmQuoteLineInput,
   claimTicketHandler,
   claimTicketInput,
   correctCustomerDetailsHandler,
@@ -212,11 +210,6 @@ export const repairModuleManifest = {
       permission: REPAIR_PERMISSION.quoteChange,
       input: declineProposalInput,
       handler: declineProposalHandler,
-    },
-    confirmQuoteLine: {
-      permission: REPAIR_PERMISSION.quoteChange,
-      input: confirmQuoteLineInput,
-      handler: confirmQuoteLineHandler,
     },
     returnDevice: {
       permission: REPAIR_PERMISSION.handover,

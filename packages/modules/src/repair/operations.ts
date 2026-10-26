@@ -18,7 +18,6 @@ import {
   markedRepairedApplier,
   quoteChangedApplier,
   quoteChangeProposedApplier,
-  quoteLineConfirmedApplier,
   quoteProposalDeclinedApplier,
   technicianAssignedApplier,
   ticketCancelledApplier,
@@ -38,6 +37,7 @@ import {
   REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
+  REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_TICKET_ENTITY,
   WORK_PHOTO_STAGES,
@@ -207,19 +207,21 @@ export const quoteChangeProposedPayload = zQuoteLineDraft
   .extend({ reason: z.string().trim().min(1).max(MAX_TEXT) })
   .strict();
 
-export const quoteChangedPayload = zQuoteLineDraft
+export const quoteChangedPayloadV1 = zQuoteLineDraft
   .extend({
     reason: z.string().trim().min(1).max(MAX_TEXT),
     customerAgreed: z.boolean(),
-    /** True when this applies a technician's proposal (lineId is then the proposal's line). */
+    /** True when this applies a proposal (lineId is then the proposal's line). */
     fromProposal: z.boolean(),
   })
   .strict();
+/**
+ * v2: a price change the customer has not agreed to yet waits, like a proposal, and only counts
+ * once agreed. In v1 it counted at once, marked unconfirmed.
+ */
+export const quoteChangedPayload = quoteChangedPayloadV1.extend({ waitsForCustomer: z.boolean() });
 
 export const quoteProposalDeclinedPayload = z.object({ lineId: zUuidV7, note: zLongText }).strict();
-
-/** The customer agreed, after it was saved, to a price change the counter saved unconfirmed. */
-export const quoteLineConfirmedPayload = z.object({ lineId: zUuidV7 }).strict();
 
 export const workPhotosAddedPayload = z
   .object({
@@ -334,8 +336,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteChanged]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: quoteChangedPayload,
+    payloadByVersion: { 1: quoteChangedPayloadV1 },
     reversal: 'Reversed by a further repair.quote_changed line with the opposite amount.',
     apply: quoteChangedApplier,
     permission: REPAIR_PERMISSION.quoteChange,
@@ -348,12 +351,6 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: quoteProposalDeclinedApplier,
     permission: REPAIR_PERMISSION.quoteChange,
     entityType: REPAIR_TICKET_ENTITY,
-  },
-  [REPAIR_OP.quoteLineConfirmed]: {
-    schemaVersion: 1,
-    payload: quoteLineConfirmedPayload,
-    reversal: 'Not reversible: the customer said yes. A further price change corrects the amount.',
-    apply: quoteLineConfirmedApplier,
   },
   [REPAIR_OP.deviceReturned]: {
     schemaVersion: 1,
@@ -389,5 +386,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: storeCancelFeesChangedPayload,
     reversal: 'Reversed by saving the previous fees again; cancelled tickets keep the fee charged.',
     apply: storeCancelFeesChangedApplier,
+    permission: REPAIR_PERMISSION.setCancelFees,
+    entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
   },
 };

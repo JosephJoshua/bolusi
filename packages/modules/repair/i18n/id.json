@@ -16,8 +16,7 @@
     "deviceReturned": "HP diambil pelanggan",
     "intakeOptionsChanged": "Pilihan saat terima HP diubah",
     "storeIntakeOptionsChanged": "Pilihan di toko ini diubah",
-    "storeCancelFeesChanged": "Biaya pembatalan diubah",
-    "quoteLineConfirmed": "Harga disetujui pelanggan"
+    "storeCancelFeesChanged": "Biaya pembatalan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -39,13 +38,11 @@
     "waitForParts": "Tunggu sparepart",
     "reassign": "Ganti teknisi",
     "agreeApply": "Setuju",
-    "applyUnasked": "Pakai tanpa konfirmasi pelanggan",
     "assignShort": "Pilih",
     "reassignShort": "Ganti",
     "backToTicket": "Kembali ke servisan",
     "applyUnconfirmed": "Belum",
-    "agreedYes": "Sudah",
-    "confirmLine": "Pelanggan setuju"
+    "agreedYes": "Sudah"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -198,15 +195,17 @@
       "agreed": "Disetujui pelanggan",
       "declined": "Ditolak pelanggan",
       "notAgreed": "Belum dikonfirmasi ke pelanggan",
-      "proposed": "Diajukan teknisi"
+      "proposed": "Menunggu persetujuan pelanggan"
     },
     "total": "Total",
     "addRow": "Tambah biaya",
     "pendingTotal": "Belum dikonfirmasi pelanggan: {amount}",
-    "technicianReason": "Alasan teknisi",
     "customerAgrees": "Pelanggan setuju dengan harga ini?",
     "notCharged": "Tidak ditagih karena dibatalkan. Pelanggan bayar biaya pembatalan {amount}.",
-    "alreadyAgreed": "Pelanggan sudah setuju?"
+    "alreadyAgreed": "Pelanggan sudah setuju?",
+    "changeReason": "Alasan perubahan",
+    "waitingEvent": "Perubahan harga menunggu pelanggan",
+    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju."
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",

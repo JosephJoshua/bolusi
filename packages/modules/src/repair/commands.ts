@@ -615,6 +615,8 @@ export async function changeQuoteHandler(
         reason: input.reason,
         customerAgreed: input.customerAgreed,
         fromProposal: false,
+        // Not agreed yet: it waits for the customer's answer and does not count until then.
+        waitsForCustomer: !input.customerAgreed,
       }),
     ],
     result: { ticketId: ticket.id, lineId },
@@ -639,7 +641,8 @@ export const applyProposalInput = z
   .object({
     ticketId: z.string().min(1),
     lineId: z.string().min(1),
-    customerAgreed: z.boolean(),
+    /** A price change counts only once the customer agreed (product-scope.md, price changes). */
+    customerAgreed: z.literal(true),
     /** The cashier may settle on a different description or amount than proposed. */
     description: zRequiredText(200).optional(),
     amount: zAmountInput.optional(),
@@ -669,6 +672,7 @@ export async function applyProposalHandler(
         reason: input.note === '' ? (proposal.reason ?? proposal.description) : input.note,
         customerAgreed: input.customerAgreed,
         fromProposal: true,
+        waitsForCustomer: false,
       }),
     ],
     result: { ticketId: ticket.id, lineId: proposal.id },
@@ -694,41 +698,6 @@ export async function declineProposalHandler(
       }),
     ],
     result: { ticketId: ticket.id, lineId: input.lineId },
-  };
-}
-
-export const confirmQuoteLineInput = z
-  .object({ ticketId: z.string().min(1), lineId: z.string().min(1) })
-  .strict();
-export type ConfirmQuoteLineInput = z.input<typeof confirmQuoteLineInput>;
-
-/**
- * The customer agreed to a price change after the counter saved it unconfirmed, often by phone. Only
- * the agreement is recorded; the amount was already counted.
- */
-export async function confirmQuoteLineHandler(
-  input: z.output<typeof confirmQuoteLineInput>,
-  ctx: CommandContext,
-): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
-  const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.quoteLineConfirmed);
-  const line = ticket.quoteLines.find((candidate) => candidate.id === input.lineId);
-  if (line === undefined) {
-    throw new DomainError('ENTITY_NOT_FOUND', {
-      entityType: 'repair_quote_line',
-      entityId: input.lineId,
-    });
-  }
-  if (line.status !== 'applied' || line.customerAgreed !== false) {
-    throw invalidTransition(
-      ticket,
-      REPAIR_OP.quoteLineConfirmed,
-      `quote line ${line.id} is not an unconfirmed price change`,
-    );
-  }
-  return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.quoteLineConfirmed, { lineId: line.id })],
-    result: { ticketId: ticket.id, lineId: line.id },
   };
 }
 

@@ -113,10 +113,21 @@ const TICKET = '01920000-0000-7000-8000-0000000d0001';
 function cancel(builder: ChainBuilder, userId?: string) {
   return builder.append({
     type: 'repair.ticket_cancelled',
+    schemaVersion: 2,
     entityType: 'repair_ticket',
     entityId: TICKET,
-    payload: { reason: 'Pelanggan batal' },
+    payload: { reason: 'Pelanggan batal', fee: 0, standardFee: 0 },
     ...(userId === undefined ? {} : { userId }),
+  });
+}
+
+/** A cashier's op: declining a proposed price change. */
+function decline(builder: ChainBuilder) {
+  return builder.append({
+    type: 'repair.quote_proposal_declined',
+    entityType: 'repair_ticket',
+    entityId: TICKET,
+    payload: { lineId: '01920000-0000-7000-8000-0000000d0002', note: '' },
   });
 }
 
@@ -167,23 +178,43 @@ describe('every pushed op is authorized against the server directory', () => {
     expect(await readAnomalies(db, world.deviceId)).toEqual([]);
   });
 
-  test('positive control: the same op from a cashier in this store is accepted', async () => {
+  test('positive control: the same op from a store owner in this store is accepted', async () => {
     const { world, builder } = await setupWorld(3202);
-    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3202);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3202);
 
     const result = await push(world, [cancel(builder)]);
 
     expect(result.results[0]).toMatchObject({ status: 'accepted' });
   });
 
-  test('a cashier grant in ANOTHER store does not authorize this store', async () => {
+  test('a cashier may no longer cancel, nor set the store’s cancellation fees', async () => {
+    // Counter staff kept customers' cash by cancelling (product-scope.md, "Cancelling a servisan").
+    const { world, builder } = await setupWorld(3207);
+    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3207);
+    const cancelled = cancel(builder);
+    const fees = builder.append({
+      type: 'repair.store_cancel_fees_changed',
+      entityType: 'repair_store_cancel_fees',
+      entityId: world.storeId,
+      payload: { beforeWork: 0, afterWork: 0 },
+    });
+
+    const result = await push(world, [cancelled, fees]);
+
+    expect(result.results.map((r) => ('code' in r ? r.code : r.status))).toEqual([
+      'PERMISSION_DENIED',
+      'PERMISSION_DENIED',
+    ]);
+  });
+
+  test('a store-owner grant in ANOTHER store does not authorize this store', async () => {
     const { world, builder } = await setupWorld(3203);
     const otherStore = testId(32031);
     await db
       .insertInto('stores')
       .values({ id: otherStore, tenantId: world.tenantId, name: 'other', createdAt: 1n })
       .execute();
-    await grantDefaultRole(world, world.userId, 'cashier', otherStore, 3203);
+    await grantDefaultRole(world, world.userId, 'store_owner', otherStore, 3203);
 
     const result = await push(world, [cancel(builder)]);
 
@@ -206,13 +237,13 @@ describe('every pushed op is authorized against the server directory', () => {
       status: 'rejected',
       code: 'PERMISSION_DENIED',
     });
-    expect((await push(world, [cancel(builder)])).results[0]).toMatchObject({
+    expect((await push(world, [decline(builder)])).results[0]).toMatchObject({
       status: 'accepted',
     });
 
     await db.deleteFrom('userRoles').where('roleId', '=', roleId).execute();
 
-    expect((await push(world, [cancel(builder)])).results[0]).toMatchObject({
+    expect((await push(world, [decline(builder)])).results[0]).toMatchObject({
       status: 'rejected',
       code: 'PERMISSION_DENIED',
     });
@@ -220,12 +251,12 @@ describe('every pushed op is authorized against the server directory', () => {
 
   test('an op attributed to a member who holds the permission is judged by THAT user, not the device', async () => {
     const { world, builder } = await setupWorld(3206);
-    const cashierId = testId(32061);
-    await seedUser(db, world.tenantId, cashierId);
-    await grantDefaultRole(world, cashierId, 'cashier', world.storeId, 3206);
+    const ownerId = testId(32061);
+    await seedUser(db, world.tenantId, ownerId);
+    await grantDefaultRole(world, ownerId, 'store_owner', world.storeId, 3206);
     await grantDefaultRole(world, world.userId, 'technician', world.storeId, 32062);
 
-    const result = await push(world, [cancel(builder, cashierId), cancel(builder)]);
+    const result = await push(world, [cancel(builder, ownerId), cancel(builder)]);
 
     expect(result.results.map((r) => r.status)).toEqual(['accepted', 'rejected']);
   });
@@ -331,15 +362,15 @@ describe('a deactivated author is refused for every op type, permission-free one
 describe('a refused op does not stop the device syncing', () => {
   test('the ops after a refused one are accepted, in the same batch and in the next', async () => {
     const { world, builder } = await setupWorld(3210);
-    const cashierId = testId(32101);
-    await seedUser(db, world.tenantId, cashierId);
-    await grantDefaultRole(world, cashierId, 'cashier', world.storeId, 3210);
+    const ownerId = testId(32101);
+    await seedUser(db, world.tenantId, ownerId);
+    await grantDefaultRole(world, ownerId, 'store_owner', world.storeId, 3210);
     await grantDefaultRole(world, world.userId, 'technician', world.storeId, 32102);
 
     const refused = cancel(builder); // technician: no repair.cancel
     const sameBatch = startWork(builder); // technician: repair.work
     const first = await push(world, [refused, sameBatch]);
-    const nextBatch = await push(world, [cancel(builder, cashierId)]);
+    const nextBatch = await push(world, [cancel(builder, ownerId)]);
 
     expect(first.results.map((r) => r.status)).toEqual(['rejected', 'accepted']);
     expect(nextBatch.results[0]).toMatchObject({ status: 'accepted' });
@@ -353,12 +384,14 @@ describe('a refused op does not stop the device syncing', () => {
 
   test('a schema-invalid op spends its place too, so one bad payload cannot wedge a device', async () => {
     const { world, builder } = await setupWorld(3211);
-    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3211);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3211);
     const bad = builder.append({
       type: 'repair.ticket_cancelled',
+      schemaVersion: 2,
+      schemaVersion: 2,
       entityType: 'repair_ticket',
       entityId: TICKET,
-      payload: { reason: '' }, // reason must be non-empty
+      payload: { reason: '', fee: 0, standardFee: 0 }, // reason must be non-empty
     });
 
     const result = await push(world, [bad, cancel(builder)]);
@@ -372,12 +405,14 @@ describe('a refused op does not stop the device syncing', () => {
   test('an op naming a record kind its type does not write is refused SCHEMA_INVALID', async () => {
     // A cancel aimed at a customer row would fold, and conflict-match, against the wrong records.
     const { world, builder } = await setupWorld(3214);
-    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3214);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3214);
     const misfiled = builder.append({
       type: 'repair.ticket_cancelled',
+      schemaVersion: 2,
+      schemaVersion: 2,
       entityType: 'repair_customer',
       entityId: TICKET,
-      payload: { reason: 'Pelanggan batal' },
+      payload: { reason: 'Pelanggan batal', fee: 0, standardFee: 0 },
     });
 
     const result = await push(world, [misfiled, cancel(builder)]);
@@ -425,9 +460,11 @@ describe('a refused op does not stop the device syncing', () => {
     const reused = builder.append({
       id: first.id,
       type: 'repair.ticket_cancelled',
+      schemaVersion: 2,
+      schemaVersion: 2,
       entityType: 'repair_ticket',
       entityId: TICKET,
-      payload: { reason: 'Lagi' },
+      payload: { reason: 'Lagi', fee: 0, standardFee: 0 },
     });
 
     const result = await push(world, [first, reused, startWork(builder)]);
@@ -443,7 +480,7 @@ describe('a refused op does not stop the device syncing', () => {
 describe('a refusal can always be stored', () => {
   test('an unknown type carrying a NUL character is refused, not a batch-wide 500', async () => {
     const { world, builder } = await setupWorld(3250);
-    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3250);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3250);
     const odd = builder.append({
       type: 'repair.ticket\u0000cancelled',
       entityType: 'repair_ticket',

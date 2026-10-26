@@ -570,14 +570,20 @@ export function PriceChangeStep({
           testID={`${testID}.reason`}
         />
       </View>
+      {mode === 'change' ? (
+        // Agreement often comes later, by phone; saying so keeps "Belum" from reading as a dead end.
+        <Text style={[repairStyles.caption, repairStyles.gap]} testID={`${testID}.waitsHint`}>
+          {tn('repair.price.waitsHint')}
+        </Text>
+      ) : null}
     </FlowScreen>
   );
 }
 
 /**
- * The cashier decides a technician's proposed line with the customer's answer as the choice itself:
- * agreed and applied, declined, or (rarely) applied without asking. A toggle that defaulted to "not
- * agreed" made it too easy to apply a price the customer never heard about.
+ * The counter decides a waiting price change, a technician's proposal or its own, with the
+ * customer's answer as the choice itself: agreed and applied, or declined. A change never counts
+ * without the customer's yes.
  */
 export function ProposalStep({
   chrome,
@@ -597,7 +603,7 @@ export function ProposalStep({
   // A line that lowers the price is an owner's to apply; anyone deciding may still decline it.
   const mayApply = line.amount >= 0 || runtime.hasPermission(REPAIR_PERMISSION.discount);
 
-  const decide = (decision: 'agreed' | 'unasked' | 'declined'): void => {
+  const decide = (decision: 'agreed' | 'declined'): void => {
     void runner
       .run(() =>
         decision === 'declined'
@@ -605,7 +611,7 @@ export function ProposalStep({
           : runtime.run('applyProposal', {
               ticketId,
               lineId: line.id,
-              customerAgreed: decision === 'agreed',
+              customerAgreed: true,
               note,
             }),
       )
@@ -643,7 +649,7 @@ export function ProposalStep({
         </Text>
         {line.reason === null ? null : (
           <>
-            <Text style={styles.proposalLabel}>{tn('repair.price.technicianReason')}</Text>
+            <Text style={styles.proposalLabel}>{tn('repair.price.changeReason')}</Text>
             <Text style={styles.proposalReason}>{line.reason}</Text>
           </>
         )}
@@ -654,15 +660,6 @@ export function ProposalStep({
           value={note}
           onChangeText={setNote}
           testID={`${testID}.note`}
-        />
-      </View>
-      {/* Rare and riskier than either answer, so it stays a link in the body, off the answer row. */}
-      <View style={styles.unasked}>
-        <TextButton
-          label={tn('repair.action.applyUnasked')}
-          onPress={() => decide('unasked')}
-          disabled={runner.busy || !mayApply}
-          testID={`${testID}.applyUnasked`}
         />
       </View>
     </FlowScreen>
@@ -684,7 +681,6 @@ const styles = StyleSheet.create({
   },
   proposalLabel: { ...type.caption, color: color.textMuted, marginTop: space.md },
   proposalReason: { ...type.bodySm, color: color.text },
-  unasked: { alignItems: 'flex-start', marginTop: space.lg, marginLeft: -space.sm },
   consequence: { marginBottom: space.md },
   // The caption and its link share one centre line; the link's text lines up with the box's right
   // edge, not its padded hit box, which may overhang the box's padding.

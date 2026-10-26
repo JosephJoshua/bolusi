@@ -250,6 +250,8 @@ interface QuoteChangedPayload extends QuoteLineDraft {
   readonly reason: string;
   readonly customerAgreed: boolean;
   readonly fromProposal: boolean;
+  /** v2 only; a v1 change counted at once. */
+  readonly waitsForCustomer?: boolean;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
@@ -627,6 +629,8 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
       .where('status', 'in', ['proposed', 'declined'])
       .execute();
   } else {
+    // A change still waiting on the customer is decided later, exactly like a proposal.
+    const waits = payload.waitsForCustomer === true;
     await db
       .insertInto('repairQuoteLines')
       .values({
@@ -637,13 +641,13 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
         kind: payload.kind,
         description: payload.description,
         amount: payload.amount,
-        status: 'applied',
+        status: waits ? 'proposed' : 'applied',
         reason: payload.reason,
-        customerAgreed,
+        customerAgreed: waits ? null : customerAgreed,
         createdBy: op.userId,
         createdAt: op.timestamp,
-        decidedBy: op.userId,
-        decidedAt: op.timestamp,
+        decidedBy: waits ? null : op.userId,
+        decidedAt: waits ? null : op.timestamp,
         decisionNote: null,
       })
       .execute();
@@ -656,6 +660,9 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
     reason: payload.reason,
     customerAgreed: payload.customerAgreed,
     fromProposal: payload.fromProposal,
+    ...(payload.waitsForCustomer === undefined
+      ? {}
+      : { waitsForCustomer: payload.waitsForCustomer }),
   });
 };
 
@@ -670,20 +677,6 @@ export const quoteProposalDeclinedApplier: ProjectionApplier<RepairDatabase> = a
     .where('status', '=', 'proposed')
     .execute();
   await recordEvent(db, op, { lineId, note });
-};
-
-/** Only an applied line the customer had not yet agreed to; anything else was not one to confirm. */
-export const quoteLineConfirmedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { lineId } = payloadOf<{ lineId: string }>(op);
-  await db
-    .updateTable('repairQuoteLines')
-    .set({ customerAgreed: 1 })
-    .where('id', '=', lineId)
-    .where('ticketId', '=', op.entityId)
-    .where('storeId', '=', storeIdOf(op))
-    .where('status', '=', 'applied')
-    .execute();
-  await recordEvent(db, op, { lineId });
 };
 
 export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {

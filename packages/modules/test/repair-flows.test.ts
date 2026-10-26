@@ -314,7 +314,9 @@ describe('an open step after the ticket changed elsewhere', () => {
     const cashier = abilitiesOf(h, h.cashierId);
     const tech = abilitiesOf(h, h.technicianId);
     expect(staleStep({ kind: 'before' }, row(), tech, h.technicianId)).toBeNull();
-    expect(staleStep({ kind: 'cancel' }, row(), cashier, h.cashierId)).toBeNull();
+    // Only owners cancel.
+    const owner = abilitiesOf(h, h.storeOwnerId);
+    expect(staleStep({ kind: 'cancel' }, row(), owner, h.storeOwnerId)).toBeNull();
     // Reassigned meanwhile, a technician can still start: the start claims it.
     expect(
       staleStep({ kind: 'before' }, row({ technicianId: h.technician2Id }), tech, h.technicianId),

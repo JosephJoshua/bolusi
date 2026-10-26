@@ -114,6 +114,12 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   negative adjustment) needs an owner, at intake or later. Counter staff and
   technicians can still raise a price or propose a part or labour; the counter
   can decline an owner's proposed discount but not apply it.
+- **A price change counts only once the customer agrees:** whether a technician
+  proposes it or the counter enters it, a change waits ("Menunggu persetujuan
+  pelanggan") and is left out of the total until the counter records the
+  customer's yes; a no drops it. There is no applying without asking, and the
+  phone cannot be handed back while a change waits. Technicians keep proposing,
+  since they find the extra fault once the phone is open.
 
 ## Decision
 

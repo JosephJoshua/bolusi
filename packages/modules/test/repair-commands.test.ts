@@ -427,8 +427,8 @@ describe('discounts (owners only)', () => {
   });
 });
 
-describe('confirming a price change later', () => {
-  test('the counter records that the customer agreed after the change was saved', async () => {
+describe('a price change waits for the customer', () => {
+  test('a change the customer has not agreed to waits, then counts once they agree', async () => {
     h = await openRepairHarness(36);
     const { ticketId } = await open(h);
     const { lineId } = (await h.run(
@@ -443,57 +443,49 @@ describe('confirming a price change later', () => {
       },
       h.cashierId,
     )) as { lineId: string };
-    const line = async () =>
-      ((await ticket(h!, ticketId)).quoteLines as { id: string; customerAgreed: boolean }[]).find(
-        (l) => l.id === lineId,
-      )!;
-    expect((await line()).customerAgreed).toBe(false);
+    const waiting = await ticket(h, ticketId);
+    expect(waiting.quoteTotal).toBe(750_000);
+    expect(waiting.pendingProposals).toBe(1);
+    expect(waiting.quoteLines.find((l: { id: string }) => l.id === lineId)).toMatchObject({
+      status: 'proposed',
+      customerAgreed: null,
+      createdBy: h.cashierId,
+    });
 
+    // There is no applying it without the customer's yes.
     await expectCode(
-      h.run('confirmQuoteLine', { ticketId, lineId }, h.technicianId),
-      'PERMISSION_DENIED',
+      h.run('applyProposal', { ticketId, lineId, customerAgreed: false }, h.cashierId),
+      'VALIDATION_FAILED',
     );
-    await h.run('confirmQuoteLine', { ticketId, lineId }, h.cashierId);
-    expect((await line()).customerAgreed).toBe(true);
-    expect((await ticket(h, ticketId)).quoteTotal).toBe(750_000 + 20_000);
-    // Already agreed, an intake line, or an unknown line: nothing to confirm.
-    await expectCode(
-      h.run('confirmQuoteLine', { ticketId, lineId }, h.cashierId),
-      'INVALID_TRANSITION',
-    );
-    const intakeLine = (await ticket(h, ticketId)).quoteLines[0].id as string;
-    await expectCode(
-      h.run('confirmQuoteLine', { ticketId, lineId: intakeLine }, h.cashierId),
-      'INVALID_TRANSITION',
-    );
-    await expectCode(
-      h.run('confirmQuoteLine', { ticketId, lineId: 'no-such-line' }, h.cashierId),
-      'ENTITY_NOT_FOUND',
-    );
+    await h.run('applyProposal', { ticketId, lineId, customerAgreed: true }, h.cashierId);
+    const agreed = await ticket(h, ticketId);
+    expect(agreed.quoteTotal).toBe(770_000);
+    expect(agreed.pendingProposals).toBe(0);
+    expect(agreed.quoteLines.find((l: { id: string }) => l.id === lineId)).toMatchObject({
+      status: 'applied',
+      customerAgreed: true,
+    });
   });
 
-  test('a proposal is decided, not confirmed, and a cancelled ticket takes no confirmation', async () => {
+  test('a change the customer turns down never counts', async () => {
     h = await openRepairHarness(37);
     const { ticketId } = await open(h);
-    const proposal = (await h.run(
-      'proposeQuoteChange',
-      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Drop' },
-      h.technicianId,
-    )) as { lineId: string };
-    await expectCode(
-      h.run('confirmQuoteLine', { ticketId, lineId: proposal.lineId }, h.cashierId),
-      'INVALID_TRANSITION',
-    );
-    await h.run(
-      'applyProposal',
-      { ticketId, lineId: proposal.lineId, customerAgreed: false },
+    const { lineId } = (await h.run(
+      'changeQuote',
+      {
+        ticketId,
+        kind: 'labour',
+        description: 'Ekstra',
+        amount: 50_000,
+        reason: 'Lama',
+        customerAgreed: false,
+      },
       h.cashierId,
-    );
-    await h.run('cancelTicket', { ticketId, reason: 'Batal' }, h.storeOwnerId);
-    await expectCode(
-      h.run('confirmQuoteLine', { ticketId, lineId: proposal.lineId }, h.cashierId),
-      'INVALID_TRANSITION',
-    );
+    )) as { lineId: string };
+    await h.run('declineProposal', { ticketId, lineId, note: 'Tidak mau' }, h.cashierId);
+    const t = await ticket(h, ticketId);
+    expect(t.quoteTotal).toBe(750_000);
+    expect(t.pendingProposals).toBe(0);
   });
 });
 

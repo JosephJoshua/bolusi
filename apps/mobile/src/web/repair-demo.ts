@@ -559,18 +559,13 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       return cancelFees;
     },
     proposeQuoteChange: (input) => priceLine(input, 'proposed', 'repair.quote_change_proposed'),
-    changeQuote: (input) => priceLine(input, 'applied', 'repair.quote_changed'),
+    // Not agreed yet: the change waits for the customer, like a proposal.
+    changeQuote: (input) =>
+      input['customerAgreed'] === true
+        ? priceLine(input, 'applied', 'repair.quote_changed')
+        : priceLine({ ...input, customerAgreed: undefined }, 'proposed', 'repair.quote_changed'),
     applyProposal: (input) => decide(input, 'applied', 'repair.quote_changed'),
     declineProposal: (input) => decide(input, 'declined', 'repair.quote_proposal_declined'),
-    confirmQuoteLine: (input) => {
-      const t = find(String(input['ticketId']));
-      update(t.id, 'repair.quote_line_confirmed', {
-        quoteLines: t.quoteLines.map((l) =>
-          l.id === input['lineId'] ? { ...l, customerAgreed: true } : l,
-        ),
-      });
-      return { ticketId: t.id, lineId: String(input['lineId']) };
-    },
     changeIntakeOptions: (input) => {
       const list = input['list'] as keyof IntakeOptionSettings['lists'];
       const items = (input['items'] as { id: string | null; label: string | null }[]).map(

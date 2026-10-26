@@ -26,7 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -470,7 +470,11 @@ export function TicketDetail({
               const note = eventNote(event.detail);
               return {
                 key: event.id,
-                title: translateOpType(event.kind),
+                // A change saved before the customer agreed reads as waiting, not as changed.
+                title:
+                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+                    ? tn('repair.price.waitingEvent')
+                    : translateOpType(event.kind),
                 meta: [formatDateTime(event.at), event.actorName]
                   .filter((part) => part !== null)
                   .join(' · '),
@@ -505,7 +509,6 @@ export function TicketDetail({
     // The bottom action already opens the first proposal; per-line buttons only when there are more.
     const perLine = deciding && pending.length > 1;
     const cancelled = row.outcome === 'cancelled';
-    const confirming = can.quoteChange && row.location === 'in_store' && !cancelled;
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -531,22 +534,6 @@ export function TicketDetail({
                   {lineCaption(line)}
                 </Text>
               )}
-              {line.status === 'applied' && line.customerAgreed === false && confirming ? (
-                // Agreement often comes later, by phone or at pickup; the price already counts.
-                <View style={styles.lineAction}>
-                  <TextButton
-                    label={tn('repair.action.confirmLine')}
-                    onPress={() => {
-                      setDone(null);
-                      void runner.run(() =>
-                        runtime.run('confirmQuoteLine', { ticketId: row.id, lineId: line.id }),
-                      );
-                    }}
-                    disabled={runner.busy}
-                    testID={`${testID}.confirm.${line.id}`}
-                  />
-                </View>
-              ) : null}
               {line.status === 'proposed' && perLine ? (
                 <View style={styles.lineAction}>
                   <TextButton

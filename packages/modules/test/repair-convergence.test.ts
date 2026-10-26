@@ -98,8 +98,8 @@ async function writeJourney(a: RepairHarness): Promise<void> {
     a.cashierId,
   )) as { lineId: string };
   await a.run(
-    'confirmQuoteLine',
-    { ticketId: first.ticketId, lineId: unconfirmed.lineId },
+    'applyProposal',
+    { ticketId: first.ticketId, lineId: unconfirmed.lineId, customerAgreed: true },
     a.cashierId,
   );
   await a.run(

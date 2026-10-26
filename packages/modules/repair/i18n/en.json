@@ -16,8 +16,7 @@
     "deviceReturned": "Device handed back",
     "intakeOptionsChanged": "Intake choices changed",
     "storeIntakeOptionsChanged": "Choices at this store changed",
-    "storeCancelFeesChanged": "Cancellation fees changed",
-    "quoteLineConfirmed": "Customer agreed to a price"
+    "storeCancelFeesChanged": "Cancellation fees changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -39,13 +38,11 @@
     "waitForParts": "Mark waiting for parts",
     "reassign": "Change technician",
     "agreeApply": "Agrees",
-    "applyUnasked": "Apply without the customer’s agreement",
     "assignShort": "Choose",
     "reassignShort": "Change",
     "backToTicket": "Back to the repair",
     "applyUnconfirmed": "Not yet",
-    "agreedYes": "Yes",
-    "confirmLine": "Customer agreed"
+    "agreedYes": "Yes"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -198,15 +195,17 @@
       "agreed": "Customer agreed",
       "declined": "Declined",
       "notAgreed": "Customer not asked yet",
-      "proposed": "Proposed by technician"
+      "proposed": "Waiting for the customer"
     },
     "total": "Total",
     "addRow": "Add a price line",
     "pendingTotal": "Not yet confirmed by the customer: {amount}",
-    "technicianReason": "Technician’s reason",
     "customerAgrees": "Does the customer agree to this price?",
     "notCharged": "Not charged because it was cancelled. The customer pays the cancellation fee of {amount}.",
-    "alreadyAgreed": "Has the customer agreed?"
+    "alreadyAgreed": "Has the customer agreed?",
+    "changeReason": "Reason for the change",
+    "waitingEvent": "Price change waiting for the customer",
+    "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree."
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",

@@ -45,7 +45,14 @@ export async function openRepairScreenHarness(
       : {
           tenantId: peerOf.tenantId,
           storeId: peerOf.storeId,
-          users: [peerOf.cashierId, peerOf.technicianId, peerOf.technician2Id, peerOf.zeroUserId],
+          users: [
+            peerOf.cashierId,
+            peerOf.technicianId,
+            peerOf.technician2Id,
+            peerOf.zeroUserId,
+            peerOf.ownerId,
+            peerOf.storeOwnerId,
+          ],
         },
   );
   await h.db

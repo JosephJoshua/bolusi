@@ -277,6 +277,35 @@ describe('folding on another device', () => {
     });
   });
 
+  test('a price change an older app signed unagreed (schema v1) still counts, as it did then', async () => {
+    const a = await harness(5113);
+    const ticketId = await openTicket(a);
+    await a.run(
+      'changeQuote',
+      {
+        ticketId,
+        kind: 'part',
+        description: 'Lem',
+        amount: 20_000,
+        reason: 'Lepas',
+        customerAgreed: true,
+      },
+      a.cashierId,
+    );
+    const ops = await a.ownOps();
+    const v2 = ops.find((op) => op.type === REPAIR_OP.quoteChanged)!;
+    const v1Payload: Record<string, unknown> = { ...(v2.payload as object), customerAgreed: false };
+    delete v1Payload['waitsForCustomer'];
+    const v1 = { ...v2, schemaVersion: 1, payload: v1Payload };
+
+    const b = await peer(a, 5114);
+    let arrival = 1;
+    for (const op of ops) await b.deliverPulled(op === v2 ? (v1 as never) : op, arrival++);
+    const row = await ticket(b, ticketId);
+    expect(row.quoteTotal).toBe(770_000);
+    expect(row.pendingProposals).toBe(0);
+  });
+
   test('a fees op whose entity is not its own store is ignored by the fold', async () => {
     const h = await harness(5112);
     await h.run('setCancelFees', FEES, h.storeOwnerId);

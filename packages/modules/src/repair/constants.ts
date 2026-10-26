@@ -38,7 +38,6 @@ export const REPAIR_OP = {
   quoteChangeProposed: 'repair.quote_change_proposed',
   quoteChanged: 'repair.quote_changed',
   quoteProposalDeclined: 'repair.quote_proposal_declined',
-  quoteLineConfirmed: 'repair.quote_line_confirmed',
   deviceReturned: 'repair.device_returned',
   intakeOptionsChanged: 'repair.intake_options_changed',
   storeIntakeOptionsChanged: 'repair.store_intake_options_changed',
