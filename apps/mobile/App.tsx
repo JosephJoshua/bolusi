@@ -15,7 +15,13 @@ import {
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
+import {
+  Platform,
+  StatusBar as RNStatusBar,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
@@ -247,6 +253,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const [switching, setSwitching] = useState(false);
   // The avatar's menu (switch user, settings), open over the home surface.
   const [accountMenu, setAccountMenu] = useState(false);
+  const { fontScale } = useWindowDimensions();
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
@@ -768,6 +775,10 @@ export default function App(props: AppProps): React.JSX.Element {
     <View testID="bolusi-app-shell" style={shellStyle}>
       <StatusBar style="auto" />
       <View
+        // A new system font size remounts the screens. Android keeps already-laid-out text at the
+        // old size (pills stayed shrunk and cut after 1.3 → 1.0 on the QA device), and a remount
+        // measures everything again. Work in progress survives: drafts live in the workspace above.
+        key={`font-${fontScale}`}
         style={styles.zone}
         // Hidden from touch and screen readers while the overlay covers it, but still mounted.
         pointerEvents={modal === null ? 'auto' : 'none'}
