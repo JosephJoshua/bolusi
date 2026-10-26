@@ -57,15 +57,19 @@ export function useLiveQuery<R extends LiveSource, TData>(
         return;
       }
       running = true;
-      runRef.current(runtime).then(
-        (data) => settle({ status: 'ready', data }),
-        (error: unknown) => {
-          const code = errorCodeOrUnexpected(error);
-          settle(
-            code === 'PERMISSION_DENIED' ? { status: 'unauthorized' } : { status: 'error', code },
-          );
-        },
-      );
+      // Through a promise, so a `run` that throws before returning one still settles the read
+      // instead of leaving it marked running and the screen deaf to every later change.
+      Promise.resolve()
+        .then(() => runRef.current(runtime))
+        .then(
+          (data) => settle({ status: 'ready', data }),
+          (error: unknown) => {
+            const code = errorCodeOrUnexpected(error);
+            settle(
+              code === 'PERMISSION_DENIED' ? { status: 'unauthorized' } : { status: 'error', code },
+            );
+          },
+        );
     };
 
     execute();

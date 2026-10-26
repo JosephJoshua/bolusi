@@ -225,7 +225,8 @@ export function FlowScreen({
   /**
    * The ticket changed elsewhere and this step can no longer finish: said in the banner slot, and
    * the bottom action becomes the way back. Held back while the step's own command runs, since
-   * that command changes the ticket too and the step closes as it lands.
+   * that command changes the ticket too and the step closes as it lands: the runner clears `busy`
+   * and the step's `onDone` closes it in the same batched update, so the notice never shows.
    */
   readonly stale?: StaleStep | null | undefined;
   readonly testID: string;

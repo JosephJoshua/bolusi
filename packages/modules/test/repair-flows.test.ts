@@ -345,7 +345,7 @@ describe('an open step after the ticket changed elsewhere', () => {
         tech,
         h.technicianId,
       ),
-    ).toEqual({ kind: 'changed', status: 'in_repair' });
+    ).toEqual({ kind: 'changed' });
     for (const decided of ['applied', 'declined'] as const) {
       expect(
         staleStep(
@@ -377,7 +377,7 @@ describe('an open step after the ticket changed elsewhere', () => {
     // Reopened on another device: the phone is back on the bench.
     expect(
       staleStep({ kind: 'handover' }, row({ outcome: 'in_repair' }), cashier, h.cashierId),
-    ).toEqual({ kind: 'changed', status: 'in_repair' });
+    ).toEqual({ kind: 'changed' });
   });
 });
 

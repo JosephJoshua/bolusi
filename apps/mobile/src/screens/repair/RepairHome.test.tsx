@@ -477,12 +477,29 @@ describe('changes synced from another device', () => {
 
   test("the user's own change closes the step without a stale notice", async () => {
     const { a, ticketId } = await sharedTicket(5605);
-    const screen = await mount(a, a.cashierId);
+    // Hold the command open after it commits, so the ticket's re-read lands while it still runs:
+    // the moment the notice must not appear, since the change is the user's own.
+    const base = repairRuntimeFor(a, a.cashierId);
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runtime = {
+      ...base,
+      run: ((command, input) =>
+        base.run(command, input).then((result) => held.then(() => result))) as typeof base.run,
+    };
+    const screen = await mount(a, a.cashierId, { runtime });
     await press(screen, `repair.board.row.${ticketId}`);
     await press(screen, 'repair.ticket.action.cancel');
     type(screen, 'repair.note.cancel.text', 'Pelanggan batal');
     await press(screen, 'repair.note.cancel.primary');
+    expect((await ticketRow(a, ticketId)).outcome).toBe('cancelled');
+    expect(screen.query('repair.note.cancel')).not.toBeNull();
     expect(screen.query('repair.note.cancel.stale')).toBeNull();
+
+    release();
+    await settle();
     expect(screen.query('repair.note.cancel')).toBeNull();
     expect(screen.query('repair.ticket.content')).not.toBeNull();
   });

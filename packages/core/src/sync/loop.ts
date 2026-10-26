@@ -39,7 +39,7 @@ import {
   type TimerPort,
 } from './ports.js';
 import { runPullPhase, type PulledBatch } from './pull.js';
-import { runPushPhase, type PushPhaseResult } from './push.js';
+import { runPushPhase, type PushSettled } from './push.js';
 import {
   pendingMediaCount,
   pendingOperationCount,
@@ -90,8 +90,11 @@ export interface SyncLoopOptions<DB> {
   readonly pullLimit?: number;
   /** Passed to the pull phase: called after each committed batch (progress display only). */
   readonly onPullBatch?: (batch: PulledBatch) => void;
-  /** Called after a push phase that changed ops' sync status (any taken or refused). */
-  readonly onPushed?: (result: PushPhaseResult) => void;
+  /**
+   * Called after each pushed batch that changed ops' sync status (any taken or refused), even when
+   * a later batch of the same push then fails.
+   */
+  readonly onPushed?: (settled: PushSettled) => void;
 }
 
 /** Observable cycle counters — for tests and diagnostics; not persisted, not a contract with the UI. */
@@ -218,6 +221,7 @@ export class SyncLoop<DB> {
           surface: this.options.surface,
           clock: this.options.clock,
           deviceId: this.options.deviceId,
+          onBatchSettled: (settled) => this.notifyPushed(settled),
           onChainBroken: async () => {
             this.pushHalted = true;
             await writeSyncState(this.options.db, { pushHalted: true });
@@ -227,7 +231,6 @@ export class SyncLoop<DB> {
             : { batchSize: this.options.pushBatchSize }),
         });
         this.stats = { ...this.stats, pushed: this.stats.pushed + push.synced };
-        if (push.synced + push.rejected > 0) this.notifyPushed(push);
         await writeSyncState(this.options.db, { lastPushAt: this.options.clock.now() });
       }
       this.transition('push_drained');
@@ -347,9 +350,9 @@ export class SyncLoop<DB> {
     });
   }
 
-  private notifyPushed(result: PushPhaseResult): void {
+  private notifyPushed(settled: PushSettled): void {
     try {
-      this.options.onPushed?.(result);
+      this.options.onPushed?.(settled);
     } catch {
       // A notification only: a throwing listener must not fail the cycle that already pushed.
     }

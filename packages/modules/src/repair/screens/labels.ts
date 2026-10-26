@@ -91,7 +91,7 @@ export function staleStepMessage(stale: StaleStep): string {
     case 'proposalPending':
       return tn('repair.stale.proposalPending');
     case 'changed':
-      return tn('repair.stale.changed', { status: statusLabel(stale.status) });
+      return tn('repair.stale.changed');
   }
 }
 

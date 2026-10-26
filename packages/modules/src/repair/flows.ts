@@ -187,7 +187,8 @@ export type StaleStep =
   | { readonly kind: 'returned' }
   | { readonly kind: 'proposalDecided'; readonly decision: 'applied' | 'declined' }
   | { readonly kind: 'proposalPending' }
-  | { readonly kind: 'changed'; readonly status: TicketStatus };
+  /** Anything else, such as another technician starting first or the ticket reopened. */
+  | { readonly kind: 'changed' };
 
 const STEP_ACTIONS: Readonly<Record<TicketStep['kind'], readonly TicketAction[]>> = {
   before: ['start', 'resume', 'reopen'],
@@ -228,7 +229,7 @@ export function staleStep(
   }
   if (ticket.outcome === 'cancelled') return { kind: 'cancelled' };
   if (step.kind === 'handover' && ticket.pendingProposals > 0) return { kind: 'proposalPending' };
-  return { kind: 'changed', status: ticketStatus(ticket) };
+  return { kind: 'changed' };
 }
 
 // ── photos ──────────────────────────────────────────────────────────────────────────────────

@@ -691,6 +691,26 @@ describe('onPushed tells the screens that ops changed status', () => {
     expect(pushed).toEqual([{ synced: 1, rejected: 1 }]);
   });
 
+  it('reports a batch already taken when a later batch of the same push fails', async () => {
+    const pushed: Array<{ synced: number; rejected: number }> = [];
+    const first = await seedLocalOp(1);
+    await seedLocalOp(2);
+    const loop = await harness.makeLoop({
+      deviceId: device.id,
+      pushBatchSize: 1,
+      onPushed: ({ synced, rejected }) => pushed.push({ synced, rejected }),
+    });
+    harness.transport.scriptPush(
+      { results: [{ id: first.id, status: 'accepted' }] as PushResult[], serverTime: 1 },
+      netFail,
+    );
+    loop.requestSync('manual');
+    await loop.settle();
+    // The cycle failed into backoff, but the first op did sync and its screens must hear of it.
+    expect(loop.state).toBe('backoff');
+    expect(pushed).toEqual([{ synced: 1, rejected: 0 }]);
+  });
+
   it('a throwing listener does not fail the cycle', async () => {
     const op = await seedLocalOp(1);
     const loop = await harness.makeLoop({
