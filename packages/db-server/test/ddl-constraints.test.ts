@@ -297,3 +297,27 @@ async function insertMedia(overrides: Record<string, unknown> = {}): Promise<unk
     } as never)
     .execute();
 }
+
+test('devices rejects a second device with the same token hash, and allows many without one', async () => {
+  // UNIQUE (token_hash), 0018: one bearer token resolves to exactly one device.
+  const device = (tokenHash: string | null) => {
+    const id = uuid();
+    return {
+      id,
+      tenantId: tenant.tenantId,
+      storeId: tenant.storeId,
+      signingKeyPublic: `pubkey-${id}`,
+      tokenHash,
+      enrolledAt: BigInt(timestampMs()),
+    };
+  };
+  const hash = 'ab'.repeat(32);
+  await testDb.db.insertInto('devices').values(device(hash)).execute();
+  await expect(testDb.db.insertInto('devices').values(device(hash)).execute()).rejects.toThrow(
+    /idx_devices_token_hash/,
+  );
+  await testDb.db
+    .insertInto('devices')
+    .values([device(null), device(null)])
+    .execute();
+});
