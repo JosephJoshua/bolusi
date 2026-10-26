@@ -17,6 +17,7 @@ import type { DeviceRecord, OpRegistry } from '../types.js';
 export const GENESIS_TYPE = 'auth.device_enrolled';
 export const AUTH_PIN_CHANGED = 'auth.pin_changed';
 export const AUTH_PIN_RESET = 'auth.pin_reset';
+export const AUTH_PIN_LOCKOUT_CLEARED = 'auth.pin_lockout_cleared';
 export const PLATFORM_CONFLICT_DETECTED = 'platform.conflict_detected';
 export const PLATFORM_CONFLICT_ACKNOWLEDGED = 'platform.conflict_acknowledged';
 
@@ -196,12 +197,14 @@ export async function checkScope(
       }
       return null;
 
-    case AUTH_PIN_RESET: {
+    case AUTH_PIN_RESET:
+    case AUTH_PIN_LOCKOUT_CLEARED: {
       // If the TARGET holds main_owner, the actor must too (blocks store_owner → main_owner
-      // impersonation, api/02-auth §6.6). auth.user_reset_pin itself is the authorization step's.
+      // impersonation, api/02-auth §6.6; unlocking an owner's PIN is the same takeover's first step).
+      // The permission itself is the authorization step's.
       const targetIsMainOwner = await userHoldsRole(db, op.entityId, MAIN_OWNER_ROLE);
       if (targetIsMainOwner && !(await userHoldsRole(db, op.userId, MAIN_OWNER_ROLE))) {
-        return { reason: 'resetting a main_owner PIN requires the actor to hold main_owner' };
+        return { reason: `${op.type} on a main_owner requires the actor to hold main_owner` };
       }
       return null;
     }

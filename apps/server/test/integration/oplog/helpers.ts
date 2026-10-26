@@ -339,6 +339,13 @@ export async function seedWorld(
       createdAt,
     })
     .execute();
+  // The author works at the device's store: the server refuses an op credited to anyone else.
+  if (options.deviceKind !== 'system') {
+    await db
+      .insertInto('userStores')
+      .values({ userId: world.userId, storeId: world.storeId, tenantId: world.tenantId })
+      .execute();
+  }
   if ((options.grants ?? 'all') === 'all') {
     await grantAllPermissions(db, world.tenantId, world.userId);
   }
@@ -392,6 +399,7 @@ export async function seedDevice(
 }
 
 /** Seed an extra user in a tenant (membership directory). */
+/** Seed a user who works at every store the tenant has so far (so they may author its ops). */
 export async function seedUser(
   db: Kysely<DB>,
   tenantId: string,
@@ -402,6 +410,14 @@ export async function seedUser(
     .insertInto('users')
     .values({ id: userId, tenantId, name: `user-${userId}`, status, createdAt: 1_726_000_000_000n })
     .execute();
+  const stores = await db
+    .selectFrom('stores')
+    .select('id')
+    .where('tenantId', '=', tenantId)
+    .execute();
+  for (const store of stores) {
+    await db.insertInto('userStores').values({ userId, storeId: store.id, tenantId }).execute();
+  }
 }
 
 /** Seed a role + its permissions, and grant it to a user (tenant-scoped). */

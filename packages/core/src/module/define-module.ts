@@ -128,7 +128,8 @@ export interface OperationDeclaration<DB> {
    * The permission the op's author must hold, in the emitting device's store, for the server to
    * accept a pushed op of this type. A device checks it locally before writing; the server checks
    * it again against its own directory, so a tampered client cannot record what its user may not
-   * do.
+   * do. (Who is signed in stays the device's claim, limited to employees of its store: PINs are
+   * verified on the device.)
    *
    * `null` only for types no command emits: ops the runtime appends outside the command layer
    * (session, denial audit, lockout, enrollment) and ops the server builds itself.

@@ -44,7 +44,7 @@ import { allocateServerSeq, lockTenantCounter } from './server-seq.js';
 import { isClockSkewed } from './skew.js';
 import { classifyChain, type ChainHead } from './steps/chain.js';
 import { findRefusal, isDuplicate } from './steps/dedupe.js';
-import { checkPermission, createDirectoryCache } from './steps/permission.js';
+import { checkPermission, createAuthorLookup } from './steps/permission.js';
 import { classifySchema } from './steps/schema.js';
 import { checkScope } from './steps/scope.js';
 import { verifyPushedSignature } from './steps/signature.js';
@@ -93,6 +93,15 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
  * Process a push batch for one tenant/device. `identity` is the token-authenticated device
  * (task 16 supplies it after bearer auth); `ops` ascend by per-device seq (api/01 §3).
  */
+/**
+ * Author-chosen text as a refusal row can hold it: Postgres `text` rejects NUL, and a refused op's
+ * type is unvalidated by definition, so an unstorable one must not turn the refusal into a 500 that
+ * wedges the device. Bounded too, since the row is kept forever.
+ */
+function storable(text: string): string {
+  return text.replaceAll('\u0000', '').slice(0, 500);
+}
+
 export async function processPushBatch(
   deps: OplogPipelineDeps,
   identity: PushIdentity,
@@ -171,11 +180,11 @@ export async function processPushBatch(
           seq: BigInt(op.seq),
           hash: op.hash,
           userId: op.userId,
-          type: op.type,
-          entityType: op.entityType,
+          type: storable(op.type),
+          entityType: storable(op.entityType),
           entityId: op.entityId,
           code,
-          reason,
+          reason: storable(reason),
           receivedAt: BigInt(deps.now()),
         })
         // An id some earlier refusal already holds (only a tampered client reuses one) must not
@@ -185,7 +194,7 @@ export async function processPushBatch(
       head = { seq: op.seq, hash: op.hash };
       reject(op, code, reason);
     };
-    const directoryFor = createDirectoryCache(db, identity.tenantId);
+    const authors = createAuthorLookup(db, identity.tenantId);
     const anomaly = async (
       op: SignedOperation,
       kind: AnomalyKind,
@@ -279,7 +288,7 @@ export async function processPushBatch(
 
       // 7. authorization: the author must hold the op type's declared permission, judged by the
       // server's directory. No anomaly: an author whose role changed while offline is not tamper.
-      const permission = await checkPermission(op, device, deps.registry, directoryFor);
+      const permission = await checkPermission(op, device, deps.registry, authors);
       if (permission !== null) {
         await refuse(op, 'PERMISSION_DENIED', permission.reason);
         continue;

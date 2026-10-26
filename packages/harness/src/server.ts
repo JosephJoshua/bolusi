@@ -291,6 +291,8 @@ export class HarnessServer {
               ON CONFLICT (id) DO NOTHING`.execute(this.db);
     await sql`INSERT INTO users (id, tenant_id, name, created_at) VALUES (${identity.userId}, ${identity.tenantId}, ${'user'}, ${CREATED_AT})
               ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_stores (user_id, store_id, tenant_id) VALUES (${identity.userId}, ${identity.storeId}, ${identity.tenantId})
+              ON CONFLICT DO NOTHING`.execute(this.db);
     // The server authorizes every pushed op against the author's roles, so the seeded user holds a
     // tenant-wide role with every registered permission: the server-side twin of the devices'
     // grant-all evaluator (buildGrantAllEvaluator). Scenarios test sync, not role design.

@@ -231,6 +231,77 @@ describe('every pushed op is authorized against the server directory', () => {
   });
 });
 
+describe('an op is credited only to an employee of the device`s store', () => {
+  /** A user of this tenant who works ONLY at a new other store. */
+  async function outsider(world: ChainWorld, seed: number): Promise<string> {
+    const otherStore = testId(seed);
+    await db
+      .insertInto('stores')
+      .values({ id: otherStore, tenantId: world.tenantId, name: 'other', createdAt: 1n })
+      .execute();
+    const userId = testId(seed + 1);
+    await db
+      .insertInto('users')
+      .values({ id: userId, tenantId: world.tenantId, name: 'outsider', createdAt: 1n })
+      .execute();
+    await db
+      .insertInto('userStores')
+      .values({ userId, storeId: otherStore, tenantId: world.tenantId })
+      .execute();
+    return userId;
+  }
+
+  test('borrowing a main owner who does not work at this store is refused', async () => {
+    // Falsification: without the store-membership rule the owner's tenant-wide grant passes and a
+    // technician's device cancels the repair in the owner's name.
+    const { world, builder } = await setupWorld(3240);
+    await grantDefaultRole(world, world.userId, 'technician', world.storeId, 3240);
+    const owner = await outsider(world, 32401);
+    await grantDefaultRole(world, owner, 'main_owner', null, 32403);
+
+    const result = await push(world, [cancel(builder, owner)]);
+
+    expect(result.results[0]).toMatchObject({
+      status: 'rejected',
+      code: 'PERMISSION_DENIED',
+      reason: expect.stringContaining('does not work at this store'),
+    });
+    // Positive control: the same owner, once they work here, may cancel.
+    await db
+      .insertInto('userStores')
+      .values({ userId: owner, storeId: world.storeId, tenantId: world.tenantId })
+      .execute();
+    expect((await push(world, [cancel(builder, owner)])).results[0]).toMatchObject({
+      status: 'accepted',
+    });
+  });
+
+  test('unlocking the PIN of an employee of another store needs the grant there too', async () => {
+    const { world, builder } = await setupWorld(3241);
+    await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3241);
+    const colleague = testId(32413);
+    await seedUser(db, world.tenantId, colleague); // before the other store exists: works here only
+    const elsewhere = await outsider(world, 32411);
+    const unlock = (target: string) =>
+      builder.append({
+        type: 'auth.pin_lockout_cleared',
+        entityType: 'user_credential',
+        entityId: target,
+        payload: {},
+      });
+
+    const result = await push(world, [unlock(elsewhere), unlock(colleague)]);
+
+    expect(result.results[0]).toMatchObject({
+      status: 'rejected',
+      code: 'PERMISSION_DENIED',
+      reason: expect.stringContaining('every store of the target'),
+    });
+    // Positive control: a colleague at this store.
+    expect(result.results[1]).toMatchObject({ status: 'accepted' });
+  });
+});
+
 describe('a deactivated author is refused for every op type, permission-free ones included', () => {
   test('a session switch by a deactivated user is refused, an active user`s is accepted', async () => {
     // Joseph (2026-10-26): refuse ALL of a deactivated employee's unsynced changes. A runtime-written
@@ -364,6 +435,26 @@ describe('a refused op does not stop the device syncing', () => {
     expect(result.results.map((r) => ('code' in r ? r.code : r.status))).toEqual([
       'PERMISSION_DENIED',
       'PERMISSION_DENIED',
+      'accepted',
+    ]);
+  });
+});
+
+describe('a refusal can always be stored', () => {
+  test('an unknown type carrying a NUL character is refused, not a batch-wide 500', async () => {
+    const { world, builder } = await setupWorld(3250);
+    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3250);
+    const odd = builder.append({
+      type: 'repair.ticket\u0000cancelled',
+      entityType: 'repair_ticket',
+      entityId: TICKET,
+      payload: {},
+    });
+
+    const result = await push(world, [odd, cancel(builder)]);
+
+    expect(result.results.map((r) => ('code' in r ? r.code : r.status))).toEqual([
+      'UNKNOWN_TYPE',
       'accepted',
     ]);
   });
