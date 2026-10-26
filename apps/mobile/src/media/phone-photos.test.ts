@@ -9,7 +9,9 @@ import { createPhonePhotoLoader, type PhonePhotoFiles } from './phone-photos.js'
 const BYTES = bytesOfLength(256);
 const PHOTO = { modelId: 12824, sha256: sha256Hex(BYTES) } as const;
 
-function rig(options: { body?: Uint8Array; status?: number; token?: string | null } = {}) {
+function rig(
+  options: { body?: Uint8Array<ArrayBuffer>; status?: number; token?: string | null } = {},
+) {
   const stored = new Map<string, Uint8Array>();
   const files: PhonePhotoFiles = {
     find: (name) => (stored.has(name) ? `file:///cache/${name}` : null),
