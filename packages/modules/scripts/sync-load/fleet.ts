@@ -222,7 +222,8 @@ export interface ChangeTemplate {
     readonly tenantId: string;
     readonly storeId: string;
     readonly deviceId: string;
-    readonly cashierId: string;
+    /** Counter-side authors (the cashier and the owners); all become the store's cashier. */
+    readonly cashierIds: readonly string[];
     readonly technicianIds: readonly string[];
   };
 }
@@ -245,7 +246,7 @@ export async function buildTemplate(days: number, ticketsPerDay: number): Promis
       tenantId: w.tenantId,
       storeId: w.storeId,
       deviceId: w.deviceId,
-      cashierId: w.cashierId,
+      cashierIds: [w.cashierId, w.ownerId, w.storeOwnerId],
       technicianIds: [w.technicianId, w.technician2Id, w.zeroUserId],
     },
   };
@@ -270,7 +271,7 @@ export class ChangeStream {
       [fixed.tenantId, device.tenantId],
       [fixed.storeId, device.storeId],
       [fixed.deviceId, device.deviceId],
-      [fixed.cashierId, device.cashierId],
+      ...fixed.cashierIds.map((id) => [id, device.cashierId] as const),
       ...fixed.technicianIds.map((id) => [id, device.technicianId] as const),
     ]);
   }
