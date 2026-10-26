@@ -92,24 +92,21 @@ function journey(world: ChainWorld): OpSpec[] {
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
     entityId: ticketId,
+    schemaVersion: 2,
     payload: {
       ticketNumber,
       customerId: customer,
       device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
       complaint: 'Layar retak',
       intakeNotes: '',
-      checklist: [{ item: 'screen', state: 'issue', note: '' }],
-      peripherals: ['charger'],
+      checklist: [{ item: 'screen', label: null, state: 'issue', note: '' }],
+      peripherals: [{ item: 'charger', label: null }],
       estimatedReadyAt: 1_726_200_000_000,
       quoteLines: [{ lineId, kind: 'part', description: 'LCD', amount: 650_000 }],
-      photos: {
-        front: photo(1),
-        back: photo(2),
-        left: photo(3),
-        right: photo(4),
-        top: photo(5),
-        bottom: photo(6),
-      },
+      photos: [
+        { slot: 'front', label: null, ref: photo(1) },
+        { slot: 'back', label: null, ref: photo(2) },
+      ],
     },
   });
   const onTicket = (type: string, payload: Record<string, unknown>): OpSpec => ({
@@ -153,6 +150,25 @@ function journey(world: ChainWorld): OpSpec[] {
     { type: 'notes.note_archived', entityType: 'note', entityId: note, payload: {} },
 
     // repair
+    {
+      type: 'repair.intake_options_changed',
+      entityType: 'repair_intake_options',
+      entityId: world.tenantId,
+      storeId: null,
+      payload: {
+        list: 'checks',
+        items: [
+          { id: 'screen', label: null },
+          { id: 'tinta-bocor', label: 'Tinta bocor' },
+        ],
+      },
+    },
+    {
+      type: 'repair.store_intake_options_changed',
+      entityType: 'repair_store_intake_options',
+      entityId: world.storeId,
+      payload: { list: 'checks', hidden: ['tinta-bocor'] },
+    },
     {
       type: 'repair.customer_registered',
       entityType: 'repair_customer',
