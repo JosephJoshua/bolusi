@@ -884,9 +884,17 @@ export function Root({
     if (app === null) return;
     let cancelled = false;
     const reread = (): void => {
-      void readSyncStatusRows(app.db.db).then((rows) => {
-        if (!cancelled) setSyncReads(rows);
-      });
+      void readSyncStatusRows(app.db.db)
+        .then((rows) => {
+          if (!cancelled) setSyncReads(rows);
+        })
+        .catch((error: unknown) => {
+          // The screen keeps its last rows and the next bump reads again. A read that lands after
+          // the database closed must not become an unhandled rejection.
+          consoleDiagnostics.warn('sync status read failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     };
     reread();
     const unsubscribe = app.invalidation.subscribe(reread);
