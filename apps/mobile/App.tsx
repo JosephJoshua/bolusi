@@ -969,18 +969,17 @@ export default function App(props: AppProps): React.JSX.Element {
               currentUser === null ? (
                 <View testID="notes-no-avatar" />
               ) : (
-                // THE HEADER CHROME (§8.1): the language Chip (the ONLY producer of `route:
+                // THE HEADER CHROME (§8.1): the Settings Chip (the ONLY producer of `route:
                 // 'settings'`) and the avatar (the producer of the User Switcher).
                 //
-                // WHY THE LANGUAGE CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
-                // toggle, the notification deep-links and the device-identity readout, and until
-                // task 124 added this node nothing in shipping source ever called
-                // `setRoute('settings')` — the render arm below was live, typed and tested, and no
-                // user could open it (CLAUDE.md §2.11's "sound tests, zero callers"). On an
-                // Indonesian-first product the language rows are the ONLY way out of a wrong locale
-                // (07-i18n §1.2), so the entry point cannot be folded behind the avatar: the avatar
-                // opens the User Switcher (a roster of faces), not Settings, so Settings needs its
-                // own direct control regardless of whether the switcher is reachable.
+                // WHY THE SETTINGS CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
+                // toggle, the owner's intake lists, the PIN and notification rows and the device
+                // readout. On an Indonesian-first product the language rows are the ONLY way out of
+                // a wrong locale (07-i18n §1.2), and switching user is the counter's most frequent
+                // header action on a shared phone, so neither is folded behind the other: the avatar
+                // opens the User Switcher in one tap, and Settings keeps its own direct control. It
+                // is labelled Settings, not Language: it opened Settings all along, and an owner
+                // looking for the intake lists would never try a chip called "Bahasa".
                 //
                 // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
                 // control before: `resolveZone` returned the shell for every session-open render
@@ -1002,8 +1001,8 @@ export default function App(props: AppProps): React.JSX.Element {
                   {/* Chip pins itself to `flex-start`; the wrapper centres it on the avatar's axis. */}
                   <View>
                     <Chip
-                      label={t('core.settings.language')}
-                      icon="language"
+                      label={t('core.settings.title')}
+                      icon="settings"
                       onPress={() => leaveHome(() => setRoute('settings'))}
                       testID="shell-open-settings"
                     />
