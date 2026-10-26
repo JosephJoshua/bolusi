@@ -131,7 +131,12 @@ async function androidUp(build) {
 
   const apk = path.join(MOBILE, 'android/app/build/outputs/apk/release/app-release.apk');
   if (build || !existsSync(apk)) {
-    const buildEnv = { ...env, EXPO_PUBLIC_API_URL: `http://10.0.2.2:${PORT}` };
+    // A release build blocks cleartext HTTP; the harness flag (as in CI) allows it to 10.0.2.2 only.
+    const buildEnv = {
+      ...env,
+      EXPO_PUBLIC_API_URL: `http://10.0.2.2:${PORT}`,
+      EXPO_PUBLIC_BOLUSI_TEST_HARNESS: '1',
+    };
     run('pnpm', ['exec', 'expo', 'prebuild', '--platform', 'android', '--no-install'], {
       cwd: MOBILE,
       env: buildEnv,

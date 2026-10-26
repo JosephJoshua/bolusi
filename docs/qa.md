@@ -35,6 +35,9 @@ once per commit.
 (about 5 load average, many ports in use), so: one emulator at a time (the script takes a lock in
 `~/.bolusi-qa.lock`), capped at 4 cores and 4 GB, Gradle at 8 workers, and nothing listening
 publicly. The lane server binds `127.0.0.1:3000`. Work in `~/bolusi-qa` and never use sudo.
+joseph's `~/.npmrc` points pnpm at an unwritable store, so prefix pnpm commands there with
+`npm_config_store_dir=$HOME/.local/share/pnpm/store`. A run takes about 5 minutes the first time
+(3.5 minute Gradle build) and 2 minutes after; the emulator uses about 6 GB and 4 cores.
 
 **Mac:** used for iOS only, since its disk is nearly full. Check free space first: an iOS build
 needs about 12 GB.
