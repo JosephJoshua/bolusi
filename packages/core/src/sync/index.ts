@@ -37,6 +37,7 @@ export {
   runPushPhase,
   type PushPhaseDeps,
   type PushPhaseResult,
+  type PushSettled,
 } from './push.js';
 export {
   insertQuarantinedOp,

@@ -83,6 +83,17 @@ export interface PushPhaseDeps<DB> {
   /** Emits the `pushHalted` write; the loop owns `SyncState` (03 §10 — bookkeeping.ts defers here). */
   readonly onChainBroken: () => Promise<void>;
   readonly batchSize?: number;
+  /**
+   * Called after each batch that changed ops' sync status, with that batch's counts. Per batch, not
+   * per phase: when a later batch fails on the wire, the ops already marked still get reported.
+   */
+  readonly onBatchSettled?: (settled: PushSettled) => void;
+}
+
+/** Ops one pushed batch moved out of `local`. */
+export interface PushSettled {
+  readonly synced: number;
+  readonly rejected: number;
 }
 
 export interface PushPhaseResult {
@@ -122,6 +133,8 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
     let halted = false;
     let gapped = false;
     let chainBrokenSeen = false;
+    const syncedBefore = synced;
+    const rejectedBefore = rejected;
 
     for (const result of response.results) {
       if (!byId.has(result.id)) continue; // A result for an op we did not send: not ours to mark.
@@ -134,6 +147,9 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
         halted = true;
       }
       if (outcome === 'gap') gapped = true;
+    }
+    if (synced > syncedBefore || rejected > rejectedBefore) {
+      deps.onBatchSettled?.({ synced: synced - syncedBefore, rejected: rejected - rejectedBefore });
     }
 
     // `CHAIN_BROKEN` halts THIS device's push (03 §10) — nothing after a broken link can be

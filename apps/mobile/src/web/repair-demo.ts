@@ -44,6 +44,9 @@ export const DEMO_REPAIR_ROLES = {
 } as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
 
+/** The `window` key of the colleague hook `demoRepairRuntime` installs (browser tests only). */
+export const DEMO_COLLEAGUE_HOOK = '__repairDemoColleague';
+
 const NAMES = new Map<string, string>([
   ['u-andi', 'Andi Pratama'],
   ['u-siti', 'Siti Rahayu'],
@@ -266,7 +269,7 @@ function placeholderUri(mediaId: string): string {
 }
 
 export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime {
-  const actor = DEMO_REPAIR_ROLES[role];
+  let actor: { readonly userId: string; readonly name: string } = DEMO_REPAIR_ROLES[role];
   let tickets = seedTickets();
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
@@ -543,7 +546,22 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     return { ticketId: t.id, lineId: String(input['lineId']) };
   }
 
-  const permitted = new Set<string>(actor.permissions);
+  // A colleague on another device: the harness's stand-in for a change that arrives by sync, so a
+  // browser test can watch an open screen react to it. Runs the same demo commands as the owner.
+  const colleague = (name: string, input: Input): unknown => {
+    const self = actor;
+    actor = DEMO_REPAIR_ROLES.owner;
+    try {
+      return commands[name]!(input);
+    } finally {
+      actor = self;
+    }
+  };
+  if (typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>)[DEMO_COLLEAGUE_HOOK] = { run: colleague };
+  }
+
+  const permitted = new Set<string>(DEMO_REPAIR_ROLES[role].permissions);
   const runtime = {
     userId: actor.userId,
     query: (name: string, input: Input) => queries[name]!(input),

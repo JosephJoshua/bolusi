@@ -31,6 +31,17 @@ anything typed (edit distance over names, digits and codes, never exact). On a
 device the index lives in memory per store, loads once, and reloads only the
 entities the projection engine reports as changed.
 
+Screens are live the same way: a module's screen reads through `useLiveQuery`
+(`packages/modules/src/screen-kit/live.ts`), which re-reads whenever the
+projection engine's invalidation bus reports a write to the module's tables, or
+a push changes op sync status (`OP_SYNC_STATUS_TABLE`). Local commands and
+pulled operations take the same path, so another device's change shows on an
+open screen with no extra wiring. A device pushes 1 s after a local change and
+pulls on the server's realtime poke, so a colleague's change normally reaches
+other screens in the store within a couple of seconds online. A step a user has
+open re-checks its ticket against the same rule that offered it and says so when
+a synced change has made it impossible to finish.
+
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
 
