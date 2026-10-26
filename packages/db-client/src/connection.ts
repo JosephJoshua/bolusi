@@ -149,55 +149,6 @@ export interface ClientDb {
 let current: ClientDb | null = null;
 
 /**
- * Wraps the driver so the connection knows when a transaction is open. Every client transaction
- * (`ClientDb.transaction`, the op store) goes through these three calls on this one driver.
- */
-function trackTransactions(driver: DbDriver) {
-  let open = false;
-  const listeners = new Set<() => void>();
-  const end = (): void => {
-    open = false;
-    for (const listener of listeners) {
-      try {
-        listener();
-      } catch {
-        // A listener must not turn a committed transaction into a reported failure.
-      }
-    }
-  };
-  const tracked: DbDriver = {
-    execute: (text, params) => driver.execute(text, params),
-    executeBatch: (commands) => driver.executeBatch(commands),
-    prepare: (text) => driver.prepare(text),
-    async begin() {
-      await driver.begin();
-      open = true;
-    },
-    async commit() {
-      // A failed commit leaves the transaction open; the caller's rollback ends it.
-      await driver.commit();
-      end();
-    },
-    async rollback() {
-      try {
-        await driver.rollback();
-      } finally {
-        end();
-      }
-    },
-    close: () => driver.close(),
-  };
-  return {
-    driver: tracked,
-    isOpen: () => open,
-    onEnd(listener: () => void): () => void {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-}
-
-/**
  * Scrubs the key out of text before it can reach an error message or a log line.
  *
  * A driver is free to echo its open params in an error string; without this, the key
@@ -223,6 +174,87 @@ function sanitizeOpenFailure(error: unknown, key: string): DbOpenError {
   return new DbOpenError('driver_open_failed', `failed to open the client database: ${redacted}`, {
     cause,
   });
+}
+
+/**
+ * Serializes transactions on the one connection and reports when each one ends. SQLite has a single
+ * transaction per connection, and every writer here (the append path, the pull, a background rebuild
+ * batch, Kysely's `db.transaction()`) shares it, so two overlapping BEGINs would fail ("cannot start
+ * a transaction within a transaction") or one caller's ROLLBACK would discard the other's writes.
+ * `begin` waits for the previous transaction to end. A successful COMMIT or any ROLLBACK ends it: the
+ * end listeners run (core's `InvalidationBus` holds what a transaction emits until then), and then
+ * the next transaction may begin. A failed COMMIT leaves the transaction open for the caller's
+ * rollback.
+ *
+ * Statements outside a transaction are not queued: a read may still land inside another caller's
+ * open transaction and see its uncommitted rows, which is why a rebuild batch removes one entity's
+ * rows at a time (core projection/rebuild.ts). A nested BEGIN from inside a transaction now waits
+ * forever instead of failing, so nothing may open a transaction while it holds one.
+ */
+export function serializeTransactions(driver: DbDriver) {
+  let tail: Promise<void> = Promise.resolve();
+  let release: (() => void) | null = null;
+  let open = false;
+  const listeners = new Set<() => void>();
+  const free = (): void => {
+    const done = release;
+    release = null;
+    done?.();
+  };
+  const end = (): void => {
+    if (!open) return;
+    open = false;
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch {
+        // A listener must not turn a committed transaction into a reported failure.
+      }
+    }
+    free();
+  };
+  const serialized: DbDriver = {
+    execute: (sql, params) => driver.execute(sql, params),
+    executeBatch: (commands) => driver.executeBatch(commands),
+    prepare: (sql) => driver.prepare(sql),
+    async begin(): Promise<void> {
+      const previous = tail;
+      let unlock!: () => void;
+      tail = new Promise<void>((resolve) => {
+        unlock = resolve;
+      });
+      await previous;
+      release = unlock;
+      try {
+        await driver.begin();
+      } catch (error) {
+        free();
+        throw error;
+      }
+      open = true;
+    },
+    async commit(): Promise<void> {
+      await driver.commit();
+      end();
+    },
+    async rollback(): Promise<void> {
+      try {
+        await driver.rollback();
+      } finally {
+        end();
+      }
+    },
+    close: () => driver.close(),
+  };
+  return {
+    driver: serialized,
+    /** True between a successful BEGIN and its commit or rollback. */
+    isOpen: (): boolean => open,
+    onEnd(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
 }
 
 /**
@@ -268,7 +300,7 @@ export async function openClientDb(options: OpenClientDbOptions): Promise<Client
   } catch (error) {
     throw sanitizeOpenFailure(error, encryptionKey);
   }
-  const transactions = trackTransactions(rawDriver);
+  const transactions = serializeTransactions(rawDriver);
   const driver = transactions.driver;
 
   try {

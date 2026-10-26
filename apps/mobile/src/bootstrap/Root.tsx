@@ -198,9 +198,10 @@ export interface RootProps {
    */
   readonly appState: AppStatePort;
   /**
-   * Core's one-shot `TimerPort` — the idle tick's cadence. Node-safe (`ports/timer.ts` is plain
-   * `setTimeout`), but injected rather than imported so a test drives the tick deterministically
-   * instead of sleeping (T-6). REQUIRED for the reason `appState` is.
+   * Core's one-shot `TimerPort` — the idle tick's cadence, and the pause between projection-rebuild
+   * batches. Node-safe (`ports/timer.ts` is plain `setTimeout`), but injected rather than imported so
+   * a test drives the tick deterministically instead of sleeping (T-6). REQUIRED for the reason
+   * `appState` is.
    */
   readonly timer: TimerPort;
   /**
@@ -762,6 +763,33 @@ export function Root({
       cancelled = true;
     };
   }, [app, enrollment, createNotes, sessionUserId, media, capture.capturePhoto]);
+
+  /**
+   * PROJECTION UPGRADES (04 §4.4). An app update that bumps a module's projectionVersion re-folds that
+   * module from the op log, in the background: every screen keeps its rows and every command keeps
+   * working while it runs (core projection/rebuild.ts). It pauses on the timer between batches so the
+   * UI and queued queries go first, and if the app closes first it resumes from its cursor on the next
+   * launch. Keyed on the engine, which enrollment keeps, so enrolling does not restart it.
+   */
+  const engine = app?.engine ?? null;
+  useEffect(() => {
+    if (engine === null) return;
+    let stopped = false;
+    void engine
+      .rebuildOutdated({
+        pause: () => new Promise<void>((resolve) => timer.schedule(0, resolve)),
+        isStopped: () => stopped,
+      })
+      .catch((error: unknown) => {
+        // The projection keeps its previous rows; the next launch retries from the cursor.
+        consoleDiagnostics.warn('projection rebuild failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    return () => {
+      stopped = true;
+    };
+  }, [engine, timer]);
 
   /**
    * §8.4's DERIVED READS (01 §5.2; task 130) — the producer `SyncStatusInput.rejected` / `.media` /

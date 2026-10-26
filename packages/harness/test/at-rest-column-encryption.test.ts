@@ -33,7 +33,7 @@ import {
   insertQuarantinedOp,
   listSwitcherUsers,
   operationFromSignedCoreJcs,
-  readCanonicalPage,
+  readEntityOps,
   readVerifier,
   replaceUsersDirectory,
   SIGNED_CORE_SEAL,
@@ -417,7 +417,7 @@ describe('at-rest column encryption — a forged marker in a PLAINTEXT column is
   // F7. The marker used to be a FIXED string, so anyone could write it. `operations
   // .agent_conversation_id` is plaintext BY DESIGN (correctly — it is not PII), it rides the SIGNED
   // envelope as an unbounded `z.string().nullable()` (schemas/envelope.ts), and the projection fold
-  // selects it (`OP_COLUMNS` → `readCanonicalPage`). So a second enrolled device could sign an op
+  // selects it (`OP_COLUMNS`, read by every re-fold). So a second enrolled device could sign an op
   // whose conversation id merely LOOKED sealed, the server would accept it, it would sync to every
   // device in the store, and the read seam would try to decrypt it and THROW — permanently breaking
   // `runRebuild` for that module on every device, in an APPEND-ONLY table where the row cannot be
@@ -452,7 +452,7 @@ describe('at-rest column encryption — a forged marker in a PLAINTEXT column is
     // THE ASSERTION THAT MATTERS: the real projection reader must survive it. Before the keyed
     // marker this threw "Unsupported state or unable to authenticate data" and took every future
     // rebuild of the module with it.
-    const page = await readCanonicalPage(opened.db.db, ['notes.note_created'], null, 10);
+    const page = await readEntityOps(opened.db.db, LOCAL_OP.entityType, 'n1');
     expect(page).toHaveLength(1);
     expect(page[0]?.agentConversationId).toBe(FORGED);
   });
