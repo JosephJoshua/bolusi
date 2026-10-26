@@ -17,6 +17,7 @@ import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
 import {
+  grantRole,
   readAnomalies,
   readOps,
   seedRepairTicket,
@@ -73,11 +74,14 @@ afterEach(async () => {
 
 const TICKET = '01920000-0000-7000-8000-0000000e0001';
 
-async function setupWorld(seed: number): Promise<{ world: ChainWorld; builder: ChainBuilder }> {
+async function setupWorld(
+  seed: number,
+  grants: 'all' | 'none' = 'all',
+): Promise<{ world: ChainWorld; builder: ChainBuilder }> {
   const world = makeWorld(seed, serverCryptoPort);
   const builder = new ChainBuilder(world, serverCryptoPort);
   const genesis = builder.genesis();
-  await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash });
+  await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash, grants });
   await seedRepairTicket(db, world, TICKET);
   return { world, builder };
 }
@@ -94,7 +98,11 @@ function ticketOp(
   builder: ChainBuilder,
   type: string,
   payload: Record<string, unknown>,
-  extra: { readonly entityId?: string; readonly timestamp?: number } = {},
+  extra: {
+    readonly entityId?: string;
+    readonly timestamp?: number;
+    readonly schemaVersion?: number;
+  } = {},
 ) {
   return builder.append({
     type,
@@ -102,6 +110,7 @@ function ticketOp(
     entityId: extra.entityId ?? TICKET,
     payload,
     ...(extra.timestamp === undefined ? {} : { timestamp: extra.timestamp }),
+    ...(extra.schemaVersion === undefined ? {} : { schemaVersion: extra.schemaVersion }),
   });
 }
 
@@ -316,6 +325,99 @@ describe('a pushed repair op must be legal against the server`s records', () => 
     expect(lines.map((line) => [line.id, Number(line.amount)])).toEqual([
       ['01920000-0000-7000-8000-0000000e0a02', -50_000],
     ]);
+  });
+});
+
+describe('owner-only prices and settings', () => {
+  test('lowering a price needs repair.discount, on a change and on a proposal', async () => {
+    const { world, builder } = await setupWorld(3340, 'none');
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId: testId(3341),
+      roleName: 'cashier',
+      permissionIds: ['repair.quote_change', 'repair.work'],
+    });
+    const lineId = (n: number) => `01920000-0000-7000-8000-0000000e0b0${n}`;
+    const change = (n: number, kind: string, amount: number) =>
+      ticketOp(
+        builder,
+        'repair.quote_changed',
+        {
+          lineId: lineId(n),
+          kind,
+          description: 'Ubah harga',
+          amount,
+          reason: 'Langganan',
+          customerAgreed: true,
+          fromProposal: false,
+          waitsForCustomer: false,
+        },
+        { schemaVersion: 2 },
+      );
+    const discount = change(1, 'discount', -10_000);
+    const part = change(2, 'part', 80_000);
+    const propose = ticketOp(builder, 'repair.quote_change_proposed', {
+      lineId: lineId(3),
+      kind: 'adjustment',
+      description: 'Potongan',
+      amount: -5_000,
+      reason: 'Langganan',
+    });
+
+    const result = await push(world, [discount, part, propose]);
+
+    expect(result.results.map((r) => r.status)).toEqual(['rejected', 'accepted', 'rejected']);
+    for (const refused of [result.results[0], result.results[2]]) {
+      expect(refused).toMatchObject({
+        code: 'RULE_VIOLATED',
+        reason: 'repair.refusal.discountOwnerOnly',
+      });
+    }
+  });
+
+  test('a price change waits exactly when the customer has not agreed yet', async () => {
+    const { world, builder } = await setupWorld(3342);
+    const change = (n: number, customerAgreed: boolean, waitsForCustomer: boolean) =>
+      ticketOp(
+        builder,
+        'repair.quote_changed',
+        {
+          lineId: `01920000-0000-7000-8000-0000000e0c0${n}`,
+          kind: 'part',
+          description: 'LCD',
+          amount: 300_000,
+          reason: 'Ganti LCD',
+          customerAgreed,
+          fromProposal: false,
+          waitsForCustomer,
+        },
+        { schemaVersion: 2 },
+      );
+
+    const result = await push(world, [change(1, true, true), change(2, false, true)]);
+
+    expect(result.results.map((r) => r.status)).toEqual(['rejected', 'accepted']);
+    expect(result.results[0]).toMatchObject({
+      reason: 'repair.refusal.customerAgreementMismatch',
+    });
+  });
+
+  test('a store sets cancellation fees only for itself', async () => {
+    const { world, builder } = await setupWorld(3343);
+    const setFees = (entityId: string) =>
+      builder.append({
+        type: 'repair.store_cancel_fees_changed',
+        entityType: 'repair_store_cancel_fees',
+        entityId,
+        storeId: world.storeId,
+        payload: { beforeWork: 0, afterWork: 50_000 },
+      });
+
+    const result = await push(world, [setFees(testId(3344)), setFees(world.storeId)]);
+
+    expect(result.results.map((r) => r.status)).toEqual(['rejected', 'accepted']);
+    expect(result.results[0]).toMatchObject({ reason: 'repair.refusal.notThisStore' });
   });
 });
 
