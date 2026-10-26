@@ -429,6 +429,13 @@ describe('cancelling (owners only)', () => {
     expect(text(screen, `repair.board.row.${kept}`)).toContain(USER_NAMES.storeOwner);
     expect(screen.query(`repair.board.row.${kept}.feeChanged`)).toBeNull();
     expect(screen.query(`repair.board.row.${changed}.feeChanged`)).not.toBeNull();
+
+    // The ticket leads with what is owed, not the repair total it no longer charges.
+    await press(screen, `repair.board.row.${changed}`);
+    expect(text(screen, 'repair.ticket.cancelFee')).toBe('Rp 0');
+    expect(
+      StyleSheet.flatten(screen.get('repair.ticket.total').props['style']).textDecorationLine,
+    ).toBe('line-through');
   });
 });
 
