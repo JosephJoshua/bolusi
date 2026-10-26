@@ -19,7 +19,6 @@ import {
   createLockedOutEmitter,
   createUuidV7Generator,
   DEFAULT_KDF_PARAMS,
-  PinVerifierQueue,
   writeVerifier,
   type ClockPort,
   type CryptoPort,
@@ -233,7 +232,6 @@ export async function openPinFixture(
       clock: clockPort,
       idSource,
       deviceId,
-      queue: new PinVerifierQueue(),
       emitter,
     }),
     authOps: async () => {

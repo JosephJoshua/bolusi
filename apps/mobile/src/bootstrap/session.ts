@@ -53,12 +53,12 @@ import {
   clearPinLockoutFlow as clearLockoutFlow,
   createLockedOutEmitter,
   derivePinAuthState,
+  drainPendingVerifiers,
   resetPin as resetPinFlow,
   DomainError,
   errorCodeOrUnexpected,
   listSwitcherUsers,
   resolveDisplayRoleKeys,
-  PinVerifierQueue,
   readIdleLockSeconds,
   readPinAttempt,
   readVerifier,
@@ -244,12 +244,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     idleLockSeconds: await readIdleLockSeconds(db),
   });
   const lockedOut = createLockedOutEmitter(commands);
-  // The pending-verifier queue (api/02-auth §5.4): a PIN change computes the verifier offline and
-  // queues it here; it is POSTed to the server on next online contact so other devices pick up the
-  // new PIN via bundle refresh. Long-lived (one per session) so a queued verifier survives until a
-  // drain sends it. The drain wiring is task 186a-2; today the change is honored LOCALLY at once.
-  const verifierQueue = new PinVerifierQueue();
-
   let users: readonly SwitcherUser[] | null = null;
   let usersError: string | null = null;
   const rows = new Map<string, PinAttemptRow | null>();
@@ -306,7 +300,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     clock: deps.clock,
     idSource: deps.idSource,
     deviceId: device.deviceId,
-    queue: verifierQueue,
     emitter: lockedOut,
   };
   const runPinFlow = async (
@@ -487,10 +480,11 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     },
 
     async drainVerifiers(port): Promise<void> {
-      // `PinVerifierQueue.drain` is itself total — it POSTs each pending verifier, drops the ones the
-      // server answered (applied true OR false), and re-queues the ones whose POST threw. It never
-      // rejects, so a bundle refresh is never blocked by an unreachable server.
-      await verifierQueue.drain(port);
+      // A PIN change queues its verifier on disk (`pending_pin_verifiers`), so one made before the app
+      // was killed is still sent here. The drain POSTs each, drops the ones the server answered
+      // (applied true OR false), and keeps the ones whose POST threw. A failed read of the queue is
+      // swallowed too: the rows stay on disk and the next bundle refresh tries again.
+      await drainPendingVerifiers(db, port).catch(() => undefined);
     },
   };
 }
