@@ -265,8 +265,18 @@ function placeholderUri(mediaId: string): string {
   )}`;
 }
 
-export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime {
-  const actor = DEMO_REPAIR_ROLES[role];
+/** The demo runtime, plus switching who acts, so "switch user" in the preview keeps the same tickets. */
+export type DemoRepairRuntime = RepairRuntime & { actAs(role: DemoRepairRole): void };
+
+/** The demo role a roster user signs in as, if they have one. */
+export function demoRoleOf(userId: string): DemoRepairRole | undefined {
+  return (Object.keys(DEMO_REPAIR_ROLES) as DemoRepairRole[]).find(
+    (role) => DEMO_REPAIR_ROLES[role].userId === userId,
+  );
+}
+
+export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRuntime {
+  let actor: (typeof DEMO_REPAIR_ROLES)[DemoRepairRole] = DEMO_REPAIR_ROLES[role];
   let tickets = seedTickets();
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
@@ -543,9 +553,16 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     return { ticketId: t.id, lineId: String(input['lineId']) };
   }
 
-  const permitted = new Set<string>(actor.permissions);
+  let permitted = new Set<string>(actor.permissions);
   const runtime = {
-    userId: actor.userId,
+    get userId() {
+      return actor.userId;
+    },
+    actAs: (next: DemoRepairRole) => {
+      actor = DEMO_REPAIR_ROLES[next];
+      permitted = new Set<string>(actor.permissions);
+      notify();
+    },
     query: (name: string, input: Input) => queries[name]!(input),
     run: (name: string, input: Input) => {
       try {
@@ -578,5 +595,5 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       return Promise.resolve('done');
     },
   };
-  return runtime as unknown as RepairRuntime;
+  return runtime as unknown as DemoRepairRuntime;
 }

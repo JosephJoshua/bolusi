@@ -1,0 +1,79 @@
+name: preview
+
+# Publishes the browser version of the phone app (real screens over demo data, no server) to
+# GitHub Pages: main at /bolusi/, each open PR at /bolusi/pr-preview/pr-<n>/. See docs/previews.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # A fork's token cannot push to gh-pages.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BUILD: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' }}
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+        if: env.BUILD == 'true'
+      - uses: actions/setup-node@v4
+        if: env.BUILD == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: env.BUILD == 'true'
+      - name: Build
+        if: env.BUILD == 'true'
+        env:
+          EXPO_BASE_URL: /${{ github.event.repository.name }}${{ github.event_name == 'pull_request' && format('/pr-preview/pr-{0}', github.event.number) || '' }}
+          EXPO_PUBLIC_PREVIEW_LABEL: ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }}
+        run: |
+          export EXPO_PUBLIC_PREVIEW_LABEL="$EXPO_PUBLIC_PREVIEW_LABEL · ${SHA::7} · $(date -u '+%Y-%m-%d %H:%M UTC')"
+          pnpm --filter @bolusi/mobile build:web
+          # Pages runs Jekyll otherwise, which drops the bundle's `_expo/` folder.
+          touch apps/mobile/dist/.nojekyll
+
+      - name: Deploy main
+        if: github.event_name != 'pull_request'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: apps/mobile/dist
+          branch: gh-pages
+          clean-exclude: pr-preview/
+          # Rebase instead of force-push so a PR preview deployed meanwhile survives.
+          force: false
+
+      # The root `.nojekyll` normally comes with main's deploy; a PR preview may come first.
+      - name: Keep Jekyll off the Pages branch
+        if: github.event_name == 'pull_request' && env.BUILD == 'true'
+        run: mkdir -p pages-root && touch pages-root/.nojekyll
+      - if: github.event_name == 'pull_request' && env.BUILD == 'true'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: pages-root
+          branch: gh-pages
+          clean: false
+          force: false
+
+      - name: Deploy or remove PR preview
+        if: github.event_name == 'pull_request'
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: apps/mobile/dist
+          preview-branch: gh-pages
