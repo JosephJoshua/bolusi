@@ -83,7 +83,7 @@ export function Sheet({
       <View testID={`${testID}.sheet`} style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1} testID={`${testID}.title`}>
+          <Text style={styles.title} numberOfLines={2} testID={`${testID}.title`}>
             {title}
           </Text>
           <Pressable

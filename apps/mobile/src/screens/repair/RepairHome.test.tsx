@@ -6,6 +6,8 @@ import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import { __windowMetrics } from '../../../test/doubles/react-native.js';
+
 import {
   ensureRepairCatalog,
   intake,
@@ -71,6 +73,43 @@ async function ticketRow(harness: RepairHarness, ticketId: string) {
 }
 
 describe('counter intake', () => {
+  // On the first Android run "Tidak dicek" showed as "Tidak": the three states did not fit beside
+  // the check's name. Where they cannot fit (a 360 dp phone, or a large system font), the name goes
+  // on top and the states share the width below; where they fit, they stay on one line.
+  test('condition checks stack on a narrow phone or a large font, and stay on one line otherwise', async () => {
+    h = await openRepairScreenHarness(5150);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.newIntake');
+    type(screen, 'repair.intake.customer.name', 'Yohanis Wenda');
+    await press(screen, 'repair.intake.primary');
+    type(screen, 'repair.intake.device.brand', 'Samsung');
+    type(screen, 'repair.intake.device.model', 'Galaxy A14');
+    await press(screen, 'repair.intake.primary');
+    const original = { ...__windowMetrics };
+    try {
+      for (const [width, fontScale, stacked] of [
+        [411, 1, false],
+        [360, 1, true],
+        [411, 1.3, true],
+      ] as const) {
+        Object.assign(__windowMetrics, { width, fontScale });
+        // Any edit re-renders the step, which reads the window again.
+        type(
+          screen,
+          'repair.intake.condition.complaint',
+          `Layar retak ${String(width * fontScale)}`,
+        );
+        await settle();
+        const check = screen.get('repair.intake.condition.check.screen');
+        // Beside the name the states wrap as a group; stacked they share one equal-width row.
+        expect(JSON.stringify(check.props['style']).includes('"flexWrap":"wrap"')).toBe(!stacked);
+        expect(screen.get('repair.intake.condition.check.screen.not_checked')).toBeDefined();
+      }
+    } finally {
+      Object.assign(__windowMetrics, original);
+    }
+  });
+
   test('the cashier takes a repair in from the board and lands on the new ticket', async () => {
     h = await openRepairScreenHarness(5101);
     const screen = await mount(h, h.cashierId);

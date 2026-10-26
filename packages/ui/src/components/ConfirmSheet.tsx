@@ -28,7 +28,7 @@ import { Button } from './Button.js';
 export interface ConfirmSheetProps {
   /** Already-localized. */
   readonly title: string;
-  /** Already-localized consequence text, ≤ 2 lines (§3.10). */
+  /** Already-localized consequence text, short (§3.10). Never cut off: at a large font it wraps. */
   readonly message?: string | undefined;
   /** Already-localized label for the destructive action. */
   readonly confirmLabel: string;
@@ -85,11 +85,11 @@ export function ConfirmSheet({
     <View testID={testID} style={styles.root}>
       <View testID={`${testID}.scrim`} style={styles.scrim} />
       <View testID={`${testID}.sheet`} style={styles.sheet}>
-        <Text testID={`${testID}.title`} numberOfLines={2} style={styles.title}>
+        <Text testID={`${testID}.title`} style={styles.title}>
           {title}
         </Text>
         {message === undefined ? null : (
-          <Text testID={`${testID}.message`} numberOfLines={2} style={styles.message}>
+          <Text testID={`${testID}.message`} style={styles.message}>
             {message}
           </Text>
         )}

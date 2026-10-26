@@ -67,7 +67,9 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   with that edge (offset the `TextButton` padding), not with their hit box.
 - Label left, control right on the same row (condition checks); controls in a
   list line up on one right edge. Do not let wrapping push controls under
-  labels.
+  labels haphazardly: when the row does not fit (narrow phone, large font),
+  stack deliberately, label on top and the control sharing the full width
+  below, the same for every row.
 - Amounts are right-aligned and top-aligned with their description.
 - Related things close, unrelated things far: section gap `space.xl`, items in
   a group `space.sm` to `space.md`.
@@ -75,6 +77,11 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   borders. Dividers are hairlines.
 - Rows in a list are edge to edge, with no chevrons when the whole row is
   tappable.
+- Nothing touches. Every label sits `space.xs` above its field, fields in a
+  group are `space.md` apart, groups and sections `space.xl` apart, and the
+  primary action lives in the fixed bottom bar, never glued under the last
+  field. Forms are steps with a `StepHeader` title, like intake (the first
+  device-setup screens broke all of this and read as unfinished).
 
 ## 5. No redundancy
 
@@ -140,6 +147,17 @@ Write like Gojek or Tokopedia product copy: short, everyday, friendly, exact.
 labels on every control (including icon-only and shortened ones), no meaning
 carried by colour alone (chips have icons), text scales without clipping.
 
+**Labels never truncate or clip.** A button, pill, chip, tab, title or
+choice shows its whole text at every supported width and font size. The
+Android run showed "Tidak" for "Tidak dicek"; that is a defect, not a style.
+When text does not fit, change the layout (wrap, stack the label above its
+control, share the width equally), or shorten the copy so it still reads
+naturally. Never rely on `numberOfLines` to hide the overflow. The only
+ellipsis allowed is a long user-entered value in a list row (a customer
+name), whose full text is one tap away.
+
+Supported range: 360 dp wide phones and the system font up to 1.3×.
+
 ## 10. Review before showing anyone
 
 Run the app, take screenshots of every changed screen and state, and check:
@@ -147,11 +165,13 @@ Run the app, take screenshots of every changed screen and state, and check:
 1. Squint test: does the right thing lead? Is there exactly one primary?
 2. Is every size on the type ladder, every gap on the spacing scale?
 3. Do edges line up? Any control wrapped under its label?
-4. Any redundant label, chevron, title, or full-width secondary button?
-5. Are paired choices equal, and risky or destructive ones set apart?
-6. Does each Indonesian string sound natural spoken aloud?
-7. Loading, empty, error, offline and success states all present?
-8. Would this look at home next to Gojek, Tokopedia or a good banking app?
+4. At 360 dp and at the system font at 1.3×: any label cut off, clipped or
+   ellipsized? Anything touching with no space between?
+5. Any redundant label, chevron, title, or full-width secondary button?
+6. Are paired choices equal, and risky or destructive ones set apart?
+7. Does each Indonesian string sound natural spoken aloud?
+8. Loading, empty, error, offline and success states all present?
+9. Would this look at home next to Gojek, Tokopedia or a good banking app?
 
 Share the screenshots with the owner along with what was verified on a real
 device vs only in the browser.
