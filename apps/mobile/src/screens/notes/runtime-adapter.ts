@@ -12,6 +12,7 @@ import { NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
 import type { NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
 import {
   bindModulePort,
+  OP_SYNC_STATUS_TABLE,
   type CommandIdentity,
   type InvalidationBus,
   type ModuleRuntime,
@@ -46,7 +47,9 @@ export function createNotesRuntime(deps: NotesRuntimeDeps): NotesRuntime {
     editNoteBody: (input) => port.run('editNoteBody', input),
     archiveNote: (input) => port.run('archiveNote', input),
     noteSyncStatuses: deps.noteSyncStatuses,
-    subscribe: (listener) => deps.invalidation.subscribeTable(NOTES_TABLE, listener),
+    // The op log too: the list and detail show each note's sync status.
+    subscribe: (listener) =>
+      deps.invalidation.subscribeTables([NOTES_TABLE, OP_SYNC_STATUS_TABLE], listener),
     hasPermission: port.hasPermission,
     capturePhoto: deps.capturePhoto,
     loadThumbnail: deps.loadThumbnail,

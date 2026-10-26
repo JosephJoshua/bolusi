@@ -37,7 +37,8 @@
     "agreeApply": "Setuju",
     "applyUnasked": "Pakai tanpa konfirmasi pelanggan",
     "assignShort": "Pilih",
-    "reassignShort": "Ganti"
+    "reassignShort": "Ganti",
+    "backToTicket": "Kembali ke servisan"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -251,5 +252,13 @@
     "message": "Foto dan catatan yang sudah kamu isi di sini akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
+  },
+  "stale": {
+    "cancelled": "Servisan ini baru saja dibatalkan di perangkat lain.",
+    "returned": "HP ini sudah diserahkan ke pelanggan di perangkat lain.",
+    "proposalApplied": "Usulan harga ini sudah dikonfirmasi di perangkat lain.",
+    "proposalDeclined": "Usulan harga ini sudah ditolak di perangkat lain.",
+    "proposalPending": "Ada usulan harga baru. Cek dulu sebelum HP diserahkan.",
+    "changed": "Servisan ini baru diubah di perangkat lain. Statusnya sekarang “{status}”."
   }
 }

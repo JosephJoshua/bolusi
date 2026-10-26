@@ -39,7 +39,7 @@ import {
   type TimerPort,
 } from './ports.js';
 import { runPullPhase, type PulledBatch } from './pull.js';
-import { runPushPhase } from './push.js';
+import { runPushPhase, type PushPhaseResult } from './push.js';
 import {
   pendingMediaCount,
   pendingOperationCount,
@@ -90,6 +90,8 @@ export interface SyncLoopOptions<DB> {
   readonly pullLimit?: number;
   /** Passed to the pull phase: called after each committed batch (progress display only). */
   readonly onPullBatch?: (batch: PulledBatch) => void;
+  /** Called after a push phase that changed ops' sync status (any taken or refused). */
+  readonly onPushed?: (result: PushPhaseResult) => void;
 }
 
 /** Observable cycle counters — for tests and diagnostics; not persisted, not a contract with the UI. */
@@ -225,6 +227,7 @@ export class SyncLoop<DB> {
             : { batchSize: this.options.pushBatchSize }),
         });
         this.stats = { ...this.stats, pushed: this.stats.pushed + push.synced };
+        if (push.synced + push.rejected > 0) this.notifyPushed(push);
         await writeSyncState(this.options.db, { lastPushAt: this.options.clock.now() });
       }
       this.transition('push_drained');
@@ -342,6 +345,14 @@ export class SyncLoop<DB> {
       this.transition('timer_elapsed');
       this.cycle = this.runCycle();
     });
+  }
+
+  private notifyPushed(result: PushPhaseResult): void {
+    try {
+      this.options.onPushed?.(result);
+    } catch {
+      // A notification only: a throwing listener must not fail the cycle that already pushed.
+    }
   }
 
   private emit(event: Parameters<SyncSurfacePort['emit']>[0]): void {

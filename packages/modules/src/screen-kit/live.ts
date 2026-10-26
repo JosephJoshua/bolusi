@@ -35,15 +35,33 @@ export function useLiveQuery<R extends LiveSource, TData>(
 
   useEffect(() => {
     let active = true;
+    // One read at a time. A pull applies ops one by one and each reports a change, so a burst of
+    // changes queues a single re-read after the one in flight instead of a read per op, and an
+    // older read can never land after a newer one and put stale rows back on screen.
+    let running = false;
+    let again = false;
+    const settle = (next: QueryState<TData>): void => {
+      running = false;
+      if (!active) return;
+      // Shown even when a change arrived meanwhile: during a long pull the screen keeps filling in
+      // rather than waiting for the pull to end. The queued read then brings it up to date.
+      setState(next);
+      if (again) {
+        again = false;
+        execute();
+      }
+    };
     const execute = (): void => {
+      if (running) {
+        again = true;
+        return;
+      }
+      running = true;
       runRef.current(runtime).then(
-        (data) => {
-          if (active) setState({ status: 'ready', data });
-        },
+        (data) => settle({ status: 'ready', data }),
         (error: unknown) => {
-          if (!active) return;
           const code = errorCodeOrUnexpected(error);
-          setState(
+          settle(
             code === 'PERMISSION_DENIED' ? { status: 'unauthorized' } : { status: 'error', code },
           );
         },

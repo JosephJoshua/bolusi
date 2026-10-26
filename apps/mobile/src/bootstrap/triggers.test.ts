@@ -1,4 +1,4 @@
-// The platform sync triggers (api/01-sync §5) — (b) 3 s append debounce, (c) 60 s foreground
+// The platform sync triggers (api/01-sync §5) — (b) 1 s append debounce, (c) 60 s foreground
 // interval, (e) manual. (a) NetInfo and (d) background task are NOT BUILT; see triggers.ts.
 //
 // Every timer is fake and every threshold is the EXPORTED constant, never a literal (T-6: a test
@@ -88,7 +88,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
-describe('(b) the append trigger — debounced 3 s (api/01-sync §5)', () => {
+describe('(b) the append trigger — debounced 1 s (api/01-sync §5)', () => {
   test('one append fires ONE sync, after the debounce and not before', async () => {
     const h = harness();
     h.triggers.scheduler.schedule();

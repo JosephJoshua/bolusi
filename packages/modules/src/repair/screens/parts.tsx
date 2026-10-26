@@ -24,8 +24,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 
-import { statusLabel } from './labels.js';
-import { statusTone, type TicketStatus } from '../flows.js';
+import { tn } from './i18n.js';
+import { staleStepMessage, statusLabel } from './labels.js';
+import { statusTone, type StaleStep, type TicketStatus } from '../flows.js';
 import { useRepairThumbnail } from './runtime.js';
 
 /**
@@ -199,6 +200,7 @@ export function FlowScreen({
   errorCode,
   onClearError,
   overlay,
+  stale,
   testID,
   children,
 }: {
@@ -220,9 +222,16 @@ export function FlowScreen({
   readonly errorCode: string | null;
   readonly onClearError: () => void;
   readonly overlay?: ReactNode;
+  /**
+   * The ticket changed elsewhere and this step can no longer finish: said in the banner slot, and
+   * the bottom action becomes the way back. Held back while the step's own command runs, since
+   * that command changes the ticket too and the step closes as it lands.
+   */
+  readonly stale?: StaleStep | null | undefined;
   readonly testID: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
+  const staleNow = busy || stale === undefined ? null : stale;
   return (
     <AppShell
       scrollable
@@ -235,8 +244,15 @@ export function FlowScreen({
       overlay={overlay}
       // In the fixed banner slot, not the scrolling content: a refusal must be seen wherever the
       // user had scrolled to when they pressed the bottom action.
+      // The stale notice outranks a refusal: it says why the refusal happened.
       banner={
-        errorCode === null ? undefined : (
+        staleNow !== null ? (
+          <Banner
+            variant="warning"
+            message={staleStepMessage(staleNow)}
+            testID={`${testID}.stale`}
+          />
+        ) : errorCode === null ? undefined : (
           <ActionErrorBanner
             errorCode={errorCode}
             onDismiss={onClearError}
@@ -245,7 +261,13 @@ export function FlowScreen({
         )
       }
       bottomAction={
-        primaryLabel === undefined || onPrimary === undefined ? undefined : (
+        staleNow !== null ? (
+          <Button
+            label={tn('repair.action.backToTicket')}
+            onPress={onBack}
+            testID={`${testID}.staleBack`}
+          />
+        ) : primaryLabel === undefined || onPrimary === undefined ? undefined : (
           <View>
             {primaryDisabled === true && primaryHint !== undefined ? (
               <Text style={styles.hint} testID={`${testID}.primaryHint`}>

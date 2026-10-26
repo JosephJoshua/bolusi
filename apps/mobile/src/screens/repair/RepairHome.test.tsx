@@ -1,6 +1,7 @@
 // The repair phone flows, mounted over a real runtime: a counter intake from the board to a new
 // ticket, a technician's required before and after photos, assignment, a proposed price change the
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
+import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -10,6 +11,7 @@ import {
   intake,
   openRepairScreenHarness,
   press,
+  pull,
   render,
   repairRuntimeFor,
   settle,
@@ -25,9 +27,13 @@ import type { SurfaceNav } from '../../navigation/surface.js';
 import { RepairHome } from './RepairHome.js';
 
 let h: RepairHarness | null = null;
+/** A second device in the same store, when a test needs changes that arrive by sync. */
+let peer: RepairHarness | null = null;
 afterEach(async () => {
   await h?.close();
   h = null;
+  await peer?.close();
+  peer = null;
   setLocale(DEFAULT_LOCALE);
 });
 
@@ -348,6 +354,134 @@ describe('the board', () => {
     await settle();
     expect(screen.query(`repair.board.row.${ticketId}`)).not.toBeNull();
     expect(screen.query('repair.board.views')).toBeNull();
+  });
+});
+
+describe('changes synced from another device', () => {
+  /** This device's ticket, also on a peer device that has pulled it. */
+  async function sharedTicket(
+    seed: number,
+  ): Promise<{ a: RepairHarness; b: RepairHarness; ticketId: string }> {
+    h = await openRepairScreenHarness(seed);
+    peer = await openRepairScreenHarness(seed + 50, h);
+    const ticketId = await openTicket(h);
+    await pull(peer, h);
+    return { a: h, b: peer, ticketId };
+  }
+
+  test('a pulled change re-renders the open ticket', async () => {
+    const { a, b, ticketId } = await sharedTicket(5601);
+    const screen = await mount(a, a.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(text(screen, 'repair.ticket.technician')).not.toContain(USER_NAMES.technician);
+
+    await b.run('startWork', { ticketId, beforePhotos: [b.photo(60)] }, b.technicianId);
+    await pull(a, b);
+    await settle();
+    expect(text(screen, 'repair.ticket.technician')).toContain(USER_NAMES.technician);
+    expect(screen.query('repair.ticket.action.markRepaired')).toBeNull(); // cashier view
+  });
+
+  test('a repair cancelled elsewhere stops the open step and leads back without asking', async () => {
+    const { a, b, ticketId } = await sharedTicket(5602);
+    await a.run('startWork', { ticketId, beforePhotos: [a.photo(61)] }, a.technicianId);
+    await pull(b, a);
+    const screen = await mount(a, a.technicianId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.markRepaired');
+    await press(screen, 'repair.work.after.take.press');
+    expect(screen.query('repair.work.after.stale')).toBeNull();
+
+    await b.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, b.cashierId);
+    await pull(a, b);
+    await settle();
+    // The step says what happened, and its only way on is back to the ticket.
+    expect(screen.query('repair.work.after.stale')).not.toBeNull();
+    expect(screen.query('repair.work.after.primary')).toBeNull();
+    await press(screen, 'repair.work.after.staleBack');
+    // The photo taken is of no use now, so leaving does not ask to discard it.
+    expect(screen.query('repair.work.after.discard')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+    expect(screen.query('repair.ticket.action.markRepaired')).toBeNull();
+    expect((await ticketRow(a, ticketId)).outcome).toBe('cancelled');
+  });
+
+  test('a proposal answered on another device cannot be answered again', async () => {
+    const { a, b, ticketId } = await sharedTicket(5603);
+    const { lineId } = (await a.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      a.technicianId,
+    )) as { lineId: string };
+    await pull(b, a);
+    const screen = await mount(a, a.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.decidePrice');
+    expect(screen.query('repair.proposal.primary')).not.toBeNull();
+
+    await b.run('declineProposal', { ticketId, lineId, note: 'Mahal' }, b.cashierId);
+    await pull(a, b);
+    await settle();
+    expect(screen.query('repair.proposal.stale')).not.toBeNull();
+    expect(screen.query('repair.proposal.primary')).toBeNull();
+    await press(screen, 'repair.proposal.staleBack');
+    expect(screen.query('repair.ticket.action.decidePrice')).toBeNull();
+  });
+
+  test('a phone handed back on another device stops the handover', async () => {
+    const { a, b, ticketId } = await sharedTicket(5604);
+    await a.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, a.cashierId);
+    await pull(b, a);
+    const screen = await mount(a, a.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    await press(screen, 'repair.handover.photo.press');
+
+    await b.run(
+      'returnDevice',
+      { ticketId, handoverPhoto: b.photo(62), signature: b.photo(63) },
+      b.cashierId,
+    );
+    await pull(a, b);
+    await settle();
+    expect(screen.query('repair.handover.stale')).not.toBeNull();
+    expect(screen.query('repair.handover.primary')).toBeNull();
+    await press(screen, 'repair.handover.staleBack');
+    expect(screen.query('repair.handover.discard')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+    expect(screen.query('repair.ticket.action.handover')).toBeNull();
+  });
+
+  test('an op the server refuses shows on the open ticket as the push lands', async () => {
+    h = await openRepairScreenHarness(5606);
+    const ticketId = await openTicket(h);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    expect(screen.query('repair.ticket.rejectedBanner')).toBeNull();
+
+    // What a push marks, with no projection write of its own: only the op log changed.
+    const [opened] = (await h.ownOps()).filter((op) => op.entityId === ticketId);
+    await markSyncResult(h.db as never, {
+      id: opened!.id,
+      currentStatus: 'local',
+      event: { kind: 'rejected', rejectionCode: 'SCOPE_VIOLATION', rejectionReason: 'nope' },
+    });
+    h.engine.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE]));
+    await settle();
+    expect(screen.query('repair.ticket.rejectedBanner')).not.toBeNull();
+  });
+
+  test("the user's own change closes the step without a stale notice", async () => {
+    const { a, ticketId } = await sharedTicket(5605);
+    const screen = await mount(a, a.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    type(screen, 'repair.note.cancel.text', 'Pelanggan batal');
+    await press(screen, 'repair.note.cancel.primary');
+    expect(screen.query('repair.note.cancel.stale')).toBeNull();
+    expect(screen.query('repair.note.cancel')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
   });
 });
 

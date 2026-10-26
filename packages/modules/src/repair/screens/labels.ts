@@ -4,7 +4,14 @@
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from '../constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import type { IntakeCheck, IntakeStep, Peripheral, ReadyChoice, TicketStatus } from '../flows.js';
+import type {
+  IntakeCheck,
+  IntakeStep,
+  Peripheral,
+  ReadyChoice,
+  StaleStep,
+  TicketStatus,
+} from '../flows.js';
 
 const STATUS_KEY: Readonly<Record<TicketStatus, RepairKey>> = {
   received: 'repair.status.received',
@@ -67,6 +74,26 @@ function storedLabel(keys: Readonly<Record<string, RepairKey>>, value: string): 
 export const statusLabel = (status: TicketStatus): string => tn(STATUS_KEY[status]);
 export const checkLabel = (item: string): string => storedLabel(CHECK_KEY, item);
 export const peripheralLabel = (item: string): string => storedLabel(PERIPHERAL_KEY, item);
+
+/** What an open step says once the ticket changed under it and the step can no longer finish. */
+export function staleStepMessage(stale: StaleStep): string {
+  switch (stale.kind) {
+    case 'cancelled':
+      return tn('repair.stale.cancelled');
+    case 'returned':
+      return tn('repair.stale.returned');
+    case 'proposalDecided':
+      return tn(
+        stale.decision === 'applied'
+          ? 'repair.stale.proposalApplied'
+          : 'repair.stale.proposalDeclined',
+      );
+    case 'proposalPending':
+      return tn('repair.stale.proposalPending');
+    case 'changed':
+      return tn('repair.stale.changed', { status: statusLabel(stale.status) });
+  }
+}
 
 export const INTAKE_STEP_KEY: Readonly<Record<IntakeStep, RepairKey>> = {
   customer: 'repair.intake.step.customer',
