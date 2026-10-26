@@ -26,7 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS, INTAKE_PHOTO_SLOTS } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -37,7 +37,7 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import { INTAKE_SLOT_KEY, PRICE_KIND_KEY, checkLabel, peripheralLabel } from './labels.js';
+import { PRICE_KIND_KEY, optionLabel } from './labels.js';
 import {
   photoInSlot,
   photoThumbnailRef,
@@ -563,7 +563,7 @@ export function TicketDetail({
               {issues.map((check) => (
                 <Chip
                   key={check.item}
-                  label={checkLabel(check.item)}
+                  label={optionLabel('checks', { id: check.item, label: check.label })}
                   icon="warning"
                   tone="warning"
                 />
@@ -575,8 +575,12 @@ export function TicketDetail({
           <View style={styles.chipGroup}>
             <Text style={styles.complaintLabel}>{tn('repair.condition.peripherals')}</Text>
             <View style={styles.chips}>
-              {row.peripherals.map((item) => (
-                <Chip key={item} label={peripheralLabel(item)} icon="check" />
+              {row.peripherals.map(({ item, label }) => (
+                <Chip
+                  key={item}
+                  label={optionLabel('accessories', { id: item, label })}
+                  icon="check"
+                />
               ))}
             </View>
           </View>
@@ -605,13 +609,23 @@ function lineCaption(line: QuoteLineRow): string {
   return line.reason === null || line.reason === '' ? status : `${status} · ${line.reason}`;
 }
 
-/** Every photo on the ticket in the order it was taken: at intake, before, after, at handover. */
+/**
+ * Every photo on the ticket in the order it was taken: at intake (the angles the ticket asked for,
+ * named as they were then), before, after, at handover.
+ */
 function ticketPhotos(row: TicketDetailRow): BrowsablePhoto[] {
-  const intake = INTAKE_PHOTO_SLOTS.flatMap((slot) => {
+  const intake = row.intakePhotos.flatMap(({ slot, label }) => {
     const photo = photoInSlot(row, slot);
     return photo === null
       ? []
-      : [{ key: slot, label: tn(INTAKE_SLOT_KEY[slot]), group: tn('repair.photo.intake'), photo }];
+      : [
+          {
+            key: slot,
+            label: optionLabel('photoAngles', { id: slot, label }),
+            group: tn('repair.photo.intake'),
+            photo,
+          },
+        ];
   });
   const work = (['before', 'after'] as const).flatMap((stage) =>
     workPhotos(row, stage).map((photo, index) => ({

@@ -32,10 +32,12 @@ import { SqliteOpStore } from './harness.js';
 
 const CASHIER_ROLE = 'role-cashier';
 const TECHNICIAN_ROLE = 'role-technician';
+const OWNER_ROLE = 'role-owner';
+const STORE_OWNER_ROLE = 'role-store-owner';
 const P = REPAIR_PERMISSION;
 
-const role = (permissionIds: readonly string[]): DirectoryRole => ({
-  scopeType: 'store',
+const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
+  scopeType,
   permissionIdsJson: JSON.stringify(permissionIds),
 });
 
@@ -56,6 +58,10 @@ export interface RepairHarness {
   readonly technicianId: string;
   readonly technician2Id: string;
   readonly zeroUserId: string;
+  /** Holds every repair permission tenant-wide, as the franchise owner does. */
+  readonly ownerId: string;
+  /** May hide intake options at this store, not change the franchise's lists. */
+  readonly storeOwnerId: string;
   /** Run a repair command as `userId`. */
   run<K extends keyof typeof repairModule.commands>(
     command: K,
@@ -99,12 +105,8 @@ export async function openRepairHarness(
   });
   const tenantId = shared?.tenantId ?? staticIds();
   const storeId = shared?.storeId ?? staticIds();
-  const [cashierId, technicianId, technician2Id, zeroUserId] = shared?.users ?? [
-    staticIds(),
-    staticIds(),
-    staticIds(),
-    staticIds(),
-  ];
+  const [cashierId, technicianId, technician2Id, zeroUserId, ownerId, storeOwnerId] =
+    shared?.users ?? [staticIds(), staticIds(), staticIds(), staticIds(), staticIds(), staticIds()];
   const deviceId = staticIds();
   const keypair = noblePort.ed25519Keygen(prngBytes(prng, 32));
   const newId = createUuidV7Generator({
@@ -119,20 +121,23 @@ export async function openRepairHarness(
         Promise.resolve({
           tenantId,
           users: new Map(
-            [cashierId!, technicianId!, technician2Id!, zeroUserId!].map((id) => [
-              id,
-              { status: 'active' as const },
-            ]),
+            [cashierId!, technicianId!, technician2Id!, zeroUserId!, ownerId!, storeOwnerId!].map(
+              (id) => [id, { status: 'active' as const }],
+            ),
           ),
           roles: new Map<string, DirectoryRole>([
             [CASHIER_ROLE, role([P.read, P.intake, P.assign, P.quoteChange, P.cancel, P.handover])],
             [TECHNICIAN_ROLE, role([P.read, P.work])],
+            [OWNER_ROLE, role(Object.values(P), 'tenant')],
+            [STORE_OWNER_ROLE, role([P.read, P.intake, P.hideIntakeOptions])],
           ]),
           grantsByUser: new Map<string, readonly DirectoryGrant[]>([
             [cashierId!, [{ roleId: CASHIER_ROLE, storeId }]],
             [technicianId!, [{ roleId: TECHNICIAN_ROLE, storeId }]],
             [technician2Id!, [{ roleId: TECHNICIAN_ROLE, storeId }]],
             [zeroUserId!, []],
+            [ownerId!, [{ roleId: OWNER_ROLE, storeId: null }]],
+            [storeOwnerId!, [{ roleId: STORE_OWNER_ROLE, storeId }]],
           ]),
         }),
     },
@@ -176,6 +181,8 @@ export async function openRepairHarness(
     technicianId: technicianId!,
     technician2Id: technician2Id!,
     zeroUserId: zeroUserId!,
+    ownerId: ownerId!,
+    storeOwnerId: storeOwnerId!,
     run: async (command, input, userId) => {
       const outcome = await runtime.commands.execute(
         repairModule.commands[command] as never,
@@ -240,22 +247,22 @@ export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}
     device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455667' },
     complaint: 'Layar retak, sentuhan tidak responsif',
     checklist: [
-      { item: 'screen', state: 'issue', note: 'retak kiri atas' },
-      { item: 'speaker', state: 'ok', note: '' },
+      { item: 'screen', label: null, state: 'issue', note: 'retak kiri atas' },
+      { item: 'speaker', label: null, state: 'ok', note: '' },
     ],
-    peripherals: ['charger', 'case'],
+    peripherals: [
+      { item: 'charger', label: null },
+      { item: 'case', label: null },
+    ],
     quoteLines: [
       { kind: 'part', description: 'LCD A14 original', amount: 650_000 },
       { kind: 'labour', description: 'Pasang LCD', amount: 100_000 },
     ],
-    photos: {
-      front: h.photo(1),
-      back: h.photo(2),
-      left: h.photo(3),
-      right: h.photo(4),
-      top: h.photo(5),
-      bottom: h.photo(6),
-    },
+    photos: ['front', 'back', 'left', 'right', 'top', 'bottom'].map((slot, i) => ({
+      slot,
+      label: null,
+      ref: h.photo(i + 1),
+    })),
     ...overrides,
   };
 }
