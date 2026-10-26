@@ -63,6 +63,23 @@ overrides the earlier "foundations first" ordering in product direction.
   search-first finding. Admin grids later get Excel-like in-place bulk editing.
 - **No paid components:** use high-quality open-source libraries or build it.
 
+## Configurable intake lists and phone catalog (2026-10-26)
+
+Agreed with the owner after slice 1's phone screens.
+
+- **Editable lists:** intake condition checks, accessories left with the phone,
+  intake photo angles, quick brand buttons and ready-by choices stop being fixed
+  in code. The owner sets them for the whole franchise; a store may hide items
+  it does not use. Edits happen on the owner's phone (later also the back-office
+  web) and sync like any other change, so counters work offline with the last
+  list they received.
+- **History stays true:** a servisan keeps showing what was recorded at intake,
+  even after an item is renamed or removed.
+- **Phone catalog:** the owner chose to crawl GSMArena, slowly, including phone
+  photos, knowingly accepting its terms-of-use and image-copyright risk. Models
+  learned from intakes supplement it. The catalog syncs to devices for offline
+  typo-tolerant model search; photos download only when shown.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.
@@ -123,7 +140,6 @@ The owner chose an actual repair business outcome rather than stock control alon
 - Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
 - Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
-- Pursue authorized GSMArena access; in parallel evaluate a lawful alternative model/specification source against fields, Indonesian device coverage, lookup/IMEI capabilities, cost, attribution, offline caching and retention rights. Choose and validate at least one source before promising model lookup for v1; GSMArena specifically is preferred, not a launch gate.
 
 Changing the roadmap does not resolve the existing extended-chaos failures or
 establish physical-device performance; see [architecture](architecture.md) for
