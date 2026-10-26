@@ -243,8 +243,8 @@ export function FlowScreen({
       avatar={chrome.avatar}
       overlay={overlay}
       // In the fixed banner slot, not the scrolling content: a refusal must be seen wherever the
-      // user had scrolled to when they pressed the bottom action.
-      // The stale notice outranks a refusal: it says why the refusal happened.
+      // user had scrolled to when they pressed the bottom action. The stale notice outranks a
+      // refusal, since it says why the refusal happened.
       banner={
         staleNow !== null ? (
           <Banner
@@ -307,7 +307,14 @@ export function FlowScreen({
       }
       testID={testID}
     >
-      {children}
+      {/* Once stale, kept in view so the user sees what they had filled in, but not workable. */}
+      <View
+        pointerEvents={staleNow === null ? 'auto' : 'none'}
+        style={staleNow === null ? undefined : styles.inert}
+        testID={`${testID}.body`}
+      >
+        {children}
+      </View>
     </AppShell>
   );
 }
@@ -408,6 +415,7 @@ export const repairStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
+  inert: { opacity: 0.45 },
   question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
   answers: { flexDirection: 'row', gap: space.md },
   answer: { flex: 1 },

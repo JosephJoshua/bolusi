@@ -391,6 +391,7 @@ describe('changes synced from another device', () => {
     await press(screen, 'repair.ticket.action.markRepaired');
     await press(screen, 'repair.work.after.take.press');
     expect(screen.query('repair.work.after.stale')).toBeNull();
+    expect(screen.get('repair.work.after.body').props['pointerEvents']).toBe('auto');
 
     await b.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, b.cashierId);
     await pull(a, b);
@@ -398,6 +399,8 @@ describe('changes synced from another device', () => {
     // The step says what happened, and its only way on is back to the ticket.
     expect(screen.query('repair.work.after.stale')).not.toBeNull();
     expect(screen.query('repair.work.after.primary')).toBeNull();
+    // What they had filled in stays in view, but cannot be worked any more.
+    expect(screen.get('repair.work.after.body').props['pointerEvents']).toBe('none');
     await press(screen, 'repair.work.after.staleBack');
     // The photo taken is of no use now, so leaving does not ask to discard it.
     expect(screen.query('repair.work.after.discard')).toBeNull();
