@@ -258,9 +258,9 @@
     "title": "Pilihan saat terima HP",
     "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi",
     "intro": "Berlaku di semua toko. Servisan yang sudah masuk tidak ikut berubah.",
-    "introStore": "Pilih yang dipakai di toko ini.",
+    "introStore": "Pilih yang tampil di toko ini.",
     "count": "{count} pilihan",
-    "hiddenCount": "{count} tidak dipakai di toko ini",
+    "hiddenCount": "{count} disembunyikan",
     "list": {
       "checks": "Cek fungsi",
       "accessories": "Kelengkapan",
@@ -281,11 +281,13 @@
     "days": "Selesai dalam (hari)",
     "moveUp": "Naikkan",
     "moveDown": "Turunkan",
-    "remove": "Hapus",
-    "usedHere": "Dipakai di toko ini",
-    "used": "Dipakai",
-    "hiddenHere": "Tidak dipakai di toko ini",
-    "notSavedYet": "Bisa diatur per toko setelah disimpan.",
+    "remove": "Hapus dari semua toko",
+    "done": "Selesai",
+    "showHere": "Tampil di toko ini",
+    "showHereCaption": "Toko lain tidak ikut berubah.",
+    "hiddenHere": "Disembunyikan di toko ini",
+    "dragHandle": "Geser untuk mengubah urutan",
+    "notSavedYet": "Bisa disembunyikan per toko setelah disimpan.",
     "save": "Simpan",
     "saved": "Tersimpan",
     "discardTitle": "Buang perubahan?",
@@ -299,7 +301,7 @@
       "badReadyBy": "Isi 0 sampai 60 hari.",
       "empty": "Sisakan minimal satu pilihan.",
       "tooMany": "Maksimal 40 pilihan.",
-      "hidesAll": "Minimal satu pilihan harus dipakai di toko ini."
+      "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
     }
   }
 }

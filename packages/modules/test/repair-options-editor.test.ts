@@ -60,8 +60,9 @@ describe('the list editor', () => {
 
   test('moving and removing rows changes the saved order', () => {
     let state = editorFor('checks', settings, builtInName);
-    expect(moveRow(state, 'screen', -1)).toBe(state);
-    state = moveRow(state, 'screen', 1);
+    expect(moveRow(state, 0, -1)).toBe(state);
+    expect(moveRow(state, 1, 2)).toBe(state);
+    state = moveRow(state, 0, 1);
     expect(state.rows.map((r) => r.id)).toStrictEqual(['touch', 'screen']);
     state = removeRow(state, 'touch');
     expect(changedItems(state, settings.lists.checks, builtInName)).toStrictEqual([
@@ -94,7 +95,7 @@ describe('the list editor', () => {
     expect(editorProblems(state, builtInName, nameOf).rows.get(bad.key)).toBe('badReadyBy');
 
     state = removeRow(state, bad.key);
-    state = moveRow(state, seven.key, -1);
+    state = moveRow(state, state.rows.length - 1, 0);
     expect(
       changedItems(state, settings.lists.readyBy, builtInName)?.map((i) => i.id),
     ).toStrictEqual(['0', '1', '3', '7', 'unknown']);

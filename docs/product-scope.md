@@ -75,7 +75,10 @@ Agreed with the owner after slice 1's phone screens.
   list they received.
 - **History stays true:** a servisan keeps showing what was recorded at intake,
   even after an item is renamed or removed.
-- **As built:** Settings → Servisan → "Pilihan saat terima HP". Changing a list
+- **As built:** avatar menu → Pengaturan → Servisan → "Pilihan saat terima HP"
+  (the avatar menu also holds "Ganti pengguna"). Rows reorder by dragging their
+  handle; a store hides an item with its "Tampil di toko ini" switch, while
+  "Hapus dari semua toko" removes it everywhere. Changing a list
   needs `repair.manage_intake_options` (tenant-wide, main owner); hiding items
   for a store needs `repair.hide_intake_options` (store owner, or the owner on
   that store's device). Built-in items keep their translated names until

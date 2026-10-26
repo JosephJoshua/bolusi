@@ -9,16 +9,17 @@ import { t } from '@bolusi/i18n';
 import {
   ConfirmSheet,
   ListRow,
+  ReorderableList,
+  SwitchRow,
   TextButton,
   TextInput,
-  ToggleChip,
   border,
   color,
   space,
   touch,
   type,
 } from '@bolusi/ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
@@ -280,28 +281,34 @@ function ListEditor({
     >
       <Text style={repairStyles.muted}>{tn(HINT_KEY[list])}</Text>
       <View style={styles.rows} testID={`${testID}.rows`}>
-        {state.rows.map((row, index) => (
-          <OptionRow
-            key={row.key}
-            list={list}
-            row={row}
-            first={index === 0}
-            last={index === state.rows.length - 1}
-            expanded={manage && expanded === row.key}
-            manage={manage}
-            hide={hide}
-            reorderable={reorderable}
-            problem={showProblems ? problems.rows.get(row.key) : undefined}
-            onToggleExpanded={() => setExpanded((key) => (key === row.key ? null : row.key))}
-            onChange={(patch) => setState((s) => updateRow(s, row.key, patch))}
-            onMove={(by) => setState((s) => moveRow(s, row.key, by))}
-            onRemove={() => {
-              setState((s) => removeRow(s, row.key));
-              setExpanded(null);
-            }}
-            testID={`${testID}.row.${row.key}`}
-          />
-        ))}
+        <ReorderableList
+          items={state.rows}
+          keyOf={(row) => row.key}
+          onMove={(from, to) => setState((s) => moveRow(s, from, to))}
+          handleLabel={tn('repair.options.dragHandle')}
+          moveUpLabel={tn('repair.options.moveUp')}
+          moveDownLabel={tn('repair.options.moveDown')}
+          testID={`${testID}.order`}
+          renderItem={(row, handle) => (
+            <OptionRow
+              list={list}
+              row={row}
+              expanded={manage && expanded === row.key}
+              manage={manage}
+              hide={hide}
+              // An open row holds still while it is being edited, as on iOS.
+              handle={reorderable && expanded !== row.key ? handle : null}
+              problem={showProblems ? problems.rows.get(row.key) : undefined}
+              onToggleExpanded={() => setExpanded((key) => (key === row.key ? null : row.key))}
+              onChange={(patch) => setState((s) => updateRow(s, row.key, patch))}
+              onRemove={() => {
+                setState((s) => removeRow(s, row.key));
+                setExpanded(null);
+              }}
+              testID={`${testID}.row.${row.key}`}
+            />
+          )}
+        />
       </View>
       {manage ? (
         <View style={styles.adds}>
@@ -336,37 +343,32 @@ function ListEditor({
 }
 
 /**
- * One item: its name, and whether this store uses it. The owner taps it open to rename, move or
- * remove it; someone who may only choose for this store toggles it where it stands.
+ * One item: its name, and whether this store shows it. The owner taps it open to rename or remove
+ * it and drags it by its handle to reorder; someone who may only choose for this store switches it
+ * where it stands.
  */
 function OptionRow({
   list,
   row,
-  first,
-  last,
   expanded,
   manage,
   hide,
-  reorderable,
+  handle,
   problem,
   onToggleExpanded,
   onChange,
-  onMove,
   onRemove,
   testID,
 }: {
   readonly list: IntakeOptionList;
   readonly row: EditorRow;
-  readonly first: boolean;
-  readonly last: boolean;
   readonly expanded: boolean;
   readonly manage: boolean;
   readonly hide: boolean;
-  readonly reorderable: boolean;
+  readonly handle: ReactNode;
   readonly problem: RowProblem | undefined;
   readonly onToggleExpanded: () => void;
   readonly onChange: (patch: Partial<EditorRow>) => void;
-  readonly onMove: (by: -1 | 1) => void;
   readonly onRemove: () => void;
   readonly testID: string;
 }): React.JSX.Element {
@@ -384,6 +386,7 @@ function OptionRow({
       : row.text;
   const editableName =
     manage && !(list === 'readyBy' && (row.id !== null || row.text === READY_UNKNOWN));
+  const setShown = (shown: boolean): void => onChange({ hidden: !shown });
 
   if (expanded) {
     return (
@@ -409,102 +412,89 @@ function OptionRow({
           </Pressable>
         )}
         {hide ? (
-          <View style={styles.useHere}>
-            {row.id === null ? (
-              <Text style={repairStyles.caption}>{tn('repair.options.notSavedYet')}</Text>
-            ) : (
-              <ToggleChip
-                label={tn('repair.options.usedHere')}
-                selected={!row.hidden}
-                onToggle={() => onChange({ hidden: !row.hidden })}
-                testID={`${testID}.used`}
+          row.id === null ? (
+            <Text style={[repairStyles.caption, styles.notSaved]}>
+              {tn('repair.options.notSavedYet')}
+            </Text>
+          ) : (
+            <View style={styles.useHere}>
+              <SwitchRow
+                label={tn('repair.options.showHere')}
+                caption={tn('repair.options.showHereCaption')}
+                value={!row.hidden}
+                onValueChange={setShown}
+                testID={`${testID}.shown`}
               />
-            )}
-          </View>
+            </View>
+          )
         ) : null}
         <View style={styles.actions}>
-          {reorderable ? (
-            <>
-              <TextButton
-                label={tn('repair.options.moveUp')}
-                icon="moveUp"
-                disabled={first}
-                onPress={() => onMove(-1)}
-                testID={`${testID}.up`}
-              />
-              <TextButton
-                label={tn('repair.options.moveDown')}
-                icon="moveDown"
-                disabled={last}
-                onPress={() => onMove(1)}
-                testID={`${testID}.down`}
-              />
-            </>
-          ) : null}
-          <View style={styles.remove}>
-            <TextButton
-              label={tn('repair.options.remove')}
-              icon="remove"
-              tone="danger"
-              onPress={onRemove}
-              testID={`${testID}.remove`}
-            />
-          </View>
+          <TextButton
+            label={tn('repair.options.done')}
+            onPress={onToggleExpanded}
+            testID={`${testID}.done`}
+          />
+          <TextButton
+            label={tn('repair.options.remove')}
+            icon="remove"
+            tone="danger"
+            onPress={onRemove}
+            testID={`${testID}.remove`}
+          />
         </View>
       </View>
     );
   }
 
-  const nameText = (
-    <View style={styles.rowText}>
-      <Text style={[styles.name, row.hidden ? styles.hiddenName : null]} numberOfLines={2}>
-        {name === '' ? ' ' : name}
-      </Text>
-      {problem !== undefined ? (
-        <Text style={styles.rowProblem}>{tn(PROBLEM_KEY[problem])}</Text>
-      ) : row.hidden ? (
-        <Text style={repairStyles.caption}>{tn('repair.options.hiddenHere')}</Text>
-      ) : null}
-    </View>
-  );
+  const caption =
+    problem !== undefined ? (
+      <Text style={styles.rowProblem}>{tn(PROBLEM_KEY[problem])}</Text>
+    ) : row.hidden ? (
+      <Text style={repairStyles.caption}>{tn('repair.options.hiddenHere')}</Text>
+    ) : null;
 
   if (!manage) {
-    // Only this store's choice to make: the toggle sits on the row.
+    // Only this store's choice to make: the switch is the row.
     return (
-      <View style={[styles.row, styles.collapsed]} testID={testID}>
-        {nameText}
+      <View style={[styles.row, styles.switchRow]} testID={testID}>
         {hide && row.id !== null ? (
-          <ToggleChip
-            label={tn('repair.options.used')}
-            selected={!row.hidden}
-            onToggle={() => onChange({ hidden: !row.hidden })}
-            testID={`${testID}.used`}
+          <SwitchRow
+            label={name}
+            caption={row.hidden ? tn('repair.options.hiddenHere') : undefined}
+            value={!row.hidden}
+            onValueChange={setShown}
+            testID={`${testID}.shown`}
           />
-        ) : null}
+        ) : (
+          <Text style={styles.name}>{name}</Text>
+        )}
       </View>
     );
   }
 
   return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: false }}
-      accessibilityLabel={[name, row.hidden ? tn('repair.options.hiddenHere') : '']
-        .filter((s) => s !== '')
-        .join(', ')}
-      accessibilityHint={t('core.action.edit')}
-      onPress={onToggleExpanded}
-      android_ripple={{ color: color.surfaceAlt }}
-      style={({ pressed }) => [
-        styles.row,
-        styles.collapsed,
-        { backgroundColor: pressed ? color.surfaceAlt : color.surface },
-      ]}
-    >
-      {nameText}
-      <Text style={styles.editLabel}>{t('core.action.edit')}</Text>
-    </Pressable>
+    <View style={[styles.row, styles.collapsed, handle === null ? null : styles.withHandle]}>
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: false }}
+        accessibilityLabel={[name, row.hidden ? tn('repair.options.hiddenHere') : '']
+          .filter((s) => s !== '')
+          .join(', ')}
+        accessibilityHint={t('core.action.edit')}
+        onPress={onToggleExpanded}
+        style={({ pressed }) => [styles.rowPress, pressed ? styles.pressed : null]}
+      >
+        <View style={styles.rowText}>
+          <Text style={[styles.name, row.hidden ? styles.hiddenName : null]} numberOfLines={2}>
+            {name === '' ? ' ' : name}
+          </Text>
+          {caption}
+        </View>
+        <Text style={styles.editLabel}>{t('core.action.edit')}</Text>
+      </Pressable>
+      {handle}
+    </View>
   );
 }
 
@@ -521,14 +511,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     borderBottomWidth: border.hairline,
     borderBottomColor: color.border,
+    backgroundColor: color.surface,
   },
   collapsed: {
     minHeight: touch.rowMin,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  // The handle's own 48 dp box carries its padding, so the row gives it the right edge.
+  withHandle: { paddingRight: space.xs },
+  rowPress: {
+    flex: 1,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: space.md,
     paddingVertical: space.sm,
   },
+  pressed: { opacity: 0.6 },
+  switchRow: { paddingVertical: 0 },
   expanded: { backgroundColor: color.surfaceAlt, paddingVertical: space.md },
   expandedTitle: { minHeight: touch.min, justifyContent: 'center' },
   rowText: { flex: 1 },
@@ -536,14 +537,14 @@ const styles = StyleSheet.create({
   hiddenName: { color: color.textMuted },
   rowProblem: { ...type.caption, color: color.danger, marginTop: space.xs },
   editLabel: { ...type.bodySm, fontWeight: '600', color: color.primary },
-  useHere: { flexDirection: 'row', marginTop: space.md },
+  useHere: { marginTop: space.sm },
+  notSaved: { marginTop: space.md },
   actions: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: space.sm,
     marginHorizontal: -space.sm,
   },
-  remove: { marginLeft: 'auto' },
   adds: {
     flexDirection: 'row',
     flexWrap: 'wrap',

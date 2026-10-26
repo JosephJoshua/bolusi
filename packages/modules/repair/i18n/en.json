@@ -258,9 +258,9 @@
     "title": "Intake choices",
     "summary": "Checks, accessories, photos, brands, ready-by",
     "intro": "These apply to every store. Repairs already taken in stay as they were.",
-    "introStore": "Choose what this store uses.",
+    "introStore": "Choose what shows at this store.",
     "count": "{count, plural, one {# choice} other {# choices}}",
-    "hiddenCount": "{count} not used at this store",
+    "hiddenCount": "{count} hidden",
     "list": {
       "checks": "Function checks",
       "accessories": "Accessories",
@@ -281,11 +281,13 @@
     "days": "Ready in (days)",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "remove": "Remove",
-    "usedHere": "Used at this store",
-    "used": "Used",
-    "hiddenHere": "Not used at this store",
-    "notSavedYet": "Can be set per store once saved.",
+    "remove": "Remove from all stores",
+    "done": "Done",
+    "showHere": "Show at this store",
+    "showHereCaption": "Other stores stay as they are.",
+    "hiddenHere": "Hidden at this store",
+    "dragHandle": "Drag to reorder",
+    "notSavedYet": "Can be hidden per store once saved.",
     "save": "Save",
     "saved": "Saved",
     "discardTitle": "Discard changes?",
@@ -299,7 +301,7 @@
       "badReadyBy": "Enter 0 to 60 days.",
       "empty": "Keep at least one choice.",
       "tooMany": "40 choices at most.",
-      "hidesAll": "At least one choice must be used at this store."
+      "hidesAll": "At least one choice must show at this store."
     }
   }
 }

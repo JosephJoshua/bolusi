@@ -24,7 +24,38 @@ const fill = (page: Page, testID: string, text: string) =>
   page.getByTestId(`${testID}.field`).fill(text);
 
 async function shoot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`) });
+  // Finished CSS transitions, so a switch just flipped shows its end state, not a blend.
+  await page.screenshot({ path: path.join(ARTIFACTS, `${name}.png`), animations: 'disabled' });
+}
+
+/** Press a drag handle and move it, in small steps like a finger, onto another row's handle. */
+async function drag(
+  page: Page,
+  from: string,
+  onto: string,
+  options: { shoot?: string } = {},
+): Promise<void> {
+  const a = await page.getByTestId(from).boundingBox();
+  const b = await page.getByTestId(onto).boundingBox();
+  if (a === null || b === null) throw new Error('drag handles not on screen');
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2 - 4, { steps: 12 });
+  if (options.shoot !== undefined) {
+    // The other rows slide aside over 150 ms; picture them where they come to rest.
+    await page.waitForTimeout(300);
+    await shoot(page, options.shoot);
+  }
+  await page.mouse.up();
+}
+
+/** The keys of a ReorderableList's rows, top to bottom. */
+async function order(page: Page, listTestID: string): Promise<string[]> {
+  const prefix = `${listTestID}.item.`;
+  const ids = await page
+    .locator(`[data-testid^="${prefix}"]`)
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid') ?? ''));
+  return ids.map((id) => id.slice(prefix.length));
 }
 
 test('a misspelled name finds the ticket', async ({ page }) => {
@@ -126,6 +157,9 @@ test('a ticket photo opens full screen, zooms on double tap, and "see all" group
 
 async function openIntakeOptions(page: Page, role: Role): Promise<void> {
   await open(page, role);
+  await tap(page, 'ui.avatarButton');
+  await expect(page.getByTestId('account-menu')).toBeVisible();
+  await shoot(page, `account-menu-${role}`);
   await tap(page, 'shell-open-settings');
   await tap(page, 'settings-intake-options');
   await expect(page.getByTestId('repair.options.open.checks')).toBeVisible();
@@ -143,20 +177,37 @@ test('the owner renames, adds and hides condition checks, and the summary follow
   await tap(page, `${list}.row.camera`);
   await shoot(page, 'options-row-open');
   await fill(page, `${list}.row.camera.name`, 'Kamera depan & belakang');
-  await tap(page, `${list}.row.camera.up`);
+  // Close the row, then drag "Mikrofon" above "Kamera" by its handle.
+  await tap(page, `${list}.row.camera.done`);
+  await drag(page, `${list}.order.handle.microphone`, `${list}.order.handle.camera`, {
+    shoot: 'options-dragging',
+  });
+  expect(await order(page, `${list}.order`)).toEqual([
+    'screen',
+    'touch',
+    'microphone',
+    'camera',
+    'speaker',
+    'charging',
+    'buttons',
+    'signal',
+    'biometrics',
+  ]);
   await tap(page, `${list}.row.signal`);
-  await tap(page, `${list}.row.signal.used`);
+  await tap(page, `${list}.row.signal.shown`);
   await tap(page, `${list}.add`);
   await fill(page, `${list}.row.new-1.name`, 'Face ID');
   await shoot(page, 'options-checks-edited');
   await tap(page, `${list}.primary`);
 
   await expect(page.getByTestId('repair.options.open.checks')).toContainText(
-    '10 pilihan · 1 tidak dipakai di toko ini',
+    '10 pilihan · 1 disembunyikan',
   );
   await tap(page, 'repair.options.open.checks');
   const rows = page.getByTestId(`${list}.rows`);
   await expect(rows).toContainText('Kamera depan & belakang');
+  // The dragged order was saved.
+  expect((await order(page, `${list}.order`)).slice(2, 4)).toEqual(['microphone', 'camera']);
   await expect(rows).toContainText('Face ID');
 });
 
@@ -185,11 +236,11 @@ test('a store owner only chooses what this store uses', async ({ page }) => {
   await tap(page, 'repair.options.open.accessories');
   const list = 'repair.options.list.accessories';
   await expect(page.getByTestId(`${list}.add`)).toHaveCount(0);
-  await tap(page, `${list}.row.box.used`);
+  await tap(page, `${list}.row.box.shown`);
   await shoot(page, 'options-store-owner');
   await tap(page, `${list}.primary`);
   await expect(page.getByTestId('repair.options.open.accessories')).toContainText(
-    '1 tidak dipakai di toko ini',
+    '1 disembunyikan',
   );
 });
 

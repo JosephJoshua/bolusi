@@ -76,13 +76,13 @@ export function removeRow(state: EditorState, key: string): EditorState {
   return { ...state, rows: state.rows.filter((row) => row.key !== key) };
 }
 
-/** Move a row one place up (`-1`) or down (`1`); a move past either end does nothing. */
-export function moveRow(state: EditorState, key: string, by: -1 | 1): EditorState {
-  const from = state.rows.findIndex((row) => row.key === key);
-  const to = from + by;
-  if (from < 0 || to < 0 || to >= state.rows.length) return state;
+/** Move the row at `from` to `to` (indices into the rows); an index past either end does nothing. */
+export function moveRow(state: EditorState, from: number, to: number): EditorState {
+  const count = state.rows.length;
+  if (from === to || from < 0 || to < 0 || from >= count || to >= count) return state;
   const rows = [...state.rows];
-  [rows[from], rows[to]] = [rows[to]!, rows[from]!];
+  const [row] = rows.splice(from, 1);
+  rows.splice(to, 0, row!);
   return { ...state, rows };
 }
 
