@@ -64,7 +64,9 @@ export type {
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
 export type { SearchFieldProps } from './components/SearchField.js';
 export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';
+export type { ReorderableListProps } from './components/ReorderableList.js';
 export type { SheetProps } from './components/Sheet.js';
+export type { SwitchRowProps } from './components/SwitchRow.js';
 export type { StepHeaderProps } from './components/StepHeader.js';
 export type {
   OperationSyncStatus,
@@ -78,6 +80,7 @@ export type { ToastProps, ToastTone } from './components/Toast.js';
 export type { ToggleChipProps } from './components/ToggleChip.js';
 export type { UnauthorizedStateProps } from './components/UnauthorizedState.js';
 export type { AppShellProps } from './shell/AppShell.js';
+export { useScrollLock, type ScrollLock } from './shell/scroll-lock.js';
 export type { AvatarButtonProps } from './shell/AvatarButton.js';
 export type { SyncChipProps, SyncChipState } from './shell/SyncChip.js';
 

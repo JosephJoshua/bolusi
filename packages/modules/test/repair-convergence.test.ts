@@ -116,7 +116,14 @@ test('any arrival order converges to the writer’s rows, re-folding along the w
     const b = await openRepairHarness(200 + seed, {
       tenantId: a.tenantId,
       storeId: a.storeId,
-      users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId],
+      users: [
+        a.cashierId,
+        a.technicianId,
+        a.technician2Id,
+        a.zeroUserId,
+        a.ownerId,
+        a.storeOwnerId,
+      ],
     });
     open.push(b);
     const before = b.engine.stats.snapshot().refolds;
@@ -137,7 +144,7 @@ test('replaying the same ops twice changes nothing (no double-counted money)', a
   const b = await openRepairHarness(300, {
     tenantId: a.tenantId,
     storeId: a.storeId,
-    users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId],
+    users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId, a.ownerId, a.storeOwnerId],
   });
   open.push(b);
   let arrival = 1;
@@ -153,7 +160,7 @@ test('two devices acting on one ticket offline converge; approval beats a concur
   const b = await openRepairHarness(104, {
     tenantId: a.tenantId,
     storeId: a.storeId,
-    users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId],
+    users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId, a.ownerId, a.storeOwnerId],
   });
   open.push(b);
 
