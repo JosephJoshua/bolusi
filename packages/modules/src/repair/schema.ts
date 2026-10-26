@@ -129,7 +129,7 @@ export interface RepairStoreIntakeOptionsTable {
 }
 
 /**
- * The phone catalog (client migration 8, server migration 0015). Not a repair projection: no op
+ * The phone catalog (client migration 8, server migration 0016). Not a repair projection: no op
  * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
  * suggest models at intake (device-models.ts). The server's table has the same columns and more.
  */

@@ -509,6 +509,33 @@ export class CommandRuntime {
       throw cause;
     }
 
+    // Step 3b — every emitted op type declares the permission its author must hold, and the server
+    // re-checks exactly that on push. A command whose own permission differs from an op type it
+    // emits must not write an op the server will refuse, so the actor must hold that one too. A
+    // type declared with no permission is one only the runtime or the server writes; a command
+    // emitting it would be an op nobody authorizes, so that is a defect, not a fast path.
+    const opPermissions = new Set<string>();
+    for (const draft of handlerResult.ops) {
+      // The record kind is part of the type's contract too: the server refuses a mismatch, so the
+      // runtime must never write one.
+      const entityType = this.#operations.entityTypeFor(draft.type);
+      if (draft.entityType !== entityType) {
+        throw new Error(
+          `${command.name} emitted ${draft.type} on entityType ${draft.entityType}; the type declares ${String(entityType)}`,
+        );
+      }
+      const permission = this.#operations.permissionFor(draft.type);
+      if (typeof permission !== 'string') {
+        throw new Error(
+          `${command.name} emitted ${draft.type}, which declares no permission; only the runtime or the server may write it`,
+        );
+      }
+      if (permission !== command.permission) opPermissions.add(permission);
+    }
+    for (const permission of opPermissions) {
+      await this.#requirePermission(identity, permission, command.name, 'command', invocation);
+    }
+
     // Steps 4–6 — completion + atomic append + projection.
     //
     // The `location` port is read EXACTLY ONCE per command, here, and never retried or polled: it

@@ -31,6 +31,17 @@ anything typed (edit distance over names, digits and codes, never exact). On a
 device the index lives in memory per store, loads once, and reloads only the
 entities the projection engine reports as changed.
 
+Screens are live the same way: a module's screen reads through `useLiveQuery`
+(`packages/modules/src/screen-kit/live.ts`), which re-reads whenever the
+projection engine's invalidation bus reports a write to the module's tables, or
+a push changes op sync status (`OP_SYNC_STATUS_TABLE`). Local commands and
+pulled operations take the same path, so another device's change shows on an
+open screen with no extra wiring. A device pushes 1 s after a local change and
+pulls on the server's realtime poke, so a colleague's change normally reaches
+other screens in the store within a couple of seconds online. A step a user has
+open re-checks its ticket against the same rule that offered it and says so when
+a synced change has made it impossible to finish.
+
 The phone catalog is global reference data, not ops: Postgres `phone_models`
 (no RLS; the app role can only read it), crawled by `apps/server/src/catalog`.
 Devices pull rows by `revision` from `GET /v1/catalog/phones` into SQLite
@@ -69,9 +80,18 @@ behind adapters. Node tests do not establish native performance or correctness.
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
   yet; inventory and accounting do not exist.
-- General pushed business operations are not reauthorized server-side in v0.
-  Privileged PIN operations are an exception. High-risk v1 approvals still need
-  a server validation/revocation policy covering legitimate offline work.
+- Every op type declares the permission its author needs and the record kind it
+  writes. The server checks each pushed op with the same `evaluatePermission`
+  the device runs, against the server's roles in the device's store. A refused
+  op is stored in `refused_operations`, still uses up its place in the device
+  chain (so later ops keep syncing), and gets the same answer when pushed again.
+  A deactivated user's unsynced ops are all refused, and an op is only credited
+  to an employee of the device's store (PINs are verified on the device, so
+  within a store the device's claim of who is signed in is trusted). Refused
+  positions leave gaps in a device's logged chain that `refused_operations`
+  (seq and hash) accounts for. The device does not yet
+  roll back a refused op locally, and per-type business rules (ticket state,
+  assignment targets, clock bounds) are not yet re-checked server-side.
 - Pull scope is tied to the enrolled store. Cross-store workflows require sync
   and authorization work, not just screens.
 - Physical 2 GB Android performance was deferred, not measured. Emulator/Simulator

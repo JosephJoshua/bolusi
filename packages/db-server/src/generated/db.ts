@@ -268,6 +268,21 @@ export interface PushTokens {
   userId: string | null;
 }
 
+export interface RefusedOperations {
+  code: string;
+  deviceId: string;
+  entityId: string;
+  entityType: string;
+  hash: string;
+  id: string;
+  reason: string;
+  receivedAt: Int8;
+  seq: Int8;
+  tenantId: string;
+  type: string;
+  userId: string;
+}
+
 export interface RepairCustomers {
   createdAt: Int8;
   createdBy: string;
@@ -476,6 +491,7 @@ export interface DB {
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
+  refusedOperations: RefusedOperations;
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;

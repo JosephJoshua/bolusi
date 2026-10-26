@@ -15,6 +15,7 @@ import {
   readyAtFor,
   repairAbilities,
   restOfChecksOk,
+  staleStep,
   stepProblems,
   ticketActions,
   toOpenTicketInput,
@@ -265,6 +266,122 @@ describe('ticket actions', () => {
     expect(
       ticketActions(row({ location: 'returned', outcome: 'repaired' }), cashier, h.cashierId),
     ).toEqual([]);
+  });
+});
+
+describe('an open step after the ticket changed elsewhere', () => {
+  type StepTicket = Parameters<typeof staleStep>[1];
+  const line = (status: 'proposed' | 'applied' | 'declined') => ({
+    id: 'line-1',
+    status,
+    kind: 'part' as const,
+    description: 'Baterai',
+    amount: 150_000,
+    reason: 'Kembung',
+    customerAgreed: status === 'applied' ? true : null,
+    createdBy: 'tech',
+    createdAt: 1,
+    decidedBy: status === 'proposed' ? null : 'cashier',
+    decidedAt: status === 'proposed' ? null : 2,
+    decisionNote: null,
+  });
+  const row = (ticket: Partial<StepTicket> = {}): StepTicket => ({
+    outcome: 'received',
+    location: 'in_store',
+    technicianId: null,
+    pendingProposals: 0,
+    quoteLines: [],
+    ...ticket,
+  });
+
+  test('a step the ticket still allows stays open', async () => {
+    h = await openRepairHarness(4201);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const tech = abilitiesOf(h, h.technicianId);
+    expect(staleStep({ kind: 'before' }, row(), tech, h.technicianId)).toBeNull();
+    expect(staleStep({ kind: 'cancel' }, row(), cashier, h.cashierId)).toBeNull();
+    // Reassigned meanwhile, a technician can still start: the start claims it.
+    expect(
+      staleStep({ kind: 'before' }, row({ technicianId: h.technician2Id }), tech, h.technicianId),
+    ).toBeNull();
+    expect(
+      staleStep(
+        { kind: 'proposal', lineId: 'line-1' },
+        row({ outcome: 'in_repair', pendingProposals: 1, quoteLines: [line('proposed')] }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toBeNull();
+    expect(
+      staleStep({ kind: 'handover' }, row({ outcome: 'repaired' }), cashier, h.cashierId),
+    ).toBeNull();
+  });
+
+  test('each change says what happened, most specific first', async () => {
+    h = await openRepairHarness(4202);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const tech = abilitiesOf(h, h.technicianId);
+    expect(
+      staleStep({ kind: 'after' }, row({ outcome: 'cancelled' }), tech, h.technicianId),
+    ).toEqual({ kind: 'cancelled' });
+    // A cancelled phone already handed back reads as handed back, the later and final fact.
+    expect(
+      staleStep(
+        { kind: 'cancel' },
+        row({ outcome: 'cancelled', location: 'returned' }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'returned' });
+    expect(
+      staleStep(
+        { kind: 'handover' },
+        row({ outcome: 'repaired', location: 'returned' }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'returned' });
+    // Another technician started first.
+    expect(
+      staleStep(
+        { kind: 'before' },
+        row({ outcome: 'in_repair', technicianId: h.technician2Id }),
+        tech,
+        h.technicianId,
+      ),
+    ).toEqual({ kind: 'changed' });
+    for (const decided of ['applied', 'declined'] as const) {
+      expect(
+        staleStep(
+          { kind: 'proposal', lineId: 'line-1' },
+          row({ outcome: 'in_repair', quoteLines: [line(decided)] }),
+          cashier,
+          h.cashierId,
+        ),
+      ).toEqual({ kind: 'proposalDecided', decision: decided });
+    }
+    // An undecided proposal on a ticket cancelled meanwhile can no longer be decided.
+    expect(
+      staleStep(
+        { kind: 'proposal', lineId: 'line-1' },
+        row({ outcome: 'cancelled', pendingProposals: 1, quoteLines: [line('proposed')] }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'cancelled' });
+    // A technician's new proposal holds the handover until the counter checks it.
+    expect(
+      staleStep(
+        { kind: 'handover' },
+        row({ outcome: 'repaired', pendingProposals: 1 }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'proposalPending' });
+    // Reopened on another device: the phone is back on the bench.
+    expect(
+      staleStep({ kind: 'handover' }, row({ outcome: 'in_repair' }), cashier, h.cashierId),
+    ).toEqual({ kind: 'changed' });
   });
 });
 

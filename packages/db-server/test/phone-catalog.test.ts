@@ -1,4 +1,4 @@
-// The phone catalog store (migration 0015) on real Postgres: revisions move only when a field a
+// The phone catalog store (migration 0016) on real Postgres: revisions move only when a field a
 // device keeps changes, pending work comes newest first, and the app role can read but not write.
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';

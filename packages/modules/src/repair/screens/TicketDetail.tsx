@@ -44,10 +44,12 @@ import {
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
+  staleStep,
   ticketActions,
   ticketStatus,
   workPhotos,
   type TicketAction,
+  type TicketStep,
 } from '../flows.js';
 import {
   ActionErrorBanner,
@@ -94,16 +96,11 @@ const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
   cancel: 'repair.action.cancel',
 };
 
+/** The open step, if any. A proposal keeps the line as it was opened, for when no fresher read is at hand. */
 type Step =
   | { readonly kind: 'none' }
-  | { readonly kind: 'before' }
-  | { readonly kind: 'after' }
-  | { readonly kind: 'waitForParts' }
-  | { readonly kind: 'cancel' }
-  | { readonly kind: 'assign' }
-  | { readonly kind: 'changePrice' }
-  | { readonly kind: 'proposePrice' }
-  | { readonly kind: 'proposal'; readonly line: QuoteLineRow };
+  | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
+  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -191,9 +188,16 @@ export function TicketDetail({
     return () => onRegisterDiscardGuard?.(null);
   }, [onRegisterDiscardGuard]);
 
+  // The ticket keeps reading live under an open step, so a change synced from another device while
+  // the user fills the step in is caught here rather than as a refusal once they submit.
+  const stale =
+    step.kind === 'none' || ticket === undefined
+      ? null
+      : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
     ticketId,
+    stale,
     onDone: closeStep,
     onCancel: leaveStep,
     onRegisterDiscardGuard: registerStepGuard,
@@ -222,7 +226,12 @@ export function TicketDetail({
     case 'proposePrice':
       return <PriceChangeStep {...stepProps} mode="propose" />;
     case 'proposal':
-      return <ProposalStep {...stepProps} line={step.line} />;
+      return (
+        <ProposalStep
+          {...stepProps}
+          line={ticket?.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+        />
+      );
     case 'none':
       break;
   }
@@ -238,7 +247,7 @@ export function TicketDetail({
     switch (action) {
       case 'decidePrice': {
         const line = row.quoteLines.find((candidate) => candidate.status === 'proposed');
-        if (line !== undefined) setStep({ kind: 'proposal', line });
+        if (line !== undefined) setStep({ kind: 'proposal', lineId: line.id, line });
         return;
       }
       case 'start':
@@ -554,7 +563,7 @@ export function TicketDetail({
                 <View style={styles.lineAction}>
                   <TextButton
                     label={tn('repair.action.decidePrice')}
-                    onPress={() => setStep({ kind: 'proposal', line })}
+                    onPress={() => setStep({ kind: 'proposal', lineId: line.id, line })}
                     disabled={runner.busy}
                     testID={`${testID}.decide.${line.id}`}
                   />

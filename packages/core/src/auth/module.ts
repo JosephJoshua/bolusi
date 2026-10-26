@@ -47,7 +47,14 @@ import {
   sessionEndedApplier,
   userSwitchedApplier,
 } from './projections/sessions.js';
-import { AUTH_MODULE_ID, AUTH_OP, AUTH_PERMISSION, authOperationRegistry } from './operations.js';
+import {
+  AUTH_MODULE_ID,
+  AUTH_OP,
+  AUTH_OP_ENTITY,
+  AUTH_OP_PERMISSION,
+  AUTH_PERMISSION,
+  authOperationRegistry,
+} from './operations.js';
 import { listPermissionDenialsQuery } from './queries.js';
 import type { AuthDatabase } from './schema.js';
 
@@ -132,6 +139,8 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     reversal:
       'Not reversible; device retirement is server-side revocation (api/02-auth §7), audited on the control plane. The genesis op is a permanent chain root.',
     apply: noProjection,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.deviceEnrolled],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.deviceEnrolled],
   },
   [AUTH_OP.userSwitched]: {
     schemaVersion: schemaVersionOf(AUTH_OP.userSwitched),
@@ -139,12 +148,16 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     reversal:
       'Session records are historical facts; a mistaken switch is corrected by the next auth.user_switched (api/02-auth §6.2).',
     apply: userSwitchedApplier,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.userSwitched],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.userSwitched],
   },
   [AUTH_OP.sessionEnded]: {
     schemaVersion: schemaVersionOf(AUTH_OP.sessionEnded),
     payload: sessionEndedPayload,
     reversal: 'Historical fact; not reversible (api/02-auth §6.2).',
     apply: sessionEndedApplier,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.sessionEnded],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.sessionEnded],
   },
   [AUTH_OP.pinChanged]: {
     schemaVersion: schemaVersionOf(AUTH_OP.pinChanged),
@@ -152,6 +165,8 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     reversal:
       'Superseded by a later auth.pin_changed/auth.pin_reset on the same entityId (canonical-order LWW audit trail, api/02-auth §6.2).',
     apply: noProjection,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.pinChanged],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.pinChanged],
   },
   [AUTH_OP.pinReset]: {
     schemaVersion: schemaVersionOf(AUTH_OP.pinReset),
@@ -159,6 +174,8 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     reversal:
       'Superseded by a later auth.pin_changed/auth.pin_reset on the same entityId (api/02-auth §6.2).',
     apply: noProjection,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.pinReset],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.pinReset],
   },
   [AUTH_OP.pinLockedOut]: {
     schemaVersion: schemaVersionOf(AUTH_OP.pinLockedOut),
@@ -166,18 +183,24 @@ export const authOperations: Readonly<Record<string, OperationDeclaration<AuthDa
     reversal:
       'Cleared by auth.pin_lockout_cleared or any later auth.pin_reset on the same entityId (api/02-auth §6.2/§6.5).',
     apply: pinLockedOutApplier,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.pinLockedOut],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.pinLockedOut],
   },
   [AUTH_OP.pinLockoutCleared]: {
     schemaVersion: schemaVersionOf(AUTH_OP.pinLockoutCleared),
     payload: pinLockoutClearedPayload,
     reversal: 'Historical fact; a re-lock is a new auth.pin_locked_out (api/02-auth §6.2).',
     apply: pinLockoutClearedApplier,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.pinLockoutCleared],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.pinLockoutCleared],
   },
   [AUTH_OP.permissionDenied]: {
     schemaVersion: schemaVersionOf(AUTH_OP.permissionDenied),
     payload: permissionDeniedPayload,
     reversal: 'Historical fact; not reversible (02-permissions §7).',
     apply: permissionDeniedApplier,
+    permission: AUTH_OP_PERMISSION[AUTH_OP.permissionDenied],
+    entityType: AUTH_OP_ENTITY[AUTH_OP.permissionDenied],
   },
 };
 

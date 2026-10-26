@@ -36,6 +36,18 @@ export interface OpRegistry {
    * type fall through to the code that names it correctly instead of mis-attributing it to scope.
    */
   scopeOf(type: string): OperationScope | undefined;
+  /**
+   * The permission the op TYPE's author must hold (`OperationDeclaration.permission`): `null` for a
+   * type no command emits, `undefined` when no module declares the type. Derived from the module
+   * declarations like `scopeOf`, so a new op type is checked the moment it is declared.
+   */
+  permissionOf(type: string): string | null | undefined;
+  /**
+   * The record kind an op of this type writes (`OperationDeclaration.entityType`), `undefined` when
+   * no module declares the type. A pushed op naming another kind is refused: appliers and conflict
+   * detection key on `(entityType, entityId)`, so the kind must not be the author's to choose.
+   */
+  entityTypeOf(type: string): string | undefined;
 }
 
 /** Everything the pipeline needs that is an I/O boundary or a not-yet-built collaborator. */

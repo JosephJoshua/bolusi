@@ -167,6 +167,77 @@ export function ticketActions(
   return actions;
 }
 
+// ── an open step after the ticket changed ────────────────────────────────────────────────────
+
+/**
+ * A step the ticket opens full screen, named by what it finishes. `before` starts (or resumes,
+ * or reopens) the work; `after` marks it repaired; `proposal` decides one proposed line.
+ */
+export type TicketStep =
+  | {
+      readonly kind:
+        | 'before'
+        | 'after'
+        | 'waitForParts'
+        | 'cancel'
+        | 'assign'
+        | 'changePrice'
+        | 'proposePrice'
+        | 'handover';
+    }
+  | { readonly kind: 'proposal'; readonly lineId: string };
+
+/** Why an open step can no longer finish, said in terms of what happened to the ticket. */
+export type StaleStep =
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'returned' }
+  | { readonly kind: 'proposalDecided'; readonly decision: 'applied' | 'declined' }
+  | { readonly kind: 'proposalPending' }
+  /** Anything else, such as another technician starting first or the ticket reopened. */
+  | { readonly kind: 'changed' };
+
+const STEP_ACTIONS: Readonly<Record<TicketStep['kind'], readonly TicketAction[]>> = {
+  before: ['start', 'resume', 'reopen'],
+  after: ['markRepaired'],
+  waitForParts: ['waitForParts'],
+  cancel: ['cancel'],
+  assign: ['assign'],
+  changePrice: ['changePrice'],
+  proposePrice: ['proposePrice'],
+  handover: ['handover'],
+  proposal: ['decidePrice'],
+};
+
+/**
+ * Whether an open step still leads somewhere, given the ticket as it reads now. A step stays open
+ * while a colleague's change syncs in, so it is checked against the same rule that offered it
+ * (`ticketActions`): `null` while it can still finish, otherwise what changed, so the step can say
+ * so instead of letting the user fill it in for a refusal.
+ */
+export function staleStep(
+  step: TicketStep,
+  ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'quoteLines'
+  >,
+  can: RepairAbilities,
+  userId: string,
+): StaleStep | null {
+  const actions = ticketActions(ticket, can, userId);
+  const line =
+    step.kind === 'proposal' ? ticket.quoteLines.find((row) => row.id === step.lineId) : undefined;
+  const lineOpen = step.kind !== 'proposal' || line?.status === 'proposed';
+  if (lineOpen && STEP_ACTIONS[step.kind].some((action) => actions.includes(action))) return null;
+
+  if (ticket.location === 'returned') return { kind: 'returned' };
+  if (line !== undefined && (line.status === 'applied' || line.status === 'declined')) {
+    return { kind: 'proposalDecided', decision: line.status };
+  }
+  if (ticket.outcome === 'cancelled') return { kind: 'cancelled' };
+  if (step.kind === 'handover' && ticket.pendingProposals > 0) return { kind: 'proposalPending' };
+  return { kind: 'changed' };
+}
+
 // ── photos ──────────────────────────────────────────────────────────────────────────────────
 
 /** A stored photo as a verifiable thumbnail ref: its hash rode in the signed op (06 §6). */

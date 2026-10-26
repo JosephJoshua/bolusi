@@ -31,7 +31,12 @@ import {
   HANDOVER_PHOTO_SLOTS,
   QUOTE_LINE_KINDS,
   REPAIR_CONFLICT_KEY,
+  REPAIR_CUSTOMER_ENTITY,
+  REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
+  REPAIR_PERMISSION,
+  REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_TICKET_ENTITY,
   WORK_PHOTO_STAGES,
   WORK_PHOTOS_MAX,
 } from './constants.js';
@@ -212,12 +217,16 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: customerRegisteredPayload,
     reversal: 'Corrected by repair.customer_details_corrected; customers are never deleted.',
     apply: customerRegisteredApplier,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_CUSTOMER_ENTITY,
   },
   [REPAIR_OP.customerDetailsCorrected]: {
     schemaVersion: 1,
     payload: customerDetailsCorrectedPayload,
     reversal: 'Reversed by another repair.customer_details_corrected with the previous details.',
     apply: customerDetailsCorrectedApplier,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_CUSTOMER_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
   [REPAIR_OP.ticketOpened]: {
@@ -227,12 +236,16 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketClaimed]: {
     schemaVersion: 1,
     payload: emptyPayload,
     reversal: 'Reversed by repair.technician_assigned to someone else.',
     apply: ticketClaimedApplier,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
   [REPAIR_OP.technicianAssigned]: {
@@ -240,6 +253,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: technicianAssignedPayload,
     reversal: 'Reversed by another repair.technician_assigned.',
     apply: technicianAssignedApplier,
+    permission: REPAIR_PERMISSION.assign,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
   [REPAIR_OP.workPhotosAdded]: {
@@ -247,12 +262,16 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: workPhotosAddedPayload,
     reversal: 'Not reversible: photos are evidence and are never removed.',
     apply: workPhotosAddedApplier,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {
     schemaVersion: 1,
     payload: emptyPayload,
     reversal: NO_UNDO,
     apply: workStartedApplier,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.workPaused]: {
@@ -260,6 +279,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: notePayload,
     reversal: 'Reversed by repair.work_started when the parts arrive.',
     apply: workPausedApplier,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.markedRepaired]: {
@@ -267,6 +288,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: notePayload,
     reversal: 'Reversed by repair.work_started (reopening) while the device is still in store.',
     apply: markedRepairedApplier,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.ticketCancelled]: {
@@ -274,6 +297,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: ticketCancelledPayload,
     reversal: 'Not reversible in slice 1: open a new ticket if the customer changes their mind.',
     apply: ticketCancelledApplier,
+    permission: REPAIR_PERMISSION.cancel,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.quoteChangeProposed]: {
@@ -281,24 +306,32 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: quoteChangeProposedPayload,
     reversal: 'Reversed by repair.quote_proposal_declined.',
     apply: quoteChangeProposedApplier,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteChanged]: {
     schemaVersion: 1,
     payload: quoteChangedPayload,
     reversal: 'Reversed by a further repair.quote_changed line with the opposite amount.',
     apply: quoteChangedApplier,
+    permission: REPAIR_PERMISSION.quoteChange,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteProposalDeclined]: {
     schemaVersion: 1,
     payload: quoteProposalDeclinedPayload,
     reversal: 'A declined proposal can be proposed again as a new line.',
     apply: quoteProposalDeclinedApplier,
+    permission: REPAIR_PERMISSION.quoteChange,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.deviceReturned]: {
     schemaVersion: 1,
     payload: deviceReturnedPayload,
     reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
+    permission: REPAIR_PERMISSION.handover,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
@@ -306,6 +339,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: intakeOptionsChangedPayload,
     reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
     apply: intakeOptionsChangedApplier,
+    permission: REPAIR_PERMISSION.manageIntakeOptions,
+    entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
     // One list for the whole franchise, on every device, whichever store edited it. No conflict
     // key: the entity holds all five lists, so saving two different lists would read as a clash,
     // and two owners saving the same list is settled by the later save, as for a locale.
@@ -316,5 +351,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: storeIntakeOptionsChangedPayload,
     reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
     apply: storeIntakeOptionsChangedApplier,
+    permission: REPAIR_PERMISSION.hideIntakeOptions,
+    entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   },
 };

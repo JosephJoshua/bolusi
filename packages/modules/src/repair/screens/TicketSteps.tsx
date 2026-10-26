@@ -28,7 +28,13 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import { PRICE_KIND_KEY } from './labels.js';
-import { acceptsRupiahText, capturedThumbnailRef, parseRupiah, signedAmount } from '../flows.js';
+import {
+  acceptsRupiahText,
+  capturedThumbnailRef,
+  parseRupiah,
+  signedAmount,
+  type StaleStep,
+} from '../flows.js';
 import {
   FlowScreen,
   PhotoGrid,
@@ -43,6 +49,8 @@ import { useRepairQuery, useRepairRuntime } from './runtime.js';
 interface StepProps {
   readonly chrome: RepairChrome;
   readonly ticketId: string;
+  /** Set once the ticket changed elsewhere and this step can no longer finish. */
+  readonly stale: StaleStep | null;
   readonly onDone: () => void;
   readonly onCancel: () => void;
   /** Lets hardware back ask before dropping photos this step has taken. */
@@ -75,6 +83,7 @@ const STAGE_COPY: Readonly<
 export function WorkPhotosStep({
   chrome,
   ticketId,
+  stale,
   stage,
   onDone,
   onCancel,
@@ -90,7 +99,8 @@ export function WorkPhotosStep({
   const [note, setNote] = useState('');
   const copy = STAGE_COPY[stage];
   const discard = useDiscardConfirm({
-    dirty: photos.length > 0 || note.trim() !== '',
+    // Nothing to keep once the step cannot finish: leaving it goes straight back.
+    dirty: stale === null && (photos.length > 0 || note.trim() !== ''),
     onRegisterDiscardGuard,
     testID,
   });
@@ -128,6 +138,7 @@ export function WorkPhotosStep({
       overlay={discard.overlay}
       busy={runner.busy}
       errorCode={runner.errorCode}
+      stale={stale}
       onClearError={runner.clearError}
       testID={testID}
     >
@@ -173,6 +184,7 @@ export function WorkPhotosStep({
 export function NoteStep({
   chrome,
   ticketId,
+  stale,
   kind,
   onDone,
   onCancel,
@@ -210,6 +222,7 @@ export function NoteStep({
       primaryHint={tn('repair.hint.reason')}
       busy={runner.busy}
       errorCode={runner.errorCode}
+      stale={stale}
       onClearError={runner.clearError}
       testID={testID}
     >
@@ -235,6 +248,7 @@ export function NoteStep({
 export function AssignStep({
   chrome,
   ticketId,
+  stale,
   currentTechnicianId,
   onDone,
   onCancel,
@@ -275,6 +289,7 @@ export function AssignStep({
       onBack={onCancel}
       busy={runner.busy}
       errorCode={runner.errorCode}
+      stale={stale}
       onClearError={runner.clearError}
       testID={testID}
     >
@@ -328,6 +343,7 @@ export type PriceKind = (typeof PRICE_KINDS)[number];
 export function PriceChangeStep({
   chrome,
   ticketId,
+  stale,
   mode,
   onDone,
   onCancel,
@@ -373,6 +389,7 @@ export function PriceChangeStep({
       primaryHint={tn('repair.hint.priceLine')}
       busy={runner.busy}
       errorCode={runner.errorCode}
+      stale={stale}
       onClearError={runner.clearError}
       testID={testID}
     >
@@ -438,6 +455,7 @@ export function PriceChangeStep({
 export function ProposalStep({
   chrome,
   ticketId,
+  stale,
   line,
   onDone,
   onCancel,
@@ -482,6 +500,7 @@ export function ProposalStep({
       }}
       busy={runner.busy}
       errorCode={runner.errorCode}
+      stale={stale}
       onClearError={runner.clearError}
       testID={testID}
     >

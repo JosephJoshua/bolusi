@@ -98,6 +98,8 @@ export function validManifest(seed: number): ModuleManifest<FixtureSuiteDatabase
         payload: strictSchema(),
         reversal: `Reversed by ${id}.widget_archived on the same entityId.`,
         apply: noopApplier,
+        permission: `${id}.create`,
+        entityType: 'widget',
       },
     },
     projections: { tables: { [`${id}_widgets`]: widgetsTable() } },

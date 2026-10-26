@@ -83,6 +83,7 @@
     "CHAIN_GAP": "Ada perubahan yang tertinggal. Dikirim ulang otomatis.",
     "CHAIN_HALTED": "Ditunda karena perubahan sebelumnya bermasalah.",
     "DEVICE_REVOKED": "Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.",
+    "PERMISSION_DENIED": "Orang yang membuat perubahan ini tidak punya izin di toko ini, jadi perubahannya tidak disimpan. Minta orang yang berwenang untuk mengulanginya.",
     "SCHEMA_INVALID": "Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.",
     "SCOPE_VIOLATION": "Perubahan ini bukan untuk toko atau akun ini, jadi ditolak. Laporkan ke pemilik toko.",
     "UNKNOWN_TYPE": "Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim."

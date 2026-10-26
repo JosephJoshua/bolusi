@@ -89,9 +89,7 @@ export class SessionManager<TWork = unknown> {
    * incoming user. Invalidates the permission memo (§6). Restores and returns the incoming user's
    * retained work state, if any.
    */
-  async switchTo(
-    userId: string,
-  ): Promise<{
+  async switchTo(userId: string): Promise<{
     readonly session: ActiveSession;
     readonly work: TWork | undefined;
     readonly ops: readonly AppendedOp[];

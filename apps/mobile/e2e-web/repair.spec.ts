@@ -408,3 +408,71 @@ test('intake offers the owner’s lists and the ticket keeps their names', async
   await expect(page.getByTestId('repair.ticket.photos.strip.front')).toBeVisible();
   await shoot(page, 'options-ticket');
 });
+
+/** A colleague's change on another device, applied the way a pull would land it. */
+async function colleague(page: Page, command: string, input: Record<string, unknown>) {
+  await page.evaluate(
+    ([name, args]) => {
+      const hook = (window as unknown as Record<string, { run(n: string, i: unknown): unknown }>)[
+        '__repairDemoColleague'
+      ];
+      hook!.run(name, args);
+    },
+    [command, input] as const,
+  );
+}
+
+test("a colleague's change shows on the open ticket at once", async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-1');
+  await expect(page.getByTestId('repair.ticket.technician')).toContainText('Belum ada teknisi');
+  await colleague(page, 'assignTechnician', { ticketId: 't-1', technicianId: 'u-yosua' });
+  await expect(page.getByTestId('repair.ticket.technician')).toContainText('Yosua Wonda');
+  await shoot(page, 'live-assigned-elsewhere');
+});
+
+test('a repair cancelled on another device stops the open step', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-1');
+  await tap(page, 'repair.ticket.action.changePrice');
+  await fill(page, 'repair.price.change.description', 'LCD');
+  await colleague(page, 'cancelTicket', { ticketId: 't-1', reason: 'Pelanggan batal' });
+  await expect(page.getByTestId('repair.price.change.stale')).toBeVisible();
+  await expect(page.getByTestId('repair.price.change.primary')).toHaveCount(0);
+  await shoot(page, 'stale-cancelled');
+  await tap(page, 'repair.price.change.staleBack');
+  await expect(page.getByTestId('repair.ticket.status')).toContainText('Dibatalkan');
+});
+
+test('a proposal answered on another device cannot be answered twice', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-2');
+  await tap(page, 'repair.ticket.action.decidePrice');
+  await colleague(page, 'declineProposal', { ticketId: 't-2', lineId: 'line-Baterai-180000' });
+  await expect(page.getByTestId('repair.proposal.stale')).toBeVisible();
+  await shoot(page, 'stale-proposal');
+});
+
+test('a phone handed back on another device stops the handover', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.handover');
+  await tap(page, 'repair.handover.photo.press');
+  const shot = (mediaId: string) => ({
+    mediaId,
+    sha256: 'a'.repeat(64),
+    mime: 'image/jpeg',
+    capturedAt: 0,
+  });
+  await colleague(page, 'returnDevice', {
+    ticketId: 't-4',
+    handoverPhoto: shot('m-handover'),
+    signature: shot('m-signature'),
+  });
+  await expect(page.getByTestId('repair.handover.stale')).toBeVisible();
+  await shoot(page, 'stale-handover');
+  await tap(page, 'repair.handover.staleBack');
+  await expect(page.getByTestId('repair.handover.discard')).toHaveCount(0);
+  await expect(page.getByTestId('repair.ticket.status')).toContainText('Sudah diambil');
+});

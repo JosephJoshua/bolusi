@@ -141,6 +141,14 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       return byType.get(type)?.scope ?? (byType.has(type) ? 'store' : undefined);
     },
 
+    permissionOf(type) {
+      return byType.get(type)?.permission;
+    },
+
+    entityTypeOf(type) {
+      return byType.get(type)?.entityType;
+    },
+
     resolve(type, schemaVersion) {
       const declaration = byType.get(type);
       if (declaration === undefined) return { kind: 'unknown' };

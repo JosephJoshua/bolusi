@@ -7,13 +7,13 @@
 import { formatMoney } from '@bolusi/i18n';
 import { Card, PhotoSlot, TextInput, border, color, space, type } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn } from './i18n.js';
-import { capturedThumbnailRef, ticketStatus } from '../flows.js';
+import { capturedThumbnailRef, repairAbilities, staleStep, ticketStatus } from '../flows.js';
 import {
   FlowScreen,
   PhotoGrid,
@@ -55,8 +55,15 @@ export function Handover({
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
 
+  // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
+  // than take a signature for a handover that would be refused.
+  const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  const ticket = query.status === 'ready' ? query.data : undefined;
+  const stale =
+    ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
+
   const discard = useDiscardConfirm({
-    dirty: photo !== null || signature !== null || note.trim() !== '',
+    dirty: stale === null && (photo !== null || signature !== null || note.trim() !== ''),
     onRegisterDiscardGuard,
     testID,
   });
@@ -92,6 +99,7 @@ export function Handover({
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
+      stale={stale}
       testID={testID}
     >
       <QueryView

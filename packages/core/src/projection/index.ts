@@ -62,6 +62,7 @@ export {
 
 export {
   InvalidationBus,
+  OP_SYNC_STATUS_TABLE,
   type EntityChange,
   type InvalidationListener,
   type TableInvalidationListener,
