@@ -22,6 +22,10 @@
 // `ops in log: [op1]`, `device lastSeq: 1` — the op vanished. After the fix the same test reports a
 // 500 with `ops in log: []` and the head unmoved: the second op is REPORTED (loud), never vanished.
 //
+// Since the per-type rules landed, the notes rule refuses that double-create before the fold, so the
+// first test now pins the refusal. The narrowed catch is still pinned by the constraint-name test
+// and the two positive controls below.
+//
 // Real PG16 in apps/server's own stamped testcontainer (T-14d), through the production `createApp`
 // middleware chain + the real `SERVER_MODULES` projections (notes applier + `notes` table).
 import { sql } from 'kysely';
@@ -85,7 +89,7 @@ async function noteIdsFor(h: SyncHarness, tenantId: string): Promise<string[]> {
 }
 
 describe('task 139 — an applier unique violation is a loud failure, never a silent `duplicate`', () => {
-  test('two distinct note_created ops sharing one entityId — the second is a LOUD 500 that rolls the whole batch back, never a `duplicate` that vanishes from the log', async () => {
+  test('two distinct note_created ops sharing one entityId — the second is REFUSED by the notes rule, never a `duplicate` that vanishes from the log', async () => {
     const h = await makeSyncHarness();
     try {
       const d = await h.seedDevice(1390);
@@ -112,38 +116,23 @@ describe('task 139 — an applier unique violation is a loud failure, never a si
       expect(op1.entityId).toBe(op2.entityId); // …that collide on entityId
 
       const res = await h.push(d.auth, d.world.deviceId, [op1, op2]);
-
-      // Diagnostics that LEAD the report (§2.11): identical lines run pre- and post-fix, so the
-      // pre-fix `[accepted, duplicate]` / `op2 durably logged: false` is captured by the same probe.
       const logAfter = await opIdsInLog(h, d.world.tenantId);
-      const lastSeqAfter = await deviceLastSeq(h, d.world.deviceId);
-      const bodyText = await res.clone().text();
-      console.log(
-        `[task-139] status=${res.status} body=${bodyText}\n` +
-          `  ops in log: ${JSON.stringify(logAfter)}\n` +
-          `  op2 durably logged: ${logAfter.includes(op2.id)}\n` +
-          `  device lastSeq: ${lastSeqAfter}\n` +
-          `  provenance: ${h.provenance}`,
-      );
+      const results = ((await res.json()) as { results: PushResultRow[] }).results;
 
-      // The applier throw propagates out of `forTenant` → the Hono error handler → 500 INTERNAL. The
-      // op is REPORTED loudly, not swallowed as a success.
-      expect(
-        res.status,
-        'an applier unique violation surfaces loudly, never as a 200 duplicate',
-      ).toBe(500);
-
-      // Assert on the LOG, not just the reply. The batch is atomic (10-db §3): the fold that could not
-      // happen rolls back its op AND op1 — nothing is half-committed, so the head cannot desync.
-      expect(
-        logAfter,
-        'the whole batch rolled back — neither op is in the append-only log',
-      ).toEqual([]);
-      expect(logAfter.includes(op2.id), 'op2 must not vanish silently into a `duplicate`').toBe(
-        false,
-      );
-      expect(await noteIdsFor(h, d.world.tenantId), 'no half-written projection row').toEqual([]);
-      expect(lastSeqAfter, 'the device chain head did not advance — no CHAIN_BROKEN brick').toBe(1);
+      // The notes rule now catches the double-create before any applier runs: op2 is REFUSED with
+      // its reason, a terminal answer the device shows under sync problems. Never a `duplicate`.
+      expect(res.status).toBe(200);
+      expect(results[0]).toMatchObject({ id: op1.id, status: 'accepted' });
+      expect(results[1]).toMatchObject({
+        id: op2.id,
+        status: 'rejected',
+        code: 'RULE_VIOLATED',
+        reason: 'notes.refusal.alreadyRecorded',
+      });
+      expect(logAfter, 'only op1 is logged').toEqual([op1.id]);
+      // The refusal spends op2's chain slot, so the head advances past it: no CHAIN_BROKEN brick.
+      expect(await deviceLastSeq(h, d.world.deviceId)).toBe(3);
+      expect(await noteIdsFor(h, d.world.tenantId)).toEqual([entityId]);
     } finally {
       await h.close();
     }
