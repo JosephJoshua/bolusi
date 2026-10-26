@@ -19,10 +19,10 @@
  * against it would verify the file against itself. `core/src/media/download.ts` makes this argument
  * at length and takes the hash as a parameter precisely to force the caller to source it correctly.
  */
-import type { NotesRuntime, ThumbnailRef, ThumbnailState } from '@bolusi/modules/notes/screens';
+import type { ThumbnailLoader, ThumbnailRef, ThumbnailState } from '@bolusi/modules/screen-kit';
 
-import type { MediaClient } from '../../media/client.js';
-import type { RenderableMedia } from '../../media/remote-cache.js';
+import type { MediaClient } from './client.js';
+import type { RenderableMedia } from './remote-cache.js';
 
 /**
  * Map the media client's outcome onto the screen's four states (design-system §5).
@@ -55,13 +55,13 @@ function toThumbnailState(resolved: RenderableMedia): ThumbnailState {
 }
 
 /**
- * Bind the notes port's `loadThumbnail` to the real media client.
+ * Bind a module port's `loadThumbnail` (notes, repair, …) to the real media client.
  *
  * The two arms are not interchangeable and the ref's type is what keeps them apart:
  *  - `signed` → the full 06 §6 path: local file, else cache (re-verified), else fetch + verify.
  *  - `legacy` → local file or nothing. No cache read, no fetch: there is no hash to check against.
  */
-export function createNotesThumbnailLoader(media: MediaClient): NotesRuntime['loadThumbnail'] {
+export function createThumbnailLoader(media: MediaClient): ThumbnailLoader {
   return async (ref: ThumbnailRef): Promise<ThumbnailState> => {
     const resolved =
       ref.kind === 'signed'

@@ -15,6 +15,7 @@
 //             → determinism/script.ts → determinism/prng.ts
 //             → driver-conformance/at-rest.ts   (self-contained; imports nothing)
 //             → vectors/jcs.ts                  (the shared RFC 8785 vectors view; imports nothing)
+//             → oplog-fixtures/row.ts → oplog-fixtures/builder.ts → determinism/prng.ts
 // None of those imports `node:crypto` / `node:*` / `node-column-aead`. `device-bundle-safe.test.ts`
 // walks this graph from THIS file and fails if any reachable module reaches a Node-only import — the
 // §2.11 guard that keeps the claim above from silently rotting when a new export is added here.
@@ -56,3 +57,7 @@ export {
   type CanonicalizationVector,
   type PropertySortingVector,
 } from './vectors/jcs.js';
+
+// An op-log row for a fixture op (its real canonical signed text), so the at-rest seed writes the op
+// log the way a device does. Imports only `@bolusi/core`, `@bolusi/schemas` and the PRNG.
+export { opRowOf } from './oplog-fixtures/row.js';

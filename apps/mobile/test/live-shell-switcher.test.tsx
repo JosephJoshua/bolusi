@@ -142,6 +142,7 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
     //    this task its handler was `setPinFor(null)`, a no-op with a session open, so this tap left the
     //    notes list exactly where it was: `switcher-screen ABSENT` (the task's own probe).
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
 
     // 3. The switcher is on screen and the notes surface is gone — the gate genuinely moved.
@@ -166,6 +167,7 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
     const userId = fixture?.userId ?? '';
 
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
     expect(screen.query('switcher-screen')).not.toBeNull();
 
@@ -186,6 +188,7 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
     const screen = await unlockedShell();
 
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
     expect(screen.query('switcher-screen')).not.toBeNull();
 
@@ -205,10 +208,12 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
 
     // Get onto the Settings surface first (task 124's header control), then open the switcher from ITS
     // avatar (`onOpenSwitcher`, which — pre-143 — navigated to `home`).
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
     expect(screen.query('settings-screen')).not.toBeNull();
 
+    // Settings' own avatar opens the switcher directly: its menu would only offer Settings again.
     fireOn(screen, 'ui.avatarButton');
     await settle();
     expect(screen.query('switcher-screen')).not.toBeNull();
@@ -231,6 +236,7 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
     const screen = await unlockedShell();
 
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
     expect(screen.query('switcher-screen')).not.toBeNull();
 

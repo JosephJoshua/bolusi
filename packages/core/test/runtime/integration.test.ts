@@ -25,6 +25,7 @@ import {
   CommandRuntime,
   createProjectionEngine,
   createUuidV7Generator,
+  insertOpLogRow,
   PermissionEvaluator,
   ProjectionRegistry,
   type ClockPort,
@@ -83,37 +84,9 @@ class SqliteOpStore implements OpAppendStore {
           `.execute(this.db);
           return rows.rows.length > 0;
         },
-        insertOp: async ({ op, signedCoreJcs }) => {
-          await this.db
-            .insertInto('operations')
-            .values({
-              id: op.id,
-              tenantId: op.tenantId,
-              storeId: op.storeId,
-              userId: op.userId,
-              deviceId: op.deviceId,
-              seq: op.seq,
-              type: op.type,
-              entityType: op.entityType,
-              entityId: op.entityId,
-              schemaVersion: op.schemaVersion,
-              payload: JSON.stringify(op.payload),
-              timestampMs: op.timestamp,
-              location: op.location === null ? null : JSON.stringify(op.location),
-              source: op.source,
-              agentInitiated: op.agentInitiated ? 1 : 0,
-              agentConversationId: op.agentConversationId,
-              previousHash: op.previousHash,
-              hash: op.hash,
-              signature: op.signature,
-              signedCoreJcs,
-              // Born local (03 §3 birth state) — sync is task 15.
-              syncStatus: 'local',
-              arrivalSeq: null,
-              syncedAt: null,
-            })
-            .execute();
-        },
+        // Born local (03 §3 birth state) — sync is task 15.
+        insertOp: (row) =>
+          insertOpLogRow(this.db, row, { syncStatus: 'local', syncedAt: null, arrivalSeq: null }),
       });
       await this.driver.commit();
       return result;

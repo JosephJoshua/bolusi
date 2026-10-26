@@ -16,6 +16,7 @@ import {
 
 import {
   DEVICE_LOCATIONS,
+  IN_PROGRESS_OUTCOMES,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OUTCOMES,
   REPAIR_PERMISSION,
@@ -26,6 +27,14 @@ import {
   type QuoteLineStatus,
   type RepairOutcome,
 } from './constants.js';
+import {
+  DEFAULT_INTAKE_OPTIONS,
+  INTAKE_OPTION_LISTS,
+  NOTHING_HIDDEN,
+  type IntakeOption,
+  type IntakeOptionList,
+  type IntakeOptionSettings,
+} from './intake-options.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
 import { deviceCode, ticketCounter } from './ticket-number.js';
@@ -97,11 +106,27 @@ export interface TicketEventRow {
   readonly detail: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * A list item as a ticket recorded it: its id and the name it showed then, or null when that was the
+ * built-in app name (and always for tickets opened before the lists were editable).
+ */
+export interface RecordedOption {
+  readonly item: string;
+  readonly label: string | null;
+}
+
+/** An intake photo angle a ticket asked for, in order. */
+export interface IntakePhotoAngle {
+  readonly slot: string;
+  readonly label: string | null;
+}
+
 export interface TicketDetailRow extends TicketSummaryRow {
   readonly devicePasscode: string | null;
   readonly intakeNotes: string;
-  readonly checklist: readonly { item: string; state: ChecklistState; note: string }[];
-  readonly peripherals: readonly string[];
+  readonly checklist: readonly (RecordedOption & { state: ChecklistState; note: string })[];
+  readonly peripherals: readonly RecordedOption[];
+  readonly intakePhotos: readonly IntakePhotoAngle[];
   readonly outcomeNote: string | null;
   readonly createdBy: string;
   readonly createdByName: string | null;
@@ -385,6 +410,21 @@ function parseJson<T>(text: string, fallback: T): T {
   }
 }
 
+/** Old tickets stored accessories as plain keys and checks without labels; both read as built-in. */
+function recordedOption(value: unknown): RecordedOption {
+  if (typeof value === 'string') return { item: value, label: null };
+  const { item, label } = value as { item: string; label?: string | null };
+  return { item, label: label ?? null };
+}
+
+/** The angles a ticket asked for; tickets from before the editable list had the six defaults. */
+function intakePhotoAngles(json: string | null): readonly IntakePhotoAngle[] {
+  if (json === null) {
+    return DEFAULT_INTAKE_OPTIONS.photoAngles.map(({ id }) => ({ slot: id, label: null }));
+  }
+  return parseJson<IntakePhotoAngle[]>(json, []);
+}
+
 export async function getTicketHandler(
   input: GetTicketInput,
   qctx: Qctx,
@@ -405,6 +445,7 @@ export async function getTicketHandler(
       'intakeNotes',
       'checklistJson',
       'peripheralsJson',
+      'intakePhotosJson',
       'outcomeNote',
       'createdBy',
       'returnedBy',
@@ -450,8 +491,12 @@ export async function getTicketHandler(
         ...toSummary(summary, names),
         devicePasscode: detail.devicePasscode,
         intakeNotes: detail.intakeNotes,
-        checklist: parseJson(detail.checklistJson, []),
-        peripherals: parseJson(detail.peripheralsJson, []),
+        checklist: parseJson<{ state: ChecklistState; note: string }[]>(
+          detail.checklistJson,
+          [],
+        ).map((check) => ({ ...recordedOption(check), state: check.state, note: check.note })),
+        peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
+        intakePhotos: intakePhotoAngles(detail.intakePhotosJson),
         outcomeNote: detail.outcomeNote,
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,
@@ -493,6 +538,39 @@ export const getTicketQuery = {
   handler: getTicketHandler,
 } as const;
 
+// ── technicianLoads ────────────────────────────────────────────────────────────────────────────
+
+export const technicianLoadsInput = z.object({}).strict();
+export type TechnicianLoadsInput = z.infer<typeof technicianLoadsInput>;
+
+/** How many repairs each technician holds that are still in the store and being worked on. */
+export async function technicianLoadsHandler(
+  _input: TechnicianLoadsInput,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly technicianId: string; readonly load: number }>> {
+  const rows = await qctx.db
+    .selectFrom('repairTickets')
+    .select((eb) => ['technicianId', eb.fn.countAll<number>().as('load')])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .where('outcome', 'in', IN_PROGRESS_OUTCOMES)
+    .where('location', '=', 'in_store')
+    .where('technicianId', 'is not', null)
+    .groupBy('technicianId')
+    .execute();
+  return {
+    rows: rows.map((row) => ({ technicianId: row.technicianId ?? '', load: Number(row.load) })),
+    nextCursor: null,
+  };
+}
+
+export const technicianLoadsQuery = {
+  name: 'technicianLoads',
+  permission: REPAIR_PERMISSION.read,
+  input: technicianLoadsInput,
+  handler: technicianLoadsHandler,
+} as const;
+
 // ── nextTicketCounter (the openTicket command's read seam) ─────────────────────────────────────
 
 export const nextTicketCounterInput = z.object({ deviceId: z.string().min(1) }).strict();
@@ -524,4 +602,49 @@ export const nextTicketCounterQuery = {
   permission: REPAIR_PERMISSION.intake,
   input: nextTicketCounterInput,
   handler: nextTicketCounterHandler,
+} as const;
+
+// ── intakeOptionSettings (the lists intake offers, and the owner's editor) ─────────────────────
+
+export const intakeOptionSettingsInput = z.object({}).strict();
+
+/**
+ * The franchise's intake lists and what this store hides. A list the owner never saved is the
+ * default one, so a new tenant's intake looks exactly like it did when the lists were code.
+ */
+export async function intakeOptionSettingsHandler(
+  _input: z.infer<typeof intakeOptionSettingsInput>,
+  qctx: Qctx,
+): Promise<QueryPage<IntakeOptionSettings>> {
+  const known = (list: string): list is IntakeOptionList =>
+    (INTAKE_OPTION_LISTS as readonly string[]).includes(list);
+
+  const lists: Record<IntakeOptionList, readonly IntakeOption[]> = { ...DEFAULT_INTAKE_OPTIONS };
+  const franchise = await qctx.db
+    .selectFrom('repairIntakeOptions')
+    .select(['list', 'itemsJson'])
+    .where('tenantId', '=', qctx.tenantId)
+    .execute();
+  for (const row of franchise) {
+    if (known(row.list)) lists[row.list] = parseJson<IntakeOption[]>(row.itemsJson, []);
+  }
+
+  const hidden: Record<IntakeOptionList, readonly string[]> = { ...NOTHING_HIDDEN };
+  const store = await qctx.db
+    .selectFrom('repairStoreIntakeOptions')
+    .select(['list', 'hiddenJson'])
+    .where('storeId', '=', qctx.storeId)
+    .execute();
+  for (const row of store) {
+    if (known(row.list)) hidden[row.list] = parseJson<string[]>(row.hiddenJson, []);
+  }
+
+  return { rows: [{ lists, hidden }], nextCursor: null };
+}
+
+export const intakeOptionSettingsQuery = {
+  name: 'intakeOptionSettings',
+  permission: REPAIR_PERMISSION.read,
+  input: intakeOptionSettingsInput,
+  handler: intakeOptionSettingsHandler,
 } as const;

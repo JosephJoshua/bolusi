@@ -144,6 +144,13 @@ export const touch = Object.freeze({
 export const size = Object.freeze({
   /** §3.5 Chip height (hit area padded to `touch.min` when tappable). */
   chip: 28,
+  /**
+   * A compact control that is not the screen's subject (filter pills, compact buttons, the search
+   * field): drawn at 36 dp so it does not outweigh content, hit area padded to `touch.min`.
+   */
+  control: 36,
+  /** A photo in a scrolling strip: big enough to tell shots apart, small enough to keep a row. */
+  photoStrip: 88,
   /** §3.5 Chip icon — mandatory, no color-only signalling. */
   iconChip: 16,
   /** §3.6 Banner / inline icon. */
@@ -152,8 +159,11 @@ export const size = Object.freeze({
   iconState: 48,
   /** §3.4 ListRow leading slot (icon/avatar). */
   avatarRow: 40,
-  /** §8.1 header avatar button. */
-  avatar: 48,
+  /**
+   * §8.1 header avatar disc. Smaller than the 56 dp header so it sits with breathing room; the
+   * `AvatarButton` around it keeps the 48 dp touch target.
+   */
+  avatar: 36,
   /**
    * §8.2 User Switcher grid. Big enough to be a FACE rather than a bullet point — PRD-011 §6.1
    * makes recognition the whole job of that screen, and a 48 dp disc in a 2-column grid wastes the

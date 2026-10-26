@@ -7,10 +7,10 @@
 // entities through `loadChanged` before answering. Nothing is re-read or re-decrypted per
 // keystroke, and a sync that brings in 200 ops costs 200 small reloads, not a rebuild.
 //
-// Ids are noted while the op's transaction is still open and read back only at the next search,
-// after it has committed. If that transaction rolls back, the reload simply finds the unchanged
-// rows, and the re-pull applies (and reports) the ops again. A rebuild batch reports tables but no
-// entity, so a source touching those tables reloads in full.
+// On the device the bus delivers an op's change only once its transaction has ended
+// (projection/invalidation.ts), so the next search reloads rows that are final: the new ones after
+// a commit, the old ones after a rollback, which also undoes anything a search read mid-transaction.
+// A rebuild batch reports tables but no entity, so a source touching those tables reloads in full.
 //
 // Without a cache (the server, tests), `searchIndexFor` builds a throwaway index per query: the
 // same matching and ranking, just not kept.
@@ -99,18 +99,18 @@ export class SearchIndexCache {
     }
     const current = entry;
     const run = async (): Promise<FuzzyIndex> => {
-      // Wait out a refresh already running; changes noted meanwhile are picked up below.
-      if (current.pending !== null) await current.pending.catch(() => undefined);
+      // Wait out every refresh in flight, not just the first: another waiter may start the next one
+      // while this one sleeps, and returning before it lands would miss the changes it took.
+      while (current.pending !== null) await current.pending.catch(() => undefined);
       if (current.index !== null && !current.stale && current.dirty.size === 0) {
         return current.index;
       }
-      const refresh = this.#refresh(current, source, db, scope);
-      current.pending = refresh;
-      try {
-        return await refresh;
-      } finally {
+      // No await between the check above and claiming `pending`, so only one waiter refreshes.
+      const refresh: Promise<FuzzyIndex> = this.#refresh(current, source, db, scope).finally(() => {
         if (current.pending === refresh) current.pending = null;
-      }
+      });
+      current.pending = refresh;
+      return refresh;
     };
     return run();
   }

@@ -40,6 +40,9 @@ behind adapters. Node tests do not establish native performance or correctness.
   can change without rewriting signed facts.
 - Apply operations transactionally and make replay idempotent. Interrupted rebuilds
   and reordered sync must preserve resulting business state.
+- A projection version bump rebuilds on the device in the background, re-folding one
+  entity at a time from the op log. Appliers write only their own entity's rows, so
+  screens and commands keep working while it runs.
 - Tenant-bound access and PostgreSQL row-level security isolate tenants. Within a
   tenant, store scope still matters; a store owner is not a tenant administrator.
 - Signatures establish device attribution/integrity, not user authorization or
@@ -65,15 +68,22 @@ behind adapters. Node tests do not establish native performance or correctness.
 - First sync on a new device replays the store's whole history; there is no
   snapshot. `pnpm --filter @bolusi/modules bench:first-sync` measures it with
   realistic repair tickets. On a laptop (Node, October 2026), one year at 50
-  tickets a day is about 122k ops: 22 MB gzipped on the wire, 205 s to pull,
-  verify and apply, and a 555 MB device database (the op log is about 70% of it).
-  Phone timings are still unmeasured.
+  tickets a day is about 122k ops: about 28 MB gzipped on the wire, about 250 s
+  to pull, verify and apply, and a 304 MB device database (555 MB before client
+  migration 6 stopped storing each payload twice and compressed the signed text;
+  the op log went from 394 MB to 143 MB). Phone timings are still unmeasured; on
+  Hermes the compression costs about 0.8 ms per pulled op.
+- Op-log values are deflated with a frozen preset dictionary
+  (`db-client/src/crypto/compression.ts`). Changing the dictionary makes stored
+  ops unreadable; a better one needs a new scheme prefix.
 - Local confidentiality uses application-layer encryption; SQLCipher is disabled.
   Old comments/report names do not establish whole-database encryption.
-- Extended chaos has unresolved large-workload failures: the recorded October 14
-  run hit rate limits in CHAOS-03 and timeouts in CHAOS-08; later nightly runs also
-  failed. Removing the schedule does not resolve them. Reproduce a bounded seed
-  before attributing a failure to the application or test workload.
+- Extended chaos (`pnpm chaos:extended`) failed from October 14 to 24 in CHAOS-03
+  (HTTP 429) and CHAOS-08 (timeout). Both were harness problems, fixed October 26:
+  the harness server's fake clock never advanced, so its per-device rate limit
+  never refilled, and CHAOS-08's timeout had no room for four workers sharing a
+  box. Reproduce a bounded seed before attributing a failure to the application
+  or test workload.
 - A future rekey/pre-key-tag fleet migration may need verified key-tag backfill.
   It was deferred because current creation tags the DB before enrollment. Add a
   migration when a real upgrade needs it, not to satisfy a historical task entry.

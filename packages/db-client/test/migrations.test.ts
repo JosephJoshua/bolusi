@@ -25,7 +25,9 @@ const SPEC_TABLES = [
   'projection_watermarks',
   'quarantined_ops',
   'repair_customers',
+  'repair_intake_options',
   'repair_quote_lines',
+  'repair_store_intake_options',
   'repair_ticket_events',
   'repair_ticket_photos',
   'repair_tickets',
@@ -132,7 +134,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3, 4, 5]);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 9]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -143,6 +145,8 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 3, name: 'column_encryption', applied_at: 1_700_000_000_000 },
       { version: 4, name: 'repair', applied_at: 1_700_000_000_000 },
       { version: 5, name: 'operations_arrival_index', applied_at: 1_700_000_000_000 },
+      { version: 6, name: 'operations_single_copy', applied_at: 1_700_000_000_000 },
+      { version: 9, name: 'repair_intake_options', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -152,11 +156,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3, 4, 5]);
+    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 9]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 5 }]);
+    expect(rows.rows).toEqual([{ c: 7 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
@@ -232,6 +236,45 @@ describe('transactional apply', () => {
   });
 });
 
+describe('migration 6 keeps one copy of each op', () => {
+  const pragma = async (name: string): Promise<number> =>
+    Number(Object.values((await driver.execute(`PRAGMA ${name}`)).rows[0] ?? {})[0]);
+
+  test('drops payload and location from a populated v5 log, keeps the signed text, and shrinks the file', async () => {
+    await runClientMigrations(driver, {
+      now: () => 1,
+      migrations: CLIENT_MIGRATIONS.filter((m) => m.version <= 5),
+    });
+    const payload = JSON.stringify({ body: 'x'.repeat(1500) });
+    for (let seq = 1; seq <= 200; seq += 1) {
+      await driver.execute(
+        `INSERT INTO operations (id, tenant_id, user_id, device_id, seq, type, entity_type, entity_id,
+           schema_version, payload, timestamp_ms, location, source, previous_hash, hash, signature,
+           signed_core_jcs)
+         VALUES (?, 't', 'u', 'd', ?, 'notes.note_created', 'note', 'n', 1, ?, 1, 'null', 'ui', 'p',
+           'h', 's', ?)`,
+        [`op-${seq}`, seq, payload, `{"payload":${payload},"seq":${seq}}`],
+      );
+    }
+    const pagesBefore = await pragma('page_count');
+
+    const result = await runClientMigrations(driver, { now: () => 2 });
+
+    expect(result.applied).toEqual([6, 9]);
+    const columns = await driver.execute(`SELECT name FROM pragma_table_info('operations')`);
+    const names = columns.rows.map((row) => String(row['name']));
+    expect(names).not.toContain('payload');
+    expect(names).not.toContain('location');
+    expect(names).toContain('signed_core_jcs');
+    const kept = await driver.execute(`SELECT signed_core_jcs FROM operations WHERE id = 'op-7'`);
+    expect(kept.rows[0]?.['signed_core_jcs']).toBe(`{"payload":${payload},"seq":7}`);
+    expect((await driver.execute(`SELECT COUNT(*) AS n FROM operations`)).rows[0]?.['n']).toBe(200);
+    // The VACUUM ran: the freed pages went back to the file system rather than staying as free space.
+    expect(await pragma('freelist_count')).toBe(0);
+    expect(await pragma('page_count')).toBeLessThan(pagesBefore * 0.7);
+  });
+});
+
 // The CHECK constraints are not decoration: they are the last line of defence for enum
 // columns the op log and state machines depend on (10-db §9.2/§9.3).
 describe('CHECK constraints are live', () => {
@@ -250,7 +293,6 @@ describe('CHECK constraints are live', () => {
       entity_type: 'note',
       entity_id: 'n',
       schema_version: 1,
-      payload: '{}',
       timestamp_ms: 1,
       source: 'ui',
       previous_hash: 'p',

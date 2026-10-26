@@ -16,14 +16,9 @@
 // by cross-checking SQL order against the shared comparator.
 import { sql, type Kysely } from 'kysely';
 
-import type { Location, SignedOperation } from '@bolusi/schemas';
+import type { SignedOperation } from '@bolusi/schemas';
 
-import {
-  boolColumnToBoolean,
-  jsonColumnToObject,
-  type BoolColumnValue,
-  type JsonColumnValue,
-} from './columns.js';
+import { operationFromSignedCoreJcs } from '../crypto/signed-core.js';
 import { int8ToBigInt, int8ToNumber, type Int8Value } from './int8.js';
 
 /** A canonical-order position (05 §4) — the rebuild checkpoint triple (04 §4.3). */
@@ -34,119 +29,32 @@ export interface CanonicalCursor {
 }
 
 /**
- * The op-log columns a projection read needs, keyed camelCase — resolved by the explicit `AS`
- * aliases in `OP_COLUMNS`, not by `CamelCasePlugin` (task 74).
+ * The op-log columns a projection read needs: the signed text and the two fields derived from it,
+ * keyed camelCase by explicit aliases in `OP_COLUMNS`, not by `CamelCasePlugin` (task 74).
  *
- * THESE TYPES ARE THE DRIVERS' TRUTH, NOT THE ENVELOPE'S (task 48). `RawOpRow` annotates a raw
- * `sql<>` result, and such an annotation is an ASSERTION the compiler simply believes — it derives
- * nothing and checks nothing at runtime. This interface used to describe the CLIENT's marshalling
- * (`seq: number`, `payload: string`, `agentInitiated: number`) while the same rows on the server
- * arrive as int8 strings, parsed jsonb and real booleans (10-db §3). `tsc` believed the assertion,
- * so three separate production bugs typechecked clean and no lane could see them (T-14f).
- *
- * kysely-codegen had already derived the truth from the live schema — `db.d.ts` says `seq: Int8`
- * (`= ColumnType<string, …>`), `payload: Json`, `agentInitiated: Generated<boolean>`. The answer
- * was in the repo the whole time and a hand-written assertion overrode it. So each field below is
- * now the UNION the drivers actually produce, which makes the compiler force the normalisation
- * rather than take our word for it.
+ * The op is rebuilt from its verbatim signed text (05 §3), the one copy every engine stores
+ * identically. The client keeps no other copy of the payload or location (client migration 6), and
+ * reading the text sidesteps the per-driver column types task 48 found in the typed columns (int8 as
+ * strings on `pg`, jsonb parsed or not, `agent_initiated` as 0/1 or a boolean): JSON numbers and
+ * booleans parse the same everywhere. The ordering columns stay in the WHERE/ORDER BY clauses,
+ * where the canonical index serves them.
  */
 interface RawOpRow {
-  id: string;
-  tenantId: string;
-  storeId: string | null;
-  userId: string;
-  deviceId: string;
-  /** `bigint` column: STRING on real `pg`, `number` on SQLite/PGlite. `"10" < "9"` is the bug. */
-  seq: Int8Value;
-  type: string;
-  entityType: string;
-  entityId: string;
-  schemaVersion: number;
-  /** `jsonb` server-side (already parsed), TEXT client-side (JSON string). */
-  payload: JsonColumnValue;
-  /** `bigint` column, same as `seq`. */
-  timestampMs: Int8Value;
-  location: JsonColumnValue | null;
-  source: string;
-  /** `boolean` server-side, `0`/`1` client-side. `false !== 0` is the bug. */
-  agentInitiated: BoolColumnValue;
-  agentConversationId: string | null;
-  previousHash: string;
+  signedCoreJcs: string;
   hash: string;
   signature: string;
 }
 
-/**
- * The column list read for reconstruction, in a stable order, each snake column ALIASED to the
- * camelCase key `RawOpRow` names (10-db §11.4; task 74).
- *
- * The aliases are load-bearing, not cosmetic: `CamelCasePlugin` rewrites raw-`sql` RESULT keys, so
- * a bare `SELECT tenant_id` arrives as `tenantId` WITH the plugin and `tenant_id` WITHOUT it — and
- * `reconstructOperation` reads `row.tenantId`/`row.timestampMs`, which would then be undefined
- * (`int8ToNumber(undefined)` throws; the rest silently vanish). A quoted alias with no underscore
- * is inert under both wirings, so the keys resolve by construction rather than by the coincidence
- * of a wired plugin.
- */
-const OP_COLUMNS = sql`
-  id, tenant_id AS "tenantId", store_id AS "storeId", user_id AS "userId",
-  device_id AS "deviceId", seq, type, entity_type AS "entityType", entity_id AS "entityId",
-  schema_version AS "schemaVersion", payload, timestamp_ms AS "timestampMs", location, source,
-  agent_initiated AS "agentInitiated", agent_conversation_id AS "agentConversationId",
-  previous_hash AS "previousHash", hash, signature
-`;
+const OP_COLUMNS = sql`signed_core_jcs AS "signedCoreJcs", hash, signature`;
 
 /** The canonical `(timestamp, deviceId, seq)` position of an op. */
 export function cursorOf(op: SignedOperation): CanonicalCursor {
   return { timestamp: op.timestamp, deviceId: op.deviceId, seq: op.seq };
 }
 
-/**
- * Rebuild a `SignedOperation` from a stored op-log row: decode `payload`/`location` JSON, map
- * `timestamp_ms → timestamp`, narrow the int8 counters, and normalise `agent_initiated`.
- *
- * The result is structurally identical to the object the append seam hands in — so an applier sees
- * one op shape regardless of whether it came head-first or through a re-fold, AND regardless of
- * which driver opened the connection. That second half is the whole point of the three seams below
- * (task 48): this function is the ONE boundary where a stored row becomes an envelope, so it is
- * the one place the drivers' differences are allowed to exist. Past it, `SignedOperation` means
- * what `zSignedOperation` says it means (05 §2.1) — `seq`/`timestamp` are numbers, `payload` and
- * `location` are objects, `agentInitiated` is a boolean — on every engine.
- *
- * Each field goes through the shared normaliser for its COLUMN CLASS rather than an inline cast.
- * Task 46's finding, quoted because it is the reason this file looks like this: "one function had
- * the cast, the neighbour twelve lines away didn't" — which is exactly how `seq`, `payload` and
- * `agent_initiated` came to be wrong in three different ways inside one 20-line function
- * (CLAUDE.md §2.8).
- */
+/** Rebuild an op from its stored row; the same shape the append seam hands in, on every engine. */
 function reconstructOperation(row: RawOpRow): SignedOperation {
-  return {
-    id: row.id,
-    tenantId: row.tenantId,
-    storeId: row.storeId,
-    userId: row.userId,
-    deviceId: row.deviceId,
-    // Narrowed HERE, at the exit, because here is where the value escapes into JS: `seq` is
-    // `z.number().int()` in the envelope, and every consumer past this line does arithmetic and
-    // `<`/`>` on it. `int8ToNumber` throws past 2^53 rather than round (int8.ts) — a rounded `seq`
-    // is a wrong `seq` returned with no error, and `seq` is a canonical-order key.
-    seq: int8ToNumber(row.seq, 'operations.seq'),
-    type: row.type,
-    entityType: row.entityType,
-    entityId: row.entityId,
-    schemaVersion: row.schemaVersion,
-    payload: jsonColumnToObject(row.payload, 'operations.payload') as SignedOperation['payload'],
-    timestamp: int8ToNumber(row.timestampMs, 'operations.timestamp_ms'),
-    location:
-      row.location === null
-        ? null
-        : (jsonColumnToObject(row.location, 'operations.location') as Location),
-    source: row.source as SignedOperation['source'],
-    agentInitiated: boolColumnToBoolean(row.agentInitiated, 'operations.agent_initiated'),
-    agentConversationId: row.agentConversationId,
-    previousHash: row.previousHash,
-    hash: row.hash,
-    signature: row.signature,
-  };
+  return operationFromSignedCoreJcs(row.signedCoreJcs, row);
 }
 
 /**
@@ -177,46 +85,64 @@ export async function readEntityOps<DB>(
   entityType: string,
   entityId: string,
 ): Promise<SignedOperation[]> {
-  const result = await sql<RawOpRow>`
-    SELECT ${OP_COLUMNS} FROM operations
-    WHERE entity_type = ${entityType} AND entity_id = ${entityId}
-    ORDER BY timestamp_ms, device_id, seq
-  `.execute(db);
-  return result.rows.map(reconstructOperation);
+  return (await readEntitiesOps(db, entityType, [entityId])).get(entityId) ?? [];
+}
+
+/** An entity's position in the rebuild walk: `(entityType, entityId)` order (04 §4.3). */
+export interface EntityCursor {
+  readonly entityType: string;
+  readonly entityId: string;
 }
 
 /**
- * One canonical-order page of the whole log restricted to `opTypes`, strictly AFTER `after`
- * (null = from the start). This is the rebuild scan (04 §4.3): iterate the canonical index,
- * apply each op (all head-case, since canonical order means each is newest-so-far for its
- * entity), checkpointing `after` per page so an interrupted rebuild resumes without
- * re-applying anything at or below the cursor.
+ * The next `limit` distinct entities, in `(entityType, entityId)` order strictly AFTER `after` (null =
+ * from the start), that have at least one op of `opTypes` in the log. This is the rebuild walk
+ * (04 §4.3): the rebuild re-folds entity by entity, checkpointing the last entity of each page.
  */
-export async function readCanonicalPage<DB>(
+export async function readEntityPage<DB>(
   db: Kysely<DB>,
   opTypes: readonly string[],
-  after: CanonicalCursor | null,
+  after: EntityCursor | null,
   limit: number,
-): Promise<SignedOperation[]> {
+): Promise<EntityCursor[]> {
   if (opTypes.length === 0) return [];
   const typeList = sql.join(opTypes.map((t) => sql`${t}`));
-  const query =
+  const afterClause =
     after === null
-      ? sql<RawOpRow>`
-          SELECT ${OP_COLUMNS} FROM operations
-          WHERE type IN (${typeList})
-          ORDER BY timestamp_ms, device_id, seq
-          LIMIT ${limit}
-        `
-      : sql<RawOpRow>`
-          SELECT ${OP_COLUMNS} FROM operations
-          WHERE type IN (${typeList})
-            AND (timestamp_ms, device_id, seq) > (${after.timestamp}, ${after.deviceId}, ${after.seq})
-          ORDER BY timestamp_ms, device_id, seq
-          LIMIT ${limit}
-        `;
-  const result = await query.execute(db);
-  return result.rows.map(reconstructOperation);
+      ? sql``
+      : sql`AND (entity_type, entity_id) > (${after.entityType}, ${after.entityId})`;
+  const result = await sql<EntityCursor>`
+    SELECT DISTINCT entity_type AS "entityType", entity_id AS "entityId" FROM operations
+    WHERE type IN (${typeList}) ${afterClause}
+    ORDER BY entity_type, entity_id
+    LIMIT ${limit}
+  `.execute(db);
+  return result.rows.map((row) => ({ entityType: row.entityType, entityId: row.entityId }));
+}
+
+/**
+ * Every op of several entities of one type, grouped by entity id, each group in canonical order: the
+ * re-fold input for a batch of entities in one query (§4.2, §4.3).
+ */
+export async function readEntitiesOps<DB>(
+  db: Kysely<DB>,
+  entityType: string,
+  entityIds: readonly string[],
+): Promise<Map<string, SignedOperation[]>> {
+  const byEntity = new Map<string, SignedOperation[]>();
+  if (entityIds.length === 0) return byEntity;
+  const result = await sql<RawOpRow>`
+    SELECT ${OP_COLUMNS} FROM operations
+    WHERE entity_type = ${entityType} AND entity_id IN (${sql.join(entityIds.map((id) => sql`${id}`))})
+    ORDER BY entity_id, timestamp_ms, device_id, seq
+  `.execute(db);
+  for (const row of result.rows) {
+    const op = reconstructOperation(row);
+    const ops = byEntity.get(op.entityId);
+    if (ops === undefined) byEntity.set(op.entityId, [op]);
+    else ops.push(op);
+  }
+  return byEntity;
 }
 
 /**

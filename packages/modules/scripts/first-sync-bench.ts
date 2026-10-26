@@ -119,6 +119,26 @@ async function openFreshDevice(directory: string) {
   return { conn, engine, search };
 }
 
+/**
+ * `PROFILE=out.cpuprofile` writes a V8 CPU profile of one phase: the pull by default, or the
+ * rebuild with `PROFILE_PHASE=rebuild`. Open it in Chrome DevTools or speedscope.
+ */
+async function startProfiler(phase: 'pull' | 'rebuild'): Promise<Session | null> {
+  if (!process.env['PROFILE'] || (process.env['PROFILE_PHASE'] ?? 'pull') !== phase) return null;
+  const session = new Session();
+  session.connect();
+  await session.post('Profiler.enable');
+  await session.post('Profiler.start');
+  return session;
+}
+
+async function stopProfiler(session: Session | null): Promise<void> {
+  if (session === null) return;
+  const { profile } = await session.post('Profiler.stop');
+  writeFileSync(process.env['PROFILE']!, JSON.stringify(profile));
+  session.disconnect();
+}
+
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 const megabytes = (bytes: number): string => `${(bytes / 1_048_576).toFixed(1)} MB`;
 
@@ -152,12 +172,7 @@ async function main(): Promise<void> {
   const device = await openFreshDevice(directory);
 
   try {
-    const profiler = process.env['PROFILE'] ? new Session() : null;
-    if (profiler) {
-      profiler.connect();
-      await profiler.post('Profiler.enable');
-      await profiler.post('Profiler.start');
-    }
+    let profiler = await startProfiler('pull');
     started = performance.now();
     const result = await runPullPhase({
       db: device.conn.db,
@@ -170,10 +185,7 @@ async function main(): Promise<void> {
       limit: MAX_PULL_LIMIT,
     });
     const pullMs = performance.now() - started;
-    if (profiler) {
-      const { profile } = await profiler.post('Profiler.stop');
-      writeFileSync(process.env['PROFILE']!, JSON.stringify(profile));
-    }
+    await stopProfiler(profiler);
     if (result.applied !== ops.length || result.quarantined !== 0) {
       throw new Error(
         `applied ${result.applied} of ${ops.length}, quarantined ${result.quarantined}`,
@@ -191,13 +203,28 @@ async function main(): Promise<void> {
 
     await device.conn.driver.execute('PRAGMA wal_checkpoint(TRUNCATE)');
     const dbBytes = statSync(join(directory, 'bolusi.db')).size;
+    // Where the bytes are: the five largest tables and indexes (SQLite's dbstat virtual table).
+    const largest = await device.conn.driver.execute(
+      `SELECT name, SUM(pgsize) AS bytes FROM dbstat GROUP BY name ORDER BY bytes DESC LIMIT 5`,
+    );
+    const breakdown = largest.rows
+      .map((row) => `${String(row['name'])} ${megabytes(Number(row['bytes']))}`)
+      .join(', ');
+
+    // A full re-fold from the op log: what a module version bump costs on this device.
+    profiler = await startProfiler('rebuild');
+    started = performance.now();
+    await device.engine.rebuild(repairModule.id);
+    const rebuildMs = performance.now() - started;
+    await stopProfiler(profiler);
 
     const report = [
       `History: ${days} days × ${ticketsPerDay} tickets = ${history.tickets} tickets, ${ops.length} ops (${(ops.length / history.tickets).toFixed(1)} per ticket), written in ${seconds(writeMs)}`,
       `Wire: ${megabytes(transport.wireBytes)} JSON, ${megabytes(transport.gzipBytes)} gzipped, ${result.batches} pages`,
       `Pull + verify + apply: ${seconds(pullMs)} (${((pullMs / ops.length) * 1000).toFixed(0)} µs per op, ${Math.round(ops.length / (pullMs / 1000))} ops/s)`,
       `Search index build after sync: ${seconds(indexMs)}; one fuzzy query: ${searchMs.toFixed(1)} ms (${hits.length} hits)`,
-      `Device database: ${megabytes(dbBytes)}`,
+      `Device database: ${megabytes(dbBytes)} (largest: ${breakdown})`,
+      `Repair projection rebuild from the op log: ${seconds(rebuildMs)}`,
     ];
     process.stdout.write(`${report.join('\n')}\n`);
   } finally {

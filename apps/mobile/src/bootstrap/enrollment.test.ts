@@ -25,6 +25,7 @@ import {
   ENROLLMENT_DRAFT_KEY,
   readDeviceId,
   readStoreId,
+  operationFromSignedCoreJcs,
   verifyOp,
   writeMeta,
   type DeviceBundle,
@@ -212,30 +213,13 @@ function platformFor(overrides: Partial<EnrollmentPlatform> = {}): {
 
 /** The single genesis op row, reconstructed into a `SignedOperation`. */
 async function genesisOp(): Promise<SignedOperation | undefined> {
-  const rows = await app.db.db.selectFrom('operations').selectAll().orderBy('seq', 'asc').execute();
+  const rows = await app.db.db
+    .selectFrom('operations')
+    .select(['signedCoreJcs', 'hash', 'signature'])
+    .orderBy('seq', 'asc')
+    .execute();
   const r = rows[0];
-  if (r === undefined) return undefined;
-  return {
-    id: r.id as string,
-    tenantId: r.tenantId,
-    storeId: r.storeId,
-    userId: r.userId,
-    deviceId: r.deviceId,
-    seq: r.seq,
-    type: r.type,
-    entityType: r.entityType,
-    entityId: r.entityId,
-    schemaVersion: r.schemaVersion,
-    payload: JSON.parse(r.payload) as Record<string, unknown>,
-    timestamp: r.timestampMs,
-    location: r.location === null ? null : (JSON.parse(r.location) as SignedOperation['location']),
-    source: r.source as SignedOperation['source'],
-    agentInitiated: r.agentInitiated === 1,
-    agentConversationId: r.agentConversationId,
-    previousHash: r.previousHash,
-    hash: r.hash,
-    signature: r.signature,
-  };
+  return r === undefined ? undefined : operationFromSignedCoreJcs(r.signedCoreJcs, r);
 }
 
 test('login returns the LoginResult the wizard renders, including the tenant name', async () => {

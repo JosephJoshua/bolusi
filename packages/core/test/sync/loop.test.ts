@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { PushResult, SignedOperation } from '@bolusi/schemas';
 
-import { noblePort } from '@bolusi/test-support';
+import { opRowOf } from '@bolusi/test-support';
 
 import {
   DomainError,
@@ -26,7 +26,7 @@ import {
   SYNC_LOOP_MACHINE,
   SyncTransportError,
   runTransition,
-  signedCoreJcsOf,
+  insertOpLogRow,
   type SyncLoopEvent,
   type SyncLoopState,
   type SyncTriggerReason,
@@ -85,18 +85,11 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
     entityId: uuidV7(prng, timestamp),
     prng,
   });
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${signedCoreJcsOf(op, noblePort)}, 'local'
-    )
-  `.execute(harness.db);
+  await insertOpLogRow(harness.db, opRowOf(op), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
   return op;
 }
 

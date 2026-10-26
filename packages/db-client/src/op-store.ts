@@ -24,7 +24,13 @@
 // begin — exactly the shape the promoted fixture had.
 import { sql, type Kysely } from 'kysely';
 
-import type { ChainHead, OpAppendStore, OpAppendTx, OpRow } from '@bolusi/core';
+import {
+  insertOpLogRow,
+  type ChainHead,
+  type OpAppendStore,
+  type OpAppendTx,
+  type OpRow,
+} from '@bolusi/core';
 
 import type { DbDriver } from './driver.js';
 import type { ClientDatabase } from './generated/index.js';
@@ -70,7 +76,7 @@ export function createClientOpStore(conn: OpStoreConnection): OpAppendStore {
   };
 }
 
-/** The transactional surface `appendLocalOps` drives — reads via raw `sql`, writes via Kysely. */
+/** The transactional surface `appendLocalOps` drives, over raw `sql` on the one Kysely handle. */
 function makeTx(db: Kysely<ClientDatabase>): OpAppendTx {
   return {
     async readChainHead(deviceId: string): Promise<ChainHead | null> {
@@ -91,40 +97,14 @@ function makeTx(db: Kysely<ClientDatabase>): OpAppendTx {
       return rows.rows.length > 0;
     },
 
-    async insertOp({ op, signedCoreJcs }: OpRow): Promise<void> {
+    async insertOp(row: OpRow): Promise<void> {
       // Born `syncStatus = 'local'` (03 §3 birth state); `syncedAt` null until pushed. `arrivalSeq`
       // is null and STAYS null: it is the pull's local arrival counter (10-db §9.2, D20 §4), never
       // a push ack's `serverSeq` — `BookkeepingPatch` excludes that deliberately.
       // `signedCoreJcs` is persisted VERBATIM (10-db §2.1) — re-serializing from typed columns can
-      // change bytes and break a genuine signature (05 §3).
-      await db
-        .insertInto('operations')
-        .values({
-          id: op.id,
-          tenantId: op.tenantId,
-          storeId: op.storeId,
-          userId: op.userId,
-          deviceId: op.deviceId,
-          seq: op.seq,
-          type: op.type,
-          entityType: op.entityType,
-          entityId: op.entityId,
-          schemaVersion: op.schemaVersion,
-          payload: JSON.stringify(op.payload),
-          timestampMs: op.timestamp,
-          location: op.location === null ? null : JSON.stringify(op.location),
-          source: op.source,
-          agentInitiated: op.agentInitiated ? 1 : 0,
-          agentConversationId: op.agentConversationId,
-          previousHash: op.previousHash,
-          hash: op.hash,
-          signature: op.signature,
-          signedCoreJcs,
-          syncStatus: 'local',
-          arrivalSeq: null,
-          syncedAt: null,
-        })
-        .execute();
+      // change bytes and break a genuine signature (05 §3). It is also the only stored copy of the
+      // payload and location (client migration 6). The same writer as the pull's, so one column list.
+      await insertOpLogRow(db, row, { syncStatus: 'local', syncedAt: null, arrivalSeq: null });
     },
   };
 }

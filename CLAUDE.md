@@ -5,6 +5,7 @@ Read `README.md` for orientation and `docs/development.md` for commands.
 Read `docs/product-direction.md` for the whole product and milestones, and
 `docs/product-scope.md` for current repair-release decisions. Earlier detailed
 ideas live in `docs/product-reference/`; read only the relevant sections.
+Before any UI or copy work, read `docs/design-guide.md` and meet it.
 
 - When asked to implement a new product scope, first discuss it with the owner.
   Use prior ideas as context, challenge assumptions, and ask focused questions

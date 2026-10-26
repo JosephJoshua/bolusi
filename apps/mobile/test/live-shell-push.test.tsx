@@ -327,7 +327,8 @@ describe('a push tap preserves the draft and does not drift the switcher origin 
     const router = fakePushRouter();
     const screen = await liveShellWithSession(fixture, { pushRouter: router.port });
 
-    fireOn(screen, 'ui.avatarButton'); // open the switcher (voluntary quick-switch) from home
+    fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user'); // open the switcher (voluntary quick-switch) from home
     await settle();
     expect(screen.query('switcher-screen')).not.toBeNull();
 

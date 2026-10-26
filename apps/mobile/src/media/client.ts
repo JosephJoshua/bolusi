@@ -24,7 +24,7 @@
 //   WIRED END-TO-END NOW (task 130): the notes editor's attach button (`NoteEditor.tsx`) calls
 //            `runtime.capturePhoto`, which `Root` binds to the REAL `CaptureHost` seam over
 //            `createExpoCapturePlatform()` (`index.ts`), and `loadThumbnail` binds to
-//            `createNotesThumbnailLoader` (task 120). The attach button "opens a camera instead of
+//            `createThumbnailLoader` (task 120). The attach button "opens a camera instead of
 //            throwing" (index.ts). `UNWIRED_NOTES_MEDIA.capturePhoto` (which REJECTS, never resolves a
 //            fake `null`) is the fallback ONLY for `media === null` / a build with no camera binding
 //            (`bootstrap/notes.ts`) — no longer the only value the app has.
@@ -67,6 +67,7 @@ import {
   type RemoteCacheEntry,
 } from './pruning.js';
 import { attachMediaToOperation } from './queue.js';
+import type { MediaRef } from '@bolusi/schemas';
 import {
   loadLocalMediaOnly,
   loadMediaForRender,
@@ -145,11 +146,16 @@ export interface MediaClient {
     pad: PadSize,
   ): Promise<SignatureOutcome>;
   /** 04 §5.1 step 5 — the command runtime's attach. Task 25 drives it from a real command. */
-  attach(mediaId: string, operationId: string): Promise<void>;
+  attach(
+    ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
+    operation: { readonly id: string; readonly userId: string },
+  ): Promise<void>;
   /** 06 §6, at render time only. */
   loadForRender(ref: RenderableMediaRef): Promise<RenderableMedia>;
   /** 06 §6 for an attachment with NO signed hash (v1/v2 payloads): local file or nothing. */
   loadLocalForRender(mediaId: string): Promise<RenderableMedia>;
+  /** 06 §5.2 (b): an append attached captures to its op, so they are drainable now. */
+  notifyAttached(): void;
   /** 06 §5.2 (e). */
   requestManual(): void;
   /** 06 §7. Exposed so a caller can force one; the client already runs it at start and after drains. */
@@ -277,8 +283,11 @@ class MediaClientImpl implements MediaClient {
     );
   }
 
-  async attach(mediaId: string, operationId: string): Promise<void> {
-    await attachMediaToOperation(this.deps.db.db, mediaId, operationId);
+  async attach(
+    ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
+    operation: { readonly id: string; readonly userId: string },
+  ): Promise<void> {
+    await attachMediaToOperation(this.deps.db.db, ref, operation);
     // A newly attached item is drainable for the first time, so this is a capture-class event.
     this.triggers.notifyCapture();
   }
@@ -309,6 +318,10 @@ class MediaClientImpl implements MediaClient {
       },
       mediaId,
     );
+  }
+
+  notifyAttached(): void {
+    this.triggers.notifyCapture();
   }
 
   requestManual(): void {

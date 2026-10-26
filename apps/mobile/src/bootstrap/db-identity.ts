@@ -1,7 +1,7 @@
 // The boot-time "is this database ours?" probe (security-guide §6.6; api/02-auth §7.4; task 160).
 //
 // ── THE BRICK THIS CLOSES (the SILENT successor to the SQLCipher one) ────────────────────────────
-// Post-D22 (task 148) the client SQLite file is PLAINTEXT; only the 11 columns of 10-db §9.7 are
+// Post-D22 (task 148) the client SQLite file is PLAINTEXT; only the signed-off columns of 10-db §9.7 are
 // AEAD-sealed, under the per-device SecureStore key. On an iOS restore-to-new-hardware `bolusi.db`
 // restores but the THIS_DEVICE_ONLY key does not (security-guide §6.6). Boot mints a FRESH key,
 // `open()` takes no key, so the restored file OPENS FINE — recovery.ts's old triggers (`missing_key`,

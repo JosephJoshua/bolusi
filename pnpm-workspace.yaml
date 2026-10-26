@@ -20,6 +20,8 @@ catalog:
   kysely: 0.29.3
   '@noble/curves': 2.2.0
   '@noble/hashes': 2.2.0
+  # Op-log compression before sealing (pure JS, so Hermes and Node share it; MIT).
+  fflate: 0.8.3
   # i18n runtime (07-i18n §2; versions verified against current docs at implementation).
   # intl-messageformat is i18next-icu's peer dep (declared range >=10.3.3 <12.0.0).
   i18next: 26.3.6

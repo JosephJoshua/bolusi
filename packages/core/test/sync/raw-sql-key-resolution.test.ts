@@ -29,13 +29,13 @@ import {
   type DbDriver,
 } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
-import { noblePort, type Prng } from '@bolusi/test-support';
+import { noblePort, type Prng, opRowOf } from '@bolusi/test-support';
 
 import {
   createSqlWatermarkStore,
   highestContiguousSeq,
   insertQuarantinedOp,
-  readCanonicalPage,
+  readEntityPage,
   readDeviceRegistry,
   readEntityOps,
   readPushBatch,
@@ -44,6 +44,8 @@ import {
   runPullPhase,
   runPushPhase,
   writeSyncState,
+  insertOpLogRow,
+  type OpSyncStatus,
 } from '../../src/index.js';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 import {
@@ -110,22 +112,13 @@ afterEach(async () => {
 async function seedOperation(
   db: Kysely<ClientDatabase>,
   op: SignedOperation,
-  overrides: { syncStatus?: string; arrivalSeq?: number | null } = {},
+  overrides: { syncStatus?: OpSyncStatus; arrivalSeq?: number | null } = {},
 ): Promise<void> {
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status, arrival_seq
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq},
-      ${op.type}, ${op.entityType}, ${op.entityId}, ${op.schemaVersion},
-      ${JSON.stringify(op.payload)}, ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null},
-      ${op.previousHash}, ${op.hash}, ${op.signature},
-      ${JSON.stringify({ ...op, hash: undefined, signature: undefined })},
-      ${overrides.syncStatus ?? 'synced'}, ${overrides.arrivalSeq ?? null}
-    )
-  `.execute(db);
+  await insertOpLogRow(db, opRowOf(op), {
+    syncStatus: overrides.syncStatus ?? 'synced',
+    syncedAt: null,
+    arrivalSeq: overrides.arrivalSeq ?? null,
+  });
 }
 
 function noteOp(seq: number, extra: Partial<{ timestamp: number }> = {}): SignedOperation {
@@ -227,23 +220,22 @@ describe('exported readers resolve their keys WITHOUT the CamelCasePlugin (task 
     expect(rebuilt?.seq).toBe(1);
   });
 
-  it('readCanonicalPage — same OP_COLUMNS read, both branches (oplog-source.ts:190,196)', async () => {
+  it('readEntityPage — aliased entity keys, both branches (oplog-source.ts)', async () => {
     const first = noteOp(1);
     const second = noteOp(2);
     await seedOperation(h.withPlugin, first);
     await seedOperation(h.withPlugin, second);
+    const [low, high] = [first.entityId, second.entityId].sort() as [string, string];
 
-    // after === null branch (:190)
-    const page = await readCanonicalPage(h.noPlugin, ['notes.note_created'], null, 10);
-    expect(page.map((o) => o.entityId)).toContain(first.entityId);
-    // after !== null branch (:196)
-    const rest = await readCanonicalPage(
-      h.noPlugin,
-      ['notes.note_created'],
-      { timestamp: first.timestamp, deviceId: first.deviceId, seq: first.seq },
-      10,
-    );
-    expect(rest.map((o) => o.entityId)).toEqual([second.entityId]);
+    // after === null branch
+    const page = await readEntityPage(h.noPlugin, ['notes.note_created'], null, 10);
+    expect(page).toEqual([
+      { entityType: 'note', entityId: low },
+      { entityType: 'note', entityId: high },
+    ]);
+    // after !== null branch
+    const rest = await readEntityPage(h.noPlugin, ['notes.note_created'], page[0]!, 10);
+    expect(rest).toEqual([{ entityType: 'note', entityId: high }]);
   });
 
   it('highestContiguousSeq — the self-alias decoy resolves the seq key (oplog-source.ts)', async () => {

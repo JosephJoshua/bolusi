@@ -56,7 +56,10 @@ describe('intake', () => {
       technicianId: null,
       quoteTotal: 750_000,
       pendingProposals: 0,
-      peripherals: ['charger', 'case'],
+      peripherals: [
+        { item: 'charger', label: null },
+        { item: 'case', label: null },
+      ],
     });
     expect(t.quoteLines.map((l: { status: string }) => l.status)).toEqual(['intake', 'intake']);
     expect(t.photos.map((p: { slot: string }) => p.slot).sort()).toEqual([
@@ -71,13 +74,12 @@ describe('intake', () => {
     expect(t.createdBy).toBe(h.cashierId);
   });
 
-  test('a ticket without all six photos is refused before anything is written', async () => {
+  test('a ticket missing a photo angle the store asks for is refused before anything is written', async () => {
     h = await openRepairHarness(2);
     const input = intake(h);
-    const fivePhotos: Partial<typeof input.photos> = { ...input.photos };
-    delete fivePhotos.bottom;
+    const fivePhotos = input.photos.filter((p) => p.slot !== 'bottom');
     await expectCode(
-      h.run('openTicket', { ...input, photos: fivePhotos } as never, h.cashierId),
+      h.run('openTicket', { ...input, photos: fivePhotos }, h.cashierId),
       'VALIDATION_FAILED',
     );
     const count = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM repair_tickets`.execute(h.db);
@@ -95,6 +97,65 @@ describe('intake', () => {
       open(h, { quoteLines: [{ kind: 'part', description: 'LCD', amount: -1 }] }),
       'VALIDATION_FAILED',
     );
+  });
+
+  test('the price can come down to nothing but never below zero', async () => {
+    h = await openRepairHarness(31);
+    await expectCode(
+      open(h, { quoteLines: [{ kind: 'discount', description: 'Diskon', amount: -1 }] }),
+      'VALIDATION_FAILED',
+    );
+    const { ticketId } = await open(h, {
+      quoteLines: [{ kind: 'labour', description: 'Cek mesin', amount: 100_000 }],
+    });
+    const discount = (amount: number) => ({
+      ticketId,
+      kind: 'discount',
+      description: 'Diskon',
+      amount,
+      reason: 'Gratis',
+      customerAgreed: true,
+    });
+    await expectCode(h.run('changeQuote', discount(-100_001), h.cashierId), 'VALIDATION_FAILED');
+    const propose = (amount: number) =>
+      h!.run(
+        'proposeQuoteChange',
+        { ticketId, kind: 'discount', description: 'Diskon', amount, reason: 'Rusak' },
+        h!.technicianId,
+      ) as Promise<{ lineId: string }>;
+    // A proposal the cashier could never apply is refused when it is made.
+    await expectCode(propose(-150_000), 'VALIDATION_FAILED');
+    const proposal = await propose(-60_000);
+    await h.run('changeQuote', discount(-100_000), h.cashierId);
+    await expectCode(
+      h.run(
+        'applyProposal',
+        { ticketId, lineId: proposal.lineId, customerAgreed: true },
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+    );
+    expect((await ticket(h, ticketId)).quoteTotal).toBe(0);
+  });
+
+  test('a total that offline merges pushed below zero can still be corrected upwards', async () => {
+    h = await openRepairHarness(32);
+    const { ticketId } = await open(h, {
+      quoteLines: [{ kind: 'labour', description: 'Cek mesin', amount: 100_000 }],
+    });
+    // Two offline discounts that were each valid on their own device, merged.
+    await sql`UPDATE repair_tickets SET quote_total = -50000 WHERE id = ${ticketId}`.execute(h.db);
+    const line = (kind: string, amount: number) => ({
+      ticketId,
+      kind,
+      description: kind,
+      amount,
+      reason: 'Koreksi',
+      customerAgreed: true,
+    });
+    await expectCode(h.run('changeQuote', line('discount', -1), h.cashierId), 'VALIDATION_FAILED');
+    // -50,000 + 20,000 is still below zero, but it moves the right way.
+    await h.run('changeQuote', line('labour', 20_000), h.cashierId);
   });
 
   test('a customer with no phone number is fine; blank phone becomes null', async () => {
@@ -133,7 +194,7 @@ describe('queue and work', () => {
     const queue = await h.query('listTickets', { filter: { unassigned: true } }, h.technicianId);
     expect(queue.rows.map((r: { id: string }) => r.id)).toEqual([ticketId]);
 
-    await h.run('startWork', { ticketId }, h.technicianId);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
     let t = await ticket(h, ticketId);
     expect(t).toMatchObject({ outcome: 'in_repair', technicianId: h.technicianId });
 
@@ -142,15 +203,21 @@ describe('queue and work', () => {
     expect(t).toMatchObject({ outcome: 'waiting_for_parts', outcomeNote: 'LCD dipesan' });
 
     await h.run('startWork', { ticketId }, h.technicianId);
-    await h.run('markRepaired', { ticketId, note: 'Tes sentuh OK' }, h.technicianId);
+    await h.run(
+      'markRepaired',
+      { ticketId, note: 'Tes sentuh OK', afterPhotos: [h.photo(21)] },
+      h.technicianId,
+    );
     t = await ticket(h, ticketId);
     expect(t.outcome).toBe('repaired');
     expect(t.events.map((e: { kind: string }) => e.kind)).toEqual([
       'repair.ticket_opened',
       'repair.ticket_claimed',
+      'repair.work_photos_added',
       'repair.work_started',
       'repair.work_paused',
       'repair.work_started',
+      'repair.work_photos_added',
       'repair.marked_repaired',
     ]);
 
@@ -162,11 +229,45 @@ describe('queue and work', () => {
     expect(mine.rows).toHaveLength(1);
   });
 
+  test('technician loads count only the repairs each one still holds in the store', async () => {
+    h = await openRepairHarness(81);
+    const first = await open(h);
+    const second = await open(h);
+    const third = await open(h);
+    await open(h); // unassigned: nobody's load
+    for (const { ticketId } of [first, second]) {
+      await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
+    }
+    await h.run(
+      'assignTechnician',
+      { ticketId: third.ticketId, technicianId: h.technician2Id },
+      h.cashierId,
+    );
+    // A cancelled repair is no longer being worked on.
+    await h.run('cancelTicket', { ticketId: second.ticketId, reason: 'Batal' }, h.cashierId);
+
+    const loads = (await h.query('technicianLoads', {}, h.cashierId)).rows as {
+      technicianId: string;
+      load: number;
+    }[];
+    expect(new Map(loads.map((row) => [row.technicianId, row.load]))).toEqual(
+      new Map([
+        [h.technicianId, 1],
+        [h.technician2Id, 1],
+      ]),
+    );
+  });
+
   test('the cashier assigns; a technician can claim from a colleague; cashiers cannot do the work', async () => {
     h = await openRepairHarness(8);
     const { ticketId } = await open(h);
     await h.run('assignTechnician', { ticketId, technicianId: h.technician2Id }, h.cashierId);
     expect((await ticket(h, ticketId)).technicianId).toBe(h.technician2Id);
+    // Only someone who can do the repair work can be given the phone.
+    await expectCode(
+      h.run('assignTechnician', { ticketId, technicianId: h.zeroUserId }, h.cashierId),
+      'VALIDATION_FAILED',
+    );
     await expectCode(
       h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.technicianId),
       'PERMISSION_DENIED',
@@ -180,7 +281,40 @@ describe('queue and work', () => {
   test('cannot mark repaired before work starts', async () => {
     h = await openRepairHarness(9);
     const { ticketId } = await open(h);
-    await expectCode(h.run('markRepaired', { ticketId }, h.technicianId), 'INVALID_TRANSITION');
+    await expectCode(
+      h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId),
+      'INVALID_TRANSITION',
+    );
+  });
+
+  test('work needs a before photo to start and an after photo every time it is marked repaired', async () => {
+    h = await openRepairHarness(14);
+    const { ticketId } = await open(h);
+    const [before, after1, after2, after3] = [h.photo(20), h.photo(21), h.photo(22), h.photo(23)];
+    await expectCode(h.run('startWork', { ticketId }, h.technicianId), 'VALIDATION_FAILED');
+
+    await h.run('startWork', { ticketId, beforePhotos: [before] }, h.technicianId);
+    await expectCode(h.run('markRepaired', { ticketId }, h.technicianId), 'VALIDATION_FAILED');
+    await h.run('markRepaired', { ticketId, afterPhotos: [after1] }, h.technicianId);
+
+    // Reopening keeps the earlier before photo; the next completion needs its own after photo.
+    await h.run('startWork', { ticketId }, h.technicianId);
+    await expectCode(
+      h.run('markRepaired', { ticketId, afterPhotos: [] }, h.technicianId),
+      'VALIDATION_FAILED',
+    );
+    await h.run('markRepaired', { ticketId, afterPhotos: [after2, after3] }, h.technicianId);
+
+    const slots = (await ticket(h, ticketId)).photos.map((p: { slot: string }) => p.slot);
+    expect(slots).toEqual(
+      expect.arrayContaining([
+        `before:${before.mediaId}`,
+        `after:${after1.mediaId}`,
+        `after:${after2.mediaId}`,
+        `after:${after3.mediaId}`,
+      ]),
+    );
+    expect(slots).toHaveLength(6 + 4);
   });
 });
 
@@ -290,12 +424,12 @@ describe('cancel and handover', () => {
   test('repaired device is handed back with photo and signature; then the ticket is closed', async () => {
     h = await openRepairHarness(12);
     const { ticketId } = await open(h);
-    await h.run('startWork', { ticketId }, h.technicianId);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
 
     const handover = { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8) };
     await expectCode(h.run('returnDevice', handover, h.cashierId), 'INVALID_TRANSITION');
 
-    await h.run('markRepaired', { ticketId }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId);
     await h.run(
       'proposeQuoteChange',
       { ticketId, kind: 'part', description: 'Baut', amount: 5_000, reason: 'Hilang' },
@@ -351,6 +485,36 @@ describe('cancel and handover', () => {
     await h.run(
       'returnDevice',
       { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8), note: 'Diambil tanpa servis' },
+      h.cashierId,
+    );
+    expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });
+  });
+
+  // Regression: a proposal left open when the repair was cancelled (or one that synced in after the
+  // cancel) can no longer be decided, so it used to keep the customer's phone in the store forever.
+  test('an open proposal on a cancelled ticket does not block handing the phone back', async () => {
+    h = await openRepairHarness(17);
+    const { ticketId } = (await h.run('openTicket', intake(h), h.cashierId)) as {
+      ticketId: string;
+    };
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(20)] }, h.technicianId);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      h.technicianId,
+    );
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    const pending = (await ticket(h, ticketId)).quoteLines.find(
+      (l: { status: string }) => l.status === 'proposed',
+    );
+    await expectCode(
+      h.run('applyProposal', { ticketId, lineId: pending.id, customerAgreed: true }, h.cashierId),
+      'INVALID_TRANSITION',
+    );
+
+    await h.run(
+      'returnDevice',
+      { ticketId, handoverPhoto: h.photo(7), signature: h.photo(8) },
       h.cashierId,
     );
     expect(await ticket(h, ticketId)).toMatchObject({ outcome: 'cancelled', location: 'returned' });

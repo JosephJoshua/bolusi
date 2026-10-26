@@ -52,11 +52,39 @@ export const ICON_GLYPHS = Object.freeze({
   /** §8.6 module rows: a note/ticket carries a media attachment. A paperclip, not a camera —
    *  the glyph marks "has a photo", it does not invite capture (that is `media.action.takePhoto`). */
   attachment: 'paperclip',
-  /** §8.1 header: the Settings entry, whose screen is titled `core.settings.language`. A translate
-   *  glyph rather than a cog — the chip carries the label "Bahasa"/"Language" beside it (§0 forbids
-   *  an icon without a label), and a user stranded in a locale they cannot read recognises this one
-   *  by shape. */
-  language: 'translate',
+  /** §8.1 header: the Settings entry, beside its label "Pengaturan"/"Settings" (§0 forbids an icon
+   *  without a label). A cog, so a user stranded in a locale they cannot read still finds the
+   *  language rows at the top of Settings by shape. */
+  settings: 'cog-outline',
+  /** PhotoSlot: an empty slot asks for a photo. */
+  camera: 'camera-outline',
+  /** ToggleChip / PhotoSlot: selected or done — always beside a label. */
+  check: 'check',
+  /** Search fields: the leading glyph of a search box. */
+  search: 'magnify',
+  /** Repair: a technician's work (queue rows, "start work"). */
+  repair: 'wrench-outline',
+  /** Repair: a customer's phone number. */
+  phone: 'phone-outline',
+  /** PhotoSlot: an empty slot that takes the customer's signature, not a photo. */
+  signature: 'draw',
+  /** A compact inline action that removes one row (a price line), always beside a label. */
+  remove: 'close',
+  /** A compact inline action that reopens a section for editing, always beside a label. */
+  edit: 'pencil-outline',
+  /** SearchField: clears what was typed. */
+  clear: 'close-circle',
+  /** PhotoViewer: closes the full-screen view. */
+  close: 'close',
+  /** PhotoViewer: saves or sends the photo through the system share sheet. */
+  share: 'share-variant-outline',
+  /** PhotoStrip: opens every photo at once. */
+  photos: 'image-multiple-outline',
+  /** ReorderableList: the handle a row is dragged by, as on iOS lists; it carries an accessible
+   *  label and move up/down actions, so it is never the only way to reorder. */
+  dragHandle: 'drag-horizontal-variant',
+  /** Avatar menu: switch to another staff member. */
+  switchUser: 'account-switch-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

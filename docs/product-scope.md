@@ -35,6 +35,14 @@ overrides the earlier "foundations first" ordering in product direction.
   never do intake. Each ticket tracks **repair outcome** (received, in repair,
   waiting for parts, repaired, cancelled) separately from **device location**
   (in store, returned to customer), so "cancelled, still in store" is visible.
+- **Work photos:** besides the 6 intake photos the counter takes, technicians
+  take at least one before photo to start work and at least one after photo
+  each time they mark a repair done.
+- **One device per job:** counter staff and technicians can each do their whole
+  job on a phone or on a computer; nobody is made to switch devices mid-job. A
+  PC without a camera or touch screen hands photos and signatures to a store
+  phone (this hand-off may need a connection). Owners use either and see at
+  least what staff see. Ownership video, when specified, is taken at intake.
 - **Price changes:** after intake, each change is a new logged line with a reason
   and a "customer agreed" mark. Only the cashier or store owner applies changes;
   technicians propose.
@@ -54,6 +62,33 @@ overrides the earlier "foundations first" ordering in product direction.
 - **UX:** screens follow user flows, not record editing; guided photo capture;
   search-first finding. Admin grids later get Excel-like in-place bulk editing.
 - **No paid components:** use high-quality open-source libraries or build it.
+
+## Configurable intake lists and phone catalog (2026-10-26)
+
+Agreed with the owner after slice 1's phone screens.
+
+- **Editable lists:** intake condition checks, accessories left with the phone,
+  intake photo angles, quick brand buttons and ready-by choices stop being fixed
+  in code. The owner sets them for the whole franchise; a store may hide items
+  it does not use. Edits happen on the owner's phone (later also the back-office
+  web) and sync like any other change, so counters work offline with the last
+  list they received.
+- **History stays true:** a servisan keeps showing what was recorded at intake,
+  even after an item is renamed or removed.
+- **As built:** avatar menu → Pengaturan → Servisan → "Pilihan saat terima HP"
+  (the avatar menu also holds "Ganti pengguna"). Rows reorder by dragging their
+  handle; a store hides an item with its "Tampil di toko ini" switch, while
+  "Hapus dari semua toko" removes it everywhere. Changing a list
+  needs `repair.manage_intake_options` (tenant-wide, main owner); hiding items
+  for a store needs `repair.hide_intake_options` (store owner, or the owner on
+  that store's device). Built-in items keep their translated names until
+  renamed. Every listed photo angle is required at intake, and a store always
+  keeps at least one photo angle and one ready-by choice. Ready-by choices are
+  day counts (0 to 60) plus an optional "Belum tahu". The later save wins.
+- **Phone catalog:** the owner chose to crawl GSMArena, slowly, including phone
+  photos, knowingly accepting its terms-of-use and image-copyright risk. Models
+  learned from intakes supplement it. The catalog syncs to devices for offline
+  typo-tolerant model search; photos download only when shown.
 
 ## Decision
 
@@ -115,12 +150,11 @@ The owner chose an actual repair business outcome rather than stock control alon
 - Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
 - Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
-- Pursue authorized GSMArena access; in parallel evaluate a lawful alternative model/specification source against fields, Indonesian device coverage, lookup/IMEI capabilities, cost, attribution, offline caching and retention rights. Choose and validate at least one source before promising model lookup for v1; GSMArena specifically is preferred, not a launch gate.
 
-Changing the roadmap does not resolve the existing extended-chaos failures or
-establish physical-device performance; see [architecture](architecture.md) for
-current limits. Resolve relevant open choices and record a concise agreement as
-each repair slice is selected. The former phase/task workflow is retired.
+Changing the roadmap does not establish physical-device performance; see
+[architecture](architecture.md) for current limits. Resolve relevant open choices
+and record a concise agreement as each repair slice is selected. The former
+phase/task workflow is retired.
 
 ## Deferred and excluded scope
 

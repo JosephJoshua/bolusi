@@ -31,73 +31,91 @@ afterEach(async () => {
   for (const engine of engines.splice(0)) await engine.close();
 });
 
-test('paused rebuild plus an out-of-order pull converges to the canonical notes fold', async () => {
-  const note = noteId(216);
+/** A note created at `t`, edited at `t + 2000`; and an out-of-order edit from device B at `t + 1000`. */
+function noteScript(n: number, t: number, i: number) {
+  const entityId = noteId(n);
   const history = [
     op(
       {
         type: 'notes.note_created',
         entityType: 'note',
-        entityId: note,
-        timestamp: 1000,
-        payload: { title: 'Interleaved', body: 'first' },
+        entityId,
+        timestamp: t,
+        payload: { title: `Interleaved ${n}`, body: 'first' },
       },
-      2161,
+      i,
     ),
     op(
       {
         type: 'notes.note_body_edited',
         entityType: 'note',
-        entityId: note,
-        timestamp: 3000,
+        entityId,
+        timestamp: t + 2000,
         payload: { body: 'last' },
       },
-      2162,
+      i + 1,
     ),
   ];
   const pulled = op(
     {
       type: 'notes.note_body_edited',
       entityType: 'note',
-      entityId: note,
+      entityId,
       deviceId: DEVICE_B,
-      timestamp: 2000,
+      timestamp: t + 1000,
       payload: { body: 'middle' },
     },
-    2163,
+    i + 2,
   );
+  return { entityId, history, pulled };
+}
+
+test('paused rebuild plus out-of-order pulls on both sides of its cursor converges to the canonical notes fold', async () => {
+  // The rebuild walks entities in id order: `passed` is re-folded by the first batch, `ahead` is not.
+  const passed = noteScript(216, 1000, 2161);
+  const ahead = noteScript(217, 5000, 2171);
+  const history = [...passed.history, ...ahead.history];
+  const pulled = [passed.pulled, ahead.pulled];
+
   const reference = await openClientEngine();
   const interrupted = await openClientEngine();
   engines = [reference, interrupted];
 
-  for (const operation of [...history, pulled])
+  for (const operation of [...history, ...pulled])
     await deliver(reference.db, reference.engine, operation);
   const canonicalDigest = await digest(reference);
-  const canonicalRow = await sql<{ editCount: number; body: string }>`
-    SELECT edit_count AS "editCount", body FROM notes WHERE id = ${note}
-  `.execute(reference.db);
-  expect(canonicalRow.rows[0]).toEqual({ editCount: 2, body: 'last' });
+  const rowsOf = async (engine: ClientEngine) =>
+    (
+      await sql<{ id: string; editCount: number; body: string }>`
+        SELECT id, edit_count AS "editCount", body FROM notes ORDER BY id
+      `.execute(engine.db)
+    ).rows;
+  expect(await rowsOf(reference)).toEqual([
+    { id: passed.entityId, editCount: 2, body: 'last' },
+    { id: ahead.entityId, editCount: 2, body: 'last' },
+  ]);
 
   for (const operation of history) await deliver(interrupted.db, interrupted.engine, operation);
   const partial = await interrupted.engine.rebuild('notes', { batchSize: 1, stopAfterBatches: 1 });
   expect(partial.complete).toBe(false);
-  expect(partial.appliedCount).toBe(1);
+  expect(partial.appliedCount).toBe(2);
 
-  await insertOp(interrupted.db, pulled, 1);
-  expect((await interrupted.engine.applyPulledOp(pulled)).mode).toBe('refold');
-  expect((await interrupted.engine.readWatermarks('notes')).appliedServerSeq).toBe(1);
-  expect(await createSqlRebuildStore(interrupted.db).readCursor('notes')).toEqual({
-    phase: 'invalidated',
+  let arrival = 0;
+  for (const operation of pulled) {
+    await insertOp(interrupted.db, operation, (arrival += 1));
+    expect((await interrupted.engine.applyPulledOp(operation)).mode).toBe('refold');
+  }
+  expect((await interrupted.engine.readWatermarks('notes')).appliedServerSeq).toBe(2);
+  // The applies did not disturb the rebuild: it still resumes after the entity it last re-folded.
+  expect(await createSqlRebuildStore(interrupted.db).readCursor('notes')).toMatchObject({
+    after: { entityType: 'note', entityId: passed.entityId },
   });
 
   const resumed = await interrupted.engine.rebuild('notes', { batchSize: 1 });
   expect(resumed.complete).toBe(true);
-  expect(resumed.startedFresh).toBe(true);
-  expect(resumed.appliedCount).toBe(3);
-  const actual = await sql<{ editCount: number; body: string }>`
-    SELECT edit_count AS "editCount", body FROM notes WHERE id = ${note}
-  `.execute(interrupted.db);
-  expect(actual.rows[0]).toEqual({ editCount: 2, body: 'last' });
+  expect(resumed.startedFresh).toBe(false);
+  expect(resumed.appliedCount).toBe(3); // `ahead`, with its pulled edit; `passed` is not re-folded
+  expect(await rowsOf(interrupted)).toEqual(await rowsOf(reference));
   expect(await digest(interrupted)).toBe(canonicalDigest);
-  expect((await interrupted.engine.readWatermarks('notes')).appliedServerSeq).toBe(1);
+  expect((await interrupted.engine.readWatermarks('notes')).appliedServerSeq).toBe(2);
 });
