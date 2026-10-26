@@ -63,6 +63,10 @@ Maestro flows (`maestro test <flow>.yaml`, `maestro hierarchy`). Look at every s
 deciding the next step. For offline: on Android use `adb shell cmd connectivity airplane-mode
 enable`; on iOS stop the lane server, since the Simulator shares the Mac's network.
 
+On an emulator, expo-camera returns a black frame with a yellow date stamp instead of a real photo,
+by design. A photo flow passes on the emulator when that stamped frame shows everywhere (review,
+thumbnails, ticket); photo content can only be checked on a physical phone.
+
 ## Web harness in a cloud container
 
 ```sh
