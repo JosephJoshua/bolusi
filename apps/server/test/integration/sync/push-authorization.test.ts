@@ -388,7 +388,6 @@ describe('a refused op does not stop the device syncing', () => {
     const bad = builder.append({
       type: 'repair.ticket_cancelled',
       schemaVersion: 2,
-      schemaVersion: 2,
       entityType: 'repair_ticket',
       entityId: TICKET,
       payload: { reason: '', fee: 0, standardFee: 0 }, // reason must be non-empty
@@ -408,7 +407,6 @@ describe('a refused op does not stop the device syncing', () => {
     await grantDefaultRole(world, world.userId, 'store_owner', world.storeId, 3214);
     const misfiled = builder.append({
       type: 'repair.ticket_cancelled',
-      schemaVersion: 2,
       schemaVersion: 2,
       entityType: 'repair_customer',
       entityId: TICKET,
@@ -460,7 +458,6 @@ describe('a refused op does not stop the device syncing', () => {
     const reused = builder.append({
       id: first.id,
       type: 'repair.ticket_cancelled',
-      schemaVersion: 2,
       schemaVersion: 2,
       entityType: 'repair_ticket',
       entityId: TICKET,
