@@ -4,11 +4,8 @@
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
-import { act } from 'react';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-
-import { __windowMetrics } from '../../../test/doubles/react-native.js';
 
 import {
   ensureRepairCatalog,
@@ -75,10 +72,9 @@ async function ticketRow(harness: RepairHarness, ticketId: string) {
 }
 
 describe('counter intake', () => {
-  // On the first Android run "Tidak dicek" showed as "Tidak": squeezed beside the check's name.
-  // Where the states fit they sit on the name's line; on a narrow phone or a large system font they
-  // go under the name. Either way each pill keeps its text's width.
-  test('condition checks stack under the name on a narrow phone or a large font', async () => {
+  // Beside the name Android 16 drew "Tidak dicek" as "Tidak" (QA runs 1 to 4): each check is its
+  // name with the states under it, and every pill keeps its text's width.
+  test('condition checks put the states under the name, pills unsqueezed', async () => {
     h = await openRepairScreenHarness(5150);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.newIntake');
@@ -87,76 +83,14 @@ describe('counter intake', () => {
     type(screen, 'repair.intake.device.brand', 'Samsung');
     type(screen, 'repair.intake.device.model', 'Galaxy A14');
     await press(screen, 'repair.intake.primary');
-    const original = { ...__windowMetrics };
-    try {
-      for (const [width, fontScale, stacked] of [
-        [411, 1, false],
-        [360, 1, true],
-        [411, 1.3, true],
-      ] as const) {
-        Object.assign(__windowMetrics, { width, fontScale });
-        // Any edit re-renders the step, which reads the window again.
-        type(
-          screen,
-          'repair.intake.condition.complaint',
-          `Layar retak ${String(width * fontScale)}`,
-        );
-        await settle();
-        const row = StyleSheet.flatten(
-          screen.get('repair.intake.condition.checkRow.screen').props['style'],
-        );
-        expect(row['flexDirection']).toBe(stacked ? 'column' : 'row');
-        const pill = StyleSheet.flatten(
-          screen.get('repair.intake.condition.check.screen.not_checked').props['style'],
-        );
-        expect(pill['flexShrink']).toBe(0);
-      }
-    } finally {
-      Object.assign(__windowMetrics, original);
-    }
-  });
-
-  // Android drew "Tidak dicek" as "Tidak" in a flex row (QA runs 1 to 3) and whole when the pills
-  // took their own width. Beside the name the pills are pinned right, the name keeps clear of them
-  // by their measured width, and the measured widths decide when to stack.
-  test('condition pills beside the name are pinned right and measured, not squeezed', async () => {
-    h = await openRepairScreenHarness(5152);
-    const screen = await mount(h, h.cashierId);
-    await press(screen, 'repair.board.newIntake');
-    type(screen, 'repair.intake.customer.name', 'Yohanis Wenda');
-    await press(screen, 'repair.intake.primary');
-    type(screen, 'repair.intake.device.brand', 'Samsung');
-    type(screen, 'repair.intake.device.model', 'Galaxy A14');
-    await press(screen, 'repair.intake.primary');
-    const first = screen.container.queryAll((n) =>
-      String(n.props['testID']).startsWith('repair.intake.condition.checkRow.'),
-    )[0]!;
-    const id = String(first.props['testID']).split('.').pop()!;
-    const layout = (testID: string, width: number): void =>
-      act(() => {
-        (screen.get(testID).props['onLayout'] as (e: unknown) => void)({
-          nativeEvent: { layout: { x: 0, y: 0, width, height: 48 } },
-        });
-      });
-    const rowStyle = (): Record<string, unknown> =>
-      StyleSheet.flatten(screen.get(`repair.intake.condition.checkRow.${id}`).props['style']);
-    const pillsStyle = (): Record<string, unknown> =>
-      StyleSheet.flatten(screen.get(`repair.intake.condition.checkPills.${id}`).props['style']);
-
-    layout(`repair.intake.condition.checkRow.${id}`, 379);
-    layout(`repair.intake.condition.checkPills.${id}`, 240);
-    expect(rowStyle()['flexDirection']).toBe('row');
-    expect(pillsStyle()).toMatchObject({ position: 'absolute', right: 0 });
-    const name = screen.get(`repair.intake.condition.checkRow.${id}`).children[0] as {
-      props: Record<string, unknown>;
-    };
-    const nameStyle = StyleSheet.flatten(name.props['style'] as object) as Record<string, unknown>;
-    expect(nameStyle['paddingRight']).toBe(240 + 12);
-
-    // Pills too wide to leave the name a readable column: every row stacks.
-    layout(`repair.intake.condition.checkPills.${id}`, 300);
-    expect(rowStyle()['flexDirection']).toBe('column');
-    expect(pillsStyle()['position']).toBeUndefined();
+    const row = StyleSheet.flatten(
+      screen.get('repair.intake.condition.checkRow.screen').props['style'],
+    );
+    expect(row['flexDirection'] ?? 'column').toBe('column');
+    const pill = StyleSheet.flatten(
+      screen.get('repair.intake.condition.check.screen.not_checked').props['style'],
+    );
+    expect(pill['flexShrink']).toBe(0);
   });
 
   // The keyboard opened by itself on intake steps and covered "Lanjut" (Android QA): no step

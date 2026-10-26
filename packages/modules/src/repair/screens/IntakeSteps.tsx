@@ -18,7 +18,7 @@ import {
   type,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 
@@ -241,14 +241,6 @@ export function ConditionStep({
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
-  const { width, fontScale } = useWindowDimensions();
-  // Measured on the first row once laid out (every row has the same states); until then, estimated.
-  const [rowWidth, setRowWidth] = useState<number | null>(null);
-  const [pillsWidth, setPillsWidth] = useState<number | null>(null);
-  const stackChecks =
-    rowWidth === null || pillsWidth === null
-      ? width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale
-      : rowWidth - pillsWidth - space.md < CHECK_NAME_MIN * fontScale;
   const togglePeripheral = (item: string): void =>
     update({
       peripherals: draft.peripherals.includes(item)
@@ -278,56 +270,26 @@ export function ConditionStep({
           }
         >
           {options.checks.map((option, index) => (
-            // One line per check: the name on the left, its state lined up on the right, so the
-            // column of choices reads straight down. On a narrow phone or a large system font the
-            // states do not fit beside the name; there they go under the name instead.
-            //
-            // Beside the name the states are pinned to the right edge rather than negotiated in a
-            // flex row: Android drew "Tidak dicek" as "Tidak" in every row but the first while its
-            // measured box held one line (QA runs 1 to 3), and only the stacked layout, where the
-            // pills take their own width, drew them whole. Pinned, they take their own width too,
-            // and the name keeps clear of them by their measured width.
+            // The name, then its states under it. Beside the name (in a flex row or pinned to the
+            // edge) Android 16 drew "Tidak dicek" as "Tidak" in every row but the first while its
+            // measured box held one line (QA runs 1 to 4); only this layout drew the pills whole.
             <View
               key={option.id}
-              style={[
-                styles.check,
-                stackChecks ? styles.checkStacked : null,
-                index === 0 ? null : styles.checkDivider,
-              ]}
-              onLayout={
-                index === 0 ? (event) => setRowWidth(event.nativeEvent.layout.width) : undefined
-              }
+              style={[styles.check, index === 0 ? null : styles.checkDivider]}
               testID={`${testID}.checkRow.${option.id}`}
             >
-              <Text
-                style={[
-                  styles.checkLabel,
-                  stackChecks
-                    ? null
-                    : { paddingRight: (pillsWidth ?? CHECK_PILLS_ESTIMATE * fontScale) + space.md },
-                ]}
-              >
-                {optionLabel('checks', option)}
-              </Text>
-              <View
-                style={stackChecks ? null : styles.checkPillsBeside}
-                onLayout={
-                  index === 0 ? (event) => setPillsWidth(event.nativeEvent.layout.width) : undefined
-                }
-                testID={`${testID}.checkPills.${option.id}`}
-              >
-                <SegmentedControl
-                  options={CHECKLIST_STATES.map((value) => ({
-                    value,
-                    label: tn(CHECK_STATE_KEY[value]),
-                  }))}
-                  value={draft.checks[option.id] ?? 'not_checked'}
-                  onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
-                  size="compact"
-                  inline
-                  testID={`${testID}.check.${option.id}`}
-                />
-              </View>
+              <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
+              <SegmentedControl
+                options={CHECKLIST_STATES.map((value) => ({
+                  value,
+                  label: tn(CHECK_STATE_KEY[value]),
+                }))}
+                value={draft.checks[option.id] ?? 'not_checked'}
+                onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
+                size="compact"
+                inline
+                testID={`${testID}.check.${option.id}`}
+              />
             </View>
           ))}
         </Section>
@@ -616,37 +578,11 @@ export function ReviewStep({
   );
 }
 
-/**
- * When a condition check fits on one line: its three compact state pills plus a short name need
- * about 340 dp of text room, which grows with the system font; the gutters and gaps do not. A
- * 411 dp phone at normal font keeps one line; a 360 dp phone, or a large font, stacks.
- */
-const CHECK_ROW_TEXT = 340;
-const CHECK_ROW_CHROME = 2 * space.lg + space.md;
-/** Room the pills take before they are measured (three compact pills at normal font). */
-const CHECK_PILLS_ESTIMATE = 250;
-/** Once measured: the narrowest name column worth keeping beside the pills. */
-const CHECK_NAME_MIN = 96;
-
 const styles = StyleSheet.create({
   // The divider gets real room on both sides: tight against the pills it read as cramped.
-  check: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    columnGap: space.md,
-    paddingVertical: space.md,
-  },
-  checkStacked: { flexDirection: 'column', alignItems: 'flex-start', rowGap: space.sm },
+  check: { alignItems: 'flex-start', rowGap: space.sm, paddingVertical: space.md },
   checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
   checkLabel: { ...type.bodySm, color: color.text },
-  // Pinned to the row's right edge, centred on it; the row's padding keeps its height for them.
-  checkPillsBeside: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
   remove: { alignSelf: 'flex-end', marginTop: space.md },
