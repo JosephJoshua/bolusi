@@ -23,8 +23,10 @@ the Mac run.
 
 ## Mobile on the Mac
 
-Cloud containers cannot run an emulator or Simulator, so threads ask the QA runner thread, which
-starts a Remote Control session on Joseph's Mac. The runner works through requests one at a time and
+Cloud containers cannot run an emulator or Simulator (checked 2026-10-26): they have no `/dev/kvm`
+or CPU virtualization (the kernel reports nested KVM is not enabled for them), no binder for
+container Android, and `dl.google.com` is blocked, so the emulator and system images cannot be
+downloaded either. Threads ask the QA runner thread instead, which starts a Remote Control session on Joseph's Mac. The runner works through requests one at a time and
 builds once per commit. Use a separate git worktree on the Mac so Joseph's own checkout is untouched.
 
 Needs: Apple Silicon Mac with Xcode, Android Studio (SDK and its bundled JDK), CocoaPods, Node 22,
