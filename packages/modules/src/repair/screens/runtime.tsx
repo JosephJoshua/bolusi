@@ -34,6 +34,11 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
   readonly capturePhoto: PhotoCapture;
   readonly captureSignature: SignatureCapture;
   readonly loadThumbnail: ThumbnailLoader;
+  /**
+   * Hand one photo to the platform to save or send (the share sheet on a phone, a download on the
+   * web). Absent ⇒ this build cannot, and the photo viewer shows no share button.
+   */
+  readonly sharePhoto?: ((ref: ThumbnailRef) => Promise<'done' | 'failed'>) | undefined;
 }
 
 const RepairRuntimeContext = createRuntimeContext<RepairRuntime>('repair');

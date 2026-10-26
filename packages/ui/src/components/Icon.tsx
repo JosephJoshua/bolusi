@@ -73,6 +73,14 @@ export const ICON_GLYPHS = Object.freeze({
   remove: 'close',
   /** A compact inline action that reopens a section for editing, always beside a label. */
   edit: 'pencil-outline',
+  /** SearchField: clears what was typed. */
+  clear: 'close-circle',
+  /** PhotoViewer: closes the full-screen view. */
+  close: 'close',
+  /** PhotoViewer: saves or sends the photo through the system share sheet. */
+  share: 'share-variant-outline',
+  /** PhotoStrip: opens every photo at once. */
+  photos: 'image-multiple-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

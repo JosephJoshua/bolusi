@@ -295,7 +295,9 @@ describe('price changes and handover', () => {
     expect(ticket.photos.map((p: { slot: string }) => p.slot)).toEqual(
       expect.arrayContaining(['handover', 'signature']),
     );
-    expect(screen.query('repair.ticket.handoverPhotos')).not.toBeNull();
+    // The ticket now shows the handover photo and signature with the rest of its photos.
+    expect(screen.query('repair.ticket.photos.strip.handover')).not.toBeNull();
+    expect(screen.query('repair.ticket.photos.strip.signature')).not.toBeNull();
   });
 });
 
@@ -358,6 +360,29 @@ describe('hardware back', () => {
 
     expect(await back()).toBe(true);
     expect(screen.query('repair.price.change')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+
+    expect(await back()).toBe(true);
+    expect(screen.query('repair.board')).not.toBeNull();
+  });
+
+  test('back closes an open photo, then the photo sheet, and only then leaves the ticket', async () => {
+    h = await openRepairScreenHarness(5503);
+    const ticketId = await openTicket(h);
+    const { screen, back } = await mountWithBack(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    // Six intake photos sit in one strip, not a grid; "see all" opens every one by group.
+    expect(screen.query('repair.ticket.photos.strip.front')).not.toBeNull();
+    await press(screen, 'repair.ticket.photos.seeAll');
+    await press(screen, 'repair.ticket.photos.sheet.back');
+    expect(text(screen, 'repair.ticket.photos.viewer.label')).toBe('Belakang');
+
+    expect(await back()).toBe(true);
+    expect(screen.query('repair.ticket.photos.viewer')).toBeNull();
+    expect(screen.query('repair.ticket.photos.sheet')).not.toBeNull();
+
+    expect(await back()).toBe(true);
+    expect(screen.query('repair.ticket.photos.sheet')).toBeNull();
     expect(screen.query('repair.ticket.content')).not.toBeNull();
 
     expect(await back()).toBe(true);

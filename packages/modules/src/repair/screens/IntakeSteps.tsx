@@ -6,13 +6,16 @@ import { formatMoney, formatNumber, t } from '@bolusi/i18n';
 import {
   Button,
   Card,
-  Chip,
   ListRow,
   PhotoSlot,
   SegmentedControl,
+  TextButton,
   TextInput,
   ToggleChip,
+  border,
+  color,
   space,
+  type,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -248,7 +251,7 @@ export function ConditionStep({
       <Section
         title={tn('repair.condition.checks')}
         action={
-          <Chip
+          <TextButton
             label={tn('repair.condition.restOk')}
             icon="check"
             onPress={() => update({ checks: restOfChecksOk(draft.checks) })}
@@ -256,9 +259,11 @@ export function ConditionStep({
           />
         }
       >
-        {INTAKE_CHECKS.map((item) => (
-          <View key={item} style={styles.check}>
-            <Text style={repairStyles.body}>{checkLabel(item)}</Text>
+        {INTAKE_CHECKS.map((item, index) => (
+          // One line per check: the name on the left (wrapping if long), its state lined up on the
+          // right, so the column of choices reads straight down.
+          <View key={item} style={[styles.check, index === 0 ? null : styles.checkDivider]}>
+            <Text style={styles.checkLabel}>{checkLabel(item)}</Text>
             <SegmentedControl
               options={CHECKLIST_STATES.map((value) => ({
                 value,
@@ -266,6 +271,8 @@ export function ConditionStep({
               }))}
               value={draft.checks[item] ?? 'not_checked'}
               onChange={(state) => update({ checks: { ...draft.checks, [item]: state } })}
+              size="compact"
+              wrap
               testID={`${testID}.check.${item}`}
             />
           </View>
@@ -373,6 +380,7 @@ export function PriceStep({
               }))}
               value={line.kind as PriceKind}
               onChange={(kind) => setLine(index, { kind })}
+              size="compact"
               testID={`${testID}.kind.${index}`}
             />
             <View style={repairStyles.gap}>
@@ -397,9 +405,10 @@ export function PriceStep({
             </View>
             {lines.length > 1 ? (
               <View style={styles.remove}>
-                <Chip
+                <TextButton
                   label={t('core.action.delete')}
                   icon="remove"
+                  tone="danger"
                   onPress={() => update({ lines: lines.filter((_, i) => i !== index) })}
                   testID={`${testID}.remove.${index}`}
                 />
@@ -409,15 +418,15 @@ export function PriceStep({
         </View>
       ))}
       <View style={repairStyles.gap}>
-        <Button
+        <TextButton
           label={tn('repair.price.addRow')}
-          variant="secondary"
+          icon="add"
           onPress={() => update({ lines: [...lines, EMPTY_LINE] })}
           testID={`${testID}.addRow`}
         />
       </View>
       <View style={[repairStyles.row, styles.total]}>
-        <Text style={repairStyles.heading}>{tn('repair.price.total')}</Text>
+        <Text style={styles.reviewStrong}>{tn('repair.price.total')}</Text>
         <Text style={repairStyles.heading} testID={`${testID}.total`}>
           {formatMoney(intakeTotal(draft.lines))}
         </Text>
@@ -427,6 +436,7 @@ export function PriceStep({
           options={READY_CHOICES.map((value) => ({ value, label: tn(READY_KEY[value]) }))}
           value={draft.ready}
           onChange={(ready) => update({ ready })}
+          size="compact"
           wrap
           testID={`${testID}.ready`}
         />
@@ -438,10 +448,13 @@ export function PriceStep({
 export function ReviewStep({
   draft,
   onEdit,
+  photoStrip,
   testID,
 }: {
   readonly draft: IntakeDraft;
   readonly onEdit: (step: number) => void;
+  /** The captured photos as a strip that opens full screen (the wizard owns the viewer). */
+  readonly photoStrip: React.ReactNode;
   readonly testID: string;
 }): React.JSX.Element {
   const issues = INTAKE_CHECKS.filter((item) => draft.checks[item] === 'issue');
@@ -449,7 +462,7 @@ export function ReviewStep({
     <Section
       title={tn(INTAKE_STEP_KEY[step])}
       action={
-        <Chip
+        <TextButton
           label={t('core.action.edit')}
           icon="edit"
           onPress={() => onEdit(INTAKE_STEPS.indexOf(step))}
@@ -465,7 +478,7 @@ export function ReviewStep({
       {section(
         'customer',
         <>
-          <Text style={repairStyles.body} testID={`${testID}.customer`}>
+          <Text style={styles.reviewStrong} testID={`${testID}.customer`}>
             {draft.customer.name}
           </Text>
           {draft.customer.phone === null || draft.customer.phone === '' ? null : (
@@ -476,7 +489,7 @@ export function ReviewStep({
       {section(
         'device',
         <>
-          <Text style={repairStyles.body} testID={`${testID}.device`}>
+          <Text style={styles.reviewStrong} testID={`${testID}.device`}>
             {[draft.device.brand, draft.device.model, draft.device.color]
               .filter((s) => s.trim() !== '')
               .join(' ')}
@@ -489,7 +502,7 @@ export function ReviewStep({
       {section(
         'condition',
         <>
-          <Text style={repairStyles.body}>{draft.complaint}</Text>
+          <Text style={styles.reviewText}>{draft.complaint}</Text>
           {issues.length === 0 ? null : (
             <Field
               label={tn('repair.condition.issues')}
@@ -504,39 +517,25 @@ export function ReviewStep({
           )}
         </>,
       )}
-      {section(
-        'photos',
-        <PhotoGrid>
-          {INTAKE_PHOTO_SLOTS.map((slot) => {
-            const photo = draft.photos[slot];
-            return photo === undefined ? null : (
-              <View key={slot} style={repairStyles.gridCell}>
-                <PhotoThumb
-                  photo={capturedThumbnailRef(photo)}
-                  testID={`${testID}.photo.${slot}`}
-                />
-              </View>
-            );
-          })}
-        </PhotoGrid>,
-      )}
+      {section('photos', photoStrip)}
       {section(
         'price',
         <>
           {draft.lines
             .filter((line) => line.description.trim() !== '')
             .map((line, index) => (
-              <View key={index} style={[repairStyles.row, styles.reviewLine]}>
-                <Text style={[repairStyles.body, repairStyles.rowText]}>
-                  {`${tn(PRICE_KIND_KEY[line.kind])} · ${line.description}`}
-                </Text>
-                <Text style={repairStyles.body}>
+              <View key={index} style={[repairStyles.row, styles.reviewLine, styles.topAligned]}>
+                <View style={repairStyles.rowText}>
+                  <Text style={styles.reviewText}>{line.description}</Text>
+                  <Text style={repairStyles.caption}>{tn(PRICE_KIND_KEY[line.kind])}</Text>
+                </View>
+                <Text style={styles.reviewText}>
                   {formatMoney(signedAmount(line.kind, line.amount))}
                 </Text>
               </View>
             ))}
-          <View style={[repairStyles.row, styles.reviewLine]}>
-            <Text style={repairStyles.heading}>{tn('repair.price.total')}</Text>
+          <View style={[repairStyles.row, styles.reviewTotal]}>
+            <Text style={styles.reviewStrong}>{tn('repair.price.total')}</Text>
             <Text style={repairStyles.heading} testID={`${testID}.total`}>
               {formatMoney(intakeTotal(draft.lines))}
             </Text>
@@ -549,10 +548,26 @@ export function ReviewStep({
 }
 
 const styles = StyleSheet.create({
-  check: { marginBottom: space.md },
+  check: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: space.md,
+    paddingVertical: space.xs,
+  },
+  checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
+  checkLabel: { ...type.bodySm, color: color.text, flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
   remove: { alignSelf: 'flex-end', marginTop: space.md },
   total: { marginTop: space.lg },
-  reviewLine: { marginBottom: space.xs },
+  reviewLine: { marginBottom: space.sm },
+  reviewTotal: {
+    paddingTop: space.md,
+    marginBottom: space.sm,
+    borderTopWidth: border.hairline,
+    borderTopColor: color.border,
+  },
+  reviewStrong: { ...type.bodyBold, color: color.text },
+  topAligned: { alignItems: 'flex-start' },
+  reviewText: { ...type.bodySm, color: color.text },
 });

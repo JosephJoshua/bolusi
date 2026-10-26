@@ -379,6 +379,7 @@ export function PriceChangeStep({
         options={PRICE_KINDS.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
         value={kind}
         onChange={setKind}
+        size="compact"
         testID={`${testID}.kind`}
       />
       <View style={repairStyles.gap}>

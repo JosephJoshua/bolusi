@@ -1,91 +1,95 @@
 {
   "opType": {
-    "customerRegistered": "Pelanggan ditambahkan",
-    "customerDetailsCorrected": "Data pelanggan diperbaiki",
-    "ticketOpened": "Tiket servis dibuka",
-    "ticketClaimed": "Servis diambil",
-    "technicianAssigned": "Teknisi ditugaskan",
-    "workPhotosAdded": "Foto pengerjaan ditambahkan",
-    "workStarted": "Servis dimulai",
-    "workPaused": "Menunggu suku cadang",
-    "markedRepaired": "Selesai diperbaiki",
-    "ticketCancelled": "Servis dibatalkan",
-    "quoteChangeProposed": "Perubahan harga diusulkan",
+    "customerRegistered": "Pelanggan baru dicatat",
+    "customerDetailsCorrected": "Data pelanggan diperbarui",
+    "ticketOpened": "Servisan diterima",
+    "ticketClaimed": "Diambil teknisi",
+    "technicianAssigned": "Teknisi ditunjuk",
+    "workPhotosAdded": "Foto pengerjaan ditambah",
+    "workStarted": "Mulai dikerjakan",
+    "workPaused": "Tunggu sparepart",
+    "markedRepaired": "Selesai dikerjakan",
+    "ticketCancelled": "Servisan dibatalkan",
+    "quoteChangeProposed": "Teknisi usul ubah harga",
     "quoteChanged": "Harga diubah",
-    "quoteProposalDeclined": "Perubahan harga ditolak",
-    "deviceReturned": "Perangkat diserahkan"
+    "quoteProposalDeclined": "Usulan harga ditolak",
+    "deviceReturned": "HP diambil pelanggan"
   },
   "action": {
-    "applyPrice": "Terapkan perubahan harga",
-    "assign": "Tugaskan teknisi",
-    "cancel": "Batalkan servis",
+    "applyPrice": "Pakai harga baru",
+    "assign": "Pilih teknisi",
+    "cancel": "Batalkan servisan",
     "changePrice": "Ubah harga",
-    "claim": "Ambil servis ini",
-    "decidePrice": "Putuskan perubahan harga",
-    "declinePrice": "Pelanggan menolak",
-    "handover": "Serahkan ke pelanggan",
-    "markRepaired": "Tandai selesai",
-    "newIntake": "Servis baru",
+    "claim": "Ambil servisan ini",
+    "decidePrice": "Cek usulan harga",
+    "declinePrice": "Pelanggan tidak setuju",
+    "handover": "Serahkan HP",
+    "markRepaired": "Selesai dikerjakan",
+    "newIntake": "Servisan baru",
     "next": "Lanjut",
-    "openTicket": "Buat tiket servis",
-    "proposePrice": "Usulkan perubahan harga",
-    "reopen": "Buka lagi servis",
-    "resume": "Lanjutkan servis",
-    "start": "Mulai servis",
-    "waitForParts": "Tandai tunggu sparepart",
+    "openTicket": "Simpan servisan",
+    "proposePrice": "Usul ubah harga",
+    "reopen": "Kerjakan lagi",
+    "resume": "Lanjut kerjakan",
+    "start": "Mulai kerjakan",
+    "waitForParts": "Tunggu sparepart",
     "reassign": "Ganti teknisi",
-    "agreeApply": "Pelanggan setuju, terapkan",
-    "applyUnasked": "Terapkan tanpa persetujuan pelanggan"
+    "agreeApply": "Pelanggan setuju",
+    "applyUnasked": "Pakai tanpa tanya pelanggan",
+    "assignShort": "Pilih",
+    "reassignShort": "Ganti"
   },
   "assign": {
-    "none": "Belum ada teknisi yang bisa ditugaskan di toko ini.",
-    "load": "{count} servis aktif"
+    "none": "Belum ada teknisi di toko ini.",
+    "load": "{count} servisan aktif"
   },
   "board": {
-    "emptyHint": "Servis yang diterima atau dikerjakan muncul di sini.",
-    "noMatches": "Tidak ada servis yang cocok.",
-    "priceChangeWaiting": "Perubahan harga menunggu",
-    "searchHint": "Cari nama, HP, tiket, IMEI, tipe",
-    "title": "Servis",
+    "emptyHint": "Servisan yang masuk akan muncul di sini.",
+    "noMatches": "Servisan nggak ketemu. Coba kata lain.",
+    "priceChangeWaiting": "Ada usulan harga",
+    "searchHint": "Cari nama, no. HP, no. servisan",
+    "title": "Servisan",
     "view": {
-      "active": "Dikerjakan",
-      "mine": "Punya saya",
+      "active": "Aktif",
+      "mine": "Tugasku",
       "pickup": "Siap diambil",
       "returned": "Sudah diambil",
-      "unassigned": "Belum ditugaskan"
-    }
+      "unassigned": "Belum ada teknisi"
+    },
+    "clearSearch": "Hapus pencarian"
   },
   "cancel": {
-    "reason": "Alasan pembatalan",
-    "consequence": "Perbaikan berhenti dan harganya tidak ditagih. HP tetap di toko sampai diserahkan ke pelanggan."
+    "reason": "Kenapa dibatalkan?",
+    "consequence": "Servisan berhenti dan biaya perbaikan tidak ditagih. HP tetap di toko sampai diambil pelanggan."
   },
   "check": {
-    "biometrics": "Sidik jari atau buka wajah",
+    "biometrics": "Sidik jari & wajah",
     "buttons": "Tombol",
     "camera": "Kamera",
-    "charging": "Pengisian daya",
+    "charging": "Cas",
     "microphone": "Mikrofon",
     "screen": "Layar",
-    "signal": "Sinyal dan SIM",
+    "signal": "Sinyal & SIM",
     "speaker": "Speaker",
-    "touch": "Sentuhan"
+    "touch": "Layar sentuh"
   },
   "condition": {
-    "checks": "Cek kondisi",
-    "complaint": "Keluhan pelanggan",
-    "issue": "Bermasalah",
-    "issues": "Masalah ditemukan",
+    "checks": "Cek fungsi",
+    "complaint": "Keluhan",
+    "issue": "Rusak",
+    "issues": "Bermasalah",
     "notChecked": "Tidak dicek",
-    "notes": "Catatan lain (opsional)",
-    "ok": "Baik",
-    "peripherals": "Barang yang ditinggal",
-    "restOk": "Sisanya baik"
+    "notes": "Catatan (opsional)",
+    "ok": "Normal",
+    "peripherals": "Kelengkapan yang dititip",
+    "restOk": "Sisanya normal",
+    "notesLabel": "Catatan"
   },
   "customer": {
-    "change": "Pilih pelanggan lain",
-    "existing": "Pelanggan lama",
+    "change": "Ganti pelanggan",
+    "existing": "Pelanggan terdaftar",
     "name": "Nama pelanggan",
-    "phone": "Nomor HP (disarankan)",
+    "phone": "No. HP",
     "phoneHint": "0812…"
   },
   "device": {
@@ -93,32 +97,33 @@
     "color": "Warna",
     "imei": "IMEI",
     "model": "Tipe",
-    "passcode": "Kode kunci layar (opsional)",
+    "passcode": "Kunci layar (opsional)",
     "colorField": "Warna (opsional)",
-    "imeiField": "IMEI (opsional)"
+    "imeiField": "IMEI (opsional)",
+    "passcodeLabel": "Kunci layar"
   },
   "handover": {
     "note": "Catatan (opsional)",
     "photo": "Foto serah terima",
-    "sign": "Tanda tangan pelanggan",
-    "signAgain": "Tanda tangan ulang",
+    "sign": "Minta tanda tangan",
+    "signAgain": "Ulangi tanda tangan",
     "signature": "Tanda tangan pelanggan",
-    "signatureTitle": "Pelanggan tanda tangan terima HP",
-    "cancelled": "Servis dibatalkan, jadi harga perbaikan tidak ditagih."
+    "signatureTitle": "Tanda tangan pelanggan",
+    "cancelled": "Servisan dibatalkan, biaya perbaikan tidak ditagih."
   },
   "intake": {
-    "discard": "Buang data servis",
-    "discardMessage": "Data servis yang sudah diisi akan hilang.",
-    "discardTitle": "Buang data servis ini?",
+    "discard": "Buang",
+    "discardMessage": "Data yang sudah diisi akan hilang.",
+    "discardTitle": "Buang servisan ini?",
     "keepEditing": "Lanjut isi",
-    "progress": "Langkah {step} dari {total}",
+    "progress": "{step} dari {total}",
     "step": {
-      "condition": "Kondisi",
+      "condition": "Kondisi HP",
       "customer": "Pelanggan",
-      "device": "Perangkat",
-      "photos": "Foto",
-      "price": "Harga dan perkiraan selesai",
-      "review": "Periksa dan simpan"
+      "device": "Data HP",
+      "photos": "Foto HP",
+      "price": "Biaya & estimasi",
+      "review": "Cek lagi"
     }
   },
   "peripheral": {
@@ -130,26 +135,35 @@
     "simCard": "Kartu SIM"
   },
   "photo": {
-    "after": "Sesudah servis",
-    "before": "Sebelum servis",
-    "handover": "Serah terima",
-    "intake": "Foto penerimaan",
+    "after": "Foto sesudah",
+    "before": "Foto sebelum",
+    "handover": "Foto serah terima",
+    "intake": "Foto saat diterima",
     "intakeHint": "Foto keenam sisi HP di depan pelanggan.",
     "retake": "Foto ulang",
     "slot": {
       "back": "Belakang",
       "bottom": "Bawah",
       "front": "Depan",
-      "left": "Sisi kiri",
-      "right": "Sisi kanan",
+      "left": "Kiri",
+      "right": "Kanan",
       "top": "Atas"
     },
     "take": "Ambil foto",
     "takeNext": "Ambil foto: {slot}",
-    "expired": "Beberapa foto dari servis yang belum selesai sudah terhapus. Ambil lagi."
+    "expired": "Ada foto yang sudah terhapus. Ambil ulang, ya.",
+    "title": "Foto",
+    "seeAll": "Lihat semua ({count})",
+    "allTitle": "Semua foto",
+    "open": "Buka foto",
+    "position": "{index} dari {total}",
+    "share": "Simpan atau kirim",
+    "shareFailed": "Fotonya belum bisa disimpan. Coba lagi nanti.",
+    "beforeN": "Sebelum {n}",
+    "afterN": "Sesudah {n}"
   },
   "price": {
-    "amount": "Jumlah (Rp)",
+    "amount": "Harga (Rp)",
     "customerAgreed": "Pelanggan setuju",
     "decisionNote": "Catatan (opsional)",
     "description": "Keterangan",
@@ -159,75 +173,75 @@
       "labour": "Jasa",
       "part": "Sparepart"
     },
-    "proposalTitle": "Usulan perubahan harga",
+    "proposalTitle": "Usulan harga",
     "reason": "Alasan",
     "status": {
-      "agreed": "Pelanggan setuju",
+      "agreed": "Disetujui pelanggan",
       "declined": "Ditolak",
-      "notAgreed": "Belum dikonfirmasi pelanggan",
+      "notAgreed": "Belum ditanyakan ke pelanggan",
       "proposed": "Usulan teknisi"
     },
     "total": "Total",
-    "addRow": "Tambah baris harga",
-    "pendingTotal": "Usulan menunggu keputusan: {amount}"
+    "addRow": "Tambah biaya",
+    "pendingTotal": "Usulan belum diputuskan: {amount}"
   },
   "problem": {
-    "complaint": "Tulis keluhan pelanggan.",
-    "customerName": "Isi nama pelanggan atau pilih pelanggan lama.",
-    "deviceBrand": "Isi merek.",
-    "deviceModel": "Isi tipe.",
-    "photos": "Keenam foto wajib diambil.",
-    "quoteLines": "Tambahkan minimal satu baris harga.",
-    "incompleteLine": "Isi keterangan untuk setiap baris yang ada jumlahnya.",
-    "negativeTotal": "Diskon lebih besar dari harga. Total tidak boleh kurang dari nol."
+    "complaint": "Keluhannya belum diisi.",
+    "customerName": "Isi nama pelanggan atau pilih yang sudah terdaftar.",
+    "deviceBrand": "Merek belum diisi.",
+    "deviceModel": "Tipe belum diisi.",
+    "photos": "Masih ada foto yang belum diambil.",
+    "quoteLines": "Tambah minimal satu biaya.",
+    "incompleteLine": "Biaya ini belum ada keterangannya.",
+    "negativeTotal": "Diskonnya lebih besar dari total biaya."
   },
   "ready": {
-    "threeDays": "3 hari lagi",
+    "threeDays": "3 hari",
     "today": "Hari ini",
     "tomorrow": "Besok",
-    "unknown": "Belum tahu"
+    "unknown": "Belum pasti"
   },
   "status": {
     "cancelled": "Dibatalkan",
     "inRepair": "Dikerjakan",
-    "received": "Diterima",
+    "received": "Baru masuk",
     "repaired": "Selesai",
     "returned": "Sudah diambil",
-    "waitingForParts": "Menunggu sparepart"
+    "waitingForParts": "Tunggu sparepart"
   },
   "ticket": {
     "history": "Riwayat",
     "lastNote": "Catatan terakhir",
-    "price": "Harga",
-    "readyBy": "Perkiraan selesai",
+    "price": "Biaya",
+    "readyBy": "Estimasi selesai",
     "technician": "Teknisi",
-    "title": "Servis",
-    "unassigned": "Belum ditugaskan"
+    "title": "Servisan",
+    "unassigned": "Belum ada teknisi"
   },
   "work": {
-    "afterHint": "Ambil minimal satu foto HP setelah diperbaiki.",
+    "afterHint": "Foto HP setelah diperbaiki, minimal satu.",
     "afterShot": "Foto sesudah {n}",
-    "afterTitle": "Tandai selesai",
-    "beforeHint": "Ambil minimal satu foto sebelum HP dibongkar.",
+    "afterTitle": "Selesai dikerjakan",
+    "beforeHint": "Foto HP sebelum dibongkar, minimal satu.",
     "beforeShot": "Foto sebelum {n}",
-    "beforeTitle": "Mulai servis",
-    "partsNote": "Sparepart apa yang dibutuhkan? (opsional)",
-    "repairNote": "Apa yang dikerjakan (opsional)"
+    "beforeTitle": "Mulai kerjakan",
+    "partsNote": "Butuh sparepart apa? (opsional)",
+    "repairNote": "Apa yang diperbaiki? (opsional)"
   },
   "done": {
-    "claim": "Tiket ini sekarang kamu kerjakan.",
-    "start": "Servis dimulai.",
-    "repaired": "Ditandai selesai. Siap diserahkan ke pelanggan."
+    "claim": "Servisan ini sekarang kamu pegang.",
+    "start": "Mulai dikerjakan.",
+    "repaired": "Selesai! HP siap diambil pelanggan."
   },
   "passcode": {
     "show": "Lihat",
     "hide": "Sembunyikan"
   },
   "hint": {
-    "handover": "Ambil foto serah terima dan tanda tangan pelanggan dulu.",
+    "handover": "Ambil foto dan tanda tangan pelanggan dulu.",
     "photo": "Ambil minimal satu foto dulu.",
     "reason": "Tulis alasannya dulu.",
-    "priceLine": "Isi keterangan, jumlah, dan alasan."
+    "priceLine": "Isi keterangan, harga, dan alasannya dulu."
   },
   "discardPhotos": {
     "title": "Buang foto yang sudah diambil?",

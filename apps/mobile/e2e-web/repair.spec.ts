@@ -92,6 +92,30 @@ test('handover needs the photo and the signature, then the phone is returned', a
   await tap(page, 'repair.handover.photo.press');
   await tap(page, 'repair.handover.signature.press');
   await tap(page, 'repair.handover.primary');
-  await expect(page.getByTestId('repair.ticket.handoverPhotos')).toBeVisible();
+  await expect(page.getByTestId('repair.ticket.photos.strip.signature')).toBeVisible();
   await shoot(page, 'handover-done');
+});
+
+test('a ticket photo opens full screen, zooms on double tap, and "see all" groups every photo', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-2');
+  await tap(page, 'repair.ticket.photos.strip.back');
+  await expect(page.getByTestId('repair.ticket.photos.viewer.label')).toHaveText('Belakang');
+  await expect(page.getByTestId('repair.ticket.photos.viewer.position')).toHaveText('2 dari 8');
+  const photo = page.getByTestId('repair.ticket.photos.viewer.zoom.back');
+  await photo.dblclick();
+  await expect(photo).toHaveCSS('transform', /matrix\(2\.5/);
+  await shoot(page, 'photo-zoomed');
+  await tap(page, 'repair.ticket.photos.viewer.close');
+  await expect(page.getByTestId('repair.ticket.photos.viewer')).toHaveCount(0);
+
+  await tap(page, 'repair.ticket.photos.seeAll');
+  await expect(page.getByTestId('repair.ticket.photos.sheet.title')).toHaveText('Semua foto');
+  await tap(page, 'repair.ticket.photos.sheet.front');
+  await expect(page.getByTestId('repair.ticket.photos.viewer.label')).toHaveText('Depan');
+  await tap(page, 'repair.ticket.photos.viewer.close');
+  // Closing a photo opened from the sheet goes back to the sheet.
+  await expect(page.getByTestId('repair.ticket.photos.sheet')).toBeVisible();
 });

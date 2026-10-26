@@ -36,6 +36,7 @@ import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-cl
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
+import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
 import { appStatePort } from './src/ports/app-state.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
@@ -359,7 +360,7 @@ function createRepair(
     app,
     runtime,
     identity,
-    media: repairMediaSeamsFor(media, capture),
+    media: repairMediaSeamsFor(media, capture, expoSharePlatform),
   });
 }
 

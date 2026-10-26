@@ -22,10 +22,10 @@ import type { Kysely } from 'kysely';
 
 import { readEntitySyncStatuses } from '../../bootstrap/entity-sync-statuses.js';
 
-/** The native half: capture, signing and verified thumbnails. */
+/** The native half: capture, signing, verified thumbnails and sharing a photo. */
 export type RepairMediaSeams = Pick<
   RepairRuntime,
-  'capturePhoto' | 'captureSignature' | 'loadThumbnail'
+  'capturePhoto' | 'captureSignature' | 'loadThumbnail' | 'sharePhoto'
 >;
 
 export interface RepairRuntimeDeps {

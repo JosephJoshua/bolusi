@@ -35,7 +35,9 @@
     "waitForParts": "Mark waiting for parts",
     "reassign": "Change technician",
     "agreeApply": "Customer agreed, apply",
-    "applyUnasked": "Apply without the customer’s agreement"
+    "applyUnasked": "Apply without the customer’s agreement",
+    "assignShort": "Choose",
+    "reassignShort": "Change"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -53,7 +55,8 @@
       "pickup": "Ready for pickup",
       "returned": "Returned",
       "unassigned": "Unassigned"
-    }
+    },
+    "clearSearch": "Clear search"
   },
   "cancel": {
     "reason": "Why is it cancelled?",
@@ -79,7 +82,8 @@
     "notes": "Other notes (optional)",
     "ok": "OK",
     "peripherals": "Left with the phone",
-    "restOk": "Mark the rest OK"
+    "restOk": "Mark the rest OK",
+    "notesLabel": "Notes"
   },
   "customer": {
     "change": "Choose another customer",
@@ -95,7 +99,8 @@
     "model": "Model",
     "passcode": "Screen lock code (optional)",
     "colorField": "Colour (optional)",
-    "imeiField": "IMEI (optional)"
+    "imeiField": "IMEI (optional)",
+    "passcodeLabel": "Screen lock"
   },
   "handover": {
     "note": "Note (optional)",
@@ -146,7 +151,16 @@
     },
     "take": "Take photo",
     "takeNext": "Take photo: {slot}",
-    "expired": "Some photos from this unfinished intake were deleted. Take them again."
+    "expired": "Some photos from this unfinished intake were deleted. Take them again.",
+    "title": "Photos",
+    "seeAll": "See all ({count})",
+    "allTitle": "All photos",
+    "open": "Open photo",
+    "position": "{index} of {total}",
+    "share": "Save or send",
+    "shareFailed": "Couldn’t save this photo. Try again later.",
+    "beforeN": "Before {n}",
+    "afterN": "After {n}"
   },
   "price": {
     "amount": "Amount (Rp)",

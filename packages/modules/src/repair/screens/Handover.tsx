@@ -5,17 +5,16 @@
  * book in this slice.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { Card, PhotoSlot, TextInput } from '@bolusi/ui';
+import { Card, PhotoSlot, TextInput, border, color, space, type } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn } from './i18n.js';
 import { capturedThumbnailRef, ticketStatus } from '../flows.js';
 import {
-  Field,
   FlowScreen,
   PhotoGrid,
   PhotoThumb,
@@ -104,23 +103,22 @@ export function Handover({
         {(ticket) =>
           ticket === undefined ? null : (
             <Card testID={`${testID}.summary`}>
-              <View style={repairStyles.row}>
-                <Text style={repairStyles.heading}>{ticket.customerName}</Text>
-                <StatusChip status={ticketStatus(ticket)} testID={`${testID}.status`} />
-              </View>
-              <Text style={repairStyles.body}>
-                {`${ticket.ticketNumber} · ${ticket.deviceBrand} ${ticket.deviceModel}`}
+              <StatusChip status={ticketStatus(ticket)} testID={`${testID}.status`} />
+              <Text style={styles.customer}>{ticket.customerName}</Text>
+              <Text style={repairStyles.muted}>
+                {`${ticket.deviceBrand} ${ticket.deviceModel} · ${ticket.ticketNumber}`}
               </Text>
               {ticket.outcome === 'cancelled' ? (
-                <Text style={[repairStyles.muted, repairStyles.gap]} testID={`${testID}.cancelled`}>
+                <Text style={[repairStyles.muted, styles.total]} testID={`${testID}.cancelled`}>
                   {tn('repair.handover.cancelled')}
                 </Text>
               ) : (
-                <Field
-                  label={tn('repair.price.total')}
-                  value={formatMoney(ticket.quoteTotal)}
-                  testID={`${testID}.total`}
-                />
+                <View style={[repairStyles.row, styles.total]}>
+                  <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
+                  <Text style={repairStyles.heading} testID={`${testID}.total`}>
+                    {formatMoney(ticket.quoteTotal)}
+                  </Text>
+                </View>
               )}
             </Card>
           )
@@ -128,7 +126,7 @@ export function Handover({
       </QueryView>
       <View style={repairStyles.gap}>
         <PhotoGrid>
-          <View style={repairStyles.gridCell}>
+          <View style={styles.half}>
             <PhotoSlot
               label={tn('repair.handover.photo')}
               actionLabel={tn(photo === null ? 'repair.photo.take' : 'repair.photo.retake')}
@@ -146,7 +144,7 @@ export function Handover({
               testID={`${testID}.photo`}
             />
           </View>
-          <View style={repairStyles.gridCell}>
+          <View style={styles.half}>
             <PhotoSlot
               label={tn('repair.handover.signature')}
               emptyIcon="signature"
@@ -184,3 +182,16 @@ export function Handover({
     </FlowScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  customer: { ...type.title, color: color.text, marginTop: space.md },
+  total: {
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: border.hairline,
+    borderTopColor: color.border,
+  },
+  totalLabel: { ...type.bodyBold, color: color.text },
+  // Two captures side by side, each half the row.
+  half: { flexBasis: '47%', flexGrow: 1 },
+});

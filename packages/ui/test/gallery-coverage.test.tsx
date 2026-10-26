@@ -88,10 +88,10 @@ describe('every declared state renders', () => {
 });
 
 describe('the §3 inventory covers what design-system §3 requires', () => {
-  test('Button: 4 states x 3 variants', () => {
-    expect(stateRegistry.Button).toHaveLength(12);
+  test('Button: 4 states x 3 variants, plus the compact size', () => {
+    expect(stateRegistry.Button).toHaveLength(15);
     for (const variant of ['primary', 'secondary', 'destructive']) {
-      for (const state of ['default', 'pressed', 'disabled', 'busy']) {
+      for (const state of ['default', 'pressed', 'disabled', 'busy', 'compact']) {
         expect(stateRegistry.Button.map((s) => s.id)).toContain(`${variant}.${state}`);
       }
     }

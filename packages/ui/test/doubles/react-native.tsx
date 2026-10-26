@@ -140,3 +140,35 @@ export const Vibration = {
 };
 
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };
+
+/**
+ * `Animated` and `PanResponder`, enough for PhotoViewer to mount. No animation runs: a value is a
+ * number holder and `start()` lands it at once. Gestures are not simulated (see the limits above).
+ */
+class AnimatedValue {
+  constructor(public value: number) {}
+  setValue(next: number): void {
+    this.value = next;
+  }
+}
+const finished = (target: AnimatedValue, toValue: number) => ({
+  start: (done?: () => void): void => {
+    target.setValue(toValue);
+    done?.();
+  },
+});
+export const Animated = {
+  View: hostComponent('Animated.View'),
+  Value: AnimatedValue,
+  spring: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
+  timing: (target: AnimatedValue, config: { toValue: number }) => finished(target, config.toValue),
+  parallel: (animations: readonly { start: (done?: () => void) => void }[]) => ({
+    start: (done?: () => void): void => {
+      for (const animation of animations) animation.start();
+      done?.();
+    },
+  }),
+};
+export const PanResponder = {
+  create: (handlers: AnyProps) => ({ panHandlers: {}, handlers }),
+};

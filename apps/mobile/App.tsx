@@ -961,12 +961,15 @@ export default function App(props: AppProps): React.JSX.Element {
                 // outright, taking an open editor's title/body/mediaRef with it and showing no
                 // confirm — the §8.1 discard gate the editor's own header back has always run.
                 <View style={styles.headerChrome}>
-                  <Chip
-                    label={t('core.settings.language')}
-                    icon="language"
-                    onPress={() => leaveHome(() => setRoute('settings'))}
-                    testID="shell-open-settings"
-                  />
+                  {/* Chip pins itself to `flex-start`; the wrapper centres it on the avatar's axis. */}
+                  <View>
+                    <Chip
+                      label={t('core.settings.language')}
+                      icon="language"
+                      onPress={() => leaveHome(() => setRoute('settings'))}
+                      testID="shell-open-settings"
+                    />
+                  </View>
                   <AvatarButton
                     userId={currentUser.id}
                     initials={currentUser.initials}

@@ -131,37 +131,41 @@ export function StatusChip({
 /** A photo by its signed ref, verified before display; honest placeholders otherwise (06 §6). */
 export function PhotoThumb({
   photo,
+  full = false,
   testID,
 }: {
   readonly photo: ThumbnailRef;
+  /** Fill the parent and show the whole photo uncropped (the full-screen viewer). */
+  readonly full?: boolean | undefined;
   readonly testID: string;
 }): React.JSX.Element {
   const state = useRepairThumbnail(photo);
+  const frame = full ? styles.full : styles.placeholder;
   switch (state.kind) {
     case 'ready':
       return (
         <Image
           source={{ uri: state.uri }}
-          contentFit="cover"
-          style={styles.thumb}
+          contentFit={full ? 'contain' : 'cover'}
+          style={full ? styles.full : styles.thumb}
           testID={`${testID}.image`}
         />
       );
     case 'loading':
       return (
-        <View style={styles.placeholder} testID={`${testID}.loading`}>
+        <View style={frame} testID={`${testID}.loading`}>
           <LoadingState variant="spinner" />
         </View>
       );
     case 'unavailable':
       return (
-        <View style={styles.placeholder} testID={`${testID}.unavailable`}>
+        <View style={frame} testID={`${testID}.unavailable`}>
           <Icon name="pending" size={size.iconInline} color={color.textMuted} />
         </View>
       );
     case 'mismatch':
       return (
-        <View style={styles.placeholder} testID={`${testID}.mismatch`}>
+        <View style={frame} testID={`${testID}.mismatch`}>
           <Icon name="rejected" size={size.iconInline} color={color.danger} />
         </View>
       );
@@ -301,6 +305,38 @@ export function Field({
   );
 }
 
+/**
+ * A key fact on a detail screen: a small label over its value, laid out two to a row by `FactGrid`.
+ * The value can carry the one action that changes it ("Ganti" beside the technician).
+ */
+export function Fact({
+  label,
+  value,
+  action,
+  testID,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly action?: ReactNode;
+  readonly testID?: string | undefined;
+}): React.JSX.Element {
+  return (
+    <View style={styles.fact}>
+      <Text style={styles.factLabel}>{label}</Text>
+      <View style={styles.factValueRow}>
+        <Text style={styles.factValue} testID={testID}>
+          {value}
+        </Text>
+        {action}
+      </View>
+    </View>
+  );
+}
+
+export function FactGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
+  return <View style={styles.factGrid}>{children}</View>;
+}
+
 /** Photos laid out in a wrapping grid. */
 export function PhotoGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
   return <View style={styles.grid}>{children}</View>;
@@ -335,14 +371,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  section: { marginTop: space.lg },
+  full: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  section: { marginTop: space.xl },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: size.control,
     marginBottom: space.sm,
   },
-  sectionTitle: { ...type.bodyBold, color: color.textMuted, flexShrink: 1 },
+  sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
+  factGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
+  fact: { width: '50%', paddingRight: space.sm },
+  factLabel: { ...type.caption, color: color.textMuted },
+  factValueRow: { flexDirection: 'row', alignItems: 'center', minHeight: size.control },
+  factValue: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },
   field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
   fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
   fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },

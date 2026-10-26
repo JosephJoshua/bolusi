@@ -24,6 +24,8 @@
  */
 export {
   ActivityIndicator,
+  Animated,
+  PanResponder,
   FlatList,
   Platform,
   Pressable,

@@ -9,6 +9,7 @@ import type { CommandIdentity } from '@bolusi/core';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 
 import type { MediaClient } from '../media/client.js';
+import { createPhotoSharer, type SharePlatform } from '../media/share.js';
 import { createRepairRuntime, type RepairMediaSeams } from '../screens/repair/runtime-adapter.js';
 
 import type { Bootstrapped } from './bootstrap.js';
@@ -20,12 +21,22 @@ export type { RepairMediaSeams };
 /**
  * The media seams for repair: the capture and signature hosts as given, and the same thumbnail
  * decision notes makes (a device with no media client shows every photo as not yet available).
+ * Sharing is offered only with a media client and a share platform: without either there is no
+ * verified file to hand over.
  */
 export function repairMediaSeamsFor(
   media: MediaClient | null,
   capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
+  share?: SharePlatform,
 ): RepairMediaSeams {
-  return { ...capture, loadThumbnail: notesMediaSeamsFor(media).loadThumbnail };
+  const loadThumbnail = notesMediaSeamsFor(media).loadThumbnail;
+  return {
+    ...capture,
+    loadThumbnail,
+    ...(media === null || share === undefined
+      ? {}
+      : { sharePhoto: createPhotoSharer(loadThumbnail, share) }),
+  };
 }
 
 export function createSessionRepairRuntime(deps: {

@@ -94,7 +94,7 @@ const noop = (): void => undefined;
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'destructive'] as const;
 
-/** §3.1: all four states are mandatory for ALL three variants — 12 entries, generated, not typed out. */
+/** §3.1: all four states are mandatory for ALL three variants, plus the compact size — generated. */
 const buttonStates: readonly GalleryState[] = BUTTON_VARIANTS.flatMap((variant) => [
   {
     id: `${variant}.default`,
@@ -140,6 +140,18 @@ const buttonStates: readonly GalleryState[] = BUTTON_VARIANTS.flatMap((variant) 
         onPress={noop}
         variant={variant}
         busy
+      />
+    ),
+  },
+  {
+    id: `${variant}.compact`,
+    render: (l: GalleryLabels) => (
+      <componentInventory.Button
+        testID="ui.button"
+        label={l.action}
+        onPress={noop}
+        variant={variant}
+        size="compact"
       />
     ),
   },
@@ -409,6 +421,20 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
         />
       ),
     },
+    {
+      id: 'compact',
+      render: (l) => (
+        <componentInventory.SegmentedControl
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+          ]}
+          value="a"
+          size="compact"
+          onChange={noop}
+        />
+      ),
+    },
   ],
 
   ToggleChip: [
@@ -471,6 +497,132 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           label={l.primaryText}
           image={<Text>{l.secondaryText}</Text>}
           actionLabel={l.action}
+        />
+      ),
+    },
+  ],
+
+  PhotoStrip: [
+    {
+      id: 'several',
+      render: (l) => (
+        <componentInventory.PhotoStrip
+          photos={[
+            { key: 'a', label: l.primaryText, image: <Text>{l.secondaryText}</Text> },
+            { key: 'b', label: l.secondaryText, image: <Text>{l.secondaryText}</Text> },
+          ]}
+          onOpen={noop}
+          openLabel={l.action}
+        />
+      ),
+    },
+  ],
+
+  PhotoViewer: [
+    {
+      id: 'with-share',
+      render: (l) => (
+        <componentInventory.PhotoViewer
+          photos={[
+            { key: 'a', label: l.primaryText },
+            { key: 'b', label: l.secondaryText },
+          ]}
+          initialIndex={0}
+          renderImage={() => <Text>{l.secondaryText}</Text>}
+          onClose={noop}
+          onShare={() => Promise.resolve('done')}
+          labels={{
+            close: l.cancel,
+            share: l.action,
+            position: () => l.hint,
+            shareFailed: l.fieldError,
+          }}
+        />
+      ),
+    },
+    {
+      id: 'view-only',
+      render: (l) => (
+        <componentInventory.PhotoViewer
+          photos={[{ key: 'a', label: l.primaryText }]}
+          initialIndex={0}
+          renderImage={() => <Text>{l.secondaryText}</Text>}
+          onClose={noop}
+          labels={{
+            close: l.cancel,
+            share: l.action,
+            position: () => l.hint,
+            shareFailed: l.fieldError,
+          }}
+        />
+      ),
+    },
+  ],
+
+  SearchField: [
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.SearchField
+          value=""
+          onChangeText={noop}
+          placeholder={l.fieldPlaceholder}
+          accessibilityLabel={l.fieldLabel}
+          clearLabel={l.cancel}
+        />
+      ),
+    },
+    {
+      id: 'typed',
+      render: (l) => (
+        <componentInventory.SearchField
+          value={l.primaryText}
+          onChangeText={noop}
+          placeholder={l.fieldPlaceholder}
+          accessibilityLabel={l.fieldLabel}
+          clearLabel={l.cancel}
+        />
+      ),
+    },
+  ],
+
+  Sheet: [
+    {
+      id: 'open',
+      render: (l) => (
+        <componentInventory.Sheet title={l.title} closeLabel={l.cancel} onClose={noop}>
+          <Text>{l.message}</Text>
+        </componentInventory.Sheet>
+      ),
+    },
+  ],
+
+  TextButton: [
+    {
+      id: 'primary',
+      render: (l) => <componentInventory.TextButton label={l.action} onPress={noop} icon="edit" />,
+    },
+    {
+      id: 'danger',
+      render: (l) => (
+        <componentInventory.TextButton label={l.action} onPress={noop} tone="danger" />
+      ),
+    },
+    {
+      id: 'disabled',
+      render: (l) => <componentInventory.TextButton label={l.action} onPress={noop} disabled />,
+    },
+  ],
+
+  Timeline: [
+    {
+      id: 'several',
+      render: (l) => (
+        <componentInventory.Timeline
+          entries={[
+            { key: 'b', title: l.primaryText, meta: l.hint, detail: l.message },
+            { key: 'a', title: l.secondaryText, meta: l.hint },
+          ]}
         />
       ),
     },

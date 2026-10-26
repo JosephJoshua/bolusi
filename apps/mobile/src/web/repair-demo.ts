@@ -7,7 +7,7 @@
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
 import { FuzzyIndex } from '@bolusi/core';
-import type { MediaRef } from '@bolusi/schemas';
+import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 import {
   REPAIR_PERMISSION,
   type QuoteLineRow,
@@ -242,9 +242,14 @@ function withTotals(row: TicketDetailRow): TicketDetailRow {
 }
 
 /** A small grey tile reading "demo photo", so a screenshot never passes for real evidence. */
-const PLACEHOLDER_URI = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#c9ced6"/><rect x="70" y="40" width="60" height="120" rx="10" fill="#8a93a3"/><text x="100" y="185" font-family="sans-serif" font-size="16" text-anchor="middle" fill="#3d4450">demo photo</text></svg>',
-)}`;
+/** A stand-in photo per media id, portrait like a phone shot, tinted so swiping shows a change. */
+function placeholderUri(mediaId: string): string {
+  const n = parseInt(mediaId.slice(-4), 16) || 0;
+  const hue = (n * 47) % 360;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="hsl(${String(hue)},18%,82%)"/><rect x="95" y="70" width="110" height="220" rx="16" fill="hsl(${String(hue)},14%,52%)"/><text x="150" y="350" font-family="sans-serif" font-size="22" text-anchor="middle" fill="#3d4450">demo photo ${String(n)}</text></svg>`,
+  )}`;
+}
 
 export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime {
   const actor = DEMO_REPAIR_ROLES[role];
@@ -516,7 +521,17 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       Promise.resolve(TECHNICIANS.map((id) => ({ id, name: NAMES.get(id) ?? id }))),
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
-    loadThumbnail: () => Promise.resolve({ kind: 'ready', uri: PLACEHOLDER_URI }),
+    loadThumbnail: (ref: ThumbnailRef) =>
+      Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
+    // The browser stand-in for the share sheet: a download of the same file.
+    sharePhoto: (ref: ThumbnailRef) => {
+      if (typeof document === 'undefined') return Promise.resolve('failed');
+      const link = document.createElement('a');
+      link.href = placeholderUri(ref.mediaId);
+      link.download = `${ref.mediaId}.svg`;
+      link.click();
+      return Promise.resolve('done');
+    },
   };
   return runtime as unknown as RepairRuntime;
 }

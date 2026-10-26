@@ -6,7 +6,7 @@
  */
 
 import { ConfirmSheet, StepHeader, color, space, type } from '@bolusi/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
@@ -24,8 +24,9 @@ import {
   type IntakeDraft,
   type IntakeProblem,
 } from '../flows.js';
-import type { IntakePhotoSlot } from '../constants.js';
+import { INTAKE_PHOTO_SLOTS, type IntakePhotoSlot } from '../constants.js';
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
+import { usePhotoBrowser } from './photos.js';
 import { useRepairRuntime } from './runtime.js';
 
 import {
@@ -115,6 +116,27 @@ export function IntakeWizard({
   const problems = stepProblems(draft, step);
   const dirty = intakeDirty(draft);
   const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
+  // The review shows the photos as a strip that opens full screen, like a saved ticket.
+  const photos = usePhotoBrowser(
+    useMemo(
+      () =>
+        INTAKE_PHOTO_SLOTS.flatMap((slot) => {
+          const ref = draft.photos[slot];
+          return ref === undefined
+            ? []
+            : [
+                {
+                  key: slot,
+                  label: tn(INTAKE_SLOT_KEY[slot]),
+                  group: tn('repair.photo.intake'),
+                  ref: capturedThumbnailRef(ref),
+                },
+              ];
+        }),
+      [draft.photos],
+    ),
+    `${testID}.review.photos`,
+  );
 
   // Write-through retention: every change, never on unmount (an unmount is what a lock looks like).
   useEffect(() => {
@@ -149,6 +171,7 @@ export function IntakeWizard({
 
   useEffect(() => {
     onRegisterStepBack?.(() => {
+      if (photos.back()) return true;
       if (stepIndex === 0) return false;
       goTo(stepIndex - 1);
       return true;
@@ -210,7 +233,9 @@ export function IntakeWizard({
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
       overlay={
-        pendingLeave === null ? null : (
+        pendingLeave === null ? (
+          photos.overlay
+        ) : (
           <ConfirmSheet
             title={tn('repair.intake.discardTitle')}
             message={tn('repair.intake.discardMessage')}
@@ -304,7 +329,14 @@ export function IntakeWizard({
           />
         );
       case 'review':
-        return <ReviewStep draft={draft} onEdit={goTo} testID={`${testID}.review`} />;
+        return (
+          <ReviewStep
+            draft={draft}
+            onEdit={goTo}
+            photoStrip={photos.strip}
+            testID={`${testID}.review`}
+          />
+        );
     }
   }
 }

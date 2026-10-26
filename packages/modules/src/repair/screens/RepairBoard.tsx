@@ -8,14 +8,13 @@ import { formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Button,
-  Icon,
+  Chip,
   List,
+  SearchField,
   SegmentedControl,
   SyncStatusChip,
-  TextInput,
   border,
   color,
-  size,
   space,
   touch,
   type,
@@ -173,22 +172,25 @@ export function RepairBoard({
       }
       testID={testID}
     >
-      <View style={styles.toolbar}>
-        <TextInput
-          label={t('core.action.search')}
+      <View style={styles.search}>
+        <SearchField
           placeholder={tn('repair.board.searchHint')}
+          accessibilityLabel={t('core.action.search')}
+          clearLabel={tn('repair.board.clearSearch')}
           value={text}
           onChangeText={setText}
           testID={`${testID}.search`}
         />
       </View>
       {searching ? null : (
-        <View style={styles.toolbar}>
+        <View style={styles.views}>
           <SegmentedControl
             options={BOARD_VIEWS.map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
             value={view}
-            // Wrapped, not scrolled sideways: every queue name is readable without a hidden swipe.
-            wrap
+            // One compact row that scrolls sideways and runs to the screen edges: the cut-off pill
+            // at the edge shows there are more queues, and the list keeps the screen.
+            size="compact"
+            bleed
             onChange={(next) => {
               setView(next);
               setPages(1);
@@ -273,46 +275,55 @@ function TicketRow({
     >
       <View style={styles.rowBody}>
         <View style={repairStyles.row}>
-          <Text style={styles.number}>{row.ticketNumber}</Text>
-          <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
-        </View>
-        <View style={repairStyles.row}>
           <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>
             {row.customerName}
           </Text>
           <Text style={styles.amount}>{formatMoney(row.quoteTotal)}</Text>
         </View>
-        <Text style={repairStyles.muted} numberOfLines={2}>
+        <Text style={styles.details} numberOfLines={2}>
           {details}
         </Text>
         <View style={styles.footer}>
+          <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
           {row.pendingProposals > 0 ? (
-            <Text style={repairStyles.warning} testID={`${testID}.priceWaiting`}>
-              {tn('repair.board.priceChangeWaiting')}
-            </Text>
+            <Chip
+              label={tn('repair.board.priceChangeWaiting')}
+              icon="warning"
+              tone="warning"
+              testID={`${testID}.priceWaiting`}
+            />
           ) : null}
           {syncChip}
+          <Text style={styles.number}>{row.ticketNumber}</Text>
         </View>
       </View>
-      <Icon name="chevron" size={size.iconInline} color={color.textMuted} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  toolbar: { marginBottom: space.md },
+  search: { marginBottom: space.sm },
+  views: { marginBottom: space.xs },
   row: {
     minHeight: touch.rowMin,
-    flexDirection: 'row',
-    alignItems: 'center',
+    // Rows run edge to edge so their dividers and pressed state span the screen, while their text
+    // lines up with the search field above.
+    marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
     borderBottomWidth: border.hairline,
     borderBottomColor: color.border,
   },
-  rowBody: { flex: 1, marginRight: space.sm },
-  number: { ...type.caption, color: color.textMuted },
+  rowBody: { flex: 1 },
   customer: { ...type.bodyBold, color: color.text },
-  amount: { ...type.bodySm, color: color.text },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
+  amount: { ...type.bodySm, fontWeight: '600', color: color.text, fontVariant: ['tabular-nums'] },
+  details: { ...type.bodySm, color: color.textMuted },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexWrap: 'wrap',
+    marginTop: space.sm,
+  },
+  number: { ...type.caption, color: color.textMuted, marginLeft: 'auto' },
 });
