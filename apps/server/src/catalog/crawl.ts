@@ -211,6 +211,13 @@ export async function crawlPhoneCatalog(
           break;
         }
         const listing = parseBrandPage(body, brand.name);
+        // A page that lists nothing was not understood (changed markup, an error page); the brand
+        // is not marked as walked, so the next run tries it again in full.
+        if (listing.models.length === 0) {
+          deps.log(`no models found on ${path}`);
+          complete = false;
+          break;
+        }
         const added = await deps.store.saveListedModels(listing.models, deps.now());
         counts.newModels += added;
         if (!fullWalk && added === 0) break;

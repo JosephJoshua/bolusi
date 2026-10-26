@@ -63,7 +63,7 @@ export { createServerWatermarkStore } from './watermarks.js';
 export { buildPinVerifierRow } from './pin-verifier-row.js';
 export type { PinVerifierRowInput, PinVerifierRowOwner } from './pin-verifier-row.js';
 
-// The phone catalog (migration 0014): global reference data with no tenant rows, so these are
+// The phone catalog (migration 0015): global reference data with no tenant rows, so these are
 // fixed functions on the plain pool. Reads return plain records; the writer's methods are fixed
 // statements over the three catalog tables only, refused by Postgres unless run as their owner.
 // Nothing here hands back a handle, so the `queryish` assertion still holds.

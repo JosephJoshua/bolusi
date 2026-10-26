@@ -72,6 +72,7 @@ test('brands come from the brand table only, with names before their counts', ()
   expect(parseBrands(MAKERS)).toEqual([
     { path: 'acer-phones-59.php', name: 'Acer' },
     { path: 'samsung-phones-9.php', name: 'Samsung' },
+    { path: 'at&t-phones-57.php', name: 'AT&T' },
   ]);
 });
 

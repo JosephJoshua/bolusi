@@ -83,6 +83,8 @@ async function main(): Promise<void> {
     get: async (url) => {
       const response = await fetch(url, {
         headers: { 'User-Agent': USER_AGENT },
+        // A redirect would lead past the robots.txt check and the path rules; it is skipped instead.
+        redirect: 'manual',
         signal: AbortSignal.timeout(60_000),
       });
       const retryAfter = Number(response.headers.get('retry-after'));

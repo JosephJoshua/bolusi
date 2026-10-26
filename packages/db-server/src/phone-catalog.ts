@@ -1,4 +1,4 @@
-// The phone catalog's reads and writes (migration 0014). Global reference data, so these run on
+// The phone catalog's reads and writes (migration 0015). Global reference data, so these run on
 // the plain pool, never through forTenant; the catalog tables hold no tenant rows to leak.
 //
 // Reads serve devices (apps/server routes/catalog.ts) and work as `bolusi_app`, which has SELECT

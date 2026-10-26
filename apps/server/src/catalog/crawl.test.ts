@@ -10,6 +10,7 @@ import type {
 } from '@bolusi/db-server';
 import { describe, expect, test } from 'vitest';
 
+import { GSMARENA_ORIGIN } from './gsmarena.js';
 import {
   crawlPhoneCatalog,
   type CrawlDeps,
@@ -17,7 +18,7 @@ import {
   type CrawlResponse,
 } from './crawl.js';
 
-const ORIGIN = 'https://www.gsmarena.com';
+const ORIGIN = GSMARENA_ORIGIN;
 const CDN = 'https://fdn2.gsmarena.com';
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 
