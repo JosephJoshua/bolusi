@@ -36,8 +36,8 @@ import {
   type StepBack,
 } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from './i18n.js';
-import { PRICE_KIND_KEY, optionLabel } from './labels.js';
+import { tn, type RepairKey } from '../i18n.js';
+import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   photoInSlot,
   photoThumbnailRef,

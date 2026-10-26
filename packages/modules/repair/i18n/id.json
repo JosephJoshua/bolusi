@@ -340,5 +340,57 @@
     "save": "Simpan",
     "saved": "Biaya pembatalan disimpan.",
     "hint": "Isi kedua biaya dulu."
+  },
+  "slip": {
+    "intakeTitle": "TANDA TERIMA SERVISAN",
+    "handoverTitle": "NOTA SERVISAN",
+    "job": {
+      "intake": "Tanda terima {number}",
+      "handover": "Nota servisan {number}"
+    },
+    "received": "Diterima {date}",
+    "readyBy": "Estimasi selesai {date}",
+    "returned": "Diambil {date}",
+    "reprint": "Cetak ulang ke-{count}",
+    "printed": "Dicetak {date}",
+    "printedBy": "Dicetak {date} oleh {name}",
+    "field": {
+      "customer": "Pelanggan",
+      "phone": "No. HP",
+      "device": "HP",
+      "color": "Warna",
+      "imei": "IMEI",
+      "receivedBy": "Diterima oleh",
+      "technician": "Teknisi",
+      "status": "Status",
+      "cancelReason": "Alasan batal"
+    },
+    "section": {
+      "complaint": "Keluhan",
+      "condition": "Kondisi saat diterima",
+      "accessories": "Kelengkapan",
+      "estimate": "Estimasi biaya",
+      "costs": "Rincian biaya",
+      "terms": "Ketentuan"
+    },
+    "noAccessories": "Tidak ada kelengkapan yang dititipkan.",
+    "estimateTotal": "Estimasi total",
+    "total": "Total",
+    "downPayment": "DP",
+    "balance": "Sisa bayar",
+    "sign": {
+      "customer": "Pelanggan",
+      "customerPickup": "Pelanggan, HP sudah diterima",
+      "staff": "Petugas toko"
+    },
+    "copy": {
+      "store": "Untuk toko",
+      "customer": "Untuk pelanggan"
+    },
+    "plyNote": "Lembar merah muda untuk toko, lembar kuning untuk pelanggan.",
+    "terms": {
+      "intake": "Bawa nota ini saat mengambil HP.\nBiaya di atas masih perkiraan. Kalau ada biaya tambahan, toko akan konfirmasi ke pelanggan dulu.\nCadangkan data HP sebelum diservis. Toko tidak bertanggung jawab atas data yang hilang.\nKerusakan lain yang baru terlihat saat HP dibongkar akan dikabari sebelum dikerjakan.\nHP yang tidak diambil 30 hari setelah pelanggan dikabari di luar tanggung jawab toko.",
+      "handover": "Cek HP sebelum meninggalkan toko.\nGaransi berlaku untuk kerusakan dan sparepart yang sama, dengan menunjukkan nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
+    }
   }
 }

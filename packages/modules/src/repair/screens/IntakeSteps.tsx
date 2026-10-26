@@ -22,14 +22,14 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 
-import { tn } from './i18n.js';
+import { tn } from '../i18n.js';
 import {
   CHECK_STATE_KEY,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
   optionLabel,
   readyLabel,
-} from './labels.js';
+} from '../labels.js';
 import {
   INTAKE_STEPS,
   capturedThumbnailRef,

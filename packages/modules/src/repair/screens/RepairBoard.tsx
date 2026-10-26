@@ -27,7 +27,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { TicketSummaryRow } from '../queries.js';
 import { statusesFor, type EntitySyncStatuses } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from './i18n.js';
+import { tn, type RepairKey } from '../i18n.js';
 import {
   boardFilter,
   boardSort,
@@ -37,7 +37,7 @@ import {
   ticketStatus,
   type BoardView,
 } from '../flows.js';
-import { statusLabel } from './labels.js';
+import { statusLabel } from '../labels.js';
 import { StatusChip, repairStyles } from './parts.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 

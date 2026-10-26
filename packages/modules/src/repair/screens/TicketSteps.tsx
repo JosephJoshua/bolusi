@@ -30,8 +30,8 @@ import {
 import { standardCancelFee, type QuoteLineRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from './i18n.js';
-import { PRICE_KIND_KEY } from './labels.js';
+import { tn, type RepairKey } from '../i18n.js';
+import { PRICE_KIND_KEY } from '../labels.js';
 import {
   acceptsRupiahText,
   capturedThumbnailRef,

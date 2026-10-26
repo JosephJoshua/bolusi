@@ -24,8 +24,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
-import { staleStepMessage, statusLabel } from './labels.js';
+import { tn } from '../i18n.js';
+import { staleStepMessage, statusLabel } from '../labels.js';
 import { statusTone, type StaleStep, type TicketStatus } from '../flows.js';
 import { useRepairThumbnail } from './runtime.js';
 

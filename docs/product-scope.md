@@ -121,6 +121,36 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   phone cannot be handed back while a change waits. Technicians keep proposing,
   since they find the extra fault once the phone is open.
 
+## Printing repair slips (2026-10-26)
+
+Agreed with the owner before building printing.
+
+- **Paper:** two-ply carbonless continuous paper (pink kept by the store, yellow
+  for the customer) on whatever Epson-compatible dot-matrix the store has, or
+  plain paper. No printer model is assumed: text mode uses the basic ESC/P set,
+  and the store picks a paper preset (9.5" continuous full or half form, A4, A5)
+  or types a size, then checks it with a test page. Windows printing cannot
+  report the paper, so it is never auto-detected.
+- **Two documents:** the intake receipt ("Tanda terima servisan") and the
+  handover slip ("Nota servisan") for a pickup or a cancel, which is also the
+  customer's receipt. No technician job sheet. Repair counters have no separate
+  thermal printer, so receipts use the same paper; thermal stays for POS.
+- **Money on the slips:** the intake receipt shows the quoted lines and total;
+  the handover slip shows the lines that count (or the cancellation fee) and the
+  total. A down payment ("DP") taken at intake is recorded on the servisan now,
+  ahead of the payments slice, printed on both slips with what is left to pay,
+  and only an owner can change it.
+- **Signatures:** a signature line for the customer and the staff member on both
+  slips; the handover also keeps the on-screen signature, shown on plain paper.
+- **Header and terms:** owners edit the store name, address, phone, an optional
+  logo and the terms of each slip. The logo prints on plain paper and PDF, and
+  on dot-matrix only when switched on. The unlock code is never printed.
+- **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
+- **Phone-only counters** make a PDF to print through the phone's print dialog
+  or share (for example on WhatsApp). Dot-matrix printing is the desktop app's.
+- **Code:** one shared printing layer (core `print`: document model, HTML and
+  ESC/P renderers) that POS receipts will reuse; slips are module templates.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.

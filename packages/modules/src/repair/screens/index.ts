@@ -20,4 +20,4 @@ export {
   tn,
   type RepairCatalogTree,
   type RepairKey,
-} from './i18n.js';
+} from '../i18n.js';

@@ -11,8 +11,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from './i18n.js';
-import { INTAKE_STEP_KEY, optionLabel } from './labels.js';
+import { tn, type RepairKey } from '../i18n.js';
+import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
 import {
   INTAKE_STEPS,
   capturedThumbnailRef,

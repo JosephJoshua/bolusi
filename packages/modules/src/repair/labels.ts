@@ -1,10 +1,10 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
-import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from '../constants.js';
+import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import type { IntakeStep, StaleStep, TicketStatus } from '../flows.js';
+import type { IntakeStep, StaleStep, TicketStatus } from './flows.js';
 import {
   READY_UNKNOWN,
   readyDays,
@@ -12,7 +12,7 @@ import {
   type IntakeOption,
   type IntakeOptionList,
   type Peripheral,
-} from '../intake-options.js';
+} from './intake-options.js';
 
 const STATUS_KEY: Readonly<Record<TicketStatus, RepairKey>> = {
   received: 'repair.status.received',
