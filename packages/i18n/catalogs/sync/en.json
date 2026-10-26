@@ -4,21 +4,26 @@
     "rejected": "Rejected"
   },
   "status": {
-    "upToDate": "All changes sent",
-    "syncing": "Syncing…",
+    "upToDate": "All changes are safe on the server.",
+    "syncing": "Sending changes to the server.",
     "pending": "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
     "pendingMedia": "{count, plural, one {# photo not sent yet} other {# photos not sent yet}}",
-    "photosPending": "Changes sent. Photos not sent yet.",
-    "attentionReassurance": "Rejected changes are still saved here.",
-    "offline": "No connection. Changes are saved on this device.",
+    "photosPending": "Changes are sent. The photos will follow.",
+    "attentionReassurance": "The server refused some changes. They’re still saved on this phone.",
+    "offline": "Changes are saved on this phone and sent once you’re connected.",
     "reconnected": "Back online",
     "lastSynced": "Last connected {relative}",
-    "titleSynced": "All Sent",
-    "titlePending": "Not Sent Yet",
+    "titleSynced": "Everything is sent",
+    "titlePending": "Some changes aren’t sent yet",
     "titleSyncing": "Sending",
-    "titleOffline": "No Connection",
-    "titleAttention": "Needs Attention",
-    "titlePhotosPending": "Photos Not Sent Yet"
+    "titleOffline": "No connection",
+    "titleAttention": "Something needs a look",
+    "titlePhotosPending": "Photos aren’t sent yet",
+    "screenTitle": "Sync status",
+    "savedHere": "{count, plural, one {# change is saved on this phone and will be sent automatically.} other {# changes are saved on this phone and will be sent automatically.}}",
+    "changesLabel": "Changes",
+    "photosLabel": "Photos",
+    "waitingCount": "{count} not sent yet"
   },
   "banner": {
     "warning": "Last connected {relative}. This may not be the latest data.",
@@ -26,17 +31,20 @@
   },
   "rejected": {
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
-    "title": "Rejected Changes",
-    "explain": "The changes below were rejected by the server and will not be sent. They stay saved on this device as a record.",
+    "title": "Refused by the server ({count})",
+    "explain": "These changes won’t be sent, but they stay saved on this phone as a record. Tap one for details.",
     "opMeta": "{opType} · {time}",
-    "technicalDetails": "Technical details"
+    "technicalDetails": "Technical details",
+    "kept": "This change stays saved on this phone as a record, but won’t be sent again.",
+    "noReason": "The server sent no details.",
+    "more": "Show {count} more"
   },
   "quarantine": {
-    "title": "Changes On Hold",
+    "title": "Changes on hold",
     "body": "Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner."
   },
   "action": {
-    "syncNow": "Sync Now",
+    "syncNow": "Send now",
     "pullToRefresh": "Pull to refresh"
   },
   "firstSync": {
@@ -45,5 +53,10 @@
     "banner": "Setting up store data ({percent}%). You can keep working.",
     "chip": "Setting up store data {percent}%",
     "explain": "This new device is downloading the store’s history. It can stop and resume at any time; nothing already downloaded is repeated."
+  },
+  "media": {
+    "failedTitle": "Photos didn’t send",
+    "failedBody": "{count, plural, one {# photo couldn’t be sent. It’s safe on this phone.} other {# photos couldn’t be sent. They’re safe on this phone.}}",
+    "retry": "Send photos again"
   }
 }

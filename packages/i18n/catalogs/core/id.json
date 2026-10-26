@@ -12,7 +12,8 @@
     "search": "Cari",
     "ok": "Oke",
     "yes": "Ya",
-    "no": "Tidak"
+    "no": "Tidak",
+    "clearSearch": "Hapus pencarian"
   },
   "status": {
     "loading": "Memuat…",
@@ -31,8 +32,19 @@
     "title": "Pengaturan",
     "security": "Keamanan",
     "notifications": "Notifikasi",
-    "device": "Perangkat Ini",
-    "language": "Bahasa"
+    "device": "HP ini",
+    "language": "Bahasa",
+    "changePinSummary": "PIN untuk masuk ke HP ini",
+    "staffPinsSummary": "Buka kunci atau buat PIN baru",
+    "staffPinsLocked": "{count} PIN terkunci",
+    "notificationsSummary": "Atur di pengaturan HP",
+    "notifyConflict": "Data yang perlu keputusan pemilik",
+    "notifyDevice": "Masalah perangkat toko",
+    "deviceName": "Nama HP",
+    "store": "Toko",
+    "business": "Usaha",
+    "appVersion": "Versi aplikasi",
+    "deviceId": "ID perangkat"
   },
   "language": {
     "id": "Bahasa Indonesia",

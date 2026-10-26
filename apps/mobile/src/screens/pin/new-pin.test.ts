@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest';
 
-import { advanceNewPin, NEW_PIN_START, newPinMessageKey, type NewPinEntry } from './new-pin.js';
+import {
+  advanceNewPin,
+  NEW_PIN_START,
+  newPinFeedbackKey,
+  newPinPadState,
+  newPinPromptKey,
+  type NewPinEntry,
+} from './new-pin.js';
 
 describe('advanceNewPin — a new PIN is submittable ONLY after an equal repeat (api/02-auth §6.6)', () => {
   test('the first entry is captured and the repeat is requested', () => {
@@ -32,22 +39,24 @@ describe('advanceNewPin — a new PIN is submittable ONLY after an equal repeat 
   });
 });
 
-describe('newPinMessageKey — key mapping, not copy', () => {
-  test('the first entry invites a new PIN', () => {
-    expect(newPinMessageKey({ kind: 'first', afterMismatch: false })).toBe('auth.pin.setup.title');
+describe('the question and feedback for a new PIN — key mapping, not copy', () => {
+  test('the first entry asks for a new PIN with a tip under the dots', () => {
+    const entry = { kind: 'first', afterMismatch: false } as const;
+    expect(newPinPromptKey(entry)).toBe('auth.pin.setup.title');
+    expect(newPinFeedbackKey(entry)).toBe('auth.pin.setup.hint');
+    expect(newPinPadState(entry)).toBe('entry');
   });
 
-  test('after a mismatch the first entry says the PINs did not match', () => {
-    expect(newPinMessageKey({ kind: 'first', afterMismatch: true })).toBe(
-      'auth.pin.setup.mismatch',
-    );
+  test('after a mismatch it asks again and says why, in the error state', () => {
+    const entry = { kind: 'first', afterMismatch: true } as const;
+    expect(newPinPromptKey(entry)).toBe('auth.pin.setup.title');
+    expect(newPinFeedbackKey(entry)).toBe('auth.pin.setup.mismatch');
+    expect(newPinPadState(entry)).toBe('error');
   });
 
-  test('the repeat asks for the repeat', () => {
-    expect(newPinMessageKey({ kind: 'repeat', first: '135790' })).toBe('auth.pin.setup.repeat');
-  });
-
-  test('a matched entry renders no message — the caller has moved on to submit', () => {
-    expect(newPinMessageKey({ kind: 'matched', pin: '135790' })).toBeNull();
+  test('the repeat asks for the repeat with nothing under the dots', () => {
+    const entry = { kind: 'repeat', first: '135790' } as const;
+    expect(newPinPromptKey(entry)).toBe('auth.pin.setup.repeat');
+    expect(newPinFeedbackKey(entry)).toBeNull();
   });
 });

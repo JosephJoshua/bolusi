@@ -382,37 +382,8 @@ export function Field({
   );
 }
 
-/**
- * A key fact on a detail screen: a small label over its value, laid out two to a row by `FactGrid`.
- * The value can carry the one action that changes it ("Ganti" beside the technician).
- */
-export function Fact({
-  label,
-  value,
-  action,
-  testID,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly action?: ReactNode;
-  readonly testID?: string | undefined;
-}): React.JSX.Element {
-  return (
-    <View style={styles.fact}>
-      <Text style={styles.factLabel}>{label}</Text>
-      <View style={styles.factValueRow}>
-        <Text style={styles.factValue} testID={testID}>
-          {value}
-        </Text>
-        {action}
-      </View>
-    </View>
-  );
-}
-
-export function FactGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  return <View style={styles.factGrid}>{children}</View>;
-}
+/** Moved to `@bolusi/ui`; re-exported so the repair screens keep importing it from here. */
+export { Fact, FactGrid } from '@bolusi/ui';
 
 /** Photos laid out in a wrapping grid. */
 export function PhotoGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
@@ -463,11 +434,6 @@ const styles = StyleSheet.create({
   },
   sectionAction: { marginRight: -space.sm },
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
-  factGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
-  fact: { width: '50%', paddingRight: space.sm },
-  factLabel: { ...type.caption, color: color.textMuted },
-  factValueRow: { flexDirection: 'row', alignItems: 'center', minHeight: size.control },
-  factValue: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },
   field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
   fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
   fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },

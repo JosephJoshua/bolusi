@@ -12,20 +12,28 @@ import type { Locale } from '@bolusi/i18n';
 import {
   AppShell,
   AvatarButton,
-  Chip,
+  Fact,
+  FactGrid,
+  Icon,
   ListRow,
   SyncChip,
+  border,
   color,
+  radius,
+  size,
   space,
   type,
+  type IconName,
   type SyncChipState,
 } from '@bolusi/ui';
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
+import { initialsOf } from '../switcher/model.js';
+import { roleAndStore } from '../switcher/UserRow.js';
 
 import {
-  categoryNameKey,
   localeNameKey,
   localeOptions,
   MUTABLE_PUSH_CATEGORIES,
@@ -40,6 +48,7 @@ export interface SettingsModuleSection {
 }
 
 export interface SettingsModuleRow {
+  readonly icon: IconName;
   readonly title: string;
   readonly summary: string;
   readonly onOpen: () => void;
@@ -55,22 +64,22 @@ export interface SettingsScreenProps {
    */
   readonly onOpenNotificationSettings: (category: MutablePushCategory) => void;
   readonly device: DeviceInfo;
-  readonly currentUser: { readonly id: string; readonly initials: string };
+  readonly currentUser: {
+    readonly id: string;
+    readonly name: string;
+    readonly roleKeys: readonly string[];
+  };
   readonly onBack: () => void;
   readonly onOpenSwitcher: () => void;
   /** Open the Change-PIN screen (api/02-auth §6.6; task 186a). Self-service, every role. */
   readonly onOpenChangePin: () => void;
   /**
-   * Open the owner "Unlock a PIN" screen (api/02-auth §6.5.1; task 186b) — present ONLY when the acting
-   * user holds `auth.pin_unlock`, so the row is absent for a non-owner rather than shown-and-denied.
-   * Optional, so a host that never grants the permission simply omits the action.
+   * Open the owner's staff PIN screen (unlock / reset) — present ONLY when the acting user may do
+   * either, so the row is absent for everyone else rather than shown-and-denied. Core still enforces.
    */
-  readonly onOpenUnlockPin?: (() => void) | undefined;
-  /**
-   * Open the owner "Reset a PIN" screen (api/02-auth §6.6; task 186b-2) — present ONLY when the acting
-   * user holds `auth.user_reset_pin`, so the row is absent for a non-owner. Optional, like the unlock row.
-   */
-  readonly onOpenResetPin?: (() => void) | undefined;
+  readonly onOpenStaffPins?: (() => void) | undefined;
+  /** How many colleagues' PINs are locked right now, so the owner sees it without opening the row. */
+  readonly lockedStaffCount?: number | undefined;
   /**
    * The owner's repair settings (intake lists, cancellation fees) — each row present ONLY for someone
    * who may change it at this store, and the section absent when none is; core still enforces them.
@@ -93,8 +102,8 @@ export function SettingsScreen({
   onBack,
   onOpenSwitcher,
   onOpenChangePin,
-  onOpenUnlockPin,
-  onOpenResetPin,
+  onOpenStaffPins,
+  lockedStaffCount = 0,
   repair,
   syncChip,
   pendingCount,
@@ -102,11 +111,9 @@ export function SettingsScreen({
 }: SettingsScreenProps): React.JSX.Element {
   return (
     <AppShell
-      // Up to 10 ListRows (plain views, NOT a FlatList) plus 5 section headers: ~640dp of rows
-      // alone at touch.row=64, so this clips on a small screen or a raised font scale (task 206).
+      // Plain views (no FlatList): a dozen rows plus the device facts overflow a small screen or a
+      // raised font scale, so the content scrolls (task 206).
       scrollable
-      // The SCREEN title names the whole screen (language + notifications + device), not just the
-      // first section — `core.settings.language` was the language section's own header (§129 item 1).
       title={t('core.settings.title')}
       titleVariant="detail"
       onBack={onBack}
@@ -122,154 +129,199 @@ export function SettingsScreen({
       avatar={
         <AvatarButton
           userId={currentUser.id}
-          initials={currentUser.initials}
+          initials={initialsOf(currentUser.name)}
           accessibilityLabel={t('auth.switcher.title')}
           onPress={onOpenSwitcher}
         />
       }
       testID="settings-screen"
     >
-      {/*
-        A WITNESS for the on-device gate — and the reason it is not the active-row checkmark below.
-        That checkmark is `option === locale`, the PROP, so it tracks whatever Root's state says. All
-        through task 211 the state was right and the SCREEN was in the old language, and the Maestro
-        flow asserting the checkmark passed the whole time. This node's testID carries the locale
-        `t()` is actually resolving in — read from the i18next instance, the same place every string
-        on this screen comes from — so it is wrong exactly when the copy is wrong.
-        Why a testID and not an assertion on the rendered title: T-4 forbids asserting copy, because
-        catalogs get reworded and a copy assertion then reds on an edit that broke nothing.
-
-        IT WRAPS THE HEADER RATHER THAN SITTING BESIDE IT AS AN EMPTY `<View/>`, AND THAT IS NOT
-        COSMETIC. An empty View has zero bounds, and Maestro drops zero-bounds nodes from the
-        accessibility hierarchy it queries — "Skipping invisible child: … boundsInParent: Rect(0, 0 -
-        0, 0)", in the `maestro-native-e2e` artifact of CI run 35857403792, `01-launch-enrollment/
-        logs/device-logcat.txt`. The empty version's own failure is in run 35857400093,
-        `06-i18n-toggle/logs/maestro.log`: "CommandFailed: Assertion is false: id:
-        settings-rendered-locale-en is visible". Neither artifact lives in this repo (CI artifacts
-        expire), so these are pointers to a producer, not evidence checked into the tree — re-run the
-        lane to reproduce. So the first version of this node could never be asserted on a device,
-        only in `test-renderer`, which has no layout at all. That is a guard that cannot
-        PASS, the mirror of the guard that could not FAIL which this whole task exists to fix, and
-        the mobile vitest lane is structurally incapable of catching it (its config says so: "CANNOT:
-        Yoga layout"). Wrapping a node that has real bounds is what makes the testID reachable.
-        Keep a visible child inside this View.
-      */}
-      <View testID={`settings-rendered-locale-${getLocale()}`}>
-        <Text style={styles.section} testID="settings-section-language">
-          {t('core.settings.language')}
-        </Text>
+      {/* Who these settings are for: the PIN rows below are this person's. */}
+      <View style={styles.who} testID="settings-who">
+        <Text style={styles.whoName}>{currentUser.name}</Text>
+        <Text style={styles.whoMeta}>{roleAndStore(currentUser.roleKeys, device.storeName)}</Text>
       </View>
-      {localeOptions.map((option) => (
+
+      <Section title={t('core.settings.security')} testID="settings-section-security">
         <ListRow
-          key={option}
-          primaryText={t(localeNameKey(option) as 'core.language.id')}
-          onPress={() => onSelectLocale(option)}
-          testID={`settings-locale-${option}`}
-          trailing={
-            option === locale ? (
-              // A check, not just a colour: §6.3 forbids colour-only signalling, and a user stranded
-              // in the wrong language needs to see which row is currently theirs.
-              <Chip
-                label={t('core.action.ok')}
-                icon="success"
-                tone="success"
-                testID={`settings-locale-active-${option}`}
-              />
-            ) : undefined
-          }
+          leading={<RowIcon name="pin" />}
+          primaryText={t('auth.pin.change.title')}
+          secondaryText={t('core.settings.changePinSummary')}
+          onPress={onOpenChangePin}
+          testID="settings-change-pin"
         />
-      ))}
+        {onOpenStaffPins === undefined ? null : (
+          // Owner-only: shown only when the acting user may unlock or reset a colleague's PIN.
+          <ListRow
+            leading={<RowIcon name="staff" />}
+            primaryText={t('auth.pin.staff.title')}
+            secondaryText={
+              lockedStaffCount > 0
+                ? t('core.settings.staffPinsLocked', { count: lockedStaffCount })
+                : t('core.settings.staffPinsSummary')
+            }
+            onPress={onOpenStaffPins}
+            testID="settings-staff-pins"
+          />
+        )}
+      </Section>
 
       {repair !== undefined && repair.rows.length > 0 ? (
-        <>
-          <Text style={styles.section} testID="settings-section-repair">
-            {repair.section}
-          </Text>
+        <Section title={repair.section} testID="settings-section-repair">
           {repair.rows.map((row) => (
             <ListRow
               key={row.testID}
+              leading={<RowIcon name={row.icon} />}
               primaryText={row.title}
               secondaryText={row.summary}
               onPress={row.onOpen}
-              showChevron
               testID={row.testID}
             />
           ))}
-        </>
+        </Section>
       ) : null}
 
-      <Text style={styles.section} testID="settings-section-security">
-        {t('core.settings.security')}
-      </Text>
-      <ListRow
-        primaryText={t('auth.pin.change.title')}
-        onPress={onOpenChangePin}
-        showChevron
-        testID="settings-change-pin"
-      />
-      {onOpenUnlockPin !== undefined ? (
-        // Owner-only (task 186b): shown only when the acting user holds `auth.pin_unlock`. A non-owner
-        // never sees the row; core still enforces the permission, so the entry is a UX gate, not the
-        // control. Same Security section as Change PIN.
-        <ListRow
-          primaryText={t('auth.pin.unlock.title')}
-          onPress={onOpenUnlockPin}
-          showChevron
-          testID="settings-unlock-pin"
-        />
-      ) : null}
-      {onOpenResetPin !== undefined ? (
-        // Owner-only (task 186b-2): shown only when the acting user holds `auth.user_reset_pin`. Same
-        // Security section; core still enforces the permission + the §6.6 privileged-target rule.
-        <ListRow
-          primaryText={t('auth.pin.reset.title')}
-          onPress={onOpenResetPin}
-          showChevron
-          testID="settings-reset-pin"
-        />
-      ) : null}
-
-      <Text style={styles.section} testID="settings-section-notifications">
-        {t('core.settings.notifications')}
-      </Text>
-      {MUTABLE_PUSH_CATEGORIES.map((category) => (
-        // A row that OPENS the OS notification settings, not a mute switch (api/04-push §5; D18 §1):
-        // Android forbids the app changing a channel's importance after creation and iOS has no
-        // channels, so muting is the user's, in the OS screen. The chevron marks it as navigating
-        // out (§3.4); there is no in-app mute state to render a Yes/No chip from.
-        <ListRow
-          key={category}
-          primaryText={t(categoryNameKey(category) as 'push.device.title')}
-          onPress={() => onOpenNotificationSettings(category)}
-          showChevron
-          testID={`settings-notifications-${category}`}
-        />
-      ))}
-
-      <Text style={styles.section} testID="settings-section-device">
-        {t('core.settings.device')}
-      </Text>
-      <View testID="settings-device-info">
-        <ListRow
-          primaryText={device.deviceName}
-          secondaryText={device.deviceId}
-          testID="settings-device-id"
-        />
-        <ListRow
-          primaryText={device.storeName}
-          secondaryText={device.tenantName}
-          testID="settings-device-store"
-        />
-        <ListRow
-          primaryText={device.platform}
-          secondaryText={device.appVersion}
-          testID="settings-device-platform"
-        />
+      {/*
+        The testID carries the locale `t()` is actually resolving in (read from the i18next instance,
+        not the prop), so a device test can tell when the copy and the state disagree. It wraps a
+        visible child: Maestro drops zero-size nodes from the hierarchy it queries.
+      */}
+      <View testID={`settings-rendered-locale-${getLocale()}`}>
+        <Section title={t('core.settings.language')} testID="settings-section-language">
+          {localeOptions.map((option) => (
+            // ENDONYMS, identical in every locale (07-i18n §10.1), and the active one is checked, not
+            // merely coloured: someone stranded in a language they cannot read can still find theirs.
+            <ListRow
+              key={option}
+              leading={<RowIcon name="language" />}
+              primaryText={t(localeNameKey(option) as 'core.language.id')}
+              selected={option === locale}
+              onPress={() => onSelectLocale(option)}
+              testID={`settings-locale-${option}`}
+            />
+          ))}
+        </Section>
       </View>
+
+      <Section title={t('core.settings.notifications')} testID="settings-section-notifications">
+        {MUTABLE_PUSH_CATEGORIES.map((category) => (
+          // A row that OPENS the OS notification settings, not a mute switch (api/04-push §5; D18 §1):
+          // Android forbids changing a channel's importance after creation and iOS has no channels,
+          // so muting is the user's, in the phone's own settings.
+          <ListRow
+            key={category}
+            leading={<RowIcon name="notifications" />}
+            primaryText={t(NOTIFICATION_KEY[category])}
+            secondaryText={t('core.settings.notificationsSummary')}
+            onPress={() => onOpenNotificationSettings(category)}
+            testID={`settings-notifications-${category}`}
+          />
+        ))}
+      </Section>
+
+      <Section title={t('core.settings.device')} rows={false} testID="settings-section-device">
+        <View style={styles.facts} testID="settings-device-info">
+          <FactGrid>
+            <Fact
+              label={t('core.settings.deviceName')}
+              value={device.deviceName}
+              testID="settings-device-name"
+            />
+            <Fact
+              label={t('core.settings.store')}
+              value={device.storeName}
+              testID="settings-device-store"
+            />
+            <Fact
+              label={t('core.settings.business')}
+              value={device.tenantName}
+              testID="settings-device-tenant"
+            />
+            <Fact
+              label={t('core.settings.appVersion')}
+              value={[device.appVersion, PLATFORM_NAME[device.platform]]
+                .filter((part) => part !== '')
+                .join(' · ')}
+              testID="settings-device-platform"
+            />
+            <Fact
+              label={t('core.settings.deviceId')}
+              value={device.deviceId}
+              wide
+              testID="settings-device-id"
+            />
+          </FactGrid>
+        </View>
+      </Section>
     </AppShell>
   );
 }
 
+/** A titled group of rows. Rows run edge to edge; the title lines up with the screen gutter. */
+function Section({
+  title,
+  children,
+  rows = true,
+  testID,
+}: {
+  readonly title: string;
+  readonly children: ReactNode;
+  /** False for content that is not a list of rows (the device facts). */
+  readonly rows?: boolean;
+  readonly testID: string;
+}): React.JSX.Element {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle} accessibilityRole="header" testID={testID}>
+        {title}
+      </Text>
+      <View style={rows ? styles.rows : styles.plain}>{children}</View>
+    </View>
+  );
+}
+
+function RowIcon({ name }: { readonly name: IconName }): React.JSX.Element {
+  return (
+    <View style={styles.rowIcon}>
+      <Icon name={name} size={size.iconInline} color={color.textMuted} />
+    </View>
+  );
+}
+
+/** The notification categories in the words of what they are about, not the push titles. */
+const NOTIFICATION_KEY = {
+  conflict: 'core.settings.notifyConflict',
+  device: 'core.settings.notifyDevice',
+} as const satisfies Record<MutablePushCategory, string>;
+
+/** Brand names, the same in every language. */
+const PLATFORM_NAME = { android: 'Android', ios: 'iOS' } as const;
+
 const styles = StyleSheet.create({
-  section: { ...type.heading, color: color.text, marginTop: space.xl, marginBottom: space.sm },
+  who: { paddingTop: space.sm },
+  whoName: { ...type.title, color: color.text },
+  whoMeta: { ...type.bodySm, color: color.textMuted },
+  section: { marginTop: space.xl },
+  sectionTitle: { ...type.bodyBold, color: color.text, marginBottom: space.xs },
+  rows: {
+    marginHorizontal: -space.lg,
+    borderTopWidth: border.hairline,
+    borderTopColor: color.border,
+  },
+  plain: { marginTop: space.sm },
+  rowIcon: {
+    width: size.avatarRow,
+    height: size.avatarRow,
+    borderRadius: radius.full,
+    backgroundColor: color.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Read-only facts sit on a quiet tinted box, so they never look like tappable rows.
+  facts: {
+    backgroundColor: color.surfaceAlt,
+    borderRadius: radius.md,
+    padding: space.lg,
+    marginBottom: space.lg,
+  },
 });

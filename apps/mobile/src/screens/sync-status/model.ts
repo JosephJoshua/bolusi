@@ -220,7 +220,7 @@ export function reassurance(input: SyncStatusInput): Reassurance {
 /** The label key for each reassurance state. Keys only (07-i18n). */
 export const REASSURANCE_KEY = {
   allSent: 'sync.status.upToDate',
-  savedHere: 'sync.status.pending',
+  savedHere: 'sync.status.savedHere',
   photosPending: 'sync.status.photosPending',
   syncing: 'sync.status.syncing',
   // NOT `sync.rejected.banner` (task 144 item 3): the banner already says "N rejected, tap to view",
@@ -391,10 +391,3 @@ export function mediaQueue(input: SyncStatusInput): readonly MediaQueueRow[] {
 // that rebuilt the same key would be a second answer to one question (CLAUDE.md §2.8) — and the
 // copy without the fallback would render a raw missing key to a cashier the first time 05 §8 gained
 // a code. `rejection-keys.test.ts` proves every code in the closed set resolves in BOTH catalogs.
-
-/** The label key for a media row's status chip. */
-export const MEDIA_STATUS_KEY = {
-  pending: 'media.status.pending',
-  uploading: 'media.status.uploading',
-  failed: 'media.status.failed',
-} as const satisfies Record<MediaQueueRow['uploadStatus'], string>;

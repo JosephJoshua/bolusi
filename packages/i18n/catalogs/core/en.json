@@ -12,7 +12,8 @@
     "search": "Search",
     "ok": "OK",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "clearSearch": "Clear search"
   },
   "status": {
     "loading": "Loading…",
@@ -31,8 +32,19 @@
     "title": "Settings",
     "security": "Security",
     "notifications": "Notifications",
-    "device": "This Device",
-    "language": "Language"
+    "device": "This phone",
+    "language": "Language",
+    "changePinSummary": "Your PIN for signing in on this phone",
+    "staffPinsSummary": "Unlock or make a new PIN",
+    "staffPinsLocked": "{count, plural, one {# PIN locked} other {# PINs locked}}",
+    "notificationsSummary": "Set in the phone’s settings",
+    "notifyConflict": "Data that needs the owner’s decision",
+    "notifyDevice": "Problems with store devices",
+    "deviceName": "Phone name",
+    "store": "Store",
+    "business": "Business",
+    "appVersion": "App version",
+    "deviceId": "Device ID"
   },
   "language": {
     "id": "Bahasa Indonesia",

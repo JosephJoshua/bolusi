@@ -100,10 +100,10 @@ afterEach(() => {
 describe('owner-Unlock target-list load (task 186b-1 review fix)', () => {
   test('loads once on entry and NOT again on an unrelated re-render with a fresh loader arrow', async () => {
     // A stable pushRoute object so a re-render does NOT re-navigate — only the loader arrow + `now` change.
-    const toUnlock = { route: 'unlockPin' as const };
+    const toUnlock = { route: 'staffPins' as const };
     screen = render(<App {...props({ pushRoute: toUnlock })} />);
     await flush();
-    expect(screen.query('clear-lockout-screen')).not.toBeNull();
+    expect(screen.query('staff-pin-screen')).not.toBeNull();
     expect(listPinTargets).toHaveBeenCalledTimes(1); // entry load
 
     // Re-render as Root would on a background bump: a NEW `listPinTargets` arrow (props() builds one),
@@ -119,16 +119,16 @@ describe('owner-Unlock target-list load (task 186b-1 review fix)', () => {
 
   test('re-entering the screen reloads — the load is per-entry, not once-forever', async () => {
     // Enter → load (1). A fresh pushRoute object drives each navigation.
-    screen = render(<App {...props({ pushRoute: { route: 'unlockPin' } })} />);
+    screen = render(<App {...props({ pushRoute: { route: 'staffPins' } })} />);
     await flush();
     expect(listPinTargets).toHaveBeenCalledTimes(1);
 
     // Leave to Settings, then come back — a new entry must load again (the cleanup reset + on-entry load).
     screen.rerender(<App {...props({ pushRoute: { route: 'settings' } })} />);
     await flush();
-    screen.rerender(<App {...props({ pushRoute: { route: 'unlockPin' } })} />);
+    screen.rerender(<App {...props({ pushRoute: { route: 'staffPins' } })} />);
     await flush();
-    expect(screen.query('clear-lockout-screen')).not.toBeNull();
+    expect(screen.query('staff-pin-screen')).not.toBeNull();
     expect(listPinTargets).toHaveBeenCalledTimes(2); // one load per entry
   });
 });

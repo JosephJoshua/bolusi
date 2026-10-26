@@ -18,18 +18,19 @@
 import { formatDuration, t } from '@bolusi/i18n';
 import {
   AppShell,
-  Avatar,
   Button,
-  PinPad,
+  OutcomeState,
+  Sheet,
   SyncChip,
+  TextButton,
   color,
   space,
   type,
   type SyncChipState,
 } from '@bolusi/ui';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { initialsOf } from '../switcher/model.js';
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
@@ -37,15 +38,22 @@ import {
   PIN_MESSAGE_KEY,
   pinPadState,
   pinView,
-  showsForgotAffordance,
   type LastAttempt,
   type PinView,
 } from './model.js';
+import { PinEntry, PinPerson } from './PinEntry.js';
 import type { PinAttemptRow } from '@bolusi/core';
 
 export interface PinScreenProps {
   readonly userId: string;
   readonly userName: string;
+  /** Top-privilege role keys, shown under the name. */
+  readonly roleKeys?: readonly string[] | undefined;
+  /**
+   * This device has no PIN for them yet, and they are not the owner who enrolled it: an owner makes
+   * it from "PIN karyawan" (api/02-auth §6.6). No pad, just who can help.
+   */
+  readonly needsFirstPin?: boolean | undefined;
   /** Task 14's persisted `pin_attempt_state` row. Null ⇒ a clean slate. */
   readonly row: PinAttemptRow | null;
   /** Injected — the caller owns the tick. See the header. */
@@ -53,12 +61,10 @@ export interface PinScreenProps {
   readonly lastAttempt: LastAttempt;
   /**
    * Fires on the 6th digit. Gated by ONE thing: `PinPad`'s `state` — when `pinPadState(view)` is
-   * `'locked'` (i.e. `delayed` or `lockedOut`), the pad disables its keys and never reaches
-   * `onComplete`. Nothing in this screen re-checks it; the gate is the prop passed at the `<PinPad>`
-   * below. This is an AFFORDANCE, not a security boundary: the enforcement is 14's
-   * `assertAttemptAllowed` (`core/src/auth/lockout.ts`), which `verifyPin` calls before the KDF and
-   * which throws regardless of what the UI renders. Both run on-device — PIN auth is offline
-   * (api/02-auth §6.5), so there is no server in this path.
+   * `'locked'` (i.e. `delayed`), the pad disables its keys and never reaches `onComplete`, and on
+   * `lockedOut` the pad is not rendered at all. This is an AFFORDANCE, not a security boundary: the
+   * enforcement is 14's `assertAttemptAllowed` (`core/src/auth/lockout.ts`), which `verifyPin` calls
+   * before the KDF and which throws regardless of what the UI renders.
    */
   readonly onSubmit: (pin: string) => void;
   readonly onSwitchUser: () => void;
@@ -71,6 +77,8 @@ export interface PinScreenProps {
 export function PinScreen({
   userId,
   userName,
+  roleKeys,
+  needsFirstPin = false,
   row,
   now,
   lastAttempt,
@@ -81,15 +89,20 @@ export function PinScreen({
   onOpenSync,
 }: PinScreenProps): React.JSX.Element {
   const view = pinView(row, now, lastAttempt);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  // A hard lock has nothing to type into: the pad gives way to who can open it (api/02-auth §6.5).
+  const lockedOut = view.kind === 'lockedOut';
+  // Either way there is nothing to type: the pad gives way to who can help.
+  const blocked = lockedOut || needsFirstPin;
 
   return (
     <AppShell
       // Plain views, no List — safe to scroll when the content outgrows the viewport (task 206).
       scrollable
-      title={t('auth.pin.title')}
+      title={t('auth.pin.signIn')}
       titleVariant="detail"
       onBack={onSwitchUser}
-      backLabel={t('core.action.back')}
+      backLabel={t('core.account.switchUser')}
       syncChip={
         <SyncChip
           state={syncChip}
@@ -99,39 +112,70 @@ export function PinScreen({
         />
       }
       avatar={<View testID="pin-no-avatar" />}
+      bottomAction={
+        blocked ? (
+          // The owner signs in on this phone and opens the PIN from Settings, so switching user is
+          // the way forward, not a dead end.
+          <Button
+            label={t('core.account.switchUser')}
+            onPress={onSwitchUser}
+            testID="pin-switch-user"
+          />
+        ) : undefined
+      }
+      overlay={
+        forgotOpen ? (
+          <Sheet
+            title={t('auth.pin.forgotTitle')}
+            closeLabel={t('core.action.close')}
+            onClose={() => setForgotOpen(false)}
+            testID="pin-forgot-sheet"
+          >
+            <Text style={styles.sheetText}>{t('auth.pin.forgot')}</Text>
+          </Sheet>
+        ) : null
+      }
       testID="pin-screen"
     >
-      <View style={styles.identity} testID="pin-identity">
-        <Avatar userId={userId} initials={initialsOf(userName)} size="header" />
-        <Text style={styles.name} numberOfLines={1} testID="pin-user-name">
-          {userName}
-        </Text>
-      </View>
-
-      <PinPad
-        onComplete={onSubmit}
-        state={pinPadState(view)}
-        message={messageFor(view)}
-        entryLabel={t('auth.pin.title')}
-        backspaceLabel={t('core.action.delete')}
-        testID="pin-pad"
-      />
-
-      {showsForgotAffordance(view) ? (
-        // §8.3 / api/02-auth §6.5: the ONLY recovery is the store owner, and it works offline.
-        // Rendered as text rather than a button because there is nothing for the app to do — the
-        // action is a conversation, and a button that did nothing would be worse than a sentence.
-        <Text style={styles.forgot} testID="pin-forgot">
-          {t('auth.pin.forgot')}
-        </Text>
-      ) : null}
-
-      <Button
-        label={t('auth.switcher.title')}
-        variant="secondary"
-        onPress={onSwitchUser}
-        testID="pin-switch-user"
-      />
+      {blocked ? (
+        <View testID={needsFirstPin ? 'pin-needs-first' : 'pin-locked-out'}>
+          <View style={styles.lockedPerson}>
+            <PinPerson person={{ id: userId, name: userName, roleKeys }} testID="pin-person" />
+          </View>
+          {needsFirstPin ? (
+            <OutcomeState
+              tone="neutral"
+              icon="pin"
+              title={t('auth.pin.noPinTitle')}
+              message={t('auth.pin.noPinBody')}
+            />
+          ) : (
+            <OutcomeState
+              tone="warning"
+              icon="lock"
+              title={t('auth.pin.lockedOutTitle')}
+              message={t(PIN_MESSAGE_KEY.lockedOut)}
+            />
+          )}
+        </View>
+      ) : (
+        <PinEntry
+          person={{ id: userId, name: userName, roleKeys }}
+          prompt={t('auth.pin.title')}
+          message={messageFor(view)}
+          state={pinPadState(view)}
+          onComplete={onSubmit}
+          backspaceLabel={t('core.action.delete')}
+          footer={
+            <TextButton
+              label={t('auth.pin.forgotTitle')}
+              onPress={() => setForgotOpen(true)}
+              testID="pin-forgot"
+            />
+          }
+          testID="pin"
+        />
+      )}
     </AppShell>
   );
 }
@@ -169,19 +213,6 @@ function messageFor(view: PinView): string | undefined {
 export { attemptsLeft };
 
 const styles = StyleSheet.create({
-  identity: {
-    alignItems: 'center',
-    gap: space.sm,
-    marginBottom: space.xl,
-  },
-  name: {
-    ...type.heading,
-    color: color.text,
-  },
-  forgot: {
-    ...type.bodySm,
-    color: color.textMuted,
-    marginTop: space.lg,
-    textAlign: 'center',
-  },
+  sheetText: { ...type.body, color: color.text, paddingBottom: space.lg },
+  lockedPerson: { paddingTop: space.lg },
 });

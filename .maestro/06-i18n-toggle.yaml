@@ -3,7 +3,7 @@
 #
 # Journey: notes -> Settings -> switch locale id <-> en -> the active-locale marker follows. This is the
 # i18n toggle the task calls out (07-i18n). Settings' own testIDs: `settings-locale-<locale>` and
-# `settings-locale-active-<locale>`. Reaching Settings is a real in-app hop: the notes surface's
+# `settings-locale-<locale>.check`. Reaching Settings is a real in-app hop: the notes surface's
 # `shell-open-settings` chip (App.tsx) navigates to `settings-screen`.
 appId: com.bolusi.app
 tags:
@@ -21,7 +21,7 @@ tags:
     id: 'settings-screen'
 - takeScreenshot:
     path: i18n-01-settings
-# Switch to English. THE CHECKMARK IS NOT ENOUGH (task 211): `settings-locale-active-<locale>` renders
+# Switch to English. THE CHECKMARK IS NOT ENOUGH (task 211): `settings-locale-<locale>.check` renders
 # from the `locale` PROP Root hands down, so it moves whenever Root's state moves — which it did
 # correctly all through a defect where the language never changed at all. This flow passed the entire
 # time, and the `i18n-02-en` screenshot it captured is the evidence: an English checkmark above an
@@ -33,7 +33,7 @@ tags:
 - tapOn:
     id: 'settings-locale-en'
 - assertVisible:
-    id: 'settings-locale-active-en'
+    id: 'settings-locale-en.check'
 - assertVisible:
     id: 'settings-rendered-locale-en'
 - takeScreenshot:
@@ -43,7 +43,7 @@ tags:
 - tapOn:
     id: 'settings-locale-id'
 - assertVisible:
-    id: 'settings-locale-active-id'
+    id: 'settings-locale-id.check'
 - assertVisible:
     id: 'settings-rendered-locale-id'
 - takeScreenshot:

@@ -414,6 +414,9 @@ export function Root({
                 // refresh that landed a tighter timeout in the database while the session kept the
                 // old one is a setting that "took effect" nowhere the user could see.
                 await sessionRef.current?.refreshSettings();
+                // The bundle may carry PINs made elsewhere (or reset by an owner), so the switcher's
+                // "no PIN yet" marks are re-read with it.
+                await sessionRef.current?.refresh();
                 // A bundle refresh means the device is online (§5.2), so this is the moment to POST any
                 // PIN verifier queued by a local change (§5.4; task 186a-2). `drainVerifiers` never
                 // throws — an unreachable server re-queues, it does not block the refresh.
@@ -1002,6 +1005,13 @@ export function Root({
                 .submitPin(userId, pin)
                 .then((outcome) => outcome.kind === 'opened')
                 .catch(() => false)
+        }
+        // First PIN (api/02-auth §6.6): the owner who enrolled this phone makes their PIN, then is signed
+        // in with it. Staff get their first PIN from an owner (Settings, staff PINs).
+        onSetFirstPin={(userId, pin) =>
+          session === null
+            ? Promise.reject(new Error('setFirstPin: no session controller'))
+            : session.setFirstPin(userId, pin)
         }
         // Change PIN (api/02-auth §6.6; task 186a). Delegates to the session controller, which runs
         // the real `auth.changePin` flow and REJECTS with its DomainError — propagated to the screen's

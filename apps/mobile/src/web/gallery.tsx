@@ -35,10 +35,11 @@ import {
 } from '../screens/enrollment/model.js';
 import { EnrollmentScreen } from '../screens/enrollment/EnrollmentScreen.js';
 import { ChangePinScreen } from '../screens/pin/ChangePinScreen.js';
-import { ClearLockoutScreen } from '../screens/pin/ClearLockoutScreen.js';
 import type { PinTargetUser } from '../screens/pin/pin-target.js';
+import type { SwitcherUser } from '../screens/switcher/model.js';
 import { PinScreen } from '../screens/pin/PinScreen.js';
-import { ResetPinScreen } from '../screens/pin/ResetPinScreen.js';
+import { PinSetupScreen } from '../screens/pin/PinSetupScreen.js';
+import { StaffPinScreen } from '../screens/pin/StaffPinScreen.js';
 import { SettingsScreen } from '../screens/settings/SettingsScreen.js';
 import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
@@ -63,6 +64,32 @@ function noop(): void {
 }
 
 const CURRENT_USER = { id: 'u-andi', initials: 'AP' } as const;
+/** The same person as Settings shows them: name and role. */
+const CURRENT_PERSON = { id: 'u-andi', name: 'Andi Pratama', roleKeys: ['main_owner'] } as const;
+
+/** A busy store's roster: enough staff that the switcher grows a search box, with long names. */
+const MANY_STAFF: readonly SwitcherUser[] = [
+  ...DEMO_USERS,
+  ...[
+    'Yohanis Mandowen',
+    'Maria Kogoya',
+    'Petrus Yikwa',
+    'Ester Mandowen',
+    'Agustinus Wenda',
+    'Fransiska Rumbiak',
+    'Kristian Tabuni',
+    'Natalia Wamafma Rumbekwan',
+    'Lukas Enembe',
+    'Selfina Ayomi',
+  ].map((name, index) => ({
+    id: `u-staff-${String(index)}`,
+    name,
+    photoMediaId: null,
+    lastActiveAt: index < 4 ? HARNESS_NOW - (index + 5) * 3_600_000 : null,
+    needsFirstPin: false,
+    roleKeys: index % 3 === 0 ? ['technician'] : ['cashier'],
+  })),
+];
 
 /** A ReactNode slot the harness fills where a screen wants a chip/avatar it does not screenshot. */
 function slot(testID: string): ReactNode {
@@ -141,10 +168,31 @@ function SettingsInteractive(): React.JSX.Element {
       }}
       onOpenNotificationSettings={noop}
       device={DEMO_DEVICE_INFO}
-      currentUser={CURRENT_USER}
+      currentUser={CURRENT_PERSON}
       onBack={noop}
       onOpenSwitcher={noop}
       onOpenChangePin={noop}
+      onOpenStaffPins={noop}
+      lockedStaffCount={1}
+      repair={{
+        section: 'Servisan',
+        rows: [
+          {
+            icon: 'list',
+            title: 'Pilihan saat terima HP',
+            summary: 'Cek fungsi, kelengkapan, sisi HP yang difoto',
+            onOpen: noop,
+            testID: 'settings-intake-options',
+          },
+          {
+            icon: 'money',
+            title: 'Biaya pembatalan',
+            summary: 'Dibayar pelanggan kalau servisan dibatalkan',
+            onOpen: noop,
+            testID: 'settings-cancel-fees',
+          },
+        ],
+      }}
       syncChip="synced"
       pendingCount={0}
       onOpenSync={noop}
@@ -308,12 +356,15 @@ function pinScreen(
   state: string,
   row: PinAttemptRow | null,
   lastAttempt: 'none' | 'wrong',
+  needsFirstPin = false,
 ): React.JSX.Element {
   return (
     <ApproxFrame screen="pin" state={state}>
       <PinScreen
         userId="u-andi"
         userName="Andi Pratama"
+        roleKeys={['main_owner']}
+        needsFirstPin={needsFirstPin}
         row={row}
         now={HARNESS_NOW}
         lastAttempt={lastAttempt}
@@ -380,6 +431,7 @@ function switcherScreen(
   screenState: Parameters<typeof SwitcherScreen>[0]['state'],
   mode: 'choose' | 'lock' = 'choose',
 ): React.JSX.Element {
+  const locked: ReadonlySet<string> = new Set(['u-yosua']);
   return (
     <ApproxFrame screen="switcher" state={state}>
       <SwitcherScreen
@@ -392,6 +444,8 @@ function switcherScreen(
         syncChip="synced"
         pendingCount={0}
         onOpenSync={noop}
+        currentUserId={mode === 'lock' ? null : 'u-andi'}
+        lockedUserIds={locked}
       />
     </ApproxFrame>
   );
@@ -425,56 +479,65 @@ const PIN_ADMIN_ACTOR = 'u-ocep';
 /** A store's directory for the owner PIN screens: the acting owner, a locked colleague, an open one. */
 const PIN_TARGETS: readonly PinTargetUser[] = [
   { id: PIN_ADMIN_ACTOR, name: 'Ocep Wanggai', lockedOut: false },
-  { id: 'u-ani', name: 'Ani Koibur', lockedOut: true },
-  { id: 'u-budi', name: 'Budi Rumbewas', lockedOut: false },
+  { id: 'u-ani', name: 'Ani Koibur', roleKeys: ['staff'], lockedOut: true },
+  { id: 'u-budi', name: 'Budi Rumbewas', roleKeys: ['staff'], lockedOut: false },
+  {
+    id: 'u-maria',
+    name: 'Maria Wenda',
+    roleKeys: ['staff'],
+    lockedOut: false,
+    needsFirstPin: true,
+  },
 ];
-
-/** A directory with nobody locked — the reassuring "no one is locked out" case. */
-const PIN_TARGETS_NONE_LOCKED: readonly PinTargetUser[] = PIN_TARGETS.map((user) => ({
-  ...user,
-  lockedOut: false,
-}));
 
 function changePinScreen(state: string): React.JSX.Element {
   return (
     <ApproxFrame screen="change-pin" state={state}>
-      <ChangePinScreen onChangePin={() => Promise.resolve()} onClose={noop} />
-    </ApproxFrame>
-  );
-}
-
-function resetPinScreen(
-  state: string,
-  opts: { canReset: boolean; users: readonly PinTargetUser[] },
-): React.JSX.Element {
-  return (
-    <ApproxFrame screen="reset-pin" state={state}>
-      <ResetPinScreen
-        canReset={opts.canReset}
-        loading={false}
-        error={null}
-        users={opts.users}
-        actorUserId={PIN_ADMIN_ACTOR}
-        onResetPin={() => Promise.resolve()}
+      <ChangePinScreen
+        person={CURRENT_PERSON}
+        onChangePin={() => Promise.resolve()}
         onClose={noop}
       />
     </ApproxFrame>
   );
 }
 
-function clearLockoutScreen(
+function staffPinScreen(
   state: string,
-  opts: { canUnlock: boolean; users: readonly PinTargetUser[] },
+  opts: { canUnlock: boolean; canReset: boolean; users: readonly PinTargetUser[] },
 ): React.JSX.Element {
   return (
-    <ApproxFrame screen="clear-lockout" state={state}>
-      <ClearLockoutScreen
+    <ApproxFrame screen="staff-pins" state={state}>
+      <StaffPinScreen
         canUnlock={opts.canUnlock}
+        canReset={opts.canReset}
         loading={false}
         error={null}
         users={opts.users}
+        actorUserId={PIN_ADMIN_ACTOR}
         onClearLockout={() => Promise.resolve()}
+        onResetPin={() => Promise.resolve()}
+        onReload={noop}
         onClose={noop}
+      />
+    </ApproxFrame>
+  );
+}
+
+/** A new staff member making their first PIN. */
+function pinSetupScreen(state: string): React.JSX.Element {
+  return (
+    <ApproxFrame screen="pin-setup" state={state}>
+      <PinSetupScreen
+        userId="u-budi"
+        userName="Budi Santoso"
+        roleKeys={['staff']}
+        onSetFirstPin={() => Promise.resolve()}
+        onSignIn={noop}
+        onBack={noop}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={noop}
       />
     </ApproxFrame>
   );
@@ -505,6 +568,11 @@ export const ENTRIES: readonly HarnessEntry[] = [
   },
   {
     screen: 'switcher',
+    state: 'many',
+    render: () => switcherScreen('many', { kind: 'ready', users: MANY_STAFF }),
+  },
+  {
+    screen: 'switcher',
     state: 'lock',
     render: () => switcherScreen('lock', { kind: 'ready', users: DEMO_USERS }, 'lock'),
   },
@@ -512,6 +580,11 @@ export const ENTRIES: readonly HarnessEntry[] = [
   // PIN — the pad's real states + the interactive pad.
   { screen: 'pin', state: 'entry', render: () => pinScreen('entry', DEMO_PIN_ROWS.clean, 'none') },
   { screen: 'pin', state: 'wrong', render: () => pinScreen('wrong', PIN_WRONG_ROW, 'wrong') },
+  {
+    screen: 'pin',
+    state: 'needsFirstPin',
+    render: () => pinScreen('needsFirstPin', DEMO_PIN_ROWS.clean, 'none', true),
+  },
   {
     screen: 'pin',
     state: 'delayed',
@@ -535,45 +608,48 @@ export const ENTRIES: readonly HarnessEntry[] = [
   // Change PIN — the interactive current → new → repeat → done flow (task 138 item 1).
   { screen: 'change-pin', state: 'interactive', render: () => changePinScreen('interactive') },
 
-  // Reset PIN (owner) — the §5 list states. Unauthorized ≠ Empty: a non-owner sees the lock, not a
-  // blank list. Ready excludes the acting owner; Empty is a device with no other users.
+  // First PIN for someone who has none (api/02-auth §6.6).
+  { screen: 'pin-setup', state: 'interactive', render: () => pinSetupScreen('interactive') },
+
+  // Staff PINs (owner) — one list for unlock and reset. Unauthorized ≠ Empty: a non-owner sees the
+  // lock, not a blank list. Ready leaves out the acting owner and puts locked PINs first.
   {
-    screen: 'reset-pin',
+    screen: 'staff-pins',
     state: 'unauthorized',
-    render: () => resetPinScreen('unauthorized', { canReset: false, users: PIN_TARGETS }),
+    render: () =>
+      staffPinScreen('unauthorized', { canUnlock: false, canReset: false, users: PIN_TARGETS }),
   },
   {
-    screen: 'reset-pin',
+    screen: 'staff-pins',
     state: 'empty',
     render: () =>
-      resetPinScreen('empty', {
+      staffPinScreen('empty', {
+        canUnlock: true,
         canReset: true,
         users: PIN_TARGETS.filter((user) => user.id === PIN_ADMIN_ACTOR),
       }),
   },
   {
-    screen: 'reset-pin',
+    screen: 'staff-pins',
     state: 'ready',
-    render: () => resetPinScreen('ready', { canReset: true, users: PIN_TARGETS }),
-  },
-
-  // Clear lockout (owner) — the §5 list states. Ready lists only locked users; the empty list is the
-  // reassuring "no one is locked out"; a non-owner sees Unauthorized.
-  {
-    screen: 'clear-lockout',
-    state: 'unauthorized',
-    render: () => clearLockoutScreen('unauthorized', { canUnlock: false, users: PIN_TARGETS }),
+    render: () => staffPinScreen('ready', { canUnlock: true, canReset: true, users: PIN_TARGETS }),
   },
   {
-    screen: 'clear-lockout',
-    state: 'noneLocked',
+    screen: 'staff-pins',
+    state: 'many',
     render: () =>
-      clearLockoutScreen('noneLocked', { canUnlock: true, users: PIN_TARGETS_NONE_LOCKED }),
-  },
-  {
-    screen: 'clear-lockout',
-    state: 'ready',
-    render: () => clearLockoutScreen('ready', { canUnlock: true, users: PIN_TARGETS }),
+      staffPinScreen('many', {
+        canUnlock: true,
+        canReset: true,
+        users: [
+          ...PIN_TARGETS,
+          ...MANY_STAFF.map((user, index) => ({
+            id: user.id,
+            name: user.name,
+            lockedOut: index === 6,
+          })),
+        ],
+      }),
   },
 
   // Settings — the live ID↔EN language toggle.

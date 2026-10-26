@@ -25,7 +25,7 @@ describe('key typing', () => {
   it('accepts real keys', () => {
     initI18n({ locale: 'id' });
     const key: TranslationKey = 'auth.pin.attemptsLeft';
-    expect(t(key, { count: 2 })).toBe('Sisa 2 kesempatan');
+    expect(t(key, { count: 2 })).toBe('Masih bisa coba 2 kali lagi.');
   });
 
   it('types the bare i18next instance too, not just the t() wrapper', () => {

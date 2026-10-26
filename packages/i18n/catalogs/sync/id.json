@@ -4,21 +4,26 @@
     "rejected": "Ditolak"
   },
   "status": {
-    "upToDate": "Semua perubahan terkirim",
-    "syncing": "Mengirim…",
+    "upToDate": "Semua perubahan sudah aman di server.",
+    "syncing": "Sedang mengirim perubahan ke server.",
     "pending": "{count} perubahan belum terkirim",
     "pendingMedia": "{count} foto belum terkirim",
-    "photosPending": "Perubahan terkirim. Foto belum terkirim.",
-    "attentionReassurance": "Perubahan yang ditolak tetap tersimpan di sini.",
-    "offline": "Tidak ada koneksi. Perubahan tersimpan di perangkat ini.",
+    "photosPending": "Perubahan sudah terkirim. Fotonya menyusul.",
+    "attentionReassurance": "Ada perubahan yang ditolak server. Datanya tetap tersimpan di HP ini.",
+    "offline": "Perubahan tersimpan di HP ini dan dikirim saat ada koneksi.",
     "reconnected": "Terhubung kembali",
     "lastSynced": "Terakhir terhubung {relative}",
-    "titleSynced": "Semua Terkirim",
-    "titlePending": "Belum Terkirim",
-    "titleSyncing": "Sedang Mengirim",
-    "titleOffline": "Tanpa Koneksi",
-    "titleAttention": "Perlu Diperiksa",
-    "titlePhotosPending": "Foto Belum Terkirim"
+    "titleSynced": "Semua sudah terkirim",
+    "titlePending": "Ada yang belum terkirim",
+    "titleSyncing": "Sedang mengirim",
+    "titleOffline": "Tidak ada koneksi",
+    "titleAttention": "Ada yang perlu dicek",
+    "titlePhotosPending": "Foto belum terkirim",
+    "screenTitle": "Status data",
+    "savedHere": "{count} perubahan tersimpan di HP ini dan akan dikirim otomatis.",
+    "changesLabel": "Perubahan",
+    "photosLabel": "Foto",
+    "waitingCount": "{count} belum terkirim"
   },
   "banner": {
     "warning": "Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.",
@@ -26,24 +31,32 @@
   },
   "rejected": {
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
-    "title": "Perubahan Ditolak",
-    "explain": "Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.",
+    "title": "Ditolak server ({count})",
+    "explain": "Perubahan ini tidak akan terkirim, tapi tetap tersimpan di HP ini sebagai catatan. Ketuk untuk melihat detailnya.",
     "opMeta": "{opType} · {time}",
-    "technicalDetails": "Detail teknis"
+    "technicalDetails": "Detail teknis",
+    "kept": "Perubahan ini tetap tersimpan di HP ini sebagai catatan, tapi tidak akan dikirim lagi.",
+    "noReason": "Server tidak mengirim keterangan.",
+    "more": "Tampilkan {count} lainnya"
   },
   "quarantine": {
-    "title": "Perubahan Ditahan",
+    "title": "Perubahan ditahan",
     "body": "Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko."
   },
   "action": {
-    "syncNow": "Kirim Sekarang",
+    "syncNow": "Kirim sekarang",
     "pullToRefresh": "Tarik untuk memperbarui"
   },
   "firstSync": {
     "title": "Menyiapkan data toko",
     "progress": "Riwayat sampai {date} · {percent}%",
-    "banner": "Menyiapkan data toko ({percent}%). Anda tetap bisa bekerja.",
+    "banner": "Menyiapkan data toko ({percent}%). Kamu tetap bisa bekerja.",
     "chip": "Menyiapkan data toko {percent}%",
     "explain": "Perangkat baru mengunduh riwayat toko. Bisa dilanjutkan kapan saja; yang sudah terunduh tidak diulang."
+  },
+  "media": {
+    "failedTitle": "Foto gagal dikirim",
+    "failedBody": "{count} foto belum bisa dikirim. Fotonya aman di HP ini.",
+    "retry": "Kirim ulang foto"
   }
 }

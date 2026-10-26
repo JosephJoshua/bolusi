@@ -3,10 +3,10 @@ import { describe, expect, test } from 'vitest';
 import {
   initialsOf,
   sortByRecency,
-  SWITCHER_COLUMNS,
+  filterUsers,
+  SWITCHER_SEARCH_MIN,
   switcherState,
   tapTarget,
-  toGridRows,
   type SwitcherUser,
 } from './model.js';
 
@@ -103,53 +103,43 @@ describe('tapping a card (§8.3, §6.6)', () => {
     expect(tapTarget(SITI)).toEqual({ kind: 'pin', userId: 'u-siti' });
   });
 
-  test('a pinVerifier:null user goes to PIN SETUP, never to a pad they cannot satisfy', () => {
+  test('the enrolling owner with no PIN goes to PIN SETUP, never to a pad they cannot satisfy', () => {
     // Sending them to the pad is a locked door with no key: guesses against a verifier that does
     // not exist still burn attempts, so a brand-new user could lock themselves out on day one.
+    const owner = user({ id: 'u-new', name: 'Agus', needsFirstPin: true, canMakeOwnPin: true });
+    expect(tapTarget(owner)).toEqual({ kind: 'firstPinSetup', userId: 'u-new' });
+  });
+
+  test('anyone else with no PIN is sent to ask an owner, not to make one themself', () => {
+    // A phone that is behind can show "no PIN" for someone who already has one elsewhere.
     const fresh = user({ id: 'u-new', name: 'Agus', needsFirstPin: true });
-    expect(tapTarget(fresh)).toEqual({ kind: 'firstPinSetup', userId: 'u-new' });
+    expect(tapTarget(fresh)).toEqual({ kind: 'askOwnerForPin', userId: 'u-new' });
   });
 });
 
-describe('the 2-column grid rides the one-column virtualized primitive (§8.2, §3.13)', () => {
-  const many = Array.from({ length: 7 }, (_, i) =>
-    user({ id: `u-${i}`, name: `User ${i}`, lastActiveAt: 1000 - i }),
-  );
+describe('searching a long staff list', () => {
+  const staff = [
+    user({ id: 'u-yosua', name: 'Yosua Wonda' }),
+    user({ id: 'u-yohanis', name: 'Yohanis Mandowen' }),
+    user({ id: 'u-siti', name: 'Siti Rahayu' }),
+    user({ id: 'u-budi', name: 'Budi Santoso' }),
+  ];
 
-  test('users are chunked into rows of SWITCHER_COLUMNS', () => {
-    const rows = toGridRows(many);
-    expect(SWITCHER_COLUMNS).toBe(2);
-    expect(rows).toHaveLength(4);
-    expect(rows.slice(0, 3).every((r) => r.users.length === SWITCHER_COLUMNS)).toBe(true);
+  test('an empty query keeps everyone, in the given (recency) order', () => {
+    expect(filterUsers(staff, '  ')).toBe(staff);
   });
 
-  test('an odd count leaves a SHORT trailing row — never a phantom placeholder card', () => {
-    const rows = toGridRows(many);
-    expect(rows[rows.length - 1]?.users).toHaveLength(1);
+  test('a typo still finds the person', () => {
+    expect(filterUsers(staff, 'sitti').map((u) => u.id)).toEqual(['u-siti']);
+    expect(filterUsers(staff, 'mandowen').map((u) => u.id)).toEqual(['u-yohanis']);
   });
 
-  test('every user appears exactly once, in order (the chunk loses and duplicates nobody)', () => {
-    const flattened = toGridRows(many).flatMap((r) => r.users.map((u) => u.id));
-    expect(flattened).toEqual(many.map((u) => u.id));
-    expect(new Set(flattened).size).toBe(many.length);
+  test('a name that matches nobody returns no one', () => {
+    expect(filterUsers(staff, 'zzzz')).toEqual([]);
   });
 
-  test('rows are keyed by a user id, never by index — a re-order must not reuse a card', () => {
-    // An index key makes React reuse a card for a different person when recency re-sorts underneath
-    // a render: the wrong face under the right name, on the one screen where identity IS the content.
-    const rows = toGridRows(many);
-    expect(rows.map((r) => r.key)).toEqual(['u-0', 'u-2', 'u-4', 'u-6']);
-    // Re-order and the keys travel with the people, not the positions.
-    const reordered = toGridRows([...many].reverse());
-    expect(reordered[0]?.key).toBe('u-6');
-  });
-
-  test('an empty list produces no rows', () => {
-    expect(toGridRows([])).toEqual([]);
-  });
-
-  test('an exact multiple produces full rows only', () => {
-    expect(toGridRows(many.slice(0, 4)).map((r) => r.users.length)).toEqual([2, 2]);
+  test('the search box only appears once the list outgrows a screen', () => {
+    expect(SWITCHER_SEARCH_MIN).toBeGreaterThan(4);
   });
 });
 

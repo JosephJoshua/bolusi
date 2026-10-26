@@ -210,8 +210,8 @@ function DoneStep({ state }: EnrollmentScreenProps): React.JSX.Element {
           {t('auth.enroll.successStore', { store: summary.storeName })}
         </Text>
       )}
-      {/* §4.4: enrollment logs nobody in. Next is the switcher, where the enrolling owner sets
-          their own PIN like everyone else (§6.6). */}
+      {/* §4.4: enrollment logs nobody in. Next is the switcher, where the enrolling owner makes
+          their own PIN if they have none yet; everyone else gets theirs from an owner (§6.6). */}
       <Text style={styles.doneNext}>{t('auth.enroll.successNext')}</Text>
     </View>
   );

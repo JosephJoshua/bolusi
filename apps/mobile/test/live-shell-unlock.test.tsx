@@ -1,6 +1,6 @@
 // Owner Unlock, END TO END on the REAL shell (task 186b). The screen + the model are unit-tested
-// (screens/pin/clear-lockout.*), but a mounted-screen test cannot see the WIRING this task adds:
-// Settings owner row → `setRoute('unlockPin')` → `<ClearLockoutScreen>` fed a REAL target list loaded
+// (screens/pin/clear-lockout.model, staff-pin.model), but a mounted-screen test cannot see the WIRING this task adds:
+// Settings staff PIN row → `setRoute('staffPins')` → `<StaffPinScreen>` fed a REAL target list loaded
 // from the directory + `pin_attempt_state` → `App.onClearLockout` → `session.clearLockout` → core's
 // `clearPinLockoutFlow` over the real attempt row. This file drives that whole path on the real `Root`,
 // with a real DB, so a broken link anywhere reds.
@@ -107,7 +107,7 @@ async function openSettings(screen: RenderResult): Promise<void> {
 }
 
 describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)', () => {
-  test('Settings → Unlock a PIN → pick the locked user → confirm → the counter is cleared', async () => {
+  test('Settings → Staff PINs → pick the locked user → confirm → the counter is cleared', async () => {
     fixture = await bootFixture();
     await enrolledDevice(fixture);
     await seedOwnerAndLockedTarget(fixture);
@@ -119,39 +119,41 @@ describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)'
     expect(await pinFailuresFor(fixture, SECOND_USER_ID)).toBe(PIN_HARD_LOCK_THRESHOLD);
 
     await openSettings(screen);
-    // The owner holds `auth.pin_unlock`, so the row is offered (the canUnlock gate, end-to-end).
-    expect(screen.query('settings-unlock-pin')).not.toBeNull();
+    // The owner holds `auth.pin_unlock`, so the staff PIN row is offered (the gate, end-to-end).
+    expect(screen.query('settings-staff-pins')).not.toBeNull();
 
-    fireOn(screen, 'settings-unlock-pin');
+    fireOn(screen, 'settings-staff-pins');
     await settle();
-    expect(screen.query('clear-lockout-screen')).not.toBeNull();
+    expect(screen.query('staff-pin-screen')).not.toBeNull();
 
     // The target list loads asynchronously on entry; wait for the locked user's row to appear. If the
     // App render branch were missing, or the list never loaded, this row never shows and the test reds.
-    const targetRow = `clear-lockout-target-${SECOND_USER_ID}`;
+    const targetRow = `staff-pin-target-${SECOND_USER_ID}`;
     await waitUntil(() => screen.query(targetRow) !== null);
     expect(screen.query(targetRow)).not.toBeNull();
 
-    fireOn(screen, targetRow); // pick → confirm sheet
+    fireOn(screen, targetRow); // pick → their page, where unlocking is the primary action
     await settle();
-    expect(screen.query('clear-lockout-confirm')).not.toBeNull();
+    fireOn(screen, 'staff-pin-unlock'); // → confirm sheet
+    await settle();
+    expect(screen.query('staff-pin-unlock-confirm')).not.toBeNull();
 
-    fireOn(screen, 'clear-lockout-confirm.confirm'); // confirm → session.clearLockout runs the flow
+    fireOn(screen, 'staff-pin-unlock-confirm.confirm'); // confirm → session.clearLockout runs the flow
     await waitUntil(
       () =>
-        screen.query('clear-lockout-done') !== null ||
-        screen.query('clear-lockout-failed') !== null,
+        screen.query('staff-pin-unlock-done') !== null ||
+        screen.query('staff-pin-unlock-failed') !== null,
     );
     // The whole path succeeded: the done panel shows (not the failure panel). A broken link anywhere —
     // the row, the route, App.onClearLockout, session.clearLockout — never reaches done.
-    expect(screen.query('clear-lockout-done')).not.toBeNull();
+    expect(screen.query('staff-pin-unlock-done')).not.toBeNull();
 
     // The REAL witness: the target's attempt counter is now cleared (§6.5). Point `onClearLockout` at a
     // no-op and this reds while the done panel still shows — the counter is what the flow actually moved.
     expect(await pinFailuresFor(fixture, SECOND_USER_ID)).toBe(0);
   });
 
-  test('CONTROL: a non-owner sees no Unlock row — the canUnlock gate holds over the whole stack', async () => {
+  test('CONTROL: a non-owner sees no staff PIN row — the canUnlock gate holds over the whole stack', async () => {
     // `seedDirectory` grants notes + `auth.pin_change` but NOT `auth.pin_unlock`, so the signed-in user
     // is not an owner. The Settings Unlock row must be absent: `session.canUnlock` is false, App omits
     // the callback, SettingsScreen omits the row. Make the row unconditional and this reds.
@@ -165,6 +167,6 @@ describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)'
     // The Change-PIN row (every role) is still present — proof the Security section rendered and it is
     // specifically the owner row that is gated out, not the whole section missing.
     expect(screen.query('settings-change-pin')).not.toBeNull();
-    expect(screen.query('settings-unlock-pin')).toBeNull();
+    expect(screen.query('settings-staff-pins')).toBeNull();
   });
 });

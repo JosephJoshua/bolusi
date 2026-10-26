@@ -314,6 +314,31 @@ export async function seedTwoUsers(
   );
 }
 
+/**
+ * Seed `fixture.userId` (signable with `TEST_PIN`) plus `SECOND_USER_ID`, a new colleague the server
+ * sent with NO verifier yet: the roster marks them `needsFirstPin` (api/02-auth §6.6).
+ */
+export async function seedUserWithoutPin(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifier = await verifierFor(fixture, 1, 1);
+  await seedBundle(
+    fixture,
+    {
+      users: [
+        activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifier),
+        {
+          ...activeUser(SECOND_USER_ID, 'Maria Wenda', ROLE_ID, fixture.storeId, verifier),
+          pinVerifier: null,
+        },
+      ],
+      roles: [storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS)],
+    },
+    idleLockSeconds,
+  );
+}
+
 const OWNER_ROLE_ID = 'role-owner-live';
 
 /**

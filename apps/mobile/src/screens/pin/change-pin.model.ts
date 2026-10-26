@@ -13,7 +13,14 @@
  * The new-PIN half is the shared `advanceNewPin` sub-flow — the same "type it, repeat it, they must
  * match" the owner-reset screen uses — so a mistyped confirmation can never submit here either.
  */
-import { advanceNewPin, NEW_PIN_START, newPinMessageKey, type NewPinEntry } from './new-pin.js';
+import {
+  advanceNewPin,
+  NEW_PIN_START,
+  newPinFeedbackKey,
+  newPinPadState,
+  newPinPromptKey,
+  type NewPinEntry,
+} from './new-pin.js';
 
 /** Why the current-PIN step is unhappy. `none` is the clean first render. */
 export type ChangeFeedback = 'none' | 'wrongCurrent' | 'locked' | 'rateLimited' | 'error';
@@ -111,23 +118,36 @@ export function changePinFailure(error: unknown): ChangePinResult {
   }
 }
 
-/** The PIN-pad message key for a phase (keys only; copy lives in the catalog — 07-i18n). */
-export type ChangePinMessageKey =
-  | 'auth.pin.change.enterCurrent'
+/** The question asked in a phase (keys only; copy lives in the catalog — 07-i18n). */
+export function changePromptKey(
+  phase: ChangePinPhase,
+): 'auth.pin.change.enterCurrent' | 'auth.pin.setup.title' | 'auth.pin.setup.repeat' | null {
+  switch (phase.kind) {
+    case 'current':
+      return 'auth.pin.change.enterCurrent';
+    case 'new':
+      return newPinPromptKey(phase.entry);
+    case 'submitting':
+    case 'done':
+      return null;
+  }
+}
+
+/** Why the last attempt failed, or a tip, under the dots; null when there is nothing to say. */
+export type ChangeFeedbackKey =
   | 'auth.pin.change.wrongCurrent'
   | 'auth.pin.lockedOut'
   | 'core.errors.PIN_RATE_LIMITED'
   | 'core.errors.UNEXPECTED'
-  | 'auth.pin.setup.title'
-  | 'auth.pin.setup.repeat'
-  | 'auth.pin.setup.mismatch';
+  | 'auth.pin.setup.mismatch'
+  | 'auth.pin.setup.hint';
 
-export function changeMessageKey(phase: ChangePinPhase): ChangePinMessageKey | null {
+export function changeFeedbackKey(phase: ChangePinPhase): ChangeFeedbackKey | null {
   switch (phase.kind) {
     case 'current':
       switch (phase.feedback) {
         case 'none':
-          return 'auth.pin.change.enterCurrent';
+          return null;
         case 'wrongCurrent':
           return 'auth.pin.change.wrongCurrent';
         case 'locked':
@@ -140,7 +160,7 @@ export function changeMessageKey(phase: ChangePinPhase): ChangePinMessageKey | n
     // The inner switch is exhaustive over ChangeFeedback and every arm returns, so `current` never
     // falls through to `new`.
     case 'new':
-      return newPinMessageKey(phase.entry);
+      return newPinFeedbackKey(phase.entry);
     case 'submitting':
     case 'done':
       return null;
@@ -160,7 +180,7 @@ export function changePadState(phase: ChangePinPhase): 'entry' | 'error' | 'lock
       if (phase.feedback === 'locked') return 'locked';
       return phase.feedback === 'none' ? 'entry' : 'error';
     case 'new':
-      return phase.entry.kind === 'first' && phase.entry.afterMismatch ? 'error' : 'entry';
+      return newPinPadState(phase.entry);
     case 'submitting':
     case 'done':
       return 'entry';
