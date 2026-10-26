@@ -314,12 +314,30 @@ describe('the board', () => {
     expect(text(screen, 'repair.ticket.technician')).toContain(USER_NAMES.technician);
   });
 
+  test('leaving the handover after typing only a note asks first', async () => {
+    h = await openRepairScreenHarness(5307);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.views.pickup');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.handover');
+    type(screen, 'repair.handover.note', 'Ada goresan di belakang');
+    await press(screen, 'repair.handover.back');
+    expect(screen.query('repair.handover.discard')).not.toBeNull();
+  });
+
   test('a user without repair access sees the unauthorized state, not an empty board', async () => {
     h = await openRepairScreenHarness(5402);
     await openTicket(h);
-    const screen = await mount(h, h.zeroUserId);
+    const onOpenSyncStatus = vi.fn();
+    const screen = await mount(h, h.zeroUserId, { onOpenSyncStatus });
     expect(screen.query('repair.board.items.unauthorized')).not.toBeNull();
     expect(screen.query('repair.board.newIntake')).toBeNull();
+    // A grant arrives by sync, so the one button says it opens the sync status, and does.
+    expect(text(screen, 'ui.unauthorizedState.back')).toContain('Cek status sinkron');
+    await press(screen, 'ui.unauthorizedState.back');
+    expect(onOpenSyncStatus).toHaveBeenCalledTimes(1);
   });
 
   test('search finds a ticket by a misspelled name', async () => {
@@ -349,6 +367,27 @@ describe('hardware back', () => {
     };
     return { screen, back };
   }
+
+  test('leaving the surface from a step holding unsaved photos asks first', async () => {
+    h = await openRepairScreenHarness(5409);
+    const ticketId = await openTicket(h);
+    let nav: SurfaceNav | null = null;
+    const screen = await mount(h, h.technicianId, {
+      onRegisterSurfaceNav: (next) => {
+        nav = next;
+      },
+    });
+    await press(screen, 'repair.board.views.unassigned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.start');
+    await press(screen, 'repair.work.before.take.press');
+    // The header sync chip leaves the whole surface, not just the step.
+    const proceed = vi.fn();
+    (nav as SurfaceNav | null)?.requestLeave(proceed);
+    await settle();
+    expect(proceed).not.toHaveBeenCalled();
+    expect(screen.query('repair.work.before.discard')).not.toBeNull();
+  });
 
   test('back inside a ticket step returns to the ticket, and only then to the board', async () => {
     h = await openRepairScreenHarness(5501);

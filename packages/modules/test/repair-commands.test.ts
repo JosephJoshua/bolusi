@@ -115,11 +115,16 @@ describe('intake', () => {
       customerAgreed: true,
     });
     await expectCode(h.run('changeQuote', discount(-100_001), h.cashierId), 'VALIDATION_FAILED');
-    const proposal = (await h.run(
-      'proposeQuoteChange',
-      { ticketId, kind: 'discount', description: 'Diskon', amount: -150_000, reason: 'Rusak' },
-      h.technicianId,
-    )) as { lineId: string };
+    const propose = (amount: number) =>
+      h!.run(
+        'proposeQuoteChange',
+        { ticketId, kind: 'discount', description: 'Diskon', amount, reason: 'Rusak' },
+        h!.technicianId,
+      ) as Promise<{ lineId: string }>;
+    // A proposal the cashier could never apply is refused when it is made.
+    await expectCode(propose(-150_000), 'VALIDATION_FAILED');
+    const proposal = await propose(-60_000);
+    await h.run('changeQuote', discount(-100_000), h.cashierId);
     await expectCode(
       h.run(
         'applyProposal',
@@ -128,8 +133,27 @@ describe('intake', () => {
       ),
       'VALIDATION_FAILED',
     );
-    await h.run('changeQuote', discount(-100_000), h.cashierId);
     expect((await ticket(h, ticketId)).quoteTotal).toBe(0);
+  });
+
+  test('a total that offline merges pushed below zero can still be corrected upwards', async () => {
+    h = await openRepairHarness(32);
+    const { ticketId } = await open(h, {
+      quoteLines: [{ kind: 'labour', description: 'Cek mesin', amount: 100_000 }],
+    });
+    // Two offline discounts that were each valid on their own device, merged.
+    await sql`UPDATE repair_tickets SET quote_total = -50000 WHERE id = ${ticketId}`.execute(h.db);
+    const line = (kind: string, amount: number) => ({
+      ticketId,
+      kind,
+      description: kind,
+      amount,
+      reason: 'Koreksi',
+      customerAgreed: true,
+    });
+    await expectCode(h.run('changeQuote', line('discount', -1), h.cashierId), 'VALIDATION_FAILED');
+    // -50,000 + 20,000 is still below zero, but it moves the right way.
+    await h.run('changeQuote', line('labour', 20_000), h.cashierId);
   });
 
   test('a customer with no phone number is fine; blank phone becomes null', async () => {
@@ -201,6 +225,35 @@ describe('queue and work', () => {
       h.technicianId,
     );
     expect(mine.rows).toHaveLength(1);
+  });
+
+  test('technician loads count only the repairs each one still holds in the store', async () => {
+    h = await openRepairHarness(81);
+    const first = await open(h);
+    const second = await open(h);
+    const third = await open(h);
+    await open(h); // unassigned: nobody's load
+    for (const { ticketId } of [first, second]) {
+      await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
+    }
+    await h.run(
+      'assignTechnician',
+      { ticketId: third.ticketId, technicianId: h.technician2Id },
+      h.cashierId,
+    );
+    // A cancelled repair is no longer being worked on.
+    await h.run('cancelTicket', { ticketId: second.ticketId, reason: 'Batal' }, h.cashierId);
+
+    const loads = (await h.query('technicianLoads', {}, h.cashierId)).rows as {
+      technicianId: string;
+      load: number;
+    }[];
+    expect(new Map(loads.map((row) => [row.technicianId, row.load]))).toEqual(
+      new Map([
+        [h.technicianId, 1],
+        [h.technician2Id, 1],
+      ]),
+    );
   });
 
   test('the cashier assigns; a technician can claim from a colleague; cashiers cannot do the work', async () => {

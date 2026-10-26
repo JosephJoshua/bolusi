@@ -40,6 +40,7 @@ import {
   READY_CHOICES,
   capturedThumbnailRef,
   intakeTotal,
+  acceptsRupiahText,
   parseRupiah,
   restOfChecksOk,
   signedAmount,
@@ -398,7 +399,9 @@ export function PriceStep({
               <TextInput
                 label={tn('repair.price.amount')}
                 value={amountText(line.amount)}
-                onChangeText={(text) => setLine(index, { amount: parseRupiah(text) ?? 0 })}
+                onChangeText={(text) => {
+                  if (acceptsRupiahText(text)) setLine(index, { amount: parseRupiah(text) ?? 0 });
+                }}
                 keyboardType="number-pad"
                 testID={`${testID}.amount.${index}`}
               />

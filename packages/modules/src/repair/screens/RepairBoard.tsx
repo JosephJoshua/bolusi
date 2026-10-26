@@ -125,7 +125,8 @@ export function RepairBoard({
           unauthorized: {
             title: t('core.errors.PERMISSION_DENIED'),
             hint: t('core.unauthorized.askOwner'),
-            backLabel: t('core.action.back'),
+            // A new grant arrives by sync, so the way forward is checking that this device is current.
+            backLabel: tn('repair.board.checkSync'),
             onBack: onOpenSyncStatus,
           },
         };

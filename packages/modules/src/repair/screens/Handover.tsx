@@ -56,7 +56,7 @@ export function Handover({
   );
 
   const discard = useDiscardConfirm({
-    dirty: photo !== null || signature !== null,
+    dirty: photo !== null || signature !== null || note.trim() !== '',
     onRegisterDiscardGuard,
     testID,
   });

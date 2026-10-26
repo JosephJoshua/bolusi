@@ -109,6 +109,8 @@ export interface TicketDetailProps {
   readonly onOpenSyncStatus: () => void;
   /** Hardware back closes an open step back to the ticket before it leaves the ticket. */
   readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
+  /** Leaving the surface (header sync chip, lock) asks the open step first, like back does. */
+  readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -124,6 +126,7 @@ export function TicketDetail({
   onHandover,
   onOpenSyncStatus,
   onRegisterStepBack,
+  onRegisterDiscardGuard,
   testID = 'repair.ticket',
 }: TicketDetailProps): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -174,6 +177,15 @@ export function TicketDetail({
     });
     return () => onRegisterStepBack?.(null);
   }, [stepOpen, onRegisterStepBack, leaveStep]);
+
+  useEffect(() => {
+    onRegisterDiscardGuard?.((proceed) => {
+      const guard = stepGuardRef.current;
+      if (guard === null) proceed();
+      else guard(proceed);
+    });
+    return () => onRegisterDiscardGuard?.(null);
+  }, [onRegisterDiscardGuard]);
 
   const stepProps = {
     chrome,

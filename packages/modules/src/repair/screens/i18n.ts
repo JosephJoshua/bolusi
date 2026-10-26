@@ -32,6 +32,7 @@ export const REPAIR_KEYS = [
   'repair.action.waitForParts',
   'repair.assign.load',
   'repair.assign.none',
+  'repair.board.checkSync',
   'repair.board.clearSearch',
   'repair.board.emptyHint',
   'repair.board.noMatches',

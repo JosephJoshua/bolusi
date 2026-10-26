@@ -154,6 +154,8 @@ export interface MediaClient {
   loadForRender(ref: RenderableMediaRef): Promise<RenderableMedia>;
   /** 06 §6 for an attachment with NO signed hash (v1/v2 payloads): local file or nothing. */
   loadLocalForRender(mediaId: string): Promise<RenderableMedia>;
+  /** 06 §5.2 (b): an append attached captures to its op, so they are drainable now. */
+  notifyAttached(): void;
   /** 06 §5.2 (e). */
   requestManual(): void;
   /** 06 §7. Exposed so a caller can force one; the client already runs it at start and after drains. */
@@ -316,6 +318,10 @@ class MediaClientImpl implements MediaClient {
       },
       mediaId,
     );
+  }
+
+  notifyAttached(): void {
+    this.triggers.notifyCapture();
   }
 
   requestManual(): void {

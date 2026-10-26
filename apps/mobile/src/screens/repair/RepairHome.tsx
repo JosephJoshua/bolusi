@@ -124,6 +124,7 @@ export function RepairHome({
           onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
           onOpenSyncStatus={onOpenSyncStatus}
           onRegisterStepBack={registerStepBack}
+          onRegisterDiscardGuard={registerDiscardGuard}
         />
       ) : null}
 

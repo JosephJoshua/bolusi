@@ -153,3 +153,39 @@ test('a ref only attaches the capture it describes, taken by the user who signed
   expect(await attachedTo(OTHER_USERS)).toBeNull();
   expect(await attachedTo(WRONG_HASH)).toBeNull();
 });
+
+test('an append that attaches media tells the media drain, and one without media does not', async () => {
+  await capture(PHOTO);
+  const identity = {
+    tenantId: fixture.tenantId,
+    storeId: fixture.storeId,
+    deviceId: fixture.deviceId,
+    userId: fixture.userId,
+  };
+  const app = runtimeFor(fixture.app);
+  await app.evaluator.prime();
+  let notified = 0;
+  app.bindMediaAttached(() => {
+    notified += 1;
+  });
+  const port = bindModulePort(notesModule, app.moduleRuntimeFor(identity), identity);
+
+  await port.run('createNote', { title: 'Tanpa foto', body: '' });
+  expect(notified).toBe(0);
+  await port.run('createNote', {
+    title: 'Foto',
+    body: '',
+    mediaRef: {
+      mediaId: PHOTO,
+      sha256: 'a'.repeat(64),
+      mime: 'image/jpeg',
+      type: 'image',
+      sizeBytes: 1024,
+      capturedAt: 1,
+      location: null,
+      userId: fixture.userId,
+      deviceId: fixture.deviceId,
+    },
+  });
+  expect(notified).toBe(1);
+});

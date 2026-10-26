@@ -10,6 +10,7 @@ import {
   intakeTotal,
   nextMissingPhoto,
   parseIntakeDraft,
+  acceptsRupiahText,
   parseRupiah,
   readyAtFor,
   repairAbilities,
@@ -280,6 +281,12 @@ describe('money and dates', () => {
     expect(parseRupiah('Rp 1.250.000')).toBe(1_250_000);
     expect(parseRupiah('')).toBeNull();
     expect(parseRupiah('abc')).toBeNull();
+    // One past the most a line may carry is not an amount, so the field refuses the keystroke.
+    expect(parseRupiah('1.000.000.000.000')).toBe(1_000_000_000_000);
+    expect(parseRupiah('10000000000000')).toBeNull();
+    expect(acceptsRupiahText('10000000000000')).toBe(false);
+    expect(acceptsRupiahText('')).toBe(true);
+    expect(acceptsRupiahText('Rp 5.000')).toBe(true);
   });
 
   test('ready dates land at the end of the store day', () => {

@@ -44,6 +44,7 @@ import {
   getCustomerQuery,
   getTicketQuery,
   listTicketsQuery,
+  technicianLoadsQuery,
   nextTicketCounterQuery,
   searchCustomersQuery,
   searchTicketsQuery,
@@ -186,6 +187,7 @@ export const repairModuleManifest = {
     searchCustomers: searchCustomersQuery,
     getCustomer: getCustomerQuery,
     nextTicketCounter: nextTicketCounterQuery,
+    technicianLoads: technicianLoadsQuery,
   },
 } as const satisfies ModuleManifest<RepairDatabase>;
 

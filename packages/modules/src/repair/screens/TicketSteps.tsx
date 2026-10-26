@@ -28,7 +28,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
 import { PRICE_KIND_KEY } from './labels.js';
-import { boardFilter, capturedThumbnailRef, parseRupiah, signedAmount } from '../flows.js';
+import { acceptsRupiahText, capturedThumbnailRef, parseRupiah, signedAmount } from '../flows.js';
 import {
   FlowScreen,
   PhotoGrid,
@@ -248,15 +248,14 @@ export function AssignStep({
   const [reloadNonce, setReloadNonce] = useState(0);
   // Each technician with how many repairs they already hold, so the counter can spread the work.
   const technicians = useRepairQuery(
-    async (rt) =>
-      Promise.all(
-        (await rt.technicians()).map(async (tech) => ({
-          ...tech,
-          load: (
-            await rt.query('listTickets', { filter: boardFilter('mine', tech.id), limit: 100 })
-          ).rows.length,
-        })),
-      ),
+    async (rt) => {
+      const [people, loads] = await Promise.all([
+        rt.technicians(),
+        rt.query('technicianLoads', {}),
+      ]);
+      const load = new Map(loads.rows.map((row) => [row.technicianId, row.load]));
+      return people.map((tech) => ({ ...tech, load: load.get(tech.id) ?? 0 }));
+    },
     `technicians:${String(reloadNonce)}`,
   );
 
@@ -396,7 +395,9 @@ export function PriceChangeStep({
         <TextInput
           label={tn('repair.price.amount')}
           value={amountText}
-          onChangeText={setAmountText}
+          onChangeText={(text) => {
+            if (acceptsRupiahText(text)) setAmountText(text);
+          }}
           keyboardType="number-pad"
           testID={`${testID}.amount`}
         />

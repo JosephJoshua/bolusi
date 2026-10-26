@@ -56,7 +56,8 @@
       "returned": "Returned",
       "unassigned": "Unassigned"
     },
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "checkSync": "Check sync status"
   },
   "cancel": {
     "reason": "Why is it cancelled?",
@@ -246,9 +247,9 @@
     "priceLine": "Fill in the description, amount and reason."
   },
   "discardPhotos": {
-    "title": "Discard the photos you took?",
-    "message": "Photos and signatures not saved yet will be lost.",
-    "confirm": "Discard",
-    "keep": "Stay here"
+    "title": "Leave without saving?",
+    "message": "The photos and notes you’ve added here will be lost.",
+    "confirm": "Leave",
+    "keep": "Stay"
   }
 }

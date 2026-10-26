@@ -8,6 +8,7 @@ import { DomainError, type CommandContext, type CommandHandlerResult } from '@bo
 import { zMediaRef, type MediaRef } from '@bolusi/schemas';
 
 import {
+  MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
@@ -38,7 +39,7 @@ const zPhone = z
   .max(40)
   .nullable()
   .transform((phone) => (phone === null || phone === '' ? null : phone));
-const zAmountInput = z.number().int().min(-1_000_000_000_000).max(1_000_000_000_000);
+const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
   .object({
@@ -60,9 +61,14 @@ function checkLineSign(kind: QuoteLineKind, amount: number): void {
   }
 }
 
-/** The agreed price can come down to nothing, but never below: the store would owe the customer. */
-function checkTotal(total: number): void {
-  if (total < 0) {
+/**
+ * The agreed price can come down to nothing, but never below: the store would owe the customer.
+ * Only a line that lowers the total is refused, so a total that offline merges already pushed
+ * below zero can still be corrected upwards.
+ */
+function checkTotal(current: number, change: number): void {
+  const total = current + change;
+  if (change < 0 && total < 0) {
     throw new DomainError(
       'VALIDATION_FAILED',
       { field: 'amount', issue: 'the total price would be negative' },
@@ -224,7 +230,10 @@ export async function openTicketHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<OpenTicketResult>> {
   for (const line of input.quoteLines) checkLineSign(line.kind, line.amount);
-  checkTotal(input.quoteLines.reduce((sum, line) => sum + line.amount, 0));
+  checkTotal(
+    0,
+    input.quoteLines.reduce((sum, line) => sum + line.amount, 0),
+  );
 
   const ops: OpDraft[] = [];
   let customerId: string;
@@ -453,6 +462,8 @@ export async function proposeQuoteChangeHandler(
   checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChangeProposed);
+  // A proposal the cashier could never apply would only block handover until declined.
+  checkTotal(ticket.quoteTotal, input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -480,7 +491,7 @@ export async function changeQuoteHandler(
   checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChanged);
-  checkTotal(ticket.quoteTotal + input.amount);
+  checkTotal(ticket.quoteTotal, input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -534,7 +545,7 @@ export async function applyProposalHandler(
   const proposal = findProposal(ticket, input.lineId, REPAIR_OP.quoteChanged);
   const amount = input.amount ?? proposal.amount;
   checkLineSign(proposal.kind, amount);
-  checkTotal(ticket.quoteTotal + amount);
+  checkTotal(ticket.quoteTotal, amount);
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.quoteChanged, {

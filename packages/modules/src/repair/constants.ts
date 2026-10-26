@@ -57,6 +57,13 @@ export const REPAIR_OUTCOMES = [
 ] as const;
 export type RepairOutcome = (typeof REPAIR_OUTCOMES)[number];
 
+/** The outcomes of a repair still being worked on. */
+export const IN_PROGRESS_OUTCOMES = [
+  'received',
+  'in_repair',
+  'waiting_for_parts',
+] as const satisfies readonly RepairOutcome[];
+
 /** Where the device is. "Cancelled, still in store" is outcome=cancelled + location=in_store. */
 export const DEVICE_LOCATIONS = ['in_store', 'returned'] as const;
 export type DeviceLocation = (typeof DEVICE_LOCATIONS)[number];
@@ -90,6 +97,9 @@ export function workPhotoStage(slot: string): WorkPhotoStage | null {
 /** Handover evidence slots. */
 export const HANDOVER_PHOTO_SLOTS = ['handover', 'signature'] as const;
 export type HandoverPhotoSlot = (typeof HANDOVER_PHOTO_SLOTS)[number];
+
+/** The largest rupiah amount one price line may carry, either way. */
+export const MAX_LINE_AMOUNT = 1_000_000_000_000;
 
 export const QUOTE_LINE_KINDS = ['part', 'labour', 'adjustment', 'discount'] as const;
 export type QuoteLineKind = (typeof QUOTE_LINE_KINDS)[number];

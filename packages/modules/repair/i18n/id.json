@@ -56,7 +56,8 @@
       "returned": "Sudah diambil",
       "unassigned": "Belum ada teknisi"
     },
-    "clearSearch": "Hapus pencarian"
+    "clearSearch": "Hapus pencarian",
+    "checkSync": "Cek status sinkron"
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
@@ -246,9 +247,9 @@
     "priceLine": "Isi keterangan, harga, dan alasannya dulu."
   },
   "discardPhotos": {
-    "title": "Buang foto yang sudah diambil?",
-    "message": "Foto dan tanda tangan yang belum disimpan akan hilang.",
-    "confirm": "Buang",
+    "title": "Keluar tanpa menyimpan?",
+    "message": "Foto dan catatan yang sudah kamu isi di sini akan hilang.",
+    "confirm": "Keluar",
     "keep": "Tetap di sini"
   }
 }

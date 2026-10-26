@@ -9,6 +9,8 @@ import type { OpenTicketInput } from './commands.js';
 import {
   CHECKLIST_STATES,
   INTAKE_PHOTO_SLOTS,
+  IN_PROGRESS_OUTCOMES,
+  MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_PERMISSION,
   workPhotoStage,
@@ -30,7 +32,7 @@ import type {
 export const BOARD_VIEWS = ['active', 'mine', 'unassigned', 'pickup', 'returned'] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
 
-const IN_PROGRESS: readonly RepairOutcome[] = ['received', 'in_repair', 'waiting_for_parts'];
+const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
 
 /** The `listTickets` filter behind each board view. */
 export function boardFilter(view: BoardView, userId: string): ListTicketsInput['filter'] {
@@ -194,12 +196,20 @@ export function capturedThumbnailRef(ref: MediaRef): ThumbnailRef {
 
 // ── money ───────────────────────────────────────────────────────────────────────────────────
 
-/** Whole rupiah from what was typed ("650.000", "Rp 650000"); null when there are no digits. */
+/**
+ * Whole rupiah from what was typed ("650.000", "Rp 650000"); null when there are no digits or the
+ * amount is more than a line may carry.
+ */
 export function parseRupiah(text: string): number | null {
   const digits = text.replace(/\D/g, '');
   if (digits === '') return null;
   const value = Number(digits);
-  return Number.isSafeInteger(value) ? value : null;
+  return value <= MAX_LINE_AMOUNT ? value : null;
+}
+
+/** Whether a keystroke in an amount field should be kept: a too-long amount is not typed at all. */
+export function acceptsRupiahText(text: string): boolean {
+  return text.replace(/\D/g, '') === '' || parseRupiah(text) !== null;
 }
 
 /** The signed amount a line contributes: discounts subtract. Adjustments are entered signed. */

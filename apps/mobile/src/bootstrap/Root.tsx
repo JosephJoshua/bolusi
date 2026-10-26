@@ -528,6 +528,8 @@ export function Root({
         if (!disposed) setDeviceInfo(info);
         await startSyncIfEnrolled(booted, enroll);
         await startMediaIfEnrolled(booted);
+        // Through the ref, so an append after teardown (ref cleared) notifies nothing.
+        enroll?.runtime.bindMediaAttached(() => mediaRef.current?.notifyAttached());
       } catch (error) {
         consoleDiagnostics.warn('enrolled-services start failed after session open', {
           via,
