@@ -56,6 +56,24 @@ export const ICON_GLYPHS = Object.freeze({
    *  without a label). A cog, so a user stranded in a locale they cannot read still finds the
    *  language rows at the top of Settings by shape. */
   settings: 'cog-outline',
+  /** A PIN that is locked, or the screen lock. */
+  lock: 'lock-outline',
+  /** Settings: PIN rows (change your own, manage staff PINs). */
+  pin: 'dialpad',
+  /** Settings: the language rows. */
+  language: 'translate',
+  /** Settings: notification rows. */
+  notifications: 'bell-outline',
+  /** Settings: this device's facts. */
+  phoneDevice: 'cellphone',
+  /** Settings: the store, on the device facts. */
+  store: 'storefront-outline',
+  /** Settings: staff (PIN karyawan). */
+  staff: 'account-group-outline',
+  /** Settings: a business list someone edits (intake options). */
+  list: 'format-list-bulleted',
+  /** Settings: a money setting (cancel fees). */
+  money: 'cash',
   /** PhotoSlot: an empty slot asks for a photo. */
   camera: 'camera-outline',
   /** ToggleChip / PhotoSlot: selected or done — always beside a label. */

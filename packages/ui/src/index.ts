@@ -49,6 +49,8 @@ export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
 export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
+export type { FactProps } from './components/Fact.js';
+export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
 export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';

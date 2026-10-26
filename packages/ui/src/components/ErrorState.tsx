@@ -47,11 +47,11 @@ export function ErrorState({
   return (
     <View testID={testID} style={styles.root}>
       <Icon name="error" size={size.iconState} color={color.danger} />
-      <Text testID={`${testID}.title`} numberOfLines={2} style={styles.title}>
+      <Text testID={`${testID}.title`} style={styles.title}>
         {title}
       </Text>
       {hint === undefined ? null : (
-        <Text testID={`${testID}.hint`} numberOfLines={2} style={styles.hint}>
+        <Text testID={`${testID}.hint`} style={styles.hint}>
           {hint}
         </Text>
       )}

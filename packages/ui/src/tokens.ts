@@ -170,6 +170,8 @@ export const size = Object.freeze({
    * one screen where identity IS the content.
    */
   avatarSwitcher: 96,
+  /** A person's identity at the top of a PIN screen or their own page: a face, not a bullet. */
+  avatarHero: 64,
   /** §3.11 FreshnessCell geometry — the battery-cell signature. */
   cellWidth: 26,
   cellHeight: 14,
