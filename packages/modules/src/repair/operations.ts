@@ -11,12 +11,14 @@ import { zMediaRef, zMoneyIdr, zMsEpoch, zUuid, zUuidV7 } from '@bolusi/schemas'
 import {
   intakeOptionsChangedApplier,
   storeIntakeOptionsChangedApplier,
+  storeCancelFeesChangedApplier,
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
   markedRepairedApplier,
   quoteChangedApplier,
   quoteChangeProposedApplier,
+  quoteLineConfirmedApplier,
   quoteProposalDeclinedApplier,
   technicianAssignedApplier,
   ticketCancelledApplier,
@@ -29,6 +31,7 @@ import {
 import {
   CHECKLIST_STATES,
   HANDOVER_PHOTO_SLOTS,
+  MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_CONFLICT_KEY,
   REPAIR_CUSTOMER_ENTITY,
@@ -179,8 +182,25 @@ export const storeIntakeOptionsChangedPayload = z
 const emptyPayload = z.object({}).strict();
 export const technicianAssignedPayload = z.object({ technicianId: zUuid }).strict();
 export const notePayload = z.object({ note: zLongText }).strict();
-export const ticketCancelledPayload = z
+/** A fee a customer can owe: integer IDR, never negative. */
+const zFee = zMoneyIdr.min(0).max(MAX_LINE_AMOUNT);
+
+/** `repair.ticket_cancelled` v1, before cancellation fees: nothing was charged. */
+export const ticketCancelledPayloadV1 = z
   .object({ reason: z.string().trim().min(1).max(MAX_TEXT) })
+  .strict();
+
+/**
+ * `repair.ticket_cancelled` v2: what the customer pays, and the store's fee in force then, so an
+ * owner can see where the person cancelling charged something else.
+ */
+export const ticketCancelledPayload = ticketCancelledPayloadV1
+  .extend({ fee: zFee, standardFee: zFee })
+  .strict();
+
+/** Both of a store's cancellation fees, replacing the previous ones. */
+export const storeCancelFeesChangedPayload = z
+  .object({ beforeWork: zFee, afterWork: zFee })
   .strict();
 
 export const quoteChangeProposedPayload = zQuoteLineDraft
@@ -197,6 +217,9 @@ export const quoteChangedPayload = zQuoteLineDraft
   .strict();
 
 export const quoteProposalDeclinedPayload = z.object({ lineId: zUuidV7, note: zLongText }).strict();
+
+/** The customer agreed, after it was saved, to a price change the counter saved unconfirmed. */
+export const quoteLineConfirmedPayload = z.object({ lineId: zUuidV7 }).strict();
 
 export const workPhotosAddedPayload = z
   .object({
@@ -293,8 +316,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.ticketCancelled]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: ticketCancelledPayload,
+    payloadByVersion: { 1: ticketCancelledPayloadV1 },
     reversal: 'Not reversible in slice 1: open a new ticket if the customer changes their mind.',
     apply: ticketCancelledApplier,
     permission: REPAIR_PERMISSION.cancel,
@@ -325,6 +349,12 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     permission: REPAIR_PERMISSION.quoteChange,
     entityType: REPAIR_TICKET_ENTITY,
   },
+  [REPAIR_OP.quoteLineConfirmed]: {
+    schemaVersion: 1,
+    payload: quoteLineConfirmedPayload,
+    reversal: 'Not reversible: the customer said yes. A further price change corrects the amount.',
+    apply: quoteLineConfirmedApplier,
+  },
   [REPAIR_OP.deviceReturned]: {
     schemaVersion: 1,
     payload: deviceReturnedPayload,
@@ -353,5 +383,11 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeIntakeOptionsChangedApplier,
     permission: REPAIR_PERMISSION.hideIntakeOptions,
     entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  },
+  [REPAIR_OP.storeCancelFeesChanged]: {
+    schemaVersion: 1,
+    payload: storeCancelFeesChangedPayload,
+    reversal: 'Reversed by saving the previous fees again; cancelled tickets keep the fee charged.',
+    apply: storeCancelFeesChangedApplier,
   },
 };

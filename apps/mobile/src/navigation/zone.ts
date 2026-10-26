@@ -26,7 +26,14 @@ export type SwitcherMode = 'lock' | 'choose';
 
 /** The in-shell surfaces this task ships. Module screens (task 25) extend this union. */
 export type ShellRoute =
-  'home' | 'syncStatus' | 'settings' | 'changePin' | 'unlockPin' | 'resetPin' | 'intakeOptions';
+  | 'home'
+  | 'syncStatus'
+  | 'settings'
+  | 'changePin'
+  | 'unlockPin'
+  | 'resetPin'
+  | 'intakeOptions'
+  | 'cancelFees';
 
 /**
  * The one surface the app is showing. A discriminated union so a renderer must handle every case —
@@ -161,6 +168,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'unlockPin') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'resetPin') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
   }
 }

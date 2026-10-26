@@ -13,6 +13,7 @@ import {
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
+  REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
@@ -41,10 +42,13 @@ import {
   zRecordedOption,
 } from './operations.js';
 import {
+  cancelFeesQuery,
   getCustomerQuery,
   getTicketQuery,
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
+  standardCancelFee,
+  type CancelFees,
   type TicketDetailRow,
 } from './queries.js';
 import { formatTicketNumber } from './ticket-number.js';
@@ -79,6 +83,18 @@ function checkLineSign(kind: QuoteLineKind, amount: number): void {
       `a ${kind} line cannot have amount ${amount}`,
     );
   }
+}
+
+/**
+ * A line that lowers the price is a discount, whatever its kind: only owners may write one, so the
+ * counter cannot charge the customer the full price and record less. A proposal counts too, so a
+ * discount never waits on the board for an owner who is not there.
+ */
+async function requireDiscountPermission(
+  ctx: CommandContext,
+  amounts: readonly number[],
+): Promise<void> {
+  if (amounts.some((amount) => amount < 0)) await ctx.requirePermission(REPAIR_PERMISSION.discount);
 }
 
 /**
@@ -251,6 +267,10 @@ export async function openTicketHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<OpenTicketResult>> {
   for (const line of input.quoteLines) checkLineSign(line.kind, line.amount);
+  await requireDiscountPermission(
+    ctx,
+    input.quoteLines.map((line) => line.amount),
+  );
   checkTotal(
     0,
     input.quoteLines.reduce((sum, line) => sum + line.amount, 0),
@@ -456,23 +476,80 @@ export async function markRepairedHandler(
   };
 }
 
-// ── cashier ──────────────────────────────────────────────────────────────────────────────────
+// ── owner ────────────────────────────────────────────────────────────────────────────────────
+
+const zFeeInput = z.number().int().min(0).max(MAX_LINE_AMOUNT);
 
 export const cancelTicketInput = z
-  .object({ ticketId: z.string().min(1), reason: zRequiredText(2000) })
+  .object({
+    ticketId: z.string().min(1),
+    reason: zRequiredText(2000),
+    /**
+     * What the customer pays when the owner changed it; left out, the store's fee for the ticket's
+     * stage as this device knows it now, so a fee that syncs in meanwhile is never undercut.
+     */
+    fee: zFeeInput.optional(),
+  })
   .strict();
 export type CancelTicketInput = z.input<typeof cancelTicketInput>;
 
-/** Cancelling never moves the device: it stays "cancelled, still in store" until handed back. */
+/**
+ * Cancel an open ticket, owners only (the permission). A repaired phone can still be cancelled
+ * when the customer won't pay or collect. Cancelling never moves the device: it stays "cancelled,
+ * still in store" until handed back, and the handover shows the fee the customer signs for.
+ */
 export async function cancelTicketHandler(
   input: z.output<typeof cancelTicketInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.ticketCancelled);
+  const fees = (await ctx.query(cancelFeesQuery, {})).rows[0]!;
+  const standardFee = standardCancelFee(ticket, fees);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.ticketCancelled, { reason: input.reason })],
+    ops: [
+      ticketOp(ctx, ticket.id, REPAIR_OP.ticketCancelled, {
+        reason: input.reason,
+        fee: input.fee ?? standardFee,
+        standardFee,
+      }),
+    ],
     result: { ticketId: ticket.id },
+  };
+}
+
+export const setCancelFeesInput = z
+  .object({ beforeWork: zFeeInput, afterWork: zFeeInput })
+  .strict();
+export type SetCancelFeesInput = z.input<typeof setCancelFeesInput>;
+
+/** Set this store's two cancellation fees. Tickets already cancelled keep what they charged. */
+export async function setCancelFeesHandler(
+  input: z.output<typeof setCancelFeesInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<CancelFees>> {
+  if (ctx.storeId === null) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'beforeWork', issue: 'this device has no store' },
+      'a store-less device cannot set cancellation fees',
+    );
+  }
+  const current = (await ctx.query(cancelFeesQuery, {})).rows[0]!;
+  if (current.beforeWork === input.beforeWork && current.afterWork === input.afterWork) {
+    throw nothingChanged('beforeWork');
+  }
+  const fees = { beforeWork: input.beforeWork, afterWork: input.afterWork };
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.storeCancelFeesChanged,
+        entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
+        entityId: ctx.storeId,
+        payload: fees,
+      }),
+    ],
+    result: fees,
   };
 }
 
@@ -493,6 +570,7 @@ export async function proposeQuoteChangeHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
   checkLineSign(input.kind, input.amount);
+  await requireDiscountPermission(ctx, [input.amount]);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChangeProposed);
   // A proposal the cashier could never apply would only block handover until declined.
@@ -522,6 +600,7 @@ export async function changeQuoteHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
   checkLineSign(input.kind, input.amount);
+  await requireDiscountPermission(ctx, [input.amount]);
   const ticket = await loadTicket(ctx, input.ticketId);
   requireOpen(ticket, REPAIR_OP.quoteChanged);
   checkTotal(ticket.quoteTotal, input.amount);
@@ -578,6 +657,7 @@ export async function applyProposalHandler(
   const proposal = findProposal(ticket, input.lineId, REPAIR_OP.quoteChanged);
   const amount = input.amount ?? proposal.amount;
   checkLineSign(proposal.kind, amount);
+  await requireDiscountPermission(ctx, [amount]);
   checkTotal(ticket.quoteTotal, amount);
   return {
     ops: [
@@ -614,6 +694,41 @@ export async function declineProposalHandler(
       }),
     ],
     result: { ticketId: ticket.id, lineId: input.lineId },
+  };
+}
+
+export const confirmQuoteLineInput = z
+  .object({ ticketId: z.string().min(1), lineId: z.string().min(1) })
+  .strict();
+export type ConfirmQuoteLineInput = z.input<typeof confirmQuoteLineInput>;
+
+/**
+ * The customer agreed to a price change after the counter saved it unconfirmed, often by phone. Only
+ * the agreement is recorded; the amount was already counted.
+ */
+export async function confirmQuoteLineHandler(
+  input: z.output<typeof confirmQuoteLineInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  requireOpen(ticket, REPAIR_OP.quoteLineConfirmed);
+  const line = ticket.quoteLines.find((candidate) => candidate.id === input.lineId);
+  if (line === undefined) {
+    throw new DomainError('ENTITY_NOT_FOUND', {
+      entityType: 'repair_quote_line',
+      entityId: input.lineId,
+    });
+  }
+  if (line.status !== 'applied' || line.customerAgreed !== false) {
+    throw invalidTransition(
+      ticket,
+      REPAIR_OP.quoteLineConfirmed,
+      `quote line ${line.id} is not an unconfirmed price change`,
+    );
+  }
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.quoteLineConfirmed, { lineId: line.id })],
+    result: { ticketId: ticket.id, lineId: line.id },
   };
 }
 

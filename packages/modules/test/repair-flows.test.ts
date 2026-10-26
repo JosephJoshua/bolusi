@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import {
   boardFilter,
+  boardSort,
+  boardViews,
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
@@ -87,8 +89,8 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   if (state === 'cancelled') {
     await harness.run(
       'cancelTicket',
-      { ticketId, reason: 'customer changed mind' },
-      harness.cashierId,
+      { ticketId, reason: 'customer changed mind', fee: 0 },
+      harness.storeOwnerId,
     );
   }
   if (state === 'returned') {
@@ -146,12 +148,12 @@ async function perform(
         userId,
       );
     case 'cancel':
-      return harness.run('cancelTicket', { ticketId, reason: 'no parts' }, userId);
+      return harness.run('cancelTicket', { ticketId, reason: 'no parts', fee: 10_000 }, userId);
   }
 }
 
 describe('ticket actions', () => {
-  test('every action offered to the cashier or a technician is accepted by its command', async () => {
+  test('every action offered to the cashier, a technician or a store owner is accepted by its command', async () => {
     h = await openRepairHarness(4101);
     const states: State[] = [
       'received',
@@ -164,7 +166,7 @@ describe('ticket actions', () => {
     ];
     let checked = 0;
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         for (const action of ticketActions(row, abilitiesOf(h, userId), userId)) {
@@ -212,7 +214,7 @@ describe('ticket actions', () => {
       (['start', 'resume', 'reopen'].includes(a) && ['start', 'resume', 'reopen'].includes(b));
     const gaps: string[] = [];
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         const offered = ticketActions(row, abilitiesOf(h, userId), userId);
@@ -224,7 +226,12 @@ describe('ticket actions', () => {
             () => false,
           );
           if (accepted) {
-            gaps.push(`${state}/${userId === h.cashierId ? 'cashier' : 'technician'}/${action}`);
+            const who = new Map([
+              [h.cashierId, 'cashier'],
+              [h.technicianId, 'technician'],
+              [h.storeOwnerId, 'store owner'],
+            ]);
+            gaps.push(`${state}/${who.get(userId) ?? userId}/${action}`);
           }
         }
       }
@@ -251,12 +258,21 @@ describe('ticket actions', () => {
       'proposePrice',
     ]);
     // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice', 'cancel']);
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice']);
     expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
       'changePrice',
       'assign',
-      'cancel',
     ]);
+    // Only owners cancel: counter staff kept customers' cash by cancelling. A repaired phone the
+    // customer won't pay for or collect can still be cancelled until it is handed back.
+    const storeOwner = abilitiesOf(h, h.storeOwnerId);
+    for (const outcome of ['received', 'in_repair', 'waiting_for_parts', 'repaired'] as const) {
+      expect(ticketActions(row({ outcome }), cashier, h.cashierId)).not.toContain('cancel');
+      expect(ticketActions(row({ outcome }), storeOwner, h.storeOwnerId)).toContain('cancel');
+    }
+    expect(
+      ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
+    ).not.toContain('cancel');
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(
@@ -393,6 +409,17 @@ describe('board views', () => {
     });
     expect(boardFilter('returned', 'u1')).toEqual({ location: 'returned' });
   });
+
+  test('the cancelled view is for owners only and lists the latest cancel first', async () => {
+    h = await openRepairHarness(4104);
+    expect(boardViews(abilitiesOf(h, h.cashierId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.ownerId))).toContain('cancelled');
+    expect(boardFilter('cancelled', 'u1')).toEqual({ outcomes: ['cancelled'] });
+    expect(boardSort('cancelled')).toBe('cancelledAt.desc');
+    expect(boardSort('active')).toBe('createdAt.desc');
+  });
 });
 
 describe('money and dates', () => {
@@ -512,10 +539,11 @@ describe('intake draft', () => {
     h = await openRepairHarness(4104);
     const draft = complete(h);
     expect(intakeTotal(draft.lines)).toBe(600_000);
+    // A discount at intake is an owner's to give.
     const { ticketId } = (await h.run(
       'openTicket',
       toOpenTicketInput(draft, OPTIONS, Date.now()),
-      h.cashierId,
+      h.storeOwnerId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
     expect(ticket.customerName).toBe('Yohanis Wenda');

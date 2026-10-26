@@ -26,6 +26,7 @@ import {
   INTAKE_PHOTO_SLOTS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_TICKET_ENTITY,
   workPhotoSlot,
@@ -85,12 +86,16 @@ export const repairTicketsTable: ProjectionTableManifest = {
     returned_by: 'text',
     returned_at: 'integer',
     intake_photos_json: 'text',
+    cancel_fee: 'integer',
+    cancel_standard_fee: 'integer',
+    cancelled_by: 'text',
+    cancelled_at: 'integer',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
   entityIdColumn: 'id',
-  // Still 1: the added column is null for every v1 ticket, which is what a re-fold would write.
-  projectionVersion: 1,
+  // 2: a re-fold fills who cancelled and when for tickets cancelled before the columns existed.
+  projectionVersion: 2,
 };
 
 export const repairQuoteLinesTable: ProjectionTableManifest = {
@@ -178,6 +183,21 @@ export const repairStoreIntakeOptionsTable: ProjectionTableManifest = {
   },
   primaryKey: ['store_id', 'list'],
   entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
+export const repairStoreCancelFeesTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    tenant_id: 'text',
+    before_work: 'integer',
+    after_work: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id'],
+  entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
   entityIdColumn: 'store_id',
   projectionVersion: 1,
 };
@@ -281,6 +301,10 @@ async function updateTicket(
     technicianId: string;
     returnedBy: string;
     returnedAt: number;
+    cancelFee: number | null;
+    cancelStandardFee: number | null;
+    cancelledBy: string;
+    cancelledAt: number;
   }>,
 ): Promise<void> {
   await db
@@ -447,6 +471,10 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       returnedBy: null,
       returnedAt: null,
       intakePhotosJson: intakePhotos === null ? null : canonicalJson(intakePhotos),
+      cancelFee: null,
+      cancelStandardFee: null,
+      cancelledBy: null,
+      cancelledAt: null,
     })
     .execute();
 
@@ -523,10 +551,26 @@ export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = async (d
   await recordEvent(db, op, { note });
 };
 
+/** v1 cancels predate fees (nothing was charged), so they record no fee. */
 export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { reason } = payloadOf<{ reason: string }>(op);
-  await updateTicket(db, op, { outcome: 'cancelled', outcomeNote: reason });
-  await recordEvent(db, op, { reason });
+  const {
+    reason,
+    fee = null,
+    standardFee = null,
+  } = payloadOf<{
+    reason: string;
+    fee?: number;
+    standardFee?: number;
+  }>(op);
+  await updateTicket(db, op, {
+    outcome: 'cancelled',
+    outcomeNote: reason,
+    cancelFee: fee,
+    cancelStandardFee: standardFee,
+    cancelledBy: op.userId,
+    cancelledAt: op.timestamp,
+  });
+  await recordEvent(db, op, fee === null ? { reason } : { reason, fee, standardFee });
 };
 
 export const quoteChangeProposedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
@@ -628,6 +672,20 @@ export const quoteProposalDeclinedApplier: ProjectionApplier<RepairDatabase> = a
   await recordEvent(db, op, { lineId, note });
 };
 
+/** Only an applied line the customer had not yet agreed to; anything else was not one to confirm. */
+export const quoteLineConfirmedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { lineId } = payloadOf<{ lineId: string }>(op);
+  await db
+    .updateTable('repairQuoteLines')
+    .set({ customerAgreed: 1 })
+    .where('id', '=', lineId)
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .where('status', '=', 'applied')
+    .execute();
+  await recordEvent(db, op, { lineId });
+};
+
 export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   const payload = payloadOf<{ handoverPhoto: MediaRef; signature: MediaRef; note: string }>(op);
   await updateTicket(db, op, {
@@ -681,5 +739,17 @@ export const storeIntakeOptionsChangedApplier: ProjectionApplier<RepairDatabase>
     .insertInto('repairStoreIntakeOptions')
     .values({ storeId, list, tenantId: op.tenantId, ...values })
     .onConflict((oc) => oc.columns(['storeId', 'list']).doUpdateSet(values))
+    .execute();
+};
+
+export const storeCancelFeesChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const { beforeWork, afterWork } = payloadOf<{ beforeWork: number; afterWork: number }>(op);
+  const values = { beforeWork, afterWork, updatedBy: op.userId, updatedAt: op.timestamp };
+  await db
+    .insertInto('repairStoreCancelFees')
+    .values({ storeId, tenantId: op.tenantId, ...values })
+    .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
     .execute();
 };
