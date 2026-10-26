@@ -211,6 +211,52 @@ describe('reversal (04 §3: MANDATORY)', () => {
   });
 });
 
+describe('authorization contract: permission + entityType (server-enforced on push)', () => {
+  test.each([
+    ['a missing permission', { permission: undefined }, 'permission'],
+    ['an empty permission', { permission: '' }, 'permission'],
+    ['a missing entityType', { entityType: undefined }, 'entityType'],
+    ['an empty entityType', { entityType: '' }, 'entityType'],
+  ])('rejects %s', (_label, override, field) => {
+    const seed = 113;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+
+    const error = expectRejected(
+      () =>
+        defineModule<FixtureSuiteDatabase, typeof manifest>({
+          ...manifest,
+          operations: {
+            [`${id}.widget_created`]: {
+              ...manifest.operations[`${id}.widget_created`]!,
+              ...override,
+            } as never,
+          },
+        }),
+      `${id}.widget_created`,
+    );
+    expect(error.message).toContain(field);
+  });
+
+  test('accepts permission null for a type only the runtime writes', () => {
+    const seed = 114;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+
+    expect(() =>
+      defineModule<FixtureSuiteDatabase, typeof manifest>({
+        ...manifest,
+        operations: {
+          [`${id}.widget_created`]: {
+            ...manifest.operations[`${id}.widget_created`]!,
+            permission: null,
+          },
+        },
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe('payload .strict() (04 §3)', () => {
   test('rejects a payload schema that strips unknown keys (zod default)', () => {
     const seed = 121;
@@ -439,6 +485,8 @@ describe('payloadSchemaFor — (type, schemaVersion) → the schema that validat
     payloadByVersion: { 1: retainedV1, 2: retainedV2 },
     reversal: 'n/a',
     apply: () => Promise.resolve(),
+    permission: null,
+    entityType: 'widget',
   };
 
   test('resolves each foldable version to ITS OWN schema, never to the current one', () => {

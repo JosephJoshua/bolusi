@@ -124,6 +124,23 @@ export interface OperationDeclaration<DB> {
   readonly conflict?: ConflictDeclaration;
   /** Envelope scope (01 §6; 05 §2.1). Default `'store'`. */
   readonly scope?: OperationScope;
+  /**
+   * The permission the op's author must hold, in the emitting device's store, for the server to
+   * accept a pushed op of this type. A device checks it locally before writing; the server checks
+   * it again against its own directory, so a tampered client cannot record what its user may not
+   * do.
+   *
+   * `null` only for types no command emits: ops the runtime appends outside the command layer
+   * (session, denial audit, lockout, enrollment) and ops the server builds itself.
+   */
+  readonly permission: string | null;
+  /**
+   * The kind of record every op of this type is about (`repair_ticket`, `note`, …). Fixed per type:
+   * the projection engine re-folds a record by its entity type and id, so an op claiming another
+   * type would be folded into the wrong record's history. Devices write it from here and the server
+   * refuses an op whose envelope says otherwise.
+   */
+  readonly entityType: string;
 }
 
 /**
@@ -322,6 +339,19 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
     if (typeof reversal !== 'string' || reversal.trim().length === 0) {
       throw new ModuleDefinitionError(
         `op type ${type} declares no reversal — it is MANDATORY (04 §3, 05 §7): state how this op is undone. It is documentation in v0; an executable buildReversal slots in for V2.`,
+      );
+    }
+
+    if (typeof declaration.entityType !== 'string' || declaration.entityType.length === 0) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares no entityType — state the kind of record its ops are about`,
+      );
+    }
+
+    const { permission } = declaration;
+    if (permission !== null && (typeof permission !== 'string' || permission.length === 0)) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares no permission — state the permission its author must hold, or null for a type no command emits`,
       );
     }
 

@@ -61,8 +61,8 @@ describe('resolveSyncTransition — valid transitions (03 §3)', () => {
         });
       }
     }
-    // Denominator guard (T-14): all eight rejection codes were exercised.
-    expect(REJECTION_CODES.length).toBe(8);
+    // Denominator guard (T-14): all nine rejection codes were exercised.
+    expect(REJECTION_CODES.length).toBe(9);
   });
 });
 

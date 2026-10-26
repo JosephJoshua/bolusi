@@ -337,6 +337,8 @@ export function makeFixtureModuleManifest(
         reversal:
           'Reversed by fixture.item_archived on the same entityId (v1 — the fixture models the declaration, not the behaviour).',
         apply: itemCreatedApplier,
+        permission: 'fixture.create',
+        entityType: 'fixture_item',
       },
     },
 

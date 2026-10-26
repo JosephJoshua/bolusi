@@ -76,6 +76,13 @@ const FIXTURE_OP_SCHEMA_VERSIONS = new Map<string, number>([
   ['notes.note_archived', 1],
 ]);
 
+/** The same permissions the real `notes` module declares for its op types. */
+const FIXTURE_OP_PERMISSIONS = new Map<string, string>([
+  ['notes.note_created', 'notes.create'],
+  ['notes.note_body_edited', 'notes.edit'],
+  ['notes.note_archived', 'notes.archive'],
+]);
+
 export const fixtureOperations: OperationRegistry = {
   schemaVersionFor: (type) => FIXTURE_OP_SCHEMA_VERSIONS.get(type),
   // Every fixture op is store-scoped (01 §6's default) and declares no conflict — this fixture
@@ -84,6 +91,8 @@ export const fixtureOperations: OperationRegistry = {
   // fail-closed path reads.
   scopeFor: (type) => (FIXTURE_OP_SCHEMA_VERSIONS.has(type) ? 'store' : undefined),
   conflictFor: () => undefined,
+  permissionFor: (type) => FIXTURE_OP_PERMISSIONS.get(type),
+  entityTypeFor: (type) => (FIXTURE_OP_SCHEMA_VERSIONS.has(type) ? 'note' : undefined),
   types: () => [...FIXTURE_OP_SCHEMA_VERSIONS.keys()].sort(),
   get size() {
     return FIXTURE_OP_SCHEMA_VERSIONS.size;
