@@ -28,6 +28,7 @@ import {
   runApplierConformance,
   FIXTURE_TABLE,
   type FixtureDatabase,
+  opRowOf,
 } from '@bolusi/test-support';
 
 import {
@@ -35,6 +36,7 @@ import {
   defineModule,
   encodeCursor,
   type AnyModuleDefinition,
+  insertOpLogRow,
 } from '../../src/index.js';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
@@ -69,9 +71,7 @@ async function createOpLogTables(db: Kysely<never>): Promise<void> {
     .addColumn('entity_type', 'text', (c) => c.notNull())
     .addColumn('entity_id', 'text', (c) => c.notNull())
     .addColumn('schema_version', 'integer', (c) => c.notNull())
-    .addColumn('payload', 'text', (c) => c.notNull())
     .addColumn('timestamp_ms', 'bigint', (c) => c.notNull())
-    .addColumn('location', 'text')
     .addColumn('source', 'text', (c) => c.notNull())
     .addColumn('agent_initiated', 'integer', (c) => c.notNull())
     .addColumn('agent_conversation_id', 'text')
@@ -147,19 +147,11 @@ function generateScript(seed: number, count: number): SignedOperation[] {
 
 /** Insert an op into the minimal op-log table. Dialect-neutral. */
 async function insertOp(db: Kysely<never>, op: SignedOperation): Promise<void> {
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      arrival_seq, synced_at
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${op.agentInitiated ? 1 : 0}, ${null},
-      ${op.previousHash}, ${op.hash}, ${op.signature}, ${`jcs:${op.id}`}, ${'local'}, ${null}, ${null}
-    )
-  `.execute(db);
+  await insertOpLogRow(db, opRowOf(op), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
 }
 
 async function countFixtureRows(db: Kysely<never>): Promise<number> {

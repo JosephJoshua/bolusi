@@ -33,6 +33,7 @@ import {
   verifyPin,
 } from '@bolusi/core';
 import { createClientDialect, type ClientDatabase } from '@bolusi/db-client';
+import type { SignedCore } from '@bolusi/schemas';
 
 import { FaultFetch } from '../src/fault-fetch.js';
 import { openPinFixture, verifyDeps, type PinFixture } from '../src/pin-fixture.js';
@@ -113,7 +114,7 @@ describe('CHAOS-11 PIN rate-limit escalation timing', () => {
             expect(lockOps).toHaveLength(1); // emitted exactly once, at the 10th
             expect(lockOps[0]!.userId).toBe(f.staffId);
             expect(lockOps[0]!.source).toBe('system');
-            expect(JSON.parse(lockOps[0]!.payload)).toMatchObject({
+            expect((JSON.parse(lockOps[0]!.signedCoreJcs) as SignedCore).payload).toMatchObject({
               consecutiveFailures: PIN_HARD_LOCK_THRESHOLD,
             });
 

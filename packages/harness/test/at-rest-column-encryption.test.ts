@@ -22,9 +22,6 @@
 // Two write paths are deliberately NOT reachable from this package and are covered elsewhere:
 //   - `media_items.location` — written by apps/mobile's `insertMediaItem` (downstream of harness);
 //     covered by `apps/mobile/src/media/queue.at-rest.test.ts`.
-//   - the PULL insert of `operations` (`insertPulledOp`, private to core's pull phase) — it writes
-//     the same three `operations` columns proven below via the op-store path, through the same
-//     `encryptColumnValue` seam five other writers here exercise.
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,17 +29,21 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  insertOpLogRow,
   insertQuarantinedOp,
   listSwitcherUsers,
+  operationFromSignedCoreJcs,
   readCanonicalPage,
   readVerifier,
   replaceUsersDirectory,
+  SIGNED_CORE_SEAL,
   writeVerifier,
   type PinVerifier,
 } from '@bolusi/core';
 import {
   Aes256GcmColumnCipher,
   COLUMN_CIPHER_SCHEME_PREFIX,
+  COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX,
   closeClientDb,
   createClientOpStore,
   openClientDb,
@@ -51,7 +52,8 @@ import {
 } from '@bolusi/db-client';
 import { noteBodyEditedApplier } from '@bolusi/modules/notes';
 import { repairModule } from '@bolusi/modules/repair';
-import { nodeColumnAead } from '@bolusi/test-support';
+import type { SignedOperation } from '@bolusi/schemas';
+import { nodeColumnAead, opRowOf } from '@bolusi/test-support';
 
 import { openFileDriver } from '@bolusi/sqlite-test-driver';
 
@@ -71,8 +73,8 @@ function keyBytes(hex: string): Uint8Array {
 // column was stored in the clear. They are deliberately weird so a coincidental match is impossible.
 const PLAIN = {
   payload: 'PLAINTEXT-PAYLOAD-crankshaft-invoice-77',
-  signedCore: 'PLAINTEXT-SIGNEDCORE-crankshaft-invoice-77',
   opLocation: 'PLAINTEXT-OPGPS-minus6point2214',
+  pulledPayload: 'PLAINTEXT-PULLEDPAYLOAD-gearbox-receipt-31',
   noteTitle: 'PLAINTEXT-NOTETITLE-Stok Oli Mesin',
   noteBody: 'PLAINTEXT-NOTEBODY-dua belas krat — ✅ diperiksa',
   salt: 'PLAINTEXTSALTAAAAAAAAAAAAAAAAAAA=',
@@ -110,40 +112,57 @@ afterEach(async () => {
   opened = null;
 });
 
+/**
+ * An op whose payload and location carry plaintext markers. Since client migration 6 the signed text
+ * is their only stored copy, so it is the real canonical text, as a production writer stores it.
+ */
+const LOCAL_OP: SignedOperation = {
+  id: 'op-1',
+  tenantId: 'tenant-1',
+  storeId: 'store-1',
+  userId: 'user-1',
+  deviceId: 'device-1',
+  seq: 1,
+  type: 'notes.note_created',
+  entityType: 'note',
+  entityId: 'note-1',
+  schemaVersion: 3,
+  payload: { marker: PLAIN.payload } as never,
+  timestamp: 1_700_000_000_000,
+  location: {
+    lat: -6.2214,
+    lng: 106.8,
+    accuracyMeters: 5,
+    marker: PLAIN.opLocation,
+  } as never,
+  source: 'ui',
+  agentInitiated: false,
+  agentConversationId: null,
+  previousHash: '0'.repeat(64),
+  hash: '1'.repeat(64),
+  signature: 'c2ln',
+};
+
+const PULLED_OP: SignedOperation = {
+  ...LOCAL_OP,
+  id: 'op-2',
+  deviceId: 'device-2',
+  payload: { marker: PLAIN.pulledPayload } as never,
+  location: null,
+};
+
 /** Drive EVERY reachable production writer of a signed-off encrypted column. */
 async function writeAllTheSensitiveThings(db: ClientDb): Promise<void> {
-  // 1–3. operations.payload / signed_core_jcs / location — the REAL production op-store (05 §1).
+  // 1. operations.signed_core_jcs (which holds the payload and location) — the REAL production
+  //    op-store (05 §1), and the pull's raw-`sql` writer.
   const store = createClientOpStore(db);
   await store.transaction(async (tx) => {
-    await tx.insertOp({
-      op: {
-        id: 'op-1',
-        tenantId: 'tenant-1',
-        storeId: 'store-1',
-        userId: 'user-1',
-        deviceId: 'device-1',
-        seq: 1,
-        type: 'notes.note_created',
-        entityType: 'note',
-        entityId: 'note-1',
-        schemaVersion: 3,
-        payload: { marker: PLAIN.payload } as never,
-        timestamp: 1_700_000_000_000,
-        location: {
-          lat: -6.2214,
-          lng: 106.8,
-          accuracyMeters: 5,
-          marker: PLAIN.opLocation,
-        } as never,
-        source: 'ui',
-        agentInitiated: false,
-        agentConversationId: null,
-        previousHash: '0'.repeat(64),
-        hash: '1'.repeat(64),
-        signature: 'c2ln',
-      },
-      signedCoreJcs: `{"marker":"${PLAIN.signedCore}"}`,
-    });
+    await tx.insertOp(opRowOf(LOCAL_OP));
+  });
+  await insertOpLogRow(db.db, opRowOf(PULLED_OP), {
+    syncStatus: 'synced',
+    syncedAt: 1_700_000_000_000,
+    arrivalSeq: 1,
   });
 
   // 4–5. notes.title / notes.body — written through the Kysely builder exactly as a module applier
@@ -231,27 +250,26 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
     //     that wrote NULL over everything would pass (a). Re-open and read the physical cells.
     opened = { ...opened, db: (await reopen(opened.file, opened.dir, DB_KEY)).db };
     const raw = opened.db.driver;
+    // The op log's signed text is sealed compressed (`SIGNED_CORE_SEAL`); everything else is not.
     const cells = [
-      ['operations', 'payload'],
-      ['operations', 'signed_core_jcs'],
-      ['operations', 'location'],
-      ['notes', 'title'],
-      ['notes', 'body'],
-      ['user_pin_verifiers', 'salt'],
-      ['user_pin_verifiers', 'hash'],
-      ['user_pin_verifiers', 'params'],
-      ['quarantined_ops', 'signed_core_jcs'],
-      ['users_directory', 'name'],
+      ['operations', 'signed_core_jcs', COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX],
+      ['notes', 'title', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['notes', 'body', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['user_pin_verifiers', 'salt', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['user_pin_verifiers', 'hash', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['user_pin_verifiers', 'params', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['quarantined_ops', 'signed_core_jcs', COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX],
+      ['users_directory', 'name', COLUMN_CIPHER_SCHEME_PREFIX],
     ] as const;
-    for (const [table, column] of cells) {
+    for (const [table, column, prefix] of cells) {
       const rows = await raw.execute(
         `SELECT ${column} AS c FROM ${table} WHERE ${column} IS NOT NULL`,
       );
       expect(rows.rows.length, `${table}.${column} had no rows to check`).toBeGreaterThan(0);
       for (const row of rows.rows) {
         expect(
-          String(row['c']).startsWith(COLUMN_CIPHER_SCHEME_PREFIX),
-          `${table}.${column} is not a marked AEAD blob`,
+          String(row['c']).startsWith(prefix),
+          `${table}.${column} is not a marked AEAD blob of the expected scheme`,
         ).toBe(true);
       }
     }
@@ -293,13 +311,20 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
     expect(note.body).toBe(PLAIN.noteBody);
 
     // The verbatim JCS bytes (05 §3) survive — a changed byte here would break a real signature.
-    const op = await opened.db.db
+    // Both writers' rows, decompressed and opened, are the canonical text they were given, and the
+    // payload and location come back out of it.
+    const ops = await opened.db.db
       .selectFrom('operations')
-      .select(['payload', 'signedCoreJcs', 'location'])
-      .executeTakeFirstOrThrow();
-    expect(op.signedCoreJcs).toBe(`{"marker":"${PLAIN.signedCore}"}`);
-    expect(JSON.parse(op.payload)).toEqual({ marker: PLAIN.payload });
-    expect(String(op.location)).toContain(PLAIN.opLocation);
+      .select(['signedCoreJcs', 'hash', 'signature'])
+      .orderBy('id')
+      .execute();
+    expect(ops.map((op) => op.signedCoreJcs)).toEqual([
+      opRowOf(LOCAL_OP).signedCoreJcs,
+      opRowOf(PULLED_OP).signedCoreJcs,
+    ]);
+    const local = operationFromSignedCoreJcs(ops[0]!.signedCoreJcs, ops[0]!);
+    expect(local.payload).toEqual({ marker: PLAIN.payload });
+    expect(JSON.stringify(local.location)).toContain(PLAIN.opLocation);
   });
 
   test('the switcher still lists users in NAME order, now sorted app-side (name is encrypted)', async () => {
@@ -405,14 +430,17 @@ describe('at-rest column encryption — a forged marker in a PLAINTEXT column is
   test('a signed op carrying a marker-shaped conversation id does not break the projection fold', async () => {
     opened = await openAt(DB_KEY);
 
-    await opened.db.driver.execute(
-      `INSERT INTO operations (
-         id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-         schema_version, payload, timestamp_ms, location, source, agent_initiated,
-         agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
-       ) VALUES (?, 't', 's', 'u', 'd', 1, 'notes.note_created', 'note', 'n1', 1,
-                 '{}', 1, NULL, 'ui', 0, ?, ?, ?, 'c2ln', '{}', 'synced')`,
-      ['op-forged', FORGED, '0'.repeat(64), '1'.repeat(64)],
+    await insertOpLogRow(
+      opened.db.db,
+      opRowOf({
+        ...LOCAL_OP,
+        id: 'op-forged',
+        entityId: 'n1',
+        payload: {} as never,
+        location: null,
+        agentConversationId: FORGED,
+      }),
+      { syncStatus: 'synced', syncedAt: 1, arrivalSeq: 1 },
     );
 
     // The column is plaintext by design — it is stored verbatim, and that is CORRECT.
@@ -644,6 +672,67 @@ describe('at-rest column encryption — the failure modes', () => {
 
     // …and gone once the file is rewritten.
     expect(readFileSync(opened.file).includes(Buffer.from(legacy, 'utf8'))).toBe(false);
+  });
+});
+
+describe('column cipher — compressed seal (the op log)', () => {
+  const cipher = new Aes256GcmColumnCipher(keyBytes(DB_KEY), nodeColumnAead);
+  const jcs = opRowOf(LOCAL_OP).signedCoreJcs;
+
+  test('round-trips byte-identically, including empty and non-ASCII text', () => {
+    for (const text of [jcs, '', 'Yohanis Wenda — layar retak ✓ 漢字', jcs.repeat(50)]) {
+      const sealed = cipher.encrypt(text, SIGNED_CORE_SEAL);
+      expect(sealed.startsWith(COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
+      expect(cipher.isCiphertext(sealed)).toBe(true);
+      expect(cipher.decrypt(sealed)).toBe(text);
+    }
+  });
+
+  test('a plain seal is unchanged by the option existing, and both kinds decrypt', () => {
+    const plain = cipher.encrypt(jcs);
+    expect(plain.startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
+    expect(cipher.decrypt(plain)).toBe(jcs);
+    expect(cipher.encrypt(jcs, {}).startsWith(COLUMN_CIPHER_SCHEME_PREFIX)).toBe(true);
+  });
+
+  test('a real signed core shrinks well below its plain seal', () => {
+    const compressed = cipher.encrypt(jcs, SIGNED_CORE_SEAL).length;
+    const plain = cipher.encrypt(jcs).length;
+    expect(compressed).toBeLessThan(plain * 0.7);
+  });
+
+  test('tampering is caught by GCM before anything is inflated', () => {
+    const sealed = cipher.encrypt(jcs, SIGNED_CORE_SEAL);
+    const flipped = sealed.slice(0, -1) + (sealed.slice(-1) === 'A' ? 'B' : 'A');
+    expect(() => cipher.decrypt(flipped)).toThrow();
+  });
+
+  test('relabelling the scheme prefix never yields the original text', () => {
+    // The prefix sits outside the GCM seal, so someone who can write the file can swap it. That gains
+    // nothing: the value either fails to open or reads as garbage, and a reader parsing the signed
+    // core then fails loudly. (Anyone who can write the file can already delete rows outright.)
+    const readAs = (value: string, from: string, to: string): string | Error => {
+      try {
+        return cipher.decrypt(to + value.slice(from.length));
+      } catch (error) {
+        return error as Error;
+      }
+    };
+    const compressed = cipher.encrypt(jcs, SIGNED_CORE_SEAL);
+    const plain = cipher.encrypt(jcs);
+    expect(
+      readAs(compressed, COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX, COLUMN_CIPHER_SCHEME_PREFIX),
+    ).not.toBe(jcs);
+    expect(
+      readAs(plain, COLUMN_CIPHER_SCHEME_PREFIX, COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX),
+    ).not.toBe(jcs);
+  });
+
+  test('another key neither recognises nor opens a compressed value', () => {
+    const sealed = cipher.encrypt(jcs, SIGNED_CORE_SEAL);
+    const wrong = new Aes256GcmColumnCipher(keyBytes(WRONG_KEY), nodeColumnAead);
+    expect(wrong.isCiphertext(sealed)).toBe(false);
+    expect(() => wrong.decrypt(sealed)).toThrow();
   });
 });
 

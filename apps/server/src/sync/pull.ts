@@ -6,6 +6,7 @@
 // db-server's generated types do not reach apps/server (task 39), so the query layer is unchecked
 // against the schema — the real-Postgres tests are the correctness gate for column names, not tsc.
 import type { ForTenant, TenantDb } from '@bolusi/db-server';
+import { operationFromSignedCoreJcs } from '@bolusi/core';
 import type { DeviceInfo, PullRequest, PullResponse, SignedOperation } from '@bolusi/schemas';
 
 /** The token-authenticated device pulling (api/00 §3; store null = system/tenant-scoped device). */
@@ -33,8 +34,7 @@ function reconstructWireOp(row: {
   hash: string;
   signature: string;
 }): SignedOperation {
-  const core = JSON.parse(row.signedCoreJcs) as Record<string, unknown>;
-  return { ...core, hash: row.hash, signature: row.signature } as SignedOperation;
+  return operationFromSignedCoreJcs(row.signedCoreJcs, row);
 }
 
 /**

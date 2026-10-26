@@ -124,9 +124,9 @@ describe('I-13 PIN hash material never reaches the operation log or any pushed o
         'the pin ops never reached the wire — the scan below would be vacuous',
       ).toBe(true);
 
-      // ── THE ASSERTION: every pushed byte, and every stored op-log payload ─────────────────────
+      // ── THE ASSERTION: every pushed byte, and every stored op-log signed text ───────────────────
       const wireBytes = transport.pushes.map((request) => JSON.stringify(request));
-      const logBytes = authOps.map((op) => op.payload);
+      const logBytes = authOps.map((op) => op.signedCoreJcs);
       for (const text of [...wireBytes, ...logBytes]) {
         expect(
           leakedVerifierEncodings(text, secrets),

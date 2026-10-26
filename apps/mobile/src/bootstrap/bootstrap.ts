@@ -179,7 +179,8 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     //    the seam the sync loop folds through (04 §4). The invalidation bus is constructed here and
     //    injected (rather than left to the engine's internal default) so the composition root can
     //    subscribe module screens to it — see `Bootstrapped.invalidation`.
-    const invalidation = new InvalidationBus();
+    // Given the connection's transaction boundaries so listeners only see committed rows.
+    const invalidation = new InvalidationBus(db);
     const engine = createProjectionEngine<never>(db.db as never, registry.projections, {
       invalidation,
     });

@@ -19,9 +19,9 @@ import {
   type PushResult,
   type SignedOperation,
 } from '@bolusi/schemas';
-import { noblePort } from '@bolusi/test-support';
+import { opRowOf } from '@bolusi/test-support';
 
-import { runPushPhase, signedCoreJcsOf } from '../../src/index.js';
+import { insertOpLogRow, runPushPhase } from '../../src/index.js';
 import {
   makeDevice,
   makeSignedNoteOp,
@@ -74,18 +74,11 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
   // `signed_core_jcs` via the REAL canonicalizer — the push path rebuilds the wire op from these
   // bytes (05 §3 verbatim-storage), so a hand-rolled approximation here would test a fixture's
   // serializer rather than the product's.
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${signedCoreJcsOf(op, noblePort)}, 'local'
-    )
-  `.execute(harness.db);
+  await insertOpLogRow(harness.db, opRowOf(op), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
   return op;
 }
 

@@ -1,5 +1,10 @@
 // The projection engine's op-log DECODER against the driver production actually uses (task 48).
 //
+// Since client migration 6 the decoder rebuilds each op from its verbatim signed text rather than
+// the typed columns below, so the payload/location/agent_initiated rows of the table describe the
+// history; the ORDER cases still read the typed int8 columns, and every case still pins the result
+// on the real driver.
+//
 // WHY THIS FILE EXISTS IN db-server AND NOT IN packages/core, WHERE THE CODE LIVES
 // ---------------------------------------------------------------------------------
 // `reconstructOperation` (core/projection/oplog-source.ts) rebuilds a `SignedOperation` from an

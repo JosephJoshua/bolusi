@@ -22,6 +22,7 @@ import {
 } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
 
+import { operationFromSignedCoreJcs } from '../crypto/signed-core.js';
 import { markSyncResult, type OpBookkeepingDatabase } from '../oplog/bookkeeping.js';
 import type { OpSyncStatus } from '../state-machines/op-sync-status.js';
 import type { SyncSurfacePort, SyncTransportPort } from './ports.js';
@@ -56,10 +57,7 @@ export async function readPushBatch<DB>(
     SELECT id, seq, signed_core_jcs AS "signedCoreJcs", hash, signature FROM operations
     WHERE sync_status = 'local' ORDER BY seq LIMIT ${limit}
   `.execute(db);
-  return result.rows.map((row) => {
-    const core = JSON.parse(row.signedCoreJcs) as Record<string, unknown>;
-    return { ...core, hash: row.hash, signature: row.signature } as SignedOperation;
-  });
+  return result.rows.map((row) => operationFromSignedCoreJcs(row.signedCoreJcs, row));
 }
 
 const KNOWN_CODES: ReadonlySet<string> = new Set(REJECTION_CODES);

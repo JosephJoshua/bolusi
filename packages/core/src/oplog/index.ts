@@ -37,6 +37,7 @@ export {
   type SyncResultEvent,
   type SyncTransition,
 } from './bookkeeping.js';
+export { insertOpLogRow, type OpLogRowBookkeeping } from './row.js';
 export {
   verifyChain,
   verifyOpDetailed,

@@ -8,6 +8,8 @@
 // an RNG — T-6 forbids real RNG in tests) and should be replaced by the kit when it lands.
 import type { Kysely } from 'kysely';
 
+import { canonicalizeJcs, type JsonValue } from '@bolusi/core';
+
 import type { DB } from '../../src/generated/db.js';
 
 let counter = 0;
@@ -165,34 +167,59 @@ export async function seedOperation(
 ): Promise<string> {
   const id = uuid();
   const at = BigInt(timestampMs());
-  const location = overrides.location;
+  const location = overrides.location ?? null;
+  const payload = overrides.payload ?? { title: `t-${id}` };
+  const core = {
+    id,
+    tenantId: tenant.tenantId,
+    storeId: tenant.storeId,
+    userId: tenant.userId,
+    deviceId: overrides.deviceId ?? tenant.deviceId,
+    seq: overrides.seq ?? BigInt(counter),
+    type: overrides.type ?? 'note.created',
+    entityType: 'note',
+    entityId: overrides.entityId ?? uuid(),
+    schemaVersion: 1,
+    payload,
+    timestamp: overrides.timestampMs ?? at,
+    location,
+    source: 'ui',
+    agentInitiated: overrides.agentInitiated ?? false,
+    agentConversationId: null,
+    previousHash: '0'.repeat(64),
+  };
 
   await db
     .insertInto('operations')
     .values({
       id,
-      tenantId: tenant.tenantId,
-      storeId: tenant.storeId,
-      userId: tenant.userId,
-      deviceId: overrides.deviceId ?? tenant.deviceId,
-      seq: overrides.seq ?? BigInt(counter),
-      type: overrides.type ?? 'note.created',
-      entityType: 'note',
-      entityId: overrides.entityId ?? uuid(),
-      schemaVersion: 1,
+      tenantId: core.tenantId,
+      storeId: core.storeId,
+      userId: core.userId,
+      deviceId: core.deviceId,
+      seq: core.seq,
+      type: core.type,
+      entityType: core.entityType,
+      entityId: core.entityId,
+      schemaVersion: core.schemaVersion,
       // Serialised here, not handed over as an object: a JSON *string* parameter is what the
       // existing rows have always written into this `jsonb` column, and the point of the tests
       // that read it back is what the DRIVER does on the way OUT, not on the way in.
-      payload: JSON.stringify(overrides.payload ?? { title: `t-${id}` }),
-      timestampMs: overrides.timestampMs ?? at,
-      location: location === undefined || location === null ? null : JSON.stringify(location),
-      source: 'ui',
-      agentInitiated: overrides.agentInitiated ?? false,
+      payload: JSON.stringify(payload),
+      timestampMs: core.timestamp,
+      location: location === null ? null : JSON.stringify(location),
+      source: core.source,
+      agentInitiated: core.agentInitiated,
       agentConversationId: null,
-      previousHash: '0'.repeat(64),
+      previousHash: core.previousHash,
       hash: id.replace(/-/g, '').padEnd(64, '0').slice(0, 64),
       signature: overrides.signature ?? `sig-${id}`,
-      signedCoreJcs: `{"id":"${id}"}`,
+      // The op's real canonical text: readers (the projection fold, the pull) rebuild the op from it.
+      signedCoreJcs: canonicalizeJcs({
+        ...core,
+        seq: Number(core.seq),
+        timestamp: Number(core.timestamp),
+      } as unknown as JsonValue),
       serverSeq,
       receivedAt: at,
     })

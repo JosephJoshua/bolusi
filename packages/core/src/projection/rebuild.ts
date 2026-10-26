@@ -135,6 +135,14 @@ export async function runRebuild<DB>(
   const opTypes = ctx.registry.moduleOpTypes(module);
   const tables = new Set(ctx.registry.moduleTableNames(module));
 
+  // A listener may read a transaction's rows before a rollback undoes them (one connection on the
+  // device, and Kysely's transactions bypass the bus's hold), so a failed transaction signals its
+  // tables too and listeners re-read what remains. A committed batch is signalled below.
+  const signalRollback = (error: unknown): never => {
+    ctx.invalidation.emit(tables);
+    throw error;
+  };
+
   const rootStore = ctx.makeStore(ctx.db);
   const existing = await rootStore.readCursor(moduleId);
 
@@ -143,12 +151,15 @@ export async function runRebuild<DB>(
   if (existing === null || existing.phase === 'invalidated') {
     startedFresh = true;
     ctx.stats.recordRebuildStart();
-    await ctx.db.transaction().execute(async (trx) => {
-      for (const table of tables) {
-        await sql`DELETE FROM ${sql.table(table)}`.execute(trx);
-      }
-      await ctx.makeStore(trx).writeCursor(moduleId, { phase: 'started' });
-    });
+    await ctx.db
+      .transaction()
+      .execute(async (trx) => {
+        for (const table of tables) {
+          await sql`DELETE FROM ${sql.table(table)}`.execute(trx);
+        }
+        await ctx.makeStore(trx).writeCursor(moduleId, { phase: 'started' });
+      })
+      .catch(signalRollback);
     after = null;
   } else if (existing.phase === 'started') {
     after = null;
@@ -162,7 +173,7 @@ export async function runRebuild<DB>(
 
   while (batches < stopAfterBatches) {
     const expected = after === null ? { phase: 'started' } : { phase: 'progress', cursor: after };
-    const batch = await ctx.db.transaction().execute(async (trx) => {
+    const transaction = ctx.db.transaction().execute(async (trx) => {
       const store = ctx.makeStore(trx);
       if (JSON.stringify(await store.readCursor(moduleId)) !== JSON.stringify(expected)) {
         return null;
@@ -186,6 +197,7 @@ export async function runRebuild<DB>(
       }
       return { length: page.length, cursor };
     });
+    const batch = await transaction.catch(signalRollback);
     if (batch === null) break;
     if (batch.length === 0) {
       complete = true;

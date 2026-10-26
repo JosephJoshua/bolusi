@@ -22,6 +22,7 @@ import {
   bytesToBase64,
   createUuidV7Generator,
   GenesisRuleError,
+  operationFromSignedCoreJcs,
   verifyChain,
   verifyOp,
   type AppendContext,
@@ -105,7 +106,7 @@ function append(overrides: AppendOverrides = {}) {
 }
 
 /**
- * Every op row for the device, ascending by seq, reconstructed into a `SignedOperation`. Read via
+ * Every op row for the device, ascending by seq, rebuilt from its stored signed text. Read via
  * the TYPED query builder (not raw `SELECT *`): the client Kysely runs CamelCasePlugin, so a raw
  * `sql` result comes back camelCased and a snake_case column lookup would silently be `undefined` —
  * which would corrupt the reconstructed core and make every `verifyOp` here vacuously false.
@@ -113,31 +114,11 @@ function append(overrides: AppendOverrides = {}) {
 async function readChain(): Promise<SignedOperation[]> {
   const rows = await db.db
     .selectFrom('operations')
-    .selectAll()
+    .select(['signedCoreJcs', 'hash', 'signature'])
     .where('deviceId', '=', deviceId)
     .orderBy('seq', 'asc')
     .execute();
-  return rows.map((r) => ({
-    id: r.id as string,
-    tenantId: r.tenantId,
-    storeId: r.storeId,
-    userId: r.userId,
-    deviceId: r.deviceId,
-    seq: r.seq,
-    type: r.type,
-    entityType: r.entityType,
-    entityId: r.entityId,
-    schemaVersion: r.schemaVersion,
-    payload: JSON.parse(r.payload) as Record<string, unknown>,
-    timestamp: r.timestampMs,
-    location: r.location === null ? null : (JSON.parse(r.location) as SignedOperation['location']),
-    source: r.source as SignedOperation['source'],
-    agentInitiated: r.agentInitiated === 1,
-    agentConversationId: r.agentConversationId,
-    previousHash: r.previousHash,
-    hash: r.hash,
-    signature: r.signature,
-  }));
+  return rows.map((r) => operationFromSignedCoreJcs(r.signedCoreJcs, r));
 }
 
 async function opCount(): Promise<number> {

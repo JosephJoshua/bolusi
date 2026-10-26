@@ -65,9 +65,14 @@ behind adapters. Node tests do not establish native performance or correctness.
 - First sync on a new device replays the store's whole history; there is no
   snapshot. `pnpm --filter @bolusi/modules bench:first-sync` measures it with
   realistic repair tickets. On a laptop (Node, October 2026), one year at 50
-  tickets a day is about 122k ops: 22 MB gzipped on the wire, 205 s to pull,
-  verify and apply, and a 555 MB device database (the op log is about 70% of it).
-  Phone timings are still unmeasured.
+  tickets a day is about 122k ops: about 28 MB gzipped on the wire, about 250 s
+  to pull, verify and apply, and a 304 MB device database (555 MB before client
+  migration 6 stopped storing each payload twice and compressed the signed text;
+  the op log went from 394 MB to 143 MB). Phone timings are still unmeasured; on
+  Hermes the compression costs about 0.8 ms per pulled op.
+- Op-log values are deflated with a frozen preset dictionary
+  (`db-client/src/crypto/compression.ts`). Changing the dictionary makes stored
+  ops unreadable; a better one needs a new scheme prefix.
 - Local confidentiality uses application-layer encryption; SQLCipher is disabled.
   Old comments/report names do not establish whole-database encryption.
 - Extended chaos has unresolved large-workload failures: the recorded October 14

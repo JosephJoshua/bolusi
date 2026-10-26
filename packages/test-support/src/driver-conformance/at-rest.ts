@@ -41,10 +41,11 @@ export interface AtRestProbeContext {
   /** Every stored cell of the encrypted columns, read from the copy (no key — the file is plain SQLite). */
   readSealedCells(): Promise<readonly SealedCell[]>;
   /**
-   * The prefix every sealed value must carry. Injected rather than imported so this package keeps its
-   * type-only edge to `@bolusi/db-client`; the device ctx passes `COLUMN_CIPHER_SCHEME_PREFIX`.
+   * The prefixes a sealed value may carry (plain and compressed seals). Injected rather than imported
+   * so this package keeps its type-only edge to `@bolusi/db-client`; the device ctx passes
+   * `COLUMN_CIPHER_SCHEME_PREFIX` and `COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX`.
    */
-  readonly sealedPrefix: string;
+  readonly sealedPrefixes: readonly string[];
 }
 
 export interface AtRestFinding {
@@ -58,9 +59,7 @@ export interface AtRestFinding {
  * set without adding it here would leave the new column unprobed and the gate still green.
  */
 export const AT_REST_ENCRYPTED_COLUMNS: readonly (readonly [table: string, column: string])[] = [
-  ['operations', 'payload'],
   ['operations', 'signed_core_jcs'],
-  ['operations', 'location'],
   ['notes', 'title'],
   ['notes', 'body'],
   ['user_pin_verifiers', 'salt'],
@@ -138,8 +137,9 @@ export async function checkDbAtRestIsCiphertext(ctx: AtRestProbeContext): Promis
   // 2. Every stored cell of an encrypted column is a marked blob.
   const cells = await ctx.readSealedCells();
   for (const cell of cells) {
-    if (cell.value === null) continue;
-    if (!cell.value.startsWith(ctx.sealedPrefix)) {
+    const { value } = cell;
+    if (value === null) continue;
+    if (!ctx.sealedPrefixes.some((prefix) => value.startsWith(prefix))) {
       findings.push({
         check: 'encrypted column is sealed',
         detail: `${cell.table}.${cell.column} is stored WITHOUT the cipher marker — it is plaintext`,

@@ -41,6 +41,7 @@ export {
   Aes256GcmColumnCipher,
   ColumnCipherError,
   COLUMN_CIPHER_SCHEME_PREFIX,
+  COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX,
   COLUMN_KEY_BYTES,
   COLUMN_NONCE_BYTES,
 } from './crypto/column-cipher.js';
