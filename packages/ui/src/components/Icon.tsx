@@ -80,10 +80,11 @@ export const ICON_GLYPHS = Object.freeze({
   share: 'share-variant-outline',
   /** PhotoStrip: opens every photo at once. */
   photos: 'image-multiple-outline',
-  /** A compact inline action that moves a row one place up a list, always beside a label. */
-  moveUp: 'arrow-up',
-  /** A compact inline action that moves a row one place down a list, always beside a label. */
-  moveDown: 'arrow-down',
+  /** ReorderableList: the handle a row is dragged by, as on iOS lists; it carries an accessible
+   *  label and move up/down actions, so it is never the only way to reorder. */
+  dragHandle: 'drag-horizontal-variant',
+  /** Avatar menu: switch to another staff member. */
+  switchUser: 'account-switch-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

@@ -93,7 +93,9 @@ Prefer a proper component over a hand-made approximation. Already built:
 `SearchField`, `SegmentedControl` (compact, bleed), `TextButton`, `Timeline`
 (history, "Riwayat"), `PhotoStrip`, `Sheet` (bottom sheet to show more, never a
 form), `PhotoViewer` (pinch and double-tap zoom, pager, share), `ConfirmSheet`,
-`Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`.
+`Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`,
+`ReorderableList` (drag a handle to reorder, iOS style), `SwitchRow` (an on/off
+setting).
 
 - When a screen needs something these do not cover, build a reusable
   component in `packages/ui` (with a gallery entry), not a screen-local hack.
