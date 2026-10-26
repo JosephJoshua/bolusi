@@ -43,3 +43,11 @@ export {
 } from './registry.js';
 
 export { createModuleRuntime, type ModuleRuntime, type ModuleRuntimeOptions } from './runtime.js';
+
+export {
+  bindModulePort,
+  type CommandName,
+  type ModuleOperations,
+  type ModulePort,
+  type QueryName,
+} from './port.js';

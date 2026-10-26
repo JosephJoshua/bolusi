@@ -53,16 +53,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import { tn } from './i18n.js';
 import { useCommand, useNotesRuntime, useQuery } from './runtime.js';
 
-/**
- * The editor's discard gate, published to the host shell (design-system §8.1; task 145).
- *
- * The shell mounts this editor inside a module surface it navigates PRIVATELY, so a hardware-back or a
- * header-chrome tap used to leave by unmounting the surface — dropping the draft with none of the
- * confirm the header back already runs. This is the ONE seam that lets those paths ask the live editor
- * "may I leave?" instead: the editor answers by running the SAME `dirty ⇒ ConfirmSheet` gate its own
- * back uses, and calls `proceed` only once the user consents (immediately when the draft is clean).
- */
-export type DiscardGuard = (proceed: () => void) => void;
+import type { DiscardGuard } from '../../screen-kit/index.js';
+
+export type { DiscardGuard };
 
 /**
  * One editor's in-flight work, as retained across a lock (task 155). The MODULE owns this shape —

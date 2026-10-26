@@ -31,14 +31,15 @@
  * its answers. That a real `CameraView` hands back a real JPEG is D12/D13's, not this lane's.
  */
 import { errorCodeOrUnexpected, type StorageBand } from '@bolusi/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { CapturedMedia } from '@bolusi/modules/notes/screens';
+import type { CaptureRequest, CapturedMedia, PhotoCapture } from '@bolusi/modules/screen-kit';
 
 import type { CameraCapturePort, CaptureIdentity } from './capture.js';
 import type { CaptureScreenState } from './CaptureScreen.js';
 import type { MediaClient } from './client.js';
+import { usePendingCapture } from './pending-capture.js';
 
 /** The native seams this host needs, bound at `index.ts` (the one `expo-camera` site). */
 export interface CapturePlatform {
@@ -63,6 +64,8 @@ export interface CapturePlatform {
 
 /** What the shell renders while a capture is in flight. `null` ⇒ no capture is running. */
 export interface CaptureSurface {
+  /** The caller's already-localized title for this shot ("Foto depan"), or null for the default. */
+  readonly title: string | null;
   readonly state: CaptureScreenState;
   readonly preview: ReactNode;
   readonly onShutter: () => void;
@@ -79,7 +82,7 @@ export interface CaptureHost {
    * distinction `UNWIRED_NOTES_MEDIA` exists to protect (a stub resolving `null` would make the
    * attach button silently report success).
    */
-  readonly capturePhoto: () => Promise<CapturedMedia | null>;
+  readonly capturePhoto: PhotoCapture;
   readonly surface: CaptureSurface | null;
 }
 
@@ -99,91 +102,44 @@ export interface CaptureHostDeps {
 
 export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
   const [state, setState] = useState<CaptureScreenState | null>(null);
+  const [title, setTitle] = useState<string | null>(null);
   /** The captured still awaiting the user's "Pakai Foto Ini". Cleared on retake / use / cancel. */
   const [review, setReview] = useState<{
     readonly uri: string;
     readonly media: CapturedMedia;
   } | null>(null);
   const cameraRef = useRef<CameraCapturePort | null>(null);
-  const settleRef = useRef<((value: CapturedMedia | null) => void) | null>(null);
-  /**
-   * The `userId` whose session OPENED the current capture, captured at the shutter's `capturePhoto`
-   * call and cleared on settle. This is what makes a capture PER-USER at the composition root, not
-   * just at the frozen `mediaRef` (06 §4). A capture is a modal step inside one user's session, and
-   * an idle lock can end that session and let a DIFFERENT user unlock underneath a still-open host
-   * (`Root` passes `identity: notes?.identity`, which changes when the switch lands). Without this,
-   * user B would unlock straight onto user A's live viewfinder, and a shot pressed there would stamp
-   * B (via `identityRef`) into A's dead promise — the very cross-user attribution the switcher exists
-   * to prevent. Compared by `userId` only: tenant/store/device are the same physical device.
-   */
-  const openedForUserRef = useRef<string | null>(null);
-
-  const identityRef = useRef<CaptureIdentity | null>(deps.identity);
-  identityRef.current = deps.identity;
   const mediaRef = useRef<MediaClient | null>(deps.media);
   mediaRef.current = deps.media;
 
-  /** Close the surface and hand the caller its answer. Idempotent — a double tap resolves once. */
-  const settle = useCallback((value: CapturedMedia | null): void => {
-    const resolve = settleRef.current;
-    settleRef.current = null;
-    openedForUserRef.current = null;
+  /**
+   * The deferred and its per-user guard (`pending-capture.ts`). The identity is read at the
+   * SHUTTER, never when the host was built: this device is PIN-switched all day (PRD-011 §2), and a
+   * stale identity would stamp the first user of the morning onto every photo, into a signed,
+   * immutable `mediaRef`. A capture left open across an idle lock into a DIFFERENT user's session
+   * is cancelled, and its viewfinder never renders for the incoming user.
+   */
+  const pending = usePendingCapture(deps.identity, () => {
     setState(null);
+    setTitle(null);
     setReview(null);
-    resolve?.(value);
-  }, []);
-
-  /**
-   * Is the open capture stranded in a DIFFERENT user's session? True only when a capture is open, it
-   * was opened by some user, and the acting user is now a different NON-null user.
-   *
-   * A transient `null` is a LOCK, not a switch — the same user's own lock→unlock goes A → null → A,
-   * and the work-retention promise (SwitcherScreen.tsx:7-11, "Pekerjaanmu aman") is that A's PIN
-   * returns to A's viewfinder. So `null` never strands: only a landed different user does.
-   */
-  const strandedUser = deps.identity?.userId ?? null;
-  const stranded =
-    settleRef.current !== null &&
-    openedForUserRef.current !== null &&
-    strandedUser !== null &&
-    strandedUser !== openedForUserRef.current;
-
-  /**
-   * Cancel a capture the acting user walked away from via an idle lock + a foreign unlock.
-   *
-   * Resolves the awaiting caller (user A's `NoteEditor`, being torn down with A's session anyway) as
-   * a cancel and clears the host, so user B lands on their OWN home rather than A's viewfinder. The
-   * frame is prevented as well as cleaned up: `surface` below returns `null` while `stranded`, so B
-   * never even renders A's camera for a tick.
-   */
-  useEffect(() => {
-    if (stranded) settle(null);
-  }, [stranded, settle]);
+  });
+  const { open, settle, isOpen, identity: actingIdentity, stranded } = pending;
 
   /**
    * Enter (or re-enter) the pre-shutter states: permission, then 06 §7's band.
    *
-   * THE BAND IS READ HERE AND NOWHERE ELSE. `storageBand()` returns the last pruning pass's verdict
-   * (`media/pruning.ts:97` `lastBand: () => band`), and `MediaClient.start()` primes it at boot
-   * (`media/client.ts:225`, `this.pruning.run('app_start')`). Stated precisely, because the loose
-   * version — "every drain refreshes it" — is not true: the after-drain pass at `client.ts:338` goes
-   * through the same `run()`, which RETURNS EARLY WITHOUT touching `band` when §7's once-an-hour
-   * throttle applies (`pruning.ts:109-114`). So this can be up to an hour stale while free space is
-   * `normal`; it is refreshed promptly exactly when it matters, because that throttle exempts every
-   * band below `normal`.
-   *
-   * `null` means no pass has run yet on this process; treated as `normal` because a band nobody has
-   * measured must not raise an alarm. Neither the staleness nor the `null` can under-protect the
-   * user, because the REFUSAL is not derived from this value at all: `capture.ts:133-134` re-reads
-   * free space at the shutter and returns `refused_low_storage` through core's `isCaptureRefused`,
-   * so §7's < 50 MB rule is enforced by the pipeline whatever this banner says.
+   * THE BAND IS READ HERE AND NOWHERE ELSE. `storageBand()` returns the last pruning pass's verdict,
+   * which can be up to an hour stale while free space is `normal` and is refreshed promptly below
+   * it. `null` (no pass yet) reads as `normal`. Neither can under-protect the user: the REFUSAL is
+   * re-derived from free space at the shutter (`capture.ts`), whatever this banner says.
    */
   const enterReady = useCallback(async (): Promise<void> => {
     const platform = deps.platform;
     if (platform === null) return;
     setState({ kind: 'permission_pending' });
     const granted = await platform.ensurePermission();
-    if (settleRef.current === null) return; // Cancelled while the OS dialog was up.
+    if (!isOpen()) return; // Cancelled while the OS dialog was up.
     if (!granted) {
       setState({ kind: 'permission_denied' });
       return;
@@ -196,29 +152,23 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
       return;
     }
     setState(cameraRef.current === null ? { kind: 'warming_up' } : { kind: 'ready', band });
-  }, [deps.platform]);
+  }, [deps.platform, isOpen]);
 
-  const capturePhoto = useCallback((): Promise<CapturedMedia | null> => {
-    if (deps.media === null || deps.platform === null || identityRef.current === null) {
-      // The SAME stance as `UNWIRED_NOTES_MEDIA`: reject, never resolve `null`. A device with no
-      // media pipeline cannot take evidence photos, and an attach button that quietly behaved like a
-      // cancel would be the working-looking lie this whole task is about.
-      return Promise.reject(new Error('in-app capture is not available on this device'));
-    }
-    if (settleRef.current !== null) {
-      // A second request while one is open. Refuse rather than replace: replacing would strand the
-      // first caller's promise forever, and the notes editor awaits it to set its `mediaRef`.
-      return Promise.reject(new Error('a capture is already in progress'));
-    }
-    const pending = new Promise<CapturedMedia | null>((resolve) => {
-      settleRef.current = resolve;
-    });
-    // Stamp the opening user NOW (see `openedForUserRef`) — `identityRef.current` is non-null here
-    // (guarded above), so a later switch has a value to diverge from.
-    openedForUserRef.current = identityRef.current?.userId ?? null;
-    void enterReady();
-    return pending;
-  }, [deps.media, deps.platform, enterReady]);
+  const capturePhoto = useCallback(
+    (request?: CaptureRequest): Promise<CapturedMedia | null> => {
+      if (deps.media === null || deps.platform === null || actingIdentity() === null) {
+        // Reject, never resolve `null`: a device with no media pipeline cannot take evidence
+        // photos, and a button that quietly behaved like a cancel would be a working-looking lie.
+        return Promise.reject(new Error('in-app capture is not available on this device'));
+      }
+      if (isOpen()) return open(); // Rejects: one capture at a time.
+      const opened = open();
+      setTitle(request?.title ?? null);
+      void enterReady();
+      return opened;
+    },
+    [deps.media, deps.platform, enterReady, open, isOpen, actingIdentity],
+  );
 
   /**
    * The published camera port. Publishing PROMOTES `warming_up` → `ready`, which is what makes
@@ -239,14 +189,14 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
 
   const onShutter = useCallback((): void => {
     const media = mediaRef.current;
-    const identity = identityRef.current;
+    const identity = actingIdentity();
     const camera = cameraRef.current;
     if (media === null || identity === null || camera === null) return;
     setState({ kind: 'capturing' });
     void media
       .capturePhoto(identity, camera)
       .then((outcome) => {
-        if (settleRef.current === null) return; // Backed out mid-encode; the orphan row prunes at 24 h.
+        if (!isOpen()) return; // Backed out mid-encode; the orphan row prunes at 24 h.
         if (outcome.kind === 'refused_low_storage') {
           setState({ kind: 'refused_low_storage' });
           return;
@@ -257,18 +207,18 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
         setState({ kind: 'review', previewUri: outcome.localPath });
       })
       .catch((error: unknown) => {
-        if (settleRef.current === null) return;
+        if (!isOpen()) return;
         setState({ kind: 'failed', code: errorCodeOrUnexpected(error) });
       });
-  }, []);
+  }, [actingIdentity, isOpen]);
 
   const surface = useMemo<CaptureSurface | null>(() => {
     // `stranded` wins over `state`: a capture open in a foreign session renders NOTHING, so the
-    // incoming user never sees the outgoing user's viewfinder even for the frame before the cancel
-    // effect above resets `state`. This is the render-side half of the identity guard.
+    // incoming user never sees the outgoing user's viewfinder even for one frame.
     if (state === null || deps.platform === null || stranded) return null;
     const platform = deps.platform;
     return {
+      title,
       state,
       preview:
         state.kind === 'review'
@@ -277,8 +227,7 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
       onShutter,
       onRetake: () => {
         // Back to the viewfinder. The discarded capture's row + file stay until the pruning pass's
-        // 24 h orphan rule collects them (06 §4/§7) — deleting here would be a second deletion path
-        // for `media_items`, and `pruning.ts` is the one that exists.
+        // 24 h orphan rule collects them (06 §4/§7) — `pruning.ts` is the one deletion path.
         setReview(null);
         void enterReady();
       },
@@ -286,7 +235,7 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
       onRetry: () => void enterReady(),
       onBack: () => settle(null),
     };
-  }, [state, deps.platform, stranded, publishCamera, onShutter, enterReady, settle, review]);
+  }, [state, title, deps.platform, stranded, publishCamera, onShutter, enterReady, settle, review]);
 
   return { capturePhoto, surface };
 }

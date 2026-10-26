@@ -40,6 +40,9 @@ behind adapters. Node tests do not establish native performance or correctness.
   can change without rewriting signed facts.
 - Apply operations transactionally and make replay idempotent. Interrupted rebuilds
   and reordered sync must preserve resulting business state.
+- A projection version bump rebuilds on the device in the background, re-folding one
+  entity at a time from the op log. Appliers write only their own entity's rows, so
+  screens and commands keep working while it runs.
 - Tenant-bound access and PostgreSQL row-level security isolate tenants. Within a
   tenant, store scope still matters; a store owner is not a tenant administrator.
 - Signatures establish device attribution/integrity, not user authorization or

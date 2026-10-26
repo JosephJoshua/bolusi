@@ -26,13 +26,15 @@
  * injected from index.ts.
  */
 import { readStoreId, readTenantId, type CommandIdentity, type DeviceIdentity } from '@bolusi/core';
+import { NOTE_ENTITY } from '@bolusi/modules/notes';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 
 import type { MediaClient } from '../media/client.js';
-import { createNotesRuntime, readNoteSyncStatuses } from '../screens/notes/runtime-adapter.js';
-import { createNotesThumbnailLoader } from '../screens/notes/thumbnail.js';
+import { createNotesRuntime } from '../screens/notes/runtime-adapter.js';
+import { createThumbnailLoader } from '../media/thumbnail-loader.js';
 
 import type { Bootstrapped } from './bootstrap.js';
+import { readEntitySyncStatuses } from './entity-sync-statuses.js';
 import type { AppRuntime } from './runtime.js';
 
 /**
@@ -105,7 +107,7 @@ export function notesMediaSeamsFor(
   if (media === null) return UNWIRED_NOTES_MEDIA;
   return {
     ...UNWIRED_NOTES_MEDIA,
-    loadThumbnail: createNotesThumbnailLoader(media),
+    loadThumbnail: createThumbnailLoader(media),
     ...(capturePhoto === undefined ? {} : { capturePhoto }),
   };
 }
@@ -167,7 +169,7 @@ export function createSessionNotesRuntime(deps: {
     }),
     invalidation: app.invalidation,
     identity,
-    noteSyncStatuses: (ids) => readNoteSyncStatuses(app.db.db, ids),
+    noteSyncStatuses: (ids) => readEntitySyncStatuses(app.db.db, NOTE_ENTITY, ids),
     capturePhoto: deps.media.capturePhoto,
     loadThumbnail: deps.media.loadThumbnail,
   });

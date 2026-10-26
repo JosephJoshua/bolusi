@@ -358,6 +358,8 @@ export class CommandRuntime {
         resolveScope: (type) => this.#resolveScope(type),
         requirePermission: (identity, permissionId, tgt, surface) =>
           this.#requirePermission(identity, permissionId, tgt, surface, invocation),
+        hasPermission: (identity, permissionId) =>
+          this.#enforcement.hasPermission(identity, permissionId),
         queryExecutor: this.#queryExecutor,
         invocation,
         brand: this.#brand,

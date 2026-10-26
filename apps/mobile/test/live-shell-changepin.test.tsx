@@ -102,6 +102,7 @@ async function unlockedShell(): Promise<RenderResult> {
 
 /** Navigate an unlocked shell to the Change-PIN screen via the Settings row. */
 async function openChangePin(screen: RenderResult): Promise<void> {
+  fireOn(screen, 'ui.avatarButton');
   fireOn(screen, 'shell-open-settings');
   await settle();
   expect(screen.query('settings-screen')).not.toBeNull();

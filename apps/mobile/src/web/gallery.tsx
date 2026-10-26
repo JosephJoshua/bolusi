@@ -44,6 +44,7 @@ import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
 import type { AppProps } from '../../App.js';
 
+import { DEMO_REPAIR_ROLES, demoRepairRuntime, type DemoRepairRole } from './repair-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -227,10 +228,20 @@ function EnrollmentInteractive({
  * instead of the empty `shell-home` placeholder it used to render. Proves the whole navigation gate
  * renders real screens from fake data, not just isolated components.
  */
-function AppMode({ session }: { readonly session: AppProps['session'] }): React.JSX.Element {
+function AppMode({
+  session,
+  repairRole,
+}: {
+  readonly session: AppProps['session'];
+  /** Puts the repair module on the home surface, signed in as this demo role. */
+  readonly repairRole?: DemoRepairRole;
+}): React.JSX.Element {
   const [, force] = useReducer((n: number) => n + 1, 0);
   // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
   const [notes] = useState(() => demoNotesRuntime());
+  const [repair] = useState(() =>
+    repairRole === undefined ? undefined : demoRepairRuntime(repairRole),
+  );
   return (
     <App
       device="active"
@@ -240,6 +251,7 @@ function AppMode({ session }: { readonly session: AppProps['session'] }): React.
       now={HARNESS_NOW}
       session={session}
       notes={notes}
+      repair={repair}
       locked={false}
       sync={demoSyncInput()}
       onSyncNow={noop}
@@ -709,6 +721,18 @@ export const ENTRIES: readonly HarnessEntry[] = [
       </ApproxFrame>
     ),
   },
+
+  // Repair — the full App with the repair module home, one entry per role. The flows behind the
+  // board (ticket, steps, intake, handover) are reached by tapping, over an in-memory runtime.
+  ...(Object.keys(DEMO_REPAIR_ROLES) as DemoRepairRole[]).map((role) => ({
+    screen: 'repair',
+    state: role,
+    render: () => (
+      <ApproxFrame screen="repair" state={role}>
+        <AppMode session={{ userId: DEMO_REPAIR_ROLES[role].userId }} repairRole={role} />
+      </ApproxFrame>
+    ),
+  })),
 ];
 
 export function findEntry(screen: string, state: string): HarnessEntry | undefined {

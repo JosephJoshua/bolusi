@@ -23,11 +23,12 @@
  * Android hardware back must equal `onBack` (§8.1). That binding is navigation's job (task 24);
  * this component only surfaces the affordance.
  */
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
+import { ScrollLockContext } from './scroll-lock.js';
 
 export interface AppShellProps {
   /** Already-localized screen title. */
@@ -134,72 +135,91 @@ export function AppShell({
   overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
+  const [locks, setLocks] = useState(0);
+  const scrollLock = useMemo(
+    () => ({
+      lock: () => {
+        setLocks((n) => n + 1);
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          setLocks((n) => n - 1);
+        };
+      },
+    }),
+    [],
+  );
   return (
-    <View testID={testID} style={styles.root}>
-      <View testID={`${testID}.header`} style={styles.header}>
-        {onBack === undefined ? null : (
-          <Pressable
-            testID={`${testID}.back`}
-            accessibilityRole="button"
-            accessibilityLabel={backLabel}
-            onPress={onBack}
-            style={styles.back}
+    <ScrollLockContext.Provider value={scrollLock}>
+      <View testID={testID} style={styles.root}>
+        <View testID={`${testID}.header`} style={styles.header}>
+          {onBack === undefined ? null : (
+            <Pressable
+              testID={`${testID}.back`}
+              accessibilityRole="button"
+              accessibilityLabel={backLabel}
+              onPress={onBack}
+              style={styles.back}
+            >
+              <Icon name="back" size={size.iconInline} color={color.text} />
+            </Pressable>
+          )}
+
+          <Text
+            testID={`${testID}.title`}
+            // §0: buttons and titles wrap or ellipsize, never silently truncate mid-word; the title
+            // is one line by §8.1 geometry, so tail-ellipsis is the honest fallback.
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
           >
-            <Icon name="back" size={size.iconInline} color={color.text} />
-          </Pressable>
-        )}
+            {title}
+          </Text>
 
-        <Text
-          testID={`${testID}.title`}
-          // §0: buttons and titles wrap or ellipsize, never silently truncate mid-word; the title
-          // is one line by §8.1 geometry, so tail-ellipsis is the honest fallback.
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
-        >
-          {title}
-        </Text>
-
-        <View testID={`${testID}.headerRight`} style={styles.headerRight}>
-          {syncChip}
-          {avatar}
+          <View testID={`${testID}.headerRight`} style={styles.headerRight}>
+            {syncChip}
+            {avatar}
+          </View>
         </View>
-      </View>
 
-      {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
+        {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
 
-      {/*
+        {/*
         The content slot. Plain View by default; a ScrollView only when the screen opts in (task 206
         — see the `scrollable` prop docs for why this is not the default). The slot keeps ONE testID
         either way so navigation and the Maestro flows do not care which shape it took.
       */}
-      {scrollable ? (
-        <ScrollView
-          testID={`${testID}.content`}
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
-          // would read as the whole screen coming loose.
-          bounces={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View testID={`${testID}.content`} style={styles.contentContainer}>
-          {children}
-        </View>
-      )}
+        {scrollable ? (
+          <ScrollView
+            testID={`${testID}.content`}
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+            // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
+            // would read as the whole screen coming loose.
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            // A drag inside the content (reordering a list) holds the page still until it ends.
+            scrollEnabled={locks === 0}
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View testID={`${testID}.content`} style={styles.contentContainer}>
+            {children}
+          </View>
+        )}
 
-      {bottomAction === undefined ? null : (
-        <View testID={`${testID}.actionBar`} style={styles.actionBar}>
-          {bottomAction}
-        </View>
-      )}
+        {bottomAction === undefined ? null : (
+          <View testID={`${testID}.actionBar`} style={styles.actionBar}>
+            {bottomAction}
+          </View>
+        )}
 
-      {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
+        {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
           the header and action bar the way a modal must. */}
-      {overlay}
-    </View>
+        {overlay}
+      </View>
+    </ScrollLockContext.Provider>
   );
 }

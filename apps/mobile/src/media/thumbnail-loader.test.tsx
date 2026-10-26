@@ -17,11 +17,11 @@ import { NoteDetail } from '@bolusi/modules/notes/screens';
 import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
-import { fakeRuntime, page, renderNotes } from '../../../test/notes-support.js';
-import type { MediaClient } from '../../media/client.js';
-import { loadMediaForRender } from '../../media/remote-cache.js';
+import { fakeRuntime, page, renderNotes } from '../../test/notes-support.js';
+import type { MediaClient } from './client.js';
+import { loadMediaForRender } from './remote-cache.js';
 
-import { createNotesThumbnailLoader } from './thumbnail.js';
+import { createThumbnailLoader } from './thumbnail-loader.js';
 
 const NOW = 1_726_000_600_000;
 const MEDIA_ID = '01920000-0000-7000-8000-0000000f0099';
@@ -102,7 +102,7 @@ function detailWith(bytes: Uint8Array, note: NoteRow = remoteNote()) {
   return renderNotes(
     fakeRuntime({
       getNote: () => Promise.resolve(page([note])),
-      loadThumbnail: createNotesThumbnailLoader(mediaClientServing(bytes)),
+      loadThumbnail: createThumbnailLoader(mediaClientServing(bytes)),
     }),
     <NoteDetail
       noteId="note-1"

@@ -53,7 +53,7 @@ test('tickets pulled from another device become searchable, and a rebuild keeps 
   const b = await openRepairHarness(403, {
     tenantId: a.tenantId,
     storeId: a.storeId,
-    users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId],
+    users: [a.cashierId, a.technicianId, a.technician2Id, a.zeroUserId, a.ownerId, a.storeOwnerId],
   });
   open.push(b);
 

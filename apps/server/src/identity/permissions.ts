@@ -68,11 +68,10 @@ export interface DefaultRoleDef {
 
 const ALL_IDS = PERMISSIONS.map((p) => p.id);
 
-// §12 matrix. main_owner holds every permission (via a tenant-wide grant); store_owner holds
-// everything except role_manage + tenant_configure; staff holds pin_change, notes.*, set_locale.
-const STORE_OWNER_PERMS = ALL_IDS.filter(
-  (id) => id !== AUTH_PERMISSION.roleManage && id !== AUTH_PERMISSION.tenantConfigure,
-);
+// §12 matrix. main_owner holds every permission (via a tenant-wide grant); store_owner holds every
+// store-scoped one (a store grant can never satisfy a tenant permission such as role_manage,
+// tenant_configure or repair.manage_intake_options); staff holds pin_change, notes.*, set_locale.
+const STORE_OWNER_PERMS = PERMISSIONS.filter((p) => p.scope === 'store').map((p) => p.id);
 const STAFF_PERMS = [
   AUTH_PERMISSION.pinChange,
   'notes.create',

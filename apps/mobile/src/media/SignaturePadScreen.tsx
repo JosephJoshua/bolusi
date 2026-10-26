@@ -49,7 +49,7 @@ import {
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { SignaturePoint, SignatureStroke } from './signature-png.js';
+import type { PadSize, SignaturePoint, SignatureStroke } from './signature-png.js';
 
 export type SignaturePadState =
   | { readonly kind: 'loading' }
@@ -124,6 +124,8 @@ export interface SignaturePadScreenProps {
   readonly onSave: () => void;
   readonly onRetry: () => void;
   readonly onBack: () => void;
+  /** The drawing surface's size, which the PNG renderer scales strokes from (06 §2.3). */
+  readonly onPadLayout?: ((pad: PadSize) => void) | undefined;
 }
 
 export function SignaturePadScreen({
@@ -139,6 +141,7 @@ export function SignaturePadScreen({
   onSave,
   onRetry,
   onBack,
+  onPadLayout,
 }: SignaturePadScreenProps): React.JSX.Element {
   const hasStrokes = strokes.some((stroke) => stroke.length > 0);
 
@@ -187,6 +190,7 @@ export function SignaturePadScreen({
         onStrokeEnd,
         onRetry,
         onBack,
+        onPadLayout,
       })}
     </AppShell>
   );
@@ -202,6 +206,7 @@ function content(
     readonly onStrokeEnd: () => void;
     readonly onRetry: () => void;
     readonly onBack: () => void;
+    readonly onPadLayout: ((pad: PadSize) => void) | undefined;
   },
 ): ReactNode {
   switch (state.kind) {
@@ -258,6 +263,10 @@ function content(
           <View
             style={styles.surface}
             testID="signature-surface"
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              handlers.onPadLayout?.({ width, height });
+            }}
             // RN's responder system. `onStartShouldSetResponder` must return true for the view to
             // receive the gesture at all — returning it from a handler that also did work would
             // couple "do I own this touch" to "record a point", which is how a pad drops its first

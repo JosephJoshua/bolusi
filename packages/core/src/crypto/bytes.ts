@@ -7,6 +7,27 @@
 const HEX_DIGITS = '0123456789abcdef';
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
+/** The alphabet as character codes, and `=`, for building output without per-character strings. */
+const BASE64_CODES = /* @__PURE__ */ Uint8Array.from(BASE64_ALPHABET, (char) => char.charCodeAt(0));
+const PAD_CODE = 0x3d;
+
+/**
+ * Code units per `String.fromCharCode.apply` call, far below every engine's argument limit. Building a
+ * string a character at a time costs about 100 ns per character on Hermes, which a sealed op log
+ * cell pays thousands of times per op; one native call per chunk does not.
+ */
+const STRING_CHUNK = 4096;
+
+/** The string of the first `length` UTF-16 code units in `units`. */
+function stringFromCodeUnits(units: Uint8Array | Uint16Array, length: number): string {
+  let out = '';
+  for (let start = 0; start < length; start += STRING_CHUNK) {
+    const chunk = units.subarray(start, Math.min(start + STRING_CHUNK, length));
+    out += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return out;
+}
+
 /** Reverse lookup, built once. -1 = not a base64 digit. */
 const BASE64_LOOKUP = /* @__PURE__ */ (() => {
   const table = new Int16Array(128).fill(-1);
@@ -50,18 +71,45 @@ export function hexToBytes(hex: string): Uint8Array {
 
 /** Standard base64 with padding (RFC 4648 §4) — the `signature` encoding of 05 §2.2. */
 export function bytesToBase64(bytes: Uint8Array): string {
-  let out = '';
+  const out = new Uint8Array(Math.ceil(bytes.length / 3) * 4);
+  let n = 0;
   for (let i = 0; i < bytes.length; i += 3) {
     const b0 = bytes[i] as number;
     const b1 = bytes[i + 1];
     const b2 = bytes[i + 2];
 
-    out += BASE64_ALPHABET[b0 >>> 2];
-    out += BASE64_ALPHABET[((b0 & 0x03) << 4) | ((b1 ?? 0) >>> 4)];
-    out += b1 === undefined ? '=' : BASE64_ALPHABET[((b1 & 0x0f) << 2) | ((b2 ?? 0) >>> 6)];
-    out += b2 === undefined ? '=' : BASE64_ALPHABET[b2 & 0x3f];
+    out[n++] = BASE64_CODES[b0 >>> 2] as number;
+    out[n++] = BASE64_CODES[((b0 & 0x03) << 4) | ((b1 ?? 0) >>> 4)] as number;
+    out[n++] =
+      b1 === undefined
+        ? PAD_CODE
+        : (BASE64_CODES[((b1 & 0x0f) << 2) | ((b2 ?? 0) >>> 6)] as number);
+    out[n++] = b2 === undefined ? PAD_CODE : (BASE64_CODES[b2 & 0x3f] as number);
   }
-  return out;
+  return stringFromCodeUnits(out, n);
+}
+
+/** The 6-bit value of the base64 digit at `index`, 0 for `=`; throws on anything else. */
+function base64DigitAt(base64: string, index: number): number {
+  const char = base64.charCodeAt(index);
+  if (char === PAD_CODE) return 0;
+  const value = char < 128 ? (BASE64_LOOKUP[char] as number) : -1;
+  if (value < 0) {
+    throw new RangeError(`invalid base64 character at offset ${index}`);
+  }
+  return value;
+}
+
+/**
+ * Whether `base64ToBytes` would accept `base64`, answered without decoding it: a cheap check for a
+ * caller that only needs to know (the column cipher asks it of every value every query reads).
+ */
+export function isCanonicalBase64(base64: string): boolean {
+  if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return false;
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  if (padding === 0) return true;
+  const tailValue = BASE64_LOOKUP[base64.charCodeAt(base64.length - padding - 1)] as number;
+  return (tailValue & (padding === 1 ? 0x03 : 0x0f)) === 0;
 }
 
 /**
@@ -95,25 +143,11 @@ export function base64ToBytes(base64: string): Uint8Array {
   let outIndex = 0;
 
   for (let i = 0; i < base64.length; i += 4) {
-    const digits = [0, 0, 0, 0];
-    for (let j = 0; j < 4; j += 1) {
-      const char = base64.charCodeAt(i + j);
-      if (base64[i + j] === '=') {
-        digits[j] = 0;
-        continue;
-      }
-      const value = char < 128 ? (BASE64_LOOKUP[char] as number) : -1;
-      if (value < 0) {
-        throw new RangeError(`invalid base64 character at offset ${i + j}`);
-      }
-      digits[j] = value;
-    }
-
     const triple =
-      ((digits[0] as number) << 18) |
-      ((digits[1] as number) << 12) |
-      ((digits[2] as number) << 6) |
-      (digits[3] as number);
+      (base64DigitAt(base64, i) << 18) |
+      (base64DigitAt(base64, i + 1) << 12) |
+      (base64DigitAt(base64, i + 2) << 6) |
+      base64DigitAt(base64, i + 3);
 
     if (outIndex < out.length) out[outIndex++] = (triple >>> 16) & 0xff;
     if (outIndex < out.length) out[outIndex++] = (triple >>> 8) & 0xff;
@@ -148,18 +182,27 @@ export function base64ToBytes(base64: string): Uint8Array {
  * @throws {RangeError} on anything that is not exactly one canonical UTF-8 encoding.
  */
 export function bytesToUtf8(bytes: Uint8Array): string {
-  let out = '';
+  // ASCII (most signed op text) is its own UTF-16: convert the bytes directly, without a copy.
   let i = 0;
+  while (i < bytes.length && (bytes[i] as number) < 0x80) i += 1;
+  if (i === bytes.length) return stringFromCodeUnits(bytes, bytes.length);
+
+  // UTF-16 never needs more code units than UTF-8 needs bytes for the same text.
+  const units = new Uint16Array(bytes.length);
+  units.set(bytes.subarray(0, i));
+  let n = i;
 
   while (i < bytes.length) {
     const b0 = bytes[i] as number;
+    if (b0 < 0x80) {
+      units[n++] = b0;
+      i += 1;
+      continue;
+    }
     let codePoint: number;
     let width: number;
 
-    if (b0 < 0x80) {
-      codePoint = b0;
-      width = 1;
-    } else if ((b0 & 0xe0) === 0xc0) {
+    if ((b0 & 0xe0) === 0xc0) {
       codePoint = b0 & 0x1f;
       width = 2;
     } else if ((b0 & 0xf0) === 0xe0) {
@@ -202,15 +245,16 @@ export function bytesToUtf8(bytes: Uint8Array): string {
 
     // Back to UTF-16, re-splitting astral code points into a surrogate pair.
     if (codePoint < 0x10000) {
-      out += String.fromCharCode(codePoint);
+      units[n++] = codePoint;
     } else {
       const offset = codePoint - 0x10000;
-      out += String.fromCharCode(0xd800 + (offset >> 10), 0xdc00 + (offset & 0x3ff));
+      units[n++] = 0xd800 + (offset >> 10);
+      units[n++] = 0xdc00 + (offset & 0x3ff);
     }
     i += width;
   }
 
-  return out;
+  return stringFromCodeUnits(units, n);
 }
 
 /** Concatenate byte arrays without Buffer, which is unavailable on mobile Hermes. */
@@ -227,7 +271,9 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 
 /** UTF-8 encode without `TextEncoder` (not guaranteed on Hermes). Handles surrogate pairs. */
 export function utf8ToBytes(text: string): Uint8Array {
-  const out: number[] = [];
+  // One UTF-16 code unit encodes to at most 3 bytes (a surrogate pair: 4 bytes for 2 units).
+  const out = new Uint8Array(text.length * 3);
+  let n = 0;
   for (let i = 0; i < text.length; i += 1) {
     let codePoint = text.charCodeAt(i);
 
@@ -240,23 +286,20 @@ export function utf8ToBytes(text: string): Uint8Array {
     }
 
     if (codePoint < 0x80) {
-      out.push(codePoint);
+      out[n++] = codePoint;
     } else if (codePoint < 0x800) {
-      out.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
+      out[n++] = 0xc0 | (codePoint >> 6);
+      out[n++] = 0x80 | (codePoint & 0x3f);
     } else if (codePoint < 0x10000) {
-      out.push(
-        0xe0 | (codePoint >> 12),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      );
+      out[n++] = 0xe0 | (codePoint >> 12);
+      out[n++] = 0x80 | ((codePoint >> 6) & 0x3f);
+      out[n++] = 0x80 | (codePoint & 0x3f);
     } else {
-      out.push(
-        0xf0 | (codePoint >> 18),
-        0x80 | ((codePoint >> 12) & 0x3f),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      );
+      out[n++] = 0xf0 | (codePoint >> 18);
+      out[n++] = 0x80 | ((codePoint >> 12) & 0x3f);
+      out[n++] = 0x80 | ((codePoint >> 6) & 0x3f);
+      out[n++] = 0x80 | (codePoint & 0x3f);
     }
   }
-  return new Uint8Array(out);
+  return out.slice(0, n);
 }

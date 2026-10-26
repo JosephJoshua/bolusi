@@ -17,26 +17,22 @@
 // go through the injected `db`, which shares the one connection (10-db §9), so an applier throw
 // propagates and the caller's transaction rolls the whole op back: entity rows are not left
 // deleted, watermarks unmoved. A rebuild, being standalone, manages its own per-batch
-// transactions (rebuild.ts).
+// transactions (rebuild.ts), and needs nothing from an apply that runs between its batches.
 //
 // DELIVERY CONTRACT: each op is inserted into the op log immediately before its apply call, and
 // ops are applied ONE AT A TIME (exactly the append seam's shape). Idempotent replay is the
 // insert layer's job (05 §5: a duplicate `id` is not inserted, so apply is never called for it)
 // — the engine's re-fold is inherently idempotent, and this contract keeps head-apply so too.
-import { sql, type Kysely } from 'kysely';
+import type { Kysely } from 'kysely';
 
 import type { ProjectionApply } from '../oplog/append.js';
 import type { ModuleProjectionManifest, ProjectionOperation } from './manifest.js';
 import { moduleVersionSignature } from './manifest.js';
-import {
-  hasNewerEntityOp,
-  highestContiguousSeq,
-  readEntityOps,
-  type OpSeqColumn,
-} from './oplog-source.js';
+import { hasNewerEntityOp, highestContiguousSeq, type OpSeqColumn } from './oplog-source.js';
 import type { ProjectionRegistry } from './registry.js';
 import {
   createSqlRebuildStore,
+  refoldEntities,
   runRebuild,
   type RebuildOutcome,
   type RebuildStore,
@@ -70,8 +66,6 @@ export interface ProjectionEngineOptions<DB> {
   readonly seqColumn: OpSeqColumn;
   /** Factory so rebuild can bind the store to a batch transaction (rebuild.ts). */
   readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
-  /** Invalidate an in-progress rebuild after an incremental apply, or no-op on server push. */
-  readonly invalidateRebuildCursor?: (moduleId: string) => Promise<void>;
   readonly invalidation?: InvalidationBus;
   readonly stats?: ProjectionStats;
 }
@@ -88,7 +82,6 @@ export class ProjectionEngine<DB> {
   private readonly watermarks: WatermarkStore;
   private readonly seqColumn: OpSeqColumn;
   private readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
-  private readonly invalidateRebuildCursor: (moduleId: string) => Promise<void>;
   readonly invalidation: InvalidationBus;
   readonly stats: ProjectionStats;
 
@@ -98,14 +91,6 @@ export class ProjectionEngine<DB> {
     this.watermarks = options.watermarks;
     this.seqColumn = options.seqColumn;
     this.makeRebuildStore = options.makeRebuildStore;
-    this.invalidateRebuildCursor =
-      options.invalidateRebuildCursor ??
-      (async (moduleId) => {
-        const store = this.makeRebuildStore(this.db);
-        if ((await store.readCursor(moduleId)) !== null) {
-          await store.writeCursor(moduleId, { phase: 'invalidated' });
-        }
-      });
     this.invalidation = options.invalidation ?? new InvalidationBus();
     this.stats = options.stats ?? new ProjectionStats();
   }
@@ -160,20 +145,10 @@ export class ProjectionEngine<DB> {
       mode = 'head';
     } else {
       // OUT-OF-ORDER: delete the entity's rows, re-fold its full history in canonical order.
-      for (const ref of entityTables) {
-        await sql`
-          DELETE FROM ${sql.table(ref.table)} WHERE ${sql.ref(ref.entityIdColumn)} = ${op.entityId}
-        `.execute(this.db);
-      }
-      const history = await readEntityOps(this.db, op.entityType, op.entityId);
-      for (const historic of history) {
-        await this.applyWith(module, historic);
-      }
+      await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId]);
       this.stats.recordRefold();
       mode = 'refold';
     }
-
-    await this.invalidateRebuildCursor(module.id);
 
     if (source === 'append') {
       await this.watermarks.advanceLocalSeq(module.id, op.seq);
@@ -232,6 +207,38 @@ export class ProjectionEngine<DB> {
       return { rebuilt: false };
     const outcome = await this.rebuild(moduleId, options);
     return { rebuilt: true, outcome };
+  }
+
+  /**
+   * Rebuild every module whose projectionVersion changed, one batch at a time, calling `pause`
+   * between batches (04 §4.4). The device runs this in the background after boot: the shop keeps
+   * working while it runs (rebuild.ts), and the pause lets queued queries and the UI go first.
+   * Stops early, resumable on the next boot, once `isStopped` answers true. Returns the modules
+   * whose rebuild completed in this call.
+   */
+  async rebuildOutdated(options: {
+    readonly pause: () => Promise<void>;
+    readonly isStopped?: () => boolean;
+    readonly batchSize?: number;
+  }): Promise<string[]> {
+    const rebuilt: string[] = [];
+    const batch = {
+      stopAfterBatches: 1,
+      ...(options.batchSize !== undefined ? { batchSize: options.batchSize } : {}),
+    };
+    for (const module of this.registry.modules()) {
+      for (;;) {
+        if (options.isStopped?.() === true) return rebuilt;
+        const { rebuilt: ran, outcome } = await this.rebuildIfVersionChanged(module.id, batch);
+        if (!ran) break;
+        if (outcome?.complete === true) {
+          rebuilt.push(module.id);
+          break;
+        }
+        await options.pause();
+      }
+    }
+    return rebuilt;
   }
 }
 
