@@ -397,7 +397,12 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         customerId?: string;
       };
       const existing = tickets.find((t) => t.customerId === customer.customerId);
-      const device = input['device'] as { brand: string; model: string; color: string };
+      const device = input['device'] as {
+        brand: string;
+        model: string;
+        color: string;
+        passcode?: string | null;
+      };
       const photos = input['photos'] as { slot: string; label: string | null; ref: MediaRef }[];
       const created = withTotals({
         ...seedTickets()[0]!,
@@ -422,6 +427,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         deviceBrand: device.brand,
         deviceModel: device.model,
         deviceColor: device.color,
+        devicePasscode: device.passcode ?? null,
         complaint: String(input['complaint']),
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],

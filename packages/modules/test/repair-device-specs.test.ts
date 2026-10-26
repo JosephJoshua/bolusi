@@ -16,12 +16,12 @@ test('memory variants read the way shops write them, RAM first', () => {
   expect(memoryVariants(undefined)).toEqual([]);
 });
 
-test('colour choices are the listed colours, once each, at most eight', () => {
+test('colour choices are the listed colours, once each, all of them (the row scrolls)', () => {
   expect(colourChoices('Awesome Navy, Awesome Lilac,  , Awesome Navy')).toEqual([
     'Awesome Navy',
     'Awesome Lilac',
   ]);
-  expect(colourChoices(Array.from({ length: 12 }, (_, i) => `C${i}`).join(', '))).toHaveLength(8);
+  expect(colourChoices(Array.from({ length: 12 }, (_, i) => `C${i}`).join(', '))).toHaveLength(12);
   expect(colourChoices(undefined)).toEqual([]);
 });
 

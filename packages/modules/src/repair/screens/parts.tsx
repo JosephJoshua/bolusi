@@ -449,21 +449,26 @@ export function Field({
 
 /**
  * A key fact on a detail screen: a small label over its value, laid out two to a row by `FactGrid`.
- * The value can carry the one action that changes it ("Ganti" beside the technician).
+ * The value can carry the one action that changes it ("Ganti" beside the technician). A `wide` fact
+ * takes the whole row, for a value with an action and something drawn under it.
  */
 export function Fact({
   label,
   value,
   action,
+  wide = false,
+  children,
   testID,
 }: {
   readonly label: string;
   readonly value: string;
   readonly action?: ReactNode;
+  readonly wide?: boolean | undefined;
+  readonly children?: ReactNode;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   return (
-    <View style={styles.fact}>
+    <View style={[styles.fact, wide ? styles.factWide : null]}>
       <Text style={styles.factLabel}>{label}</Text>
       <View style={styles.factValueRow}>
         <Text style={styles.factValue} testID={testID}>
@@ -471,6 +476,7 @@ export function Fact({
         </Text>
         {action}
       </View>
+      {children}
     </View>
   );
 }
@@ -538,6 +544,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
   factGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
   fact: { width: '50%', paddingRight: space.sm },
+  factWide: { width: '100%' },
   factLabel: { ...type.caption, color: color.textMuted },
   factValueRow: { flexDirection: 'row', alignItems: 'center', minHeight: size.control },
   factValue: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },

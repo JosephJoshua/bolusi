@@ -49,6 +49,19 @@ async function drag(
   await page.mouse.up();
 }
 
+/** Draw a lock pattern through the given dots with the mouse, like a finger on the pad. */
+async function drawPattern(page: Page, testID: string, dots: readonly number[]): Promise<void> {
+  const centres = [];
+  for (const dot of dots) {
+    const box = (await page.getByTestId(`${testID}.dot.${dot}`).boundingBox())!;
+    centres.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  }
+  await page.mouse.move(centres[0]!.x, centres[0]!.y);
+  await page.mouse.down();
+  for (const point of centres.slice(1)) await page.mouse.move(point.x, point.y, { steps: 8 });
+  await page.mouse.up();
+}
+
 /** The keys of a ReorderableList's rows, top to bottom. */
 async function order(page: Page, listTestID: string): Promise<string[]> {
   const prefix = `${listTestID}.item.`;
@@ -77,6 +90,15 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await tap(page, 'repair.intake.device.colour.Glowing Black');
   await expect(page.getByTestId('repair.intake.device.color.field')).toHaveValue('Glowing Black');
   await shoot(page, 'device-autofill');
+  // The screen lock is drawn the way the customer draws it; 1 to 7 passes over 4 and takes it in.
+  await tap(page, 'repair.intake.device.lock.kind.pattern');
+  const pad = page.getByTestId('repair.intake.device.lock.pattern');
+  await pad.scrollIntoViewIfNeeded();
+  await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 2]);
+  await expect(page.getByTestId('repair.intake.device.lock')).toContainText('minimal 4 titik');
+  await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 7, 8, 9]);
+  await expect(pad).toHaveAttribute('aria-label', 'Pola kunci layar: 1-4-7-8-9');
+  await shoot(page, 'device-pattern');
   await tap(page, 'repair.intake.primary');
   await fill(page, 'repair.intake.condition.complaint', 'Mati total');
   await tap(page, 'repair.intake.condition.restOk');
@@ -98,6 +120,12 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   // Unassigned, picking a technician is the counter's next step.
   await expect(page.getByTestId('repair.ticket.action.assign')).toBeVisible();
   await shoot(page, 'intake-ticket');
+  // The pattern stays hidden until asked for, then reads in order and is drawn out.
+  await expect(page.getByTestId('repair.ticket.passcode')).toHaveText('••••');
+  await tap(page, 'repair.ticket.passcode.toggle');
+  await expect(page.getByTestId('repair.ticket.passcode')).toHaveText('1-4-7-8-9');
+  await page.getByTestId('repair.ticket.passcode.pattern').scrollIntoViewIfNeeded();
+  await shoot(page, 'ticket-pattern');
   // The picker lists the store's technicians with their loads, not an error.
   await tap(page, 'repair.ticket.action.assign');
   await expect(page.locator('[data-testid^="repair.assign.row."]').first()).toBeVisible();
@@ -187,9 +215,10 @@ test('a focused field on a long form is scrolled above the keyboard', async ({ p
   await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
   await tap(page, 'repair.intake.primary');
   await page.setViewportSize(KEYBOARD_UP);
-  // The passcode is the last field: below the fold until focused.
-  await page.getByTestId('repair.intake.device.passcode.field').focus();
-  await expect(page.getByTestId('repair.intake.device.passcode.field')).toBeInViewport();
+  // The PIN is the last field: below the fold, and focused as soon as PIN is chosen.
+  await tap(page, 'repair.intake.device.lock.kind.pin');
+  await expect(page.getByTestId('repair.intake.device.lock.pin.field')).toBeFocused();
+  await expect(page.getByTestId('repair.intake.device.lock.pin.field')).toBeInViewport();
   await expect(page.getByTestId('repair.intake.primary')).toBeInViewport();
   await shoot(page, 'keyboard-last-field');
 });

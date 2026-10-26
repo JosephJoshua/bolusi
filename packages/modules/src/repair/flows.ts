@@ -19,6 +19,7 @@ import {
   type WorkPhotoStage,
 } from './constants.js';
 import { readyDays, type IntakeOption, type IntakeOptionLists } from './intake-options.js';
+import { SCREEN_LOCK_KINDS, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
   TicketDetailRow,
@@ -275,13 +276,21 @@ const zIntakeDraft = z.strictObject({
     }),
     z.strictObject({ kind: z.literal('new'), name: z.string(), phone: z.string() }),
   ]),
-  device: z.strictObject({
-    brand: z.string(),
-    model: z.string(),
-    color: z.string(),
-    imei: z.string(),
-    passcode: z.string(),
-  }),
+  device: z
+    .strictObject({
+      brand: z.string(),
+      model: z.string(),
+      color: z.string(),
+      imei: z.string(),
+      /** How the phone is locked; `passcode` holds the PIN, password or pattern (screen-lock.ts). */
+      lockKind: z.enum(['none', ...SCREEN_LOCK_KINDS]).optional(),
+      passcode: z.string(),
+    })
+    // A draft saved before lock kinds kept a typed passcode only.
+    .transform(({ lockKind, ...device }) => ({
+      ...device,
+      lockKind: lockKind ?? (device.passcode === '' ? ('none' as const) : ('password' as const)),
+    })),
   complaint: z.string(),
   intakeNotes: z.string(),
   checks: z.record(z.string(), z.enum(CHECKLIST_STATES)),
@@ -306,7 +315,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     kind: 'intake',
     step: 0,
     customer: { kind: 'new', name: '', phone: '' },
-    device: { brand: '', model: '', color: '', imei: '', passcode: '' },
+    device: { brand: '', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
     complaint: '',
     intakeNotes: '',
     checks: {},
@@ -468,7 +477,10 @@ export function toOpenTicketInput(
       model: draft.device.model.trim(),
       color: draft.device.color.trim(),
       imei: draft.device.imei.trim() || null,
-      passcode: draft.device.passcode === '' ? null : draft.device.passcode,
+      passcode:
+        draft.device.lockKind === 'none' || draft.device.passcode === ''
+          ? null
+          : encodeScreenLock({ kind: draft.device.lockKind, value: draft.device.passcode }),
     },
     complaint: draft.complaint.trim(),
     intakeNotes: draft.intakeNotes.trim(),

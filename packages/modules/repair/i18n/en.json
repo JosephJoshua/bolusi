@@ -320,5 +320,17 @@
     "screen": "Screen",
     "sim": "SIM",
     "title": "Specs"
+  },
+  "lock": {
+    "none": "None",
+    "pin": "PIN",
+    "password": "Password",
+    "pattern": "Pattern",
+    "pinField": "PIN",
+    "passwordField": "Password",
+    "patternHint": "Draw the pattern the way the customer does.",
+    "patternShort": "Connect at least 4 dots, then draw it again.",
+    "patternRedo": "Draw again",
+    "patternLabel": "Screen lock pattern"
   }
 }

@@ -244,7 +244,7 @@
     "repaired": "Selesai! HP siap diambil pelanggan."
   },
   "passcode": {
-    "show": "Lihat",
+    "show": "Tampilkan",
     "hide": "Sembunyikan"
   },
   "hint": {
@@ -320,5 +320,17 @@
     "screen": "Layar",
     "sim": "SIM",
     "title": "Spesifikasi"
+  },
+  "lock": {
+    "none": "Tidak ada",
+    "pin": "PIN",
+    "password": "Sandi",
+    "pattern": "Pola",
+    "pinField": "PIN",
+    "passwordField": "Kata sandi",
+    "patternHint": "Gambar polanya seperti di HP pelanggan.",
+    "patternShort": "Hubungkan minimal 4 titik, lalu gambar lagi.",
+    "patternRedo": "Gambar ulang",
+    "patternLabel": "Pola kunci layar"
   }
 }

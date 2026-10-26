@@ -3,6 +3,7 @@ export { repairModule, repairModuleManifest } from './manifest.js';
 export * from './constants.js';
 export * from './intake-options.js';
 export * from './options-editor.js';
+export * from './screen-lock.js';
 export type * from './schema.js';
 export * from './search.js';
 export {

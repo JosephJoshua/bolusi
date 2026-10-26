@@ -6,7 +6,9 @@ import { formatMoney, formatNumber, t } from '@bolusi/i18n';
 import {
   Button,
   Card,
+  ChipRow,
   ListRow,
+  PatternLock,
   PhotoSlot,
   SegmentedControl,
   TextButton,
@@ -23,11 +25,13 @@ import { Keyboard, StyleSheet, Text, View } from 'react-native';
 import { CHECKLIST_STATES } from '../constants.js';
 import { sameDeviceModel, type DeviceModelRow } from '../device-models.js';
 import { colourChoices, memoryVariants } from '../device-specs.js';
+import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
 
 import { tn } from './i18n.js';
 import {
   CHECK_STATE_KEY,
   INTAKE_STEP_KEY,
+  LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
   readyLabel,
@@ -182,7 +186,6 @@ export function DeviceStep({
   readonly modelError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
-  const [passcodeShown, setPasscodeShown] = useState(false);
   // The brand this step filled in from the catalog. While the field still holds it, a different
   // catalog model may replace it; once the user types their own brand, it is theirs.
   const [autoBrand, setAutoBrand] = useState<string | null>(null);
@@ -288,19 +291,21 @@ export function DeviceStep({
         />
         {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
         {matched !== null ? null : (
-          <View style={[styles.chips, styles.suggestions]}>
-            {options.brands.map((option) => {
-              const choice = optionLabel('brands', option);
-              return (
-                <ToggleChip
-                  key={option.id}
-                  label={choice}
-                  selected={device.brand === choice}
-                  onToggle={() => set({ brand: choice })}
-                  testID={`${testID}.brandChoice.${choice}`}
-                />
-              );
-            })}
+          <View style={styles.suggestions}>
+            <ChipRow testID={`${testID}.brandChoices`}>
+              {options.brands.map((option) => {
+                const choice = optionLabel('brands', option);
+                return (
+                  <ToggleChip
+                    key={option.id}
+                    label={choice}
+                    selected={device.brand === choice}
+                    onToggle={() => set({ brand: choice })}
+                    testID={`${testID}.brandChoice.${choice}`}
+                  />
+                );
+              })}
+            </ChipRow>
           </View>
         )}
       </View>
@@ -312,16 +317,18 @@ export function DeviceStep({
           testID={`${testID}.color`}
         />
         {colours.length === 0 ? null : (
-          <View style={[styles.chips, styles.suggestions]} testID={`${testID}.colours`}>
-            {colours.map((colour) => (
-              <ToggleChip
-                key={colour}
-                label={colour}
-                selected={device.color === colour}
-                onToggle={() => set({ color: device.color === colour ? '' : colour })}
-                testID={`${testID}.colour.${colour}`}
-              />
-            ))}
+          <View style={styles.suggestions}>
+            <ChipRow testID={`${testID}.colours`}>
+              {colours.map((colour) => (
+                <ToggleChip
+                  key={colour}
+                  label={colour}
+                  selected={device.color === colour}
+                  onToggle={() => set({ color: device.color === colour ? '' : colour })}
+                  testID={`${testID}.colour.${colour}`}
+                />
+              ))}
+            </ChipRow>
           </View>
         )}
       </View>
@@ -334,24 +341,106 @@ export function DeviceStep({
           testID={`${testID}.imei`}
         />
       </View>
-      <View style={repairStyles.gap}>
-        {/* Hidden while typed, so it is not read over the counter; shown on request to check it. */}
-        <TextInput
-          label={tn('repair.device.passcode')}
-          value={device.passcode}
-          onChangeText={(passcode) => set({ passcode })}
-          secureTextEntry={!passcodeShown}
-          testID={`${testID}.passcode`}
-        />
-        <View style={[styles.chips, styles.suggestions]}>
-          <ToggleChip
-            label={tn('repair.passcode.show')}
-            selected={passcodeShown}
-            onToggle={() => setPasscodeShown((shown) => !shown)}
-            testID={`${testID}.passcode.show`}
+      <ScreenLockField
+        kind={device.lockKind}
+        value={device.passcode}
+        onChange={(lockKind, passcode) => set({ lockKind, passcode })}
+        testID={`${testID}.lock`}
+      />
+    </View>
+  );
+}
+
+/**
+ * How the phone is unlocked: nothing, a PIN, a password, or a pattern drawn on the pad the way the
+ * customer draws it. A typed PIN or password stays hidden, so it is not read over the counter, with
+ * an eye button to check it with the customer.
+ */
+function ScreenLockField({
+  kind,
+  value,
+  onChange,
+  testID,
+}: {
+  readonly kind: IntakeDraft['device']['lockKind'];
+  readonly value: string;
+  readonly onChange: (kind: IntakeDraft['device']['lockKind'], value: string) => void;
+  readonly testID: string;
+}): React.JSX.Element {
+  const [tooShort, setTooShort] = useState(false);
+  const revealLabels = { show: tn('repair.passcode.show'), hide: tn('repair.passcode.hide') };
+  return (
+    <View style={repairStyles.gap} testID={testID}>
+      <Text style={styles.fieldLabel}>{tn('repair.device.passcode')}</Text>
+      <SegmentedControl
+        options={(['none', ...SCREEN_LOCK_KINDS] as const).map((option) => ({
+          value: option,
+          label: tn(LOCK_KIND_KEY[option]),
+        }))}
+        value={kind}
+        onChange={(next) => {
+          setTooShort(false);
+          if (next !== kind) onChange(next, '');
+        }}
+        size="compact"
+        testID={`${testID}.kind`}
+      />
+      {kind === 'pin' ? (
+        <View style={styles.suggestions}>
+          <TextInput
+            label={tn('repair.lock.pinField')}
+            value={value}
+            onChangeText={(text) => onChange('pin', text.replace(/\D/g, ''))}
+            keyboardType="number-pad"
+            secureTextEntry
+            revealLabels={revealLabels}
+            autoFocus
+            testID={`${testID}.pin`}
           />
         </View>
-      </View>
+      ) : null}
+      {kind === 'password' ? (
+        <View style={styles.suggestions}>
+          <TextInput
+            label={tn('repair.lock.passwordField')}
+            value={value}
+            onChangeText={(text) => onChange('password', text)}
+            secureTextEntry
+            revealLabels={revealLabels}
+            autoFocus
+            testID={`${testID}.password`}
+          />
+        </View>
+      ) : null}
+      {kind === 'pattern' ? (
+        <View style={styles.suggestions}>
+          <Text style={tooShort ? styles.patternProblem : repairStyles.muted}>
+            {tn(tooShort ? 'repair.lock.patternShort' : 'repair.lock.patternHint')}
+          </Text>
+          <View style={styles.patternPad}>
+            <PatternLock
+              value={value}
+              onChange={(drawn) => {
+                // A pattern shorter than Android allows was not finished: draw it again.
+                const finished = drawn.length >= PATTERN_MIN_DOTS;
+                setTooShort(!finished);
+                onChange('pattern', finished ? drawn : '');
+              }}
+              accessibilityLabel={tn('repair.lock.patternLabel')}
+              testID={`${testID}.pattern`}
+            />
+          </View>
+          {value === '' ? null : (
+            <View style={styles.patternActions}>
+              <TextButton
+                label={tn('repair.lock.patternRedo')}
+                onPress={() => onChange('pattern', '')}
+                testID={`${testID}.pattern.redo`}
+              />
+            </View>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -414,7 +503,7 @@ export function ConditionStep({
       )}
       {options.accessories.length === 0 ? null : (
         <Section title={tn('repair.condition.peripherals')}>
-          <View style={styles.chips}>
+          <ChipRow testID={`${testID}.peripherals`}>
             {options.accessories.map((option) => (
               <ToggleChip
                 key={option.id}
@@ -424,7 +513,7 @@ export function ConditionStep({
                 testID={`${testID}.peripheral.${option.id}`}
               />
             ))}
-          </View>
+          </ChipRow>
         </Section>
       )}
       <View style={repairStyles.gap}>
@@ -652,6 +741,14 @@ export function ReviewStep({
           {draft.device.imei === '' ? null : (
             <Field label={tn('repair.device.imei')} value={draft.device.imei} />
           )}
+          {/* Which lock was noted, not the code itself: the review is read out at the counter. */}
+          {draft.device.lockKind === 'none' || draft.device.passcode === '' ? null : (
+            <Field
+              label={tn('repair.device.passcodeLabel')}
+              value={tn(LOCK_KIND_KEY[draft.device.lockKind])}
+              testID={`${testID}.lock`}
+            />
+          )}
         </>,
       )}
       {section(
@@ -716,6 +813,10 @@ const styles = StyleSheet.create({
   checkLabel: { ...type.bodySm, color: color.text, flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
+  fieldLabel: { ...type.caption, color: color.textMuted, marginBottom: space.xs },
+  patternProblem: { ...type.bodySm, color: color.danger },
+  patternPad: { alignItems: 'center' },
+  patternActions: { alignItems: 'center', marginTop: space.xs },
   modelMatch: {
     flexDirection: 'row',
     alignItems: 'center',

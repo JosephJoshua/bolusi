@@ -42,7 +42,7 @@ export function colourChoices(colors: string | undefined): string[] {
     const colour = part.trim();
     if (colour !== '' && colour.length <= 40 && !out.includes(colour)) out.push(colour);
   }
-  return out.slice(0, 8);
+  return out;
 }
 
 function joined(...parts: (string | undefined)[]): string | undefined {

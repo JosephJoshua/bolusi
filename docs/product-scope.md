@@ -95,6 +95,12 @@ Agreed with the owner after slice 1's phone screens.
   catalog match fills the brand. Specs are kept per model: the counter sees
   memory variants and colour choices, someone who repairs also sees screen,
   chipset, battery and charging, port, SIM, card slot and system.
+- **Screen lock at intake:** none, PIN, password or pattern (drawn on a 3 x 3
+  pad the way the customer draws it). It stays in the ticket's one passcode
+  text as `kind:value` (`pattern:14789`), so no operation changed; older
+  passcodes show as typed. Hidden on the ticket until someone taps to show it.
+  Choice chips from lists that grow (colours, quick brands, accessories) scroll
+  sideways in one row instead of wrapping.
 
 ## Decision
 
