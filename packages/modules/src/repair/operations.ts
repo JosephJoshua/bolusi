@@ -32,8 +32,10 @@ import {
   QUOTE_LINE_KINDS,
   REPAIR_CONFLICT_KEY,
   REPAIR_CUSTOMER_ENTITY,
+  REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
+  REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_TICKET_ENTITY,
   WORK_PHOTO_STAGES,
   WORK_PHOTOS_MAX,
@@ -337,6 +339,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: intakeOptionsChangedPayload,
     reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
     apply: intakeOptionsChangedApplier,
+    permission: REPAIR_PERMISSION.manageIntakeOptions,
+    entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
     // One list for the whole franchise, on every device, whichever store edited it. No conflict
     // key: the entity holds all five lists, so saving two different lists would read as a clash,
     // and two owners saving the same list is settled by the later save, as for a locale.
@@ -347,5 +351,7 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: storeIntakeOptionsChangedPayload,
     reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
     apply: storeIntakeOptionsChangedApplier,
+    permission: REPAIR_PERMISSION.hideIntakeOptions,
+    entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   },
 };
