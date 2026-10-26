@@ -15,6 +15,9 @@
 //   chain continuity → CHAIN_GAP | CHAIN_BROKEN(+halt)
 //   scope (tenant/store/user membership + per-type rules) → SCOPE_VIOLATION
 //   registry + zod → UNKNOWN_TYPE | SCHEMA_INVALID
+//   authorization (declared permission, server directory) → PERMISSION_DENIED
+//   a refusal from scope onward still advances the chain head (refused_operations), so the
+//     device's later ops keep syncing; a re-push of a refused op gets the same refusal
 //   accepted → allocate serverSeq → INSERT (+ clock-skew flag) → APPLY PROJECTIONS → advance head
 //
 // The APPLY step is normative (10-db §3, 04 §5.1 step 6): the projection fold shares this
@@ -40,7 +43,8 @@ import { insertOperationRow, OPERATIONS_PK_CONSTRAINT } from './persist.js';
 import { allocateServerSeq, lockTenantCounter } from './server-seq.js';
 import { isClockSkewed } from './skew.js';
 import { classifyChain, type ChainHead } from './steps/chain.js';
-import { isDuplicate } from './steps/dedupe.js';
+import { findRefusal, isDuplicate } from './steps/dedupe.js';
+import { checkPermission, createAuthorLookup } from './steps/permission.js';
 import { classifySchema } from './steps/schema.js';
 import { checkScope } from './steps/scope.js';
 import { verifyPushedSignature } from './steps/signature.js';
@@ -89,6 +93,15 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
  * Process a push batch for one tenant/device. `identity` is the token-authenticated device
  * (task 16 supplies it after bearer auth); `ops` ascend by per-device seq (api/01 §3).
  */
+/**
+ * Author-chosen text as a refusal row can hold it: Postgres `text` rejects NUL, and a refused op's
+ * type is unvalidated by definition, so an unstorable one must not turn the refusal into a 500 that
+ * wedges the device. Bounded too, since the row is kept forever.
+ */
+function storable(text: string): string {
+  return text.replaceAll('\u0000', '').slice(0, 500);
+}
+
 export async function processPushBatch(
   deps: OplogPipelineDeps,
   identity: PushIdentity,
@@ -154,6 +167,34 @@ export async function processPushBatch(
     const reject = (op: SignedOperation, code: RejectionCode, reason: string): void => {
       results.push({ id: op.id, status: 'rejected', code, reason });
     };
+    // Refuse an op that is proven to be this device's (signature) at the next chain position
+    // (chain): record the refusal and advance the head past it, so the device's later ops, which
+    // link to this one, are not stranded behind a gap forever. The op itself never enters the log.
+    const refuse = async (op: SignedOperation, code: RejectionCode, reason: string) => {
+      await db
+        .insertInto('refusedOperations')
+        .values({
+          tenantId: identity.tenantId,
+          id: op.id,
+          deviceId: device.id,
+          seq: BigInt(op.seq),
+          hash: op.hash,
+          userId: op.userId,
+          type: storable(op.type),
+          entityType: storable(op.entityType),
+          entityId: op.entityId,
+          code,
+          reason: storable(reason),
+          receivedAt: BigInt(deps.now()),
+        })
+        // An id some earlier refusal already holds (only a tampered client reuses one) must not
+        // turn this verdict into a 500 that rolls back the batch; the answer stands either way.
+        .onConflict((oc) => oc.doNothing())
+        .execute();
+      head = { seq: op.seq, hash: op.hash };
+      reject(op, code, reason);
+    };
+    const authors = createAuthorLookup(db, identity.tenantId);
     const anomaly = async (
       op: SignedOperation,
       kind: AnomalyKind,
@@ -180,9 +221,19 @@ export async function processPushBatch(
         continue;
       }
 
-      // 1. dedupe (05 §5): a replay consumes nothing.
+      // 1. dedupe (05 §5): a replay consumes nothing, and a refused op is answered as before.
       if (await isDuplicate(db, op.id)) {
         results.push({ id: op.id, status: 'duplicate' });
+        continue;
+      }
+      // Only for the token's own device (another device's op id must reach the binding step), and
+      // only behind the head: a refused op already spent its position, so a new op never pays the read.
+      const refusal =
+        op.deviceId === identity.deviceId && op.seq <= head.seq
+          ? await findRefusal(db, op)
+          : undefined;
+      if (refusal !== undefined) {
+        reject(op, refusal.code, refusal.reason);
         continue;
       }
 
@@ -217,22 +268,29 @@ export async function processPushBatch(
         continue;
       }
 
+      // From here on the op is proven to be this device's, at its next chain position, so every
+      // refusal below spends that position (`refuse`) instead of stranding the device's later ops.
+
       // 5. scope (05 §9): tenant/store/user membership + per-type rules.
       const scope = await checkScope(db, op, device, deps.registry);
       if (scope !== null) {
         await anomaly(op, 'SCOPE_VIOLATION', scope.reason);
-        reject(op, 'SCOPE_VIOLATION', scope.reason);
+        await refuse(op, 'SCOPE_VIOLATION', scope.reason);
         continue;
       }
 
       // 6. registry + zod (05 §8): distinct codes.
       const schema = classifySchema(deps.registry, op);
-      if (schema === 'UNKNOWN_TYPE') {
-        reject(op, 'UNKNOWN_TYPE', `type ${op.type} is not in the server registry`);
+      if (schema !== null) {
+        await refuse(op, schema.code, schema.reason);
         continue;
       }
-      if (schema === 'SCHEMA_INVALID') {
-        reject(op, 'SCHEMA_INVALID', `payload fails the registry schema for ${op.type}`);
+
+      // 7. authorization: the author must hold the op type's declared permission, judged by the
+      // server's directory. No anomaly: an author whose role changed while offline is not tamper.
+      const permission = await checkPermission(op, device, deps.registry, authors);
+      if (permission !== null) {
+        await refuse(op, 'PERMISSION_DENIED', permission.reason);
         continue;
       }
 

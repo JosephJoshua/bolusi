@@ -68,9 +68,18 @@ behind adapters. Node tests do not establish native performance or correctness.
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
   yet; inventory and accounting do not exist.
-- General pushed business operations are not reauthorized server-side in v0.
-  Privileged PIN operations are an exception. High-risk v1 approvals still need
-  a server validation/revocation policy covering legitimate offline work.
+- Every op type declares the permission its author needs and the record kind it
+  writes. The server checks each pushed op with the same `evaluatePermission`
+  the device runs, against the server's roles in the device's store. A refused
+  op is stored in `refused_operations`, still uses up its place in the device
+  chain (so later ops keep syncing), and gets the same answer when pushed again.
+  A deactivated user's unsynced ops are all refused, and an op is only credited
+  to an employee of the device's store (PINs are verified on the device, so
+  within a store the device's claim of who is signed in is trusted). Refused
+  positions leave gaps in a device's logged chain that `refused_operations`
+  (seq and hash) accounts for. The device does not yet
+  roll back a refused op locally, and per-type business rules (ticket state,
+  assignment targets, clock bounds) are not yet re-checked server-side.
 - Pull scope is tied to the enrolled store. Cross-store workflows require sync
   and authorization work, not just screens.
 - Physical 2 GB Android performance was deferred, not measured. Emulator/Simulator

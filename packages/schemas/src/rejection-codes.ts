@@ -1,4 +1,4 @@
-// Server → client op rejection codes (05-operation-log §8) — all eight, including
+// Server → client op rejection codes (05-operation-log §8) — all nine, including
 // the batch-halt code CHAIN_HALTED. CHAOS-05's rejection matrix consumes this enum;
 // additions/removals are spec changes to 05 §8 first.
 import { z } from 'zod';
@@ -9,6 +9,7 @@ export const REJECTION_CODES = [
   'CHAIN_GAP',
   'CHAIN_HALTED',
   'DEVICE_REVOKED',
+  'PERMISSION_DENIED',
   'SCHEMA_INVALID',
   'SCOPE_VIOLATION',
   'UNKNOWN_TYPE',

@@ -26,7 +26,7 @@ import { createVerifyToken, InMemoryTokenStore } from '../../../src/middleware/a
 import { ImmediateDeliveryDispatcher } from '../../../src/push/dispatcher.js';
 import { FakePushPort, type PushPort } from '../../../src/push/port.js';
 import { InProcessPokeHub, type PokeScope } from '../../../src/realtime/poke-hub.js';
-import { testRegistry } from '../oplog/helpers.js';
+import { grantAllPermissions, testRegistry } from '../oplog/helpers.js';
 
 const APP_ROLE = 'bolusi_app';
 
@@ -219,6 +219,11 @@ export async function makeSyncHarness(
       .insertInto('users')
       .values({ id: world.userId, tenantId: world.tenantId, name: `user-${seed}`, createdAt })
       .execute();
+    await db
+      .insertInto('userStores')
+      .values({ userId: world.userId, storeId: world.storeId, tenantId: world.tenantId })
+      .execute();
+    await grantAllPermissions(db, world.tenantId, world.userId);
     const auth = enroll({ ...world, status });
     return { world, auth, builder: new ChainBuilder(world, serverCryptoPort) };
   }
@@ -265,6 +270,13 @@ export async function makeSyncHarness(
       .insertInto('users')
       .values({ id: world.userId, tenantId, name: `user-${seed}`, createdAt })
       .execute();
+    if (kind !== 'system' && storeId !== null) {
+      await db
+        .insertInto('userStores')
+        .values({ userId: world.userId, storeId, tenantId })
+        .execute();
+    }
+    await grantAllPermissions(db, tenantId, world.userId);
     const auth = enroll({
       deviceId: world.deviceId,
       tenantId,
