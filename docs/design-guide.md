@@ -82,6 +82,9 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   primary action lives in the fixed bottom bar, never glued under the last
   field. Forms are steps with a `StepHeader` title, like intake (the first
   device-setup screens broke all of this and read as unfinished).
+- The keyboard opens only when someone taps a field. A step never focuses a
+  field on its own (it covered "Lanjut" on intake); `autoFocus` is only for a
+  field that appears because the person just asked to type (Tambah, Ubah biaya).
 
 ## 5. No redundancy
 

@@ -106,7 +106,6 @@ export function CustomerStep({
         errorMessage={nameError}
         autoCorrect={false}
         autoCapitalize="words"
-        autoFocus
         testID={`${testID}.name`}
       />
       <View style={repairStyles.gap}>
@@ -258,7 +257,6 @@ export function ConditionStep({
         onChangeText={(complaint) => update({ complaint })}
         errorMessage={complaintError}
         multiline
-        autoFocus
         testID={`${testID}.complaint`}
       />
       {options.checks.length === 0 ? null : (

@@ -132,7 +132,6 @@ function CredentialsStep({ state, onChange }: EnrollmentScreenProps): React.JSX.
         disabled={state.busy}
         autoCorrect={false}
         autoCapitalize="none"
-        autoFocus
         testID="enroll-identifier"
       />
       <View style={styles.gap}>

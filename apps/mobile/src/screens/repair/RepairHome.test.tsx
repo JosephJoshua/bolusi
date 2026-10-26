@@ -115,6 +115,24 @@ describe('counter intake', () => {
     }
   });
 
+  // The keyboard opened by itself on intake steps and covered "Lanjut" (Android QA): no step
+  // focuses a field on its own; the person taps the field they want to fill.
+  test('no intake step opens the keyboard by itself', async () => {
+    h = await openRepairScreenHarness(5151);
+    const screen = await mount(h, h.cashierId);
+    const focused = (): number =>
+      screen.container.queryAll((n) => n.props['autoFocus'] === true).length;
+    await press(screen, 'repair.board.newIntake');
+    expect(focused()).toBe(0);
+    type(screen, 'repair.intake.customer.name', 'Yohanis Wenda');
+    await press(screen, 'repair.intake.primary');
+    type(screen, 'repair.intake.device.brand', 'Samsung');
+    type(screen, 'repair.intake.device.model', 'Galaxy A14');
+    await press(screen, 'repair.intake.primary');
+    expect(screen.query('repair.intake.condition.complaint')).not.toBeNull();
+    expect(focused()).toBe(0);
+  });
+
   test('the cashier takes a repair in from the board and lands on the new ticket', async () => {
     h = await openRepairScreenHarness(5101);
     const screen = await mount(h, h.cashierId);
