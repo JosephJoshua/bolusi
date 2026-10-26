@@ -65,11 +65,11 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   2xl 32, 3xl 48). Screen gutter is `space.lg`.
 - One left edge per column. Text links that sit under content align their text
   with that edge (offset the `TextButton` padding), not with their hit box.
-- Label left, control right on the same row (condition checks); controls in a
-  list line up on one right edge. Do not let wrapping push controls under
-  labels haphazardly: when the row does not fit (narrow phone, large font),
-  stack deliberately, label on top and the control sharing the full width
-  below, the same for every row.
+- A list of items that each take one choice (condition checks) puts the
+  item's name on its own line and the choice as a full-width
+  `SegmentedControl fill` track below, rows split by hairlines. Side by side,
+  the choices clipped on a real phone. Short controls (a switch, an amount)
+  stay on the label's row, lined up on one right edge.
 - Amounts are right-aligned and top-aligned with their description.
 - Related things close, unrelated things far: section gap `space.xl`, items in
   a group `space.sm` to `space.md`.

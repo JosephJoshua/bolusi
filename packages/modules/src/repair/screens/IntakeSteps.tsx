@@ -18,7 +18,7 @@ import {
   type,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 
@@ -242,8 +242,6 @@ export function ConditionStep({
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
-  const { width, fontScale } = useWindowDimensions();
-  const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
   const togglePeripheral = (item: string): void =>
     update({
       peripherals: draft.peripherals.includes(item)
@@ -274,17 +272,12 @@ export function ConditionStep({
           }
         >
           {options.checks.map((option, index) => (
-            // Room allowing, one line per check: the name on the left, its state lined up on the
-            // right, so the column of choices reads straight down. On a narrow phone or a large
-            // system font the three states no longer fit beside the name without clipping ("Tidak"
-            // for "Tidak dicek" on the first Android run), so the name goes on top and the states
-            // share the full width below it.
+            // The check's name on its own line and its three states as one full-width track below,
+            // rows split by hairlines. Side by side, the states clipped ("Tidak" for "Tidak dicek")
+            // on the first Android run; stacked they never do, at any width or font size.
             <View
               key={option.id}
-              style={[
-                stackChecks ? styles.checkStacked : styles.check,
-                index === 0 ? null : styles.checkDivider,
-              ]}
+              style={[styles.check, index === 0 ? null : styles.checkDivider]}
               testID={`${testID}.checkRow.${option.id}`}
             >
               <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
@@ -292,12 +285,11 @@ export function ConditionStep({
                 options={CHECKLIST_STATES.map((value) => ({
                   value,
                   label: tn(CHECK_STATE_KEY[value]),
+                  tone: CHECK_STATE_TONE[value],
                 }))}
                 value={draft.checks[option.id] ?? 'not_checked'}
                 onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
-                size="compact"
-                wrap={!stackChecks}
-                fill={stackChecks}
+                fill
                 testID={`${testID}.check.${option.id}`}
               />
             </View>
@@ -587,25 +579,13 @@ export function ReviewStep({
   );
 }
 
-/**
- * When a condition check fits on one line. The text part (a short check name plus the three state
- * pills at 1x font) needs about 340 dp and grows with the system font; the rest (screen gutters,
- * gaps) does not. Below that the row stacks instead of clipping a label. A 411 dp phone at normal
- * font keeps one line; a 360 dp phone, or any phone at a large font, stacks.
- */
-const CHECK_ROW_TEXT = 340;
-const CHECK_ROW_CHROME = 2 * space.lg + space.md + 2 * space.sm;
+/** A found problem reads red and a passed check green, at a glance down the list. */
+const CHECK_STATE_TONE = { ok: 'success', issue: 'danger', not_checked: undefined } as const;
 
 const styles = StyleSheet.create({
-  check: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    columnGap: space.md,
-    paddingVertical: space.xs,
-  },
+  check: { paddingVertical: space.md, rowGap: space.sm },
   checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
-  checkStacked: { paddingVertical: space.sm, rowGap: space.xs },
-  checkLabel: { ...type.bodySm, color: color.text, flex: 1 },
+  checkLabel: { ...type.bodySm, fontWeight: '600', color: color.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
   remove: { alignSelf: 'flex-end', marginTop: space.md },

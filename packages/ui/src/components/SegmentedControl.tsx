@@ -19,6 +19,11 @@ export interface SegmentedOption<V extends string> {
   readonly value: V;
   /** Already-localized. */
   readonly label: string;
+  /**
+   * `fill` only: what choosing this option means, tinting it when chosen (a check found "Rusak" reads
+   * red at a glance). The label still says it, so the meaning never rides on colour alone.
+   */
+  readonly tone?: 'success' | 'danger' | undefined;
 }
 
 export interface SegmentedControlProps<V extends string> {
@@ -34,8 +39,8 @@ export interface SegmentedControlProps<V extends string> {
    */
   readonly bleed?: boolean | undefined;
   /**
-   * Share the full width equally, one row, no scrolling: for a short fixed set placed on its own
-   * line (a condition check's state under its name on a narrow phone). Overrides `wrap`.
+   * One connected track sharing the full width equally, no scrolling: for a short fixed set on its
+   * own line (a condition check's state under its name). Overrides `wrap`, `size` and `bleed`.
    */
   readonly fill?: boolean | undefined;
   readonly testID?: string | undefined;
@@ -70,8 +75,24 @@ const styles = StyleSheet.create({
   },
   label: { ...type.bodySm },
   compactLabel: { ...type.caption, fontWeight: '600' },
-  filled: { flexDirection: 'row', gap: touch.gap },
-  fillOption: { flex: 1, paddingHorizontal: space.sm },
+  track: {
+    flexDirection: 'row',
+    minHeight: touch.min,
+    padding: space.xs,
+    gap: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: color.surfaceAlt,
+  },
+  segment: {
+    flex: 1,
+    borderRadius: radius.sm,
+    borderWidth: border.hairline,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+  },
+  segmentLabel: { ...type.caption, fontWeight: '600', textAlign: 'center' },
 });
 
 export function SegmentedControl<V extends string>({
@@ -84,6 +105,7 @@ export function SegmentedControl<V extends string>({
   fill = false,
   testID = 'ui.segmented',
 }: SegmentedControlProps<V>): React.JSX.Element {
+  if (fill) return <Track options={options} value={value} onChange={onChange} testID={testID} />;
   const compact = size === 'compact';
   const items = options.map((option) => {
     const selected = option.value === value;
@@ -99,7 +121,6 @@ export function SegmentedControl<V extends string>({
         hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
         style={[
           compact ? styles.compactOption : styles.option,
-          fill ? styles.fillOption : null,
           {
             backgroundColor: selected ? color.primary : color.surface,
             borderColor: selected ? color.primary : color.border,
@@ -120,17 +141,6 @@ export function SegmentedControl<V extends string>({
       </Pressable>
     );
   });
-  if (fill) {
-    return (
-      <View
-        style={[styles.filled, compact ? styles.compactRow : null]}
-        accessibilityRole="radiogroup"
-        testID={testID}
-      >
-        {items}
-      </View>
-    );
-  }
   if (wrap) {
     return (
       <View
@@ -157,5 +167,52 @@ export function SegmentedControl<V extends string>({
     >
       {items}
     </ScrollView>
+  );
+}
+
+/** Colours of a chosen segment, by what the choice means. */
+const TONE = {
+  neutral: { bg: color.surface, border: color.border, fg: color.text },
+  success: { bg: color.successBg, border: color.success, fg: color.onSuccessBg },
+  danger: { bg: color.dangerBg, border: color.danger, fg: color.onDangerBg },
+} as const;
+
+/** The `fill` variant: equal segments in one track, the chosen one raised and tinted. */
+function Track<V extends string>({
+  options,
+  value,
+  onChange,
+  testID,
+}: Pick<SegmentedControlProps<V>, 'options' | 'value' | 'onChange'> & {
+  readonly testID: string;
+}): React.JSX.Element {
+  return (
+    <View style={styles.track} accessibilityRole="radiogroup" testID={testID}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        const tone = TONE[option.tone ?? 'neutral'];
+        return (
+          <Pressable
+            key={option.value}
+            testID={`${testID}.${option.value}`}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ checked: selected, selected }}
+            onPress={() => onChange(option.value)}
+            // The track's padding is part of each segment's touch area: 48 dp in all.
+            hitSlop={{ top: space.xs, bottom: space.xs }}
+            style={[
+              styles.segment,
+              selected ? { backgroundColor: tone.bg, borderColor: tone.border } : null,
+            ]}
+          >
+            {/* Wraps rather than clips if a translation or a large font needs it (§9). */}
+            <Text style={[styles.segmentLabel, { color: selected ? tone.fg : color.textMuted }]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
