@@ -151,10 +151,10 @@ The owner chose an actual repair business outcome rather than stock control alon
 - Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
 
-Changing the roadmap does not resolve the existing extended-chaos failures or
-establish physical-device performance; see [architecture](architecture.md) for
-current limits. Resolve relevant open choices and record a concise agreement as
-each repair slice is selected. The former phase/task workflow is retired.
+Changing the roadmap does not establish physical-device performance; see
+[architecture](architecture.md) for current limits. Resolve relevant open choices
+and record a concise agreement as each repair slice is selected. The former
+phase/task workflow is retired.
 
 ## Deferred and excluded scope
 
