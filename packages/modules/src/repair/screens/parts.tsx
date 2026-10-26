@@ -306,7 +306,8 @@ export function Section({
     <View style={styles.section} testID={testID}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{title}</Text>
-        {action}
+        {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
+        {action === undefined ? null : <View style={styles.sectionAction}>{action}</View>}
       </View>
       {children}
     </View>
@@ -411,6 +412,7 @@ const styles = StyleSheet.create({
     minHeight: size.control,
     marginBottom: space.sm,
   },
+  sectionAction: { marginRight: -space.sm },
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
   factGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
   fact: { width: '50%', paddingRight: space.sm },

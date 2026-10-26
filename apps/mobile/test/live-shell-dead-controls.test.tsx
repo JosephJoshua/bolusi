@@ -145,6 +145,7 @@ function fakeMediaClient(
     attach: () => Promise.resolve(),
     loadForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
     loadLocalForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
+    notifyAttached: () => undefined,
     requestManual: () => {
       manualRequests.push(Date.now());
     },

@@ -9,6 +9,7 @@
 import { FuzzyIndex } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 import {
+  IN_PROGRESS_OUTCOMES,
   REPAIR_PERMISSION,
   type QuoteLineRow,
   type RepairOutcome,
@@ -311,6 +312,15 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
           .sort((a, b) => b.createdAt - a.createdAt)
           .map(summary),
       );
+    },
+    technicianLoads: () => {
+      const loads = new Map<string, number>();
+      for (const t of tickets) {
+        const working = (IN_PROGRESS_OUTCOMES as readonly RepairOutcome[]).includes(t.outcome);
+        if (t.technicianId === null || !working || t.location !== 'in_store') continue;
+        loads.set(t.technicianId, (loads.get(t.technicianId) ?? 0) + 1);
+      }
+      return page([...loads].map(([technicianId, load]) => ({ technicianId, load })));
     },
     // The same shared fuzzy search the device runs, so typos and spelling variants behave alike.
     searchTickets: (input) => {

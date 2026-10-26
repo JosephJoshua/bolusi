@@ -61,6 +61,10 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   // Unassigned, picking a technician is the counter's next step.
   await expect(page.getByTestId('repair.ticket.action.assign')).toBeVisible();
   await shoot(page, 'intake-ticket');
+  // The picker lists the store's technicians with their loads, not an error.
+  await tap(page, 'repair.ticket.action.assign');
+  await expect(page.locator('[data-testid^="repair.assign.row."]').first()).toBeVisible();
+  await expect(page.getByTestId('repair.assign.items.error')).toHaveCount(0);
 });
 
 test('the price-kind choices stay one row high on the price-change step', async ({ page }) => {
