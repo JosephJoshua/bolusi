@@ -130,6 +130,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
 
     // 2. THE AFFORDANCE. Not `setRoute('settings')` — the header control a user's thumb reaches.
     //    Before this task no such node existed anywhere in shipping source and `screen.get` threw.
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
 
@@ -164,6 +165,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     // catalog directly, independent of the ACTIVE language, so the expectations come from the same
     // source the screen renders from — and the test keeps working when the copy is reworded.
     const screen = await unlockedShell();
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
 
@@ -220,6 +222,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     // `home`, and this drives the REAL `BackHandler` listener `useHardwareBack` registered — so a
     // user who opens Settings can always get out the way the platform expects.
     const screen = await unlockedShell();
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
     expect(screen.query('settings-screen')).not.toBeNull();

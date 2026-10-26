@@ -226,6 +226,8 @@ test('the running shell opens Settings from its header — the language escape h
   await open(page, 'app', 'shell');
   await expect(page.getByTestId('settings-screen')).toHaveCount(0);
 
+  // Settings sits in the avatar's account menu.
+  await page.getByTestId('ui.avatarButton').click();
   await page.getByTestId('shell-open-settings').click();
 
   await expect(page.getByTestId('settings-screen')).toBeVisible();

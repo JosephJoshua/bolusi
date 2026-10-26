@@ -1,7 +1,17 @@
 /** App shell: session gates, navigation, retained drafts and screen callbacks.
  * Native services and sync state are supplied by the bootstrap composition root.
  */
-import { AvatarButton, Chip, NAV_BAR_INSET, SyncChip, touch } from '@bolusi/ui';
+import {
+  AvatarButton,
+  Icon,
+  ListRow,
+  NAV_BAR_INSET,
+  Sheet,
+  SyncChip,
+  color,
+  size,
+  space,
+} from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
@@ -228,6 +238,8 @@ export default function App(props: AppProps): React.JSX.Element {
    * completed switch), so a stale intent can never re-open the roster over the incoming user's shell.
    */
   const [switching, setSwitching] = useState(false);
+  // The avatar's menu (switch user, settings), open over the home surface.
+  const [accountMenu, setAccountMenu] = useState(false);
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
@@ -503,6 +515,10 @@ export default function App(props: AppProps): React.JSX.Element {
   const captureSurface = props.capture ?? null;
   const signatureSurface = props.signature ?? null;
   const goBack = useCallback((): boolean => {
+    if (accountMenu) {
+      setAccountMenu(false);
+      return true;
+    }
     // A capture owns the screen while it runs (see the early return below), so back IS its cancel —
     // §8.1's "hardware back always equals the header back action", applied to the surface actually
     // showing. Without this the press would fall through to the zone underneath and navigate a tree
@@ -562,7 +578,12 @@ export default function App(props: AppProps): React.JSX.Element {
       return true;
     }
     return false; // Let Android exit.
-  }, [zone, enrollment, captureSurface, signatureSurface]);
+  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface]);
+
+  // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
+  useEffect(() => {
+    if (zone.kind !== 'shell') setAccountMenu(false);
+  }, [zone.kind]);
 
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
@@ -976,51 +997,25 @@ export default function App(props: AppProps): React.JSX.Element {
               currentUser === null ? (
                 <View testID="notes-no-avatar" />
               ) : (
-                // THE HEADER CHROME (§8.1): the Settings Chip (the ONLY producer of `route:
-                // 'settings'`) and the avatar (the producer of the User Switcher).
+                // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
+                // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
                 //
-                // WHY THE SETTINGS CHIP IS SEPARATE FROM THE AVATAR. Settings holds the language
-                // toggle, the owner's intake lists, the PIN and notification rows and the device
-                // readout. On an Indonesian-first product the language rows are the ONLY way out of
-                // a wrong locale (07-i18n §1.2), and switching user is the counter's most frequent
-                // header action on a shared phone, so neither is folded behind the other: the avatar
-                // opens the User Switcher in one tap, and Settings keeps its own direct control. It
-                // is labelled Settings, not Language: it opened Settings all along, and an owner
-                // looking for the intake lists would never try a chip called "Bahasa".
+                // Settings holds the language toggle, the owner's intake lists, the PIN and
+                // notification rows and the device readout. On an Indonesian-first product the
+                // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
+                // rows carry an icon that reads by shape: a cog and a person swap.
                 //
-                // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES IS NOW REAL (task 143). It was a dead
-                // control before: `resolveZone` returned the shell for every session-open render
-                // (`session !== null && pinFor === null`), and the only writer was `setPinFor(null)`
-                // — a no-op in that state — so tapping the avatar left the notes list exactly where
-                // it was. `setSwitching(true)` is the input the model was missing: it produces the
-                // switcher zone from a live session, and `backTarget` returns to `home` (this
-                // surface's route) when the switch is abandoned.
-                //
-                // A `Chip` rather than a bespoke control for language: §3.5 gives it the icon+label
-                // pair §0 requires ("no icons without labels" — a bare cog is unreadable to the
-                // users this product is for) and pads its 28 dp height to the §1.4 48 dp floor. It
-                // sits in the §8.1 header chrome beside the avatar; §0 only bottom-anchors the
-                // primary action, so this placement rests on §8.1 (header-right is not a §0 claim).
-                // BOTH GO THROUGH `leaveHome` (task 145). Either tap used to unmount `NotesHome`
-                // outright, taking an open editor's title/body/mediaRef with it and showing no
-                // confirm — the §8.1 discard gate the editor's own header back has always run.
-                <View style={styles.headerChrome}>
-                  {/* Chip pins itself to `flex-start`; the wrapper centres it on the avatar's axis. */}
-                  <View>
-                    <Chip
-                      label={t('core.settings.title')}
-                      icon="settings"
-                      onPress={() => leaveHome(() => setRoute('settings'))}
-                      testID="shell-open-settings"
-                    />
-                  </View>
-                  <AvatarButton
-                    userId={currentUser.id}
-                    initials={currentUser.initials}
-                    accessibilityLabel={t('auth.switcher.title')}
-                    onPress={() => leaveHome(() => setSwitching(true))}
-                  />
-                </View>
+                // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
+                // `setSwitching(true)` produces the switcher zone from a live session, and
+                // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
+                // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
+                // before either leaves the surface.
+                <AvatarButton
+                  userId={currentUser.id}
+                  initials={currentUser.initials}
+                  accessibilityLabel={t('core.account.menu')}
+                  onPress={() => setAccountMenu(true)}
+                />
               );
             // Repair is the slice-1 home; notes stays the home on a build without it.
             if (props.repair !== undefined) {
@@ -1058,6 +1053,35 @@ export default function App(props: AppProps): React.JSX.Element {
           },
         })}
       </View>
+      {accountMenu && currentUser !== null && zone.kind === 'shell' ? (
+        <Sheet
+          title={nameOf(props.users, currentUser.id)}
+          closeLabel={t('core.action.close')}
+          onClose={() => setAccountMenu(false)}
+          testID="account-menu"
+        >
+          <View style={styles.menuRows}>
+            <ListRow
+              leading={<Icon name="switchUser" size={size.iconInline} color={color.text} />}
+              primaryText={t('core.account.switchUser')}
+              onPress={() => {
+                setAccountMenu(false);
+                leaveHome(() => setSwitching(true));
+              }}
+              testID="account-menu-switch-user"
+            />
+            <ListRow
+              leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
+              primaryText={t('core.settings.title')}
+              onPress={() => {
+                setAccountMenu(false);
+                leaveHome(() => setRoute('settings'));
+              }}
+              testID="shell-open-settings"
+            />
+          </View>
+        </Sheet>
+      ) : null}
       {modal === null ? null : <View style={[StyleSheet.absoluteFill, shellStyle]}>{modal}</View>}
     </View>
   );
@@ -1147,5 +1171,6 @@ const styles = StyleSheet.create({
   shell: { flex: 1, paddingBottom: NAV_BAR_INSET },
   zone: { flex: 1 },
   /** The header-right group's own spacing rule (§1.4 `touch.gap`) — adjacent targets never touch. */
-  headerChrome: { flexDirection: 'row', alignItems: 'center', gap: touch.gap },
+  // The menu's rows run edge to edge, like every list.
+  menuRows: { marginHorizontal: -space.lg },
 });

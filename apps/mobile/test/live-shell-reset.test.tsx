@@ -90,6 +90,7 @@ async function signInAsOwner(screen: RenderResult): Promise<void> {
 }
 
 async function openSettings(screen: RenderResult): Promise<void> {
+  fireOn(screen, 'ui.avatarButton');
   fireOn(screen, 'shell-open-settings');
   await settle();
   expect(screen.query('settings-screen')).not.toBeNull();
