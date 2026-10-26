@@ -24,11 +24,11 @@
  * this component only surfaces the affordance.
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
-import { RevealProvider, useRevealingScroll } from './keyboard.js';
+import { RevealProvider, useKeyboardLift, useRevealingScroll } from './keyboard.js';
 import { ScrollLockContext } from './scroll-lock.js';
 
 export interface AppShellProps {
@@ -156,12 +156,17 @@ export function AppShell({
     [],
   );
   const reveal = useRevealingScroll();
+  const keyboard = useKeyboardLift();
   return (
     <ScrollLockContext.Provider value={scrollLock}>
       {/* The keyboard covers the screen rather than shrinking it (keyboard.tsx), so the shell lifts
-          its content and bottom action above it. `padding` is measured against this view's own
-          frame, so it adds nothing on a platform where the window did shrink. */}
-      <KeyboardAvoidingView behavior="padding" testID={testID} style={styles.root}>
+          its content and bottom action above it. Measured in the window, so it adds nothing on a
+          platform where the window did shrink. */}
+      <View
+        ref={keyboard.ref}
+        testID={testID}
+        style={[styles.root, keyboard.lift === 0 ? null : { paddingBottom: keyboard.lift }]}
+      >
         <View testID={`${testID}.header`} style={styles.header}>
           {onBack === undefined ? null : (
             <Pressable
@@ -240,7 +245,7 @@ export function AppShell({
         {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
           the header and action bar the way a modal must. */}
         {overlay}
-      </KeyboardAvoidingView>
+      </View>
     </ScrollLockContext.Provider>
   );
 }

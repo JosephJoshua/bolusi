@@ -5,12 +5,15 @@
  * the green emulator lane could not disprove them. The assertions below are therefore about
  * GEOMETRY — what the layout actually reserves — not about presence.
  */
+import { act } from 'react';
+import { Keyboard } from 'react-native';
 import { expect, test } from 'vitest';
 
 import { AppShell } from '../src/shell/AppShell.js';
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { NAV_BAR_INSET } from '../src/platform-insets.js';
 import { space } from '../src/tokens.js';
+import { windowLayout } from './doubles/react-native.js';
 import { render } from './render.js';
 
 function sheet() {
@@ -96,4 +99,23 @@ test('the content keeps its padding in both shapes', () => {
   // against when it is scrolled above the keyboard (shell/keyboard.tsx).
   expect(shell(true).styleOf('ui.appShell.contentInner')['padding']).toBe(space.lg);
   expect(shell().styleOf('ui.appShell.content')['padding']).toBe(space.lg);
+});
+
+// ── the on-screen keyboard: the shell lifts its bottom action clear of the keyboard's top edge ──
+
+test('the shell is lifted by exactly how far the keyboard covers it, measured in the window', () => {
+  // Regression (Android 16 emulator): KeyboardAvoidingView measured itself against its parent,
+  // so under the status bar inset the bottom action stayed tucked under the keyboard's top edge.
+  // The shell sits 24 dp down the window (below the status bar) and is 820 dp tall.
+  windowLayout.set('ui.appShell', { y: 24, height: 820 });
+  const r = shell(true);
+  expect(r.styleOf('ui.appShell')['paddingBottom']).toBeUndefined();
+
+  act(() => Keyboard.emit('keyboardDidShow', { endCoordinates: { screenY: 544 } }));
+  expect(r.styleOf('ui.appShell')['paddingBottom']).toBe(24 + 820 - 544);
+
+  act(() => Keyboard.emit('keyboardDidHide'));
+  expect(r.styleOf('ui.appShell')['paddingBottom']).toBeUndefined();
+  r.unmount();
+  windowLayout.delete('ui.appShell');
 });

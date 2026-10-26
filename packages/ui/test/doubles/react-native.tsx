@@ -43,7 +43,22 @@ function hostComponent(type: string) {
   return Component;
 }
 
-export const View = hostComponent('View');
+/**
+ * Where a test says a view sits in the window, by testID: what `measureInWindow` reports for it.
+ * A view with none set never answers, as a view that has not been laid out yet.
+ */
+export const windowLayout = new Map<string, { y: number; height: number }>();
+export const View = React.forwardRef<unknown, AnyProps>(function View(props, ref) {
+  React.useImperativeHandle(ref, () => ({
+    measureInWindow: (done: (x: number, y: number, width: number, height: number) => void) => {
+      const layout = windowLayout.get(String(props['testID']));
+      if (layout !== undefined) done(0, layout.y, 0, layout.height);
+    },
+    measureLayout: (): void => undefined,
+  }));
+  return React.createElement('View', props);
+});
+View.displayName = 'View';
 export const Text = hostComponent('Text');
 export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
@@ -142,9 +157,22 @@ export const Vibration = {
   vibrate: (): void => undefined,
 };
 
-/** Recorded, never real: there is no on-screen keyboard in this lane. */
+/**
+ * No on-screen keyboard in this lane: `emit` stands in for the system announcing one, so a test can
+ * drive what the shell does when it opens.
+ */
+const keyboardListeners = new Map<string, Set<(event: unknown) => void>>();
 export const Keyboard = {
   dismiss: (): void => undefined,
+  addListener: (name: string, listener: (event: unknown) => void) => {
+    const set = keyboardListeners.get(name) ?? new Set();
+    set.add(listener);
+    keyboardListeners.set(name, set);
+    return { remove: () => set.delete(listener) };
+  },
+  emit: (name: string, event?: unknown): void => {
+    for (const listener of keyboardListeners.get(name) ?? []) listener(event);
+  },
 };
 
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };

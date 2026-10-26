@@ -3,22 +3,39 @@
  *
  * Android draws apps edge to edge (Expo SDK 54+), so the window no longer shrinks for the
  * keyboard, and iOS never did: the keyboard simply covers the bottom of the screen. `AppShell`
- * therefore lifts its content and bottom action above the keyboard (a KeyboardAvoidingView), and a
+ * therefore lifts its content and bottom action above the keyboard (`useKeyboardLift`), and a
  * scrollable shell scrolls the focused field into what is left of the screen, again whenever that
  * space changes (the keyboard opening after the focus, or switching to the emoji keyboard).
+ *
+ * The lift is measured in window coordinates on purpose. React Native's KeyboardAvoidingView
+ * compares the keyboard's screen position with its own frame relative to its parent, so under a
+ * status bar inset it came up short by that inset: on an Android 16 emulator the bottom action sat
+ * under the keyboard's top edge with only a sliver showing.
  *
  * Fields ask for it with `useRevealOnFocus`. Most only need to be seen ('into-view'). A field whose
  * suggestions open below it (the phone model at intake) asks to go to the top ('to-top'), so the
  * suggestions get the room between it and the keyboard.
  */
-import { createContext, useCallback, useContext, useMemo, useRef, type RefObject } from 'react';
-import type {
-  LayoutChangeEvent,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  ScrollView,
-  TextInput,
-  View,
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
+import {
+  Keyboard,
+  Platform,
+  type KeyboardEvent,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type ScrollView,
+  type TextInput,
+  type View,
 } from 'react-native';
 
 import { space } from '../tokens.js';
@@ -41,6 +58,35 @@ const RevealContext = createContext<RevealPort | null>(null);
 
 /** Where a focused field should sit: `space.lg` clear of the top or bottom edge. */
 const MARGIN = space.lg;
+
+/**
+ * How far the bottom of `ref`'s view sits under the keyboard's top edge, in dp: the padding that
+ * lifts the shell's content and bottom action clear of it. 0 while the keyboard is down, and on
+ * the web, which has no keyboard events.
+ */
+export function useKeyboardLift(): { readonly ref: RefObject<View | null>; readonly lift: number } {
+  const ref = useRef<View | null>(null);
+  const [lift, setLift] = useState(0);
+  useEffect(() => {
+    // iOS announces the keyboard before it moves, so the lift rides along; Android only after.
+    const [show, hide] =
+      Platform.OS === 'ios'
+        ? (['keyboardWillShow', 'keyboardWillHide'] as const)
+        : (['keyboardDidShow', 'keyboardDidHide'] as const);
+    const shown = Keyboard.addListener(show, (event: KeyboardEvent) => {
+      const keyboardTop = event.endCoordinates.screenY;
+      ref.current?.measureInWindow((_x, y, _width, height) => {
+        setLift(Math.max(0, Math.round(y + height - keyboardTop)));
+      });
+    });
+    const hidden = Keyboard.addListener(hide, () => setLift(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
+  return { ref, lift };
+}
 
 /** The scrolling half, owned by `AppShell`'s ScrollView. */
 export function useRevealingScroll(): {
