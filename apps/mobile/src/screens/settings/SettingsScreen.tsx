@@ -33,12 +33,17 @@ import {
   type MutablePushCategory,
 } from './model.js';
 
-/** A module's row in Settings, its copy resolved by the caller. */
-export interface SettingsModuleEntry {
+/** A module's section in Settings, its copy resolved by the caller. */
+export interface SettingsModuleSection {
   readonly section: string;
+  readonly rows: readonly SettingsModuleRow[];
+}
+
+export interface SettingsModuleRow {
   readonly title: string;
   readonly summary: string;
   readonly onOpen: () => void;
+  readonly testID: string;
 }
 
 export interface SettingsScreenProps {
@@ -67,12 +72,12 @@ export interface SettingsScreenProps {
    */
   readonly onOpenResetPin?: (() => void) | undefined;
   /**
-   * The owner's intake lists (repair checks, accessories, photos, brands, ready-by) — present ONLY
-   * for someone who may edit them or hide items at this store; core still enforces both. The caller
-   * supplies the repair module's copy, so this screen never imports the module's screens (whose
-   * lists would nest a FlatList in this scrolling shell).
+   * The owner's repair settings (intake lists, cancellation fees) — each row present ONLY for someone
+   * who may change it at this store, and the section absent when none is; core still enforces them.
+   * The caller supplies the repair module's copy, so this screen never imports the module's screens
+   * (whose lists would nest a FlatList in this scrolling shell).
    */
-  readonly intakeOptions?: SettingsModuleEntry | undefined;
+  readonly repair?: SettingsModuleSection | undefined;
   readonly syncChip: SyncChipState;
   /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
   readonly pendingCount: number;
@@ -90,7 +95,7 @@ export function SettingsScreen({
   onOpenChangePin,
   onOpenUnlockPin,
   onOpenResetPin,
-  intakeOptions,
+  repair,
   syncChip,
   pendingCount,
   onOpenSync,
@@ -175,18 +180,21 @@ export function SettingsScreen({
         />
       ))}
 
-      {intakeOptions !== undefined ? (
+      {repair !== undefined && repair.rows.length > 0 ? (
         <>
           <Text style={styles.section} testID="settings-section-repair">
-            {intakeOptions.section}
+            {repair.section}
           </Text>
-          <ListRow
-            primaryText={intakeOptions.title}
-            secondaryText={intakeOptions.summary}
-            onPress={intakeOptions.onOpen}
-            showChevron
-            testID="settings-intake-options"
-          />
+          {repair.rows.map((row) => (
+            <ListRow
+              key={row.testID}
+              primaryText={row.title}
+              secondaryText={row.summary}
+              onPress={row.onOpen}
+              showChevron
+              testID={row.testID}
+            />
+          ))}
         </>
       ) : null}
 

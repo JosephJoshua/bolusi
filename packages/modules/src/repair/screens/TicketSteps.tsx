@@ -9,7 +9,6 @@ import {
   PhotoSlot,
   SegmentedControl,
   TextInput,
-  ToggleChip,
   Icon,
   TextButton,
   color,
@@ -19,11 +18,16 @@ import {
   type,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { WORK_PHOTOS_MAX, type QuoteLineKind, type WorkPhotoStage } from '../constants.js';
-import type { QuoteLineRow } from '../queries.js';
+import {
+  REPAIR_PERMISSION,
+  WORK_PHOTOS_MAX,
+  type QuoteLineKind,
+  type WorkPhotoStage,
+} from '../constants.js';
+import { standardCancelFee, type QuoteLineRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
@@ -44,7 +48,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useCancelFees, useRepairQuery, useRepairRuntime } from './runtime.js';
 
 interface StepProps {
   readonly chrome: RepairChrome;
@@ -178,32 +182,94 @@ export function WorkPhotosStep({
   );
 }
 
-// ── a note or a reason ────────────────────────────────────────────────────────────────────────
+// ── waiting for parts ─────────────────────────────────────────────────────────────────────
 
-/** "Waiting for parts" (which part, optional) and "Cancel repair" (why, required). */
-export function NoteStep({
+/** "Waiting for parts", with an optional note of which part. */
+export function WaitForPartsStep({
   chrome,
   ticketId,
   stale,
-  kind,
   onDone,
   onCancel,
-  testID = `repair.note.${kind}`,
+  testID = 'repair.note.waitForParts',
+}: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [text, setText] = useState('');
+
+  const submit = (): void => {
+    void runner
+      .run(() => runtime.run('markWaitingForParts', { ticketId, note: text }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  return (
+    <FlowScreen
+      chrome={chrome}
+      title={tn('repair.action.waitForParts')}
+      onBack={onCancel}
+      primaryLabel={tn('repair.action.waitForParts')}
+      onPrimary={submit}
+      busy={runner.busy}
+      errorCode={runner.errorCode}
+      stale={stale}
+      onClearError={runner.clearError}
+      testID={testID}
+    >
+      <TextInput
+        label={tn('repair.work.partsNote')}
+        value={text}
+        onChangeText={setText}
+        multiline
+        autoFocus
+        testID={`${testID}.text`}
+      />
+    </FlowScreen>
+  );
+}
+
+// ── cancel (owners) ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cancel a servisan: the store's fee for its stage is filled in, the owner may change it, and the
+ * reason is always required. The fee is what the customer signs for at handover.
+ */
+export function CancelStep({
+  chrome,
+  ticketId,
+  stale,
+  workStarted,
+  onDone,
+  onCancel,
+  testID = 'repair.cancel',
 }: StepProps & {
-  readonly kind: 'waitForParts' | 'cancel';
+  readonly workStarted: boolean;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [text, setText] = useState('');
-  const cancel = kind === 'cancel';
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const fees = useCancelFees(reloadNonce);
+  const [reason, setReason] = useState('');
+  // Null until the owner taps "Ubah"; the store's fee applies until then.
+  const [feeText, setFeeText] = useState<string | null>(null);
+
+  const standard = fees.status === 'ready' ? standardCancelFee({ workStarted }, fees.data) : null;
+  const fee = feeText === null ? standard : parseRupiah(feeText);
+  const changed = standard !== null && fee !== null && fee !== standard;
+  const complete = fee !== null && reason.trim() !== '';
 
   const submit = (): void => {
+    if (fee === null || !complete) return;
+    // An unchanged fee is left to the command, which fills in the store's fee as it is then.
     void runner
       .run(() =>
-        cancel
-          ? runtime.run('cancelTicket', { ticketId, reason: text })
-          : runtime.run('markWaitingForParts', { ticketId, note: text }),
+        runtime.run(
+          'cancelTicket',
+          feeText === null ? { ticketId, reason } : { ticketId, reason, fee },
+        ),
       )
       .then((result) => {
         if (result !== undefined) onDone();
@@ -213,32 +279,84 @@ export function NoteStep({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn(cancel ? 'repair.action.cancel' : 'repair.action.waitForParts')}
+      title={tn('repair.action.cancel')}
       onBack={onCancel}
-      primaryLabel={tn(cancel ? 'repair.action.cancel' : 'repair.action.waitForParts')}
-      primaryVariant={cancel ? 'destructive' : 'primary'}
+      primaryLabel={tn('repair.action.cancel')}
+      primaryVariant="destructive"
       onPrimary={submit}
-      primaryDisabled={cancel && text.trim() === ''}
-      primaryHint={tn('repair.hint.reason')}
+      primaryDisabled={!complete}
+      primaryHint={tn(
+        feeText !== null && fee === null ? 'repair.hint.cancelFee' : 'repair.hint.reason',
+      )}
       busy={runner.busy}
       errorCode={runner.errorCode}
       stale={stale}
       onClearError={runner.clearError}
       testID={testID}
     >
-      {cancel ? (
-        <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
-          {tn('repair.cancel.consequence')}
-        </Text>
-      ) : null}
-      <TextInput
-        label={tn(cancel ? 'repair.cancel.reason' : 'repair.work.partsNote')}
-        value={text}
-        onChangeText={setText}
-        multiline
-        autoFocus
-        testID={`${testID}.text`}
-      />
+      <Text style={[repairStyles.body, styles.consequence]} testID={`${testID}.consequence`}>
+        {tn('repair.cancel.consequence')}
+      </Text>
+      <QueryView
+        query={fees}
+        onBack={onCancel}
+        onRetry={() => setReloadNonce((n) => n + 1)}
+        testID={`${testID}.fees`}
+      >
+        {() => (
+          <View style={styles.proposal} testID={`${testID}.fee`}>
+            <View style={styles.feeHeader}>
+              <Text style={styles.feeLabel}>{tn('repair.cancel.fee')}</Text>
+              {feeText === null ? (
+                <View style={styles.feeAction}>
+                  <TextButton
+                    label={tn('repair.cancel.changeFee')}
+                    accessibilityLabel={tn('repair.cancel.changeFeeLabel')}
+                    onPress={() => setFeeText(String(standard ?? 0))}
+                    testID={`${testID}.changeFee`}
+                  />
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.proposalAmount} testID={`${testID}.feeAmount`}>
+              {fee === null ? '–' : formatMoney(fee)}
+            </Text>
+            <Text style={repairStyles.caption} testID={`${testID}.feeBasis`}>
+              {changed
+                ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
+                : tn(workStarted ? 'repair.cancel.afterWork' : 'repair.cancel.beforeWork')}
+            </Text>
+          </View>
+        )}
+      </QueryView>
+      {feeText === null ? null : (
+        <View style={repairStyles.gap}>
+          <TextInput
+            label={tn('repair.cancel.feeInput')}
+            value={feeText}
+            onChangeText={(text) => {
+              if (acceptsRupiahText(text)) setFeeText(text);
+            }}
+            keyboardType="number-pad"
+            autoFocus
+            testID={`${testID}.feeInput`}
+          />
+        </View>
+      )}
+      <View style={repairStyles.gap}>
+        <TextInput
+          label={tn('repair.cancel.reason')}
+          value={reason}
+          onChangeText={setReason}
+          multiline
+          testID={`${testID}.reason`}
+        />
+        {changed ? (
+          <Text style={repairStyles.caption} testID={`${testID}.feeChangedHint`}>
+            {tn('repair.cancel.feeChangedHint')}
+          </Text>
+        ) : null}
+      </View>
     </FlowScreen>
   );
 }
@@ -336,9 +454,17 @@ export const PRICE_KINDS = [
 ] as const satisfies readonly QuoteLineKind[];
 export type PriceKind = (typeof PRICE_KINDS)[number];
 
+/** The kinds this user may add: a discount lowers the price, so only owners see it. */
+export function usePriceKinds(): readonly PriceKind[] {
+  const runtime = useRepairRuntime();
+  const discount = runtime.hasPermission(REPAIR_PERMISSION.discount);
+  return useMemo(() => PRICE_KINDS.filter((kind) => kind !== 'discount' || discount), [discount]);
+}
+
 /**
- * A new price line after intake. The cashier changes the price directly and records whether the
- * customer agreed; a technician only proposes it for the cashier to decide.
+ * A new price line after intake. The cashier changes the price directly, answering whether the
+ * customer agreed as the save itself (as on a proposal, so it cannot be skipped by not noticing a
+ * toggle); a technician only proposes it for the cashier to decide.
  */
 export function PriceChangeStep({
   chrome,
@@ -354,15 +480,15 @@ export function PriceChangeStep({
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
+  const kinds = usePriceKinds();
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
-  const [customerAgreed, setCustomerAgreed] = useState(false);
   const amount = parseRupiah(amountText);
   const complete = description.trim() !== '' && amount !== null && reason.trim() !== '';
 
-  const submit = (): void => {
+  const submit = (customerAgreed: boolean): void => {
     if (!complete) return;
     const line = { ticketId, kind, description, amount: signedAmount(kind, amount), reason };
     void runner
@@ -381,10 +507,21 @@ export function PriceChangeStep({
       chrome={chrome}
       title={tn(mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice')}
       onBack={onCancel}
+      question={mode === 'change' ? tn('repair.price.alreadyAgreed') : undefined}
       primaryLabel={tn(
-        mode === 'change' ? 'repair.action.changePrice' : 'repair.action.proposePrice',
+        mode === 'change' ? 'repair.action.agreedYes' : 'repair.action.proposePrice',
       )}
-      onPrimary={submit}
+      onPrimary={() => submit(true)}
+      secondary={
+        mode === 'change'
+          ? {
+              label: tn('repair.action.applyUnconfirmed'),
+              onPress: () => submit(false),
+              disabled: !complete,
+              testID: `${testID}.unconfirmed`,
+            }
+          : undefined
+      }
       primaryDisabled={!complete}
       primaryHint={tn('repair.hint.priceLine')}
       busy={runner.busy}
@@ -394,7 +531,7 @@ export function PriceChangeStep({
       testID={testID}
     >
       <SegmentedControl
-        options={PRICE_KINDS.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
+        options={kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
         value={kind}
         onChange={setKind}
         size="compact"
@@ -434,23 +571,19 @@ export function PriceChangeStep({
         />
       </View>
       {mode === 'change' ? (
-        <View style={repairStyles.gap}>
-          <ToggleChip
-            label={tn('repair.price.customerAgreed')}
-            selected={customerAgreed}
-            onToggle={() => setCustomerAgreed((current) => !current)}
-            testID={`${testID}.agreed`}
-          />
-        </View>
+        // Agreement often comes later, by phone; saying so keeps "Belum" from reading as a dead end.
+        <Text style={[repairStyles.caption, repairStyles.gap]} testID={`${testID}.waitsHint`}>
+          {tn('repair.price.waitsHint')}
+        </Text>
       ) : null}
     </FlowScreen>
   );
 }
 
 /**
- * The cashier decides a technician's proposed line with the customer's answer as the choice itself:
- * agreed and applied, declined, or (rarely) applied without asking. A toggle that defaulted to "not
- * agreed" made it too easy to apply a price the customer never heard about.
+ * The counter decides a waiting price change, a technician's proposal or its own, with the
+ * customer's answer as the choice itself: agreed and applied, or declined. A change never counts
+ * without the customer's yes.
  */
 export function ProposalStep({
   chrome,
@@ -467,8 +600,10 @@ export function ProposalStep({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [note, setNote] = useState('');
+  // A line that lowers the price is an owner's to apply; anyone deciding may still decline it.
+  const mayApply = line.amount >= 0 || runtime.hasPermission(REPAIR_PERMISSION.discount);
 
-  const decide = (decision: 'agreed' | 'unasked' | 'declined'): void => {
+  const decide = (decision: 'agreed' | 'declined'): void => {
     void runner
       .run(() =>
         decision === 'declined'
@@ -476,7 +611,7 @@ export function ProposalStep({
           : runtime.run('applyProposal', {
               ticketId,
               lineId: line.id,
-              customerAgreed: decision === 'agreed',
+              customerAgreed: true,
               note,
             }),
       )
@@ -493,6 +628,8 @@ export function ProposalStep({
       question={tn('repair.price.customerAgrees')}
       primaryLabel={tn('repair.action.agreeApply')}
       onPrimary={() => decide('agreed')}
+      primaryDisabled={!mayApply}
+      primaryHint={mayApply ? undefined : tn('repair.hint.discountOwner')}
       secondary={{
         label: tn('repair.action.declinePrice'),
         onPress: () => decide('declined'),
@@ -512,7 +649,7 @@ export function ProposalStep({
         </Text>
         {line.reason === null ? null : (
           <>
-            <Text style={styles.proposalLabel}>{tn('repair.price.technicianReason')}</Text>
+            <Text style={styles.proposalLabel}>{tn('repair.price.changeReason')}</Text>
             <Text style={styles.proposalReason}>{line.reason}</Text>
           </>
         )}
@@ -523,15 +660,6 @@ export function ProposalStep({
           value={note}
           onChangeText={setNote}
           testID={`${testID}.note`}
-        />
-      </View>
-      {/* Rare and riskier than either answer, so it stays a link in the body, off the answer row. */}
-      <View style={styles.unasked}>
-        <TextButton
-          label={tn('repair.action.applyUnasked')}
-          onPress={() => decide('unasked')}
-          disabled={runner.busy}
-          testID={`${testID}.applyUnasked`}
         />
       </View>
     </FlowScreen>
@@ -553,6 +681,10 @@ const styles = StyleSheet.create({
   },
   proposalLabel: { ...type.caption, color: color.textMuted, marginTop: space.md },
   proposalReason: { ...type.bodySm, color: color.text },
-  unasked: { alignItems: 'flex-start', marginTop: space.lg, marginLeft: -space.sm },
   consequence: { marginBottom: space.md },
+  // The caption and its link share one centre line; the link's text lines up with the box's right
+  // edge, not its padded hit box, which may overhang the box's padding.
+  feeHeader: { flexDirection: 'row', alignItems: 'center' },
+  feeLabel: { ...type.caption, color: color.textMuted },
+  feeAction: { marginLeft: 'auto', marginRight: -space.sm, marginVertical: -space.md },
 });
