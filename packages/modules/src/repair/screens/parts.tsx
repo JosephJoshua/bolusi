@@ -199,6 +199,8 @@ export function FlowScreen({
   busy,
   errorCode,
   onClearError,
+  notice,
+  onClearNotice,
   overlay,
   stale,
   scrollKey,
@@ -216,12 +218,21 @@ export function FlowScreen({
   readonly primaryVariant?: 'primary' | 'destructive' | undefined;
   /** The other answer to `question`, drawn beside the primary. */
   readonly secondary?:
-    { readonly label: string; readonly onPress: () => void; readonly testID: string } | undefined;
+    | {
+        readonly label: string;
+        readonly onPress: () => void;
+        readonly disabled?: boolean | undefined;
+        readonly testID: string;
+      }
+    | undefined;
   /** Already-localized question the bottom answers reply to. */
   readonly question?: string | undefined;
   readonly busy: boolean;
   readonly errorCode: string | null;
   readonly onClearError: () => void;
+  /** Already-localized word on what the last action did, shown when nothing was refused. */
+  readonly notice?: string | null | undefined;
+  readonly onClearNotice?: (() => void) | undefined;
   readonly overlay?: ReactNode;
   /**
    * The ticket changed elsewhere and this step can no longer finish: said in the banner slot, and
@@ -257,13 +268,20 @@ export function FlowScreen({
             message={staleStepMessage(staleNow)}
             testID={`${testID}.stale`}
           />
-        ) : errorCode === null ? undefined : (
+        ) : errorCode !== null ? (
           <ActionErrorBanner
             errorCode={errorCode}
             onDismiss={onClearError}
             testID={`${testID}.error`}
           />
-        )
+        ) : notice !== null && notice !== undefined ? (
+          <Banner
+            variant="info"
+            message={notice}
+            onPress={onClearNotice}
+            testID={`${testID}.notice`}
+          />
+        ) : undefined
       }
       bottomAction={
         staleNow !== null ? (
@@ -291,7 +309,7 @@ export function FlowScreen({
                     label={secondary.label}
                     onPress={secondary.onPress}
                     variant="secondary"
-                    disabled={busy}
+                    disabled={secondary.disabled === true || busy}
                     testID={secondary.testID}
                   />
                 </View>

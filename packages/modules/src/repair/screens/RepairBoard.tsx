@@ -4,7 +4,7 @@
  * text the board shows one view of the queue. Technicians open on their own queue, everyone else on
  * all active repairs. A denied read is the Unauthorized state, never an empty board (FR-1036).
  */
-import { formatMoney, t, translateErrorCode } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Button,
@@ -29,8 +29,9 @@ import { statusesFor, type EntitySyncStatuses } from '../../screen-kit/index.js'
 
 import { tn, type RepairKey } from './i18n.js';
 import {
-  BOARD_VIEWS,
   boardFilter,
+  boardSort,
+  boardViews,
   defaultBoardView,
   repairAbilities,
   ticketStatus,
@@ -50,6 +51,7 @@ const VIEW_KEY: Readonly<Record<BoardView, RepairKey>> = {
   unassigned: 'repair.board.view.unassigned',
   pickup: 'repair.board.view.pickup',
   returned: 'repair.board.view.returned',
+  cancelled: 'repair.board.view.cancelled',
 };
 
 export interface RepairBoardProps {
@@ -100,6 +102,7 @@ export function RepairBoard({
             readonly nextCursor: string | null;
           } = await rt.query('listTickets', {
             filter: boardFilter(view, rt.userId),
+            sort: boardSort(view),
             limit: PAGE,
             ...(cursor === null ? {} : { cursor }),
           });
@@ -186,7 +189,7 @@ export function RepairBoard({
       {searching ? null : (
         <View style={styles.views}>
           <SegmentedControl
-            options={BOARD_VIEWS.map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
+            options={boardViews(can).map((value) => ({ value, label: tn(VIEW_KEY[value]) }))}
             value={view}
             // One compact row that scrolls sideways and runs to the screen edges: the cut-off pill
             // at the edge shows there are more queues, and the list keeps the screen.
@@ -212,6 +215,7 @@ export function RepairBoard({
         renderRow={(row) => (
           <TicketRow
             row={row}
+            showCancel={!searching && view === 'cancelled'}
             syncChip={
               <SyncStatusChip
                 syncStatuses={statusesFor(loaded?.statuses ?? {}, row.id)}
@@ -238,26 +242,43 @@ export function RepairBoard({
  */
 function TicketRow({
   row,
+  showCancel,
   syncChip,
   onPress,
   testID,
 }: {
   readonly row: TicketSummaryRow;
+  /** The owners' cancelled view: who cancelled, why, and a fee that differs from the store's. */
+  readonly showCancel: boolean;
   readonly syncChip: ReactNode;
   readonly onPress: () => void;
   readonly testID: string;
 }): React.JSX.Element {
   const device = [row.deviceBrand, row.deviceModel].filter((s) => s !== '').join(' ');
-  const details = [device, row.technicianName ?? tn('repair.ticket.unassigned')]
-    .filter((s) => s !== '')
-    .join(' · ');
+  const who = showCancel
+    ? row.cancelledByName === null
+      ? null
+      : tn('repair.board.cancelledBy', { name: row.cancelledByName })
+    : (row.technicianName ?? tn('repair.ticket.unassigned'));
+  const details = [device, who].filter((s) => s !== null && s !== '').join(' · ');
+  const reason = showCancel ? row.outcomeNote : null;
+  // A cancelled servisan costs the customer its fee, never the repair price (none before fees).
+  const amount = row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+  const feeChanged =
+    showCancel &&
+    row.cancelFee !== null &&
+    row.cancelStandardFee !== null &&
+    row.cancelFee !== row.cancelStandardFee;
   // The label replaces what a screen reader would read from the row, so it says everything shown.
   const label = [
     row.ticketNumber,
     statusLabel(ticketStatus(row)),
     row.customerName,
-    formatMoney(row.quoteTotal),
+    formatMoney(amount),
     details,
+    reason ?? '',
+    feeChanged ? tn('repair.board.feeChanged') : '',
+    row.cancelledAt !== null && showCancel ? formatDateTime(row.cancelledAt) : '',
     row.pendingProposals > 0 ? tn('repair.board.priceChangeWaiting') : '',
   ]
     .filter((s) => s !== '')
@@ -279,13 +300,28 @@ function TicketRow({
           <Text style={[styles.customer, repairStyles.rowText]} numberOfLines={1}>
             {row.customerName}
           </Text>
-          <Text style={styles.amount}>{formatMoney(row.quoteTotal)}</Text>
+          <Text style={styles.amount} testID={`${testID}.amount`}>
+            {formatMoney(amount)}
+          </Text>
         </View>
         <Text style={styles.details} numberOfLines={2}>
           {details}
         </Text>
+        {reason === null || reason === '' ? null : (
+          <Text style={styles.reason} numberOfLines={2} testID={`${testID}.reason`}>
+            {reason}
+          </Text>
+        )}
         <View style={styles.footer}>
           <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+          {feeChanged ? (
+            <Chip
+              label={tn('repair.board.feeChanged')}
+              icon="warning"
+              tone="warning"
+              testID={`${testID}.feeChanged`}
+            />
+          ) : null}
           {row.pendingProposals > 0 ? (
             <Chip
               label={tn('repair.board.priceChangeWaiting')}
@@ -295,7 +331,11 @@ function TicketRow({
             />
           ) : null}
           {syncChip}
-          <Text style={styles.number}>{row.ticketNumber}</Text>
+          <Text style={styles.number}>
+            {showCancel && row.cancelledAt !== null
+              ? `${formatDateTime(row.cancelledAt)} · ${row.ticketNumber}`
+              : row.ticketNumber}
+          </Text>
         </View>
       </View>
     </Pressable>
@@ -319,6 +359,7 @@ const styles = StyleSheet.create({
   customer: { ...type.bodyBold, color: color.text },
   amount: { ...type.bodySm, fontWeight: '600', color: color.text, fontVariant: ['tabular-nums'] },
   details: { ...type.bodySm, color: color.textMuted },
+  reason: { ...type.bodySm, color: color.text, marginTop: space.xs },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

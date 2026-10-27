@@ -32,14 +32,23 @@ export const DEMO_REPAIR_ROLES = {
   counter: {
     userId: 'u-siti',
     name: 'Siti Rahayu',
-    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.cancel, P.handover],
+    // No cancel or discount: only owners lower what a customer pays (how counter staff kept cash).
+    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover],
   },
   technician: { userId: 'u-budi', name: 'Budi Santoso', permissions: [P.read, P.work] },
   /** A store owner: may choose what this store uses, not change the franchise's lists. */
   storeOwner: {
     userId: 'u-yosua',
     name: 'Yosua Wonda',
-    permissions: [P.read, P.intake, P.hideIntakeOptions],
+    permissions: [
+      P.read,
+      P.intake,
+      P.quoteChange,
+      P.hideIntakeOptions,
+      P.cancel,
+      P.discount,
+      P.setCancelFees,
+    ],
   },
 } as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
@@ -122,6 +131,7 @@ function ticket(spec: {
   hoursAgo: number;
   extraPhotos?: TicketPhotoRow[];
   location?: TicketDetailRow['location'];
+  cancel?: { fee: number; standardFee: number; by: string; reason: string; hoursAgo: number };
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -144,6 +154,13 @@ function ticket(spec: {
     pendingProposals: 0,
     createdAt,
     updatedAt: createdAt,
+    cancelFee: spec.cancel?.fee ?? null,
+    cancelStandardFee: spec.cancel?.standardFee ?? null,
+    cancelledBy: spec.cancel?.by ?? null,
+    cancelledByName: spec.cancel === undefined ? null : (NAMES.get(spec.cancel.by) ?? null),
+    cancelledAt: spec.cancel === undefined ? null : HARNESS_NOW - spec.cancel.hoursAgo * HOUR,
+    // Every seeded ticket past "received" has had work started on it.
+    workStarted: spec.outcome !== 'received' && (spec.extraPhotos ?? []).length > 0,
     devicePasscode: null,
     intakeNotes: 'Ada goresan di sudut kanan bawah.',
     checklist: [
@@ -157,7 +174,7 @@ function ticket(spec: {
       { item: 'case', label: null },
     ],
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
-    outcomeNote: null,
+    outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',
     createdByName: 'Siti Rahayu',
     returnedBy: null,
@@ -246,6 +263,51 @@ function seedTickets(): TicketDetailRow[] {
       hoursAgo: 70,
       extraPhotos: [photoRow('before:m4'), photoRow('after:m5')],
     }),
+    ticket({
+      id: 't-5',
+      number: 'K7Q-0008',
+      customer: 'Daniel Tabuni',
+      phone: '0852-1122-3344',
+      brand: 'Realme',
+      model: 'C55',
+      color: 'Hitam',
+      complaint: 'Kamera belakang buram',
+      outcome: 'cancelled',
+      technicianId: 'u-budi',
+      lines: [line('part', 'Kamera C55', 220_000), line('labour', 'Pasang kamera', 50_000)],
+      hoursAgo: 90,
+      extraPhotos: [photoRow('before:m6')],
+      cancel: {
+        fee: 50_000,
+        standardFee: 50_000,
+        by: 'u-andi',
+        reason: 'Pelanggan tidak jadi, harga kamera terlalu mahal.',
+        hoursAgo: 30,
+      },
+    }),
+    ticket({
+      id: 't-6',
+      number: 'K7Q-0007',
+      customer: 'Lince Wakerkwa',
+      phone: null,
+      brand: 'Samsung',
+      model: 'Galaxy A05',
+      color: 'Hijau',
+      complaint: 'Tombol power macet',
+      outcome: 'cancelled',
+      technicianId: 'u-budi',
+      lines: [line('labour', 'Servis tombol power', 60_000)],
+      hoursAgo: 120,
+      extraPhotos: [photoRow('before:m7')],
+      location: 'returned',
+      cancel: {
+        fee: 0,
+        standardFee: 50_000,
+        by: 'u-yosua',
+        reason: 'Sparepart tidak tersedia. Biaya dibebaskan karena kami yang tidak bisa servis.',
+        hoursAgo: 100,
+      },
+    }),
   ].map(withTotals);
 }
 
@@ -274,6 +336,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
   let optionIds = 0;
+  let cancelFees = { beforeWork: 0, afterWork: 50_000 };
   const listeners = new Set<() => void>();
   const notify = (): void => {
     for (const listener of listeners) listener();
@@ -327,7 +390,12 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
           .filter((t) => f['location'] === undefined || t.location === f['location'])
           .filter((t) => f['technicianId'] === undefined || t.technicianId === f['technicianId'])
           .filter((t) => f['unassigned'] !== true || t.technicianId === null)
-          .sort((a, b) => b.createdAt - a.createdAt)
+          .filter((t) => input['sort'] !== 'cancelledAt.desc' || t.cancelledAt !== null)
+          .sort((a, b) =>
+            input['sort'] === 'cancelledAt.desc'
+              ? (b.cancelledAt ?? 0) - (a.cancelledAt ?? 0)
+              : b.createdAt - a.createdAt,
+          )
           .map(summary),
       );
     },
@@ -378,6 +446,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     },
     getTicket: (input) => page([find(String(input['ticketId']))]),
     intakeOptionSettings: () => page([options]),
+    cancelFees: () => page([cancelFees]),
   };
 
   const commands: Record<string, (input: Input) => unknown> = {
@@ -450,6 +519,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       const t = find(String(input['ticketId']));
       return update(t.id, 'repair.work_started', {
         outcome: 'in_repair',
+        workStarted: true,
         technicianId: t.technicianId ?? actor.userId,
         technicianName: t.technicianName ?? actor.name,
         photos: addPhotos(t, 'before', (input['beforePhotos'] as MediaRef[] | undefined) ?? []),
@@ -468,13 +538,32 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         photos: addPhotos(t, 'after', input['afterPhotos'] as MediaRef[]),
       });
     },
-    cancelTicket: (input) =>
-      update(String(input['ticketId']), 'repair.ticket_cancelled', {
+    cancelTicket: (input) => {
+      const t = find(String(input['ticketId']));
+      return update(t.id, 'repair.ticket_cancelled', {
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
-      }),
+        cancelFee: Number(input['fee']),
+        cancelStandardFee: t.workStarted ? cancelFees.afterWork : cancelFees.beforeWork,
+        cancelledBy: actor.userId,
+        cancelledByName: actor.name,
+        cancelledAt: HARNESS_NOW,
+      });
+    },
+    setCancelFees: (input) => {
+      cancelFees = {
+        beforeWork: Number(input['beforeWork']),
+        afterWork: Number(input['afterWork']),
+      };
+      notify();
+      return cancelFees;
+    },
     proposeQuoteChange: (input) => priceLine(input, 'proposed', 'repair.quote_change_proposed'),
-    changeQuote: (input) => priceLine(input, 'applied', 'repair.quote_changed'),
+    // Not agreed yet: the change waits for the customer, like a proposal.
+    changeQuote: (input) =>
+      input['customerAgreed'] === true
+        ? priceLine(input, 'applied', 'repair.quote_changed')
+        : priceLine({ ...input, customerAgreed: undefined }, 'proposed', 'repair.quote_changed'),
     applyProposal: (input) => decide(input, 'applied', 'repair.quote_changed'),
     declineProposal: (input) => decide(input, 'declined', 'repair.quote_proposal_declined'),
     changeIntakeOptions: (input) => {

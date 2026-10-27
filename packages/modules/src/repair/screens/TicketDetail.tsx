@@ -26,7 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -63,7 +63,8 @@ import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 import {
   AssignStep,
-  NoteStep,
+  CancelStep,
+  WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
   WorkPhotosStep,
@@ -213,8 +214,9 @@ export function TicketDetail({
         />
       );
     case 'waitForParts':
+      return <WaitForPartsStep {...stepProps} />;
     case 'cancel':
-      return <NoteStep {...stepProps} kind={step.kind} />;
+      return <CancelStep {...stepProps} workStarted={ticket?.workStarted ?? false} />;
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
@@ -407,6 +409,13 @@ export function TicketDetail({
                 value={formatDateTime(row.estimatedReadyAt)}
               />
             )}
+            {row.outcome === 'cancelled' && row.cancelFee !== null ? (
+              <Fact
+                label={tn('repair.cancel.fee')}
+                value={formatMoney(row.cancelFee)}
+                testID={`${testID}.cancelFee`}
+              />
+            ) : null}
             {row.deviceImei === null ? null : (
               <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
             )}
@@ -461,7 +470,11 @@ export function TicketDetail({
               const note = eventNote(event.detail);
               return {
                 key: event.id,
-                title: translateOpType(event.kind),
+                // A change saved before the customer agreed reads as waiting, not as changed.
+                title:
+                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+                    ? tn('repair.price.waitingEvent')
+                    : translateOpType(event.kind),
                 meta: [formatDateTime(event.at), event.actorName]
                   .filter((part) => part !== null)
                   .join(' · '),
@@ -495,6 +508,7 @@ export function TicketDetail({
     const deciding = actions.includes('decidePrice');
     // The bottom action already opens the first proposal; per-line buttons only when there are more.
     const perLine = deciding && pending.length > 1;
+    const cancelled = row.outcome === 'cancelled';
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -534,11 +548,22 @@ export function TicketDetail({
           );
         })}
         <View style={[repairStyles.row, styles.total]}>
-          <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
-          <Text style={[styles.totalValue, styles.amount]} testID={`${testID}.total`}>
+          <Text style={[styles.totalLabel, cancelled && styles.notCharged]}>
+            {tn('repair.price.total')}
+          </Text>
+          <Text
+            style={[styles.totalValue, styles.amount, cancelled && styles.notCharged]}
+            testID={`${testID}.total`}
+          >
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
+        {cancelled ? (
+          // The repair price stays as history, struck through: the customer owes only the fee.
+          <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
+            {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
+          </Text>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           // The total is what the customer agreed to; what a decision would add is said, not summed.
           <Text style={styles.lineWarning} testID={`${testID}.pendingTotal`}>
@@ -711,6 +736,7 @@ const styles = StyleSheet.create({
   totalLabel: { ...type.bodyBold, color: color.text },
   totalValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },
+  notCharged: { color: color.textMuted, textDecorationLine: 'line-through' },
   chipGroup: { marginBottom: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
 });

@@ -81,8 +81,9 @@ const STAFF_PERMS = [
   'platform.set_locale',
 ];
 
-// Repair presets (product-scope.md slice 1): the cashier takes devices in, prices, assigns, cancels
-// and hands back; the technician works tickets and may only propose price changes.
+// Repair presets (product-scope.md slice 1): the cashier takes devices in, prices, assigns and hands
+// back; the technician works tickets and may only propose price changes. Cancelling and discounts are
+// the owners' alone ("Cancelling a servisan"): both are how counter staff kept customers' cash.
 const PERSONAL_PERMS = [AUTH_PERMISSION.pinChange, 'platform.set_locale'];
 const CASHIER_PERMS = [
   ...PERSONAL_PERMS,
@@ -90,7 +91,6 @@ const CASHIER_PERMS = [
   'repair.intake',
   'repair.assign',
   'repair.quote_change',
-  'repair.cancel',
   'repair.handover',
 ];
 const TECHNICIAN_PERMS = [...PERSONAL_PERMS, 'repair.read', 'repair.work'];
