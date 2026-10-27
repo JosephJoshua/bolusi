@@ -91,12 +91,12 @@ export function useKeyboardLift(): { readonly ref: RefObject<View | null>; reado
 /** The scrolling half, owned by `AppShell`'s ScrollView. */
 export function useRevealingScroll(): {
   readonly port: RevealPort;
-  readonly scrollRef: RefObject<ScrollView | null>;
+  readonly scrollRef: (view: ScrollView | null) => void;
   readonly contentRef: RefObject<View | null>;
   readonly onLayout: (event: LayoutChangeEvent) => void;
   readonly onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 } {
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scroll = useRef<ScrollView | null>(null);
   const contentRef = useRef<View | null>(null);
   const viewport = useRef({ height: 0, offset: 0 });
   const last = useRef<Focused | null>(null);
@@ -111,8 +111,7 @@ export function useRevealingScroll(): {
         let target: number | null = null;
         if (mode === 'to-top' || y - MARGIN < offset) target = y - MARGIN;
         else if (y + height + MARGIN > offset + visible) target = y + height + MARGIN - visible;
-        if (target !== null)
-          scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: true });
+        if (target !== null) scroll.current?.scrollTo({ y: Math.max(0, target), animated: true });
       },
       () => undefined,
     );
@@ -139,6 +138,13 @@ export function useRevealingScroll(): {
     },
     [reveal],
   );
+
+  // A new ScrollView (AppShell remounts it per `scrollKey`) starts at the top, whatever the last
+  // one was scrolled to.
+  const scrollRef = useCallback((view: ScrollView | null) => {
+    if (view !== scroll.current) viewport.current.offset = 0;
+    scroll.current = view;
+  }, []);
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     viewport.current.offset = event.nativeEvent.contentOffset.y;

@@ -19,7 +19,9 @@ this host only. Keep machine-specific paths out of shared config.
 On restricted networks, installation with `--ignore-scripts` can help, but native
 dependencies still need valid build artifacts before SQLite tests can run.
 The pre-commit hook formats staged files and scans the staged diff with gitleaks;
-install gitleaks before committing. CI also scans committed history.
+install gitleaks before committing. Claude Code cloud sessions install a pinned,
+checksum-verified gitleaks through `.claude/hooks/session-start.sh`. CI also
+scans committed history.
 
 ## Run
 

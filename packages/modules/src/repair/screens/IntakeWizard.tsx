@@ -236,6 +236,7 @@ export function IntakeWizard({
       chrome={chrome}
       title={tn('repair.action.newIntake')}
       onBack={back}
+      scrollKey={step}
       primaryLabel={
         missingPhoto !== null
           ? tn('repair.photo.takeNext', { slot: optionLabel('photoAngles', missingPhoto) })

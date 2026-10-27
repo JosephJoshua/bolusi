@@ -15,7 +15,7 @@
 import { color } from '@bolusi/ui';
 import { hasKey, t } from '@bolusi/i18n';
 import type { StorageBand } from '@bolusi/core';
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { render } from '../../../../packages/ui/test/render.js';
@@ -54,25 +54,62 @@ afterEach(() => {
 });
 
 describe('design-system §5 — the mandatory states this screen has', () => {
-  test.each(['permission_pending', 'warming_up'] as const)(
-    'LOADING (%s): a spinner, and no viewfinder behind it',
-    (kind) => {
-      // `LoadingState` deliberately renders NOTHING for the first `LOADING_DELAY_MS` (§5: "Must NOT
-      // … show for local queries resolved < 300 ms"), so the timer has to be advanced for the
-      // spinner to exist. Asserting presence without that would have quietly asserted `null`.
-      vi.useFakeTimers();
-      const screen = renderCapture({ kind });
-      expect(screen.query('capture-loading')).toBeNull();
-      act(() => {
-        vi.advanceTimersByTime(1000);
-      });
-      expect(screen.query('capture-loading')).not.toBeNull();
-      // The preview surface is NOT mounted behind it: a camera view attached before it is ready
-      // shows a black or frozen frame, which reads as a broken app.
-      expect(screen.query('capture-viewfinder')).toBeNull();
-      expect(screen.query('capture-shutter')).toBeNull();
-    },
-  );
+  test('LOADING (permission_pending): a spinner, and no viewfinder behind it', () => {
+    // `LoadingState` deliberately renders NOTHING for the first `LOADING_DELAY_MS` (§5: "Must NOT
+    // … show for local queries resolved < 300 ms"), so the timer has to be advanced for the
+    // spinner to exist. Asserting presence without that would have quietly asserted `null`.
+    vi.useFakeTimers();
+    const screen = renderCapture({ kind: 'permission_pending' });
+    expect(screen.query('capture-loading')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.query('capture-loading')).not.toBeNull();
+    // No camera before the OS has granted it.
+    expect(screen.query('capture-viewfinder')).toBeNull();
+    expect(screen.query('capture-shutter')).toBeNull();
+  });
+
+  test('LOADING (warming_up): the preview is mounted under the spinner, so the camera can start', () => {
+    // The camera only reports ready once its view is mounted. This state used to render the
+    // spinner INSTEAD of the preview, so on a device it never left the spinner.
+    vi.useFakeTimers();
+    let mounts = 0;
+    function Preview(): null {
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return null;
+    }
+    const at = (state: CaptureScreenState) => (
+      <CaptureScreen
+        title={TITLE}
+        state={state}
+        preview={<Preview />}
+        syncChip={<></>}
+        avatar={<></>}
+        onShutter={vi.fn()}
+        onRetake={vi.fn()}
+        onUsePhoto={vi.fn()}
+        onRetry={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    const screen = render(at({ kind: 'warming_up' }));
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(mounts).toBe(1);
+    expect(screen.query('capture-viewfinder')).not.toBeNull();
+    expect(screen.query('capture-loading')).not.toBeNull();
+    expect(screen.query('capture-shutter')).toBeNull();
+
+    // Ready keeps the same preview: the camera does not restart when the spinner goes.
+    screen.rerender(at(READY));
+    expect(mounts).toBe(1);
+    expect(screen.query('capture-loading')).toBeNull();
+    expect(screen.query('capture-shutter')).not.toBeNull();
+  });
 
   test('UNAUTHORIZED: a denied camera permission is a LOCK, never an empty box', () => {
     // §5: Unauthorized "must not masquerade as Empty" and must not dead-end.

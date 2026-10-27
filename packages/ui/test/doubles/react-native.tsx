@@ -48,13 +48,21 @@ function hostComponent(type: string) {
  * A view with none set never answers, as a view that has not been laid out yet.
  */
 export const windowLayout = new Map<string, { y: number; height: number }>();
+/** Where a view sits inside the content it is measured against (`measureLayout`), by testID. */
+export const contentLayout = new Map<string, { y: number; height: number }>();
 export const View = React.forwardRef<unknown, AnyProps>(function View(props, ref) {
   React.useImperativeHandle(ref, () => ({
     measureInWindow: (done: (x: number, y: number, width: number, height: number) => void) => {
       const layout = windowLayout.get(String(props['testID']));
       if (layout !== undefined) done(0, layout.y, 0, layout.height);
     },
-    measureLayout: (): void => undefined,
+    measureLayout: (
+      _relativeTo: unknown,
+      done: (x: number, y: number, width: number, height: number) => void,
+    ): void => {
+      const layout = contentLayout.get(String(props['testID']));
+      if (layout !== undefined) done(0, layout.y, 0, layout.height);
+    },
   }));
   return React.createElement('View', props);
 });
@@ -62,7 +70,15 @@ View.displayName = 'View';
 export const Text = hostComponent('Text');
 export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
-export const ScrollView = hostComponent('ScrollView');
+/** Every `scrollTo` a ScrollView was asked for, newest last. */
+export const scrollCalls: { y: number }[] = [];
+export const ScrollView = React.forwardRef<unknown, AnyProps>(function ScrollView(props, ref) {
+  React.useImperativeHandle(ref, () => ({
+    scrollTo: (to: { y: number }) => scrollCalls.push({ y: to.y }),
+  }));
+  return React.createElement('ScrollView', props);
+});
+ScrollView.displayName = 'ScrollView';
 export const Switch = hostComponent('Switch');
 /** A host node: lifting content above the keyboard is native layout, not under test here. */
 export const KeyboardAvoidingView = hostComponent('KeyboardAvoidingView');
