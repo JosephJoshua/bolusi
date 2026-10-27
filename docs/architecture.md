@@ -108,6 +108,9 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- A change that lowers what a customer owes (a price, a down payment, a fee) needs
+  an owner-only permission, checked in the type's `permission` or its `rule` with
+  `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
 - Every op type needs a label (`apps/mobile/test/op-type-labels.test.ts`). Every
   error and rejection code needs id and en copy (`pnpm i18n:check`).
 - Every op type a device can push needs a sample in
