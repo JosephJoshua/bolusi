@@ -85,3 +85,26 @@ describe('ChangePinScreen wires the flow reject through — a rejected change is
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('saving the new PIN is visible, never a frozen pad (VPS QA on PR #43)', () => {
+  test('while the change runs a spinner and "Menyimpan PIN" replace the pad, then the success panel', async () => {
+    let finish: () => void = () => undefined;
+    const onChangePin = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const screen = render(<ChangePinScreen onChangePin={onChangePin} onClose={vi.fn()} />);
+
+    submitChange(screen);
+    await flush();
+    expect(screen.query('change-pin-busy')).not.toBeNull();
+    expect(screen.query(PAD)).toBeNull();
+
+    finish();
+    await flush();
+    expect(screen.query('change-pin-busy')).toBeNull();
+    expect(screen.query('change-pin-done')).not.toBeNull();
+  });
+});

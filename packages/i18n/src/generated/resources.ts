@@ -170,6 +170,7 @@ const source = {
         },
         noPinTitle: 'Belum ada PIN',
         noPinBody: 'Minta pemilik toko membuatkan PIN untukmu.',
+        saving: 'Menyimpan PIN…',
       },
       enroll: {
         title: 'Daftarkan HP ini',
@@ -526,6 +527,7 @@ export const resources = {
           },
           noPinTitle: 'No PIN yet',
           noPinBody: 'Ask the store owner to make you a PIN.',
+          saving: 'Saving the PIN…',
         },
         enroll: {
           title: 'Enroll this phone',

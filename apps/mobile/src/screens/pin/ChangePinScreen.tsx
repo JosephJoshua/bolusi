@@ -99,7 +99,7 @@ export function ChangePinScreen({
       ) : (
         <PinEntry
           person={person}
-          // While submitting, the just-completed pad stays up, frozen, for the one local write.
+          busyLabel={phase.kind === 'submitting' ? t('auth.pin.saving') : undefined}
           prompt={t(prompt ?? 'auth.pin.setup.repeat')}
           message={feedback === null ? undefined : t(feedback)}
           state={phase.kind === 'submitting' ? 'locked' : changePadState(phase)}

@@ -41,6 +41,7 @@ export function StaffPinNewPin({
     >
       <PinEntry
         person={target}
+        busyLabel={entry === null ? t('auth.pin.saving') : undefined}
         prompt={t(entry === null ? 'auth.pin.setup.repeat' : newPinPromptKey(entry))}
         message={feedback === null ? undefined : t(feedback)}
         state={entry === null ? 'locked' : newPinPadState(entry)}

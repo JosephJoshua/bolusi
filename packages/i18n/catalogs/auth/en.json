@@ -66,7 +66,8 @@
       "lockedBody": "Still remembers the old PIN? Just unlock it."
     },
     "noPinTitle": "No PIN yet",
-    "noPinBody": "Ask the store owner to make you a PIN."
+    "noPinBody": "Ask the store owner to make you a PIN.",
+    "saving": "Saving the PIN…"
   },
   "enroll": {
     "title": "Enroll this phone",
