@@ -1036,6 +1036,7 @@ export default function App(props: AppProps): React.JSX.Element {
                       ...(props.repair?.printing !== undefined
                         ? [
                             {
+                              icon: 'paper' as const,
                               title: tn('repair.paper.title'),
                               summary: tn('repair.paper.phoneSummary'),
                               onOpen: () => setRoute('printPaper'),
