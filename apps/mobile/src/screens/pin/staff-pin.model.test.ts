@@ -77,8 +77,6 @@ describe('an owner who may only unlock', () => {
     expect(staffPinBodyKey(locked, ['reset'])).toBeNull();
     expect(staffPinBodyKey(locked, ['unlock', 'reset'])).toBe('auth.pin.staff.lockedBody');
     expect(staffPinBodyKey(active, ['reset'])).toBeNull();
-    expect(staffPinBodyKey({ ...active, needsFirstPin: true }, ['reset'])).toBe(
-      null,
-    );
+    expect(staffPinBodyKey({ ...active, needsFirstPin: true }, ['reset'])).toBe(null);
   });
 });
