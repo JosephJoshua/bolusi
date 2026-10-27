@@ -53,6 +53,7 @@ import {
   type IntakeStep,
   type QuoteLineDraft,
 } from '../flows.js';
+import { useSettledValue } from '../../screen-kit/index.js';
 import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
 import {
   CatalogPhoto,
@@ -87,8 +88,10 @@ export function CustomerStep({
   testID,
 }: StepProps & { readonly nameError: string | undefined }): React.JSX.Element {
   const customer = draft.customer;
-  const searchText =
-    customer.kind === 'new' ? [customer.name, customer.phone].join(' ').trim() : '';
+  const typed = customer.kind === 'new' ? [customer.name, customer.phone].join(' ').trim() : '';
+  // Matched once the counter pauses typing, not on every key; a cleared name clears them at once.
+  const settledText = useSettledValue(typed);
+  const searchText = typed.length < 2 ? '' : settledText;
   const matches = useRepairQuery(
     async (rt) =>
       searchText.length < 2

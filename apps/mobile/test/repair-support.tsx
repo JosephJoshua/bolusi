@@ -6,6 +6,7 @@
 import idCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enCatalog from '@bolusi/modules/repair/i18n/en.json';
 import { registerRepairCatalog, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { TYPING_PAUSE_MS } from '@bolusi/modules/screen-kit';
 import { act } from 'react';
 
 import {
@@ -106,6 +107,12 @@ export async function settle(): Promise<void> {
 /** Press the control with `testID` and let what it started finish. */
 export async function press(screen: RenderResult, testID: string): Promise<void> {
   fire(screen.all(testID)[0]!, 'onPress');
+  await settle();
+}
+
+/** Wait out the pause a search box waits for after the last key, then let the read finish. */
+export async function settleTyping(): Promise<void> {
+  await act(() => new Promise((resolve) => setTimeout(resolve, TYPING_PAUSE_MS)));
   await settle();
 }
 

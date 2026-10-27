@@ -49,6 +49,7 @@ import {
   DEMO_REPAIR_ROLES,
   demoRepairRuntime,
   demoRoleOf,
+  demoTicketCount,
   type DemoRepairRole,
 } from './repair-demo.js';
 import { STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
@@ -313,7 +314,12 @@ function AppMode({
   // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
   const [notes] = useState(() => demoNotesRuntime());
   const [repair] = useState(() =>
-    repairRole === undefined ? undefined : demoRepairRuntime(repairRole),
+    repairRole === undefined
+      ? undefined
+      : demoRepairRuntime(
+          repairRole,
+          demoTicketCount(typeof window === 'undefined' ? '' : window.location.search),
+        ),
   );
   // "Switch user" works: any PIN opens the chosen person, who acts on the same demo tickets.
   const [current, setCurrent] = useState(session);

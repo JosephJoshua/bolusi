@@ -18,6 +18,7 @@ import {
   render,
   repairRuntimeFor,
   settle,
+  settleTyping,
   text,
   type,
   USER_NAMES,
@@ -190,7 +191,7 @@ describe('counter intake', () => {
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.newIntake');
     type(screen, 'repair.intake.customer.name', 'yohanes');
-    await settle();
+    await settleTyping();
     const customerId = (await h.query('searchCustomers', { text: 'Yohanis' }, h.cashierId)).rows[0]
       .id as string;
     await press(screen, `repair.intake.customer.match.${customerId}`);
@@ -647,7 +648,10 @@ describe('the board', () => {
     const ticketId = await openTicket(h);
     const screen = await mount(h, h.cashierId);
     type(screen, 'repair.board.search', 'yohanes wenda');
+    // Nothing is searched until the typing pauses.
     await settle();
+    expect(screen.query('repair.board.views')).not.toBeNull();
+    await settleTyping();
     expect(screen.query(`repair.board.row.${ticketId}`)).not.toBeNull();
     expect(screen.query('repair.board.views')).toBeNull();
   });
