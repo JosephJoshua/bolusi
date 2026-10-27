@@ -181,7 +181,8 @@ async function androidUp(build) {
     );
   }
   run('adb', ['install', apk]);
-  run('adb', ['shell', 'monkey', '-p', APP_ID, '-c', 'android.intent.category.LAUNCHER', '1']);
+  // Not `monkey`: it resets the rotation lock, which breaks tablet orientation checks.
+  run('adb', ['shell', 'am', 'start', '-n', `${APP_ID}/.MainActivity`]);
 }
 
 function simUdid() {
