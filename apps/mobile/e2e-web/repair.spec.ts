@@ -416,6 +416,31 @@ test('intake offers the owner’s lists and the ticket keeps their names', async
   await shoot(page, 'options-ticket');
 });
 
+test('the preview start page signs in, and switching user keeps the same tickets', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await tap(page, 'preview.role.counter');
+  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await tap(page, 'repair.board.row.t-1');
+  await tap(page, 'repair.ticket.action.assign');
+  await tap(page, 'repair.assign.row.u-budi');
+  await tap(page, 'repair.ticket.back');
+
+  await tap(page, 'ui.avatarButton');
+  await tap(page, 'account-menu-switch-user');
+  await page.getByText('Budi Santoso').first().click();
+  // The preview opens on any PIN.
+  for (const digit of '123456') {
+    await page.getByRole('button', { name: digit, exact: true }).click();
+  }
+  await expect(page.getByTestId('ui.avatarButton.avatar')).toHaveText('BS');
+  // The ticket the counter just gave Budi is in his own list.
+  await tap(page, 'repair.board.views.mine');
+  await expect(page.getByTestId('repair.board.row.t-1')).toBeVisible();
+  await shoot(page, 'preview-switched');
+});
+
 /** A colleague's change on another device, applied the way a pull would land it. */
 async function colleague(page: Page, command: string, input: Record<string, unknown>) {
   await page.evaluate(

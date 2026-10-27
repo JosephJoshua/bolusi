@@ -62,6 +62,11 @@ DATABASE_URL=<owner url> pnpm --filter @bolusi/server crawl-phone-catalog --max-
 
 `--brands "Samsung,Apple"`, `--phases list,photos,details` and `--delay-seconds`
 narrow a run. Devices download the catalog after sync and photos when shown.
+GSMArena refuses cloud and datacenter addresses (429s, a Cloudflare check), so
+run it from a home or office connection; the crawler never tries to get past a check.
+
+To click through the screens in a browser without a server or device, run
+`pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
 
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).
