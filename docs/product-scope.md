@@ -126,6 +126,9 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   negative adjustment) needs an owner, at intake or later. Counter staff and
   technicians can still raise a price or propose a part or labour; the counter
   can decline an owner's proposed discount but not apply it.
+- **Any drop in what a customer owes is an owner's** (2026-10-27): a lower
+  price, a lower or removed down payment, a lower cancellation fee. Every later
+  module follows this rule (for example a POS discount or a refund).
 - **A price change counts only once the customer agrees:** whether a technician
   proposes it or the counter enters it, a change waits ("Menunggu persetujuan
   pelanggan") and is left out of the total until the counter records the
