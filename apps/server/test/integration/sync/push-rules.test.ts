@@ -203,6 +203,27 @@ describe('a pushed repair op must be legal against the server`s records', () => 
     expect(await readAnomalies(db, world.deviceId)).toEqual([]);
   });
 
+  test('a down payment on a cancelled ticket is refused, so no cash is booked against it', async () => {
+    const { world, builder } = await setupWorld(3309);
+    const cancelled = cancel(builder);
+    const deposit = ticketOp(builder, 'repair.down_payment_received', { amount: 100_000 });
+
+    const result = await push(world, [cancelled, deposit]);
+
+    expect(result.results[0]).toMatchObject({ status: 'accepted' });
+    expect(result.results[1]).toMatchObject({
+      status: 'rejected',
+      code: 'RULE_VIOLATED',
+      reason: 'repair.refusal.cancelled',
+    });
+    const row = await db
+      .selectFrom('repairTickets')
+      .select('downPayment')
+      .where('id', '=', TICKET)
+      .executeTakeFirst();
+    expect(row?.downPayment).toBeNull();
+  });
+
   test('a ticket in another store of the tenant cannot be touched', async () => {
     const { world, builder } = await setupWorld(3302);
     const otherStore = testId(33021);

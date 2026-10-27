@@ -291,14 +291,14 @@ describe('ticket actions', () => {
 describe('down payment and slips', () => {
   test('recording a down payment is offered exactly where the command accepts it', async () => {
     h = await openRepairHarness(4109);
-    for (const state of ['received', 'repaired', 'returned'] as const) {
+    for (const state of ['received', 'repaired', 'returned', 'cancelled'] as const) {
       const ticketId = await ticketIn(h, state);
       const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
       const offered = downPaymentAction(ticket, abilitiesOf(h, h.cashierId)) === 'record';
       const run = h.run('recordDownPayment', { ticketId, amount: 20_000 }, h.cashierId);
       if (offered) await expect(run).resolves.toBeDefined();
       else await expect(run).rejects.toThrow();
-      expect(offered).toBe(state !== 'returned');
+      expect(offered).toBe(state !== 'returned' && state !== 'cancelled');
     }
   });
 
