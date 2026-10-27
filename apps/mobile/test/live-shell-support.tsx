@@ -621,6 +621,7 @@ export async function mountRoot(
     controller: {
       login: () => Promise.reject(new Error('login not used by this test')),
       enroll: () => Promise.reject(new Error('enroll not used by this test')),
+      heldPhone: () => Promise.resolve(null),
       finish: () => {
         throw new Error('finish not used by this test');
       },

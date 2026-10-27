@@ -84,6 +84,7 @@ function renderSync(over: Partial<SyncStatusInput> = {}) {
       onOpenRejected={vi.fn()}
       onRetryMedia={vi.fn()}
       onOpenSwitcher={vi.fn()}
+      onReenroll={vi.fn()}
       expandedRejectedOpId={null}
     />,
   );
@@ -449,5 +450,41 @@ describe('a long refused list can be read to the end', () => {
     fire(screen.get('sync-rejected-more'), 'onPress');
     expect(rows(screen)).toBe(many.length);
     expect(screen.query('sync-rejected-more')).toBeNull();
+  });
+});
+
+describe('a phone the server no longer recognises', () => {
+  test('says so and offers re-enrolment as the one action', () => {
+    const onReenroll = vi.fn();
+    const screen = render(
+      <SyncStatusScreen
+        input={input({
+          pendingOperationCount: 3,
+          state: {
+            ...input().state,
+            syncDisabled: true,
+            syncDisabledReason: 'device_unrecognised',
+          },
+        })}
+        currentUser={{ id: 'user-1', initials: 'PO' }}
+        onBack={vi.fn()}
+        onSyncNow={vi.fn()}
+        onOpenRejected={vi.fn()}
+        onRetryMedia={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onReenroll={onReenroll}
+        expandedRejectedOpId={null}
+      />,
+    );
+    expect(textsIn(screen.get('sync-unrecognised'))).toContain(t('auth.unrecognised.title'));
+    expect(screen.query('sync-now')).toBeNull();
+    fire(screen.get('sync-reenroll'), 'onPress');
+    expect(onReenroll).toHaveBeenCalledTimes(1);
+  });
+
+  test('is absent on a healthy phone', () => {
+    const screen = renderSync();
+    expect(screen.query('sync-unrecognised')).toBeNull();
+    expect(screen.query('sync-reenroll')).toBeNull();
   });
 });

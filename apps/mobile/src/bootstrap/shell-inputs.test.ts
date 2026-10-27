@@ -97,4 +97,11 @@ describe('resolveShellInputs — live reads, never literals (task 89)', () => {
     const client = fakeClient({ syncState: syncState({ syncDisabled: true }) });
     expect(resolveShellInputs(app, client, 1000).device).toBe('revoked');
   });
+
+  test('a phone the server no longer recognises is told apart from a revoked one', () => {
+    const forgotten = syncState({ syncDisabled: true, syncDisabledReason: 'device_unrecognised' });
+    const app = bootstrapped('device-1', forgotten);
+    const client = fakeClient({ syncState: forgotten });
+    expect(resolveShellInputs(app, client, 1000).device).toBe('unrecognised');
+  });
 });

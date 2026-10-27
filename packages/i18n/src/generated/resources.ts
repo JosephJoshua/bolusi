@@ -209,10 +209,20 @@ const source = {
         discardMessage: 'Yang sudah kamu isi akan hilang.',
         discard: 'Batalkan',
         keepEditing: 'Lanjut isi',
+        otherStore: 'HP ini berisi data toko lain. Masuk pakai akun pemilik toko itu.',
+        unsyncedTitle: 'Perubahan yang belum terkirim',
+        unsyncedBody: 'Dikirim setelah HP ini terdaftar, tetap atas nama yang membuatnya.',
+        unsyncedCount: '{count} perubahan',
+        formerStaff: 'Karyawan lama',
       },
       revoked: {
         title: 'Perangkat Diblokir',
         body: 'Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang.',
+      },
+      unrecognised: {
+        title: 'HP ini perlu didaftarkan ulang',
+        body: 'Server tidak mengenali HP ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.',
+        action: 'Daftarkan ulang HP ini',
       },
       opType: {
         deviceEnrolled: 'Perangkat didaftarkan',
@@ -223,6 +233,7 @@ const source = {
         pinLockedOut: 'PIN terkunci',
         pinLockoutCleared: 'Kunci PIN dibuka',
         permissionDenied: 'Akses ditolak',
+        deviceChangesTransferred: 'Perubahan dipindah ke HP baru',
       },
       staff: {
         title: 'Karyawan',
@@ -636,10 +647,22 @@ export const resources = {
           discardMessage: 'What you entered will be lost.',
           discard: 'Cancel enrollment',
           keepEditing: 'Keep going',
+          otherStore:
+            'This phone holds another store’s data. Sign in with that store’s owner account.',
+          unsyncedTitle: 'Changes not sent yet',
+          unsyncedBody:
+            'Sent once this phone is registered, still under the name of whoever made them.',
+          unsyncedCount: '{count, plural, one {# change} other {# changes}}',
+          formerStaff: 'Former employee',
         },
         revoked: {
           title: 'Device Revoked',
           body: 'This device has been revoked and can no longer be used. Contact the store owner to enroll it again.',
+        },
+        unrecognised: {
+          title: 'This phone needs to be registered again',
+          body: 'The server no longer recognises this phone. Every change stays safe here until an owner registers it again.',
+          action: 'Register this phone again',
         },
         opType: {
           deviceEnrolled: 'Device enrolled',
@@ -650,6 +673,7 @@ export const resources = {
           pinLockedOut: 'PIN locked',
           pinLockoutCleared: 'PIN unlocked',
           permissionDenied: 'Access denied',
+          deviceChangesTransferred: 'Changes moved to a new phone',
         },
         staff: {
           title: 'Staff',

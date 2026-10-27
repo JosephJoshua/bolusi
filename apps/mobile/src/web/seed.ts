@@ -185,6 +185,16 @@ export const SYNC_STATUS_STATES = {
   // "Sedang Mengirim". This is the one chip state the visual matrix had never screenshotted (item 5).
   syncing: () => demoSyncInput({ loopState: 'pushing' }),
   attention: () => demoSyncInput({ rejected: DEMO_REJECTED }),
+  // The server no longer recognises this phone: work goes on, nothing sends until it is re-enrolled.
+  unrecognised: () =>
+    demoSyncInput({
+      pendingOperationCount: 7,
+      state: {
+        ...demoSyncState(),
+        syncDisabled: true,
+        syncDisabledReason: 'device_unrecognised',
+      },
+    }),
 } as const;
 
 /** A clean PIN row (entry) and a lockout-bearing row (delayed) — the pad's real states. */
@@ -218,6 +228,7 @@ export function fakeEnrollmentController(): EnrollmentController {
   return {
     login: () => Promise.resolve(DEMO_LOGIN),
     enroll: () => Promise.resolve(),
+    heldPhone: () => Promise.resolve(null),
     // The demo never hands off to a real sync loop (it has no `onEnrolled` to fire) — Continue is a
     // no-op here, matching "resolves against the demo rather than hitting a server".
     finish: () => undefined,

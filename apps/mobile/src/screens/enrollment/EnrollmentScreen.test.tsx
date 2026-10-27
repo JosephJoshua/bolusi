@@ -205,3 +205,33 @@ describe('enrollment fields stay single-line after the §8.6 multiline variant (
     expect(screen.get('enroll-device-name.field').props['multiline']).toBe(false);
   });
 });
+
+describe('re-enrolling a phone that still holds unsent changes', () => {
+  const phone = {
+    storeId: STORE_A.id,
+    storeName: STORE_A.name,
+    replacesDeviceId: null,
+    unsynced: [
+      { userId: 'user-ana', name: 'Ana', count: 3, types: ['auth.session_ended'] },
+      { userId: 'user-gone', name: null, count: 1, types: ['auth.pin_changed'] },
+    ],
+  };
+
+  test('lists whose changes will go with the phone, right above the bind button', () => {
+    const screen = renderScreen(onA({ phone }), vi.fn());
+    const list = textsIn(screen.get('enroll-unsynced'));
+    expect(list).toContain(t('auth.enroll.unsyncedTitle'));
+    expect(list).toContain('Ana');
+    expect(list).toContain(t('auth.enroll.unsyncedCount', { count: 3 }));
+    expect(list).toContain(t('auth.opType.sessionEnded'));
+    // Someone no longer on the staff list is still shown, not dropped.
+    expect(textsIn(screen.get('enroll-unsynced-user-gone'))).toContain(
+      t('auth.enroll.formerStaff'),
+    );
+  });
+
+  test('says nothing when every change reached the server', () => {
+    const screen = renderScreen(onA({ phone: { ...phone, unsynced: [] } }), vi.fn());
+    expect(screen.query('enroll-unsynced')).toBeNull();
+  });
+});

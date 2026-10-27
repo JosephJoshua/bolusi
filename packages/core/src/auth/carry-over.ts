@@ -20,32 +20,73 @@ import { nextChainPosition, type ChainHead } from '../oplog/chain.js';
 import { completeDraft } from '../oplog/draft.js';
 import { insertOpLogRow } from '../oplog/row.js';
 import type { CommandRuntime } from '../runtime/execute.js';
+import { readSyncState } from '../sync/state.js';
 import { AUTH_ENTITY, AUTH_OP } from './operations.js';
+import { DEVICE_ID_META_KEY, readMeta, STORE_ID_META_KEY, STORE_NAME_META_KEY } from './repo.js';
 
-/** One unsynced change from an earlier registration of this phone, as the owner reviews it. */
-export interface UnsyncedChange {
-  readonly id: string;
-  readonly deviceId: string;
+/**
+ * Records about a registration itself (its genesis, an earlier carry-over) mean nothing under a new
+ * one, and the server would refuse them there. An unsent one is dropped at re-enrolment instead of
+ * carried: the new registration's own records replace it.
+ */
+const REGISTRATION_OP_TYPES = [AUTH_OP.deviceEnrolled, AUTH_OP.deviceChangesTransferred];
+
+/** Whose unsynced changes a re-enrolment will carry over, as the owner reviews them. */
+export interface UnsyncedAuthor {
   readonly userId: string;
-  readonly type: string;
-  readonly timestamp: number;
+  /** From the phone's staff list; null for someone no longer on it. */
+  readonly name: string | null;
+  readonly count: number;
+  /** The kinds of change, by op type, in the order first made. */
+  readonly types: readonly string[];
+}
+
+/** What a phone that already holds a store's data brings to its re-enrolment. */
+export interface HeldPhone {
+  /** The store whose data is on this phone: the only store it may be re-enrolled into. */
+  readonly storeId: string;
+  readonly storeName: string | null;
+  /**
+   * The registration this enrolment replaces, which the server then revokes in the same step: set
+   * only while sync still runs. A revoked phone is already revoked, and a phone the server no longer
+   * recognises has nothing there to replace.
+   */
+  readonly replacesDeviceId: string | null;
+  /** Oldest change first; empty when everything reached the server. */
+  readonly unsynced: readonly UnsyncedAuthor[];
 }
 
 /**
- * The changes saved on this phone under any device id other than `currentDeviceId` (null before the
- * phone has a new one) that never reached the server, oldest first.
+ * The phone's store, registration and unsynced changes, for the owner to review before re-enrolling
+ * it; null on a phone that was never enrolled.
  */
-export async function readUnsyncedChanges<DB>(
-  db: Kysely<DB>,
-  currentDeviceId: string | null,
-): Promise<readonly UnsyncedChange[]> {
-  const result = await sql<UnsyncedChange>`
-    SELECT id, device_id AS "deviceId", user_id AS "userId", type, timestamp_ms AS "timestamp"
-    FROM operations
-    WHERE sync_status = 'local' AND device_id <> ${currentDeviceId ?? ''}
-    ORDER BY timestamp_ms, device_id, seq
+export async function readHeldPhone<DB>(db: Kysely<DB>): Promise<HeldPhone | null> {
+  const storeId = await readMeta(db, STORE_ID_META_KEY);
+  if (storeId === null) return null;
+  const [storeName, deviceId, sync] = await Promise.all([
+    readMeta(db, STORE_NAME_META_KEY),
+    readMeta(db, DEVICE_ID_META_KEY),
+    readSyncState(db),
+  ]);
+  const result = await sql<{ userId: string; name: string | null; type: string }>`
+    SELECT o.user_id AS "userId", u.name, o.type
+    FROM operations o LEFT JOIN users_directory u ON u.id = o.user_id
+    WHERE o.sync_status = 'local' AND o.type NOT IN (${sql.join(REGISTRATION_OP_TYPES)})
+    ORDER BY o.timestamp_ms, o.device_id, o.seq
   `.execute(db);
-  return result.rows.map((row) => ({ ...row, timestamp: Number(row.timestamp) }));
+  const byUser = new Map<string, { name: string | null; count: number; types: string[] }>();
+  for (const row of result.rows) {
+    const author = byUser.get(row.userId) ?? { name: row.name, count: 0, types: [] };
+    author.count += 1;
+    if (!author.types.includes(row.type)) author.types.push(row.type);
+    byUser.set(row.userId, author);
+  }
+  return {
+    storeId,
+    storeName,
+    replacesDeviceId: deviceId !== null && !sync.syncDisabled ? deviceId : null,
+    unsynced: [...byUser].map(([userId, author]) => ({ userId, ...author })),
+  };
 }
 
 export interface CarryOverDeps<DB> {
@@ -74,7 +115,10 @@ export async function carryOverUnsyncedChanges<DB>(
   params: { readonly deviceId: string; readonly ownerUserId: string },
 ): Promise<CarryOverResult> {
   const pending = await readCarryRows(deps.db, params.deviceId);
-  if (pending.length === 0) return { audit: [], carried: 0 };
+  if (pending.length === 0) {
+    await dropRegistrationRecords(deps.db, params.deviceId);
+    return { audit: [], carried: 0 };
+  }
   const fromDeviceIds = [...new Set(pending.map((row) => row.op.deviceId))];
 
   const audit = await runtime.emitRuntimeOp(
@@ -96,6 +140,7 @@ export async function carryOverUnsyncedChanges<DB>(
         if (rows.length !== pending.length) {
           throw new Error('unsynced changes changed while carrying them over');
         }
+        await dropRegistrationRecords(deps.db, params.deviceId);
         const refolded = new Set<string>();
         for (const { op } of rows) {
           const { seq, previousHash } = nextChainPosition(head);
@@ -155,6 +200,15 @@ export async function carryOverUnsyncedChanges<DB>(
   return { audit, carried: pending.length };
 }
 
+/** The old registrations' own unsent records (see `REGISTRATION_OP_TYPES`). */
+async function dropRegistrationRecords<DB>(db: Kysely<DB>, deviceId: string): Promise<void> {
+  await sql`
+    DELETE FROM operations
+    WHERE sync_status = 'local' AND device_id <> ${deviceId}
+      AND type IN (${sql.join(REGISTRATION_OP_TYPES)})
+  `.execute(db);
+}
+
 interface CarryRow {
   readonly op: SignedOperation;
 }
@@ -173,9 +227,10 @@ async function readCarryRows<DB>(db: Kysely<DB>, deviceId: string): Promise<Carr
     JOIN (
       SELECT device_id, MIN(timestamp_ms) AS first_at FROM operations
       WHERE sync_status = 'local' AND device_id <> ${deviceId}
+        AND type NOT IN (${sql.join(REGISTRATION_OP_TYPES)})
       GROUP BY device_id
     ) d ON d.device_id = o.device_id
-    WHERE o.sync_status = 'local'
+    WHERE o.sync_status = 'local' AND o.type NOT IN (${sql.join(REGISTRATION_OP_TYPES)})
     ORDER BY d.first_at, o.device_id, o.seq
   `.execute(db);
   return result.rows.map((row) => ({ op: operationFromSignedCoreJcs(row.signedCoreJcs, row) }));

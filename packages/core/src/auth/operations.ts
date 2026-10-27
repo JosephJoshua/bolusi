@@ -79,8 +79,9 @@ export const AUTH_OP_PERMISSION: Readonly<Record<AuthOpType, string | null>> = {
   [AUTH_OP.pinLockedOut]: null,
   [AUTH_OP.pinLockoutCleared]: AUTH_PERMISSION.pinUnlock,
   [AUTH_OP.permissionDenied]: null,
-  // The owner who re-enrolled the phone approved re-sending its unsynced changes.
-  [AUTH_OP.deviceChangesTransferred]: AUTH_PERMISSION.deviceEnroll,
+  // Written only by enrolment, like the genesis: the owner proved `auth.device_enroll` to the
+  // server's enrol endpoint, and each carried change is still authorized on its own.
+  [AUTH_OP.deviceChangesTransferred]: null,
 };
 
 /** The record each auth op is about (`OperationDeclaration.entityType`). */

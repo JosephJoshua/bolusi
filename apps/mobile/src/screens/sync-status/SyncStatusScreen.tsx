@@ -87,6 +87,8 @@ export interface SyncStatusScreenProps {
   /** Re-sends every failed photo: the drain is one loop over all of them (06 §5.2 (e)). */
   readonly onRetryMedia: () => void;
   readonly onOpenSwitcher: () => void;
+  /** Open device setup to register this phone again (offered only when the server forgot it). */
+  readonly onReenroll: () => void;
   /**
    * The refused change whose detail sheet is open, or `null`. The row already says what happened and
    * what to do (`core.rejection.<CODE>`, 07-i18n §10.2); the sheet adds which change it was, when, and
@@ -106,6 +108,7 @@ export function SyncStatusScreen({
   onOpenRejected,
   onRetryMedia,
   onOpenSwitcher,
+  onReenroll,
   expandedRejectedOpId,
 }: SyncStatusScreenProps): React.JSX.Element {
   const level = staleness(input);
@@ -185,13 +188,21 @@ export function SyncStatusScreen({
               {translateRejectionCode(sync.reasonCode)}
             </Text>
           ) : null}
-          <Button
-            label={t('sync.action.syncNow')}
-            onPress={onSyncNow}
-            busy={sync.kind === 'busy'}
-            disabled={sync.kind === 'disabled'}
-            testID="sync-now"
-          />
+          {sync.kind === 'reenroll' ? (
+            <Button
+              label={t('auth.unrecognised.action')}
+              onPress={onReenroll}
+              testID="sync-reenroll"
+            />
+          ) : (
+            <Button
+              label={t('sync.action.syncNow')}
+              onPress={onSyncNow}
+              busy={sync.kind === 'busy'}
+              disabled={sync.kind === 'disabled'}
+              testID="sync-now"
+            />
+          )}
         </View>
       }
       overlay={
@@ -298,6 +309,13 @@ export function SyncStatusScreen({
       ) : null}
 
       {/* 4 — PROBLEMS, only when real. */}
+      {problems.some((problem) => problem.kind === 'deviceUnrecognised') ? (
+        <View style={styles.section} testID="sync-unrecognised">
+          <Text style={styles.sectionTitle}>{t('auth.unrecognised.title')}</Text>
+          <Text style={styles.sectionText}>{t('auth.unrecognised.body')}</Text>
+        </View>
+      ) : null}
+
       {failedPhotos.length > 0 ? (
         <View style={styles.section} testID="sync-media-section">
           <Text style={styles.sectionTitle}>{t('sync.media.failedTitle')}</Text>

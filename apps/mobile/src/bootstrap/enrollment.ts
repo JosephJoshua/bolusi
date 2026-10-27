@@ -18,12 +18,14 @@
 // transports) arrive as injected values from index.ts, so this whole caller runs headless under a
 // fake transport + a real better-sqlite3 client DB (the honest ceiling below a running server/device).
 import {
+  readHeldPhone,
   runEnrollment,
   type ClockPort,
   type CommandRuntime,
   type CryptoPort,
   type DeviceIdentity,
   type EnrollTransportPort,
+  type HeldPhone,
   type IdSource,
   type KeyStorePort,
   type LocationPort,
@@ -42,6 +44,9 @@ import { createAppRuntime, type AppRuntime } from './runtime.js';
 export interface EnrollmentController {
   /** Step 1 (§4.2): exchange credentials for the control session + store list + tenant name. */
   login(req: { readonly loginIdentifier: string; readonly password: string }): Promise<LoginResult>;
+  /** The store and unsynced changes this phone already holds, for the owner to review; null on a
+   *  phone that was never enrolled. */
+  heldPhone(): Promise<HeldPhone | null>;
   /** Step 2 (§4.3 + §4.1 steps 4–6): register the device, persist the bundle, append the genesis,
    *  and persist the identity. Does NOT hand off to the enrolled zone — that is `finish`'s job, so the
    *  wizard's success step (§8.5 step 3) renders before the switcher takes over. */
@@ -49,8 +54,6 @@ export interface EnrollmentController {
     readonly login: LoginResult;
     readonly storeId: string;
     readonly deviceName: string;
-    /** The still-active registration a voluntary re-enrolment replaces (the server revokes it). */
-    readonly replacesDeviceId?: string;
   }): Promise<void>;
   /** Step 3 (§8.5): the owner acknowledges the success step ("Continue"). ONLY now does `onEnrolled`
    *  fire — the zone flips to the switcher and the sync loop / push registration start. Splitting this
@@ -152,7 +155,14 @@ export function createAppEnrollment(
       return platform.loginTransport.login(req);
     },
 
+    heldPhone(): Promise<HeldPhone | null> {
+      return readHeldPhone(app.db.db);
+    },
+
     async enroll(req): Promise<void> {
+      // A re-enrolment of a phone whose registration still works replaces it, so the server revokes
+      // the old one in the same step instead of leaving two active (task 168).
+      const replacesDeviceId = (await readHeldPhone(app.db.db))?.replacesDeviceId ?? null;
       const result = await runEnrollment(
         {
           db: app.db.db,
@@ -176,7 +186,7 @@ export function createAppEnrollment(
           deviceName: req.deviceName,
           platform: platform.platform,
           appVersion: platform.appVersion,
-          ...(req.replacesDeviceId === undefined ? {} : { replacesDeviceId: req.replacesDeviceId }),
+          ...(replacesDeviceId === null ? {} : { replacesDeviceId }),
         },
       );
       // Persist the owner-typed device name to meta_kv (task 94), AFTER core wrote the ids AND ran

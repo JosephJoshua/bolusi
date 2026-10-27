@@ -622,6 +622,24 @@ export default function App(props: AppProps): React.JSX.Element {
     if (zone.kind !== 'shell') setAccountMenu(false);
   }, [zone.kind]);
 
+  // A phone enrolled before goes back to its own store, and its owner sees the unsynced changes
+  // that will be carried over (core auth/carry-over.ts). Read each time the wizard opens.
+  const inEnrollment = zone.kind === 'enrollment';
+  const readHeldPhone = props.enrollment.heldPhone;
+  useEffect(() => {
+    if (!inEnrollment) return;
+    let live = true;
+    readHeldPhone()
+      .then((phone) => {
+        if (live) setEnrollment((s) => ({ ...s, phone }));
+      })
+      // Unreadable: the wizard still works, and core refuses a bind into another store anyway.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [inEnrollment, readHeldPhone]);
+
   // Hardware back IS the header back (§8.1) — one function, so they cannot drift.
   useHardwareBack(goBack);
 
@@ -829,7 +847,10 @@ export default function App(props: AppProps): React.JSX.Element {
               discardPrompt={discardPrompt}
               onConfirmDiscard={() => {
                 setDiscardPrompt(false);
-                setEnrollment(initialEnrollmentState(revoked));
+                setEnrollment((previous) => ({
+                  ...initialEnrollmentState(revoked),
+                  phone: previous.phone,
+                }));
               }}
               onCancelDiscard={() => setDiscardPrompt(false)}
             />
@@ -967,6 +988,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   // that looks more precise than the engine underneath it.
                   onRetryMedia={props.onRetryMedia}
                   onOpenSwitcher={() => setSwitching(true)}
+                  onReenroll={() => setReenrolling(true)}
                 />
               );
             }

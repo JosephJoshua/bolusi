@@ -88,11 +88,12 @@ import type { AppStatePort } from './triggers.js';
 import { createIdleTicker } from '../session/idle-ticker.js';
 import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { MediaClient } from '../media/client.js';
-import type {
-  CommandIdentity,
-  PinVerifierUploadPort,
-  StaffAdminPort,
-  TimerPort,
+import {
+  readSyncState,
+  type CommandIdentity,
+  type PinVerifierUploadPort,
+  type StaffAdminPort,
+  type TimerPort,
 } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
@@ -106,6 +107,7 @@ import type { PhotoCapture, SignatureCapture } from '@bolusi/modules/screen-kit'
 const UNWIRED_ENROLLMENT: EnrollmentController = {
   login: () => Promise.reject(new Error('enrollment is not wired (no createEnrollment injected)')),
   enroll: () => Promise.reject(new Error('enrollment is not wired (no createEnrollment injected)')),
+  heldPhone: () => Promise.resolve(null),
   // `finish` is reachable only after a successful `enroll`, which this stub rejects — so a call here
   // is a bug, not a no-op. Throw for the same reason the others reject: no working-looking lie.
   finish: () => {
@@ -530,6 +532,31 @@ export function Root({
       await controller.refresh();
     };
 
+    // Stop the sync and media loops: on unmount, and while a re-enrolment replaces the registration
+    // they push under (they would otherwise send its changes with a token that is being replaced).
+    const stopLoops = (): void => {
+      unsubRef.current?.();
+      unsubRef.current = null;
+      // Detach step 7 BEFORE stopping the loop, so no append can arm a debounce on triggers that are
+      // about to be torn down. Back to inert — the same state the runtime is built in.
+      boundRuntimeRef.current?.bindSyncScheduler(null);
+      boundRuntimeRef.current = null;
+      syncRef.current?.stop();
+      syncRef.current = null;
+      if (!disposed) setSync(null);
+      mediaRef.current?.stop();
+      mediaRef.current = null;
+      setMedia(null);
+    };
+
+    // Stop every enrolled-device service: on unmount, and before a re-enrolment restarts them.
+    const stopServices = (): void => {
+      stopLoops();
+      sessionUnsubRef.current?.();
+      sessionUnsubRef.current = null;
+      sessionRef.current = null;
+    };
+
     /**
      * Start the enrolled-device services in the ONE order that keeps the switcher live: session
      * FIRST, then device-info + the sync/media loops. Session-open populates the switcher roster
@@ -619,27 +646,66 @@ export function Root({
       // (same connection, new deviceId) and starts the loop live — no reboot (task 89). `let` so the
       // callback can close over the value assigned on the same line (called only later, never in TDZ).
       let enroll: AppEnrollment | null = null;
+      // The identity the services run under; a re-enrolment replaces it.
+      let current: Bootstrapped = booting;
       enroll =
         createEnrollment?.(booting, (deviceId, ownerUserId) => {
-          const enrolled: Bootstrapped = { ...booting, deviceId };
-          setApp(enrolled);
-          // The device just became enrolled — start its services in the shared order: session FIRST,
-          // so the switcher can list users and a PIN can open a session live, without a reboot; then
-          // re-derive the Settings device-info (enrollment.ts persisted the device/store/tenant names
-          // to meta_kv before firing this, so the read surfaces the real identity, no reboot — task
-          // 94) and start the loops. Fire-and-forget so the enroll-success path is never delayed, and
-          // a stall in a loop cannot starve the switcher — session has already settled (task 201).
-          void startServicesForEnrolled(enrolled, enroll, 'enroll');
-          // Register the push token immediately post-enrollment (api/04-push §2 (b)) — ALWAYS, so the
-          // server stamps `user_id` for the just-enrolled device even if the token has not changed.
-          // The acting user is the OWNER who enrolled (the only user known at this instant; no PIN
-          // session is open yet — the gate shows the switcher next). Fire-and-forget: push is
-          // best-effort and this must not delay or fail the enroll-success path (§1).
-          if (createPushRegistration !== undefined) {
-            const ports = createPushRegistration(enrolled, ownerUserId);
-            if (ports !== undefined) void registerPushTokenOnEnrollment(ports);
-          }
+          void (async () => {
+            const reenrolled = current.deviceId !== null;
+            if (reenrolled) {
+              // RE-ENROLMENT: the loops, the session and every module surface were bound to the old
+              // registration's device id, and each start below is a no-op while one is running. Stop
+              // them all so they start again under the new id, from the sync state enrolment reset.
+              stopServices();
+              setSession(null);
+            }
+            const enrolled: Bootstrapped = {
+              ...current,
+              deviceId,
+              syncState: reenrolled ? await readSyncState(current.db.db) : current.syncState,
+            };
+            current = enrolled;
+            if (disposed) return;
+            setApp(enrolled);
+            // The device just became enrolled — start its services in the shared order: session FIRST,
+            // so the switcher can list users and a PIN can open a session live, without a reboot; then
+            // re-derive the Settings device-info (enrollment.ts persisted the device/store/tenant names
+            // to meta_kv before firing this, so the read surfaces the real identity, no reboot — task
+            // 94) and start the loops. Fire-and-forget so the enroll-success path is never delayed, and
+            // a stall in a loop cannot starve the switcher — session has already settled (task 201).
+            void startServicesForEnrolled(enrolled, enroll, 'enroll');
+            // Register the push token immediately post-enrollment (api/04-push §2 (b)) — ALWAYS, so the
+            // server stamps `user_id` for the just-enrolled device even if the token has not changed.
+            // The acting user is the OWNER who enrolled (the only user known at this instant; no PIN
+            // session is open yet — the gate shows the switcher next). Fire-and-forget: push is
+            // best-effort and this must not delay or fail the enroll-success path (§1).
+            if (createPushRegistration !== undefined) {
+              const ports = createPushRegistration(enrolled, ownerUserId);
+              if (ports !== undefined) void registerPushTokenOnEnrollment(ports);
+            }
+          })();
         }) ?? null;
+      if (enroll !== null) {
+        // A phone enrolled before stops sending while it is enrolled again, and picks up where it
+        // was if that fails (the services start only what is not running).
+        const composed = enroll;
+        enroll = {
+          ...composed,
+          controller: {
+            ...composed.controller,
+            enroll: async (req) => {
+              if (current.deviceId === null) return composed.controller.enroll(req);
+              stopLoops();
+              try {
+                await composed.controller.enroll(req);
+              } catch (error) {
+                if (!disposed) void startServicesForEnrolled(current, enroll, 'enroll');
+                throw error;
+              }
+            },
+          },
+        };
+      }
       setEnrollment(enroll);
       setApp(booting);
       // Start the enrolled-device services on the already-enrolled boot path. Awaited so boot
@@ -651,20 +717,7 @@ export function Root({
 
     return () => {
       disposed = true;
-      unsubRef.current?.();
-      unsubRef.current = null;
-      // Detach step 7 BEFORE stopping the loop, so no append can arm a debounce on triggers that are
-      // about to be torn down. Back to inert — the same state the runtime is built in.
-      boundRuntimeRef.current?.bindSyncScheduler(null);
-      boundRuntimeRef.current = null;
-      syncRef.current?.stop();
-      syncRef.current = null;
-      mediaRef.current?.stop();
-      mediaRef.current = null;
-      setMedia(null);
-      sessionUnsubRef.current?.();
-      sessionUnsubRef.current = null;
-      sessionRef.current = null;
+      stopServices();
     };
   }, [
     localeStore,

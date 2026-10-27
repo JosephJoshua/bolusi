@@ -98,11 +98,21 @@
     "discardTitle": "Batalkan pendaftaran?",
     "discardMessage": "Yang sudah kamu isi akan hilang.",
     "discard": "Batalkan",
-    "keepEditing": "Lanjut isi"
+    "keepEditing": "Lanjut isi",
+    "otherStore": "HP ini berisi data toko lain. Masuk pakai akun pemilik toko itu.",
+    "unsyncedTitle": "Perubahan yang belum terkirim",
+    "unsyncedBody": "Dikirim setelah HP ini terdaftar, tetap atas nama yang membuatnya.",
+    "unsyncedCount": "{count} perubahan",
+    "formerStaff": "Karyawan lama"
   },
   "revoked": {
     "title": "Perangkat Diblokir",
     "body": "Perangkat ini sudah diblokir dan tidak bisa dipakai lagi. Hubungi pemilik toko untuk mendaftarkannya ulang."
+  },
+  "unrecognised": {
+    "title": "HP ini perlu didaftarkan ulang",
+    "body": "Server tidak mengenali HP ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.",
+    "action": "Daftarkan ulang HP ini"
   },
   "opType": {
     "deviceEnrolled": "Perangkat didaftarkan",
@@ -112,7 +122,8 @@
     "pinReset": "PIN diatur ulang",
     "pinLockedOut": "PIN terkunci",
     "pinLockoutCleared": "Kunci PIN dibuka",
-    "permissionDenied": "Akses ditolak"
+    "permissionDenied": "Akses ditolak",
+    "deviceChangesTransferred": "Perubahan dipindah ke HP baru"
   },
   "staff": {
     "title": "Karyawan",
