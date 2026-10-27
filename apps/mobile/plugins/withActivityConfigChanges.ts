@@ -5,12 +5,14 @@
 // white screen until force-stop, and the intake in progress gone.
 //
 // Handling the change ourselves means finishing what React Native leaves out on the new
-// architecture. On `onConfigurationChanged` it re-reads the display metrics, but it only asks the
-// screens to measure again when its own before/after comparison sees a difference, and it tells JS
-// the new font scale only on the next resume. A live change from 1.3 back to 1.0 on the QA device
-// kept JS at 1.3 and the text at its old size until a restart. `FONT_SCALE_SYNC_KOTLIN` does the
-// three steps every time the font scale changes: refresh the metrics, re-measure every React root,
-// and re-emit Dimensions so `useWindowDimensions` sees the new scale.
+// architecture: it tells JS the new font scale only on the next resume, so a live change never
+// reached `useWindowDimensions` (App.tsx remounts the screens on it). `FONT_SCALE_SYNC_KOTLIN` does
+// three steps each time the font scale changes, in this order:
+//   1. Refresh the display metrics at once. Back from Settings, a measure pass can run before
+//      anything posted, and text measured with the old metrics is cached under the new scale.
+//   2. Measure every React root now, so the surface's layout carries the new scale before JS
+//      commits. Text measurements are cached by scale, and a remount at the old scale reuses them.
+//   3. Re-emit Dimensions through React Native's own "font scale changed" check.
 //
 // No relative `.ts` imports, for the reason given in withHarnessActivity.ts.
 import {
@@ -46,10 +48,6 @@ const FONT_SCALE_SYNC_IMPORTS = [
   'com.facebook.react.uimanager.DisplayMetricsHolder',
 ] as const;
 
-// The metrics are refreshed at once from the activity, which already has the new configuration,
-// because the next measure pass can run before anything posted: back from Settings, the screens
-// measured at the new scale with the old metrics, cached that, and drew new-size text in old boxes.
-// The rest is posted so it runs after both the process and the activity have their new configuration.
 // `DeviceInfo.onHostResume` is React Native's own "re-read the font scale and emit Dimensions if it
 // changed", reached through the public listener interface because the module class is internal.
 export const FONT_SCALE_SYNC_KOTLIN = `
@@ -59,9 +57,7 @@ export const FONT_SCALE_SYNC_KOTLIN = `
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
     if (newConfig.fontScale == syncedFontScale) return
-    val qaMode = intent?.getStringExtra("bolusiFontSync") ?: "early"
-    android.util.Log.i("BolusiFontScale", "config mode=$qaMode fontScale=\${newConfig.fontScale} holderScaledDensity=\${DisplayMetricsHolder.getScreenDisplayMetrics().scaledDensity}")
-    if (qaMode == "early") DisplayMetricsHolder.initDisplayMetrics(this)
+    DisplayMetricsHolder.initDisplayMetrics(this)
     window.decorView.post { syncFontScale() }
   }
 
@@ -77,6 +73,12 @@ export const FONT_SCALE_SYNC_KOTLIN = `
   private fun remeasureReactRoots(view: View) {
     if (view is ReactRootView) {
       view.requestLayout()
+      if (view.width > 0 && view.height > 0) {
+        view.measure(
+          View.MeasureSpec.makeMeasureSpec(view.width, View.MeasureSpec.EXACTLY),
+          View.MeasureSpec.makeMeasureSpec(view.height, View.MeasureSpec.EXACTLY),
+        )
+      }
       return
     }
     if (view is ViewGroup) {

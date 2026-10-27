@@ -112,6 +112,11 @@ describe('MainActivity font scale sync', () => {
       'DisplayMetricsHolder.initDisplayMetrics(reactContext)',
     );
     expect(FONT_SCALE_SYNC_KOTLIN).toContain('view.requestLayout()');
+    // Measured now, before DeviceInfo tells JS, so a remount measures at the new scale.
+    expect(FONT_SCALE_SYNC_KOTLIN.indexOf('remeasureReactRoots(window.decorView)')).toBeLessThan(
+      FONT_SCALE_SYNC_KOTLIN.indexOf('getNativeModule("DeviceInfo")'),
+    );
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain('view.measure(');
     expect(FONT_SCALE_SYNC_KOTLIN).toContain('getNativeModule("DeviceInfo")');
   });
 
