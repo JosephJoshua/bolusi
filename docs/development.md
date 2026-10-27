@@ -49,6 +49,9 @@ Set `EXPO_ACCESS_TOKEN` in your local environment first. See
 Use `pnpm --filter @bolusi/server provision-tenant --help` for enrollment setup.
 Do not paste provisioning secrets into chats or commit them.
 
+To click through the screens in a browser without a server or device, run
+`pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
+
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).
 
