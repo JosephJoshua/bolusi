@@ -172,6 +172,7 @@ expoBackgroundTaskPlatform.defineTask(SYNC_BACKGROUND_TASK, () => backgroundSync
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
+  onBundleChecked?: () => void | Promise<void>,
 ): SyncClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
@@ -185,6 +186,7 @@ function createSync(
     netInfo: netInfoPort,
     background: { platform: expoBackgroundTaskPlatform, host: backgroundSync },
     ...(onBundleRefreshed === undefined ? {} : { onBundleRefreshed }),
+    ...(onBundleChecked === undefined ? {} : { onBundleChecked }),
   });
 }
 
@@ -447,7 +449,7 @@ function Bootstrapped(): React.JSX.Element | null {
     pushRouter: expoPushRouter,
     // THE PIN-VERIFIER POST TRANSPORT (api/02-auth §5.4; task 186a-2). Bound here for the same reason
     // `postToken` is: the fetch wire + the SecureStore device bearer, neither Node-safe. `Root` drains
-    // it on `onBundleRefreshed` (online-only), so a locally-applied PIN change reaches the server and
+    // it on `onBundleChecked` (every online bundle answer), so a locally-applied PIN change reaches the server and
     // every other device (§5.2). A fresh keystore per call reads the bearer at call time (§7.3).
     uploadPinVerifier: createFetchPinVerifierUpload({
       baseUrl: apiBaseUrl(),

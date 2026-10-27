@@ -179,7 +179,7 @@ export interface AppSessionController {
   listPinTargets(): Promise<readonly PinTargetUser[]>;
   /**
    * POST every queued PIN verifier to the server (api/02-auth §5.4; task 186a-2). Called on next
-   * online contact (Root wires it to the sync client's `onBundleRefreshed`, which fires only online):
+   * online contact (Root wires it to the sync client's `onBundleChecked`, which fires on every online bundle answer):
    * a change applied LOCALLY at once (`changePin`) reaches the server here, and from there every other
    * device via bundle refresh (§5.2). Idempotent — a stale POST is a no-op (§5.3); a network fault
    * keeps the item queued for the next contact. Never throws: the drain swallows per-item transport
