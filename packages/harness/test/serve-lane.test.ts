@@ -15,10 +15,12 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import {
   bytesToBase64,
   createUuidV7Generator,
+  SessionManager,
   verifyPinAgainst,
+  type CommandRuntime,
   type PinVerifier,
 } from '@bolusi/core';
-import { deriveDeviceKeypair, noblePort } from '@bolusi/test-support';
+import { ChainBuilder, deriveDeviceKeypair, noblePort } from '@bolusi/test-support';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { HarnessServer } from '../src/server.js';
@@ -49,6 +51,7 @@ async function enroll(
   server: HarnessServer,
   controlSession: string,
   storeId: string,
+  deviceId?: string,
 ): Promise<Response> {
   const ids = createUuidV7Generator({
     now: () => server.clock.now(),
@@ -62,7 +65,7 @@ async function enroll(
       'Idempotency-Key': ids(),
     },
     body: JSON.stringify({
-      deviceId: ids(),
+      deviceId: deviceId ?? ids(),
       devicePublicKeyB64: bytesToBase64(deriveDeviceKeypair(3, 0).publicKey),
       storeId,
       deviceName: 'Tablet Kasir',
@@ -119,6 +122,86 @@ describe('task 201-B: provisionLaneOwner over a productionAuth server', () => {
     expect(await verifyPinAgainst(noblePort, carried, new TextEncoder().encode('000000'))).toBe(
       false,
     );
+  });
+});
+
+describe('the lane accepts what a real app writes on its own clock', () => {
+  let server: HarnessServer | undefined;
+  afterEach(async () => {
+    await server?.close();
+    server = undefined;
+  });
+
+  // The app stamps every change with the phone's wall clock, and the push refuses one dated more than
+  // 10 minutes ahead of the server (CLOCK_AHEAD). On the scenarios' fixed 2024 clock the lane refused
+  // every unlock the Android QA run made; it runs on real time now.
+  test('an owner PIN unlock, lock and unlock again sync with no refusal', async () => {
+    server = await HarnessServer.boot({ productionAuth: true, wallClock: true });
+    const creds = await provisionLaneOwner(server);
+    expect(Math.abs(server.clock.now() - Date.now())).toBeLessThan(60_000);
+
+    const loginRes = await login(server, creds.ownerLogin, creds.oneTimePassword);
+    const controlSession = ((await loginRes.json()) as { controlSession: string }).controlSession;
+    const ids = createUuidV7Generator({
+      now: () => Date.now(),
+      randomBytes: (n) => noblePort.randomBytes(n),
+    });
+    const deviceId = ids();
+    const enrollRes = await enroll(server, controlSession, creds.storeId, deviceId);
+    expect(enrollRes.status).toBe(201);
+    const { deviceToken } = (await enrollRes.json()) as { deviceToken: string };
+
+    // The real session code decides what an unlock writes; the device signs it on its wall clock.
+    const keypair = deriveDeviceKeypair(3, 0);
+    const device = new ChainBuilder(
+      {
+        tenantId: creds.tenantId,
+        storeId: creds.storeId,
+        userId: creds.ownerUserId,
+        deviceId,
+        secretKey: keypair.seed,
+        publicKey: keypair.publicKey,
+        publicKeyB64: bytesToBase64(keypair.publicKey),
+      },
+      noblePort,
+    );
+    const ops = [device.genesis({ timestamp: Date.now() })];
+    const runtime = {
+      emitRuntimeOp: (input: {
+        type: string;
+        entityType: string;
+        entityId: string;
+        payload: Record<string, unknown>;
+        userId: string;
+      }) => {
+        ops.push(device.append({ ...input, timestamp: Date.now() }));
+        return Promise.resolve([]);
+      },
+    } as unknown as CommandRuntime;
+    const sessions = new SessionManager({
+      runtime,
+      idSource: ids,
+      clock: { now: () => Date.now() },
+      memo: { onUserSwitch: () => Promise.resolve() },
+    });
+    await sessions.switchTo(creds.ownerUserId);
+    await sessions.manualLock();
+    await sessions.switchTo(creds.ownerUserId);
+    expect(ops.map((op) => op.type)).toEqual([
+      'auth.device_enrolled',
+      'auth.user_switched',
+      'auth.session_ended',
+      'auth.user_switched',
+    ]);
+
+    const push = await server.fetch(`${BASE}/v1/sync/push`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${deviceToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId, ops }),
+    });
+    expect(push.status).toBe(200);
+    const { results } = (await push.json()) as { results: { status: string; code?: string }[] };
+    expect(results).toEqual(ops.map(() => expect.objectContaining({ status: 'accepted' })));
   });
 });
 
