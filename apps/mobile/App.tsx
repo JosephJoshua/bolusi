@@ -796,9 +796,11 @@ export default function App(props: AppProps): React.JSX.Element {
     <View testID="bolusi-app-shell" style={shellStyle}>
       <StatusBar style="auto" />
       <View
-        // A new system font size remounts the screens. Android keeps already-laid-out text at the
-        // old size (pills stayed shrunk and cut after 1.3 → 1.0 on the QA device), and a remount
-        // measures everything again. Work in progress survives: drafts live in the workspace above.
+        // A new system font size remounts the screens. Re-measuring in place does not hold on
+        // Android: the next React commit brings back its own text nodes, measured at the old size,
+        // so text drew at the new size inside old boxes (QA runs on PR #45). Fresh nodes measure
+        // at the new size. MainActivity tells JS the new scale (withActivityConfigChanges.ts).
+        // Work in progress survives: drafts live in the workspace above.
         key={`font-${fontScale}`}
         style={styles.zone}
         // Hidden from touch and screen readers while the overlay covers it, but still mounted.
