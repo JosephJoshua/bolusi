@@ -33,7 +33,8 @@ export type ShellRoute =
   | 'unlockPin'
   | 'resetPin'
   | 'intakeOptions'
-  | 'cancelFees';
+  | 'cancelFees'
+  | 'printSettings';
 
 /**
  * The one surface the app is showing. A discriminated union so a renderer must handle every case —
@@ -169,6 +170,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'resetPin') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'printSettings') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
   }
 }

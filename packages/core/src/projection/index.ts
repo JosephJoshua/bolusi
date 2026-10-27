@@ -20,6 +20,7 @@ export {
   highestContiguousSeq,
   readEntitiesOps,
   readEntityOps,
+  type FoldReadOptions,
   readEntityPage,
   type CanonicalCursor,
   type EntityCursor,

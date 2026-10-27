@@ -23,9 +23,10 @@ changing source and docs. See the [official Projects guide](https://code.claude.
 1. Create a Code Project connected to `JosephJoshua/bolusi`. Start from `main`
    once this simplification lands there. Cloud clones cannot see unpushed local work.
 2. Paste the brief below into Project settings → Memory → Project instructions.
-3. Configure the cloud environment for Node 22, Corepack/pnpm, gitleaks for the
-   commit hook, and frozen-lockfile installation. Tests need Docker for real PostgreSQL. If unavailable, use GitHub
-   CI or an appropriate local thread and report the limitation explicitly.
+3. Configure the cloud environment for Node 22, Corepack/pnpm and frozen-lockfile
+   installation (the repo's SessionStart hook installs gitleaks for the commit
+   hook). Tests need Docker for real PostgreSQL. If unavailable, use GitHub CI or
+   an appropriate local thread and report the limitation explicitly.
 4. Have Claude read `docs/product-direction.md` and `docs/product-scope.md`, then
    discuss the next useful repair slice with you before implementation. It should
    bring the relevant earlier ideas from `docs/product-reference/` into that

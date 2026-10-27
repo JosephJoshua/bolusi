@@ -46,6 +46,7 @@ import type { FirstSyncProgress } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
+import { createPhoneCatalogRefresher } from './phone-catalog.js';
 import {
   createRealtimeController,
   type RealtimeHandle,
@@ -76,6 +77,8 @@ export interface SyncClientDeps {
   readonly bundle: BundleRefreshPort;
   /** `ProjectionEngine.applyPulledOp` — the pull phase folds through it inside the batch txn. */
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
+  readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -190,6 +193,7 @@ class SyncClientImpl implements SyncClient {
       timer: deps.timer,
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
+      refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
       onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
@@ -419,12 +423,31 @@ export function createSyncClientForApp(
       : { onBundleRefreshed: config.onBundleRefreshed }),
     ...(config.onBundleChecked === undefined ? {} : { onBundleChecked: config.onBundleChecked }),
   });
+  const phoneCatalog = createPhoneCatalogRefresher({
+    baseUrl: config.baseUrl,
+    deviceToken: config.loadDeviceToken,
+    db: app.db,
+    invalidation: app.invalidation,
+    clock: config.clock,
+    ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+  });
+  // The bundle refresh is the last step of a drained cycle, so the catalog check starts there. It
+  // runs beside the loop, not inside it: a catalog failure must not put sync into backoff
+  // (phone-catalog.ts), and the next due check simply tries again.
+  const bundleThenCatalog: BundleRefreshPort = {
+    async refresh() {
+      const outcome = await bundle.refresh();
+      void phoneCatalog.refreshIfDue().catch(() => undefined);
+      return outcome;
+    },
+  };
   return createSyncClient({
     db: app.db,
     deviceId: config.deviceId,
     transport,
-    bundle,
+    bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
+    refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,
     timer: config.timer ?? systemTimer,

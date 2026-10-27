@@ -4,7 +4,7 @@
 // contact. That queue used to live in memory, so killing the app before the upload lost the new
 // verifier for good: the PIN op still synced, but other devices never got the new PIN. One row per
 // pending upload, keyed by the op's `verifier_ref`. `salt`, `params` and `hash` are sealed at rest
-// like `user_pin_verifiers`. Versions 12 and 13 belong to other branches; the runner applies by version.
+// like `user_pin_verifiers`. Version 12 belongs to another branch; the runner applies by version.
 import type { ClientMigration } from './types.js';
 
 export const pendingPinVerifiersMigration: ClientMigration = {

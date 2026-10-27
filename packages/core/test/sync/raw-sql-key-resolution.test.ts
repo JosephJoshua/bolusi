@@ -298,6 +298,8 @@ describe('the two private readers, via their sync-phase entry points (task 74)',
       surface: new FakeSurface(),
       clock: new FakeClock(),
       deviceId: signer.id,
+      transaction: (fn) => fn(),
+      refoldRefused: async () => undefined,
       onChainBroken: async () => undefined,
     });
 

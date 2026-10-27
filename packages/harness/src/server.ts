@@ -15,7 +15,13 @@ import { PGlite } from '@electric-sql/pglite';
 import { serve, type ServerType } from '@hono/node-server';
 import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
-import { migrateToLatest, type DB, type TenantDb } from '@bolusi/db-server';
+import {
+  migrateToLatest,
+  readPhoneModelPhotoFrom,
+  readPhoneModelsFrom,
+  type DB,
+  type TenantDb,
+} from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
@@ -110,8 +116,34 @@ function formatHost(address: string): string {
   return address.includes(':') ? `[${address}]` : address;
 }
 
+/**
+ * Runs push deliveries off the request path as production does, and remembers them so `close()` can
+ * wait: destroying PGlite under an in-flight delivery wedges it, which turned a failed assertion
+ * into a hang instead of a report.
+ */
+class TrackedDeliveries {
+  readonly #pending = new Set<Promise<void>>();
+
+  dispatch(task: () => Promise<void>): void {
+    let started: Promise<void>;
+    try {
+      started = task();
+    } catch {
+      return;
+    }
+    const tracked = started.catch(() => undefined);
+    this.#pending.add(tracked);
+    void tracked.finally(() => this.#pending.delete(tracked));
+  }
+
+  async flush(): Promise<void> {
+    while (this.#pending.size > 0) await Promise.all([...this.#pending]);
+  }
+}
+
 export class HarnessServer {
   readonly accessLogs: string[] = [];
+  #deliveries: TrackedDeliveries | undefined;
   #tokenCounter = 0;
 
   private constructor(
@@ -247,11 +279,18 @@ export class HarnessServer {
     // verify + login runs the production definer path. Otherwise inject the token-map/test-auth
     // `verifyToken` and let `authDirectory` default to `dbAuthDirectory` (unused: no request presents a
     // bdt_/bcs_ token the DB path would resolve, since the map verifier answers first).
+    const deliveries = new TrackedDeliveries();
     const app = createApp({
       now: () => clock.now(),
       forTenant,
+      deliveryDispatcher: deliveries,
       ...(productionAuth ? { authDirectory: createPgliteAuthDirectory(db) } : { verifyToken }),
       accessLogSink: (record: unknown) => accessLogs.push(JSON.stringify(record)),
+      // The catalog is global data on the plain pool in production; here it is this PGlite's.
+      phoneCatalog: {
+        models: (after: number, limit: number) => readPhoneModelsFrom(db, after, limit),
+        photo: (modelId: number) => readPhoneModelPhotoFrom(db, modelId),
+      },
       ...(options?.gzipOnProgress === undefined ? {} : { gzipOnProgress: options.gzipOnProgress }),
       // CHAOS-07: forwarded structurally to production `resolveDeps` (deps.ts). `systemKeyStore`
       // is the enable-switch — with it, `detectConflicts` is built from SERVER_MODULES; without it,
@@ -273,6 +312,7 @@ export class HarnessServer {
       productionAuth,
     );
     (server as { accessLogs: string[] }).accessLogs = accessLogs;
+    server.#deliveries = deliveries;
     return server;
   }
 
@@ -421,6 +461,7 @@ export class HarnessServer {
   }
 
   async close(): Promise<void> {
+    await this.#deliveries?.flush();
     // Destroying the Kysely handle closes the PGlite instance the dialect owns; closing it again
     // throws "PGlite is closed", so the single destroy is the whole teardown.
     await this.db.destroy();

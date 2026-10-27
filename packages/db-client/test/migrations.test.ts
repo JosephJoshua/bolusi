@@ -21,6 +21,7 @@ const SPEC_TABLES = [
   'notes',
   'operations',
   'pending_pin_verifiers',
+  'phone_models',
   'pin_attempt_state',
   'pin_lockout_events',
   'projection_watermarks',
@@ -30,6 +31,7 @@ const SPEC_TABLES = [
   'repair_quote_lines',
   'repair_store_cancel_fees',
   'repair_store_intake_options',
+  'repair_store_print_settings',
   'repair_ticket_events',
   'repair_ticket_photos',
   'repair_tickets',
@@ -136,7 +138,7 @@ describe('runClientMigrations against a fresh database', () => {
 
   test('records the applied version with the injected clock', async () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
-    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 9, 11, 14]);
+    expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
     expect(rows.rows).toEqual([
@@ -148,8 +150,10 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 4, name: 'repair', applied_at: 1_700_000_000_000 },
       { version: 5, name: 'operations_arrival_index', applied_at: 1_700_000_000_000 },
       { version: 6, name: 'operations_single_copy', applied_at: 1_700_000_000_000 },
+      { version: 8, name: 'phone_models', applied_at: 1_700_000_000_000 },
       { version: 9, name: 'repair_intake_options', applied_at: 1_700_000_000_000 },
       { version: 11, name: 'repair_cancel_fees', applied_at: 1_700_000_000_000 },
+      { version: 13, name: 'repair_printing', applied_at: 1_700_000_000_000 },
       { version: 14, name: 'pending_pin_verifiers', applied_at: 1_700_000_000_000 },
     ]);
   });
@@ -160,11 +164,11 @@ describe('runner is idempotent', () => {
     const first = await runClientMigrations(driver, { now: () => 1 });
     const second = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 9, 11, 14]);
+    expect(first.applied).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 9 }]);
+    expect(rows.rows).toEqual([{ c: 11 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);
@@ -264,7 +268,7 @@ describe('migration 6 keeps one copy of each op', () => {
 
     const result = await runClientMigrations(driver, { now: () => 2 });
 
-    expect(result.applied).toEqual([6, 9, 11, 14]);
+    expect(result.applied).toEqual([6, 8, 9, 11, 13, 14]);
     const columns = await driver.execute(`SELECT name FROM pragma_table_info('operations')`);
     const names = columns.rows.map((row) => String(row['name']));
     expect(names).not.toContain('payload');

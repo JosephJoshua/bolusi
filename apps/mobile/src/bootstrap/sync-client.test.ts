@@ -200,6 +200,7 @@ async function build(options: BuildOptions = {}) {
       applied.push(op);
       return Promise.resolve();
     },
+    refoldRefused: () => Promise.resolve(),
     crypto: noblePort,
     clock: { now: () => T },
     timer,
@@ -391,7 +392,7 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
   async function clientForApp(timer: ReturnType<typeof delayRecordingTimer>) {
     const app = {
       db,
-      engine: { applyPulledOp: () => Promise.resolve() },
+      engine: { applyPulledOp: () => Promise.resolve(), refoldRefused: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
     } as unknown as Bootstrapped;
     return createSyncClientForApp(app, {

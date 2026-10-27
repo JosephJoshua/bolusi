@@ -24,7 +24,12 @@ import { sql, type Kysely } from 'kysely';
 
 import type { InvalidationBus } from './invalidation.js';
 import { moduleVersionSignature, type ModuleProjectionManifest } from './manifest.js';
-import { readEntitiesOps, readEntityPage, type EntityCursor } from './oplog-source.js';
+import {
+  readEntitiesOps,
+  readEntityPage,
+  type EntityCursor,
+  type FoldReadOptions,
+} from './oplog-source.js';
 import type { ProjectionRegistry } from './registry.js';
 import type { ProjectionStats } from './stats.js';
 
@@ -127,9 +132,10 @@ export async function refoldEntities<DB>(
   module: ModuleProjectionManifest<DB>,
   entityType: string,
   entityIds: readonly string[],
+  options: FoldReadOptions = {},
 ): Promise<number> {
   const tables = registry.tablesForEntityType(module, entityType);
-  const histories = await readEntitiesOps(db, entityType, entityIds);
+  const histories = await readEntitiesOps(db, entityType, entityIds, options);
   let applied = 0;
   for (const entityId of entityIds) {
     for (const ref of tables) {
@@ -166,6 +172,7 @@ export interface RunRebuildContext<DB> {
   readonly makeStore: (handle: Kysely<DB>) => RebuildStore;
   readonly invalidation: InvalidationBus;
   readonly stats: ProjectionStats;
+  readonly fold: FoldReadOptions;
 }
 
 export interface RunRebuildOptions {
@@ -238,7 +245,7 @@ export async function runRebuild<DB>(
         let end = start;
         while (end < entities.length && entities[end]!.entityType === entityType) end += 1;
         const ids = entities.slice(start, end).map((entity) => entity.entityId);
-        applied += await refoldEntities(trx, ctx.registry, module, entityType, ids);
+        applied += await refoldEntities(trx, ctx.registry, module, entityType, ids, ctx.fold);
         start = end;
       }
       const next: RebuildCursorState = {

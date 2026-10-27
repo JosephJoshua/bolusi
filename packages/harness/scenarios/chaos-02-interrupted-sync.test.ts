@@ -56,7 +56,9 @@ import { FaultFetch, type FaultPoint } from '../src/fault-fetch.js';
 import { HttpTransport, SILENT_SURFACE } from '../src/transport.js';
 import { activeVolumes, nightlyX4Seeds, resolveSeeds, withSeed } from '../src/index.js';
 
-const CLOCK_BASE = 1_726_100_000_000;
+// Before the harness server's now (its clock base, 1_726_100_000_000): the server refuses a timestamp
+// ahead of its own clock (core sync/clock-guard.ts), and these devices author in the past and sync later.
+const CLOCK_BASE = 1_726_100_000_000 - 6 * 60 * 60 * 1_000;
 const PUSH_BATCH = 500; // api/01 §3 cap.
 const PULL_LIMIT = 500;
 
@@ -242,6 +244,7 @@ function buildLoop(
     timer,
     deviceId: fx.device.identity.deviceId,
     applyPulledOp: (op) => fx.device.pullApply(op),
+    refoldRefused: (op) => fx.device.refoldRefused(op),
     pushBatchSize: PUSH_BATCH,
     pullLimit: PULL_LIMIT,
   });

@@ -26,6 +26,8 @@ export const NOTES_KEYS = [
   'notes.opType.noteCreated',
   'notes.opType.noteBodyEdited',
   'notes.opType.noteArchived',
+  'notes.refusal.alreadyRecorded',
+  'notes.refusal.noteNotFound',
 ] as const;
 
 export type NotesKey = (typeof NOTES_KEYS)[number];

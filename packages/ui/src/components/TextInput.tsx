@@ -27,9 +27,10 @@
  *     trusting `maxHeight` not to clip an 8-line body.
  */
 import { useState } from 'react';
-import { TextInput as RNTextInput, StyleSheet, Text, View } from 'react-native';
+import { Pressable, TextInput as RNTextInput, StyleSheet, Text, View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 
+import { useRevealOnFocus, type RevealMode } from '../shell/keyboard.js';
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
@@ -57,6 +58,16 @@ export interface TextInputProps {
   /** §3.2: numeric fields open numeric keyboards. */
   readonly keyboardType?: KeyboardTypeOptions | undefined;
   readonly secureTextEntry?: boolean | undefined;
+  /**
+   * `false` for names and codes the keyboard does not know (phone models: Gboard turns "samsng" into
+   * "Samsung" and "a55" into something else). Absent: the platform default.
+   */
+  readonly autoCorrect?: boolean | undefined;
+  /**
+   * Already-localized labels for an eye button at the end of a `secureTextEntry` field that shows
+   * and hides what was typed (checking a phone's PIN with its owner). Absent: no button.
+   */
+  readonly revealLabels?: { readonly show: string; readonly hide: string } | undefined;
   /** First field of a wizard step / PIN screen. Also how the Gallery shows a real `focused` field. */
   readonly autoFocus?: boolean | undefined;
   /**
@@ -65,6 +76,14 @@ export interface TextInputProps {
    * `textAlignVertical` and heights rather than `numberOfLines`.
    */
   readonly multiline?: boolean | undefined;
+  /** The most characters the field takes: what its command accepts, so typing past it is stopped. */
+  readonly maxLength?: number | undefined;
+  /**
+   * Where a focused field is scrolled to above the on-screen keyboard (shell/keyboard.tsx):
+   * just into sight (default), or to the top when something opens below it as the user types.
+   */
+  readonly revealOnFocus?: RevealMode | undefined;
+  readonly onBlur?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -89,6 +108,16 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     textAlignVertical: 'top',
   },
+  revealable: { paddingRight: touch.min },
+  revealButton: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: touch.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   errorRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xs },
   errorText: { ...type.bodySm, color: color.danger, marginLeft: space.xs, flex: 1 },
 });
@@ -103,12 +132,20 @@ export function TextInput({
   readOnly = false,
   keyboardType,
   secureTextEntry = false,
+  autoCorrect,
+  revealLabels,
   autoFocus = false,
   multiline = false,
+  maxLength,
+  revealOnFocus = 'into-view',
+  onBlur,
   testID = 'ui.textInput',
 }: TextInputProps): React.JSX.Element {
+  const reveal = useRevealOnFocus(revealOnFocus);
   const hasError = errorMessage !== undefined;
   const [focused, setFocused] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const revealable = secureTextEntry && revealLabels !== undefined;
   // Both states are non-editable; only `disabled` greys the value (§6.1 exemption). A read-only field
   // keeps full-contrast text — the fix for a note title that read as an unfilled placeholder (item 12).
   const notEditable = disabled || readOnly;
@@ -120,45 +157,73 @@ export function TextInput({
   const effectiveMultiline = multiline && !secureTextEntry;
 
   return (
-    <View testID={testID}>
+    <View ref={reveal.anchorRef} testID={testID}>
       <Text testID={`${testID}.label`} style={styles.label}>
         {label}
       </Text>
 
-      <RNTextInput
-        testID={`${testID}.field`}
-        accessibilityLabel={label}
-        accessibilityState={{ disabled }}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={color.textMuted}
-        editable={!notEditable}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        autoFocus={autoFocus}
-        multiline={effectiveMultiline}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        style={[
-          styles.field,
-          effectiveMultiline ? styles.multilineField : null,
-          {
-            // A non-editable field (disabled OR read-only) gets the calmer `surface` fill; an editable
-            // field sits on `surfaceAlt` so it reads as a place to type.
-            backgroundColor: notEditable ? color.surface : color.surfaceAlt,
-            // Error outranks focus (§3.2): a focused field with an error still reads as an error.
-            // Both use `border.focus` width — only the colour distinguishes them, which is legal
-            // here because the error ALSO carries an icon + message below (§6.3). A read-only field
-            // never focuses (it is not editable), so it stays on the resting hairline border.
-            borderColor: hasError ? color.danger : focused ? color.primary : color.border,
-            borderWidth: hasError || focused ? border.focus : border.hairline,
-            // ONLY `disabled` greys the value (§6.1 exemption). `readOnly` keeps `color.text`, so the
-            // real value is legible at full contrast rather than reading as an unfilled placeholder.
-            color: disabled ? color.textDisabled : color.text,
-          },
-        ]}
-      />
+      <View>
+        <RNTextInput
+          ref={reveal.ref}
+          testID={`${testID}.field`}
+          accessibilityLabel={label}
+          accessibilityState={{ disabled }}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={color.textMuted}
+          editable={!notEditable}
+          keyboardType={keyboardType}
+          secureTextEntry={secureTextEntry && !revealed}
+          autoCorrect={autoCorrect}
+          spellCheck={autoCorrect}
+          autoFocus={autoFocus}
+          multiline={effectiveMultiline}
+          maxLength={maxLength}
+          onFocus={() => {
+            setFocused(true);
+            reveal.onFocus();
+          }}
+          onBlur={() => {
+            setFocused(false);
+            onBlur?.();
+          }}
+          style={[
+            styles.field,
+            effectiveMultiline ? styles.multilineField : null,
+            revealable ? styles.revealable : null,
+            {
+              // A non-editable field (disabled OR read-only) gets the calmer `surface` fill; an editable
+              // field sits on `surfaceAlt` so it reads as a place to type.
+              backgroundColor: notEditable ? color.surface : color.surfaceAlt,
+              // Error outranks focus (§3.2): a focused field with an error still reads as an error.
+              // Both use `border.focus` width — only the colour distinguishes them, which is legal
+              // here because the error ALSO carries an icon + message below (§6.3). A read-only field
+              // never focuses (it is not editable), so it stays on the resting hairline border.
+              borderColor: hasError ? color.danger : focused ? color.primary : color.border,
+              borderWidth: hasError || focused ? border.focus : border.hairline,
+              // ONLY `disabled` greys the value (§6.1 exemption). `readOnly` keeps `color.text`, so the
+              // real value is legible at full contrast rather than reading as an unfilled placeholder.
+              color: disabled ? color.textDisabled : color.text,
+            },
+          ]}
+        />
+        {revealable ? (
+          <Pressable
+            testID={`${testID}.reveal`}
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? revealLabels.hide : revealLabels.show}
+            onPress={() => setRevealed((shown) => !shown)}
+            style={styles.revealButton}
+          >
+            <Icon
+              name={revealed ? 'conceal' : 'reveal'}
+              size={size.iconInline}
+              color={color.textMuted}
+            />
+          </Pressable>
+        ) : null}
+      </View>
 
       {hasError ? (
         <View testID={`${testID}.error`} style={styles.errorRow}>
