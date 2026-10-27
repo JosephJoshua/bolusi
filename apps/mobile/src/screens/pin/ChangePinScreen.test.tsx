@@ -108,3 +108,32 @@ describe('saving the new PIN is visible, never a frozen pad (VPS QA on PR #43)',
     expect(screen.query('change-pin-done')).not.toBeNull();
   });
 });
+
+describe('a re-render during the save never runs the change twice (VPS QA on PR #44)', () => {
+  test('a new onChangePin identity mid-save keeps the first call and still reaches done', async () => {
+    // App hands a fresh inline callback on every render, and the flow's own emit re-renders App while
+    // the change runs. Rerunning the change then verified the OLD PIN against the NEW verifier and
+    // showed a false "too many wrong PINs" after the PIN had in fact been changed.
+    let finish: () => void = () => undefined;
+    const calls: string[][] = [];
+    const makeChange = () =>
+      vi.fn(
+        (current: string, next: string) =>
+          new Promise<void>((resolve) => {
+            calls.push([current, next]);
+            finish = resolve;
+          }),
+      );
+    const screen = render(<ChangePinScreen onChangePin={makeChange()} onClose={vi.fn()} />);
+
+    submitChange(screen);
+    await flush();
+    screen.rerender(<ChangePinScreen onChangePin={makeChange()} onClose={vi.fn()} />);
+    await flush();
+    finish();
+    await flush();
+
+    expect(calls).toEqual([['111111', '222222']]);
+    expect(screen.query('change-pin-done')).not.toBeNull();
+  });
+});

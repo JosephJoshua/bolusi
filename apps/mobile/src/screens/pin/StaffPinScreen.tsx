@@ -80,11 +80,14 @@ export function StaffPinScreen({
   const [query, setQuery] = useState('');
   const [unlock, dispatchUnlock] = useReducer(clearActionReducer, CLEAR_IDLE);
   const [reset, dispatchReset] = useReducer(resetPinReducer, RESET_LIST);
+  // Stable wrappers so a parent re-render mid-save never cancels and reruns a submit.
+  const clearLockout = useLatestCallback(onClearLockout);
+  const resetPin = useLatestCallback(onResetPin);
 
   useEffect(() => {
     if (unlock.kind !== 'submitting') return undefined;
     let cancelled = false;
-    void onClearLockout(unlock.target.id).then(
+    void clearLockout(unlock.target.id).then(
       () => {
         if (!cancelled) dispatchUnlock({ kind: 'settled', result: { ok: true } });
       },
@@ -96,12 +99,12 @@ export function StaffPinScreen({
     return () => {
       cancelled = true;
     };
-  }, [unlock, onClearLockout]);
+  }, [unlock, clearLockout]);
 
   useEffect(() => {
     if (reset.kind !== 'submitting') return undefined;
     let cancelled = false;
-    void onResetPin(reset.target.id, reset.newPin).then(
+    void resetPin(reset.target.id, reset.newPin).then(
       () => {
         if (!cancelled) dispatchReset({ kind: 'settled', result: { ok: true } });
       },
@@ -112,7 +115,7 @@ export function StaffPinScreen({
     return () => {
       cancelled = true;
     };
-  }, [reset, onResetPin]);
+  }, [reset, resetPin]);
 
   const list = useMemo(
     () => staffListState({ canUnlock, canReset, loading, error, users, actorUserId }),

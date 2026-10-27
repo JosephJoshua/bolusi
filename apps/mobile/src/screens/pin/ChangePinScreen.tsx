@@ -18,6 +18,7 @@ import { AppShell, Button, OutcomeState } from '@bolusi/ui';
 import { useEffect, useReducer } from 'react';
 import { View } from 'react-native';
 
+import { useLatestCallback } from '../../hooks/useLatestCallback.js';
 import {
   CHANGE_PIN_START,
   changeFeedbackKey,
@@ -47,11 +48,14 @@ export function ChangePinScreen({
   onClose,
 }: ChangePinScreenProps): React.JSX.Element {
   const [phase, dispatch] = useReducer(changePinReducer, CHANGE_PIN_START);
+  // Keyed on the stable wrapper, not the prop: a parent re-render mid-save (the flow's own emit)
+  // must not cancel and rerun the change, which would verify the old PIN against the new verifier.
+  const changePin = useLatestCallback(onChangePin);
 
   useEffect(() => {
     if (phase.kind !== 'submitting') return;
     let cancelled = false;
-    void onChangePin(phase.currentPin, phase.newPin).then(
+    void changePin(phase.currentPin, phase.newPin).then(
       () => {
         if (!cancelled) dispatch({ kind: 'settled', result: { ok: true } });
       },
@@ -62,7 +66,7 @@ export function ChangePinScreen({
     return () => {
       cancelled = true;
     };
-  }, [phase, onChangePin]);
+  }, [phase, changePin]);
 
   const prompt = changePromptKey(phase);
   const feedback = changeFeedbackKey(phase);
