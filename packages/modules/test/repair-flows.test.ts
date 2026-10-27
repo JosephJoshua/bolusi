@@ -17,6 +17,7 @@ import {
   parseIntakeDraft,
   acceptsRupiahText,
   parseRupiah,
+  phoneText,
   readyAtFor,
   repairAbilities,
   restOfChecksOk,
@@ -471,6 +472,13 @@ describe('money and dates', () => {
     expect(acceptsRupiahText('Rp 5.000')).toBe(true);
   });
 
+  test('a phone field keeps digits, spaces, dashes and a leading plus only', () => {
+    expect(phoneText('081234567890.')).toBe('081234567890');
+    expect(phoneText('+62 812-3456-7890')).toBe('+62 812-3456-7890');
+    expect(phoneText('0812,34*56#78(90)N/')).toBe('081234567890');
+    expect(phoneText('08+12')).toBe('0812');
+  });
+
   test('ready dates land at the end of the store day', () => {
     const now = new Date(2026, 9, 25, 9, 30).getTime();
     expect(readyAtFor('0', now)).toBe(new Date(2026, 9, 25, 17, 0).getTime());
@@ -545,6 +553,8 @@ describe('intake draft', () => {
     ).toEqual([]);
     expect(intakeDirty(draft)).toBe(false);
     expect(intakeDirty({ ...draft, step: 3 })).toBe(false);
+    // The id an intake takes up front is not an answer: an untouched intake is still clean.
+    expect(intakeDirty({ ...draft, ticketId: '01920000-0000-7000-8000-00000000a161' })).toBe(false);
     expect(intakeDirty({ ...draft, complaint: 'x' })).toBe(true);
   });
 

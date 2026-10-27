@@ -43,6 +43,26 @@ async function ticket(harness: RepairHarness, ticketId: string, userId = harness
 }
 
 describe('intake', () => {
+  test('opening the same intake id twice returns the first ticket and writes nothing new', async () => {
+    h = await openRepairHarness(41);
+    const ticketId = '01920000-0000-7000-8000-00000000a141';
+    const first = await open(h, { ticketId });
+    expect(first.ticketId).toBe(ticketId);
+    const countOps = async () =>
+      Number(
+        (await sql<{ c: number }>`SELECT COUNT(*) AS c FROM operations`.execute(h!.db)).rows[0]!.c,
+      );
+    const before = await countOps();
+
+    // A draft restored after the app died mid-submit, sent again (even with other answers).
+    const again = await open(h, { ticketId, complaint: 'Baterai bocor' });
+    expect(again).toEqual(first);
+    expect(await countOps()).toBe(before);
+    const tickets = await h.query('listTickets', {}, h.cashierId);
+    expect(tickets.rows.filter((row: { id: string }) => row.id === ticketId)).toHaveLength(1);
+    expect((await ticket(h, ticketId)).complaint).not.toBe('Baterai bocor');
+  });
+
   test('openTicket registers the customer, numbers the ticket and records the quote and photos', async () => {
     h = await openRepairHarness(1);
     const first = await open(h);

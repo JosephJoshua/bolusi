@@ -32,6 +32,29 @@ import { createPgliteAuthDirectory } from './production-auth.js';
 import { assertLaneLoopbackBind } from './serve-lane.js';
 
 const SERVER_CLOCK_BASE = 1_726_100_000_000;
+
+/**
+ * Real time, for a server a real app talks to. A phone stamps its changes with its own wall clock,
+ * and the push refuses one dated more than 10 minutes ahead of the server (CLOCK_AHEAD), so the
+ * scenarios' fixed 2024 clock would refuse every change the app makes. `set`/`advance` still work:
+ * they shift the clock and it keeps running from there.
+ */
+class WallClock extends FakeClock {
+  #offset = 0;
+
+  override now(): number {
+    return Date.now() + this.#offset;
+  }
+
+  override advance(ms: number): void {
+    if (ms < 0) throw new RangeError(`WallClock.advance moves time forward only (got ${ms})`);
+    this.#offset += ms;
+  }
+
+  override set(ms: number): void {
+    this.#offset = ms - Date.now();
+  }
+}
 const CREATED_AT = 1_726_000_000_000n;
 const APP_ROLE = 'bolusi_app';
 
@@ -221,6 +244,11 @@ export class HarnessServer {
      * auth path). The default (both unset) keeps the in-memory token map.
      */
     readonly productionAuth?: boolean;
+    /**
+     * Run the server on real time instead of the scenarios' fixed FakeClock. For the lane a real app
+     * syncs with (`harness-serve-lane.mjs`): the app's changes carry its wall clock.
+     */
+    readonly wallClock?: boolean;
   }): Promise<HarnessServer> {
     if (options?.productionAuth === true && options.testAuthSeam === true) {
       throw new Error(
@@ -235,7 +263,7 @@ export class HarnessServer {
     });
     await migrateToLatest(db);
 
-    const clock = new FakeClock(SERVER_CLOCK_BASE);
+    const clock = options?.wallClock === true ? new WallClock() : new FakeClock(SERVER_CLOCK_BASE);
     const tokens = new Map<string, DevicePrincipal>();
     // CHAOS-05: when the test-auth seam is on, the REAL production verifier reads this store; the
     // token MAP below is left unused (harmless). Off by default → the map verifier serves everyone.

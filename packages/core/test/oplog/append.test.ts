@@ -11,6 +11,7 @@ import {
   utf8ToBytes,
   verifyOp,
   type AppendContext,
+  type AppendedOp,
   type JsonValue,
   type OpDraft,
   type ProjectionApply,
@@ -190,6 +191,38 @@ describe('appendLocalOps — atomicity (04 §5.1: append is atomic with projecti
     expect(result.ops[0]!.status).toBe('appended');
     expect((result.ops[0] as { seq: number }).seq).toBe(2);
     expect(f.store.count()).toBe(countAfterGenesis + 1);
+  });
+
+  it('runs withinAppend once inside the transaction with the appended ops; its throw rolls back', async () => {
+    const f = makeFixture(402);
+    await append(f, [f.genesisDraft()]);
+    const countAfterGenesis = f.store.count();
+
+    const seen: number[] = [];
+    const run = (withinAppend: (ops: readonly AppendedOp[]) => Promise<void>) =>
+      appendLocalOps({
+        store: f.store,
+        drafts: [f.noteDraft()],
+        context: f.context,
+        crypto: f.crypto,
+        newId: f.newId,
+        now: () => f.clock.now(),
+        location: null,
+        applyProjection: () => undefined,
+        withinAppend,
+      });
+
+    await expect(run(() => Promise.reject(new Error('queue write failed')))).rejects.toThrow(
+      'queue write failed',
+    );
+    expect(f.store.count(), 'the op rolls back with the failed write').toBe(countAfterGenesis);
+
+    await run((ops) => {
+      // The op row is already visible to a write in the same transaction.
+      seen.push(f.store.count(), ...ops.map((o) => (o.status === 'appended' ? o.seq : -1)));
+      return Promise.resolve();
+    });
+    expect(seen).toEqual([countAfterGenesis + 1, 2]);
   });
 });
 

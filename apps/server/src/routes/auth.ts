@@ -8,8 +8,10 @@ import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { resolveActingUser } from '../auth/acting-user.js';
 import { mintControlSession } from '../auth/control-sessions.js';
+import { storesGranting } from '../auth/permissions.js';
 import { appendAudit } from '../identity/audit.js';
 import { IdentityError, withIdentityErrors } from '../identity/errors.js';
+import { PERM } from '../identity/permissions.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
 import { LoginReq, PasswordChangeReq, type LoginRes } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
@@ -84,13 +86,23 @@ export function createAuthRouter(deps: ServerDeps) {
             .select(['id', 'name'])
             .where('id', '=', cred.userId)
             .executeTakeFirstOrThrow();
-          const stores = await db
-            .selectFrom('userStores')
-            .innerJoin('stores', 'stores.id', 'userStores.storeId')
-            .select(['stores.id as id', 'stores.name as name'])
-            .where('userStores.userId', '=', cred.userId)
-            .orderBy('stores.id')
-            .execute();
+          // Only the stores this user may enroll a phone into (§4.2 `LoginRes.stores`): an empty
+          // list tells the wizard at its first step that this is not an owner, instead of after the
+          // phone is named. The enroll route still checks the permission itself.
+          const enrollable = await storesGranting(db, {
+            tenantId: cred.tenantId,
+            userId: cred.userId,
+            permissionId: PERM.deviceEnroll,
+          });
+          const stores = (
+            await db
+              .selectFrom('userStores')
+              .innerJoin('stores', 'stores.id', 'userStores.storeId')
+              .select(['stores.id as id', 'stores.name as name'])
+              .where('userStores.userId', '=', cred.userId)
+              .orderBy('stores.id')
+              .execute()
+          ).filter((store) => enrollable.storeIds.includes(store.id));
           await appendAudit(db, cred.tenantId, {
             actorUserId: cred.userId,
             action: 'auth.login',

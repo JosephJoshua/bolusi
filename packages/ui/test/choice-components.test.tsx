@@ -2,6 +2,7 @@
 import { StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
+import { ListRow } from '../src/components/ListRow.js';
 import { PatternLock } from '../src/components/PatternLock.js';
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
@@ -68,6 +69,55 @@ describe('SegmentedControl', () => {
   });
 });
 
+describe('SegmentedControl inline', () => {
+  // Beside a label each pill keeps its text's width: squeezed, "Tidak dicek" showed as "Tidak".
+  test('lays the options in one row whose pills never shrink, and leaves labels uncut', () => {
+    const r = render(
+      <SegmentedControl
+        testID="seg"
+        inline
+        size="compact"
+        options={[{ value: 'not_checked', label: 'Tidak dicek' }]}
+        value="not_checked"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexShrink: 0 });
+    expect(StyleSheet.flatten(r.get('seg.not_checked').props['style'])).toMatchObject({
+      flexShrink: 0,
+    });
+    const [label] = r.get('seg.not_checked').queryAll((n) => n.type === 'Text');
+    // One line that clips, never an ellipsis: the width is guaranteed by the layout above, so this
+    // only absorbs Android's draw-time rounding (it wrapped the last word away on device).
+    expect(label?.props['numberOfLines']).toBe(1);
+    expect(label?.props['ellipsizeMode']).toBe('clip');
+  });
+});
+
+describe('ListRow as a choice', () => {
+  // The enrolment store list showed no chosen state at all (first Android QA run).
+  test('the chosen row is a checked radio with a check mark; the others are not', () => {
+    const chosen = render(
+      <ListRow testID="r" primaryText="Toko Utama" onPress={vi.fn()} selected />,
+    );
+    expect(chosen.get('r').props['accessibilityRole']).toBe('radio');
+    expect(chosen.get('r').props['accessibilityState']).toEqual({ checked: true, selected: true });
+    expect(chosen.query('r.check')).not.toBeNull();
+
+    const other = render(
+      <ListRow testID="r" primaryText="Toko Kota" onPress={vi.fn()} selected={false} />,
+    );
+    expect(other.get('r').props['accessibilityState']).toEqual({ checked: false, selected: false });
+    expect(other.query('r.check')).toBeNull();
+  });
+
+  test('a plain tappable row stays a button', () => {
+    const r = render(<ListRow testID="r" primaryText="x" onPress={vi.fn()} />);
+    expect(r.get('r').props['accessibilityRole']).toBe('button');
+    expect(r.get('r').props['accessibilityState']).toBeUndefined();
+  });
+});
+
 describe('ToggleChip', () => {
   test('a selected chip is checked and carries a check icon; pressing toggles', () => {
     const onToggle = vi.fn();
@@ -121,6 +171,28 @@ describe('PhotoSlot', () => {
     const filled = render(<PhotoSlot testID="p" label="Depan" image={<></>} actionLabel="Ulang" />);
     expect(filled.query('p.done')).not.toBeNull();
     expect(filled.query('p.press')).toBeNull();
+  });
+});
+
+describe('ListRow as a checkbox', () => {
+  test('announces a combinable choice as a checkbox and shows a tick box, filled only when ticked', () => {
+    const onPress = vi.fn();
+    const r = render(
+      <>
+        <ListRow testID="on" primaryText="Kasir" checked onPress={onPress} />
+        <ListRow testID="off" primaryText="Teknisi" checked={false} onPress={onPress} />
+      </>,
+    );
+    expect(r.get('on').props['accessibilityRole']).toBe('checkbox');
+    expect(r.get('on').props['accessibilityState']).toEqual({ checked: true });
+    expect(r.get('off').props['accessibilityState']).toEqual({ checked: false });
+    // Both rows draw the box (the choice never rides on colour alone); only the ticked one has a tick.
+    expect(r.query('on.box')).not.toBeNull();
+    expect(r.query('off.box')).not.toBeNull();
+    expect(r.get('on.box').children.length).toBe(1);
+    expect(r.get('off.box').children.length).toBe(0);
+    fire(r.get('off'), 'onPress');
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 });
 

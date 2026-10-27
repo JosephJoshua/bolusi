@@ -45,7 +45,7 @@ import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
 import { render, fire, type RenderResult } from '../../../packages/ui/test/render.js';
 import { ensureNotesCatalog } from './notes-support.js';
 
-export { closeClientDb, buildPinVerifier };
+export { closeClientDb, buildPinVerifier, NOTES_PERMISSIONS };
 export type { Bootstrapped };
 
 /** The PIN the seeded verifier is built from. Six digits (api/02-auth §6.1). */
@@ -102,6 +102,7 @@ export function bootAt(location: string): Promise<Bootstrapped> {
  * has one monotonic id source and one persistent signing key across restarts; this mirrors that.
  */
 const idPrng = mulberry32(119);
+const sessionIdPrng = mulberry32(7);
 const DEVICE_KEYPAIR = noblePort.ed25519Keygen(new Uint8Array(32).fill(9));
 let opClock = FIXED_NOW;
 
@@ -296,6 +297,7 @@ export const SECOND_USER_ID = '01920000-0000-7000-8000-0000000130d1';
 export async function seedTwoUsers(
   fixture: Fixture,
   idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+  permissions: readonly string[] = NOTES_PERMISSIONS,
 ): Promise<void> {
   const [verifierA, verifierB] = await Promise.all([
     verifierFor(fixture, 1, 1),
@@ -307,6 +309,31 @@ export async function seedTwoUsers(
       users: [
         activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifierA),
         activeUser(SECOND_USER_ID, 'Budi Santoso', ROLE_ID, fixture.storeId, verifierB),
+      ],
+      roles: [storeRole(ROLE_ID, 'Notes', permissions)],
+    },
+    idleLockSeconds,
+  );
+}
+
+/**
+ * Seed `fixture.userId` (signable with `TEST_PIN`) plus `SECOND_USER_ID`, a new colleague the server
+ * sent with NO verifier yet: the roster marks them `needsFirstPin` (api/02-auth §6.6).
+ */
+export async function seedUserWithoutPin(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifier = await verifierFor(fixture, 1, 1);
+  await seedBundle(
+    fixture,
+    {
+      users: [
+        activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifier),
+        {
+          ...activeUser(SECOND_USER_ID, 'Maria Wenda', ROLE_ID, fixture.storeId, verifier),
+          pinVerifier: null,
+        },
       ],
       roles: [storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS)],
     },
@@ -534,6 +561,8 @@ export interface MountOptions {
   readonly createPushRegistration?: RootProps['createPushRegistration'];
   /** The notification-tap seam (api/04-push §4/§6; task 135). Omitted by default (no listener). */
   readonly pushRouter?: RootProps['pushRouter'];
+  /** The notification permission seam; default undefined (never asks). */
+  readonly notificationPermission?: RootProps['notificationPermission'];
   /**
    * The enrollment factory (api/02-auth §4; task 92). Omitted by default, so the pre-enrolled tests use
    * the rejecting stub below (the device is already enrolled — the transports are never called). The
@@ -541,6 +570,8 @@ export interface MountOptions {
    * `onEnrolled` fires through the real composition and Root's push registration runs.
    */
   readonly createEnrollment?: RootProps['createEnrollment'];
+  /** The repair surface factory. Omitted by default, so the shell's home stays the notes list. */
+  readonly createRepair?: RootProps['createRepair'];
   /**
    * The sync-client factory (api/01-sync; task 136). Omitted by default — every pre-136 test mounted
    * with NO `createSync` at all, which is precisely why `Root`'s sync wiring was unobservable and how
@@ -550,7 +581,7 @@ export interface MountOptions {
   readonly createSync?: RootProps['createSync'];
   /**
    * The pin-verifier POST transport (api/02-auth §5.4; task 186a-2). Omitted by default — the drain test
-   * passes a fake that records `upload` calls and captures `onBundleRefreshed` (via `createSync`) to fire
+   * passes a fake that records `upload` calls and captures `onBundleChecked` (via `createSync`) to fire
    * it, so the "a change POSTs on next online contact" wiring is observed rather than assumed.
    */
   readonly uploadPinVerifier?: RootProps['uploadPinVerifier'];
@@ -640,9 +671,11 @@ export async function mountRoot(
             runtime: appRuntime,
             crypto: noblePort,
             clock: sessionClock,
+            // Module-scoped like `idPrng`: a remount in the same test must not mint the session ids
+            // the previous mount already used, exactly as a restarted device would not.
             idSource: createUuidV7Generator({
               now: () => FIXED_NOW,
-              randomBytes: (n) => prngBytes(mulberry32(7), n),
+              randomBytes: (n) => prngBytes(sessionIdPrng, n),
             }),
           });
           if (controller !== null) options.onSessionController?.(controller);
@@ -663,10 +696,12 @@ export async function mountRoot(
         });
       }}
       {...(options.createMedia === undefined ? {} : { createMedia: options.createMedia })}
+      {...(options.createRepair === undefined ? {} : { createRepair: options.createRepair })}
       capturePlatform={options.capturePlatform}
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
+      notificationPermission={options.notificationPermission}
     />
   );
   const screen = render(element);

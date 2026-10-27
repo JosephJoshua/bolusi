@@ -170,6 +170,8 @@ export const size = Object.freeze({
    * one screen where identity IS the content.
    */
   avatarSwitcher: 96,
+  /** A person's identity at the top of a PIN screen or their own page: a face, not a bullet. */
+  avatarHero: 64,
   /** §3.11 FreshnessCell geometry — the battery-cell signature. */
   cellWidth: 26,
   cellHeight: 14,
@@ -182,6 +184,8 @@ export const size = Object.freeze({
   bannerDot: 12,
   /** §3.3 PIN entry dot. */
   pinDot: 16,
+  /** A tick box on a row that is one of several choices you may combine (Material's 18 dp + pad). */
+  checkbox: 24,
   /**
    * §3.2 + §8.6 multiline TextInput (the free-form note BODY). Single-line's 56 dp floor is a
    * TOUCH target; a body the user composes needs a READING area, so these are DERIVED from the

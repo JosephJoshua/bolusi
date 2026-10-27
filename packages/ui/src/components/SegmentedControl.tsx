@@ -33,6 +33,12 @@ export interface SegmentedControlProps<V extends string> {
    * screen edges, so a pill cut off at the edge shows there are more to swipe to.
    */
   readonly bleed?: boolean | undefined;
+  /**
+   * A plain row sized to its options, no wrapping or scrolling: a few short options beside a label
+   * (a condition check's state). Each pill keeps its text's width and never shrinks, so a label is
+   * never cut; the caller stacks the row under its label when it does not fit beside it.
+   */
+  readonly inline?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -63,8 +69,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { ...type.bodySm },
-  compactLabel: { ...type.caption, fontWeight: '600' },
+  // No lineHeight on a pill's one line of text: with it, Android 15+ dropped the last word of
+  // "Tidak dicek" while the measured box still held it (RN issue #57110; QA runs 1 to 5). The pill's
+  // own height centres the text, so the line height adds nothing here.
+  label: { fontSize: type.bodySm.fontSize, fontWeight: type.bodySm.fontWeight },
+  compactLabel: { fontSize: type.caption.fontSize, fontWeight: '600' },
+  inlineRow: { flexDirection: 'row', gap: touch.gap, flexShrink: 0 },
+  inlineOption: { flexShrink: 0 },
 });
 
 export function SegmentedControl<V extends string>({
@@ -74,6 +85,7 @@ export function SegmentedControl<V extends string>({
   wrap = false,
   size = 'regular',
   bleed = false,
+  inline = false,
   testID = 'ui.segmented',
 }: SegmentedControlProps<V>): React.JSX.Element {
   const compact = size === 'compact';
@@ -91,6 +103,7 @@ export function SegmentedControl<V extends string>({
         hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
         style={[
           compact ? styles.compactOption : styles.option,
+          inline ? styles.inlineOption : null,
           {
             backgroundColor: selected ? color.primary : color.surface,
             borderColor: selected ? color.primary : color.border,
@@ -98,6 +111,10 @@ export function SegmentedControl<V extends string>({
         ]}
       >
         <Text
+          // A pill is one line by design and the layout gives it its text's full width (pills never
+          // shrink). One line with `clip` keeps any draw-time rounding to a sliver, never a word.
+          numberOfLines={1}
+          ellipsizeMode="clip"
           style={[
             compact ? styles.compactLabel : styles.label,
             { color: selected ? color.onPrimary : color.text },
@@ -108,6 +125,13 @@ export function SegmentedControl<V extends string>({
       </Pressable>
     );
   });
+  if (inline) {
+    return (
+      <View style={styles.inlineRow} accessibilityRole="radiogroup" testID={testID}>
+        {items}
+      </View>
+    );
+  }
   if (wrap) {
     return (
       <View

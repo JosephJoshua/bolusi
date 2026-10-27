@@ -88,7 +88,10 @@ export function IntakeWizard({
 }: IntakeWizardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
+  const [draft, setDraft] = useState<IntakeDraft>(() => {
+    const start = restoredDraft ?? emptyIntakeDraft();
+    return start.ticketId === undefined ? { ...start, ticketId: runtime.newId() } : start;
+  });
   const [showProblems, setShowProblems] = useState(false);
   const [restoredOnce] = useState(restoredDraft ?? null);
   const [photosExpired, setPhotosExpired] = useState(false);
@@ -121,6 +124,24 @@ export function IntakeWizard({
       live = false;
     };
   }, [restoredOnce, runtime]);
+  // The app can die between opening the ticket and clearing the draft. A restored draft whose ticket
+  // exists is that case: show the ticket instead of offering to open it again.
+  useEffect(() => {
+    const ticketId = restoredOnce?.ticketId;
+    if (ticketId === undefined) return;
+    let live = true;
+    runtime.query('getTicket', { ticketId }).then(
+      () => {
+        if (!live) return;
+        onDraftChange?.(null);
+        onOpened(ticketId);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [restoredOnce, runtime, onDraftChange, onOpened]);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
   // The store's lists, live: an owner's change that syncs in mid-intake shows at once, and the draft

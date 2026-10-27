@@ -60,9 +60,11 @@ export interface TextInputProps {
   readonly secureTextEntry?: boolean | undefined;
   /**
    * `false` for names and codes the keyboard does not know (phone models: Gboard turns "samsng" into
-   * "Samsung" and "a55" into something else). Absent: the platform default.
+   * "Samsung" and "a55" into something else). Off also drops the spellcheck underline, which reads
+   * as a mistake under a customer's name. Absent: the platform default.
    */
   readonly autoCorrect?: boolean | undefined;
+  readonly autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters' | undefined;
   /**
    * Already-localized labels for an eye button at the end of a `secureTextEntry` field that shows
    * and hides what was typed (checking a phone's PIN with its owner). Absent: no button.
@@ -133,6 +135,7 @@ export function TextInput({
   keyboardType,
   secureTextEntry = false,
   autoCorrect,
+  autoCapitalize,
   revealLabels,
   autoFocus = false,
   multiline = false,
@@ -177,6 +180,7 @@ export function TextInput({
           secureTextEntry={secureTextEntry && !revealed}
           autoCorrect={autoCorrect}
           spellCheck={autoCorrect}
+          autoCapitalize={autoCapitalize}
           autoFocus={autoFocus}
           multiline={effectiveMultiline}
           maxLength={maxLength}

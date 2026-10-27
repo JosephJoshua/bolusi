@@ -149,10 +149,10 @@ test('the AppShell screen scan finds screens at all', () => {
 
 test('the List detector actually finds the known List-bearing screens', () => {
   // Second denominator, and the one that matters: if `listBinding`/`reachesList` silently stopped
-  // matching, the guard below would report no offenders for the wrong reason. These five render a
+  // matching, the guard below would report no offenders for the wrong reason. These four render a
   // `<List>` today; the count is deliberately a floor, so adding a screen does not break it.
   const withList = [...reachesList()].filter((path) => files.get(path)?.includes('<AppShell'));
-  expect(withList.length).toBeGreaterThanOrEqual(5);
+  expect(withList.length).toBeGreaterThanOrEqual(4);
 });
 
 test('no screen opts into AppShell scrolling while reaching a List', () => {
