@@ -242,6 +242,28 @@ describe('RealtimeController — fallback ladder (api/00 §12.3)', () => {
     expect(sseHandle.closed).toBe(true); // lower rung torn down
     expect(controller.getStats().backfills).toBe(backfillsBefore + 1); // promotion is a (re)connect
   });
+  test('reports every rung change (WS→SSE→polling→WS) and survives a throwing listener', () => {
+    const rungs: string[] = [];
+    const { deps, ws, sse, timer } = makeDeps({
+      onRungChange: (rung) => {
+        rungs.push(rung);
+        throw new Error('listener failure');
+      },
+    });
+    const controller = new RealtimeController(deps);
+    controller.start();
+    for (const fail of [ws, ws, ws, sse, sse, sse]) {
+      fail.last.cb.onError();
+      timer.advance(SYNC_BACKOFF_SCHEDULE_MS[1]);
+    }
+    expect(controller.state.rung).toBe('polling');
+
+    timer.advance(DEGRADED_WS_RETRY_MS);
+    ws.last.cb.onOpen(); // the recovery probe connects
+
+    expect(rungs).toEqual(['sse', 'polling', 'ws']);
+    expect(controller.state.connected).toBe(true);
+  });
 });
 
 describe('RealtimeController — FR-1146: realtime never gates sync', () => {

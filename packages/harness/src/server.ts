@@ -12,7 +12,7 @@
 import type { AddressInfo } from 'node:net';
 
 import { PGlite } from '@electric-sql/pglite';
-import { serve, type ServerType } from '@hono/node-server';
+import type { ServerType } from '@hono/node-server';
 import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
 import {
@@ -22,7 +22,7 @@ import {
   type DB,
   type TenantDb,
 } from '@bolusi/db-server';
-import { createApp } from '@bolusi/server';
+import { createApp, serveWithRealtime } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
 
@@ -435,7 +435,7 @@ export class HarnessServer {
       assertLaneLoopbackBind(hostname);
     }
     const { node, info } = await new Promise<{ node: ServerType; info: AddressInfo }>((resolve) => {
-      const node_ = serve({ fetch: this.app.fetch, hostname, port }, (i) =>
+      const node_ = serveWithRealtime({ fetch: this.app.fetch, hostname, port }, (i) =>
         resolve({ node: node_, info: i }),
       );
     });
