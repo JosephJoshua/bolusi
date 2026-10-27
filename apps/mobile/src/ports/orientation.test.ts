@@ -27,7 +27,8 @@ beforeEach(() => {
   changeListener = null;
   vi.spyOn(Dimensions, 'addEventListener').mockImplementation((_type, listener) => {
     changeListener = listener as typeof changeListener;
-    return { remove: vi.fn() };
+    // Only `remove` is ever used of the subscription.
+    return { remove: vi.fn() } as unknown as ReturnType<typeof Dimensions.addEventListener>;
   });
 });
 
