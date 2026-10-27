@@ -10,9 +10,12 @@
 // three steps each time the font scale changes, in this order:
 //   1. Refresh the display metrics at once. Back from Settings, a measure pass can run before
 //      anything posted, and text measured with the old metrics is cached under the new scale.
-//   2. Measure every React root now, so the surface's layout carries the new scale before JS
-//      commits. Text measurements are cached by scale, and a remount at the old scale reuses them.
-//   3. Re-emit Dimensions through React Native's own "font scale changed" check.
+//   2. Measure every React root at once too, so the surface's layout carries the new scale before
+//      JS hears of it. Text measurements are cached by scale, and a remount at the old scale reuses
+//      them. Back from Settings, the activity's resume tells JS before anything posted runs, which
+//      left the header and bottom bar at their old size on the QA device.
+//   3. Re-emit Dimensions through React Native's own "font scale changed" check (posted, so the
+//      process has its new configuration too).
 //
 // No relative `.ts` imports, for the reason given in withHarnessActivity.ts.
 import {
@@ -58,6 +61,7 @@ export const FONT_SCALE_SYNC_KOTLIN = `
     super.onConfigurationChanged(newConfig)
     if (newConfig.fontScale == syncedFontScale) return
     DisplayMetricsHolder.initDisplayMetrics(this)
+    remeasureReactRoots(window.decorView)
     window.decorView.post { syncFontScale() }
   }
 
@@ -65,7 +69,6 @@ export const FONT_SCALE_SYNC_KOTLIN = `
     val reactContext = (application as ReactApplication).reactHost?.currentReactContext ?: return
     syncedFontScale = resources.configuration.fontScale
     DisplayMetricsHolder.initDisplayMetrics(reactContext)
-    remeasureReactRoots(window.decorView)
     (reactContext.getNativeModule("DeviceInfo") as? LifecycleEventListener)?.onHostResume()
     android.util.Log.i("BolusiFontScale", "synced fontScale=$syncedFontScale app=\${applicationContext.resources.configuration.fontScale} scaledDensity=\${DisplayMetricsHolder.getScreenDisplayMetrics().scaledDensity}")
   }
