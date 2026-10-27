@@ -94,6 +94,8 @@ describe('customer search', () => {
     ['fransiskos kogoya', 'c3'], // typo in a full name
     ['rum biak', 'c4'], // split differently from how it was stored
     ['tima', 'c6'], // inside a longer word
+    ['hannna', 'c4'], // a key held too long
+    ['yoh', 'c1'], // still being typed: the h is not the trailing h of Fatimah, so not Djoko
   ])('%s finds %s first', (query, expected) => {
     expect(ids(searchCustomers(customers, query))[0]).toBe(expected);
   });
@@ -143,7 +145,19 @@ describe('customer search', () => {
     expect(normalizePhone('+62 812-345')).toBe('0812345');
     expect(normalizePhone('812345678')).toBe('0812345678');
     expect(foldWord('johannes')).toBe(foldWord('yohanes'));
+    expect(foldWord('rocky')).toBe(foldWord('roky'));
+    expect(foldWord('riyanto')).toBe(foldWord('rianto'));
+    expect(foldWord('mariyam')).toBe(foldWord('maryam'));
+    expect(foldWord('alexsander')).toBe(foldWord('aleksander'));
+    expect(foldWord('jacqueline')).toBe(foldWord('jaqueline'));
     expect(foldWord('2024')).toBe('2024');
+  });
+
+  test('folds squeeze a pair, never a longer run or down to a word of one or two letters', () => {
+    expect(foldWord('zzzz')).toBe('zzzz');
+    expect(foldWord('yyyy')).toBe('iiii');
+    expect(foldWord('qx')).toBe('kks');
+    expect(foldWord('qq')).toBe('kk');
   });
 });
 
@@ -171,6 +185,19 @@ describe('ticket search', () => {
       createdAt: 2,
     }),
     ticket({ id: 't3', ticketNumber: 'M2X-0001', createdAt: 3, deviceModel: 'Galaxy A05' }),
+  ];
+  const withXiaomi = [
+    ...tickets,
+    ticket({
+      id: 't4',
+      ticketNumber: 'M2X-0002',
+      name: 'Elias Mofu',
+      phone: null,
+      deviceBrand: 'Xiaomi',
+      deviceModel: 'Redmi Note 13',
+      deviceImei: null,
+      createdAt: 4,
+    }),
   ];
 
   test('ticket number with or without the dash, any case', () => {
@@ -203,6 +230,46 @@ describe('ticket search', () => {
 
   test('IMEI digits', () => {
     expect(ids(searchTickets(tickets, '35678910'))).toEqual(['t3', 't1']);
+  });
+
+  test.each([
+    ['samsng a1', 't1'], // a dropped letter, the model still being typed
+    ['samsung galaxi a05', 't3'],
+    ['galaxya1', 't1'], // typed together, still being typed
+    ['oppo a5', 't2'],
+    ['xiomi', 't4'],
+    ['xiaomi redmi not 13', 't4'],
+    ['redminote', 't4'],
+    ['elias mofu', 't4'],
+    ['elis', 't4'], // a dropped letter in a short name
+    ['yohn', 't3'], // four letters with a typo, still being typed
+    ['galaxy a 14', 't1'], // typed apart
+    ['red mi', 't4'],
+  ])('real typos still match: %s finds %s first', (query, expected) => {
+    expect(ids(searchTickets(withXiaomi, query))[0]).toBe(expected);
+  });
+
+  // A few letters with a typo, or letters the spelling folds squeezed away, used to match whole
+  // brands: "zzzzqx" listed every Xiaomi on the board.
+  test.each([
+    'zzzzqx',
+    'qx',
+    'kx',
+    'xyz',
+    'abc',
+    'zzx',
+    'hhhh',
+    'aaaa',
+    'qqq',
+    'iiii',
+    'qwqw',
+    'lkjh',
+    // A real word does not carry a stray one along.
+    'samsung abc',
+    'galaxy zz',
+    'xiaomi qq',
+  ])('nonsense %s finds nothing', (query) => {
+    expect(searchTickets(withXiaomi, query)).toEqual([]);
   });
 
   test('equal matches come back newest first', () => {

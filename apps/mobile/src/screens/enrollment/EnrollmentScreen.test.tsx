@@ -167,9 +167,7 @@ describe('a failed attempt says what to do, in the banner slot', () => {
 describe('the done step', () => {
   test('names the store the phone joined', () => {
     const screen = renderScreen(onA({ step: 'done' }), vi.fn());
-    expect(textsIn(screen.get('enroll-store-name'))).toEqual([
-      t('auth.enroll.successStore', { store: STORE_A.name }),
-    ]);
+    expect(textsIn(screen.get('enroll-store-name'))).toEqual([STORE_A.name]);
   });
 });
 

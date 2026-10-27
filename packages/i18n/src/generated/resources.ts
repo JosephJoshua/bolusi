@@ -52,6 +52,8 @@ const source = {
         LAST_ADMIN_PROTECTED: 'Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.',
         ROLE_IN_USE:
           'Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.',
+        CLOCK_AHEAD:
+          'Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.',
         IDEMPOTENCY_CONFLICT: 'Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.',
         RATE_LIMITED: 'Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.',
         UNEXPECTED: 'Terjadi kesalahan. Coba lagi.',
@@ -82,10 +84,14 @@ const source = {
           'Riwayat perubahan di perangkat ini rusak. Pengiriman dihentikan. Segera hubungi pemilik toko.',
         CHAIN_GAP: 'Ada perubahan yang tertinggal. Dikirim ulang otomatis.',
         CHAIN_HALTED: 'Ditunda karena perubahan sebelumnya bermasalah.',
+        CLOCK_AHEAD:
+          'Jam perangkat ini lebih cepat dari seharusnya waktu perubahan ini dibuat, jadi perubahannya tidak disimpan. Nyalakan tanggal & jam otomatis, lalu ulangi.',
         DEVICE_REVOKED:
           'Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.',
         PERMISSION_DENIED:
           'Orang yang membuat perubahan ini tidak punya izin di toko ini, jadi perubahannya tidak disimpan. Minta orang yang berwenang untuk mengulanginya.',
+        RULE_VIOLATED:
+          'Datanya sudah berubah di perangkat lain, jadi perubahan ini tidak disimpan. Cek lagi datanya, lalu ulangi kalau masih perlu.',
         SCHEMA_INVALID:
           'Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.',
         SCOPE_VIOLATION:
@@ -150,27 +156,27 @@ const source = {
         title: 'Daftarkan HP ini',
         progress: '{step} dari {total}',
         credentialsTitle: 'Masuk dengan akun pemilik',
-        instruction: 'Cukup sekali untuk HP ini. Langkah ini butuh koneksi internet.',
+        instruction: 'Cukup sekali di HP ini. Pastikan ada internet.',
         identifierField: 'Nama akun',
         passwordField: 'Kata sandi',
         passwordTooShort: 'Kata sandi minimal {min} karakter.',
         submit: 'Masuk',
-        storeTitle: 'Pilih toko untuk HP ini',
-        nameTitle: 'Kasih nama HP ini',
+        storeTitle: 'Pilih toko',
+        nameTitle: 'Hampir selesai',
         storeLabel: 'Toko',
         account: 'Akun {tenant}',
-        deviceNameField: 'Nama HP ini',
+        deviceNameField: 'Nama HP',
         deviceNamePlaceholder: 'Contoh: HP Kasir 1',
         bind: 'Daftarkan ke {store}',
-        bindWithoutStore: 'Daftarkan HP ini',
+        bindWithoutStore: 'Daftarkan',
         pickStoreFirst: 'Pilih tokonya dulu.',
-        nameDeviceFirst: 'Kasih nama HP ini dulu.',
-        needsConnection: 'Pendaftaran HP butuh koneksi internet. Sambungkan dulu, lalu coba lagi.',
+        nameDeviceFirst: 'Kasih nama HP-nya dulu.',
+        needsConnection: 'Belum ada internet. Sambungkan dulu, lalu coba lagi.',
         wrongCredentials: 'Nama akun atau kata sandi salah. Coba lagi.',
-        notOwner: 'Akun ini tidak bisa mendaftarkan HP. Masuk dengan akun pemilik toko.',
-        success: 'HP ini sudah terdaftar',
-        successStore: 'Terdaftar di {store}.',
-        successNext: 'Sekarang pilih siapa yang pakai HP ini.',
+        notOwner: 'Akun ini bukan akun pemilik.',
+        success: 'Pendaftaran selesai',
+        successStore: 'Terdaftar di',
+        successNext: 'Berikutnya, pilih siapa yang pakai.',
         finish: 'Lanjut',
         discardTitle: 'Batalkan pendaftaran?',
         discardMessage: 'Yang sudah kamu isi akan hilang.',
@@ -200,7 +206,7 @@ const source = {
         pending: '{count} perubahan belum terkirim',
         pendingMedia: '{count} foto belum terkirim',
         photosPending: 'Perubahan terkirim. Foto belum terkirim.',
-        attentionReassurance: 'Perubahan yang ditolak tetap tersimpan di sini.',
+        attentionReassurance: 'Ada perubahan yang ditolak server dan sudah dibatalkan di sini.',
         offline: 'Tidak ada koneksi. Perubahan tersimpan di perangkat ini.',
         reconnected: 'Terhubung kembali',
         lastSynced: 'Terakhir terhubung {relative}',
@@ -219,8 +225,9 @@ const source = {
         banner: '{count} perubahan ditolak server. Ketuk untuk melihat.',
         title: 'Perubahan Ditolak',
         explain:
-          'Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.',
+          'Server menolak perubahan di bawah ini, jadi perubahannya juga dibatalkan di perangkat ini. Ulangi kalau masih perlu.',
         opMeta: '{opType} · {time}',
+        opMetaSubject: '{opType} · {subject} · {time}',
         technicalDetails: 'Detail teknis',
       },
       quarantine: {
@@ -286,6 +293,10 @@ const source = {
         conflictAcknowledged: 'Data bentrok diputuskan',
         userLocaleChanged: 'Bahasa diubah',
       },
+      refusal: {
+        conflictNotFound: 'Data bentrok ini tidak ditemukan.',
+        notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
+      },
     },
     push: {
       conflict: {
@@ -298,9 +309,8 @@ const source = {
       },
       permission: {
         title: 'Nyalakan notifikasi?',
-        message:
-          'Biar kamu langsung tahu kalau ada data yang perlu dicek atau masalah di perangkat toko, walau aplikasinya sedang ditutup.',
-        allow: 'Nyalakan notifikasi',
+        message: 'Biar kamu tahu kalau ada yang perlu dicek, walau aplikasi sedang ditutup.',
+        allow: 'Nyalakan',
         later: 'Nanti saja',
       },
     },
@@ -369,6 +379,8 @@ export const resources = {
           LAST_ADMIN_PROTECTED: 'Not allowed. There must always be at least one active main owner.',
           ROLE_IN_USE:
             'This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.',
+          CLOCK_AHEAD:
+            'This device’s clock is ahead. Turn on automatic date and time in settings, then try again.',
           IDEMPOTENCY_CONFLICT: 'This request clashed with an earlier one. Try again.',
           RATE_LIMITED: 'Too many requests. Wait a moment, then try again.',
           UNEXPECTED: 'Something went wrong. Try again.',
@@ -404,10 +416,14 @@ export const resources = {
             'This device’s change history is broken. Sending has stopped. Contact the store owner right away.',
           CHAIN_GAP: 'Some changes were missing. They’re being resent automatically.',
           CHAIN_HALTED: 'On hold because an earlier change has a problem.',
+          CLOCK_AHEAD:
+            'This device’s clock was ahead when this change was made, so it wasn’t saved. Turn on automatic date and time, then redo it.',
           DEVICE_REVOKED:
             'This device has been revoked, so the change was rejected. Enroll this device again.',
           PERMISSION_DENIED:
             'The person who made this change isn’t allowed to do it in this store, so it wasn’t saved. Ask someone who is allowed to do it again.',
+          RULE_VIOLATED:
+            'The record changed on another device, so this change wasn’t saved. Check the record and redo it if it’s still needed.',
           SCHEMA_INVALID:
             'The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.',
           SCOPE_VIOLATION:
@@ -468,28 +484,27 @@ export const resources = {
           title: 'Enroll this phone',
           progress: '{step} of {total}',
           credentialsTitle: 'Sign in with the owner account',
-          instruction: 'You only do this once per phone. It needs an internet connection.',
+          instruction: 'Only needed once on this phone. Make sure you’re online.',
           identifierField: 'Account name',
           passwordField: 'Password',
           passwordTooShort: 'Passwords are at least {min} characters.',
           submit: 'Sign in',
-          storeTitle: 'Choose a store for this phone',
-          nameTitle: 'Name this phone',
+          storeTitle: 'Choose a store',
+          nameTitle: 'Almost done',
           storeLabel: 'Store',
           account: '{tenant} account',
-          deviceNameField: 'Name for this phone',
+          deviceNameField: 'Phone name',
           deviceNamePlaceholder: 'For example: Counter phone 1',
           bind: 'Enroll in {store}',
-          bindWithoutStore: 'Enroll this phone',
+          bindWithoutStore: 'Enroll',
           pickStoreFirst: 'Choose a store first.',
-          nameDeviceFirst: 'Give this phone a name first.',
-          needsConnection:
-            'Enrolling a phone needs an internet connection. Connect, then try again.',
+          nameDeviceFirst: 'Name the phone first.',
+          needsConnection: 'You’re offline. Connect, then try again.',
           wrongCredentials: 'Wrong account name or password. Try again.',
-          notOwner: 'This account can’t enroll phones. Sign in with the store owner’s account.',
-          success: 'This phone is enrolled',
-          successStore: 'Enrolled in {store}.',
-          successNext: 'Next, choose who is using this phone.',
+          notOwner: 'This isn’t an owner account.',
+          success: 'All set',
+          successStore: 'Enrolled in',
+          successNext: 'Next, choose who’s using it.',
           finish: 'Continue',
           discardTitle: 'Cancel enrollment?',
           discardMessage: 'What you entered will be lost.',
@@ -519,7 +534,7 @@ export const resources = {
           pending: '{count, plural, one {# change not sent yet} other {# changes not sent yet}}',
           pendingMedia: '{count, plural, one {# photo not sent yet} other {# photos not sent yet}}',
           photosPending: 'Changes sent. Photos not sent yet.',
-          attentionReassurance: 'Rejected changes are still saved here.',
+          attentionReassurance: 'Some changes were refused by the server and undone here.',
           offline: 'No connection. Changes are saved on this device.',
           reconnected: 'Back online',
           lastSynced: 'Last connected {relative}',
@@ -539,8 +554,9 @@ export const resources = {
             '{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}',
           title: 'Rejected Changes',
           explain:
-            'The changes below were rejected by the server and will not be sent. They stay saved on this device as a record.',
+            'The server refused the changes below, so they were undone on this device too. Redo them if they’re still needed.',
           opMeta: '{opType} · {time}',
+          opMetaSubject: '{opType} · {subject} · {time}',
           technicalDetails: 'Technical details',
         },
         quarantine: {
@@ -615,6 +631,10 @@ export const resources = {
           conflictAcknowledged: 'Conflict decided',
           userLocaleChanged: 'Language changed',
         },
+        refusal: {
+          conflictNotFound: 'This conflict wasn’t found.',
+          notYourPreference: 'Only the account’s owner can change its language.',
+        },
       },
       push: {
         conflict: {
@@ -627,9 +647,8 @@ export const resources = {
         },
         permission: {
           title: 'Turn on notifications?',
-          message:
-            'So you know right away when data needs checking or a store device has a problem, even when the app is closed.',
-          allow: 'Turn on notifications',
+          message: 'So you know when something needs a look, even when the app is closed.',
+          allow: 'Turn on',
           later: 'Not now',
         },
       },

@@ -45,7 +45,7 @@ import { openBetterSqlite3Driver } from './better-sqlite3-driver.js';
 import { render, fire, type RenderResult } from '../../../packages/ui/test/render.js';
 import { ensureNotesCatalog } from './notes-support.js';
 
-export { closeClientDb, buildPinVerifier };
+export { closeClientDb, buildPinVerifier, NOTES_PERMISSIONS };
 export type { Bootstrapped };
 
 /** The PIN the seeded verifier is built from. Six digits (api/02-auth §6.1). */
@@ -78,7 +78,7 @@ export interface Fixture {
   close(): Promise<void>;
 }
 
-function bootAt(location: string): Promise<Bootstrapped> {
+export function bootAt(location: string): Promise<Bootstrapped> {
   return bootstrap({
     driverFactory: openBetterSqlite3Driver,
     keyStore: {
@@ -102,6 +102,7 @@ function bootAt(location: string): Promise<Bootstrapped> {
  * has one monotonic id source and one persistent signing key across restarts; this mirrors that.
  */
 const idPrng = mulberry32(119);
+const sessionIdPrng = mulberry32(7);
 const DEVICE_KEYPAIR = noblePort.ed25519Keygen(new Uint8Array(32).fill(9));
 let opClock = FIXED_NOW;
 
@@ -296,6 +297,7 @@ export const SECOND_USER_ID = '01920000-0000-7000-8000-0000000130d1';
 export async function seedTwoUsers(
   fixture: Fixture,
   idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+  permissions: readonly string[] = NOTES_PERMISSIONS,
 ): Promise<void> {
   const [verifierA, verifierB] = await Promise.all([
     verifierFor(fixture, 1, 1),
@@ -308,7 +310,7 @@ export async function seedTwoUsers(
         activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifierA),
         activeUser(SECOND_USER_ID, 'Budi Santoso', ROLE_ID, fixture.storeId, verifierB),
       ],
-      roles: [storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS)],
+      roles: [storeRole(ROLE_ID, 'Notes', permissions)],
     },
     idleLockSeconds,
   );
@@ -543,6 +545,8 @@ export interface MountOptions {
    * `onEnrolled` fires through the real composition and Root's push registration runs.
    */
   readonly createEnrollment?: RootProps['createEnrollment'];
+  /** The repair surface factory. Omitted by default, so the shell's home stays the notes list. */
+  readonly createRepair?: RootProps['createRepair'];
   /**
    * The sync-client factory (api/01-sync; task 136). Omitted by default — every pre-136 test mounted
    * with NO `createSync` at all, which is precisely why `Root`'s sync wiring was unobservable and how
@@ -552,7 +556,7 @@ export interface MountOptions {
   readonly createSync?: RootProps['createSync'];
   /**
    * The pin-verifier POST transport (api/02-auth §5.4; task 186a-2). Omitted by default — the drain test
-   * passes a fake that records `upload` calls and captures `onBundleRefreshed` (via `createSync`) to fire
+   * passes a fake that records `upload` calls and captures `onBundleChecked` (via `createSync`) to fire
    * it, so the "a change POSTs on next online contact" wiring is observed rather than assumed.
    */
   readonly uploadPinVerifier?: RootProps['uploadPinVerifier'];
@@ -568,12 +572,19 @@ export interface MountOptions {
    * only the capture test opts in with a fake camera.
    */
   readonly capturePlatform?: RootProps['capturePlatform'];
+  /** Called each time Root builds the signed-in user's screens, so a test can count rebuilds. */
+  readonly onScreensBuilt?: () => void;
 }
+
+/** A mounted Root that can be re-rendered with some props replaced, as a parent re-render would. */
+export type MountedRoot = RenderResult & {
+  readonly rerenderRoot: (props: Partial<RootProps>) => void;
+};
 
 export async function mountRoot(
   fixture: Fixture,
   options: MountOptions = {},
-): Promise<RenderResult> {
+): Promise<MountedRoot> {
   ensureNotesCatalog();
   await closeClientDb();
   fixture.app = await bootAt(fixture.location);
@@ -598,7 +609,7 @@ export async function mountRoot(
     loadSigningKey: () => Promise.resolve(),
   };
 
-  const screen = render(
+  const element = (
     <Root
       localeStore={{ read: () => Promise.resolve(null), write: () => Promise.resolve() }}
       readDeviceInfo={() =>
@@ -635,9 +646,11 @@ export async function mountRoot(
             runtime: appRuntime,
             crypto: noblePort,
             clock: sessionClock,
+            // Module-scoped like `idPrng`: a remount in the same test must not mint the session ids
+            // the previous mount already used, exactly as a restarted device would not.
             idSource: createUuidV7Generator({
               now: () => FIXED_NOW,
-              randomBytes: (n) => prngBytes(mulberry32(7), n),
+              randomBytes: (n) => prngBytes(sessionIdPrng, n),
             }),
           });
           if (controller !== null) options.onSessionController?.(controller);
@@ -648,24 +661,32 @@ export async function mountRoot(
       // same function `index.ts` calls, so what this lane binds into the notes runtime is what a
       // device binds. It was `UNWIRED_NOTES_MEDIA` unconditionally here, which meant the composed
       // lane could not have observed a wired capture even after one existed.
-      createNotes={(booted, appRuntime, identity, media, capturePhoto) =>
-        createSessionNotesRuntime({
+      createNotes={(booted, appRuntime, identity, media, capturePhoto) => {
+        options.onScreensBuilt?.();
+        return createSessionNotesRuntime({
           app: booted,
           runtime: appRuntime,
           identity,
           media: notesMediaSeamsFor(media, capturePhoto),
-        })
-      }
+        });
+      }}
       {...(options.createMedia === undefined ? {} : { createMedia: options.createMedia })}
+      {...(options.createRepair === undefined ? {} : { createRepair: options.createRepair })}
       capturePlatform={options.capturePlatform}
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
       notificationPermission={options.notificationPermission}
-    />,
+    />
   );
+  const screen = render(element);
   await settle();
-  return screen;
+  // The first render's props, so a re-render keeps every other identity, as production now does.
+  const props: RootProps = element.props;
+  return Object.assign(screen, {
+    rerenderRoot: (replaced: Partial<RootProps>) =>
+      screen.rerender(<Root {...props} {...replaced} />),
+  });
 }
 
 /** Flush the microtask queue inside `act` so effects and queries settle before an assertion. */

@@ -3,5 +3,9 @@
     "conflictDetected": "Conflict detected",
     "conflictAcknowledged": "Conflict decided",
     "userLocaleChanged": "Language changed"
+  },
+  "refusal": {
+    "conflictNotFound": "This conflict wasn’t found.",
+    "notYourPreference": "Only the account’s owner can change its language."
   }
 }

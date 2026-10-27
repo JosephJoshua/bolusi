@@ -3,7 +3,7 @@
 import { sql } from 'kysely';
 import { afterEach, describe, expect, test } from 'vitest';
 
-import { DomainError } from '@bolusi/core';
+import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
@@ -13,13 +13,15 @@ afterEach(async () => {
   h = null;
 });
 
-async function expectCode(p: Promise<unknown>, code: string): Promise<void> {
+async function expectCode(p: Promise<unknown>, code: string, refusal?: string): Promise<void> {
   const err = await p.then(
     () => new Error(`expected ${code}, but the call resolved`),
     (e: unknown) => e,
   );
   expect(err).toBeInstanceOf(DomainError);
   expect((err as DomainError).code).toBe(code);
+  // The reason the phone shows, from the type's declared refusals.
+  if (refusal !== undefined) expect(refusalKeyOf(err)).toBe(`repair.refusal.${refusal}`);
 }
 
 interface Opened {
@@ -41,6 +43,26 @@ async function ticket(harness: RepairHarness, ticketId: string, userId = harness
 }
 
 describe('intake', () => {
+  test('opening the same intake id twice returns the first ticket and writes nothing new', async () => {
+    h = await openRepairHarness(41);
+    const ticketId = '01920000-0000-7000-8000-00000000a141';
+    const first = await open(h, { ticketId });
+    expect(first.ticketId).toBe(ticketId);
+    const countOps = async () =>
+      Number(
+        (await sql<{ c: number }>`SELECT COUNT(*) AS c FROM operations`.execute(h!.db)).rows[0]!.c,
+      );
+    const before = await countOps();
+
+    // A draft restored after the app died mid-submit, sent again (even with other answers).
+    const again = await open(h, { ticketId, complaint: 'Baterai bocor' });
+    expect(again).toEqual(first);
+    expect(await countOps()).toBe(before);
+    const tickets = await h.query('listTickets', {}, h.cashierId);
+    expect(tickets.rows.filter((row: { id: string }) => row.id === ticketId)).toHaveLength(1);
+    expect((await ticket(h, ticketId)).complaint).not.toBe('Baterai bocor');
+  });
+
   test('openTicket registers the customer, numbers the ticket and records the quote and photos', async () => {
     h = await openRepairHarness(1);
     const first = await open(h);
@@ -298,22 +320,31 @@ describe('queue and work', () => {
     await expectCode(h.run('startWork', { ticketId }, h.cashierId), 'PERMISSION_DENIED');
   });
 
-  test('cannot mark repaired before work starts', async () => {
+  test('cannot mark repaired before work starts: the type`s rule refuses it before saving', async () => {
     h = await openRepairHarness(9);
     const { ticketId } = await open(h);
+    const before = (await h.ownOps()).length;
     await expectCode(
       h.run('markRepaired', { ticketId, afterPhotos: [h.photo(21)] }, h.technicianId),
       'INVALID_TRANSITION',
+      'notStarted',
     );
+    // Neither the photos nor the transition were saved: one command, one transaction.
+    expect(await h.ownOps()).toHaveLength(before);
   });
 
   test('work needs a before photo to start and an after photo every time it is marked repaired', async () => {
     h = await openRepairHarness(14);
     const { ticketId } = await open(h);
     const [before, after1, after2, after3] = [h.photo(20), h.photo(21), h.photo(22), h.photo(23)];
-    await expectCode(h.run('startWork', { ticketId }, h.technicianId), 'VALIDATION_FAILED');
+    await expectCode(
+      h.run('startWork', { ticketId }, h.technicianId),
+      'VALIDATION_FAILED',
+      'needsBeforePhoto',
+    );
 
     await h.run('startWork', { ticketId, beforePhotos: [before] }, h.technicianId);
+    // The input itself requires the photo, so the form refuses before any rule runs.
     await expectCode(h.run('markRepaired', { ticketId }, h.technicianId), 'VALIDATION_FAILED');
     await h.run('markRepaired', { ticketId, afterPhotos: [after1] }, h.technicianId);
 

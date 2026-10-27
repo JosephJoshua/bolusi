@@ -6,7 +6,8 @@
 // spawn concurrent transactions, so they cannot themselves witness a genuine race. (A race is now
 // expressible here in principle — this lane runs a real `pg` pool, not PGlite's single in-process
 // connection — but the dedicated race harness lives once, in db-server, §2.8.) The split:
-//   - HERE: the pipeline's per-op accounting + proof it EMITS the FOR UPDATE lock (statement spy).
+//   - HERE: the pipeline's per-op accounting + proof it EMITS the FOR UPDATE lock and writes the
+//     counter once per batch (statement spy).
 //   - packages/db-server/test/oplog-server-seq-concurrency.test.ts under `pnpm test:rls`: the same
 //     statements raced across REAL concurrent pooled connections against postgres:16 — where a
 //     missing lock produces duplicate/lost serverSeq and the assertions go red.
@@ -183,22 +184,23 @@ describe('the counter row lock is actually taken (statement spy)', () => {
     expect(lockAt).toBeLessThan(insertAt);
   });
 
-  test('allocation increments and returns the consumed value (UPDATE ... RETURNING)', async () => {
+  test('a batch writes the counter ONCE, however many ops it accepts', async () => {
     const { world, builder } = await setupWorld(3012);
     testDb.appStatements.length = 0;
 
     await processPushBatch(makeDeps({ forTenant: testDb.appForTenant }), identityOf(world), [
       builder.genesis(),
+      builder.append(note('a', 'b')),
+      builder.append(note('c', 'd')),
     ]);
 
-    const allocating = testDb.appStatements.filter(
-      (s) => /update "tenant_op_counters"/i.test(s) && /returning/i.test(s),
-    );
-    // Exactly one accepted op ⇒ exactly one allocation.
-    expect(allocating).toHaveLength(1);
+    const writes = testDb.appStatements.filter((s) => /update "tenant_op_counters"/i.test(s));
+    // Three accepted ops are numbered in memory under the lock; the counter is written once.
+    expect(writes).toHaveLength(1);
+    expect(await counterOf(world.tenantId)).toBe(4);
   });
 
-  test('a rejected op issues NO allocation statement', async () => {
+  test('a rejected op issues NO counter write', async () => {
     const { world, builder } = await setupWorld(3013);
     const deps = makeDeps({ forTenant: testDb.appForTenant });
     const genesis = builder.genesis();
@@ -209,9 +211,7 @@ describe('the counter row lock is actually taken (statement spy)', () => {
     const broken = breakPreviousHash(op2, '8'.repeat(64), world.secretKey, serverCryptoPort);
     await processPushBatch(deps, identityOf(world), [broken]);
 
-    const allocating = testDb.appStatements.filter(
-      (s) => /update "tenant_op_counters"/i.test(s) && /returning/i.test(s),
-    );
-    expect(allocating).toEqual([]);
+    const writes = testDb.appStatements.filter((s) => /update "tenant_op_counters"/i.test(s));
+    expect(writes).toEqual([]);
   });
 });

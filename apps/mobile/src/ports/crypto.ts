@@ -14,11 +14,11 @@
 // build: `KeyObjectHandle.initRawSeed` throws "Failed to create key from raw seed" (the emulator lane
 // caught it — enrollment keygen is the one crypto step no on-device gate exercised, so nothing proved
 // the raw handle before it shipped). So this adapter stays on quick-crypto's OWN internal interchange —
-// DER — and converts raw<->DER itself via `./ed25519-der` (the pure, native-free framing, extracted so it
-// is host-tested against `node:crypto`'s own Ed25519 DER export in `ed25519-der.test.ts` — the check this
-// JSI file cannot host). For Ed25519 that is NOT hand-rolled variable-length ASN.1: the key type is
-// single-length, so PKCS8/SPKI is a FIXED 16-/12-byte prefix over the 32 raw bytes (RFC 8410 §10) —
-// prepend to import, slice the trailing 32 to export. Every method below therefore avoids the raw-seed /
+// DER — and converts raw<->DER itself via core's `ed25519-der` framing (pure and native-free, so it is
+// host-tested against `node:crypto`'s own Ed25519 DER export — the check this JSI file cannot host).
+// For Ed25519 that is NOT hand-rolled variable-length ASN.1: the key type is single-length, so
+// PKCS8/SPKI is a FIXED 16-/12-byte prefix over the 32 raw bytes (RFC 8410 §10) — prepend to import,
+// slice the trailing 32 to export. Every method below therefore avoids the raw-seed /
 // raw-public KeyObjectHandle constructors and exporters, and touches only `init`/`exportKey`/`SignHandle`.
 import {
   argon2,
@@ -30,9 +30,14 @@ import {
   verify,
 } from 'react-native-quick-crypto';
 
-import type { CryptoPort, Ed25519KeyPair, KdfParams } from '@bolusi/core';
-
-import { frameEd25519Pkcs8, frameEd25519Spki, pointFromSpkiDer } from './ed25519-der';
+import {
+  frameEd25519Pkcs8,
+  frameEd25519Spki,
+  pointFromSpkiDer,
+  type CryptoPort,
+  type Ed25519KeyPair,
+  type KdfParams,
+} from '@bolusi/core';
 
 /** Copy a quick-crypto Buffer into a plain Uint8Array — core's surface never sees a Buffer. */
 function toBytes(value: { readonly [index: number]: number; readonly length: number }): Uint8Array {

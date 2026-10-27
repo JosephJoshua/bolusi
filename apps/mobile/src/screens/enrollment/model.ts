@@ -24,7 +24,7 @@
  * design-system §4 rule 2 says no flow may fail because of the network, and that rule is absolute
  * for COMMANDS. Enrollment is not a command: there is no local device identity to write yet, so
  * there is nothing to be optimistic with. The catalog anticipates this exactly once —
- * `auth.enroll.needsConnection` ("Pendaftaran perangkat butuh koneksi internet.") — and this is its
+ * `auth.enroll.needsConnection` ("Belum ada internet. Sambungkan dulu, lalu coba lagi.") — and this is its
  * only use in v0. Saying it here is honest; saying it anywhere else would be the lie §4 forbids.
  *
  * ── AND WHY STEP 2 EXISTS AT ALL ────────────────────────────────────────────────────────────────
@@ -190,6 +190,24 @@ export function bindingSummary(
   const store = state.login.stores.find((candidate) => candidate.id === storeId);
   if (store === undefined) return null;
   return { tenantName: state.login.tenantName, storeName: store.name };
+}
+
+/**
+ * Step 1's answer. The server lists only the stores this account may enroll a phone into, so an
+ * empty list is a non-owner: refused here, on the sign-in step, not after they named the phone.
+ */
+export function afterLogin(state: EnrollmentState, login: LoginResult): EnrollmentState {
+  if (login.stores.length === 0) {
+    return { ...state, busy: false, failure: { kind: 'notPermitted' } };
+  }
+  return {
+    ...state,
+    busy: false,
+    login,
+    step: 'confirm',
+    selectedStoreId:
+      login.stores.length === 1 ? (login.stores[0]?.id ?? null) : state.selectedStoreId,
+  };
 }
 
 /**

@@ -101,7 +101,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 
 Prefer a proper component over a hand-made approximation. Already built:
 `SearchField`, `SegmentedControl` (compact, bleed), `TextButton`, `Timeline`
-(history, "Riwayat"), `PhotoStrip`, `Sheet` (bottom sheet to show more, never a
+(history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways), `Sheet` (bottom sheet to show more, never a
 form), `PhotoViewer` (pinch and double-tap zoom, pager, share), `ConfirmSheet`,
 `Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`,
 `ReorderableList` (drag a handle to reorder, iOS style), `SwitchRow` (an on/off
@@ -111,6 +111,17 @@ setting).
   component in `packages/ui` (with a gallery entry), not a screen-local hack.
 - Flows, not modals or CRUD: each task is a full-screen step with a back arrow
   and one bottom action. Capture is guided (photo walk with angle labels).
+- Design every input for the on-screen keyboard, which covers about half a phone
+  screen. Put fields inside `AppShell` (it lifts the content and bottom action
+  above the keyboard and scrolls the focused field into sight); a field whose
+  suggestions open below it uses `revealOnFocus="to-top"` and comes first on its
+  step; picking a suggestion closes the keyboard. Check a screenshot at a
+  keyboard-up height (about 390 x 520).
+- Design for the realistic amount, not the demo's three items: owner-edited
+  lists, catalog data and records grow. Choice chips from such a list sit in one
+  `ChipRow` that scrolls sideways instead of wrapping down the screen; long lists
+  get search or paging; tables keep their header and scroll. Try each screen
+  with 20+ options, long names and an empty list.
 - Desktop and admin screens: enterprise-grade tables with sorting, filtering,
   column control, drag where it helps, and Excel-like inline bulk editing.
 - No paid component libraries.
@@ -143,6 +154,10 @@ Write like Gojek or Tokopedia product copy: short, everyday, friendly, exact.
   phrases), no jargon from the code (op, entity, sync conflict).
 - Read every string aloud as a counter person would say it to a customer. If
   it sounds like a form, rewrite it.
+- **Short, and said once.** Be clear in one short sentence, not a paragraph.
+  Never say again what the title, a label or the button on the same screen
+  already says ("Daftarkan HP ini" as both title and button; "Terdaftar" in the
+  title and the line under it). A lead line that only restates the title goes.
 
 ## 9. Accessibility floor
 
@@ -159,6 +174,10 @@ naturally. Never rely on `numberOfLines` to hide the overflow. The only
 ellipsis allowed is a long user-entered value in a list row (a customer
 name), whose full text is one tap away.
 
+**Values never split mid-phrase.** A money amount, a date or a name stays on
+one line ("Rp" and "50.000" together). Let the label beside it wrap instead
+(`repairStyles.rowText` beside `rowValue`), or give the value its own line.
+
 Supported range: 360 dp wide phones and the system font up to 1.3×.
 
 ## 10. Review before showing anyone
@@ -172,7 +191,8 @@ Run the app, take screenshots of every changed screen and state, and check:
    ellipsized? Anything touching with no space between?
 5. Any redundant label, chevron, title, or full-width secondary button?
 6. Are paired choices equal, and risky or destructive ones set apart?
-7. Does each Indonesian string sound natural spoken aloud?
+7. Does each Indonesian string sound natural spoken aloud? Is it short, and
+   is nothing on the screen said twice?
 8. Loading, empty, error, offline and success states all present?
 9. Would this look at home next to Gojek, Tokopedia or a good banking app?
 

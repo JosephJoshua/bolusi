@@ -140,11 +140,11 @@ describe('Change PIN reaches the screen and runs the real flow (task 186a)', () 
 
   test('a locally-applied change POSTs the queued verifier on the next online contact (§5.4, 186a-2)', async () => {
     // The wiring this sub-slice adds: `changePin` queues the verifier locally; Root drains the queue
-    // on `onBundleRefreshed` (which fires only online). Capture that callback via `createSync` and fire
+    // on `onBundleChecked` (every online bundle answer, a 304 included). Capture that callback via `createSync` and fire
     // it after a change; the fake transport records the POST. Remove the drain line from Root and the
     // final assertion reds — the verifier would sit in the queue forever.
     const uploads: Array<{ userId: string; verifierRef: string }> = [];
-    let onBundleRefreshed: (() => void | Promise<void>) | undefined;
+    let onBundleChecked: (() => void | Promise<void>) | undefined;
 
     fixture = await bootFixture();
     await enrolledDevice(fixture);
@@ -158,8 +158,8 @@ describe('Change PIN reaches the screen and runs the real flow (task 186a)', () 
       },
       // Capture Root's online-only bundle-refresh callback; return no client (the drain does not need
       // a running loop, only the callback Root wires the drain into).
-      createSync: (_booted, refresh) => {
-        onBundleRefreshed = refresh;
+      createSync: (_booted, _refreshed, checked) => {
+        onBundleChecked = checked;
         return null;
       },
     });
@@ -181,8 +181,8 @@ describe('Change PIN reaches the screen and runs the real flow (task 186a)', () 
 
     // Nothing is POSTed until the device is next online (a bundle refresh) — not on the change itself.
     expect(uploads).toHaveLength(0);
-    expect(onBundleRefreshed).toBeDefined();
-    await onBundleRefreshed?.();
+    expect(onBundleChecked).toBeDefined();
+    await onBundleChecked?.();
 
     // The queued verifier was POSTed for the acting (self) user.
     expect(uploads).toHaveLength(1);

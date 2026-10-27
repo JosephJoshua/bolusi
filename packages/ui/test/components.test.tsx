@@ -101,7 +101,15 @@ describe('Button (§3.1)', () => {
 
   test('height is the 56 dp primary target (§1.4)', () => {
     const r = render(<Button testID="b" label="x" onPress={vi.fn()} />);
-    expect(r.styleOf('b')['height']).toBe(56);
+    expect(r.styleOf('b')['minHeight']).toBe(56);
+  });
+
+  test('a label that wraps grows the button instead of touching its edges', () => {
+    const r = render(
+      <Button testID="b" label="Daftarkan ke Cabang Pasar Baru" onPress={vi.fn()} />,
+    );
+    expect(r.styleOf('b')['height']).toBeUndefined();
+    expect(r.styleOf('b')['paddingVertical']).toBeGreaterThan(0);
   });
 });
 
@@ -489,6 +497,21 @@ describe('TextInput (§3.2)', () => {
     // the note-body long-text field it exists for.
     const plainMultiline = render(<TextInput {...base} multiline />);
     expect(plainMultiline.get('ui.textInput.field').props.multiline).toBe(true);
+  });
+
+  test('a hidden field with reveal labels has an eye button that shows and hides it', () => {
+    const labels = { show: 'Tampilkan', hide: 'Sembunyikan' };
+    const r = render(<TextInput {...base} secureTextEntry revealLabels={labels} />);
+    expect(r.get('ui.textInput.field').props.secureTextEntry).toBe(true);
+    expect(r.get('ui.textInput.reveal').props['accessibilityLabel']).toBe('Tampilkan');
+    fire(r.get('ui.textInput.reveal'), 'onPress');
+    expect(r.get('ui.textInput.field').props.secureTextEntry).toBe(false);
+    expect(r.get('ui.textInput.reveal').props['accessibilityLabel']).toBe('Sembunyikan');
+    // Without labels, or on a field that is not hidden, there is no button.
+    expect(render(<TextInput {...base} secureTextEntry />).query('ui.textInput.reveal')).toBeNull();
+    expect(
+      render(<TextInput {...base} revealLabels={labels} />).query('ui.textInput.reveal'),
+    ).toBeNull();
   });
 
   test('error outranks focus — a focused field with an error still reads as an error', () => {

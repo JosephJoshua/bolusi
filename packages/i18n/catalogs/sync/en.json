@@ -9,7 +9,7 @@
     "pending": "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
     "pendingMedia": "{count, plural, one {# photo not sent yet} other {# photos not sent yet}}",
     "photosPending": "Changes sent. Photos not sent yet.",
-    "attentionReassurance": "Rejected changes are still saved here.",
+    "attentionReassurance": "Some changes were refused by the server and undone here.",
     "offline": "No connection. Changes are saved on this device.",
     "reconnected": "Back online",
     "lastSynced": "Last connected {relative}",
@@ -27,8 +27,9 @@
   "rejected": {
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
     "title": "Rejected Changes",
-    "explain": "The changes below were rejected by the server and will not be sent. They stay saved on this device as a record.",
+    "explain": "The server refused the changes below, so they were undone on this device too. Redo them if they’re still needed.",
     "opMeta": "{opType} · {time}",
+    "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Technical details"
   },
   "quarantine": {

@@ -13,7 +13,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { acceptsRupiahText, parseRupiah } from '../flows.js';
 import type { CancelFees } from '../queries.js';
 
-import { tn, type RepairKey } from './i18n.js';
+import { tn, type RepairKey } from '../i18n.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useCancelFees, useRepairRuntime } from './runtime.js';
 

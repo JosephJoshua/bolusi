@@ -1,14 +1,11 @@
-// Pure RFC 8410 §10 DER framing for Ed25519 keys — the raw<->DER conversion the device `CryptoPort`
-// (`crypto.ts`) relies on because quick-crypto 1.1.6's raw-seed / raw-public `KeyObjectHandle` is broken
-// on the Android build (see the `crypto.ts` header for the "Failed to create key from raw seed" story).
+// Pure RFC 8410 §10 DER framing for Ed25519 keys: the raw<->DER conversion every OpenSSL-backed
+// `CryptoPort` needs, because those providers import and export keys as PKCS8/SPKI rather than raw
+// RFC 8032 bytes. The device port (apps/mobile `ports/crypto.ts`, where quick-crypto's raw-seed handle is
+// broken on Android) and the server port (`node:crypto`) both frame through here.
 //
-// WHY THIS IS A SEPARATE FILE. `crypto.ts` imports `react-native-quick-crypto` at the top level, a JSI
-// native module Node cannot load — so nothing in that file is host-testable, and the on-device leg only
-// runs on the emulator lane. But the ASN.1 framing itself is a PURE byte operation over fixed-length
-// prefixes; it needs no native crypto to compute, only to be *used*. Splitting it here (importing NOTHING
-// native) lets a host test pin these bytes against `node:crypto`'s own Ed25519 DER export — the one
-// oracle that can prove the 16-/12-byte prefixes are correct without a device (`ed25519-der.test.ts`).
-// `crypto.ts` imports these; it does not redefine them (§2.8 — one implementation).
+// Platform-free on purpose: a PURE byte operation over fixed-length prefixes needs no native crypto to
+// compute, only to be *used*, so the bytes are pinned against `node:crypto`'s own Ed25519 DER export in
+// `test/crypto/ed25519-der.test.ts`. One implementation (§2.8): the ports import these, never redefine.
 
 /** RFC 8032 raw key length: an Ed25519 seed and a compressed point are each exactly 32 bytes. */
 export const ED25519_RAW_LENGTH = 32;
