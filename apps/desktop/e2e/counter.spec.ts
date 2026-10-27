@@ -72,3 +72,38 @@ for (const [width, height] of [
     await fits();
   });
 }
+
+for (const [width, height, sidebar] of [
+  [1024, 640, 'expanded'],
+  [1024, 640, 'collapsed'],
+  [1366, 768, 'expanded'],
+  [2560, 1440, 'expanded'],
+] as const) {
+  test(`the intake fits a ${String(width)}×${String(height)} screen with the sidebar ${sidebar}`, async () => {
+    await page.setViewportSize({ width, height });
+    await page.evaluate((state) => localStorage.setItem('bolusi.sidebar', state), sidebar);
+    await page.reload();
+    await page.getByTestId('repair.desk.board').waitFor();
+    await expect(page.getByTestId('desktop.shell')).toHaveAttribute('data-sidebar', sidebar);
+    await page.keyboard.press('F2');
+    await expect(page.getByTestId('repair.desk.intake')).toBeVisible();
+    // Nothing sticks out sideways or spills out of its box, such as the save button's label.
+    const spilled = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-testid="repair.desk.intake"] *')]
+        .filter((el) => {
+          const box = el.getBoundingClientRect();
+          return box.width > 0 && (box.right > window.innerWidth + 1 || box.left < -1);
+        })
+        .map((el) => el.outerHTML.slice(0, 80)),
+    );
+    expect(spilled).toEqual([]);
+    const save = page.getByTestId('repair.desk.intake.save');
+    expect(
+      await save.evaluate((button) =>
+        [button, ...button.querySelectorAll('*')].every(
+          (el) => el.scrollWidth <= el.clientWidth + 1,
+        ),
+      ),
+    ).toBe(true);
+  });
+}

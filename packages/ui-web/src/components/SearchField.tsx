@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react';
 import { forwardRef } from 'react';
 
 import { Kbd } from './Kbd.js';
+import { Tooltip } from './Tooltip.js';
 
 /** The page's search. The placeholder says what it finds, so there is no label above it. */
 export const SearchField = forwardRef<
@@ -51,14 +52,16 @@ export const SearchField = forwardRef<
             <Kbd>{shortcut}</Kbd>
           )
         ) : (
-          <button
-            type="button"
-            aria-label={clearLabel}
-            onClick={() => onChange('')}
-            className="flex size-7 cursor-pointer items-center justify-center rounded-xs text-text-muted hover:bg-surface hover:text-text"
-          >
-            <X size={16} aria-hidden />
-          </button>
+          <Tooltip label={clearLabel} shortcut="Esc">
+            <button
+              type="button"
+              aria-label={clearLabel}
+              onClick={() => onChange('')}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-xs text-text-muted hover:bg-surface hover:text-text"
+            >
+              <X size={16} aria-hidden />
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>

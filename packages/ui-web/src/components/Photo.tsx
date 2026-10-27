@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type MouseEvent } from 'react';
 
+import { OverflowText } from './OverflowText.js';
 import { Skeleton } from './States.js';
+import { Tooltip } from './Tooltip.js';
 
 /** A photo's load state, the same four states the phone shows. */
 export type PhotoState =
@@ -93,8 +95,8 @@ export function PhotoTile({
       >
         <PhotoFace state={state} labels={labels} alt={caption} />
       </button>
-      <figcaption className="truncate text-small text-text-muted" title={caption}>
-        {caption}
+      <figcaption>
+        <OverflowText text={caption} className="text-small text-text-muted" />
       </figcaption>
     </figure>
   );
@@ -298,22 +300,26 @@ export function PhotoViewer({
                 )}
                 {photos.length < 2 ? null : (
                   <>
-                    <button
-                      type="button"
-                      aria-label={labels.previous}
-                      onClick={() => go(-1)}
-                      className="absolute left-3 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/10 hover:bg-white/25"
-                    >
-                      <ChevronLeft size={24} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={labels.next}
-                      onClick={() => go(1)}
-                      className="absolute right-3 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/10 hover:bg-white/25"
-                    >
-                      <ChevronRight size={24} aria-hidden />
-                    </button>
+                    <Tooltip label={labels.previous} shortcut="←">
+                      <button
+                        type="button"
+                        aria-label={labels.previous}
+                        onClick={() => go(-1)}
+                        className="absolute left-3 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/10 hover:bg-white/25"
+                      >
+                        <ChevronLeft size={24} aria-hidden />
+                      </button>
+                    </Tooltip>
+                    <Tooltip label={labels.next} shortcut="→">
+                      <button
+                        type="button"
+                        aria-label={labels.next}
+                        onClick={() => go(1)}
+                        className="absolute right-3 top-1/2 flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/10 hover:bg-white/25"
+                      >
+                        <ChevronRight size={24} aria-hidden />
+                      </button>
+                    </Tooltip>
                   </>
                 )}
               </div>

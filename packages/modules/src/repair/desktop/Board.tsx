@@ -13,6 +13,7 @@ import {
   DayRangeFilter,
   FilterToggle,
   OptionsFilter,
+  OverflowText,
   PageHeader,
   Pagination,
   SearchField,
@@ -738,17 +739,11 @@ function TwoLines({
 }): React.JSX.Element {
   return (
     <span className="block min-w-0">
-      <span
-        className={`block truncate text-body ${strong ? 'font-semibold' : ''} text-text`}
-        title={first}
-      >
-        {first}
-      </span>
-      {second === '' ? null : (
-        <span className="block truncate text-small text-text-muted" title={second}>
-          {second}
-        </span>
-      )}
+      <OverflowText
+        text={first}
+        className={`text-body ${strong ? 'font-semibold' : ''} text-text`}
+      />
+      {second === '' ? null : <OverflowText text={second} className="text-small text-text-muted" />}
     </span>
   );
 }

@@ -4,6 +4,8 @@ import * as RadixMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { Tooltip } from './Tooltip.js';
+
 export interface PaginationLabels {
   /** "1–50 dari 312" */
   readonly range: (from: number, to: number, total: number) => string;
@@ -102,15 +104,17 @@ export function Pagination({
         </RadixMenu.Portal>
       </RadixMenu.Root>
       <div className="ml-auto flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={labels.previous}
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          className={clsx(step, 'text-text enabled:hover:bg-surface-alt')}
-        >
-          <ChevronLeft size={16} aria-hidden />
-        </button>
+        <Tooltip label={labels.previous}>
+          <button
+            type="button"
+            aria-label={labels.previous}
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            className={clsx(step, 'text-text enabled:hover:bg-surface-alt')}
+          >
+            <ChevronLeft size={16} aria-hidden />
+          </button>
+        </Tooltip>
         {pageWindow(page, pageCount).map((entry, index) =>
           entry === 'gap' ? (
             <span
@@ -139,16 +143,18 @@ export function Pagination({
             </button>
           ),
         )}
-        <button
-          type="button"
-          aria-label={labels.next}
-          disabled={page >= pageCount}
-          onClick={() => onPageChange(page + 1)}
-          data-testid={`${testId ?? 'pagination'}.next`}
-          className={clsx(step, 'text-text enabled:hover:bg-surface-alt')}
-        >
-          <ChevronRight size={16} aria-hidden />
-        </button>
+        <Tooltip label={labels.next}>
+          <button
+            type="button"
+            aria-label={labels.next}
+            disabled={page >= pageCount}
+            onClick={() => onPageChange(page + 1)}
+            data-testid={`${testId ?? 'pagination'}.next`}
+            className={clsx(step, 'text-text enabled:hover:bg-surface-alt')}
+          >
+            <ChevronRight size={16} aria-hidden />
+          </button>
+        </Tooltip>
       </div>
     </nav>
   );

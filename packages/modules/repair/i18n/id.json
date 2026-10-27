@@ -456,7 +456,8 @@
     "paperHalf": "Continuous ½",
     "paperFull": "Continuous penuh",
     "paperA4": "A4",
-    "paperA5": "A5"
+    "paperA5": "A5",
+    "onPaper": "Kertas {paper}"
   },
   "downPayment": {
     "recordTitle": "Catat DP",
@@ -586,5 +587,11 @@
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
+  },
+  "paper": {
+    "title": "Kertas nota",
+    "phoneSummary": "Ukuran kertas di HP ini",
+    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini.",
+    "deskHint": "Semua nota dari komputer ini dicetak di kertas ini."
   }
 }

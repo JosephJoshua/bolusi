@@ -17,6 +17,7 @@ import {
   TextArea,
   TextField,
   ToggleChip,
+  Tooltip,
   controlClass,
 } from '@bolusi/ui-web';
 import { ArrowLeft, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
@@ -295,9 +296,11 @@ export function IntakePage({
           <Skeleton className="h-64 w-full" />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)_300px] gap-8 px-6 pb-12 pt-2">
-            <div className="flex min-w-0 flex-col gap-6">
+        // Laid out by the room the page has, not the screen: the sidebar may be open or not. The
+        // summary narrows, then drops under the form; field pairs stack when a column is narrow.
+        <div className="@container min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-8 px-6 pb-12 pt-2 @3xl:grid-cols-[minmax(0,1fr)_248px] @5xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="@container flex min-w-0 flex-col gap-6">
               <IntakeSection
                 n={1}
                 section="customer"
@@ -481,7 +484,7 @@ function CustomerFields({
   }
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         <TextField
           label={tn('repair.customer.name')}
           value={customer.name}
@@ -564,7 +567,7 @@ function DeviceFields({
   const { matched, colours, memory } = picker;
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         <ModelField
           value={device.model}
           onChange={(model) => set({ model })}
@@ -624,7 +627,7 @@ function DeviceFields({
           </div>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <TextField
             label={tn('repair.device.colorField')}
@@ -832,7 +835,7 @@ function ScreenLockFields({
         />
       ) : null}
       {kind === 'pattern' ? (
-        <div className="flex items-start gap-6">
+        <div className="flex flex-wrap items-start gap-6">
           <PatternPad
             value={value}
             onChange={(drawn) => {
@@ -911,7 +914,7 @@ function ConditionFields({
               data-testid="repair.desk.intake.restOk"
             />
           </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(330px,1fr))] gap-x-8 border-t border-border">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(330px,100%),1fr))] gap-x-8 border-t border-border">
             {options.checks.map((option) => {
               const name = optionLabel('checks', option);
               return (
@@ -1227,7 +1230,7 @@ function Summary({
   const balance = balanceAfterDownPayment(total, downPayment);
   return (
     <aside
-      className="sticky top-2 flex flex-col gap-4 self-start"
+      className="@container sticky top-2 flex flex-col gap-4 self-start"
       data-testid="repair.desk.intake.summary"
     >
       <div className="rounded-md border border-border bg-surface p-5">
@@ -1286,16 +1289,19 @@ function Summary({
             <p className="mt-1">{jump('price', tn('repair.desk.incomplete'))}</p>
           ) : null}
         </div>
-        <Button
-          label={tn('repair.action.openTicket')}
-          variant="primary"
-          size="lg"
-          shortcut="Ctrl+Enter"
-          className="mt-5 w-full"
-          onClick={onSave}
-          busy={busy}
-          data-testid="repair.desk.intake.save"
-        />
+        {/* The key shows on the button where the summary is wide enough, and in its tooltip always. */}
+        <Tooltip label={tn('repair.action.openTicket')} shortcut="Ctrl+Enter">
+          <Button
+            label={tn('repair.action.openTicket')}
+            variant="primary"
+            size="lg"
+            shortcut="Ctrl+Enter"
+            className="mt-5 w-full [&_kbd]:hidden @[18rem]:[&_kbd]:inline-flex"
+            onClick={onSave}
+            busy={busy}
+            data-testid="repair.desk.intake.save"
+          />
+        </Tooltip>
       </div>
       {error}
     </aside>

@@ -11,6 +11,8 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 
+import { Tooltip } from './Tooltip.js';
+
 interface FieldFrameProps {
   readonly label: string;
   readonly hint?: string | undefined;
@@ -175,15 +177,17 @@ export const SecretField = forwardRef<HTMLInputElement, SecretFieldProps>(functi
           className={clsx(controlClass(error !== undefined), 'h-10 pr-11')}
           {...rest}
         />
-        <button
-          type="button"
-          aria-label={shown ? hideLabel : showLabel}
-          aria-pressed={shown}
-          onClick={() => setShown((value) => !value)}
-          className="absolute inset-y-0 right-1 my-auto flex size-8 cursor-pointer items-center justify-center rounded-sm text-text-muted hover:bg-surface-alt hover:text-text"
-        >
-          {shown ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
-        </button>
+        <Tooltip label={shown ? hideLabel : showLabel}>
+          <button
+            type="button"
+            aria-label={shown ? hideLabel : showLabel}
+            aria-pressed={shown}
+            onClick={() => setShown((value) => !value)}
+            className="absolute inset-y-0 right-1 my-auto flex size-8 cursor-pointer items-center justify-center rounded-sm text-text-muted hover:bg-surface-alt hover:text-text"
+          >
+            {shown ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
+          </button>
+        </Tooltip>
       </div>
     </FieldFrame>
   );

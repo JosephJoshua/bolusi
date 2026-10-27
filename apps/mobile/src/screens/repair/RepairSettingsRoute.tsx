@@ -1,12 +1,14 @@
 /**
- * The owner's repair settings reached from Settings: the intake lists (`intakeOptions` route), the
- * cancellation fees (`cancelFees`) and what the slips print (`printSettings`). Like `RepairHome` it binds the runtime provider and publishes the
+ * The repair settings reached from Settings: the intake lists (`intakeOptions` route), the
+ * cancellation fees (`cancelFees`), what the slips print (`printSettings`), and this phone's paper
+ * (`printPaper`, anyone who prints). Like `RepairHome` it binds the runtime provider and publishes the
  * surface's back/leave to the shell, so hardware back and a header tap go through the screen's
  * discard confirm instead of dropping edits.
  */
 import {
   CancelFeesScreen,
   IntakeOptionsScreen,
+  PaperScreen,
   PrintSettingsScreen,
   RepairRuntimeProvider,
   type DiscardGuard,
@@ -18,7 +20,7 @@ import type { ReactNode } from 'react';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
-export type RepairSettingsPage = 'intakeOptions' | 'cancelFees' | 'printSettings';
+export type RepairSettingsPage = 'intakeOptions' | 'cancelFees' | 'printSettings' | 'printPaper';
 
 export interface RepairSettingsRouteProps {
   readonly page: RepairSettingsPage;
@@ -76,6 +78,8 @@ export function RepairSettingsRoute({
           onClose={onClose}
           onRegisterDiscardGuard={registerDiscardGuard}
         />
+      ) : page === 'printPaper' ? (
+        <PaperScreen chrome={{ syncChip, avatar: null }} onClose={onClose} />
       ) : (
         <PrintSettingsScreen
           chrome={{ syncChip, avatar: null }}

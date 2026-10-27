@@ -7,6 +7,9 @@ import { clsx } from 'clsx';
 import { Check, ChevronDown, Columns3, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
+import { OverflowText } from './OverflowText.js';
+import { Tooltip } from './Tooltip.js';
+
 const POPOVER =
   'z-50 origin-(--radix-popover-content-transform-origin) rounded-sm border border-border bg-surface shadow-lg focus:outline-none data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out';
 
@@ -52,22 +55,24 @@ export function FilterPopover({
           >
             <span>{label}</span>
             {active ? (
-              <span className="max-w-48 truncate font-normal text-info">{summary}</span>
+              <OverflowText text={summary} className="max-w-48 font-normal text-info" />
             ) : (
               <ChevronDown size={14} aria-hidden />
             )}
           </button>
         </RadixPopover.Trigger>
         {active ? (
-          <button
-            type="button"
-            aria-label={`${clearLabel}: ${label}`}
-            onClick={onClear}
-            data-testid={testId === undefined ? undefined : `${testId}.clear`}
-            className="mr-1 flex size-6 cursor-pointer items-center justify-center rounded-xs text-text-muted hover:bg-black/5 hover:text-text"
-          >
-            <X size={14} aria-hidden />
-          </button>
+          <Tooltip label={`${clearLabel}: ${label}`}>
+            <button
+              type="button"
+              aria-label={`${clearLabel}: ${label}`}
+              onClick={onClear}
+              data-testid={testId === undefined ? undefined : `${testId}.clear`}
+              className="mr-1 flex size-6 cursor-pointer items-center justify-center rounded-xs text-text-muted hover:bg-black/5 hover:text-text"
+            >
+              <X size={14} aria-hidden />
+            </button>
+          </Tooltip>
         ) : null}
       </div>
       <RadixPopover.Portal>
@@ -173,7 +178,7 @@ export function OptionsFilter({
                 aria-checked={on}
                 onClick={() => toggle(option.value)}
                 data-testid={testId === undefined ? undefined : `${testId}.option.${option.value}`}
-                className="flex h-9 w-full cursor-pointer items-center gap-3 rounded-xs px-2 text-left text-body text-text hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
+                className="flex min-h-9 w-full cursor-pointer items-center gap-3 rounded-xs px-2 py-1.5 text-left text-body text-text hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
               >
                 <span
                   aria-hidden
@@ -184,7 +189,7 @@ export function OptionsFilter({
                 >
                   {on ? <Check size={12} strokeWidth={3} /> : null}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                <span className="min-w-0 flex-1 break-words">{option.label}</span>
                 {option.count === undefined ? null : (
                   <span className="tabular text-small text-text-muted">{option.count}</span>
                 )}
@@ -330,7 +335,7 @@ export function DayRangeFilter({
               aria-checked={on}
               onClick={() => onChange(candidate.range)}
               data-testid={testId === undefined ? undefined : `${testId}.preset.${candidate.key}`}
-              className="flex h-9 w-full cursor-pointer items-center gap-3 rounded-xs px-2 text-left text-body text-text hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
+              className="flex min-h-9 w-full cursor-pointer items-center gap-3 rounded-xs px-2 py-1.5 text-left text-body text-text hover:bg-surface-alt focus-visible:bg-surface-alt focus-visible:outline-none"
             >
               <span className="flex w-4 justify-center text-primary">
                 {on ? <Check size={14} aria-hidden /> : null}

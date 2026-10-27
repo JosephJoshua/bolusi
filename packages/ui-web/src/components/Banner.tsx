@@ -2,6 +2,8 @@ import { clsx } from 'clsx';
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { Tooltip } from './Tooltip.js';
+
 export type BannerTone = 'info' | 'success' | 'warning' | 'danger';
 
 const TONE: Readonly<Record<BannerTone, string>> = {
@@ -42,14 +44,16 @@ export function Banner({
       <p className="min-w-0 flex-1">{message}</p>
       {action}
       {onDismiss === undefined ? null : (
-        <button
-          type="button"
-          aria-label={dismissLabel}
-          onClick={onDismiss}
-          className="-my-1 -mr-2 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-black/5"
-        >
-          <X size={16} aria-hidden />
-        </button>
+        <Tooltip label={dismissLabel ?? ''} disabled={dismissLabel === undefined}>
+          <button
+            type="button"
+            aria-label={dismissLabel}
+            onClick={onDismiss}
+            className="-my-1 -mr-2 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-black/5"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </Tooltip>
       )}
     </div>
   );

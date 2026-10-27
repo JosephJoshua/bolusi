@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/renderer/App.js';
 
 beforeEach(() => {
+  window.localStorage.clear();
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
 });
@@ -237,6 +238,74 @@ describe('counter app over demo data', () => {
       'Sudah dicetak 1 kali.',
     );
     spy.mockRestore();
+  });
+
+  it('prints on the paper set once in the settings of this PC', async () => {
+    const frames: HTMLIFrameElement[] = [];
+    const append = document.body.append.bind(document.body);
+    const spy = vi.spyOn(document.body, 'append').mockImplementation((...nodes) => {
+      append(...nodes);
+      for (const node of nodes) {
+        if (node instanceof HTMLIFrameElement) {
+          frames.push(node);
+          Object.defineProperty(node, 'contentWindow', {
+            value: { print: () => undefined, addEventListener: () => undefined },
+          });
+        }
+      }
+    });
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.click(byTestId('nav.settings'));
+    const a4 = await screen.findByTestId('repair.desk.paper.choice.a4');
+    await waitFor(() =>
+      expect(byTestId('repair.desk.paper.choice.continuous_half').getAttribute('data-state')).toBe(
+        'on',
+      ),
+    );
+    fireEvent.click(a4);
+    await waitFor(() => expect(a4.getAttribute('data-state')).toBe('on'));
+
+    fireEvent.click(byTestId('nav.repair'));
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.print'));
+    // The dialog only says the paper; there is nothing to pick at each print.
+    expect((await screen.findByTestId('repair.desk.print.paper')).textContent).toBe('Kertas A4');
+    expect(screen.queryByTestId('repair.desk.print.paper.a4')).toBeNull();
+    fireEvent.click(byTestId('repair.desk.print.submit'));
+    await screen.findByTestId('repair.desk.print.ask');
+    expect(frames[0]?.srcdoc).toContain('size: 210mm 297mm');
+    spy.mockRestore();
+  });
+
+  it('collapses the sidebar to icons and remembers it on this PC', async () => {
+    window.innerWidth = 1440;
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    const shell = byTestId('desktop.shell');
+    expect(shell.getAttribute('data-sidebar')).toBe('expanded');
+    expect(byTestId('nav.repair').textContent).toBe('Servisan');
+
+    fireEvent.click(byTestId('nav.toggle'));
+    expect(shell.getAttribute('data-sidebar')).toBe('collapsed');
+    // Icon only, still named for a screen reader and in its tooltip.
+    expect(byTestId('nav.repair').textContent).toBe('');
+    expect(byTestId('nav.repair').getAttribute('aria-label')).toBe('Servisan');
+    expect(window.localStorage.getItem('bolusi.sidebar')).toBe('collapsed');
+
+    fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
+    expect(shell.getAttribute('data-sidebar')).toBe('expanded');
+    cleanup();
+
+    // A narrow screen starts collapsed, unless the person chose otherwise here.
+    window.innerWidth = 1024;
+    renderApp();
+    expect(byTestId('desktop.shell').getAttribute('data-sidebar')).toBe('expanded');
+    cleanup();
+    window.localStorage.clear();
+    renderApp();
+    expect(byTestId('desktop.shell').getAttribute('data-sidebar')).toBe('collapsed');
   });
 
   it('filters, sorts and pages the queue, and keeps the choice across an intake', async () => {

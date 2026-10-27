@@ -227,24 +227,27 @@ export function TicketPane({
   const rowActions = others.filter((action) => !CONTEXTUAL.has(action));
   const contextual = (action: TicketAction, row: TicketDetailRow): ReactNode =>
     others.some((other) => other === action) ? (
-      <Button
-        label={
-          action === 'assign'
-            ? tn(
-                row.technicianId === null
-                  ? 'repair.action.assignShort'
-                  : 'repair.action.reassignShort',
-              )
-            : label(action)
-        }
-        aria-label={label(action)}
-        variant="text"
-        size="sm"
-        className="-my-1"
-        onClick={() => perform(action, row)}
-        disabled={runner.busy}
-        data-testid={`repair.desk.ticket.action.${action}`}
-      />
+      // The short word beside a fact ("Ubah"), named in full on hover.
+      <Tooltip label={label(action)}>
+        <Button
+          label={
+            action === 'assign'
+              ? tn(
+                  row.technicianId === null
+                    ? 'repair.action.assignShort'
+                    : 'repair.action.reassignShort',
+                )
+              : label(action)
+          }
+          aria-label={label(action)}
+          variant="text"
+          size="sm"
+          className="-my-1"
+          onClick={() => perform(action, row)}
+          disabled={runner.busy}
+          data-testid={`repair.desk.ticket.action.${action}`}
+        />
+      </Tooltip>
     ) : null;
 
   const banner =
@@ -994,16 +997,18 @@ function DownPaymentLines({
         <dt className="flex items-center gap-2">
           {tn('repair.price.downPayment')}
           {action === 'correct' ? (
-            <Button
-              label={tn('repair.downPayment.change')}
-              aria-label={tn('repair.downPayment.correctTitle')}
-              variant="text"
-              size="sm"
-              className="-my-1"
-              onClick={() => onAction('correct')}
-              disabled={disabled}
-              data-testid="repair.desk.ticket.downPayment.correct"
-            />
+            <Tooltip label={tn('repair.downPayment.correctTitle')}>
+              <Button
+                label={tn('repair.downPayment.change')}
+                aria-label={tn('repair.downPayment.correctTitle')}
+                variant="text"
+                size="sm"
+                className="-my-1"
+                onClick={() => onAction('correct')}
+                disabled={disabled}
+                data-testid="repair.desk.ticket.downPayment.correct"
+              />
+            </Tooltip>
           ) : null}
         </dt>
         <dd className="tabular">{formatMoney(-downPayment)}</dd>

@@ -11,16 +11,29 @@ export interface IconButtonProps extends Omit<
   readonly icon: LucideIcon;
   /** Read aloud and shown as a tooltip: an icon alone never carries the meaning. */
   readonly label: string;
+  /** Shown beside the label in the tooltip, such as "Ctrl+B". */
+  readonly shortcut?: string | undefined;
+  readonly tooltipSide?: 'top' | 'bottom' | 'left' | 'right';
   readonly size?: 'sm' | 'md';
   readonly tone?: 'plain' | 'inverse';
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { icon: Icon, label, size = 'md', tone = 'plain', className, type = 'button', ...rest },
+  {
+    icon: Icon,
+    label,
+    shortcut,
+    tooltipSide,
+    size = 'md',
+    tone = 'plain',
+    className,
+    type = 'button',
+    ...rest
+  },
   ref,
 ) {
   return (
-    <Tooltip label={label}>
+    <Tooltip label={label} shortcut={shortcut} side={tooltipSide}>
       <button
         ref={ref}
         type={type}

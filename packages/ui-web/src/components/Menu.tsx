@@ -3,6 +3,8 @@ import { clsx } from 'clsx';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { Tooltip } from './Tooltip.js';
+
 export interface MenuItem {
   readonly key: string;
   readonly label: string;
@@ -20,15 +22,24 @@ export function Menu({
   items,
   header,
   align = 'end',
+  tooltip,
 }: {
   readonly trigger: ReactNode;
+  /** Names a trigger that shows only an icon or a face. */
+  readonly tooltip?: { readonly label: string; readonly side: 'top' | 'right' } | undefined;
   readonly items: readonly MenuItem[];
   readonly header?: ReactNode;
   readonly align?: 'start' | 'end';
 }): React.JSX.Element {
   return (
     <RadixMenu.Root>
-      <RadixMenu.Trigger asChild>{trigger}</RadixMenu.Trigger>
+      {tooltip === undefined ? (
+        <RadixMenu.Trigger asChild>{trigger}</RadixMenu.Trigger>
+      ) : (
+        <Tooltip label={tooltip.label} side={tooltip.side}>
+          <RadixMenu.Trigger asChild>{trigger}</RadixMenu.Trigger>
+        </Tooltip>
+      )}
       <RadixMenu.Portal>
         <RadixMenu.Content
           align={align}

@@ -8,6 +8,7 @@ export { Handover, type HandoverProps } from './Handover.js';
 export { IntakeOptionsScreen, type IntakeOptionsScreenProps } from './IntakeOptionsScreen.js';
 export { CancelFeesScreen, type CancelFeesScreenProps } from './CancelFeesScreen.js';
 export { PrintSettingsScreen, type PrintSettingsScreenProps } from './PrintSettingsScreen.js';
+export { PaperScreen, type PaperScreenProps } from './PaperScreen.js';
 export type { RepairChrome } from './parts.js';
 export {
   RepairRuntimeProvider,

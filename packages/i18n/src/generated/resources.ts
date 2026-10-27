@@ -100,7 +100,7 @@ const source = {
           'Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim.',
       },
       account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
-      nav: { main: 'Menu utama' },
+      nav: { main: 'Menu utama', collapse: 'Ciutkan menu', expand: 'Lebarkan menu' },
     },
     auth: {
       switcher: {
@@ -404,7 +404,7 @@ export const resources = {
           UNKNOWN_TYPE: 'This device’s app needs an update before this change can be sent.',
         },
         account: { menu: 'Account menu', switchUser: 'Switch user' },
-        nav: { main: 'Main menu' },
+        nav: { main: 'Main menu', collapse: 'Collapse menu', expand: 'Expand menu' },
       },
       auth: {
         switcher: {

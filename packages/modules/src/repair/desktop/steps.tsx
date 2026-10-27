@@ -14,9 +14,8 @@ import {
   TextArea,
   TextField,
 } from '@bolusi/ui-web';
-import { PAPER_PRESETS } from '@bolusi/core';
 import { Check, Printer, Signature } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
 import {
@@ -43,6 +42,7 @@ import {
   useRepairRuntime,
   type RepairPrinting,
 } from '../runtime.js';
+import { DESK_PAPERS, PAPER_KEY, useDevicePaper } from '../paper.js';
 import { outputSlip } from '../slip-output.js';
 
 import {
@@ -1033,25 +1033,14 @@ export function DownPaymentDialog({
 
 // ── print ───────────────────────────────────────────────────────────────────────────────────
 
-/** What a counter PC prints on: the store's carbonless dot-matrix forms, or plain paper. */
-const DESK_PAPERS = ['continuous_half', 'continuous_full', 'a4', 'a5'] as const;
-type DeskPaper = (typeof DESK_PAPERS)[number];
-
-const DESK_PAPER_KEY: Readonly<Record<DeskPaper, RepairKey>> = {
-  continuous_half: 'repair.print.paperHalf',
-  continuous_full: 'repair.print.paperFull',
-  a4: 'repair.print.paperA4',
-  a5: 'repair.print.paperA5',
-};
-
 const SLIP_KEY: Readonly<Record<SlipKind, { title: RepairKey; about: RepairKey }>> = {
   intake: { title: 'repair.print.intake', about: 'repair.print.intakeAbout' },
   handover: { title: 'repair.print.handover', about: 'repair.print.handoverAbout' },
 };
 
 /**
- * Printing a slip from the PC: which slip (once the bill exists) and which paper, then the same
- * `outputSlip` the phone runs. A print the platform cannot confirm is asked about before it counts.
+ * Printing a slip from the PC: which slip (once the bill exists), on the paper set for this PC, then
+ * the same `outputSlip` the phone runs. A print the platform cannot confirm is asked about before it counts.
  */
 export function PrintDialog({
   ticket,
@@ -1069,23 +1058,13 @@ export function PrintDialog({
   const slips = printableSlips(ticket);
   // Once the phone is ready, the bill is what the counter is likeliest to print.
   const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
-  const [paper, setPaper] = useState<DeskPaper>('continuous_half');
+  const [paper] = useDevicePaper(printing, DESK_PAPERS);
   const [asking, setAsking] = useState(false);
   const testId = 'repair.desk.print';
 
-  useEffect(() => {
-    let live = true;
-    void printing.readPaper().then((saved) => {
-      if (live && saved !== null && isDeskPaper(saved.preset)) setPaper(saved.preset);
-    });
-    return () => {
-      live = false;
-    };
-  }, [printing]);
-
   const print = (): void => {
     void runner
-      .run(() => outputSlip(runtime, printing, ticket, slip, PAPER_PRESETS[paper], 'print'))
+      .run(() => outputSlip(runtime, printing, ticket, slip, DESK_PAPERS, 'print'))
       .then((outcome) => {
         if (outcome === 'unconfirmed') setAsking(true);
         else if (outcome === 'done') onDone();
@@ -1124,34 +1103,27 @@ export function PrintDialog({
           </>
         }
       >
-        <div className="flex flex-col gap-6">
-          <div>
-            {slips.length > 1 ? (
-              <Segmented
-                label={tn('repair.print.slip')}
-                options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
-                value={slip}
-                onChange={setSlip}
-                testId={`${testId}.slip`}
-              />
-            ) : (
-              <p className="text-body font-semibold text-text">{tn(SLIP_KEY[slip].title)}</p>
-            )}
-            <p className="mt-2 text-small text-text-muted" data-testid={`${testId}.about`}>
-              {tn(SLIP_KEY[slip].about)}
-              {printed === 0 ? null : <> {tn('repair.print.reprint', { count: printed })}</>}
-            </p>
-          </div>
-          <div>
-            <p className="mb-2 text-small font-semibold text-text">{tn('repair.print.paper')}</p>
+        <div>
+          {slips.length > 1 ? (
             <Segmented
-              label={tn('repair.print.paper')}
-              options={DESK_PAPERS.map((value) => ({ value, label: tn(DESK_PAPER_KEY[value]) }))}
-              value={paper}
-              onChange={setPaper}
-              testId={`${testId}.paper`}
+              label={tn('repair.print.slip')}
+              options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
+              value={slip}
+              onChange={setSlip}
+              testId={`${testId}.slip`}
             />
-          </div>
+          ) : (
+            <p className="text-body font-semibold text-text">{tn(SLIP_KEY[slip].title)}</p>
+          )}
+          <p className="mt-2 text-small text-text-muted" data-testid={`${testId}.about`}>
+            {tn(SLIP_KEY[slip].about)}
+            {printed === 0 ? null : <> {tn('repair.print.reprint', { count: printed })}</>}
+          </p>
+          {paper === null ? null : (
+            <p className="mt-1 text-small text-text-muted" data-testid={`${testId}.paper`}>
+              {tn('repair.print.onPaper', { paper: tn(PAPER_KEY[paper]) })}
+            </p>
+          )}
         </div>
       </StepDialog>
       <ConfirmDialog
@@ -1167,8 +1139,4 @@ export function PrintDialog({
       />
     </>
   );
-}
-
-function isDeskPaper(preset: string): preset is DeskPaper {
-  return (DESK_PAPERS as readonly string[]).includes(preset);
 }

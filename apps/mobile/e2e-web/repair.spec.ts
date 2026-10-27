@@ -625,6 +625,29 @@ test('the counter prints the handover slip, and the next print is a reprint', as
   await shoot(page, 'print-step-reprint');
 });
 
+test('the counter sets the paper once in Settings, and printing uses it', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'ui.avatarButton');
+  await tap(page, 'shell-open-settings');
+  await tap(page, 'settings-print-paper');
+  await expect(page.getByTestId('repair.paper.choice')).toBeVisible();
+  await tap(page, 'repair.paper.choice.a5');
+  await shoot(page, 'print-paper');
+  await tap(page, 'repair.paper.back');
+  await tap(page, 'settings-screen.back');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.print');
+  await expect(page.getByTestId('repair.print.paper')).toHaveText('Kertas A5');
+  await shoot(page, 'print-step-paper');
+  const popup = page.waitForEvent('popup');
+  await tap(page, 'repair.print.primary');
+  const slip = await popup;
+  await slip.waitForLoadState();
+  expect(await slip.content()).toContain('size: 148mm 210mm');
+  await slip.close();
+});
+
 test('the owner sets what the slips print at the top', async ({ page }) => {
   await open(page, 'owner');
   await tap(page, 'ui.avatarButton');

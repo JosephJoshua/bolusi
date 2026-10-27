@@ -171,7 +171,8 @@ Agreed with the owner before building printing.
   and the store picks a paper preset (9.5" continuous half form, the landscape
   default, or full form; A4 or A5 either way round) or types a size, then checks
   it with a test page. Windows printing cannot report the paper, so it is never
-  auto-detected.
+  auto-detected. The paper is a setting of each device, picked once in its
+  Settings (owner, 2026-10-27), not at every print.
 - **Layout:** on landscape paper the money and terms sit beside the customer and
   phone details. Every field is printed whole at its longest allowed length,
   wrapping rather than cutting. An ordinary slip fits one half form at the
