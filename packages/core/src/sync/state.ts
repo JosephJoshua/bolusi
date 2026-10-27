@@ -33,6 +33,12 @@ export interface SyncState extends StalenessInput {
   /** Last failure, as a label-catalog code (01 §5.2). */
   readonly lastSyncError: string | null;
   readonly backoffUntil: number | null;
+  /**
+   * When the server started answering `AUTH_TOKEN_INVALID` to this device's token, and how many
+   * cycles in a row it has (client migration 16). Cleared by a successful sync.
+   */
+  readonly tokenRejectedSince: number | null;
+  readonly tokenRejectedCount: number;
 }
 
 /** A partial update. Every key is optional; absent keys are left untouched. */
@@ -53,6 +59,8 @@ interface SyncStateRow {
   readonly pushHalted: number;
   readonly syncDisabled: number;
   readonly syncDisabledReason: string | null;
+  readonly tokenRejectedSince: number | null;
+  readonly tokenRejectedCount: number;
 }
 
 /** Read the singleton (10-db §9.3). @throws {Error} when the seeded row is absent. */
@@ -69,7 +77,9 @@ export async function readSyncState<DB>(db: Kysely<DB>): Promise<SyncState> {
            last_server_time_received_at AS "lastServerTimeReceivedAt",
            last_sync_error AS "lastSyncError", backoff_until AS "backoffUntil",
            push_halted AS "pushHalted", sync_disabled AS "syncDisabled",
-           sync_disabled_reason AS "syncDisabledReason"
+           sync_disabled_reason AS "syncDisabledReason",
+           token_rejected_since AS "tokenRejectedSince",
+           token_rejected_count AS "tokenRejectedCount"
     FROM sync_state WHERE id = 1
   `.execute(db);
   const row = result.rows[0];
@@ -91,6 +101,8 @@ export async function readSyncState<DB>(db: Kysely<DB>): Promise<SyncState> {
     syncDisabledReason: row.syncDisabledReason,
     lastSyncError: row.lastSyncError,
     backoffUntil: nullableNumber(row.backoffUntil),
+    tokenRejectedSince: nullableNumber(row.tokenRejectedSince),
+    tokenRejectedCount: Number(row.tokenRejectedCount),
   };
 }
 
@@ -118,6 +130,8 @@ const COLUMNS: Record<keyof SyncState, string> = {
   syncDisabledReason: 'sync_disabled_reason',
   lastSyncError: 'last_sync_error',
   backoffUntil: 'backoff_until',
+  tokenRejectedSince: 'token_rejected_since',
+  tokenRejectedCount: 'token_rejected_count',
 };
 
 export async function writeSyncState<DB>(db: Kysely<DB>, patch: SyncStatePatch): Promise<void> {
