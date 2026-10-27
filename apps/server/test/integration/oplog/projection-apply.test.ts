@@ -34,6 +34,8 @@ import {
   readOps,
   seedWorld,
   testScopeOf,
+  testEntityTypeOf,
+  testPermissionOf,
   type OplogTestDb,
 } from './helpers.js';
 
@@ -106,6 +108,10 @@ const probeOpRegistry: OpRegistry = {
   // Both types this probe knows are store-scoped (the `OperationDeclaration.scope` default), so
   // their ops must carry a store — which the probe's ops do (05 §9.2).
   scopeOf: testScopeOf((type) => type === GENESIS_TYPE || type === PROBE_TYPE),
+  permissionOf: testPermissionOf((type) => type === GENESIS_TYPE || type === PROBE_TYPE),
+  entityTypeOf: testEntityTypeOf((type) => type === GENESIS_TYPE || type === PROBE_TYPE, {
+    [PROBE_TYPE]: PROBE_ENTITY,
+  }),
 
   resolve(type) {
     if (type === GENESIS_TYPE) return { kind: 'known', validate: () => true };

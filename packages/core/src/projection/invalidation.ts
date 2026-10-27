@@ -26,6 +26,13 @@ export interface EntityChange {
   readonly entityId: string;
 }
 
+/**
+ * Not a projection: the op log itself. Emitted (with no entity) when a push changed ops' sync
+ * status — taken by the server or refused — so a screen showing an entity's sync chip or rejected
+ * banner re-reads it as the status changes rather than at the next projection write.
+ */
+export const OP_SYNC_STATUS_TABLE = 'operations';
+
 /** A change notification carrying the set of tables written and, per op, the entity changed. */
 export type InvalidationListener = (tables: ReadonlySet<string>, change?: EntityChange) => void;
 

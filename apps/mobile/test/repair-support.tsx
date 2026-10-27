@@ -27,11 +27,34 @@ export const USER_NAMES = {
   technician: 'Budi Teknisi',
   technician2: 'Yosua Teknisi',
   zero: 'Tamu',
+  storeOwner: 'Yohana Pemilik',
 } as const;
 
-/** The harness plus the users directory the technician picker and ticket names read. */
-export async function openRepairScreenHarness(seed: number): Promise<RepairHarness> {
-  const h = await openRepairHarness(seed);
+/**
+ * The harness plus the users directory the technician picker and ticket names read. Given `peerOf`,
+ * a second device in the same store with the same staff, for changes that arrive by sync.
+ */
+export async function openRepairScreenHarness(
+  seed: number,
+  peerOf?: RepairHarness,
+): Promise<RepairHarness> {
+  const h = await openRepairHarness(
+    seed,
+    peerOf === undefined
+      ? undefined
+      : {
+          tenantId: peerOf.tenantId,
+          storeId: peerOf.storeId,
+          users: [
+            peerOf.cashierId,
+            peerOf.technicianId,
+            peerOf.technician2Id,
+            peerOf.zeroUserId,
+            peerOf.ownerId,
+            peerOf.storeOwnerId,
+          ],
+        },
+  );
   await h.db
     .insertInto('usersDirectory')
     .values([
@@ -39,9 +62,20 @@ export async function openRepairScreenHarness(seed: number): Promise<RepairHarne
       { id: h.technicianId, name: USER_NAMES.technician, photoMediaId: null, status: 'active' },
       { id: h.technician2Id, name: USER_NAMES.technician2, photoMediaId: null, status: 'active' },
       { id: h.zeroUserId, name: USER_NAMES.zero, photoMediaId: null, status: 'active' },
+      { id: h.storeOwnerId, name: USER_NAMES.storeOwner, photoMediaId: null, status: 'active' },
     ])
     .execute();
   return h;
+}
+
+/** Hand `to` every op `from` wrote that it has not seen yet, the way a pull delivers them. */
+export async function pull(to: RepairHarness, from: RepairHarness): Promise<void> {
+  const known = await to.db.selectFrom('operations').select(['id', 'arrivalSeq']).execute();
+  const seen = new Set(known.map((row) => row.id));
+  let arrival = Math.max(0, ...known.map((row) => row.arrivalSeq ?? 0));
+  for (const op of await from.ownOps()) {
+    if (!seen.has(op.id)) await to.deliverPulled(op, (arrival += 1));
+  }
 }
 
 /** A real runtime for `userId`; every photo or signature "taken" is a fresh signed ref. */

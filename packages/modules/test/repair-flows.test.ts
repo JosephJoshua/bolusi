@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import {
   boardFilter,
+  boardSort,
+  boardViews,
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
@@ -15,6 +17,7 @@ import {
   readyAtFor,
   repairAbilities,
   restOfChecksOk,
+  staleStep,
   stepProblems,
   ticketActions,
   toOpenTicketInput,
@@ -86,8 +89,8 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   if (state === 'cancelled') {
     await harness.run(
       'cancelTicket',
-      { ticketId, reason: 'customer changed mind' },
-      harness.cashierId,
+      { ticketId, reason: 'customer changed mind', fee: 0 },
+      harness.storeOwnerId,
     );
   }
   if (state === 'returned') {
@@ -145,12 +148,12 @@ async function perform(
         userId,
       );
     case 'cancel':
-      return harness.run('cancelTicket', { ticketId, reason: 'no parts' }, userId);
+      return harness.run('cancelTicket', { ticketId, reason: 'no parts', fee: 10_000 }, userId);
   }
 }
 
 describe('ticket actions', () => {
-  test('every action offered to the cashier or a technician is accepted by its command', async () => {
+  test('every action offered to the cashier, a technician or a store owner is accepted by its command', async () => {
     h = await openRepairHarness(4101);
     const states: State[] = [
       'received',
@@ -163,7 +166,7 @@ describe('ticket actions', () => {
     ];
     let checked = 0;
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         for (const action of ticketActions(row, abilitiesOf(h, userId), userId)) {
@@ -211,7 +214,7 @@ describe('ticket actions', () => {
       (['start', 'resume', 'reopen'].includes(a) && ['start', 'resume', 'reopen'].includes(b));
     const gaps: string[] = [];
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         const offered = ticketActions(row, abilitiesOf(h, userId), userId);
@@ -223,7 +226,12 @@ describe('ticket actions', () => {
             () => false,
           );
           if (accepted) {
-            gaps.push(`${state}/${userId === h.cashierId ? 'cashier' : 'technician'}/${action}`);
+            const who = new Map([
+              [h.cashierId, 'cashier'],
+              [h.technicianId, 'technician'],
+              [h.storeOwnerId, 'store owner'],
+            ]);
+            gaps.push(`${state}/${who.get(userId) ?? userId}/${action}`);
           }
         }
       }
@@ -250,12 +258,21 @@ describe('ticket actions', () => {
       'proposePrice',
     ]);
     // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice', 'cancel']);
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice']);
     expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
       'changePrice',
       'assign',
-      'cancel',
     ]);
+    // Only owners cancel: counter staff kept customers' cash by cancelling. A repaired phone the
+    // customer won't pay for or collect can still be cancelled until it is handed back.
+    const storeOwner = abilitiesOf(h, h.storeOwnerId);
+    for (const outcome of ['received', 'in_repair', 'waiting_for_parts', 'repaired'] as const) {
+      expect(ticketActions(row({ outcome }), cashier, h.cashierId)).not.toContain('cancel');
+      expect(ticketActions(row({ outcome }), storeOwner, h.storeOwnerId)).toContain('cancel');
+    }
+    expect(
+      ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
+    ).not.toContain('cancel');
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(
@@ -267,6 +284,124 @@ describe('ticket actions', () => {
   });
 });
 
+describe('an open step after the ticket changed elsewhere', () => {
+  type StepTicket = Parameters<typeof staleStep>[1];
+  const line = (status: 'proposed' | 'applied' | 'declined') => ({
+    id: 'line-1',
+    status,
+    kind: 'part' as const,
+    description: 'Baterai',
+    amount: 150_000,
+    reason: 'Kembung',
+    customerAgreed: status === 'applied' ? true : null,
+    createdBy: 'tech',
+    createdAt: 1,
+    decidedBy: status === 'proposed' ? null : 'cashier',
+    decidedAt: status === 'proposed' ? null : 2,
+    decisionNote: null,
+  });
+  const row = (ticket: Partial<StepTicket> = {}): StepTicket => ({
+    outcome: 'received',
+    location: 'in_store',
+    technicianId: null,
+    pendingProposals: 0,
+    quoteLines: [],
+    ...ticket,
+  });
+
+  test('a step the ticket still allows stays open', async () => {
+    h = await openRepairHarness(4201);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const tech = abilitiesOf(h, h.technicianId);
+    expect(staleStep({ kind: 'before' }, row(), tech, h.technicianId)).toBeNull();
+    // Only owners cancel.
+    const owner = abilitiesOf(h, h.storeOwnerId);
+    expect(staleStep({ kind: 'cancel' }, row(), owner, h.storeOwnerId)).toBeNull();
+    // Reassigned meanwhile, a technician can still start: the start claims it.
+    expect(
+      staleStep({ kind: 'before' }, row({ technicianId: h.technician2Id }), tech, h.technicianId),
+    ).toBeNull();
+    expect(
+      staleStep(
+        { kind: 'proposal', lineId: 'line-1' },
+        row({ outcome: 'in_repair', pendingProposals: 1, quoteLines: [line('proposed')] }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toBeNull();
+    expect(
+      staleStep({ kind: 'handover' }, row({ outcome: 'repaired' }), cashier, h.cashierId),
+    ).toBeNull();
+  });
+
+  test('each change says what happened, most specific first', async () => {
+    h = await openRepairHarness(4202);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const tech = abilitiesOf(h, h.technicianId);
+    expect(
+      staleStep({ kind: 'after' }, row({ outcome: 'cancelled' }), tech, h.technicianId),
+    ).toEqual({ kind: 'cancelled' });
+    // A cancelled phone already handed back reads as handed back, the later and final fact.
+    expect(
+      staleStep(
+        { kind: 'cancel' },
+        row({ outcome: 'cancelled', location: 'returned' }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'returned' });
+    expect(
+      staleStep(
+        { kind: 'handover' },
+        row({ outcome: 'repaired', location: 'returned' }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'returned' });
+    // Another technician started first.
+    expect(
+      staleStep(
+        { kind: 'before' },
+        row({ outcome: 'in_repair', technicianId: h.technician2Id }),
+        tech,
+        h.technicianId,
+      ),
+    ).toEqual({ kind: 'changed' });
+    for (const decided of ['applied', 'declined'] as const) {
+      expect(
+        staleStep(
+          { kind: 'proposal', lineId: 'line-1' },
+          row({ outcome: 'in_repair', quoteLines: [line(decided)] }),
+          cashier,
+          h.cashierId,
+        ),
+      ).toEqual({ kind: 'proposalDecided', decision: decided });
+    }
+    // An undecided proposal on a ticket cancelled meanwhile can no longer be decided.
+    expect(
+      staleStep(
+        { kind: 'proposal', lineId: 'line-1' },
+        row({ outcome: 'cancelled', pendingProposals: 1, quoteLines: [line('proposed')] }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'cancelled' });
+    // A technician's new proposal holds the handover until the counter checks it.
+    expect(
+      staleStep(
+        { kind: 'handover' },
+        row({ outcome: 'repaired', pendingProposals: 1 }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'proposalPending' });
+    // Reopened on another device: the phone is back on the bench.
+    expect(
+      staleStep({ kind: 'handover' }, row({ outcome: 'in_repair' }), cashier, h.cashierId),
+    ).toEqual({ kind: 'changed' });
+  });
+});
+
 describe('board views', () => {
   test('mine filters to the user; pickup is finished work still in the store', () => {
     expect(boardFilter('mine', 'u1')).toMatchObject({ technicianId: 'u1', location: 'in_store' });
@@ -275,6 +410,17 @@ describe('board views', () => {
       location: 'in_store',
     });
     expect(boardFilter('returned', 'u1')).toEqual({ location: 'returned' });
+  });
+
+  test('the cancelled view is for owners only and lists the latest cancel first', async () => {
+    h = await openRepairHarness(4104);
+    expect(boardViews(abilitiesOf(h, h.cashierId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.ownerId))).toContain('cancelled');
+    expect(boardFilter('cancelled', 'u1')).toEqual({ outcomes: ['cancelled'] });
+    expect(boardSort('cancelled')).toBe('cancelledAt.desc');
+    expect(boardSort('active')).toBe('createdAt.desc');
   });
 });
 
@@ -395,10 +541,11 @@ describe('intake draft', () => {
     h = await openRepairHarness(4104);
     const draft = complete(h);
     expect(intakeTotal(draft.lines)).toBe(600_000);
+    // A discount at intake is an owner's to give.
     const { ticketId } = (await h.run(
       'openTicket',
       toOpenTicketInput(draft, OPTIONS, Date.now()),
-      h.cashierId,
+      h.storeOwnerId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
     expect(ticket.customerName).toBe('Yohanis Wenda');

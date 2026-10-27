@@ -291,6 +291,23 @@ export class HarnessServer {
               ON CONFLICT (id) DO NOTHING`.execute(this.db);
     await sql`INSERT INTO users (id, tenant_id, name, created_at) VALUES (${identity.userId}, ${identity.tenantId}, ${'user'}, ${CREATED_AT})
               ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_stores (user_id, store_id, tenant_id) VALUES (${identity.userId}, ${identity.storeId}, ${identity.tenantId})
+              ON CONFLICT DO NOTHING`.execute(this.db);
+    // The server authorizes every pushed op against the author's roles, so the seeded user holds a
+    // tenant-wide role with every registered permission: the server-side twin of the devices'
+    // grant-all evaluator (buildGrantAllEvaluator). Scenarios test sync, not role design.
+    await sql`INSERT INTO roles (id, tenant_id, name, scope_type, created_at)
+              VALUES (md5(${identity.tenantId} || ':harness-all')::uuid, ${identity.tenantId}, ${'harness_all'}, ${'tenant'}, ${CREATED_AT})
+              ON CONFLICT (id) DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO role_permissions (role_id, permission_id, tenant_id)
+              SELECT md5(${identity.tenantId} || ':harness-all')::uuid, id, ${identity.tenantId} FROM permissions
+              ON CONFLICT DO NOTHING`.execute(this.db);
+    await sql`INSERT INTO user_roles (tenant_id, user_id, role_id, store_id)
+              SELECT ${identity.tenantId}, ${identity.userId}, md5(${identity.tenantId} || ':harness-all')::uuid, NULL
+              WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = ${identity.userId}
+                                AND role_id = md5(${identity.tenantId} || ':harness-all')::uuid)`.execute(
+      this.db,
+    );
     await sql`INSERT INTO devices (id, tenant_id, store_id, kind, signing_key_public, status, revoked_at, enrolled_at, last_seq, last_hash, last_sync_at)
               VALUES (${identity.deviceId}, ${identity.tenantId}, ${identity.storeId}, ${'member'}, ${identity.publicKeyBase64}, ${status},
                       ${status === 'revoked' ? CREATED_AT : null}, ${CREATED_AT}, ${0n}, ${null}, ${null})

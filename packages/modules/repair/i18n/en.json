@@ -15,7 +15,8 @@
     "quoteProposalDeclined": "Price change declined",
     "deviceReturned": "Device handed back",
     "intakeOptionsChanged": "Intake choices changed",
-    "storeIntakeOptionsChanged": "Choices at this store changed"
+    "storeIntakeOptionsChanged": "Choices at this store changed",
+    "storeCancelFeesChanged": "Cancellation fees changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -37,9 +38,11 @@
     "waitForParts": "Mark waiting for parts",
     "reassign": "Change technician",
     "agreeApply": "Agrees",
-    "applyUnasked": "Apply without the customer’s agreement",
     "assignShort": "Choose",
-    "reassignShort": "Change"
+    "reassignShort": "Change",
+    "backToTicket": "Back to the repair",
+    "applyUnconfirmed": "Not yet",
+    "agreedYes": "Yes"
   },
   "assign": {
     "none": "No technician can be assigned in this store yet.",
@@ -56,14 +59,25 @@
       "mine": "Mine",
       "pickup": "Ready for pickup",
       "returned": "Returned",
-      "unassigned": "Unassigned"
+      "unassigned": "Unassigned",
+      "cancelled": "Cancelled"
     },
     "clearSearch": "Clear search",
-    "checkSync": "Check sync status"
+    "checkSync": "Check sync status",
+    "cancelledBy": "by {name}",
+    "feeChanged": "Fee changed"
   },
   "cancel": {
     "reason": "Why is it cancelled?",
-    "consequence": "The repair stops and its price is not charged. The phone stays in the store until it is handed back."
+    "consequence": "The repair stops. When collecting the phone, the customer only pays the cancellation fee. The phone stays in the store until then.",
+    "fee": "Cancellation fee",
+    "beforeWork": "Work hasn’t started",
+    "afterWork": "Work has started",
+    "changeFee": "Change",
+    "changeFeeLabel": "Change the cancellation fee",
+    "feeInput": "Fee the customer pays",
+    "storeFee": "This store’s usual fee: {amount}",
+    "feeChangedHint": "Also say why you changed the fee."
   },
   "check": {
     "biometrics": "Fingerprint or face unlock",
@@ -167,7 +181,6 @@
   },
   "price": {
     "amount": "Amount (Rp)",
-    "customerAgreed": "Customer agreed",
     "decisionNote": "Note (optional)",
     "description": "Description",
     "kind": {
@@ -182,13 +195,17 @@
       "agreed": "Customer agreed",
       "declined": "Declined",
       "notAgreed": "Customer not asked yet",
-      "proposed": "Proposed by technician"
+      "proposed": "Waiting for the customer"
     },
     "total": "Total",
     "addRow": "Add a price line",
     "pendingTotal": "Not yet confirmed by the customer: {amount}",
-    "technicianReason": "Technician’s reason",
-    "customerAgrees": "Does the customer agree to this price?"
+    "customerAgrees": "Does the customer agree to this price?",
+    "notCharged": "Not charged because it was cancelled. The customer pays the cancellation fee of {amount}.",
+    "alreadyAgreed": "Has the customer agreed?",
+    "changeReason": "Reason for the change",
+    "waitingEvent": "Price change waiting for the customer",
+    "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree."
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",
@@ -246,7 +263,9 @@
     "handover": "Take the handover photo and the customer’s signature first.",
     "photo": "Take at least one photo first.",
     "reason": "Write the reason first.",
-    "priceLine": "Fill in the description, amount and reason."
+    "priceLine": "Fill in the description, amount and reason.",
+    "cancelFee": "Enter the cancellation fee first.",
+    "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -303,5 +322,23 @@
       "tooMany": "40 choices at most.",
       "hidesAll": "At least one choice must show at this store."
     }
+  },
+  "stale": {
+    "cancelled": "This repair was just cancelled on another device.",
+    "returned": "This phone was already recorded as handed back on another device.",
+    "proposalApplied": "This price change was already approved on another device.",
+    "proposalDeclined": "This price change was already declined on another device.",
+    "proposalPending": "A new price change needs confirming. Check it before handing the phone back.",
+    "changed": "This repair was just changed on another device, so this step can’t go on."
+  },
+  "fees": {
+    "title": "Cancellation fees",
+    "summary": "Before and after work starts",
+    "intro": "What the customer pays when a repair is cancelled. Owners can still change it when cancelling.",
+    "beforeWork": "Work hasn’t started",
+    "afterWork": "Work has started",
+    "save": "Save",
+    "saved": "Cancellation fees saved.",
+    "hint": "Enter both fees first."
   }
 }

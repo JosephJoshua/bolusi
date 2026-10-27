@@ -1,19 +1,19 @@
 /**
  * Handover — giving the device back: a photo of the handover and the customer's signature, both
- * required, then one tap records it. On a repaired phone the price shown is what the customer owes;
- * on a cancelled one the repair price is not charged. Payment itself is still the store's paper cash
- * book in this slice.
+ * required, then one tap records it. The amount shown is what the customer owes and signs for: the
+ * price on a repaired phone, the cancellation fee on a cancelled one. Payment itself is still the
+ * store's paper cash book in this slice.
  */
 import { formatMoney } from '@bolusi/i18n';
 import { Card, PhotoSlot, TextInput, border, color, space, type } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn } from './i18n.js';
-import { capturedThumbnailRef, ticketStatus } from '../flows.js';
+import { capturedThumbnailRef, repairAbilities, staleStep, ticketStatus } from '../flows.js';
 import {
   FlowScreen,
   PhotoGrid,
@@ -55,8 +55,15 @@ export function Handover({
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
 
+  // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
+  // than take a signature for a handover that would be refused.
+  const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  const ticket = query.status === 'ready' ? query.data : undefined;
+  const stale =
+    ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
+
   const discard = useDiscardConfirm({
-    dirty: photo !== null || signature !== null || note.trim() !== '',
+    dirty: stale === null && (photo !== null || signature !== null || note.trim() !== ''),
     onRegisterDiscardGuard,
     testID,
   });
@@ -92,6 +99,7 @@ export function Handover({
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
+      stale={stale}
       testID={testID}
     >
       <QueryView
@@ -109,9 +117,19 @@ export function Handover({
                 {`${ticket.deviceBrand} ${ticket.deviceModel} · ${ticket.ticketNumber}`}
               </Text>
               {ticket.outcome === 'cancelled' ? (
-                <Text style={[repairStyles.muted, styles.total]} testID={`${testID}.cancelled`}>
-                  {tn('repair.handover.cancelled')}
-                </Text>
+                // What the customer signs for: the cancellation fee, never the repair price. A
+                // ticket cancelled before fees existed charged nothing.
+                <View style={styles.total}>
+                  <View style={repairStyles.row}>
+                    <Text style={styles.totalLabel}>{tn('repair.cancel.fee')}</Text>
+                    <Text style={repairStyles.heading} testID={`${testID}.total`}>
+                      {formatMoney(ticket.cancelFee ?? 0)}
+                    </Text>
+                  </View>
+                  <Text style={repairStyles.muted} testID={`${testID}.cancelled`}>
+                    {tn('repair.handover.cancelled')}
+                  </Text>
+                </View>
               ) : (
                 <View style={[repairStyles.row, styles.total]}>
                   <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>

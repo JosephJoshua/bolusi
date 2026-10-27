@@ -26,7 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -42,10 +42,12 @@ import {
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
+  staleStep,
   ticketActions,
   ticketStatus,
   workPhotos,
   type TicketAction,
+  type TicketStep,
 } from '../flows.js';
 import {
   ActionErrorBanner,
@@ -61,7 +63,8 @@ import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 import {
   AssignStep,
-  NoteStep,
+  CancelStep,
+  WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
   WorkPhotosStep,
@@ -90,16 +93,11 @@ const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
   cancel: 'repair.action.cancel',
 };
 
+/** The open step, if any. A proposal keeps the line as it was opened, for when no fresher read is at hand. */
 type Step =
   | { readonly kind: 'none' }
-  | { readonly kind: 'before' }
-  | { readonly kind: 'after' }
-  | { readonly kind: 'waitForParts' }
-  | { readonly kind: 'cancel' }
-  | { readonly kind: 'assign' }
-  | { readonly kind: 'changePrice' }
-  | { readonly kind: 'proposePrice' }
-  | { readonly kind: 'proposal'; readonly line: QuoteLineRow };
+  | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
+  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -187,9 +185,16 @@ export function TicketDetail({
     return () => onRegisterDiscardGuard?.(null);
   }, [onRegisterDiscardGuard]);
 
+  // The ticket keeps reading live under an open step, so a change synced from another device while
+  // the user fills the step in is caught here rather than as a refusal once they submit.
+  const stale =
+    step.kind === 'none' || ticket === undefined
+      ? null
+      : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
     ticketId,
+    stale,
     onDone: closeStep,
     onCancel: leaveStep,
     onRegisterDiscardGuard: registerStepGuard,
@@ -209,8 +214,9 @@ export function TicketDetail({
         />
       );
     case 'waitForParts':
+      return <WaitForPartsStep {...stepProps} />;
     case 'cancel':
-      return <NoteStep {...stepProps} kind={step.kind} />;
+      return <CancelStep {...stepProps} workStarted={ticket?.workStarted ?? false} />;
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
@@ -218,7 +224,12 @@ export function TicketDetail({
     case 'proposePrice':
       return <PriceChangeStep {...stepProps} mode="propose" />;
     case 'proposal':
-      return <ProposalStep {...stepProps} line={step.line} />;
+      return (
+        <ProposalStep
+          {...stepProps}
+          line={ticket?.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+        />
+      );
     case 'none':
       break;
   }
@@ -234,7 +245,7 @@ export function TicketDetail({
     switch (action) {
       case 'decidePrice': {
         const line = row.quoteLines.find((candidate) => candidate.status === 'proposed');
-        if (line !== undefined) setStep({ kind: 'proposal', line });
+        if (line !== undefined) setStep({ kind: 'proposal', lineId: line.id, line });
         return;
       }
       case 'start':
@@ -398,6 +409,13 @@ export function TicketDetail({
                 value={formatDateTime(row.estimatedReadyAt)}
               />
             )}
+            {row.outcome === 'cancelled' && row.cancelFee !== null ? (
+              <Fact
+                label={tn('repair.cancel.fee')}
+                value={formatMoney(row.cancelFee)}
+                testID={`${testID}.cancelFee`}
+              />
+            ) : null}
             {row.deviceImei === null ? null : (
               <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
             )}
@@ -452,7 +470,11 @@ export function TicketDetail({
               const note = eventNote(event.detail);
               return {
                 key: event.id,
-                title: translateOpType(event.kind),
+                // A change saved before the customer agreed reads as waiting, not as changed.
+                title:
+                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+                    ? tn('repair.price.waitingEvent')
+                    : translateOpType(event.kind),
                 meta: [formatDateTime(event.at), event.actorName]
                   .filter((part) => part !== null)
                   .join(' · '),
@@ -486,6 +508,7 @@ export function TicketDetail({
     const deciding = actions.includes('decidePrice');
     // The bottom action already opens the first proposal; per-line buttons only when there are more.
     const perLine = deciding && pending.length > 1;
+    const cancelled = row.outcome === 'cancelled';
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -515,7 +538,7 @@ export function TicketDetail({
                 <View style={styles.lineAction}>
                   <TextButton
                     label={tn('repair.action.decidePrice')}
-                    onPress={() => setStep({ kind: 'proposal', line })}
+                    onPress={() => setStep({ kind: 'proposal', lineId: line.id, line })}
                     disabled={runner.busy}
                     testID={`${testID}.decide.${line.id}`}
                   />
@@ -525,11 +548,22 @@ export function TicketDetail({
           );
         })}
         <View style={[repairStyles.row, styles.total]}>
-          <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
-          <Text style={[styles.totalValue, styles.amount]} testID={`${testID}.total`}>
+          <Text style={[styles.totalLabel, cancelled && styles.notCharged]}>
+            {tn('repair.price.total')}
+          </Text>
+          <Text
+            style={[styles.totalValue, styles.amount, cancelled && styles.notCharged]}
+            testID={`${testID}.total`}
+          >
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
+        {cancelled ? (
+          // The repair price stays as history, struck through: the customer owes only the fee.
+          <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
+            {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
+          </Text>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           // The total is what the customer agreed to; what a decision would add is said, not summed.
           <Text style={styles.lineWarning} testID={`${testID}.pendingTotal`}>
@@ -702,6 +736,7 @@ const styles = StyleSheet.create({
   totalLabel: { ...type.bodyBold, color: color.text },
   totalValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },
+  notCharged: { color: color.textMuted, textDecorationLine: 'line-through' },
   chipGroup: { marginBottom: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
 });

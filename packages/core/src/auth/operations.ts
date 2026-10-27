@@ -61,6 +61,37 @@ export const AUTH_PERMISSION = {
 /** The `main_owner` role id (02-permissions §10) — the privileged-target rule pivots on it (§6.6). */
 export const MAIN_OWNER_ROLE_ID = 'main_owner';
 
+/**
+ * The permission each auth op's author must hold (`OperationDeclaration.permission`). The three PIN
+ * commands emit the credential ops; the rest are appended by the runtime outside any command
+ * (02-permissions §4: authentication precedes authorization, and a denial or lockout record must
+ * not depend on the actor's permissions).
+ */
+type AuthOpType = (typeof AUTH_OP)[keyof typeof AUTH_OP];
+
+export const AUTH_OP_PERMISSION: Readonly<Record<AuthOpType, string | null>> = {
+  [AUTH_OP.deviceEnrolled]: null,
+  [AUTH_OP.userSwitched]: null,
+  [AUTH_OP.sessionEnded]: null,
+  [AUTH_OP.pinChanged]: AUTH_PERMISSION.pinChange,
+  [AUTH_OP.pinReset]: AUTH_PERMISSION.userResetPin,
+  [AUTH_OP.pinLockedOut]: null,
+  [AUTH_OP.pinLockoutCleared]: AUTH_PERMISSION.pinUnlock,
+  [AUTH_OP.permissionDenied]: null,
+};
+
+/** The record each auth op is about (`OperationDeclaration.entityType`). */
+export const AUTH_OP_ENTITY: Readonly<Record<AuthOpType, string>> = {
+  [AUTH_OP.deviceEnrolled]: AUTH_ENTITY.device,
+  [AUTH_OP.userSwitched]: AUTH_ENTITY.authSession,
+  [AUTH_OP.sessionEnded]: AUTH_ENTITY.authSession,
+  [AUTH_OP.pinChanged]: AUTH_ENTITY.userCredential,
+  [AUTH_OP.pinReset]: AUTH_ENTITY.userCredential,
+  [AUTH_OP.pinLockedOut]: AUTH_ENTITY.userCredential,
+  [AUTH_OP.pinLockoutCleared]: AUTH_ENTITY.userCredential,
+  [AUTH_OP.permissionDenied]: AUTH_ENTITY.permissionDenial,
+};
+
 /** Every auth op type declares `schemaVersion: 1` in v0. */
 const AUTH_OP_SCHEMA_VERSIONS: ReadonlyMap<string, number> = new Map(
   Object.values(AUTH_OP).map((type) => [type, 1] as const),
@@ -79,6 +110,11 @@ export const authOperationRegistry: OperationRegistry = {
   // collision can exist (01 §8.2 says so explicitly — "Identity uniqueness is *not* a Rule-2
   // case"). An auth op therefore never produces a Conflict record.
   conflictFor: () => undefined,
+  // Typed by `AuthOpType`, so a type added to AUTH_OP without a permission entry does not compile.
+  permissionFor: (type) =>
+    AUTH_OP_SCHEMA_VERSIONS.has(type) ? AUTH_OP_PERMISSION[type as AuthOpType] : undefined,
+  entityTypeFor: (type) =>
+    AUTH_OP_SCHEMA_VERSIONS.has(type) ? AUTH_OP_ENTITY[type as AuthOpType] : undefined,
   types: () => [...AUTH_OP_SCHEMA_VERSIONS.keys()].sort(),
   get size() {
     return AUTH_OP_SCHEMA_VERSIONS.size;

@@ -28,8 +28,25 @@ import type {
 
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
-export const BOARD_VIEWS = ['active', 'mine', 'unassigned', 'pickup', 'returned'] as const;
+export const BOARD_VIEWS = [
+  'active',
+  'mine',
+  'unassigned',
+  'pickup',
+  'returned',
+  'cancelled',
+] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
+
+/** The views this user gets: every cancel, with who and what it charged, is for owners only. */
+export function boardViews(can: RepairAbilities): readonly BoardView[] {
+  return BOARD_VIEWS.filter((view) => view !== 'cancelled' || can.cancel);
+}
+
+/** The cancelled view lists the latest cancel first; every queue lists the newest ticket first. */
+export function boardSort(view: BoardView): ListTicketsInput['sort'] {
+  return view === 'cancelled' ? 'cancelledAt.desc' : 'createdAt.desc';
+}
 
 const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
 
@@ -46,6 +63,8 @@ export function boardFilter(view: BoardView, userId: string): ListTicketsInput['
       return { outcomes: ['repaired', 'cancelled'], location: 'in_store' };
     case 'returned':
       return { location: 'returned' };
+    case 'cancelled':
+      return { outcomes: ['cancelled'] };
   }
 }
 
@@ -88,11 +107,15 @@ export interface RepairAbilities {
   readonly assign: boolean;
   readonly quoteChange: boolean;
   readonly cancel: boolean;
+  /** Lower a price (owners). */
+  readonly discount: boolean;
   readonly handover: boolean;
   /** Edit the franchise's intake lists (tenant-wide). */
   readonly manageIntakeOptions: boolean;
   /** Hide intake list items at this store. */
   readonly hideIntakeOptions: boolean;
+  /** Set this store's cancellation fees. */
+  readonly setCancelFees: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -104,9 +127,11 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     assign: hasPermission(P.assign),
     quoteChange: hasPermission(P.quoteChange),
     cancel: hasPermission(P.cancel),
+    discount: hasPermission(P.discount),
     handover: hasPermission(P.handover),
     manageIntakeOptions: hasPermission(P.manageIntakeOptions),
     hideIntakeOptions: hasPermission(P.hideIntakeOptions),
+    setCancelFees: hasPermission(P.setCancelFees),
   };
 }
 
@@ -164,6 +189,77 @@ export function ticketActions(
   if (open && can.work && ticket.outcome === 'repaired') actions.push('reopen');
   if (open && can.cancel) actions.push('cancel');
   return actions;
+}
+
+// ── an open step after the ticket changed ────────────────────────────────────────────────────
+
+/**
+ * A step the ticket opens full screen, named by what it finishes. `before` starts (or resumes,
+ * or reopens) the work; `after` marks it repaired; `proposal` decides one proposed line.
+ */
+export type TicketStep =
+  | {
+      readonly kind:
+        | 'before'
+        | 'after'
+        | 'waitForParts'
+        | 'cancel'
+        | 'assign'
+        | 'changePrice'
+        | 'proposePrice'
+        | 'handover';
+    }
+  | { readonly kind: 'proposal'; readonly lineId: string };
+
+/** Why an open step can no longer finish, said in terms of what happened to the ticket. */
+export type StaleStep =
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'returned' }
+  | { readonly kind: 'proposalDecided'; readonly decision: 'applied' | 'declined' }
+  | { readonly kind: 'proposalPending' }
+  /** Anything else, such as another technician starting first or the ticket reopened. */
+  | { readonly kind: 'changed' };
+
+const STEP_ACTIONS: Readonly<Record<TicketStep['kind'], readonly TicketAction[]>> = {
+  before: ['start', 'resume', 'reopen'],
+  after: ['markRepaired'],
+  waitForParts: ['waitForParts'],
+  cancel: ['cancel'],
+  assign: ['assign'],
+  changePrice: ['changePrice'],
+  proposePrice: ['proposePrice'],
+  handover: ['handover'],
+  proposal: ['decidePrice'],
+};
+
+/**
+ * Whether an open step still leads somewhere, given the ticket as it reads now. A step stays open
+ * while a colleague's change syncs in, so it is checked against the same rule that offered it
+ * (`ticketActions`): `null` while it can still finish, otherwise what changed, so the step can say
+ * so instead of letting the user fill it in for a refusal.
+ */
+export function staleStep(
+  step: TicketStep,
+  ticket: Pick<
+    TicketDetailRow,
+    'outcome' | 'location' | 'technicianId' | 'pendingProposals' | 'quoteLines'
+  >,
+  can: RepairAbilities,
+  userId: string,
+): StaleStep | null {
+  const actions = ticketActions(ticket, can, userId);
+  const line =
+    step.kind === 'proposal' ? ticket.quoteLines.find((row) => row.id === step.lineId) : undefined;
+  const lineOpen = step.kind !== 'proposal' || line?.status === 'proposed';
+  if (lineOpen && STEP_ACTIONS[step.kind].some((action) => actions.includes(action))) return null;
+
+  if (ticket.location === 'returned') return { kind: 'returned' };
+  if (line !== undefined && (line.status === 'applied' || line.status === 'declined')) {
+    return { kind: 'proposalDecided', decision: line.status };
+  }
+  if (ticket.outcome === 'cancelled') return { kind: 'cancelled' };
+  if (step.kind === 'handover' && ticket.pendingProposals > 0) return { kind: 'proposalPending' };
+  return { kind: 'changed' };
 }
 
 // ── photos ──────────────────────────────────────────────────────────────────────────────────

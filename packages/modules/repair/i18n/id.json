@@ -15,7 +15,8 @@
     "quoteProposalDeclined": "Perubahan harga ditolak",
     "deviceReturned": "HP diambil pelanggan",
     "intakeOptionsChanged": "Pilihan saat terima HP diubah",
-    "storeIntakeOptionsChanged": "Pilihan di toko ini diubah"
+    "storeIntakeOptionsChanged": "Pilihan di toko ini diubah",
+    "storeCancelFeesChanged": "Biaya pembatalan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -37,9 +38,11 @@
     "waitForParts": "Tunggu sparepart",
     "reassign": "Ganti teknisi",
     "agreeApply": "Setuju",
-    "applyUnasked": "Pakai tanpa konfirmasi pelanggan",
     "assignShort": "Pilih",
-    "reassignShort": "Ganti"
+    "reassignShort": "Ganti",
+    "backToTicket": "Kembali ke servisan",
+    "applyUnconfirmed": "Belum",
+    "agreedYes": "Sudah"
   },
   "assign": {
     "none": "Belum ada teknisi di toko ini.",
@@ -56,14 +59,25 @@
       "mine": "Tugasku",
       "pickup": "Siap diambil",
       "returned": "Sudah diambil",
-      "unassigned": "Belum ada teknisi"
+      "unassigned": "Belum ada teknisi",
+      "cancelled": "Dibatalkan"
     },
     "clearSearch": "Hapus pencarian",
-    "checkSync": "Cek status sinkron"
+    "checkSync": "Cek status sinkron",
+    "cancelledBy": "oleh {name}",
+    "feeChanged": "Biaya diubah"
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
-    "consequence": "Servisan dihentikan dan biaya perbaikan tidak ditagih. HP tetap di toko sampai diambil pelanggan."
+    "consequence": "Servisan dihentikan. Saat ambil HP, pelanggan cukup bayar biaya pembatalan. HP tetap di toko sampai diambil.",
+    "fee": "Biaya pembatalan",
+    "beforeWork": "Belum mulai dikerjakan",
+    "afterWork": "Sudah mulai dikerjakan",
+    "changeFee": "Ubah",
+    "changeFeeLabel": "Ubah biaya pembatalan",
+    "feeInput": "Biaya yang dibayar pelanggan",
+    "storeFee": "Biaya biasa di toko ini: {amount}",
+    "feeChangedHint": "Tulis juga kenapa biayanya diubah."
   },
   "check": {
     "biometrics": "Sidik jari & wajah",
@@ -167,7 +181,6 @@
   },
   "price": {
     "amount": "Harga (Rp)",
-    "customerAgreed": "Pelanggan setuju",
     "decisionNote": "Catatan (opsional)",
     "description": "Keterangan",
     "kind": {
@@ -182,13 +195,17 @@
       "agreed": "Disetujui pelanggan",
       "declined": "Ditolak pelanggan",
       "notAgreed": "Belum dikonfirmasi ke pelanggan",
-      "proposed": "Diajukan teknisi"
+      "proposed": "Menunggu persetujuan pelanggan"
     },
     "total": "Total",
     "addRow": "Tambah biaya",
     "pendingTotal": "Belum dikonfirmasi pelanggan: {amount}",
-    "technicianReason": "Alasan teknisi",
-    "customerAgrees": "Pelanggan setuju dengan harga ini?"
+    "customerAgrees": "Pelanggan setuju dengan harga ini?",
+    "notCharged": "Tidak ditagih karena dibatalkan. Pelanggan bayar biaya pembatalan {amount}.",
+    "alreadyAgreed": "Pelanggan sudah setuju?",
+    "changeReason": "Alasan perubahan",
+    "waitingEvent": "Perubahan harga menunggu pelanggan",
+    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju."
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",
@@ -246,7 +263,9 @@
     "handover": "Ambil foto dan tanda tangan pelanggan dulu.",
     "photo": "Ambil minimal satu foto dulu.",
     "reason": "Tulis alasannya dulu.",
-    "priceLine": "Isi keterangan, harga, dan alasannya dulu."
+    "priceLine": "Isi keterangan, harga, dan alasannya dulu.",
+    "cancelFee": "Isi biaya pembatalannya dulu.",
+    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -303,5 +322,23 @@
       "tooMany": "Maksimal 40 pilihan.",
       "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
     }
+  },
+  "stale": {
+    "cancelled": "Servisan ini baru saja dibatalkan dari perangkat lain.",
+    "returned": "HP ini sudah tercatat diserahkan ke pelanggan dari perangkat lain.",
+    "proposalApplied": "Perubahan harga ini sudah disetujui dari perangkat lain.",
+    "proposalDeclined": "Perubahan harga ini sudah ditolak dari perangkat lain.",
+    "proposalPending": "Ada perubahan harga baru yang perlu dikonfirmasi. Cek dulu sebelum HP diserahkan.",
+    "changed": "Servisan ini baru diubah dari perangkat lain, jadi langkah ini tidak bisa dilanjutkan."
+  },
+  "fees": {
+    "title": "Biaya pembatalan",
+    "summary": "Sebelum dan sesudah mulai dikerjakan",
+    "intro": "Dibayar pelanggan kalau servisannya dibatalkan. Saat membatalkan, pemilik masih bisa mengubahnya.",
+    "beforeWork": "Belum mulai dikerjakan",
+    "afterWork": "Sudah mulai dikerjakan",
+    "save": "Simpan",
+    "saved": "Biaya pembatalan disimpan.",
+    "hint": "Isi kedua biaya dulu."
   }
 }

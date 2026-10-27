@@ -97,6 +97,13 @@ export interface OperationRegistry {
    */
   scopeFor(type: string): OperationScope | undefined;
   /**
+   * The permission an op type's author must hold (`OperationDeclaration.permission`), `null` for a
+   * type no command emits, or `undefined` when no module declares the type.
+   */
+  permissionFor(type: string): string | null | undefined;
+  /** The declared entity type for an op type (`OperationDeclaration.entityType`), or `undefined`. */
+  entityTypeFor(type: string): string | undefined;
+  /**
    * The declared conflict rule for an op type (01 §8.1), or `undefined` when the type declares
    * none (⇒ it never produces a Conflict record). The server's Rule-1 detection reads this.
    */
@@ -158,6 +165,7 @@ export function registerModules<DB>(
     ...(module.permissions === undefined ? {} : { permissions: module.permissions }),
     ...(module.commands === undefined ? {} : { commands: module.commands }),
     ...(module.queries === undefined ? {} : { queries: module.queries }),
+    operations: module.operations,
   }));
   const permissions = assemblePermissionRegistry(permissionManifests);
 
@@ -174,9 +182,13 @@ export function registerModules<DB>(
   const schemaVersions = new Map<string, number>();
   const scopes = new Map<string, OperationScope>();
   const conflicts = new Map<string, ConflictDeclaration>();
+  const opPermissions = new Map<string, string | null>();
+  const entityTypes = new Map<string, string>();
   for (const module of modules) {
     for (const [type, declaration] of Object.entries(module.operations)) {
       schemaVersions.set(type, declaration.schemaVersion);
+      opPermissions.set(type, declaration.permission);
+      entityTypes.set(type, declaration.entityType);
       // Default here, once, rather than at each reader: an absent `scope` means 'store' (01 §6),
       // and a reader that had to remember that is how the two answers drift apart.
       scopes.set(type, declaration.scope ?? 'store');
@@ -201,6 +213,8 @@ export function registerModules<DB>(
     // `undefined` (the caller's fail-closed signal) rather than the 'store' default.
     scopeFor: (type) => (schemaVersions.has(type) ? (scopes.get(type) ?? 'store') : undefined),
     conflictFor: (type) => conflicts.get(type),
+    permissionFor: (type) => opPermissions.get(type),
+    entityTypeFor: (type) => entityTypes.get(type),
     types: () => [...schemaVersions.keys()].sort(),
     get size() {
       return schemaVersions.size;

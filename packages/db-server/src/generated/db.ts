@@ -236,6 +236,21 @@ export interface PushTokens {
   userId: string | null;
 }
 
+export interface RefusedOperations {
+  code: string;
+  deviceId: string;
+  entityId: string;
+  entityType: string;
+  hash: string;
+  id: string;
+  reason: string;
+  receivedAt: Int8;
+  seq: Int8;
+  tenantId: string;
+  type: string;
+  userId: string;
+}
+
 export interface RepairCustomers {
   createdAt: Int8;
   createdBy: string;
@@ -274,6 +289,15 @@ export interface RepairQuoteLines {
   ticketId: string;
 }
 
+export interface RepairStoreCancelFees {
+  afterWork: Int8;
+  beforeWork: Int8;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RepairStoreIntakeOptions {
   hiddenJson: string;
   list: string;
@@ -308,6 +332,10 @@ export interface RepairTicketPhotos {
 }
 
 export interface RepairTickets {
+  cancelFee: Int8 | null;
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
+  cancelStandardFee: Int8 | null;
   checklistJson: string;
   complaint: string;
   createdAt: Int8;
@@ -441,9 +469,11 @@ export interface DB {
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
+  refusedOperations: RefusedOperations;
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreCancelFees: RepairStoreCancelFees;
   repairStoreIntakeOptions: RepairStoreIntakeOptions;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
