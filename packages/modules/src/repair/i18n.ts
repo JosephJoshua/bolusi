@@ -123,6 +123,8 @@ export const REPAIR_KEYS = [
   'repair.hint.priceLine',
   'repair.hint.reason',
   'repair.hint.downPayment',
+  'repair.hint.downPaymentCorrect',
+  'repair.hint.downPaymentSame',
   'repair.intake.discard',
   'repair.intake.discardMessage',
   'repair.intake.discardTitle',

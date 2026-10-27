@@ -403,7 +403,13 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await open(page, 'owner');
   await tap(page, 'repair.board.row.t-2');
   await tap(page, 'repair.ticket.downPayment.correct');
+  // The recorded amount is shown above; the field waits for the correct one.
+  await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('');
+  await expect(page.getByText('Isi DP yang benar dulu.')).toBeVisible();
+  await fill(page, 'repair.downPayment.amount', '50000');
+  await expect(page.getByText('Jumlahnya masih sama dengan DP tercatat.')).toBeVisible();
   await fill(page, 'repair.downPayment.amount', '30000');
+  await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('30.000');
   await fill(page, 'repair.downPayment.reason', 'Salah ketik, pelanggan bayar 30 ribu.');
   await shoot(page, 'dp-correct');
   await tap(page, 'repair.downPayment.primary');

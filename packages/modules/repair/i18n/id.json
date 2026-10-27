@@ -278,7 +278,9 @@
     "priceLine": "Isi keterangan, harga, dan alasannya dulu.",
     "cancelFee": "Isi biaya pembatalannya dulu.",
     "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan.",
-    "downPayment": "Isi jumlah DP dulu."
+    "downPayment": "Isi jumlah DP dulu.",
+    "downPaymentCorrect": "Isi DP yang benar dulu.",
+    "downPaymentSame": "Jumlahnya masih sama dengan DP tercatat."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",

@@ -386,9 +386,8 @@ export function DownPaymentStep({
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [amountText, setAmountText] = useState(
-    current === null ? '' : groupedAmount(String(current)),
-  );
+  // Empty even when correcting: the recorded amount is shown above, and the step asks for a new one.
+  const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const correcting = mode === 'correct';
   // A correction may bring it to nothing (removing it); a new one is at least Rp 1.
@@ -423,9 +422,13 @@ export function DownPaymentStep({
       primaryHint={tn(
         aboveTotal
           ? 'repair.problem.downPaymentAboveTotal'
-          : correcting && amount !== null && amount !== current
-            ? 'repair.hint.reason'
-            : 'repair.hint.downPayment',
+          : !correcting
+            ? 'repair.hint.downPayment'
+            : amount === null
+              ? 'repair.hint.downPaymentCorrect'
+              : amount === current
+                ? 'repair.hint.downPaymentSame'
+                : 'repair.hint.reason',
       )}
       busy={runner.busy}
       errorCode={runner.errorCode}

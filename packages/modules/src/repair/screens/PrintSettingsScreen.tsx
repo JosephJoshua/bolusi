@@ -226,6 +226,8 @@ function SettingsForm({
             value={form.name}
             onChangeText={(name) => edit({ name })}
             maxLength={100}
+            // A shop's own name ("Bolusi Cell") is not a dictionary word to correct.
+            autoCorrect={false}
             testID={`${testID}.name`}
           />
           {storeName === '' ? null : (

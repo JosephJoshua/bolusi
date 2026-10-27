@@ -57,6 +57,11 @@ export interface TextInputProps {
   /** §3.2: numeric fields open numeric keyboards. */
   readonly keyboardType?: KeyboardTypeOptions | undefined;
   readonly secureTextEntry?: boolean | undefined;
+  /**
+   * `false` for names and codes the keyboard does not know (phone models: Gboard turns "samsng" into
+   * "Samsung" and "a55" into something else). Absent: the platform default.
+   */
+  readonly autoCorrect?: boolean | undefined;
   /** First field of a wizard step / PIN screen. Also how the Gallery shows a real `focused` field. */
   readonly autoFocus?: boolean | undefined;
   /**
@@ -105,6 +110,7 @@ export function TextInput({
   readOnly = false,
   keyboardType,
   secureTextEntry = false,
+  autoCorrect,
   autoFocus = false,
   multiline = false,
   maxLength,
@@ -139,6 +145,8 @@ export function TextInput({
         editable={!notEditable}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
+        autoCorrect={autoCorrect}
+        spellCheck={autoCorrect}
         autoFocus={autoFocus}
         multiline={effectiveMultiline}
         maxLength={maxLength}

@@ -278,7 +278,9 @@
     "priceLine": "Fill in the description, amount and reason.",
     "cancelFee": "Enter the cancellation fee first.",
     "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide.",
-    "downPayment": "Enter the amount first."
+    "downPayment": "Enter the amount first.",
+    "downPaymentCorrect": "Enter the correct down payment first.",
+    "downPaymentSame": "It is the same as the recorded down payment."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
