@@ -7,9 +7,11 @@
 // eight of the fourteen repair op types had never folded on Postgres in any test.
 //
 // So the list of samples below is checked against the registered modules. A new op type fails
-// here until it has a sample that the server accepts and folds.
+// here until it has a sample that the server accepts and folds. The samples form legal journeys,
+// so they also pass every type's rule: a rule that refuses ordinary shop work fails here too.
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
+import { formatTicketNumber } from '@bolusi/modules/repair';
 import { ChainBuilder, makeWorld, type ChainWorld, type OpSpec } from '@bolusi/test-support';
 import type { MediaRef } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
@@ -164,6 +166,12 @@ function journey(world: ChainWorld): OpSpec[] {
       },
     },
     {
+      type: 'repair.store_cancel_fees_changed',
+      entityType: 'repair_store_cancel_fees',
+      entityId: world.storeId,
+      payload: { beforeWork: 0, afterWork: 25_000 },
+    },
+    {
       type: 'repair.store_intake_options_changed',
       entityType: 'repair_store_intake_options',
       entityId: world.storeId,
@@ -181,9 +189,8 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId: customer,
       payload: { name: 'Yohanis Wenda', phone: '081234567890' },
     },
-    opened(ticket, 'K7Q-0001', id(0x200)),
+    opened(ticket, formatTicketNumber(world.deviceId, 1), id(0x200)),
     onTicket('repair.ticket_claimed', {}),
-    onTicket('repair.technician_assigned', { technicianId: world.userId }),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),
     onTicket('repair.quote_change_proposed', {
@@ -194,15 +201,20 @@ function journey(world: ChainWorld): OpSpec[] {
       reason: 'Baterai kembung',
     }),
     onTicket('repair.quote_proposal_declined', { lineId: id(0x201), note: 'Tidak jadi' }),
-    onTicket('repair.quote_changed', {
-      lineId: id(0x202),
-      kind: 'discount',
-      description: 'Diskon',
-      amount: -50_000,
-      reason: 'Langganan',
-      customerAgreed: true,
-      fromProposal: false,
-    }),
+    {
+      ...onTicket('repair.quote_changed', {}),
+      schemaVersion: 2,
+      payload: {
+        lineId: id(0x202),
+        kind: 'discount',
+        description: 'Diskon',
+        amount: -50_000,
+        reason: 'Langganan',
+        customerAgreed: true,
+        fromProposal: false,
+        waitsForCustomer: false,
+      },
+    },
     onTicket('repair.work_paused', { note: 'Tunggu sparepart' }),
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),
@@ -212,12 +224,19 @@ function journey(world: ChainWorld): OpSpec[] {
       signature: photo(11),
       note: '',
     }),
-    opened(cancelledTicket, 'K7Q-0002', id(0x210)),
+    opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
+    {
+      type: 'repair.technician_assigned',
+      entityType: 'repair_ticket',
+      entityId: cancelledTicket,
+      payload: { technicianId: world.userId },
+    },
     {
       type: 'repair.ticket_cancelled',
       entityType: 'repair_ticket',
       entityId: cancelledTicket,
-      payload: { reason: 'Pelanggan batal' },
+      schemaVersion: 2,
+      payload: { reason: 'Pelanggan batal', fee: 0, standardFee: 0 },
     },
 
     // auth (the genesis `auth.device_enrolled` is pushed first, by the test)
@@ -278,6 +297,23 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     roleName: 'store_owner',
     permissionIds: SERVER_MODULES.flatMap((module) => Object.keys(module.permissions ?? {})),
   });
+  // Conflicts are recorded only by the server, so the one the journey acknowledges is seeded.
+  await db
+    .insertInto('conflicts')
+    .values({
+      id: id(5),
+      tenantId: world.tenantId,
+      storeId: world.storeId,
+      entityType: 'note',
+      entityId: id(4),
+      conflictKey: 'note.body',
+      severity: 'minor',
+      status: 'surfaced',
+      opAId: id(0x300),
+      opBId: id(0x301),
+      detectedAt: 1_726_000_000_000n,
+    })
+    .execute();
   const ops = [builder.genesis(), ...journey(world).map((spec) => builder.append(spec))];
 
   const result = await processPushBatch(
@@ -298,8 +334,16 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     .orderBy('ticketNumber')
     .execute();
   expect(tickets).toEqual([
-    { ticketNumber: 'K7Q-0001', outcome: 'repaired', location: 'returned' },
-    { ticketNumber: 'K7Q-0002', outcome: 'cancelled', location: 'in_store' },
+    {
+      ticketNumber: formatTicketNumber(world.deviceId, 1),
+      outcome: 'repaired',
+      location: 'returned',
+    },
+    {
+      ticketNumber: formatTicketNumber(world.deviceId, 2),
+      outcome: 'cancelled',
+      location: 'in_store',
+    },
   ]);
   const notes = await db.selectFrom('notes').select('archived').execute();
   expect(notes).toEqual([{ archived: true }]);

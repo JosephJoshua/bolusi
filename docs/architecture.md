@@ -94,6 +94,12 @@ fails a build, a boot or a test rather than waiting for review:
 - `defineModule` refuses a manifest whose op type is not past tense, whose payload
   schema is not `.strict()`, or which lacks a reversal note, an applier or retained
   schemas for older versions.
+- Every op type declares its `permission`, its `entityType` and its `rule`: what
+  must hold in the records for it to be recorded (`module/op-rules.ts`), run by the
+  device before saving and by the server before accepting a push. `null` is only for
+  a type nothing in the records constrains. A module with rules lists its refusal
+  reasons with `defineRefusals`, and each reason needs id and en copy at
+  `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
 - Every op type needs a label (`apps/mobile/test/op-type-labels.test.ts`). Every
   error and rejection code needs id and en copy (`pnpm i18n:check`).
 - Every op type a device can push needs a sample in
