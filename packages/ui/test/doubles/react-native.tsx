@@ -175,11 +175,15 @@ export const Vibration = {
 
 /**
  * No on-screen keyboard in this lane: `emit` stands in for the system announcing one, so a test can
- * drive what the shell does when it opens.
+ * drive what the shell does when it opens. `dismiss` is recorded: a sheet dismisses the keyboard as
+ * it opens, and tests count that.
  */
 const keyboardListeners = new Map<string, Set<(event: unknown) => void>>();
 export const Keyboard = {
-  dismiss: (): void => undefined,
+  dismissCount: 0,
+  dismiss(): void {
+    Keyboard.dismissCount += 1;
+  },
   addListener: (name: string, listener: (event: unknown) => void) => {
     const set = keyboardListeners.get(name) ?? new Set();
     set.add(listener);
@@ -190,6 +194,15 @@ export const Keyboard = {
     for (const listener of keyboardListeners.get(name) ?? []) listener(event);
   },
 };
+
+/**
+ * Recorded window metrics. A test sets `__windowMetrics` to see a narrow phone or a large system
+ * font; nothing is measured.
+ */
+export const __windowMetrics = { width: 411, height: 914, scale: 2.625, fontScale: 1 };
+export function useWindowDimensions(): typeof __windowMetrics {
+  return { ...__windowMetrics };
+}
 
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };
 

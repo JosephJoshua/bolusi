@@ -101,7 +101,15 @@ describe('Button (§3.1)', () => {
 
   test('height is the 56 dp primary target (§1.4)', () => {
     const r = render(<Button testID="b" label="x" onPress={vi.fn()} />);
-    expect(r.styleOf('b')['height']).toBe(56);
+    expect(r.styleOf('b')['minHeight']).toBe(56);
+  });
+
+  test('a label that wraps grows the button instead of touching its edges', () => {
+    const r = render(
+      <Button testID="b" label="Daftarkan ke Cabang Pasar Baru" onPress={vi.fn()} />,
+    );
+    expect(r.styleOf('b')['height']).toBeUndefined();
+    expect(r.styleOf('b')['paddingVertical']).toBeGreaterThan(0);
   });
 });
 
@@ -256,16 +264,17 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
     expect(withCta.query('ui.emptyState.cta')).not.toBeNull();
   });
 
-  test('the EmptyState hint holds 3 lines — a compliant Indonesian string survives 1.3× (task 129 item 13)', () => {
-    // §6.5: the hint must not truncate the "what to do next" sentence at the required font scale, the
-    // FR-1036 trap (§5). Widened 2→3, matching Banner (§3.6, task 23). Revert to 2 and this reds.
+  test('the EmptyState title and hint wrap without a line cap, so they survive 1.3× (task 129 item 13)', () => {
+    // §6.5 / design guide §9: the "what to do next" sentence must never truncate at a large font, so
+    // the hint (and title) wrap with no line cap.
     const r = render(
       <EmptyState
         title="Belum ada catatan"
         hint="Ketuk tombol di bawah untuk membuat catatan pertama."
       />,
     );
-    expect(r.get('ui.emptyState.hint').props['numberOfLines']).toBe(3);
+    expect(r.get('ui.emptyState.hint').props['numberOfLines']).toBeUndefined();
+    expect(r.get('ui.emptyState.title').props['numberOfLines']).toBeUndefined();
   });
 
   test('ErrorState exposes retry and an error-code caption (§5: never a dead end)', () => {
@@ -294,7 +303,7 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
     expect(r.query('ui.unauthorizedState.retry')).toBeNull();
   });
 
-  test('the UnauthorizedState hint holds 3 lines — a compliant Indonesian body survives 1.3× (task 129 item 8)', () => {
+  test('the UnauthorizedState hint wraps without a line cap, so it survives 1.3× (task 129 item 8)', () => {
     // §5's Unauthorized body is "what happened + what to do" (07-i18n §7.2) — two ID sentences that
     // fill two `bodySm` lines at 360 dp and overflow at the required 1.3× scale, truncating the
     // instruction into the FR-1036 "nothing here" trap. Widened 2→3, matching EmptyState + Banner.
@@ -307,7 +316,7 @@ describe('empty / error / unauthorized are three distinct components (§3.8, §5
         onBack={vi.fn()}
       />,
     );
-    expect(r.get('ui.unauthorizedState.hint').props['numberOfLines']).toBe(3);
+    expect(r.get('ui.unauthorizedState.hint').props['numberOfLines']).toBeUndefined();
   });
 });
 

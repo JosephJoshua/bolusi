@@ -316,6 +316,31 @@ export async function seedTwoUsers(
   );
 }
 
+/**
+ * Seed `fixture.userId` (signable with `TEST_PIN`) plus `SECOND_USER_ID`, a new colleague the server
+ * sent with NO verifier yet: the roster marks them `needsFirstPin` (api/02-auth §6.6).
+ */
+export async function seedUserWithoutPin(
+  fixture: Fixture,
+  idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
+): Promise<void> {
+  const verifier = await verifierFor(fixture, 1, 1);
+  await seedBundle(
+    fixture,
+    {
+      users: [
+        activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifier),
+        {
+          ...activeUser(SECOND_USER_ID, 'Maria Wenda', ROLE_ID, fixture.storeId, verifier),
+          pinVerifier: null,
+        },
+      ],
+      roles: [storeRole(ROLE_ID, 'Notes', NOTES_PERMISSIONS)],
+    },
+    idleLockSeconds,
+  );
+}
+
 const OWNER_ROLE_ID = 'role-owner-live';
 
 /**
@@ -536,6 +561,8 @@ export interface MountOptions {
   readonly createPushRegistration?: RootProps['createPushRegistration'];
   /** The notification-tap seam (api/04-push §4/§6; task 135). Omitted by default (no listener). */
   readonly pushRouter?: RootProps['pushRouter'];
+  /** The notification permission seam; default undefined (never asks). */
+  readonly notificationPermission?: RootProps['notificationPermission'];
   /**
    * The enrollment factory (api/02-auth §4; task 92). Omitted by default, so the pre-enrolled tests use
    * the rejecting stub below (the device is already enrolled — the transports are never called). The
@@ -674,6 +701,7 @@ export async function mountRoot(
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
+      notificationPermission={options.notificationPermission}
     />
   );
   const screen = render(element);

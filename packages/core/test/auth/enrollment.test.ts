@@ -17,7 +17,9 @@ import {
   createUuidV7Generator,
   DEVICE_ID_META_KEY,
   DomainError,
+  FIRST_PIN_USER_META_KEY,
   IDLE_LOCK_SECONDS_META_KEY,
+  readMeta,
   PermissionEvaluator,
   readDeviceId,
   readIdleLockSeconds,
@@ -427,7 +429,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     expect(await readStoreId(restarted)).toBe(fx.params.storeId);
   });
 
-  it('after enrollment meta_kv holds EXACTLY {idleLockSeconds, storeName, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
+  it('after enrollment meta_kv holds EXACTLY {firstPinUserId, idleLockSeconds, storeName, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
     // A presence spot-check would pass on a row that also wrote keys nobody declared; assert the whole
     // set. deviceId/storeId are task 88's; tenantId, the store/tenant DISPLAY NAMES and (task 133) the
     // tenant's idleLockSeconds are applyBundle's — every one of them re-delivered on each refresh, so
@@ -436,6 +438,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     fx = await fixture(12);
     await runEnrollment(fx.deps, fx.params);
     expect(await metaKeys(fx.db)).toStrictEqual([
+      FIRST_PIN_USER_META_KEY,
       IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
       TENANT_NAME_META_KEY,
@@ -445,6 +448,8 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     ]);
     // The keys the two producers own — no draft, no undeclared key.
     expect([DEVICE_ID_META_KEY, STORE_ID_META_KEY]).toStrictEqual(['deviceId', 'storeId']);
+    // The enrolling owner, the one user who may make their own first PIN here (pin-flows.ts).
+    expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBe(fx.params.ownerUserId);
     expect([STORE_NAME_META_KEY, TENANT_NAME_META_KEY, IDLE_LOCK_SECONDS_META_KEY]).toStrictEqual([
       'auth.storeName',
       'auth.tenantName',
@@ -470,6 +475,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     // store/tenant names persisted by applyBundle (task 109), which runs BEFORE the draft delete, survive.
     expect(await metaKeys(restarted)).toStrictEqual([
       'auth.enrollment_draft',
+      FIRST_PIN_USER_META_KEY,
       IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
       TENANT_NAME_META_KEY,
@@ -500,6 +506,24 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
 
     expect(await readStoreId(fx.db)).toBe(fx.params.storeId); // unchanged — the binding held
     expect(otherStore).not.toBe(fx.params.storeId); // control: the refresh really named a new store
+  });
+});
+
+describe('the enrolling owner’s own first PIN', () => {
+  it('is only allowed when the server has no PIN for them', async () => {
+    fx = await fixture(180, undefined, undefined, (bundle) => {
+      (bundle.users[0] as { pinVerifier: unknown }).pinVerifier = {
+        algorithm: 'argon2id',
+        saltB64: 'MDEyMzQ1Njc4OWFiY2RlZg==',
+        mKiB: 19456,
+        t: 2,
+        p: 1,
+        hashB64: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+        asOf: { timestamp: 1, deviceId: '00000000-0000-0000-0000-000000000000', seq: 0 },
+      };
+    });
+    await runEnrollment(fx.deps, fx.params);
+    expect(await readMeta(fx.db, FIRST_PIN_USER_META_KEY)).toBeNull();
   });
 });
 

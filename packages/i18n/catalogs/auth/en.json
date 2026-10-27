@@ -1,59 +1,104 @@
 {
   "switcher": {
     "title": "Who’s using this?",
-    "instruction": "Tap your name",
     "addUser": "Add User",
     "reenroll": "Re-enroll Device",
-    "emptyUsers": "No users on this device yet. Ask the store owner to enroll this device.",
-    "idleLocked": "Locked after sitting idle. Your work is safe."
+    "emptyUsers": "No one is set up on this phone yet. Ask the store owner to add people.",
+    "idleLocked": "Locked after a while unused. Your work is safe.",
+    "search": "Search name",
+    "noMatches": "No matching names",
+    "locked": "PIN locked",
+    "noPin": "No PIN yet",
+    "current": "Signed in"
   },
   "pin": {
-    "title": "Enter PIN",
-    "wrong": "Wrong PIN. Try again.",
-    "attemptsLeft": "{count, plural, one {# try left} other {# tries left}}",
-    "wait": "Too many wrong tries. Wait {duration}.",
-    "lockedOut": "PIN locked. Ask the store owner to unlock it.",
-    "forgot": "Forgot your PIN? Ask the store owner to set a new one.",
+    "title": "Enter your PIN",
+    "wrong": "Wrong PIN.",
+    "attemptsLeft": "{count, plural, one {# try left.} other {# tries left.}}",
+    "wait": "Too many wrong tries. Try again in {duration}.",
+    "lockedOut": "Ask the store owner to unlock it.",
+    "forgot": "Ask the store owner to make you a new PIN. Works offline.",
     "setup": {
-      "title": "Create a New PIN",
-      "repeat": "Repeat the PIN",
-      "mismatch": "The PINs don’t match. Try again."
+      "title": "Create a new PIN",
+      "repeat": "Repeat the new PIN",
+      "mismatch": "The PINs don’t match. Start again.",
+      "screenTitle": "Create PIN",
+      "hint": "6 digits. Avoid your birthday.",
+      "failed": "The PIN couldn’t be saved. Try again."
     },
     "change": {
       "title": "Change PIN",
       "enterCurrent": "Enter your current PIN",
-      "wrongCurrent": "That current PIN is wrong. Try again.",
-      "done": "Your PIN has been changed."
+      "wrongCurrent": "That’s not your current PIN. Try again.",
+      "done": "Your PIN is changed",
+      "doneBody": "Use the new PIN from now on."
     },
     "reset": {
-      "title": "Reset PIN",
-      "chooseUser": "Choose the user who forgot their PIN",
-      "noUsers": "There are no other users on this device.",
-      "handOver": "Hand the device to {name}. They type the new PIN — you won’t see it.",
-      "done": "{name}’s PIN has been reset.",
-      "denied": "Only a main owner can reset another main owner’s PIN."
+      "noUsers": "There’s no other staff on this phone yet.",
+      "done": "New PIN is set",
+      "denied": "Only a main owner can make a new PIN for another main owner."
     },
     "unlock": {
-      "title": "Unlock a PIN",
-      "chooseUser": "Choose the locked-out user",
-      "noneLocked": "No one is locked out.",
-      "confirm": "Unlock {name}’s PIN? They can try their PIN again right away.",
-      "done": "{name}’s PIN is unlocked.",
-      "notLocked": "{name}’s PIN is no longer locked."
+      "confirm": "They can sign in with their old PIN right away.",
+      "done": "PIN unlocked",
+      "notLocked": "{name}’s PIN is no longer locked"
     },
     "manage": {
       "unauthorizedTitle": "Owner permission needed",
-      "unauthorizedBody": "Only the store owner can reset or unlock PINs. Ask the store owner."
-    }
+      "unauthorizedBody": "Only the store owner can manage staff PINs."
+    },
+    "signIn": "Sign in",
+    "lockedOutTitle": "Your PIN is locked",
+    "forgotTitle": "Forgot your PIN?",
+    "staff": {
+      "title": "Staff PINs",
+      "resetTitle": "New PIN",
+      "unlock": "Unlock PIN",
+      "reset": "Make a new PIN",
+      "handedOver": "Continue",
+      "handOverTitle": "Hand the phone to {name}",
+      "handOverBody": "{name} types the new PIN themselves.",
+      "finish": "Done",
+      "resetDoneBody": "{name} can sign in with the new PIN.",
+      "unlockDoneBody": "{name} can sign in again.",
+      "failedTitle": "That didn’t work",
+      "unlockConfirmTitle": "Unlock {name}’s PIN?",
+      "lockedBody": "Still remembers the old PIN? Just unlock it."
+    },
+    "noPinTitle": "No PIN yet",
+    "noPinBody": "Ask the store owner to make you a PIN.",
+    "saving": "Saving the PIN…"
   },
   "enroll": {
-    "title": "Enroll This Device",
-    "instruction": "Sign in with your account. This device will be enrolled for your store.",
+    "title": "Enroll this phone",
+    "progress": "{step} of {total}",
+    "credentialsTitle": "Sign in with the owner account",
+    "instruction": "Only needed once on this phone. Make sure you’re online.",
     "identifierField": "Account name",
     "passwordField": "Password",
-    "submit": "Sign In",
-    "needsConnection": "Enrolling a device needs an internet connection.",
-    "success": "Device enrolled"
+    "passwordTooShort": "Passwords are at least {min} characters.",
+    "submit": "Sign in",
+    "storeTitle": "Choose a store",
+    "nameTitle": "Almost done",
+    "storeLabel": "Store",
+    "account": "{tenant} account",
+    "deviceNameField": "Phone name",
+    "deviceNamePlaceholder": "For example: Counter phone 1",
+    "bind": "Enroll in {store}",
+    "bindWithoutStore": "Enroll",
+    "pickStoreFirst": "Choose a store first.",
+    "nameDeviceFirst": "Name the phone first.",
+    "needsConnection": "You’re offline. Connect, then try again.",
+    "wrongCredentials": "Wrong account name or password. Try again.",
+    "notOwner": "This isn’t an owner account.",
+    "success": "All set",
+    "successStore": "Enrolled in",
+    "successNext": "Next, choose who’s using it.",
+    "finish": "Continue",
+    "discardTitle": "Cancel enrollment?",
+    "discardMessage": "What you entered will be lost.",
+    "discard": "Cancel enrollment",
+    "keepEditing": "Keep going"
   },
   "revoked": {
     "title": "Device Revoked",
@@ -68,5 +113,61 @@
     "pinLockedOut": "PIN locked",
     "pinLockoutCleared": "PIN unlocked",
     "permissionDenied": "Access denied"
+  },
+  "staff": {
+    "title": "Staff",
+    "add": "Add staff",
+    "addTitle": "New staff member",
+    "editTitle": "Edit staff member",
+    "name": "Name",
+    "nameHint": "Shown when picking an account on the store’s devices.",
+    "roles": "Role",
+    "rolesHint": "You can pick more than one.",
+    "roleHint": {
+      "cashier": "Take in devices, set prices and hand devices back",
+      "technician": "Work on repairs, including before and after photos",
+      "storeOwner": "Everything in the store, including staff, discounts and cancelling repairs"
+    },
+    "save": "Save",
+    "problem": {
+      "nameMissing": "Type the name first.",
+      "nameTooLong": "That name is too long. Use at most 64 letters.",
+      "nameTaken": "Someone here already has this name. Add a last name to tell them apart.",
+      "roleMissing": "Pick a role first."
+    },
+    "failure": {
+      "offline": "Changing staff needs the internet. Connect, then try again.",
+      "denied": "You can’t change this person. Ask the main owner.",
+      "lastOwner": "The business must keep one main owner.",
+      "rateLimited": "Too many staff changes today. Try again tomorrow.",
+      "unexpected": "The change wasn’t saved. Try again in a moment."
+    },
+    "you": "You",
+    "noPin": "No PIN yet",
+    "inactive": "Deactivated",
+    "inactiveSection": "Deactivated",
+    "empty": "No other staff yet",
+    "emptyBody": "Add staff so they can sign in with their own PIN.",
+    "addedTitle": "{name} was added",
+    "addedBody": "If they’re here, hand them the phone so they make their own PIN.",
+    "makePinNow": "Make PIN",
+    "later": "Later",
+    "notYetHere": "{name} will appear on this phone after it syncs. Make their PIN later under Staff PINs.",
+    "makePin": "Make PIN",
+    "deactivate": "Deactivate",
+    "deactivateTitle": "Deactivate {name}?",
+    "deactivateBody": "They can no longer sign in, and changes from their phone that haven’t been sent yet will be refused. Their work history stays.",
+    "deactivateConfirm": "Deactivate",
+    "inactiveBody": "They can’t sign in until reactivated.",
+    "reactivate": "Reactivate",
+    "saved": "Changes saved.",
+    "deactivated": "{name} was deactivated.",
+    "reactivated": "{name} is active again. If they forgot their PIN, make a new one under Staff PINs.",
+    "settingsSummary": "Add, change roles or deactivate",
+    "discardTitle": "Discard changes?",
+    "discardMessage": "Changes you haven’t saved will be lost.",
+    "discard": "Discard",
+    "keepEditing": "Keep editing",
+    "makePinHint": "Can’t sign in yet without a PIN."
   }
 }

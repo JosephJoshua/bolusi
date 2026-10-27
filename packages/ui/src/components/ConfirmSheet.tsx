@@ -9,6 +9,11 @@
  * bottom of the sheet is the thumb's resting position (§0 one-handed use), so the SAFE action gets
  * the position a misfire is most likely to hit. Do not "fix" this to match platform convention.
  *
+ * IT CLOSES THE KEYBOARD AS IT OPENS. A sheet asked for while a field is focused (back pressed on
+ * a half-filled intake) otherwise sat under the keyboard: the confirm was hidden, and the person
+ * could not see what they were about to tap (first Android QA run). Every sheet does this, so no
+ * caller has to remember to.
+ *
  * Rendered as a plain absolute overlay rather than RN `Modal`: the owner mounts it, so there is no
  * second, invisible view hierarchy to reason about. Android hardware-back → cancel is navigation
  * wiring (§8.1), and belongs to the screen (task 24), not here.
@@ -16,17 +21,18 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, space, type } from '../tokens.js';
 import { Button } from './Button.js';
 
 export interface ConfirmSheetProps {
   /** Already-localized. */
   readonly title: string;
-  /** Already-localized consequence text, ≤ 2 lines (§3.10). */
+  /** Already-localized consequence text, short (§3.10). Never cut off: at a large font it wraps. */
   readonly message?: string | undefined;
   /** Already-localized label for the confirming action, destructive unless `tone` says not. */
   readonly confirmLabel: string;
-  /** `primary` for a confirmation that loses nothing, such as "yes, it printed". */
+  /** `primary` for a confirmation that loses nothing ("yes, it printed", allowing notifications). */
   readonly tone?: 'destructive' | 'primary' | undefined;
   readonly onConfirm: () => void;
   /** Already-localized label for the safe action. */
@@ -77,15 +83,16 @@ export function ConfirmSheet({
   tone = 'destructive',
   testID = 'ui.confirmSheet',
 }: ConfirmSheetProps): React.JSX.Element {
+  useDismissKeyboard();
   return (
     <View testID={testID} style={styles.root}>
       <View testID={`${testID}.scrim`} style={styles.scrim} />
       <View testID={`${testID}.sheet`} style={styles.sheet}>
-        <Text testID={`${testID}.title`} numberOfLines={2} style={styles.title}>
+        <Text testID={`${testID}.title`} style={styles.title}>
           {title}
         </Text>
         {message === undefined ? null : (
-          <Text testID={`${testID}.message`} numberOfLines={2} style={styles.message}>
+          <Text testID={`${testID}.message`} style={styles.message}>
             {message}
           </Text>
         )}

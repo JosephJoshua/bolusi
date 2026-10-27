@@ -52,7 +52,7 @@ function renderSettings(
       onSelectLocale={vi.fn()}
       onOpenNotificationSettings={onOpenNotificationSettings}
       device={device}
-      currentUser={{ id: 'user-1', initials: 'PO' }}
+      currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
       onBack={vi.fn()}
       onOpenSwitcher={vi.fn()}
       onOpenChangePin={vi.fn()}
@@ -72,11 +72,11 @@ describe('the device-info block renders the enrolled identity (task 94)', () => 
   test('deviceName + deviceId, storeName + tenantName, and the platform all paint from the prop', () => {
     const screen = renderSettings(ENROLLED);
 
-    expect(lineText(screen, 'settings-device-id.primary')).toBe('Kasir 1');
-    expect(lineText(screen, 'settings-device-id.secondary')).toBe('device-abc-123');
-    expect(lineText(screen, 'settings-device-store.primary')).toBe('Toko Jayapura');
-    expect(lineText(screen, 'settings-device-store.secondary')).toBe('Bolusi Papua');
-    expect(lineText(screen, 'settings-device-platform.primary')).toBe('android');
+    expect(lineText(screen, 'settings-device-name')).toBe('Kasir 1');
+    expect(lineText(screen, 'settings-device-id')).toBe('device-abc-123');
+    expect(lineText(screen, 'settings-device-store')).toBe('Toko Jayapura');
+    expect(lineText(screen, 'settings-device-tenant')).toBe('Bolusi Papua');
+    expect(lineText(screen, 'settings-device-platform')).toBe('Android');
   });
 });
 
@@ -87,10 +87,10 @@ describe('POSITIVE CONTROL: blank in ⇒ blank out (T-14b)', () => {
     // means the device is unenrolled (the reader's honest empty state), not that the screen hardcodes.
     const screen = renderSettings(BLANK);
 
-    expect(lineText(screen, 'settings-device-id.primary')).toBe('');
-    expect(lineText(screen, 'settings-device-id.secondary')).toBe('');
-    expect(lineText(screen, 'settings-device-store.primary')).toBe('');
-    expect(lineText(screen, 'settings-device-store.secondary')).toBe('');
+    expect(lineText(screen, 'settings-device-name')).toBe('');
+    expect(lineText(screen, 'settings-device-id')).toBe('');
+    expect(lineText(screen, 'settings-device-store')).toBe('');
+    expect(lineText(screen, 'settings-device-tenant')).toBe('');
   });
 });
 
@@ -132,7 +132,7 @@ describe('the screen title and section headers are distinct, correct labels (§1
         onSelectLocale={vi.fn()}
         onOpenNotificationSettings={vi.fn()}
         device={ENROLLED}
-        currentUser={{ id: 'user-1', initials: 'PO' }}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
         onBack={vi.fn()}
         onOpenSwitcher={vi.fn()}
         onOpenChangePin={onOpenChangePin}
@@ -146,63 +146,65 @@ describe('the screen title and section headers are distinct, correct labels (§1
     expect(onOpenChangePin).toHaveBeenCalledTimes(1);
   });
 
-  test('the Unlock-a-PIN row is shown and fires ONLY when the owner action is offered (task 186b)', () => {
-    // `onOpenUnlockPin` present ⇒ the owner holds `auth.pin_unlock`, so the row renders and routes.
-    const onOpenUnlockPin = vi.fn();
+  test('the staff PIN row is shown and fires ONLY when an owner PIN action is offered', () => {
+    // `onOpenStaffPins` present ⇒ the user holds `auth.pin_unlock` or `auth.user_reset_pin`.
+    const onOpenStaffPins = vi.fn();
     const owner = render(
       <SettingsScreen
         locale="id"
         onSelectLocale={vi.fn()}
         onOpenNotificationSettings={vi.fn()}
         device={ENROLLED}
-        currentUser={{ id: 'user-1', initials: 'PO' }}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
         onBack={vi.fn()}
         onOpenSwitcher={vi.fn()}
         onOpenChangePin={vi.fn()}
-        onOpenUnlockPin={onOpenUnlockPin}
+        onOpenStaffPins={onOpenStaffPins}
+        lockedStaffCount={2}
         syncChip="synced"
         pendingCount={0}
         onOpenSync={vi.fn()}
       />,
     );
-    fire(owner.get('settings-unlock-pin'), 'onPress');
-    expect(onOpenUnlockPin).toHaveBeenCalledTimes(1);
+    fire(owner.get('settings-staff-pins'), 'onPress');
+    expect(onOpenStaffPins).toHaveBeenCalledTimes(1);
+    // A locked colleague is surfaced on the row itself, so the owner sees it without opening the list.
+    expect(lineText(owner, 'settings-staff-pins.secondary')).toBe(
+      t('core.settings.staffPinsLocked', { count: 2 }),
+    );
   });
 
-  test('CONTROL: a non-owner (no unlock callback) never sees the Unlock row — it is gated, not always on', () => {
-    // `renderSettings` omits `onOpenUnlockPin`, standing for a user WITHOUT `auth.pin_unlock`. The row
-    // must be absent — a shown-then-denied entry would leak that the action exists. This is the
-    // falsification control for the test above: render the row unconditionally and this reds.
+  test('CONTROL: a user without owner PIN actions never sees the staff PIN row', () => {
+    // A shown-then-denied entry would leak that the action exists; render it unconditionally and this reds.
     const nonOwner = renderSettings(ENROLLED);
-    expect(nonOwner.query('settings-unlock-pin')).toBeNull();
+    expect(nonOwner.query('settings-staff-pins')).toBeNull();
   });
 
-  test('the Reset-a-PIN row is shown and fires ONLY when the owner action is offered (task 186b-2)', () => {
-    const onOpenResetPin = vi.fn();
+  test('"Karyawan" shows under the store team ONLY for someone who may add staff, and opens it', () => {
+    const onOpenStaff = vi.fn();
     const owner = render(
       <SettingsScreen
         locale="id"
         onSelectLocale={vi.fn()}
         onOpenNotificationSettings={vi.fn()}
         device={ENROLLED}
-        currentUser={{ id: 'user-1', initials: 'PO' }}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
         onBack={vi.fn()}
         onOpenSwitcher={vi.fn()}
         onOpenChangePin={vi.fn()}
-        onOpenResetPin={onOpenResetPin}
+        onOpenStaff={onOpenStaff}
         syncChip="synced"
         pendingCount={0}
         onOpenSync={vi.fn()}
       />,
     );
-    fire(owner.get('settings-reset-pin'), 'onPress');
-    expect(onOpenResetPin).toHaveBeenCalledTimes(1);
-  });
+    expect(lineText(owner, 'settings-section-team')).toBe(t('core.settings.team'));
+    fire(owner.get('settings-staff'), 'onPress');
+    expect(onOpenStaff).toHaveBeenCalledTimes(1);
 
-  test('CONTROL: a non-owner (no reset callback) never sees the Reset row — it is gated (task 186b-2)', () => {
-    // `renderSettings` omits `onOpenResetPin` ⇒ a user WITHOUT `auth.user_reset_pin`; the row is absent.
-    const nonOwner = renderSettings(ENROLLED);
-    expect(nonOwner.query('settings-reset-pin')).toBeNull();
+    const staff = renderSettings(ENROLLED);
+    expect(staff.query('settings-staff')).toBeNull();
+    expect(staff.query('settings-section-team')).toBeNull();
   });
 
   test('the three section headers are mutually distinct (no two sections share a label)', () => {
@@ -258,7 +260,7 @@ describe("the pending chip announces THIS screen's unsent-op count (task 144 rev
         onSelectLocale={vi.fn()}
         onOpenNotificationSettings={vi.fn()}
         device={ENROLLED}
-        currentUser={{ id: 'user-1', initials: 'PO' }}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
         onBack={vi.fn()}
         onOpenSwitcher={vi.fn()}
         onOpenChangePin={vi.fn()}

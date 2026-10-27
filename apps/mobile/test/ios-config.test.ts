@@ -64,7 +64,7 @@ const EXPECTED_BUNDLE_ID = 'com.bolusi.app';
  * added here in the same commit that adds the dep.
  */
 const REQUIRED_IOS_USAGE_DESCRIPTIONS: Record<string, Readonly<Record<string, string>>> = {
-  // Foreground only — `ports/location.ts` calls `requestForegroundPermissionsAsync`, never `Always`.
+  // Foreground only — `ports/location.ts` reads a foreground grant, never `Always`.
   'expo-location': {
     NSLocationWhenInUseUsageDescription:
       'Izinkan aplikasi memakai lokasi untuk mencatat tempat pekerjaan dilakukan.',

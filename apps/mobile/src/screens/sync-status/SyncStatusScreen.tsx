@@ -7,27 +7,26 @@
  *   1. THE ANSWER — "is my work safe?" That is the only question anyone opens this screen with, so
  *      it is the first thing on it, in `type.display`. In every state but `attention` the answer is
  *      yes, and it is stated as a fact rather than implied by the absence of an error.
- *   2. FRESHNESS — the FreshnessCell + "last connected …". Not "are you online" (nobody cares) but
+ *   2. FRESHNESS — "last connected …" under the answer. Not "are you online" (nobody cares) but
  *      "is what I am looking at current" (everybody does). This is the honest escalation.
- *   3. COUNTERS — receipts. Neutral. `sync.status.pending` is "3 perubahan belum terkirim", which
- *      is the app telling you it is holding your work, not confessing to losing it.
+ *   3. WHAT IS WAITING — changes and photos not sent yet, and ONLY when there are some: a box of
+ *      zeros said nothing the headline had not already said.
  *   4. PROBLEMS — rejected / quarantined, and ONLY when they exist. An empty problems list renders
  *      nothing at all: no "0 rejected", no green all-clear badge. A section that is usually empty
  *      trains people to skim past it, and this is the one section that must never be skimmed.
  *
- * The HEADER TITLE is part of that argument, not chrome above it: it names the state the device is
- * actually in (`SYNC_TITLE_KEY`, model.ts). A fixed title cannot be honest on this screen — a title
- * that says "Rejected Changes" over "everything is sent" is the screen contradicting itself in its
- * largest text, and the largest text wins.
+ * The HEADLINE names the state the device is actually in (`SYNC_TITLE_KEY`, model.ts), in the
+ * largest text on the screen, under a neutral header ("Status data"). A fixed headline cannot be
+ * honest here — "Rejected Changes" over "everything is sent" is the screen contradicting itself.
  *
  * Offline appears exactly once, at tier 1, phrased as `sync.status.offline` — "Tidak ada koneksi.
  * Perubahan tersimpan di perangkat ini." It is a statement about the network AND a reassurance about
  * the data, in that order, in one sentence. It is never red.
  */
 import {
+  formatDate,
   formatRelative,
   t,
-  formatDate,
   translateErrorCode,
   translateOpType,
   translateRejection,
@@ -38,20 +37,25 @@ import {
   AvatarButton,
   Banner,
   Button,
-  Card,
-  Chip,
+  Fact,
+  FactGrid,
   FreshnessCell,
-  List,
+  Icon,
   ListRow,
+  Sheet,
   SyncChip,
+  TextButton,
+  border,
   color,
-  numeric,
+  radius,
   selectBanner,
+  size,
   space,
   type,
-  type ListState,
+  type IconName,
 } from '@bolusi/ui';
-import { StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from './chip-a11y.js';
 import {
@@ -60,7 +64,6 @@ import {
   isOfflineButHealthy,
   manualSync,
   mediaQueue,
-  MEDIA_STATUS_KEY,
   reassurance,
   REASSURANCE_KEY,
   showsRejectedSection,
@@ -69,9 +72,9 @@ import {
   syncChipState,
   syncProblems,
   syncTitleState,
-  type MediaQueueRow,
   type RejectedOpRow,
   type SyncStatusInput,
+  type SyncTitleState,
 } from './model.js';
 
 export interface SyncStatusScreenProps {
@@ -79,24 +82,21 @@ export interface SyncStatusScreenProps {
   readonly currentUser: { readonly id: string; readonly initials: string } | null;
   readonly onBack: () => void;
   readonly onSyncNow: () => void;
+  /** Open (or close, when it is the open one) a refused change's detail sheet. */
   readonly onOpenRejected: (row: RejectedOpRow) => void;
-  readonly onRetryMedia: (row: MediaQueueRow) => void;
+  /** Re-sends every failed photo: the drain is one loop over all of them (06 §5.2 (e)). */
+  readonly onRetryMedia: () => void;
   readonly onOpenSwitcher: () => void;
   /**
-   * The rejected op whose §8.4-item-4 detail is open, or `null` when none is (task 130).
-   *
-   * §8.4 says "tap → detail with `rejectionCode`/`rejectionReason` … and label-catalog explanation +
-   * prescribed next step per code". Three of those four are ALREADY on the row: `core.rejection.<CODE>`
-   * (07-i18n §10.2) is written as "what happened, then what to do", which is the explanation
-   * AND the prescribed step, and the row renders it. The one thing a detail adds is the server's
-   * `rejectionReason`, and 07-i18n §4.3 states its treatment exactly — "the server's `rejectionReason`
-   * shows only as **collapsed technical detail**" under `sync.rejected.technicalDetails`, a key that
-   * shipped with zero consumers. So the detail is a DISCLOSURE on this screen rather than a new
-   * route: a second screen would have to re-render the same sentence to justify existing, and §3.10's
-   * "avoid modals, full-screen flows preferred" is about flows, not about a two-line collapsed field.
+   * The refused change whose detail sheet is open, or `null`. The row already says what happened and
+   * what to do (`core.rejection.<CODE>`, 07-i18n §10.2); the sheet adds which change it was, when, and
+   * the server's own words as collapsed technical detail (07-i18n §4.3).
    */
   readonly expandedRejectedOpId: string | null;
 }
+
+/** How many refused changes are listed at a time; "show more" adds this many again. */
+export const REJECTED_SHOWN = 50;
 
 export function SyncStatusScreen({
   input,
@@ -109,28 +109,32 @@ export function SyncStatusScreen({
   expandedRejectedOpId,
 }: SyncStatusScreenProps): React.JSX.Element {
   const level = staleness(input);
-  const banner = selectBanner(bannerCauses(input));
+  // The refused-changes banner points here, so on this screen it would only repeat the headline
+  // and the section below it.
+  const banner = selectBanner(bannerCauses(input).filter((cause) => cause.kind !== 'rejectedOps'));
   const sync = manualSync(input);
   const queue = mediaQueue(input);
   const problems = syncProblems(input);
-  // The header chip is the five-state, media-blind verdict (design-system §8.1). The header title is
-  // that verdict PLUS the `photosPending` distinction the chip cannot carry (task 147): they agree
-  // whenever anything is wrong, and diverge only when ops are sent while photos are still queued.
+  // The header chip is the five-state, media-blind verdict (design-system §8.1). The headline is that
+  // verdict PLUS the `photosPending` distinction the chip cannot carry (task 147).
   const chip = syncChipState(input);
   const titleState = syncTitleState(input);
   const setupPercent = input.firstSync === null ? null : firstSyncPercent(input.firstSync);
-
-  const rejectedState: ListState<RejectedOpRow> = { kind: 'ready', items: [...input.rejected] };
-  const mediaState: ListState<MediaQueueRow> = { kind: 'ready', items: [...queue] };
+  const failedPhotos = queue.filter((row) => row.uploadStatus === 'failed');
+  // The canonical count (06 §4: orphans never count), the same one the headline reads; failed photos
+  // are still waiting, and their own section below says why.
+  const waitingPhotos = input.pendingMediaCount;
+  const hasWaiting = input.pendingOperationCount > 0 || waitingPhotos > 0;
+  const openRejected = input.rejected.find((row) => row.opId === expandedRejectedOpId) ?? null;
+  const [rejectedShown, setRejectedShown] = useState(REJECTED_SHOWN);
+  const rejectedHidden = input.rejected.length - rejectedShown;
+  const { icon, tone } = HERO[titleState];
 
   return (
     <AppShell
-      // task 126/147: the title is the STATE, read from `SYNC_TITLE_KEY` (model.ts) — the one
-      // view→key mapping (§2.8). Keyed on `syncTitleState`, which is the chip's verdict plus the one
-      // distinction the media-blind chip cannot draw: ops sent, photos still queued (FR-1138). Before
-      // 126 it was `t('sync.rejected.title')` unconditionally (a synced device headed "Perubahan
-      // Ditolak"); 126 keyed it on the chip, which then read "Semua Terkirim" over 3 pending photos.
-      title={t(SYNC_TITLE_KEY[titleState])}
+      // Plain views: the refused list grows in pages (`REJECTED_SHOWN`), so the whole page scrolls.
+      scrollable
+      title={t('sync.status.screenTitle')}
       titleVariant="detail"
       onBack={onBack}
       backLabel={t('core.action.back')}
@@ -173,31 +177,80 @@ export function SyncStatusScreen({
         )
       }
       bottomAction={
-        <Button
-          label={t('sync.action.syncNow')}
-          onPress={onSyncNow}
-          busy={sync.kind === 'busy'}
-          disabled={sync.kind === 'disabled'}
-          testID="sync-now"
-        />
+        <View>
+          {sync.kind === 'disabled' ? (
+            // A disabled button with no reason is how a user decides the app is broken. The reason
+            // comes from the MODEL's `reasonCode` (task 144 item 1).
+            <Text style={styles.disabledReason} testID="sync-disabled-reason">
+              {translateRejectionCode(sync.reasonCode)}
+            </Text>
+          ) : null}
+          <Button
+            label={t('sync.action.syncNow')}
+            onPress={onSyncNow}
+            busy={sync.kind === 'busy'}
+            disabled={sync.kind === 'disabled'}
+            testID="sync-now"
+          />
+        </View>
+      }
+      overlay={
+        openRejected === null ? null : (
+          <Sheet
+            title={translateOpType(openRejected.type)}
+            subtitle={
+              openRejected.subject === null
+                ? formatRelative(input.now - openRejected.at)
+                : `${openRejected.subject} · ${formatRelative(input.now - openRejected.at)}`
+            }
+            closeLabel={t('core.action.close')}
+            onClose={() => onOpenRejected(openRejected)}
+            testID={`sync-rejected-detail-${openRejected.opId}`}
+          >
+            <Text style={styles.sheetBody}>
+              {translateRejection(openRejected.rejectionCode, openRejected.rejectionReason)}
+            </Text>
+            <View style={styles.technical}>
+              <Text style={styles.technicalTitle}>{t('sync.rejected.technicalDetails')}</Text>
+              <Text style={styles.technicalText} testID={`sync-rejected-code-${openRejected.opId}`}>
+                {openRejected.rejectionCode}
+              </Text>
+              {/* The server's own words, and ONLY here (07-i18n §4.3). */}
+              <Text
+                style={styles.technicalText}
+                selectable
+                testID={`sync-rejected-reason-${openRejected.opId}`}
+              >
+                {openRejected.rejectionReason ?? t('sync.rejected.noReason')}
+              </Text>
+            </View>
+          </Sheet>
+        )
       }
       testID="sync-status-screen"
     >
-      {/* 1 — THE ANSWER. */}
-      <View style={styles.answer} testID="sync-reassurance">
-        <FreshnessCell
-          level={level}
-          accessibilityLabel={t('sync.status.lastSynced', { relative: relativeLabel(input) })}
-        />
-        <Text style={styles.answerText} testID="sync-reassurance-text">
-          {reassuranceText(input)}
-        </Text>
+      {/* 1 — THE ANSWER, then 2 — how fresh it is. */}
+      <View style={styles.hero} testID="sync-reassurance">
+        <View style={[styles.heroDisc, { backgroundColor: TONE[tone].bg }]}>
+          <Icon name={icon} size={size.iconInline + space.xs} color={TONE[tone].fg} />
+        </View>
+        <View style={styles.heroText}>
+          <Text style={styles.headline} accessibilityRole="header" testID="sync-headline">
+            {t(SYNC_TITLE_KEY[titleState])}
+          </Text>
+          <Text style={styles.answer} testID="sync-reassurance-text">
+            {reassuranceText(input)}
+          </Text>
+          <Text style={styles.meta} testID="sync-last-synced">
+            {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
+          </Text>
+        </View>
       </View>
 
       {input.firstSync !== null && setupPercent !== null ? (
         // A new device's first pull. Calm on purpose: it is setup, not a fault, and work can go on.
-        <Card testID="sync-first-sync">
-          <Text style={styles.firstSyncTitle}>{t('sync.firstSync.title')}</Text>
+        <View style={styles.box} testID="sync-first-sync">
+          <Text style={styles.boxTitle}>{t('sync.firstSync.title')}</Text>
           <Text style={styles.meta} testID="sync-first-sync-progress">
             {t('sync.firstSync.progress', {
               date: formatDate(input.firstSync.reachedAt),
@@ -205,57 +258,39 @@ export function SyncStatusScreen({
             })}
           </Text>
           <Text style={styles.meta}>{t('sync.firstSync.explain')}</Text>
-        </Card>
+        </View>
       ) : null}
 
-      {/* 2 — FRESHNESS. */}
-      <Text style={styles.meta} testID="sync-last-synced">
-        {t('sync.status.lastSynced', { relative: relativeLabel(input) })}
-      </Text>
-
-      {/* 3 — RECEIPTS. Neutral by construction: Chips, `textMuted`, no danger tone anywhere. */}
-      <View style={styles.counters} testID="sync-counters">
-        {/* Each card sits in a `flex: 1` cell so the two SHARE the row width (task 129 item 7). `Card`
-            carries no width of its own (design-system §3.4 forbids the ad-hoc style prop that would let
-            it flex directly), so without the cell the two cards size to their content and a wide
-            Indonesian label — the +30% expansion §0 requires us to survive — pushed the right card past
-            the 360 dp viewport and scrolled the screen horizontally. The cell constrains each to half the
-            row; the label wraps inside the card instead. */}
-        <View style={styles.counterCell} testID="sync-counter-ops-cell">
-          <Card testID="sync-counter-ops">
-            <Text style={styles.count}>{String(input.pendingOperationCount)}</Text>
-            <Text style={styles.meta}>
-              {t('sync.status.pending', { count: input.pendingOperationCount })}
-            </Text>
-          </Card>
+      {/* 3 — WHAT IS WAITING, only when something is. Neutral: held work is safe work. */}
+      {hasWaiting ? (
+        <View style={styles.box} testID="sync-counters">
+          <FactGrid>
+            {/* A zero says nothing the headline has not, so only what is waiting is listed. */}
+            {input.pendingOperationCount > 0 ? (
+              <Fact
+                label={t('sync.status.changesLabel')}
+                value={t('sync.status.waitingCount', { count: input.pendingOperationCount })}
+                wide={waitingPhotos === 0}
+                testID="sync-counter-ops"
+              />
+            ) : null}
+            {waitingPhotos > 0 ? (
+              <Fact
+                label={t('sync.status.photosLabel')}
+                value={t('sync.status.waitingCount', { count: waitingPhotos })}
+                wide={input.pendingOperationCount === 0}
+                testID="sync-counter-media"
+              />
+            ) : null}
+          </FactGrid>
         </View>
-        <View style={styles.counterCell} testID="sync-counter-media-cell">
-          <Card testID="sync-counter-media">
-            <Text style={styles.count}>{String(input.pendingMediaCount)}</Text>
-            <Text style={styles.meta}>
-              {t('sync.status.pendingMedia', { count: input.pendingMediaCount })}
-            </Text>
-          </Card>
-        </View>
-      </View>
-
-      {sync.kind === 'disabled' ? (
-        // A disabled button with no reason is how a user decides the app is broken. The reason comes
-        // from the MODEL's `reasonCode` (task 144 item 1) — the screen used to hardcode the code, so the
-        // model value had zero callers; now a change to `manualSync`'s reason reaches the screen.
-        <Text style={styles.disabledReason} testID="sync-disabled-reason">
-          {translateRejectionCode(sync.reasonCode)}
-        </Text>
       ) : null}
 
       {input.manualSyncError !== null ? (
         // §8.4 item 3: inline, never modal — the backoff continues in the background regardless. The
-        // message translates the ACTUAL failure code (07-i18n §4.2), not a hardcoded NETWORK (task 144
-        // item 2 — the field used to be ignored, so every failure claimed a network problem); an
-        // unregistered code degrades to `core.errors.UNEXPECTED`. The raw code rides beneath the message
-        // so a shop owner has something to quote to support (§5 Error state).
-        <View testID="sync-manual-error">
-          <Text style={styles.inlineError}>{translateErrorCode(input.manualSyncError)}</Text>
+        // raw code rides beneath the message so a shop owner has something to quote to support.
+        <View style={styles.inlineError} testID="sync-manual-error">
+          <Text style={styles.inlineErrorText}>{translateErrorCode(input.manualSyncError)}</Text>
           <Text style={styles.meta} testID="sync-manual-error-code">
             {input.manualSyncError}
           </Text>
@@ -263,98 +298,99 @@ export function SyncStatusScreen({
       ) : null}
 
       {/* 4 — PROBLEMS, only when real. */}
+      {failedPhotos.length > 0 ? (
+        <View style={styles.section} testID="sync-media-section">
+          <Text style={styles.sectionTitle}>{t('sync.media.failedTitle')}</Text>
+          <Text style={styles.sectionText}>
+            {t('sync.media.failedBody', { count: failedPhotos.length })}
+          </Text>
+          <View style={styles.sectionAction}>
+            <TextButton
+              label={t('sync.media.retry')}
+              icon="retry"
+              onPress={onRetryMedia}
+              testID="sync-media-retry"
+            />
+          </View>
+        </View>
+      ) : null}
+
       {problems.some((problem) => problem.kind === 'quarantined') ? (
-        <View testID="sync-quarantine">
-          <Text style={styles.sectionDanger}>{t('sync.quarantine.title')}</Text>
-          <Text style={styles.meta}>{t('sync.quarantine.body')}</Text>
+        <View style={styles.section} testID="sync-quarantine">
+          <Text style={styles.sectionTitle}>{t('sync.quarantine.title')}</Text>
+          <Text style={styles.sectionText}>{t('sync.quarantine.body')}</Text>
         </View>
       ) : null}
 
       {showsRejectedSection(input) ? (
-        <View testID="sync-rejected-section">
-          <Text style={styles.sectionDanger}>{t('sync.rejected.title')}</Text>
-          <Text style={styles.meta}>{t('sync.rejected.explain')}</Text>
-          <List
-            state={rejectedState}
-            keyExtractor={(row) => row.opId}
-            renderRow={(row) => (
-              <View>
-                <ListRow
-                  primaryText={translateRejection(row.rejectionCode, row.rejectionReason)}
-                  // The op type answers "which change was rejected?" — the rejection code alone
-                  // ("SCHEMA_VERSION_UNSUPPORTED") names the verdict, not the change. `translateOpType`
-                  // resolves the module's own label (07-i18n §4.4); an unregistered/unknown type
-                  // degrades to "Change" rather than leaking the raw `notes.note_created` id.
-                  secondaryText={
-                    row.subject === null
-                      ? t('sync.rejected.opMeta', {
-                          opType: translateOpType(row.type),
-                          time: formatRelative(input.now - row.at),
-                        })
-                      : t('sync.rejected.opMetaSubject', {
-                          opType: translateOpType(row.type),
-                          subject: row.subject,
-                          time: formatRelative(input.now - row.at),
-                        })
-                  }
-                  onPress={() => onOpenRejected(row)}
-                  showChevron
-                  testID={`sync-rejected-${row.opId}`}
-                />
-                {row.opId === expandedRejectedOpId ? (
-                  <View style={styles.rejectedDetail} testID={`sync-rejected-detail-${row.opId}`}>
-                    {/* The code itself, for support (§5's Error row rule, applied to a rejection). */}
-                    <Text style={styles.meta} testID={`sync-rejected-code-${row.opId}`}>
-                      {row.rejectionCode}
-                    </Text>
-                    <Text style={styles.meta}>{t('sync.rejected.technicalDetails')}</Text>
-                    {/* The server's own words, and ONLY here: 07-i18n §4.3 says the reason "shows
-                        only as collapsed technical detail". A null reason renders the catalog's empty
-                        marker rather than an empty box, so "the server sent no detail" is legible
-                        instead of looking like a rendering bug. */}
-                    <Text style={styles.meta} testID={`sync-rejected-reason-${row.opId}`}>
-                      {row.rejectionReason ?? t('core.status.empty')}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            )}
-            testID="sync-rejected-list"
-          />
-        </View>
-      ) : null}
-
-      {queue.length > 0 ? (
-        <View testID="sync-media-section">
-          <List
-            state={mediaState}
-            keyExtractor={(row) => row.mediaId}
-            renderRow={(row) => (
+        <View style={styles.section} testID="sync-rejected-section">
+          <Text style={styles.sectionTitle}>
+            {t('sync.rejected.title', { count: input.rejected.length })}
+          </Text>
+          <Text style={styles.sectionText}>{t('sync.rejected.explain')}</Text>
+          <View style={styles.rows} testID="sync-rejected-list">
+            {input.rejected.slice(0, rejectedShown).map((row) => (
               <ListRow
-                primaryText={t(MEDIA_STATUS_KEY[row.uploadStatus])}
-                secondaryText={row.progressPercent === null ? undefined : `${row.progressPercent}%`}
-                trailing={
-                  <Chip
-                    label={t(MEDIA_STATUS_KEY[row.uploadStatus])}
-                    icon={row.uploadStatus === 'failed' ? 'rejected' : 'pending'}
-                    tone={row.uploadStatus === 'failed' ? 'danger' : 'neutral'}
-                    // Per-row testID so a composed test can press THIS chip. The default
-                    // (`ui.chip`) is ambiguous the moment a device has two queued photos, and an
-                    // ambiguous selector is how a test ends up asserting against the wrong row.
-                    testID={`sync-media-retry-${row.mediaId}`}
-                    {...(row.uploadStatus === 'failed' ? { onPress: () => onRetryMedia(row) } : {})}
-                  />
+                key={row.opId}
+                leading={
+                  <View style={styles.rowIcon}>
+                    <Icon name="rejected" size={size.iconInline} color={color.danger} />
+                  </View>
                 }
-                testID={`sync-media-${row.mediaId}`}
+                // What happened and what to do (the code's catalog sentence), then which change it was
+                // and when. `translateOpType` degrades an unknown type to "Change", never a raw id.
+                primaryText={translateRejection(row.rejectionCode, row.rejectionReason)}
+                secondaryText={
+                  row.subject === null
+                    ? t('sync.rejected.opMeta', {
+                        opType: translateOpType(row.type),
+                        time: formatRelative(input.now - row.at),
+                      })
+                    : t('sync.rejected.opMetaSubject', {
+                        opType: translateOpType(row.type),
+                        subject: row.subject,
+                        time: formatRelative(input.now - row.at),
+                      })
+                }
+                onPress={() => onOpenRejected(row)}
+                testID={`sync-rejected-${row.opId}`}
               />
-            )}
-            testID="sync-media-list"
-          />
+            ))}
+          </View>
+          {rejectedHidden > 0 ? (
+            <View style={styles.sectionAction}>
+              <TextButton
+                label={t('sync.rejected.more', {
+                  count: Math.min(rejectedHidden, REJECTED_SHOWN),
+                })}
+                onPress={() => setRejectedShown((shown) => shown + REJECTED_SHOWN)}
+                testID="sync-rejected-more"
+              />
+            </View>
+          ) : null}
         </View>
       ) : null}
     </AppShell>
   );
 }
+
+/** The headline's icon and tone per state. Only a real problem is coloured. */
+const HERO: Record<SyncTitleState, { readonly icon: IconName; readonly tone: HeroTone }> = {
+  synced: { icon: 'syncSynced', tone: 'success' },
+  pending: { icon: 'pending', tone: 'neutral' },
+  photosPending: { icon: 'photos', tone: 'neutral' },
+  syncing: { icon: 'syncSyncing', tone: 'neutral' },
+  offline: { icon: 'syncOffline', tone: 'neutral' },
+  attention: { icon: 'warning', tone: 'warning' },
+};
+
+type HeroTone = 'success' | 'neutral' | 'warning';
+
+const TONE: Record<HeroTone, { readonly bg: string; readonly fg: string }> = {
+  success: { bg: color.successBg, fg: color.success },
+  neutral: { bg: color.surfaceAlt, fg: color.textMuted },
+  warning: { bg: color.warningBg, fg: color.warning },
+};
 
 /** `{relative}` arrives PRE-FORMATTED (07-i18n): the formatter is i18n's, never Intl here. */
 function relativeLabel(input: SyncStatusInput): string {
@@ -405,33 +441,58 @@ function bannerMessage(input: SyncStatusInput, cause: string): string {
 }
 
 const styles = StyleSheet.create({
-  answer: { alignItems: 'center', flexDirection: 'row', gap: space.md, marginBottom: space.sm },
-  answerText: { ...type.heading, color: color.text, flex: 1 },
-  meta: { ...type.caption, color: color.textMuted },
-  counters: { flexDirection: 'row', gap: space.md, marginVertical: space.lg },
-  // Half the row each (task 129 item 7). A column wrapper's default `alignItems: 'stretch'` fills the
-  // enclosed card to the cell width, so the two counters are equal-width and neither overflows 360 dp.
-  counterCell: { flex: 1 },
-  // design-system §2: tabular figures so a ticking count does not jitter as it ticks.
-  //
-  // The cast is a `@bolusi/ui` nit, not a token bypass: `numeric` is
-  // `Object.freeze({ fontVariant: Object.freeze(['tabular-nums']) } as const)`, and the inner
-  // `Object.freeze` widens the tuple to `readonly string[]`, which RN's `TextStyle` (a literal
-  // union) rejects. The VALUE is still the token's — nothing is restated here. Flagged for task 33:
-  // dropping the inner freeze in tokens.ts fixes it for every consumer, but `packages/ui` is
-  // contended this wave (CLAUDE.md §4) and `numeric` has no other consumer yet, so this screen is
-  // the first to hit it.
-  count: {
-    ...type.display,
-    color: color.text,
-    fontVariant: numeric.fontVariant as TextStyle['fontVariant'],
+  hero: { flexDirection: 'row', gap: space.md, paddingTop: space.sm },
+  heroDisc: {
+    width: size.avatarRow,
+    height: size.avatarRow,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  // The disclosed technical detail sits INDENTED under its row so it reads as belonging to it, and
-  // stays in `type.caption`/`textMuted` (via `meta`) — §8.4 item 4's "collapsed technical detail" is
-  // support material, never the primary message the row already carries.
-  rejectedDetail: { gap: space.xs, marginBottom: space.md, paddingLeft: space.lg },
-  sectionDanger: { ...type.heading, color: color.danger, marginTop: space.xl },
-  inlineError: { ...type.bodySm, color: color.danger, marginTop: space.sm },
-  firstSyncTitle: { ...type.body, color: color.text, marginBottom: space.xs },
-  disabledReason: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
+  heroText: { flex: 1 },
+  headline: { ...type.title, color: color.text },
+  answer: { ...type.body, color: color.text, marginTop: space.xs },
+  meta: { ...type.caption, color: color.textMuted, marginTop: space.xs },
+  box: {
+    backgroundColor: color.surfaceAlt,
+    borderRadius: radius.md,
+    padding: space.lg,
+    marginTop: space.xl,
+  },
+  boxTitle: { ...type.bodyBold, color: color.text },
+  inlineError: { marginTop: space.lg },
+  inlineErrorText: { ...type.bodySm, color: color.danger },
+  section: { marginTop: space.xl },
+  sectionTitle: { ...type.bodyBold, color: color.text },
+  sectionText: { ...type.bodySm, color: color.textMuted, marginTop: space.xs },
+  sectionAction: { alignItems: 'flex-start', marginLeft: -space.sm, marginTop: space.xs },
+  rows: {
+    marginTop: space.md,
+    marginHorizontal: -space.lg,
+    borderTopWidth: border.hairline,
+    borderTopColor: color.border,
+  },
+  rowIcon: {
+    width: size.avatarRow,
+    height: size.avatarRow,
+    borderRadius: radius.full,
+    backgroundColor: color.dangerBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledReason: {
+    ...type.bodySm,
+    color: color.textMuted,
+    marginBottom: space.sm,
+    textAlign: 'center',
+  },
+  sheetBody: { ...type.body, color: color.text, marginBottom: space.md },
+  technical: {
+    backgroundColor: color.surfaceAlt,
+    borderRadius: radius.md,
+    padding: space.md,
+    gap: space.xs,
+  },
+  technicalTitle: { ...type.caption, color: color.textMuted },
+  technicalText: { ...type.caption, color: color.text },
 });
