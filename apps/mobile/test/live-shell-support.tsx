@@ -566,12 +566,19 @@ export interface MountOptions {
    * only the capture test opts in with a fake camera.
    */
   readonly capturePlatform?: RootProps['capturePlatform'];
+  /** Called each time Root builds the signed-in user's screens, so a test can count rebuilds. */
+  readonly onScreensBuilt?: () => void;
 }
+
+/** A mounted Root that can be re-rendered with some props replaced, as a parent re-render would. */
+export type MountedRoot = RenderResult & {
+  readonly rerenderRoot: (props: Partial<RootProps>) => void;
+};
 
 export async function mountRoot(
   fixture: Fixture,
   options: MountOptions = {},
-): Promise<RenderResult> {
+): Promise<MountedRoot> {
   ensureNotesCatalog();
   await closeClientDb();
   fixture.app = await bootAt(fixture.location);
@@ -596,7 +603,7 @@ export async function mountRoot(
     loadSigningKey: () => Promise.resolve(),
   };
 
-  const screen = render(
+  const element = (
     <Root
       localeStore={{ read: () => Promise.resolve(null), write: () => Promise.resolve() }}
       readDeviceInfo={() =>
@@ -646,23 +653,30 @@ export async function mountRoot(
       // same function `index.ts` calls, so what this lane binds into the notes runtime is what a
       // device binds. It was `UNWIRED_NOTES_MEDIA` unconditionally here, which meant the composed
       // lane could not have observed a wired capture even after one existed.
-      createNotes={(booted, appRuntime, identity, media, capturePhoto) =>
-        createSessionNotesRuntime({
+      createNotes={(booted, appRuntime, identity, media, capturePhoto) => {
+        options.onScreensBuilt?.();
+        return createSessionNotesRuntime({
           app: booted,
           runtime: appRuntime,
           identity,
           media: notesMediaSeamsFor(media, capturePhoto),
-        })
-      }
+        });
+      }}
       {...(options.createMedia === undefined ? {} : { createMedia: options.createMedia })}
       capturePlatform={options.capturePlatform}
       // Push (task 135) — undefined unless a test opts in, so every other live-shell test is unchanged.
       createPushRegistration={options.createPushRegistration}
       pushRouter={options.pushRouter}
-    />,
+    />
   );
+  const screen = render(element);
   await settle();
-  return screen;
+  // The first render's props, so a re-render keeps every other identity, as production now does.
+  const props: RootProps = element.props;
+  return Object.assign(screen, {
+    rerenderRoot: (replaced: Partial<RootProps>) =>
+      screen.rerender(<Root {...props} {...replaced} />),
+  });
 }
 
 /** Flush the microtask queue inside `act` so effects and queries settle before an assertion. */

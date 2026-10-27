@@ -378,6 +378,15 @@ export function Root({
    */
   const readDeviceInfoStable = useLatestCallback(readDeviceInfo);
 
+  /**
+   * The camera seam, fixed at the first render. Same reason as `readDeviceInfoStable`: a platform
+   * built inline in `index.ts` was a new object every render, which rebuilt `capture.capturePhoto`,
+   * which re-ran the session effect below, which rebuilt the screens and rendered again: an endless
+   * loop on every signed-in screen. The native camera binding never changes while the app runs.
+   * `test/live-shell-dead-controls.test.tsx` guards it.
+   */
+  const [capturePlatformFixed] = useState(capturePlatform ?? null);
+
   useEffect(() => {
     let disposed = false;
 
@@ -669,7 +678,7 @@ export function Root({
    */
   const capture = useCaptureHost({
     media,
-    platform: capturePlatform ?? null,
+    platform: capturePlatformFixed,
     identity: notes?.identity ?? null,
   });
 
