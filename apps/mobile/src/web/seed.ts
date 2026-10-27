@@ -65,7 +65,7 @@ export const DEMO_USERS: readonly SwitcherUser[] = [
     photoMediaId: null,
     lastActiveAt: HARNESS_NOW - 45 * MINUTE,
     needsFirstPin: false,
-    roleKeys: ['store_owner'],
+    roleKeys: ['staff'],
   },
   {
     id: 'u-budi',
@@ -150,11 +150,21 @@ export const DEMO_REJECTED_OP_ID = 'op_9f3a';
 
 const DEMO_REJECTED: readonly RejectedOpRow[] = [
   {
+    // Started on a ticket the cashier had already cancelled from the counter PC.
     opId: DEMO_REJECTED_OP_ID,
-    type: 'repair.ticket_cancelled',
+    type: 'repair.work_started',
     at: HARNESS_NOW - 12 * MINUTE,
-    rejectionCode: 'PERMISSION_DENIED',
-    rejectionReason: 'actor lacks repair.ticket.cancel',
+    rejectionCode: 'RULE_VIOLATED',
+    rejectionReason: 'repair.refusal.cancelled',
+    subject: 'Servisan K7Q-0042',
+  },
+  {
+    opId: 'op_7c21',
+    type: 'repair.quote_changed',
+    at: HARNESS_NOW - 40 * MINUTE,
+    rejectionCode: 'CLOCK_AHEAD',
+    rejectionReason: 'timestamp is ahead of the server clock',
+    subject: 'Servisan K7Q-0039',
   },
 ];
 

@@ -1,6 +1,6 @@
 // Small pieces every repair screen shares: the four read states around a query, a verified photo
 // thumbnail, the ticket status chip and the banner for a refused action.
-import { t, translateErrorCode } from '@bolusi/i18n';
+import { formatMoney, t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -8,6 +8,8 @@ import {
   Chip,
   EmptyState,
   ErrorState,
+  Fact,
+  FactGrid,
   Icon,
   LoadingState,
   UnauthorizedState,
@@ -24,10 +26,17 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
-import { staleStepMessage, statusLabel } from './labels.js';
-import { statusTone, type StaleStep, type TicketStatus } from '../flows.js';
-import { useRepairThumbnail } from './runtime.js';
+import { tn } from '../i18n.js';
+import { staleStepMessage, statusLabel } from '../labels.js';
+import {
+  balanceAfterDownPayment,
+  statusTone,
+  type StaleStep,
+  type TicketStatus,
+} from '../flows.js';
+import type { DeviceModelPhoto, DeviceModelRow } from '../device-models.js';
+import { specFacts, type SpecFactKey } from '../device-specs.js';
+import { useModelPhoto, useRepairQuery, useRepairThumbnail } from './runtime.js';
 
 /**
  * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
@@ -96,7 +105,7 @@ export function ActionErrorBanner({
   return (
     <Banner
       variant="danger"
-      message={translateErrorCode(errorCode)}
+      message={translateFailure(errorCode)}
       onPress={onDismiss}
       testID={testID}
     />
@@ -173,6 +182,116 @@ export function PhotoThumb({
   }
 }
 
+/** The catalog model a brand and model name are, when the catalog surely has it (findDeviceModel). */
+export function useCatalogModel(brand: string, model: string): DeviceModelRow | null {
+  const query = useRepairQuery(
+    async (rt) =>
+      model.trim() === ''
+        ? null
+        : ((await rt.query('findDeviceModel', { brand: brand.trim(), model: model.trim() }))
+            .rows[0] ?? null),
+    `deviceModel:${brand.trim()}\u0000${model.trim()}`,
+  );
+  return query.status === 'ready' ? query.data : null;
+}
+
+/**
+ * A catalog picture of a phone model, the whole phone shown uncropped. While it loads, or when there
+ * is none (offline, not in the catalog), a plain phone glyph holds its place so rows do not jump.
+ */
+export function ModelPhoto({
+  photo,
+  large = false,
+  testID,
+}: {
+  readonly photo: DeviceModelPhoto | null;
+  /** The confirmation card's size; rows use the small one. */
+  readonly large?: boolean;
+  readonly testID: string;
+}): React.JSX.Element {
+  const uri = useModelPhoto(photo);
+  const frame = large ? styles.modelLarge : styles.modelSmall;
+  return uri === null ? (
+    <View style={[frame, styles.modelEmpty]} testID={`${testID}.none`}>
+      <Icon name="device" size={size.iconInline} color={color.textMuted} />
+    </View>
+  ) : (
+    <Image source={{ uri }} contentFit="contain" style={frame} testID={`${testID}.image`} />
+  );
+}
+
+/** The catalog picture of a ticket's phone, or nothing when the catalog has no picture of it. */
+export function CatalogPhoto({
+  brand,
+  model,
+  large = false,
+  testID,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly large?: boolean;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const uri = useModelPhoto(found?.photo ?? null);
+  if (uri === null) return null;
+  return (
+    <Image
+      source={{ uri }}
+      contentFit="contain"
+      style={large ? styles.modelLarge : styles.modelSmall}
+      testID={`${testID}.image`}
+    />
+  );
+}
+
+const SPEC_LABEL = {
+  memory: 'repair.spec.memory',
+  screen: 'repair.spec.screen',
+  chipset: 'repair.spec.chipset',
+  battery: 'repair.spec.battery',
+  port: 'repair.spec.port',
+  sim: 'repair.spec.sim',
+  cardSlot: 'repair.spec.cardSlot',
+  os: 'repair.spec.os',
+} as const satisfies Record<SpecFactKey, string>;
+
+/**
+ * The catalog's specs for a ticket's phone, as the viewer needs them (`specFacts`): memory
+ * variants for everyone, the inside of the phone for someone who repairs it. Nothing when the
+ * catalog does not know the model or has no specs for it.
+ */
+export function DeviceSpecs({
+  brand,
+  model,
+  repairs,
+  testID,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly repairs: boolean;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const facts = found === null ? [] : specFacts(found.specs, repairs);
+  if (facts.length === 0) return null;
+  return (
+    <Section title={tn('repair.spec.title')} testID={testID}>
+      <FactGrid>
+        {facts.map((fact) => (
+          <Fact
+            key={fact.key}
+            label={tn(SPEC_LABEL[fact.key])}
+            // GSMArena's "No" for a phone without a card slot.
+            value={fact.value === 'No' ? tn('repair.spec.none') : fact.value}
+            testID={`${testID}.${fact.key}`}
+          />
+        ))}
+      </FactGrid>
+    </Section>
+  );
+}
+
 /** The chrome every full-screen repair step shares: the shell's sync chip and avatar. */
 export interface RepairChrome {
   readonly syncChip: ReactNode;
@@ -203,6 +322,7 @@ export function FlowScreen({
   onClearNotice,
   overlay,
   stale,
+  scrollKey,
   testID,
   children,
 }: {
@@ -240,6 +360,8 @@ export function FlowScreen({
    * and the step's `onDone` closes it in the same batched update, so the notice never shows.
    */
   readonly stale?: StaleStep | null | undefined;
+  /** A multi-step flow's step: each step opens scrolled to the top (AppShell `scrollKey`). */
+  readonly scrollKey?: string | number | undefined;
   readonly testID: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -247,6 +369,7 @@ export function FlowScreen({
   return (
     <AppShell
       scrollable
+      scrollKey={scrollKey}
       title={title}
       titleVariant="detail"
       onBack={onBack}
@@ -342,16 +465,19 @@ export function FlowScreen({
 export function Section({
   title,
   action,
+  first = false,
   children,
   testID,
 }: {
   readonly title: string;
   readonly action?: ReactNode;
+  /** The screen's first section: the screen's own top padding is room enough above it. */
+  readonly first?: boolean | undefined;
   readonly children: ReactNode;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   return (
-    <View style={styles.section} testID={testID}>
+    <View style={first ? undefined : styles.section} testID={testID}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
@@ -383,7 +509,48 @@ export function Field({
 }
 
 /** Moved to `@bolusi/ui`; re-exported so the repair screens keep importing it from here. */
-export { Fact, FactGrid } from '@bolusi/ui';
+export { Fact, FactGrid };
+
+/**
+ * Under a total: the down payment taken off it, then what the customer still pays, or what the
+ * store gives back when the down payment was more. Nothing when no down payment was taken. `action`
+ * sits beside the down payment, the one thing it changes.
+ */
+export function DownPaymentRows({
+  total,
+  downPayment,
+  action,
+  testID,
+}: {
+  readonly total: number;
+  readonly downPayment: number | null;
+  readonly action?: ReactNode;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  if (downPayment === null || downPayment === 0) return null;
+  const balance = balanceAfterDownPayment(total, downPayment);
+  return (
+    <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
+      <View style={[repairStyles.row, styles.paidRow]}>
+        <View style={styles.paidLabel}>
+          <Text style={styles.paidText}>{tn('repair.price.downPayment')}</Text>
+          {action}
+        </View>
+        <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
+          {formatMoney(-downPayment)}
+        </Text>
+      </View>
+      <View style={[repairStyles.row, styles.paidRow]}>
+        <Text style={styles.balanceLabel}>
+          {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+        </Text>
+        <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
+          {formatMoney(balance.amount)}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 /** Photos laid out in a wrapping grid. */
 export function PhotoGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
@@ -406,6 +573,14 @@ export const repairStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  // Room below "Sisa bayar" too, so the next row does not read as part of the sum.
+  paidRows: { marginBottom: space.sm },
+  paidRow: { marginTop: space.sm, minHeight: space['2xl'] },
+  paidLabel: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: space.md },
+  paidText: { ...type.bodySm, color: color.text },
+  balanceLabel: { ...type.bodyBold, color: color.text },
+  balanceValue: { ...type.heading, color: color.text },
+  amount: { fontVariant: ['tabular-nums'] },
   hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
   inert: { opacity: 0.45 },
   question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
@@ -426,6 +601,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   full: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  // GSMArena's pictures are 160×212 portraits on white, so the frames keep that shape.
+  modelSmall: { width: 30, height: 40 },
+  modelLarge: { width: 60, height: 80 },
+  modelEmpty: {
+    borderRadius: radius.sm,
+    backgroundColor: color.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   section: { marginTop: space.xl },
   sectionHeader: {
     flexDirection: 'row',

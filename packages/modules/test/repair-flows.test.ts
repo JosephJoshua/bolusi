@@ -4,6 +4,9 @@
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  balanceAfterDownPayment,
+  downPaymentAction,
+  printableSlips,
   boardFilter,
   boardSort,
   boardViews,
@@ -27,6 +30,7 @@ import {
 } from '../src/repair/flows.js';
 import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
+import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
 const OPTIONS = DEFAULT_INTAKE_OPTIONS;
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
@@ -285,6 +289,35 @@ describe('ticket actions', () => {
   });
 });
 
+describe('down payment and slips', () => {
+  test('recording a down payment is offered exactly where the command accepts it', async () => {
+    h = await openRepairHarness(4109);
+    for (const state of ['received', 'repaired', 'returned'] as const) {
+      const ticketId = await ticketIn(h, state);
+      const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+      const offered = downPaymentAction(ticket, abilitiesOf(h, h.cashierId)) === 'record';
+      const run = h.run('recordDownPayment', { ticketId, amount: 20_000 }, h.cashierId);
+      if (offered) await expect(run).resolves.toBeDefined();
+      else await expect(run).rejects.toThrow();
+      expect(offered).toBe(state !== 'returned');
+    }
+  });
+
+  test('the handover slip prints once the phone is ready or gone, and a large deposit is a refund', () => {
+    expect(printableSlips({ outcome: 'in_repair', location: 'in_store' })).toEqual(['intake']);
+    expect(printableSlips({ outcome: 'repaired', location: 'in_store' })).toEqual([
+      'intake',
+      'handover',
+    ]);
+    expect(printableSlips({ outcome: 'cancelled', location: 'in_store' })).toEqual([
+      'intake',
+      'handover',
+    ]);
+    expect(balanceAfterDownPayment(50_000, 100_000)).toEqual({ kind: 'refund', amount: 50_000 });
+    expect(balanceAfterDownPayment(50_000, 50_000)).toEqual({ kind: 'due', amount: 0 });
+  });
+});
+
 describe('an open step after the ticket changed elsewhere', () => {
   type StepTicket = Parameters<typeof staleStep>[1];
   const line = (status: 'proposed' | 'applied' | 'declined') => ({
@@ -465,7 +498,14 @@ describe('intake draft', () => {
       ...emptyIntakeDraft(),
       step: 5,
       customer: { kind: 'new', name: ' Yohanis Wenda ', phone: '0812 4455 6677' },
-      device: { brand: 'Samsung', model: 'Galaxy A14', color: '', imei: '', passcode: '' },
+      device: {
+        brand: 'Samsung',
+        model: 'Galaxy A14',
+        color: '',
+        imei: '',
+        lockKind: 'none',
+        passcode: '',
+      },
       complaint: 'Layar retak',
       checks: { screen: 'issue', speaker: 'ok' },
       peripherals: ['charger'],
@@ -492,6 +532,16 @@ describe('intake draft', () => {
       'quoteLines',
     ]);
     expect(stepProblems(complete(h), 'review', OPTIONS)).toEqual([]);
+    // A lock kind chosen with nothing entered (or a too-short pattern, kept as '') blocks the step,
+    // where saving would have quietly recorded no lock.
+    const done = complete(h);
+    const lock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      stepProblems({ ...done, device: { ...done.device, lockKind, passcode } }, 'device', OPTIONS);
+    expect(lock('pattern', '')).toEqual(['screenLock']);
+    expect(lock('pin', '')).toEqual(['screenLock']);
+    expect(lock('password', '')).toEqual(['screenLock']);
+    expect(lock('pattern', '1478')).toEqual([]);
+    expect(lock('none', '')).toEqual([]);
     // A store that asks for fewer photo angles has no problem with the ones it does not ask for.
     const twoAngles = { ...OPTIONS, photoAngles: OPTIONS.photoAngles.slice(0, 2) };
     expect(
@@ -503,6 +553,8 @@ describe('intake draft', () => {
     ).toEqual([]);
     expect(intakeDirty(draft)).toBe(false);
     expect(intakeDirty({ ...draft, step: 3 })).toBe(false);
+    // The id an intake takes up front is not an answer: an untouched intake is still clean.
+    expect(intakeDirty({ ...draft, ticketId: '01920000-0000-7000-8000-00000000a161' })).toBe(false);
     expect(intakeDirty({ ...draft, complaint: 'x' })).toBe(true);
   });
 
@@ -568,6 +620,35 @@ describe('intake draft', () => {
     ]);
   });
 
+  test('a down payment at intake is checked like the command checks it, and opens with the ticket', async () => {
+    h = await openRepairHarness(4108);
+    const draft = { ...complete(h), downPayment: '700.000' };
+    // More than a known price is change, not a payment.
+    expect(stepProblems(draft, 'price', OPTIONS)).toEqual(['downPaymentAboveTotal']);
+    // With no price yet, any deposit stands.
+    const unpriced = {
+      ...draft,
+      lines: [{ kind: 'labour' as const, description: 'Cek dulu', amount: 0 }],
+    };
+    expect(stepProblems(unpriced, 'price', OPTIONS)).toEqual([]);
+    const paid = { ...draft, downPayment: '100.000' };
+    expect(stepProblems(paid, 'review', OPTIONS)).toEqual([]);
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(paid, OPTIONS, Date.now()),
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+    expect(ticket.downPayment).toBe(100_000);
+    expect(balanceAfterDownPayment(ticket.quoteTotal, ticket.downPayment!)).toEqual({
+      kind: 'due',
+      amount: 500_000,
+    });
+    // Recorded once: after that only an owner may change it, and the counter sees no action.
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.cashierId))).toBeNull();
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.ownerId))).toBe('correct');
+  });
+
   test('a draft opens against the lists the store offers, and records their names', async () => {
     h = await openRepairHarness(4106);
     const options = {
@@ -616,5 +697,39 @@ describe('intake draft', () => {
     expect(parseIntakeDraft({ ...draft, ready: 'threeDays' })?.ready).toBe('3');
     expect(parseIntakeDraft({ ...draft, ready: 'unknown' })?.ready).toBe('unknown');
     expect(parseIntakeDraft(null)).toBeNull();
+    // A draft from before lock kinds: a typed passcode is kept as a password.
+    const { brand, model, color, imei } = draft.device;
+    const oldDevice = { brand, model, color, imei, passcode: '1234' };
+    expect(parseIntakeDraft({ ...draft, device: oldDevice })?.device.lockKind).toBe('password');
+    expect(
+      parseIntakeDraft({ ...draft, device: { ...oldDevice, passcode: '' } })?.device.lockKind,
+    ).toBe('none');
+  });
+
+  test('the screen lock reaches the ticket with its kind, and none means no passcode', async () => {
+    h = await openRepairHarness(4107);
+    const draft = complete(h);
+    const withLock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      toOpenTicketInput({ ...draft, device: { ...draft.device, lockKind, passcode } }, OPTIONS, 0)
+        .device.passcode;
+    expect(withLock('pattern', '14753')).toBe('pattern:14753');
+    expect(withLock('pin', '0000')).toBe('pin:0000');
+    expect(withLock('password', 'a:b')).toBe('password:a:b');
+    expect(withLock('pin', '')).toBeNull();
+    // A value left over from another kind is dropped with "no lock".
+    expect(withLock('none', '1234')).toBeNull();
+
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(
+        { ...draft, device: { ...draft.device, lockKind: 'pattern', passcode: '14753' } },
+        OPTIONS,
+        Date.now(),
+      ),
+      // The draft carries a discount, which only an owner may give.
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+    expect(decodeScreenLock(ticket.devicePasscode)).toEqual({ kind: 'pattern', value: '14753' });
   });
 });

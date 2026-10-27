@@ -96,6 +96,7 @@ const REJECTED: readonly RejectedOpRow[] = [
     at: NOW - 60_000,
     rejectionCode: 'BAD_SIGNATURE',
     rejectionReason: null,
+    subject: null,
   },
 ];
 
@@ -278,6 +279,21 @@ describe('the chip and title are witnessed together on the pending-media screen 
     expect(renderSync().query('sync-manual-error')).toBeNull();
   });
 
+  test('a rule refusal reads as its own reason, with what the change was about', () => {
+    const refused: RejectedOpRow = {
+      opId: 'op-rule',
+      type: 'platform.user_locale_changed',
+      at: NOW - 60_000,
+      rejectionCode: 'RULE_VIOLATED',
+      rejectionReason: 'platform.refusal.notYourPreference',
+      subject: 'Andi Pratama',
+    };
+    const row = textsIn(renderSync({ rejected: [refused] }).get('sync-rejected-op-rule')).join('');
+    expect(row).toContain(t('platform.refusal.notYourPreference'));
+    expect(row).not.toContain(t('core.rejection.RULE_VIOLATED'));
+    expect(row).toContain('Andi Pratama');
+  });
+
   test('the disabled-reason renders the MODELs reason code, not a screen literal (task 144 item 1)', () => {
     // The decoy this kills: the screen hardcoded `DEVICE_REVOKED`, so `manualSync`'s reasonCode had zero
     // consumers and a sound model test guarded a value nothing rendered. Now the screen reads it — pin
@@ -342,6 +358,7 @@ describe('the rejected row names which change was rejected, not only when (task 
       at: NOW - 60_000,
       rejectionCode: 'BAD_SIGNATURE',
       rejectionReason: null,
+      subject: null,
     },
     {
       opId: 'op-unknown',
@@ -349,6 +366,7 @@ describe('the rejected row names which change was rejected, not only when (task 
       at: NOW - 60_000,
       rejectionCode: 'BAD_SIGNATURE',
       rejectionReason: null,
+      subject: null,
     },
   ];
 

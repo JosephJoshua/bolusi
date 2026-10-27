@@ -29,6 +29,7 @@ import {
   t,
   translateErrorCode,
   translateOpType,
+  translateRejection,
   translateRejectionCode,
 } from '@bolusi/i18n';
 import {
@@ -197,13 +198,17 @@ export function SyncStatusScreen({
         openRejected === null ? null : (
           <Sheet
             title={translateOpType(openRejected.type)}
-            subtitle={formatRelative(input.now - openRejected.at)}
+            subtitle={
+              openRejected.subject === null
+                ? formatRelative(input.now - openRejected.at)
+                : `${openRejected.subject} · ${formatRelative(input.now - openRejected.at)}`
+            }
             closeLabel={t('core.action.close')}
             onClose={() => onOpenRejected(openRejected)}
             testID={`sync-rejected-detail-${openRejected.opId}`}
           >
             <Text style={styles.sheetBody}>
-              {translateRejectionCode(openRejected.rejectionCode)}
+              {translateRejection(openRejected.rejectionCode, openRejected.rejectionReason)}
             </Text>
             <View style={styles.technical}>
               <Text style={styles.technicalTitle}>{t('sync.rejected.technicalDetails')}</Text>
@@ -334,11 +339,19 @@ export function SyncStatusScreen({
                 }
                 // What happened and what to do (the code's catalog sentence), then which change it was
                 // and when. `translateOpType` degrades an unknown type to "Change", never a raw id.
-                primaryText={translateRejectionCode(row.rejectionCode)}
-                secondaryText={t('sync.rejected.opMeta', {
-                  opType: translateOpType(row.type),
-                  time: formatRelative(input.now - row.at),
-                })}
+                primaryText={translateRejection(row.rejectionCode, row.rejectionReason)}
+                secondaryText={
+                  row.subject === null
+                    ? t('sync.rejected.opMeta', {
+                        opType: translateOpType(row.type),
+                        time: formatRelative(input.now - row.at),
+                      })
+                    : t('sync.rejected.opMetaSubject', {
+                        opType: translateOpType(row.type),
+                        subject: row.subject,
+                        time: formatRelative(input.now - row.at),
+                      })
+                }
                 onPress={() => onOpenRejected(row)}
                 testID={`sync-rejected-${row.opId}`}
               />

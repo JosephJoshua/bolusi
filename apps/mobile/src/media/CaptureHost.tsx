@@ -201,10 +201,22 @@ export function useCaptureHost(deps: CaptureHostDeps): CaptureHost {
           setState({ kind: 'refused_low_storage' });
           return;
         }
-        // §2.2 step 5 has already moved the bytes to the document dir, so this uri is the FINAL file
-        // the hash was taken over — the review frame shows exactly what the `mediaRef` commits to.
-        setReview({ uri: outcome.localPath, media: { mediaRef: outcome.ref } });
-        setState({ kind: 'review', previewUri: outcome.localPath });
+        // The saved file is ENCRYPTED at rest (task 158), so the image view cannot read it: showing
+        // `outcome.localPath` gave an empty frame. Render it the way every thumbnail is rendered, as
+        // a decrypted copy checked against the hash the `mediaRef` commits to, so the review frame
+        // shows exactly the bytes that will be signed.
+        const ref = outcome.ref;
+        return media
+          .loadForRender({ mediaId: ref.mediaId, sha256: ref.sha256, mime: ref.mime })
+          .then((rendered) => {
+            if (!isOpen()) return;
+            if (rendered.kind !== 'local' && rendered.kind !== 'cached') {
+              setState({ kind: 'failed', code: 'STORAGE_ERROR' });
+              return;
+            }
+            setReview({ uri: rendered.uri, media: { mediaRef: ref } });
+            setState({ kind: 'review', previewUri: rendered.uri });
+          });
       })
       .catch((error: unknown) => {
         if (!isOpen()) return;

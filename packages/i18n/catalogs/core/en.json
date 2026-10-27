@@ -68,6 +68,7 @@
     "PIN_LOCKED": "PIN locked. Ask the store owner to unlock it or set a new PIN.",
     "LAST_ADMIN_PROTECTED": "Not allowed. There must always be at least one active main owner.",
     "ROLE_IN_USE": "This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.",
+    "CLOCK_AHEAD": "This device’s clock is ahead. Turn on automatic date and time in settings, then try again.",
     "IDEMPOTENCY_CONFLICT": "This request clashed with an earlier one. Try again.",
     "RATE_LIMITED": "Too many requests. Wait a moment, then try again.",
     "UNEXPECTED": "Something went wrong. Try again.",
@@ -94,8 +95,10 @@
     "CHAIN_BROKEN": "This device’s history is broken and sending stopped. Tell the store owner now.",
     "CHAIN_GAP": "Something was missing. Resending automatically.",
     "CHAIN_HALTED": "Waiting on an earlier change.",
+    "CLOCK_AHEAD": "This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.",
     "DEVICE_REVOKED": "This device is blocked. Enroll it again.",
     "PERMISSION_DENIED": "Whoever made it wasn’t allowed to. Ask someone who is to redo it.",
+    "RULE_VIOLATED": "The record changed on another device. Check it and redo this if it’s still needed.",
     "SCHEMA_INVALID": "The server didn’t recognise this change. Tell the store owner.",
     "SCOPE_VIOLATION": "Not for this store. Tell the store owner.",
     "UNKNOWN_TYPE": "Update the app so this can be sent."

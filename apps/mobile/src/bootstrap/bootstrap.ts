@@ -224,3 +224,37 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     throw error;
   }
 }
+
+/**
+ * Boot the data layer once per JS realm, however many times the React tree mounts.
+ *
+ * Android can destroy and recreate the activity while the process lives on ("Don't keep
+ * activities", backing out and relaunching from the launcher, memory pressure). The JS realm
+ * survives, so React mounts `Root` again and its boot effect calls `boot()` a second time. The first
+ * boot's connection is still open, and op-sqlite allows one per database (08 §2.2), so a second
+ * `bootstrap()` throws `already_open`, and the shell renders nothing until a force-stop.
+ *
+ * A later call reuses the first boot's connection, registry and engine, and re-reads `deviceId` and
+ * `syncState`, because the device may have enrolled or synced since. A failed boot is not kept, so
+ * the next mount retries it.
+ */
+export function bootOncePerRealm(boot: () => Promise<Bootstrapped>): () => Promise<Bootstrapped> {
+  let first: Promise<Bootstrapped> | null = null;
+  return async () => {
+    if (first === null) {
+      const attempt = boot();
+      first = attempt;
+      attempt.catch(() => {
+        if (first === attempt) first = null;
+      });
+      return attempt;
+    }
+    const app = await first;
+    return {
+      ...app,
+      migrationsApplied: [],
+      deviceId: await readDeviceId(app.db.db as never),
+      syncState: await readSyncState(app.db.db as never),
+    };
+  };
+}

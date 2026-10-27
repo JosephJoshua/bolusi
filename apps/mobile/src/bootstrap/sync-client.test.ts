@@ -200,6 +200,7 @@ async function build(options: BuildOptions = {}) {
       applied.push(op);
       return Promise.resolve();
     },
+    refoldRefused: () => Promise.resolve(),
     crypto: noblePort,
     clock: { now: () => T },
     timer,
@@ -391,7 +392,7 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
   async function clientForApp(timer: ReturnType<typeof delayRecordingTimer>) {
     const app = {
       db,
-      engine: { applyPulledOp: () => Promise.resolve() },
+      engine: { applyPulledOp: () => Promise.resolve(), refoldRefused: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
     } as unknown as Bootstrapped;
     return createSyncClientForApp(app, {
@@ -478,6 +479,49 @@ describe('a push that settles ops tells the open screens', () => {
     await client.settle();
 
     expect(written).toContainEqual([OP_SYNC_STATUS_TABLE]);
+    client.stop();
+  });
+});
+
+describe('work waiting for the next online contact', () => {
+  test("the app's client runs onBundleChecked on a steady 304 cycle, not only on a changed bundle", async () => {
+    const app = {
+      db,
+      engine: { applyPulledOp: () => Promise.resolve() },
+      syncState: await readSyncState(db.db),
+      invalidation: new InvalidationBus(),
+    } as unknown as Bootstrapped;
+    const reply = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    const calls: string[] = [];
+    const client = createSyncClientForApp(app, {
+      baseUrl: 'https://example.invalid',
+      deviceId: DEVICE_ID,
+      loadDeviceToken: () => Promise.resolve('bdt_test'),
+      crypto: noblePort,
+      clock: clockT,
+      appState: activeAppState,
+      netInfo: fakeNetInfo(true).port,
+      timer: new RecordingTimer(),
+      // The queued PIN verifier drain hangs on this: an offline PIN change leaves the bundle as it
+      // was, so the next answer is a 304 and a refresh-only hook would never send the verifier.
+      onBundleRefreshed: () => {
+        calls.push('refreshed');
+      },
+      onBundleChecked: () => {
+        calls.push('checked');
+      },
+      fetchImpl: (input) => {
+        if (String(input).endsWith('/v1/sync/pull')) {
+          return Promise.resolve(reply({ ops: [], nextCursor: 0, hasMore: false, serverTime: T }));
+        }
+        return Promise.resolve(new Response(null, { status: 304 }));
+      },
+    });
+    await client.start();
+    await client.settle();
+
+    expect(calls).toEqual(['checked']);
     client.stop();
   });
 });

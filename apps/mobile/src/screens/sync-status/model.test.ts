@@ -87,6 +87,7 @@ function rejectedRow(code: string): RejectedOpRow {
     at: NOW,
     rejectionCode: code,
     rejectionReason: 'detail',
+    subject: null,
   };
 }
 

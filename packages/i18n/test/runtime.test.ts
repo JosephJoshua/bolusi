@@ -14,7 +14,9 @@ import {
   setLocale,
   t,
   translateErrorCode,
+  translateFailure,
   translateOpType,
+  translateRejection,
   translateRejectionCode,
   translateRoleKey,
   type I18nLogger,
@@ -128,6 +130,31 @@ describe('derived error and rejection copy (07-i18n §4.2, §4.3)', () => {
     initI18n({ locale: 'id' });
     expect(translateErrorCode('ROLE_IN_USE')).toBe(t('core.errors.ROLE_IN_USE'));
     expect(translateRejectionCode('CHAIN_BROKEN')).toBe(t('core.rejection.CHAIN_BROKEN'));
+  });
+
+  it('a rule refusal renders its own copy, on the phone and under sync problems', () => {
+    initI18n({ locale: 'id' });
+    const key = 'platform.refusal.notYourPreference';
+    expect(translateFailure(key)).toBe(t(key));
+    expect(translateRejection('RULE_VIOLATED', key)).toBe(t(key));
+    expect(t(key)).not.toBe(t('core.rejection.RULE_VIOLATED'));
+  });
+
+  it('falls back to the code copy for a plain code, another code, or a reason with no copy', () => {
+    initI18n({ locale: 'id' });
+    expect(translateFailure('ROLE_IN_USE')).toBe(t('core.errors.ROLE_IN_USE'));
+    // Only RULE_VIOLATED carries a refusal key; another code's reason is diagnostic text.
+    expect(translateRejection('PERMISSION_DENIED', 'platform.refusal.notYourPreference')).toBe(
+      t('core.rejection.PERMISSION_DENIED'),
+    );
+    // A newer server's reason this build has no copy for, or free text from an older one.
+    expect(translateRejection('RULE_VIOLATED', 'repair.refusal.fromTheFuture')).toBe(
+      t('core.rejection.RULE_VIOLATED'),
+    );
+    expect(translateRejection('RULE_VIOLATED', 'ticket is cancelled')).toBe(
+      t('core.rejection.RULE_VIOLATED'),
+    );
+    expect(translateRejection('RULE_VIOLATED', null)).toBe(t('core.rejection.RULE_VIOLATED'));
   });
 
   it('renders UNEXPECTED and logs for an unknown error code', () => {

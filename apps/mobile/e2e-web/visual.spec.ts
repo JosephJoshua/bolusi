@@ -102,7 +102,7 @@ const MATRIX: readonly Row[] = [
     screen: 'sync-status',
     state: 'rejectedDetail',
     testId: 'sync-rejected-reason-op_9f3a',
-    text: 'actor lacks repair.ticket.cancel',
+    text: 'repair.refusal.cancelled',
   },
 
   // Enrollment — steps + revoked banner.

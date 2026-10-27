@@ -30,6 +30,7 @@ import {
 import { createHash } from 'react-native-quick-crypto';
 
 import { deviceColumnAead } from '../ports/aead.js';
+import type { PhonePhotoFiles } from './phone-photos.js';
 
 /** `<documentDirectory>/media/` — self-captured evidence (06 §2.2 step 5). Encrypted at rest. */
 export function mediaDocumentDirectory(): Directory {
@@ -294,4 +295,28 @@ export function createEncryptingMediaFileParts(
       }
     },
   };
+}
+
+/**
+ * `<cacheDirectory>/phone-models/` — catalog photos of phone models (phone-photos.ts). Public
+ * pictures, hash-checked before they are written, so stored plainly; evictable like any cache.
+ */
+export const phonePhotoFiles: PhonePhotoFiles = {
+  find(name) {
+    const file = new File(new Directory(Paths.cache, 'phone-models'), name);
+    return file.exists ? file.uri : null;
+  },
+  write(name, bytes) {
+    const dir = new Directory(Paths.cache, 'phone-models');
+    if (!dir.exists) dir.create({ intermediates: true });
+    const file = new File(dir, name);
+    if (!file.exists) file.create();
+    file.write(bytes);
+    return file.uri;
+  },
+};
+
+/** SHA-256 hex of a whole buffer, via quick-crypto. */
+export function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }

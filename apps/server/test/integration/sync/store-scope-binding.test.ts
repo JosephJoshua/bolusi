@@ -356,10 +356,15 @@ describe('a device cannot MUTATE another store’s note via entityId (task 157 l
     const response = await h.push(auth, world.deviceId, [dodge]);
 
     // This op is legitimately SCOPED (it claims the device's own store), so the scope step cannot
-    // and does not reject it — the envelope is self-consistent; only the ENTITY it names is foreign.
-    // It is accepted and logged, and the applier must fold it to NOTHING (store mismatch → no-op).
+    // reject it; only the ENTITY it names is foreign. The notes rule finds no such note in the op's
+    // store and refuses it, so it is never logged (and the applier's store match stays as a backstop).
     expect(response.status).toBe(200);
-    expect((await readResults(response))[0]).toMatchObject({ id: dodge.id, status: 'accepted' });
+    expect((await readResults(response))[0]).toMatchObject({
+      id: dodge.id,
+      status: 'rejected',
+      code: 'RULE_VIOLATED',
+    });
+    expect(await logHas(dodge.id)).toBe(false);
     // BEFORE leg 2 the UPDATE matched on `id` alone and store-2's body became PWNED.
     expect(await noteState(victimNoteId)).toMatchObject({
       body: HONEST,

@@ -32,8 +32,9 @@
   "rejected": {
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
     "title": "Refused by the server ({count})",
-    "explain": "Not sent again, but still saved on this phone.",
+    "explain": "Also undone on this phone. Redo them if they’re still needed.",
     "opMeta": "{opType} · {time}",
+    "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Technical details",
     "noReason": "The server sent no details.",
     "more": "Show {count} more"

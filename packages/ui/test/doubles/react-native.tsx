@@ -43,12 +43,45 @@ function hostComponent(type: string) {
   return Component;
 }
 
-export const View = hostComponent('View');
+/**
+ * Where a test says a view sits in the window, by testID: what `measureInWindow` reports for it.
+ * A view with none set never answers, as a view that has not been laid out yet.
+ */
+export const windowLayout = new Map<string, { y: number; height: number }>();
+/** Where a view sits inside the content it is measured against (`measureLayout`), by testID. */
+export const contentLayout = new Map<string, { y: number; height: number }>();
+export const View = React.forwardRef<unknown, AnyProps>(function View(props, ref) {
+  React.useImperativeHandle(ref, () => ({
+    measureInWindow: (done: (x: number, y: number, width: number, height: number) => void) => {
+      const layout = windowLayout.get(String(props['testID']));
+      if (layout !== undefined) done(0, layout.y, 0, layout.height);
+    },
+    measureLayout: (
+      _relativeTo: unknown,
+      done: (x: number, y: number, width: number, height: number) => void,
+    ): void => {
+      const layout = contentLayout.get(String(props['testID']));
+      if (layout !== undefined) done(0, layout.y, 0, layout.height);
+    },
+  }));
+  return React.createElement('View', props);
+});
+View.displayName = 'View';
 export const Text = hostComponent('Text');
 export const TextInput = hostComponent('TextInput');
 export const ActivityIndicator = hostComponent('ActivityIndicator');
-export const ScrollView = hostComponent('ScrollView');
+/** Every `scrollTo` a ScrollView was asked for, newest last. */
+export const scrollCalls: { y: number }[] = [];
+export const ScrollView = React.forwardRef<unknown, AnyProps>(function ScrollView(props, ref) {
+  React.useImperativeHandle(ref, () => ({
+    scrollTo: (to: { y: number }) => scrollCalls.push({ y: to.y }),
+  }));
+  return React.createElement('ScrollView', props);
+});
+ScrollView.displayName = 'ScrollView';
 export const Switch = hostComponent('Switch');
+/** A host node: lifting content above the keyboard is native layout, not under test here. */
+export const KeyboardAvoidingView = hostComponent('KeyboardAvoidingView');
 
 /**
  * Renders every item rather than a window. That is deliberate and its limits must be understood:
@@ -140,11 +173,25 @@ export const Vibration = {
   vibrate: (): void => undefined,
 };
 
-/** Recorded, never real: a sheet dismisses the keyboard as it opens, and tests count that. */
+/**
+ * No on-screen keyboard in this lane: `emit` stands in for the system announcing one, so a test can
+ * drive what the shell does when it opens. `dismiss` is recorded: a sheet dismisses the keyboard as
+ * it opens, and tests count that.
+ */
+const keyboardListeners = new Map<string, Set<(event: unknown) => void>>();
 export const Keyboard = {
   dismissCount: 0,
   dismiss(): void {
     Keyboard.dismissCount += 1;
+  },
+  addListener: (name: string, listener: (event: unknown) => void) => {
+    const set = keyboardListeners.get(name) ?? new Set();
+    set.add(listener);
+    keyboardListeners.set(name, set);
+    return { remove: () => set.delete(listener) };
+  },
+  emit: (name: string, event?: unknown): void => {
+    for (const listener of keyboardListeners.get(name) ?? []) listener(event);
   },
 };
 

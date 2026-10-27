@@ -193,6 +193,24 @@ export function bindingSummary(
 }
 
 /**
+ * Step 1's answer. The server lists only the stores this account may enroll a phone into, so an
+ * empty list is a non-owner: refused here, on the sign-in step, not after they named the phone.
+ */
+export function afterLogin(state: EnrollmentState, login: LoginResult): EnrollmentState {
+  if (login.stores.length === 0) {
+    return { ...state, busy: false, failure: { kind: 'notPermitted' } };
+  }
+  return {
+    ...state,
+    busy: false,
+    login,
+    step: 'confirm',
+    selectedStoreId:
+      login.stores.length === 1 ? (login.stores[0]?.id ?? null) : state.selectedStoreId,
+  };
+}
+
+/**
  * §8.1: a back press on non-empty input confirms via ConfirmSheet before discarding.
  *
  * "Non-empty" is measured on what the user TYPED, not on what the wizard fetched: re-typing a

@@ -54,6 +54,9 @@ export interface PinVerifier {
   readonly asOf: CanonicalRef;
 }
 
+/** A verifier's salted hash and params, before it has a canonical position. */
+export type PinVerifierMaterial = Omit<PinVerifier, 'asOf'>;
+
 /** A verifier failing the api/02-auth §5.3 bounds. Distinct + greppable — never a UI-facing code. */
 export class VerifierBoundsError extends Error {
   override readonly name = 'VerifierBoundsError';
@@ -74,7 +77,7 @@ export class VerifierBoundsError extends Error {
  *   out-of-bounds verifier that "just doesn't verify" would be indistinguishable from a wrong PIN,
  *   hiding a hostile bundle as a user error.
  */
-export function assertVerifierInBounds(verifier: PinVerifier): void {
+export function assertVerifierInBounds(verifier: PinVerifierMaterial): void {
   if (verifier.algorithm !== 'argon2id') {
     throw new VerifierBoundsError(`algorithm ${JSON.stringify(verifier.algorithm)} !== 'argon2id'`);
   }
@@ -190,20 +193,32 @@ export async function buildPinVerifier(
   salt: Uint8Array,
   asOf: CanonicalRef,
 ): Promise<PinVerifier> {
+  return { ...(await hashNewPin(crypto, pin, params, salt)), asOf };
+}
+
+/**
+ * `buildPinVerifier` without the position: runs the KDF so a caller can derive the hash before the
+ * op that gives the verifier its `asOf` exists.
+ */
+export async function hashNewPin(
+  crypto: CryptoPort,
+  pin: Uint8Array,
+  params: KdfParams,
+  salt: Uint8Array,
+): Promise<PinVerifierMaterial> {
   // Bounds BEFORE the KDF: never spend ~300 ms deriving a key for a profile we are about to reject.
   assertKdfParamsInBounds(params.memoryCost, params.timeCost, params.parallelism, salt.length);
   const hash = await crypto.kdf(pin, salt, params);
-  const verifier: PinVerifier = {
+  const material: PinVerifierMaterial = {
     algorithm: 'argon2id',
     saltB64: bytesToBase64(salt),
     mKiB: params.memoryCost,
     t: params.timeCost,
     p: 1,
     hashB64: bytesToBase64(hash),
-    asOf,
   };
-  assertVerifierInBounds(verifier);
-  return verifier;
+  assertVerifierInBounds(material);
+  return material;
 }
 
 /**

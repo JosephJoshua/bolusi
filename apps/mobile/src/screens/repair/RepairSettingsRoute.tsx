@@ -1,12 +1,13 @@
 /**
- * The owner's repair settings reached from Settings: the intake lists (`intakeOptions` route) and the
- * cancellation fees (`cancelFees`). Like `RepairHome` it binds the runtime provider and publishes the
+ * The owner's repair settings reached from Settings: the intake lists (`intakeOptions` route), the
+ * cancellation fees (`cancelFees`) and what the slips print (`printSettings`). Like `RepairHome` it binds the runtime provider and publishes the
  * surface's back/leave to the shell, so hardware back and a header tap go through the screen's
  * discard confirm instead of dropping edits.
  */
 import {
   CancelFeesScreen,
   IntakeOptionsScreen,
+  PrintSettingsScreen,
   RepairRuntimeProvider,
   type DiscardGuard,
   type RepairRuntime,
@@ -17,7 +18,7 @@ import type { ReactNode } from 'react';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
-export type RepairSettingsPage = 'intakeOptions' | 'cancelFees';
+export type RepairSettingsPage = 'intakeOptions' | 'cancelFees' | 'printSettings';
 
 export interface RepairSettingsRouteProps {
   readonly page: RepairSettingsPage;
@@ -69,8 +70,14 @@ export function RepairSettingsRoute({
           onRegisterDiscardGuard={registerDiscardGuard}
           onRegisterStepBack={registerStepBack}
         />
-      ) : (
+      ) : page === 'cancelFees' ? (
         <CancelFeesScreen
+          chrome={{ syncChip, avatar: null }}
+          onClose={onClose}
+          onRegisterDiscardGuard={registerDiscardGuard}
+        />
+      ) : (
+        <PrintSettingsScreen
           chrome={{ syncChip, avatar: null }}
           onClose={onClose}
           onRegisterDiscardGuard={registerDiscardGuard}

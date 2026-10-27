@@ -12,6 +12,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  afterLogin,
   bindingSummary,
   canSubmitConfirm,
   chosenStoreId,
@@ -142,6 +143,21 @@ describe('the 403 leg — the account is fine, it just may not enroll (permissio
     // The distinction is the whole point: retyping the password fixes 401 and never fixes 403.
     expect(failureKey({ kind: 'notPermitted' })).toBe('auth.enroll.notOwner');
     expect(failureKey({ kind: 'notPermitted' })).not.toBe(failureKey({ kind: 'credentials' }));
+  });
+
+  test('a login with no store to enroll into is a non-owner, refused on the sign-in step', () => {
+    const typed = { ...initialEnrollmentState(), loginIdentifier: 'kasir', busy: true };
+    const refused = afterLogin(typed, { ...LOGIN, stores: [] });
+    expect(refused.step).toBe('credentials');
+    expect(refused.login).toBeNull();
+    expect(refused.failure).toEqual({ kind: 'notPermitted' });
+    expect(refused.busy).toBe(false);
+    expect(refused.loginIdentifier).toBe('kasir');
+
+    const owner = afterLogin(typed, { ...LOGIN, stores: LOGIN.stores.slice(0, 1) });
+    expect(owner.step).toBe('confirm');
+    expect(owner.selectedStoreId).toBe('store-1');
+    expect(owner.failure).toBeNull();
   });
 
   test('a non-owner failure PRESERVES the wizard state — nothing is retyped', () => {

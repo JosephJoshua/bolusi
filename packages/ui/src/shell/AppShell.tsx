@@ -28,6 +28,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
+import { RevealProvider, useKeyboardLift, useRevealingScroll } from './keyboard.js';
 import { ScrollLockContext } from './scroll-lock.js';
 
 export interface AppShellProps {
@@ -70,6 +71,12 @@ export interface AppShellProps {
    * appear on a device or the emulator lane.
    */
   readonly scrollable?: boolean | undefined;
+  /**
+   * With `scrollable`, the content starts again at the top whenever this changes. A wizard passes
+   * its step, so a new step does not open at the previous step's scroll position with its header
+   * scrolled out of view.
+   */
+  readonly scrollKey?: string | number | undefined;
   /**
    * Screen-covering overlays — today only `ConfirmSheet` (§3.10, the one sanctioned modal).
    *
@@ -117,6 +124,10 @@ const styles = StyleSheet.create({
    * free to exceed it and scroll.
    */
   contentContainer: { flexGrow: 1, padding: space.lg },
+  // Scrolling, the padding moves onto the measured view inside, so a field's measured position
+  // is its scroll position (keyboard.tsx).
+  scrollContainer: { flexGrow: 1 },
+  contentInner: { flexGrow: 1, padding: space.lg },
   actionBar: {
     padding: space.lg,
     borderTopWidth: border.hairline,
@@ -135,6 +146,7 @@ export function AppShell({
   children,
   bottomAction,
   scrollable = false,
+  scrollKey,
   overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
@@ -153,9 +165,18 @@ export function AppShell({
     }),
     [],
   );
+  const reveal = useRevealingScroll();
+  const keyboard = useKeyboardLift();
   return (
     <ScrollLockContext.Provider value={scrollLock}>
-      <View testID={testID} style={styles.root}>
+      {/* The keyboard covers the screen rather than shrinking it (keyboard.tsx), so the shell lifts
+          its content and bottom action above it. Measured in the window, so it adds nothing on a
+          platform where the window did shrink. */}
+      <View
+        ref={keyboard.ref}
+        testID={testID}
+        style={[styles.root, keyboard.lift === 0 ? null : { paddingBottom: keyboard.lift }]}
+      >
         <View testID={`${testID}.header`} style={styles.header}>
           {onBack === undefined ? null : (
             <Pressable
@@ -195,17 +216,30 @@ export function AppShell({
       */}
         {scrollable ? (
           <ScrollView
+            key={scrollKey}
+            ref={reveal.scrollRef}
             testID={`${testID}.content`}
             style={styles.content}
-            contentContainerStyle={styles.contentContainer}
+            contentContainerStyle={styles.scrollContainer}
             // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
             // would read as the whole screen coming loose.
             bounces={false}
             keyboardShouldPersistTaps="handled"
             // A drag inside the content (reordering a list) holds the page still until it ends.
             scrollEnabled={locks === 0}
+            onLayout={reveal.onLayout}
+            onScroll={reveal.onScroll}
+            scrollEventThrottle={16}
           >
-            {children}
+            {/* What a focused field is measured against when it is scrolled into sight. */}
+            <View
+              ref={reveal.contentRef}
+              collapsable={false}
+              style={styles.contentInner}
+              testID={`${testID}.contentInner`}
+            >
+              <RevealProvider port={reveal.port}>{children}</RevealProvider>
+            </View>
           </ScrollView>
         ) : (
           <View testID={`${testID}.content`} style={styles.contentContainer}>

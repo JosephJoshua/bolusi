@@ -333,6 +333,7 @@ export async function openSyncHarness(): Promise<SyncHarness> {
         timer,
         deviceId: options.deviceId ?? '00000000-0000-4000-8000-000000000001',
         applyPulledOp: (op) => engine.applyPulledOp(op),
+        refoldRefused: (op) => engine.refoldRefused(op),
         bundle: {
           refresh: async () => {
             bundleCalls += 1;

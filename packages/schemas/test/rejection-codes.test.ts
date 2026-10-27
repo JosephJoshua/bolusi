@@ -3,14 +3,16 @@ import { describe, expect, test } from 'vitest';
 import { REJECTION_CODES, zRejectionCode } from '../src/index.js';
 
 describe('rejection-code enum (05 §8)', () => {
-  test('the value set is exactly the nine codes — catches silent additions/removals', () => {
+  test('the value set is exactly the eleven codes — catches silent additions/removals', () => {
     expect([...REJECTION_CODES].sort()).toEqual([
       'BAD_SIGNATURE',
       'CHAIN_BROKEN',
       'CHAIN_GAP',
       'CHAIN_HALTED',
+      'CLOCK_AHEAD',
       'DEVICE_REVOKED',
       'PERMISSION_DENIED',
+      'RULE_VIOLATED',
       'SCHEMA_INVALID',
       'SCOPE_VIOLATION',
       'UNKNOWN_TYPE',
