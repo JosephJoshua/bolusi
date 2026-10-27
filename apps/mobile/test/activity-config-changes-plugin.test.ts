@@ -1,7 +1,11 @@
 // A system font-size change recreated MainActivity and blanked the app (first Android QA run).
 import { describe, expect, test } from 'vitest';
 
-import { addConfigChanges } from '../plugins/withActivityConfigChanges.js';
+import {
+  FONT_SCALE_SYNC_KOTLIN,
+  addConfigChanges,
+  addFontScaleSync,
+} from '../plugins/withActivityConfigChanges.js';
 
 function manifest(configChanges?: string) {
   return {
@@ -59,5 +63,76 @@ describe('MainActivity config changes', () => {
       'locale',
       'layoutDirection',
     ]);
+  });
+});
+
+// The Expo SDK 57 template's MainActivity.kt, trimmed to what the transform touches.
+const TEMPLATE_MAIN_ACTIVITY = `package com.bolusi.app
+
+import android.os.Build
+import android.os.Bundle
+
+import com.facebook.react.ReactActivity
+import com.facebook.react.ReactActivityDelegate
+
+class MainActivity : ReactActivity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    setTheme(R.style.AppTheme);
+    super.onCreate(null)
+  }
+
+  override fun getMainComponentName(): String = "main"
+}
+`;
+
+describe('MainActivity font scale sync', () => {
+  test('adds the override inside the class and its imports after the package line', () => {
+    const out = addFontScaleSync(TEMPLATE_MAIN_ACTIVITY);
+    expect(out.startsWith('package com.bolusi.app\n')).toBe(true);
+    expect(out).toContain('class MainActivity : ReactActivity() {\n' + FONT_SCALE_SYNC_KOTLIN);
+    for (const name of [
+      'android.content.res.Configuration',
+      'com.facebook.react.ReactRootView',
+      'com.facebook.react.bridge.LifecycleEventListener',
+      'com.facebook.react.uimanager.DisplayMetricsHolder',
+    ]) {
+      expect(out).toMatch(new RegExp(`^import ${name.replaceAll('.', '\\.')}$`, 'm'));
+    }
+    // The template's own members are kept.
+    expect(out).toContain('override fun getMainComponentName(): String = "main"');
+  });
+
+  test('re-measures React roots and re-emits the font scale when it changes', () => {
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain('override fun onConfigurationChanged');
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain(
+      'DisplayMetricsHolder.initDisplayMetrics(reactContext)',
+    );
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain('view.requestLayout()');
+    // Metrics refreshed and roots measured before the post, so no measure pass or resume beats them.
+    expect(FONT_SCALE_SYNC_KOTLIN).toMatch(
+      /initDisplayMetrics\(this\)\n\s*remeasureReactRoots\(window\.decorView\)\n\s*window\.decorView\.post/,
+    );
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain('view.measure(');
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain('getNativeModule("DeviceInfo")');
+  });
+
+  test('a second prebuild is a no-op', () => {
+    const once = addFontScaleSync(TEMPLATE_MAIN_ACTIVITY);
+    expect(addFontScaleSync(once)).toBe(once);
+  });
+
+  test('does not repeat an import the template already has', () => {
+    const withImport = TEMPLATE_MAIN_ACTIVITY.replace(
+      'import android.os.Build\n',
+      'import android.os.Build\nimport android.view.View\n',
+    );
+    const out = addFontScaleSync(withImport);
+    expect(out.match(/^import android\.view\.View$/gm)).toHaveLength(1);
+  });
+
+  test('fails the prebuild when the template no longer matches', () => {
+    expect(() => addFontScaleSync('package x\n\nclass MainActivity : Activity() {\n}\n')).toThrow(
+      /expected ReactActivity/,
+    );
   });
 });
