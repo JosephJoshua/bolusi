@@ -122,6 +122,8 @@ export function demoSyncState(overrides: Partial<SyncState> = {}): SyncState {
     syncDisabledReason: null,
     lastSyncError: null,
     backoffUntil: null,
+    tokenRejectedSince: null,
+    tokenRejectedCount: 0,
     ...overrides,
   };
 }

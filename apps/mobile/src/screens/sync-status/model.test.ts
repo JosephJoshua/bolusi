@@ -56,6 +56,8 @@ function state(overrides: Partial<SyncState> = {}): SyncState {
     syncDisabledReason: null,
     lastSyncError: null,
     backoffUntil: null,
+    tokenRejectedSince: null,
+    tokenRejectedCount: 0,
     lastServerTime: NOW,
     lastServerTimeReceivedAt: NOW,
     ...overrides,
@@ -225,6 +227,8 @@ describe('the counters are DERIVED — no stored count column exists to read (01
       'pushHalted',
       'syncDisabled',
       'syncDisabledReason',
+      'tokenRejectedCount',
+      'tokenRejectedSince',
     ]);
     expect(record).not.toHaveProperty('pendingOperationCount');
     expect(record).not.toHaveProperty('pendingMediaCount');
