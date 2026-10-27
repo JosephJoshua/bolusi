@@ -4,6 +4,7 @@
 
 export { noblePort } from './crypto/noble-port.js';
 export { nodeColumnAead } from './crypto/node-column-aead.js';
+export { opensslPort } from './crypto/openssl-port.js';
 export {
   generateSignedCore,
   generateSignedCores,

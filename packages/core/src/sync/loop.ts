@@ -2,7 +2,7 @@
 //
 //   push all syncStatus=local ops in seq order (batched)   // skipped while SyncState.pushHalted
 //   pull until hasMore=false                                // applies devices sidecar when present
-//   conditional GET /v1/devices/me/bundle                   // once per loop; 304 steady-state
+//   conditional GET /v1/devices/me/bundle                   // at most every 50 s; 304 steady-state
 //   set lastSuccessfulSyncAt / lastServerTime; recompute derived pending counts
 //
 // THE LOOP NEVER THROWS TO ITS CALLER (api/01 §6). Not on a network error, not on a rejected op, not
@@ -75,6 +75,15 @@ const EARLY_EXIT_REASONS: ReadonlySet<SyncTriggerReason> = new Set<SyncTriggerRe
   'connectivity',
 ]);
 
+/**
+ * The least time between two bundle refreshes, unless a person asked for a sync (pull-to-refresh).
+ * The bundle (staff, roles, PIN verifiers) changes rarely, but a store device runs a cycle for every
+ * live-update poke and every change it makes, so refreshing once per cycle sent a busy phone past the
+ * server's 120-per-hour bundle limit (api/02-auth §9) and into backoff for up to an hour. Every 50 s
+ * keeps a device under 72 an hour while a role or PIN change still lands within a minute.
+ */
+export const BUNDLE_REFRESH_INTERVAL_MS = 50_000;
+
 export interface SyncLoopOptions<DB> {
   readonly db: Kysely<DB>;
   readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -121,6 +130,10 @@ export class SyncLoop<DB> {
   /** Mirrors of the persisted guards, so the trigger guard needs no `await` (see the header). */
   private syncDisabled = false;
   private pushHalted = false;
+  /** Clock time of the last successful bundle refresh; null until the first (in-memory on purpose). */
+  private bundleRefreshedAt: number | null = null;
+  /** A manual trigger asked for a fresh bundle, possibly while a cycle was running. */
+  private bundleWanted = false;
   private stats: SyncCycleStats = {
     cycles: 0,
     pushed: 0,
@@ -159,6 +172,9 @@ export class SyncLoop<DB> {
     }
     // 03 §10 trigger guard: `syncDisabled` ⇒ no cycle starts, for ANY reason including manual.
     if (this.syncDisabled) return;
+    // Realtime pokes arrive as `connectivity` too (apps/mobile sync-client), so only a person's
+    // explicit refresh skips the bundle interval.
+    if (reason === 'manual') this.bundleWanted = true;
 
     if (this.loopState === 'pushing' || this.loopState === 'pulling') {
       // 03 §10: "any trigger arrives → (no transition), rerun flag set". Coalescing: N triggers
@@ -267,9 +283,9 @@ export class SyncLoop<DB> {
         return;
       }
 
-      // ── bundle refresh (once per loop) ──────────────────────────────────────────────────
-      // 304 is SUCCESS (api/02-auth §5): a steady-state device gets one every single cycle, and a
-      // loop that treated it as failure would live in permanent backoff.
+      // ── bundle refresh (throttled) ──────────────────────────────────────────────────────
+      // 304 is SUCCESS (api/02-auth §5): a steady-state device gets one on nearly every refresh, and
+      // a loop that treated it as failure would live in permanent backoff.
       //
       // JUDGMENT (api/01 §6 lists this step; 03 §10's table does not mention it): a bundle failure
       // is a transport failure and enters backoff, and `lastSuccessfulSyncAt` is NOT set — the
@@ -277,8 +293,19 @@ export class SyncLoop<DB> {
       // therefore looks staler than it is while the bundle endpoint is down. That is the SAFE
       // direction: a false "your data may be old" costs a banner, a false "you are current" costs
       // a wrong business decision (03 §8 exists to prevent exactly the latter).
-      await this.options.bundle.refresh();
-      this.stats = { ...this.stats, bundleRefreshes: this.stats.bundleRefreshes + 1 };
+      //
+      // At most once per BUNDLE_REFRESH_INTERVAL_MS, unless a person asked for it.
+      const refreshStartedAt = this.options.clock.now();
+      if (
+        this.bundleWanted ||
+        this.bundleRefreshedAt === null ||
+        refreshStartedAt - this.bundleRefreshedAt >= BUNDLE_REFRESH_INTERVAL_MS
+      ) {
+        await this.options.bundle.refresh();
+        this.bundleWanted = false;
+        this.bundleRefreshedAt = refreshStartedAt;
+        this.stats = { ...this.stats, bundleRefreshes: this.stats.bundleRefreshes + 1 };
+      }
 
       // ── drain complete (03 §10: `pulling → idle`) ───────────────────────────────────────
       this.transition('pull_drained');

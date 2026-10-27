@@ -9,6 +9,7 @@ import type { OplogPipelineDeps } from '../oplog/types.js';
 import type { DeliveryDispatcher } from '../push/dispatcher.js';
 import { sendSyncWake, type PushDeliveryDeps } from '../push/fanout.js';
 import type { PokeHub, PokeScope } from '../realtime/poke-hub.js';
+import type { TenantQueue } from './tenant-queue.js';
 import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
 import type { DB, ForTenant } from '@bolusi/db-server';
 import type { PushRequest, PushResponse, PushResult } from '@bolusi/schemas';
@@ -22,6 +23,9 @@ export interface PushIdentity {
 
 export interface PushDeps {
   readonly forTenant: ForTenant;
+  /** Holds a tenant's pushes in memory until the previous one finishes (tenant-queue.ts). Absent ⇒
+   *  pushes go straight to the database and wait there. */
+  readonly tenantQueue?: TenantQueue;
   /** Ed25519 verify + SHA-256 over the JCS bytes (05 §3) — the task-07 pipeline's crypto port. */
   readonly crypto: CryptoPort;
   readonly now: () => number;
@@ -72,24 +76,27 @@ export async function runPush(
     };
   }
 
-  const { results } = await processPushBatch(
-    {
-      forTenant: deps.forTenant,
-      crypto: deps.crypto,
-      now: deps.now,
-      newId: deps.newId,
-      registry: deps.registry,
-      projections: deps.projections,
-      // Threaded straight through: the pipeline runs detection inside the push transaction and
-      // fires the hook post-commit. Both undefined by default (no key store) — detection off.
-      ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
-      ...(deps.onConflictSurfaced === undefined
-        ? {}
-        : { onConflictSurfaced: deps.onConflictSurfaced }),
-      ...(deps.onDeviceAnomaly === undefined ? {} : { onDeviceAnomaly: deps.onDeviceAnomaly }),
-    },
-    { deviceId: identity.deviceId, tenantId: identity.tenantId },
-    request.ops,
+  const queue = deps.tenantQueue ?? ((_tenantId, task) => task());
+  const { results } = await queue(identity.tenantId, () =>
+    processPushBatch(
+      {
+        forTenant: deps.forTenant,
+        crypto: deps.crypto,
+        now: deps.now,
+        newId: deps.newId,
+        registry: deps.registry,
+        projections: deps.projections,
+        // Threaded straight through: the pipeline runs detection inside the push transaction and
+        // fires the hook post-commit. Both undefined by default (no key store) — detection off.
+        ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
+        ...(deps.onConflictSurfaced === undefined
+          ? {}
+          : { onConflictSurfaced: deps.onConflictSurfaced }),
+        ...(deps.onDeviceAnomaly === undefined ? {} : { onDeviceAnomaly: deps.onDeviceAnomaly }),
+      },
+      { deviceId: identity.deviceId, tenantId: identity.tenantId },
+      request.ops,
+    ),
   );
 
   // Emit one scoped poke per DISTINCT pull scope among the accepted ops (api/01-sync §4.1). An

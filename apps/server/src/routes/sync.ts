@@ -20,6 +20,7 @@ export function createSyncRouter(deps: ServerDeps) {
       const body: PushResponse = await runPush(
         {
           forTenant: deps.forTenant,
+          tenantQueue: deps.tenantPushQueue,
           crypto: deps.serverCrypto,
           now: deps.now,
           newId: deps.newOpLogId,

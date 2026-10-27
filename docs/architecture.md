@@ -143,6 +143,16 @@ fails a build, a boot or a test rather than waiting for review:
   migration 6 stopped storing each payload twice and compressed the signed text;
   the op log went from 394 MB to 143 MB). Phone timings are still unmeasured; on
   Hermes the compression costs about 0.8 ms per pulled op.
+- Server sync capacity (`bench:sync-load`, one Node process on one core, Postgres
+  16 on two cores, October 2026). A busy hour is light even at 1,000 stores and
+  4,000 devices: push p50 about 100 ms, and changes reach the store's other
+  devices within 0.1 s at p95. The limit is ingest: each change is about 13
+  sequential statements under the tenant's counter lock, so one business takes
+  about 90 changes a second and one server process about 250. A 100-store
+  business reconnecting after two hours offline (23k changes) catches up in
+  about 3.5 minutes. Pushes are queued per tenant in memory and at most 6 run at
+  once (`apps/server/src/sync/tenant-queue.ts`), so pulls keep their connections.
+  Batching the per-change statements is the next lever.
 - Op-log values are deflated with a frozen preset dictionary
   (`db-client/src/crypto/compression.ts`). Changing the dictionary makes stored
   ops unreadable; a better one needs a new scheme prefix.

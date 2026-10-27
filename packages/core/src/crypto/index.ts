@@ -40,6 +40,14 @@ export {
   MEDIA_FILE_TAG_BYTES,
   type MediaFileAead,
 } from './media-file-cipher.js';
+export {
+  ED25519_RAW_LENGTH,
+  frameEd25519Pkcs8,
+  frameEd25519Spki,
+  PKCS8_ED25519_PREFIX,
+  pointFromSpkiDer,
+  SPKI_ED25519_PREFIX,
+} from './ed25519-der.js';
 export { compareCanonicalOrder, sortCanonical, type CanonicalOrderKey } from './order.js';
 export {
   DEFAULT_KDF_PARAMS,
