@@ -63,7 +63,7 @@ import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
 import { pinView } from './src/screens/pin/model.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
-import { roleAndStore } from './src/screens/switcher/UserRow.js';
+import { roleLabel } from './src/screens/switcher/UserRow.js';
 import {
   initialsOf,
   switcherState,
@@ -1144,7 +1144,7 @@ export default function App(props: AppProps): React.JSX.Element {
       {accountMenu && currentUser !== null && zone.kind === 'shell' ? (
         <Sheet
           title={currentUser.name}
-          subtitle={roleAndStore(currentUser.roleKeys, props.deviceInfo.storeName)}
+          subtitle={roleLabel(currentUser.roleKeys) || undefined}
           leading={
             <Avatar
               userId={currentUser.id}

@@ -3,8 +3,8 @@
     "title": "Who’s using this?",
     "addUser": "Add User",
     "reenroll": "Re-enroll Device",
-    "emptyUsers": "No users on this device yet. Ask the store owner to enroll this device.",
-    "idleLocked": "Locked after sitting idle. Your work is safe.",
+    "emptyUsers": "No one is set up on this phone yet. Ask the store owner to add people.",
+    "idleLocked": "Locked after a while unused. Your work is safe.",
     "search": "Search name",
     "noMatches": "No matching names",
     "locked": "PIN locked",
@@ -14,16 +14,16 @@
   "pin": {
     "title": "Enter your PIN",
     "wrong": "Wrong PIN.",
-    "attemptsLeft": "{count, plural, one {# more try left.} other {# more tries left.}}",
+    "attemptsLeft": "{count, plural, one {# try left.} other {# tries left.}}",
     "wait": "Too many wrong tries. Try again in {duration}.",
-    "lockedOut": "The PIN was wrong too many times. Ask the store owner to unlock it in Settings, under Staff PINs.",
-    "forgot": "Ask the store owner to make you a new PIN. They can do it on this phone in Settings, under Staff PINs, even offline.",
+    "lockedOut": "Ask the store owner to unlock it.",
+    "forgot": "Ask the store owner to make you a new PIN. Works offline.",
     "setup": {
       "title": "Create a new PIN",
       "repeat": "Repeat the new PIN",
       "mismatch": "The PINs don’t match. Start again.",
       "screenTitle": "Create PIN",
-      "hint": "6 digits to sign in on this phone. Avoid your birthday.",
+      "hint": "6 digits. Avoid your birthday.",
       "failed": "The PIN couldn’t be saved. Try again."
     },
     "change": {
@@ -31,21 +31,21 @@
       "enterCurrent": "Enter your current PIN",
       "wrongCurrent": "That’s not your current PIN. Try again.",
       "done": "Your PIN is changed",
-      "doneBody": "From now on, sign in with the new PIN."
+      "doneBody": "Use the new PIN from now on."
     },
     "reset": {
       "noUsers": "There’s no other staff on this phone yet.",
-      "done": "{name}’s new PIN is set",
+      "done": "New PIN is set",
       "denied": "Only a main owner can make a new PIN for another main owner."
     },
     "unlock": {
-      "confirm": "{name} can sign in again right away with their old PIN.",
-      "done": "{name}’s PIN is unlocked",
+      "confirm": "They can sign in with their old PIN right away.",
+      "done": "PIN unlocked",
       "notLocked": "{name}’s PIN is no longer locked"
     },
     "manage": {
       "unauthorizedTitle": "Owner permission needed",
-      "unauthorizedBody": "Only the store owner can unlock or make PINs. Ask the store owner."
+      "unauthorizedBody": "Only the store owner can manage staff PINs."
     },
     "signIn": "Sign in",
     "lockedOutTitle": "Your PIN is locked",
@@ -55,22 +55,18 @@
       "resetTitle": "New PIN",
       "unlock": "Unlock PIN",
       "reset": "Make a new PIN",
-      "handedOver": "{name} has the phone",
+      "handedOver": "Continue",
       "handOverTitle": "Hand the phone to {name}",
-      "handOverBody": "{name} types their own new PIN, so you never see it.",
+      "handOverBody": "{name} types the new PIN themselves.",
       "finish": "Done",
-      "resetDoneBody": "{name} can now sign in with the new PIN.",
-      "unlockDoneBody": "{name} can sign in again with their old PIN.",
+      "resetDoneBody": "{name} can sign in with the new PIN.",
+      "unlockDoneBody": "{name} can sign in again.",
       "failedTitle": "That didn’t work",
       "unlockConfirmTitle": "Unlock {name}’s PIN?",
-      "lockedBody": "The PIN was wrong too many times. Unlock it if {name} still remembers it, or make a new one.",
-      "activeBody": "The PIN isn’t locked. If {name} forgot it, make a new one.",
-      "lockedUnlockBody": "The PIN was wrong too many times. Unlock it if {name} still remembers it.",
-      "lockedResetBody": "The PIN was wrong too many times. Make a new one, typed by {name}.",
-      "noPinBody": "{name} has no PIN on this phone yet. Make one, typed by {name}."
+      "lockedBody": "Still remembers the old PIN? Just unlock it."
     },
     "noPinTitle": "No PIN yet",
-    "noPinBody": "Ask the store owner to make one in Settings, under Staff PINs. You type the PIN yourself."
+    "noPinBody": "Ask the store owner to make you a PIN."
   },
   "enroll": {
     "title": "Enroll this phone",

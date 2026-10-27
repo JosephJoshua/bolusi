@@ -88,22 +88,16 @@ const source = {
           'Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto.',
       },
       rejection: {
-        BAD_SIGNATURE:
-          'Perubahan ini gagal diverifikasi dan ditolak server. Laporkan ke pemilik toko.',
+        BAD_SIGNATURE: 'Gagal diverifikasi server. Kabari pemilik toko.',
         CHAIN_BROKEN:
-          'Riwayat perubahan di perangkat ini rusak. Pengiriman dihentikan. Segera hubungi pemilik toko.',
-        CHAIN_GAP: 'Ada perubahan yang tertinggal. Dikirim ulang otomatis.',
-        CHAIN_HALTED: 'Ditunda karena perubahan sebelumnya bermasalah.',
-        DEVICE_REVOKED:
-          'Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.',
-        PERMISSION_DENIED:
-          'Orang yang membuat perubahan ini tidak punya izin di toko ini, jadi perubahannya tidak disimpan. Minta orang yang berwenang untuk mengulanginya.',
-        SCHEMA_INVALID:
-          'Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.',
-        SCOPE_VIOLATION:
-          'Perubahan ini bukan untuk toko atau akun ini, jadi ditolak. Laporkan ke pemilik toko.',
-        UNKNOWN_TYPE:
-          'Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim.',
+          'Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.',
+        CHAIN_GAP: 'Ada yang tertinggal. Dikirim ulang otomatis.',
+        CHAIN_HALTED: 'Menunggu perubahan sebelumnya beres.',
+        DEVICE_REVOKED: 'Perangkat ini sudah diblokir. Daftarkan ulang.',
+        PERMISSION_DENIED: 'Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.',
+        SCHEMA_INVALID: 'Server tidak mengenali perubahan ini. Kabari pemilik toko.',
+        SCOPE_VIOLATION: 'Bukan untuk toko ini. Kabari pemilik toko.',
+        UNKNOWN_TYPE: 'Perbarui aplikasi supaya bisa dikirim.',
       },
       account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
     },
@@ -112,9 +106,8 @@ const source = {
         title: 'Siapa yang pakai?',
         addUser: 'Tambah Pengguna',
         reenroll: 'Daftarkan Ulang Perangkat',
-        emptyUsers:
-          'Belum ada pengguna di perangkat ini. Minta pemilik toko untuk mendaftarkannya.',
-        idleLocked: 'Layar terkunci karena lama tidak dipakai. Pekerjaanmu aman.',
+        emptyUsers: 'Belum ada pengguna di HP ini. Minta pemilik toko menambahkannya.',
+        idleLocked: 'Terkunci karena lama tidak dipakai. Pekerjaanmu aman.',
         search: 'Cari nama',
         noMatches: 'Tidak ada nama yang cocok',
         locked: 'PIN terkunci',
@@ -122,20 +115,18 @@ const source = {
         current: 'Sedang dipakai',
       },
       pin: {
-        title: 'Masukkan PIN kamu',
+        title: 'Masukkan PIN',
         wrong: 'PIN salah.',
-        attemptsLeft: 'Masih bisa coba {count} kali lagi.',
+        attemptsLeft: 'Sisa {count} kali coba.',
         wait: 'Terlalu sering salah. Coba lagi dalam {duration}.',
-        lockedOut:
-          'PIN-nya terlalu sering salah. Minta pemilik toko membukanya di Pengaturan, bagian PIN karyawan.',
-        forgot:
-          'Minta pemilik toko membuatkan PIN baru. Pemilik bisa melakukannya di HP ini lewat Pengaturan, bagian PIN karyawan, juga tanpa internet.',
+        lockedOut: 'Minta pemilik toko membuka kuncinya.',
+        forgot: 'Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.',
         setup: {
           title: 'Buat PIN baru',
           repeat: 'Ulangi PIN baru',
           mismatch: 'PIN tidak sama. Buat lagi dari awal.',
           screenTitle: 'Buat PIN',
-          hint: '6 angka untuk masuk ke HP ini. Jangan pakai tanggal lahir.',
+          hint: '6 angka. Jangan pakai tanggal lahir.',
           failed: 'PIN belum bisa dibuat. Coba lagi.',
         },
         change: {
@@ -143,22 +134,21 @@ const source = {
           enterCurrent: 'Masukkan PIN lama',
           wrongCurrent: 'PIN lama salah. Coba lagi.',
           done: 'PIN kamu sudah diganti',
-          doneBody: 'Mulai sekarang, masuk pakai PIN baru ini.',
+          doneBody: 'Masuk pakai PIN baru mulai sekarang.',
         },
         reset: {
           noUsers: 'Belum ada karyawan lain di HP ini.',
-          done: 'PIN baru {name} sudah dibuat',
+          done: 'PIN baru sudah dibuat',
           denied: 'Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain.',
         },
         unlock: {
-          confirm: '{name} bisa langsung masuk lagi dengan PIN lamanya.',
-          done: 'PIN {name} sudah dibuka',
+          confirm: 'Bisa langsung masuk dengan PIN lamanya.',
+          done: 'Kunci PIN sudah dibuka',
           notLocked: 'PIN {name} sudah tidak terkunci',
         },
         manage: {
           unauthorizedTitle: 'Perlu izin pemilik',
-          unauthorizedBody:
-            'Hanya pemilik toko yang bisa membuka kunci atau membuat PIN baru. Minta pemilik toko.',
+          unauthorizedBody: 'Hanya pemilik toko yang bisa mengatur PIN karyawan.',
         },
         signIn: 'Masuk',
         lockedOutTitle: 'PIN kamu terkunci',
@@ -168,28 +158,18 @@ const source = {
           resetTitle: 'Buat PIN baru',
           unlock: 'Buka kunci PIN',
           reset: 'Buat PIN baru',
-          handedOver: '{name} sudah pegang HP',
+          handedOver: 'Lanjut',
           handOverTitle: 'Berikan HP ke {name}',
-          handOverBody:
-            '{name} yang mengetik PIN barunya sendiri, jadi kamu tidak akan tahu PIN-nya.',
+          handOverBody: 'Biar {name} sendiri yang mengetik PIN barunya.',
           finish: 'Selesai',
-          resetDoneBody: 'Sekarang {name} bisa masuk dengan PIN barunya.',
-          unlockDoneBody: '{name} bisa masuk lagi dengan PIN lamanya.',
+          resetDoneBody: '{name} sudah bisa masuk dengan PIN baru.',
+          unlockDoneBody: '{name} sudah bisa masuk lagi.',
           failedTitle: 'Belum berhasil',
           unlockConfirmTitle: 'Buka kunci PIN {name}?',
-          lockedBody:
-            'PIN-nya terlalu sering salah. Buka kuncinya kalau {name} masih ingat PIN-nya, atau buat PIN baru.',
-          activeBody: 'PIN-nya tidak terkunci. Kalau {name} lupa PIN, buat PIN baru.',
-          lockedUnlockBody:
-            'PIN-nya terlalu sering salah. Buka kuncinya kalau {name} masih ingat PIN-nya.',
-          lockedResetBody:
-            'PIN-nya terlalu sering salah. Buat PIN baru, nanti {name} sendiri yang mengetik.',
-          noPinBody:
-            '{name} belum punya PIN di HP ini. Buat PIN, nanti {name} sendiri yang mengetik.',
+          lockedBody: 'Masih ingat PIN lamanya? Cukup buka kuncinya.',
         },
         noPinTitle: 'Belum ada PIN',
-        noPinBody:
-          'Minta pemilik toko membuatkan PIN di Pengaturan, bagian PIN karyawan. Nanti kamu sendiri yang mengetik PIN-nya.',
+        noPinBody: 'Minta pemilik toko membuatkan PIN untukmu.',
       },
       enroll: {
         title: 'Daftarkan HP ini',
@@ -240,13 +220,12 @@ const source = {
     sync: {
       chip: { pending: 'Belum terkirim', rejected: 'Ditolak' },
       status: {
-        upToDate: 'Semua perubahan sudah aman di server.',
+        upToDate: 'Datanya aman di server.',
         syncing: 'Sedang mengirim perubahan ke server.',
         pending: '{count} perubahan belum terkirim',
         pendingMedia: '{count} foto belum terkirim',
         photosPending: 'Perubahan sudah terkirim. Fotonya menyusul.',
-        attentionReassurance:
-          'Ada perubahan yang ditolak server. Datanya tetap tersimpan di HP ini.',
+        attentionReassurance: 'Cek daftarnya di bawah.',
         offline: 'Perubahan tersimpan di HP ini dan dikirim saat ada koneksi.',
         reconnected: 'Terhubung kembali',
         lastSynced: 'Terakhir terhubung {relative}',
@@ -269,17 +248,15 @@ const source = {
       rejected: {
         banner: '{count} perubahan ditolak server. Ketuk untuk melihat.',
         title: 'Ditolak server ({count})',
-        explain:
-          'Perubahan ini tidak akan terkirim, tapi tetap tersimpan di HP ini sebagai catatan. Ketuk untuk melihat detailnya.',
+        explain: 'Tidak dikirim lagi, tapi tetap tersimpan di HP ini.',
         opMeta: '{opType} · {time}',
         technicalDetails: 'Detail teknis',
-        kept: 'Perubahan ini tetap tersimpan di HP ini sebagai catatan, tapi tidak akan dikirim lagi.',
         noReason: 'Server tidak mengirim keterangan.',
         more: 'Tampilkan {count} lainnya',
       },
       quarantine: {
         title: 'Perubahan ditahan',
-        body: 'Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko.',
+        body: 'Beberapa perubahan dari HP lain gagal diperiksa, jadi belum tampil. Kabari pemilik toko.',
       },
       action: { syncNow: 'Kirim sekarang', pullToRefresh: 'Tarik untuk memperbarui' },
       firstSync: {
@@ -287,8 +264,7 @@ const source = {
         progress: 'Riwayat sampai {date} · {percent}%',
         banner: 'Menyiapkan data toko ({percent}%). Kamu tetap bisa bekerja.',
         chip: 'Menyiapkan data toko {percent}%',
-        explain:
-          'Perangkat baru mengunduh riwayat toko. Bisa dilanjutkan kapan saja; yang sudah terunduh tidak diulang.',
+        explain: 'HP baru mengunduh riwayat toko. Kalau terputus, lanjut dari yang terakhir.',
       },
       media: {
         failedTitle: 'Foto gagal dikirim',
@@ -469,21 +445,16 @@ export const resources = {
             'This device’s session has ended. Sign in again to keep sending photos.',
         },
         rejection: {
-          BAD_SIGNATURE:
-            'This change failed verification and was rejected by the server. Report this to the store owner.',
+          BAD_SIGNATURE: 'Failed the server check. Tell the store owner.',
           CHAIN_BROKEN:
-            'This device’s change history is broken. Sending has stopped. Contact the store owner right away.',
-          CHAIN_GAP: 'Some changes were missing. They’re being resent automatically.',
-          CHAIN_HALTED: 'On hold because an earlier change has a problem.',
-          DEVICE_REVOKED:
-            'This device has been revoked, so the change was rejected. Enroll this device again.',
-          PERMISSION_DENIED:
-            'The person who made this change isn’t allowed to do it in this store, so it wasn’t saved. Ask someone who is allowed to do it again.',
-          SCHEMA_INVALID:
-            'The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.',
-          SCOPE_VIOLATION:
-            'This change doesn’t belong to this store or account, so it was rejected. Report it to the store owner.',
-          UNKNOWN_TYPE: 'This device’s app needs an update before this change can be sent.',
+            'This device’s history is broken and sending stopped. Tell the store owner now.',
+          CHAIN_GAP: 'Something was missing. Resending automatically.',
+          CHAIN_HALTED: 'Waiting on an earlier change.',
+          DEVICE_REVOKED: 'This device is blocked. Enroll it again.',
+          PERMISSION_DENIED: 'Whoever made it wasn’t allowed to. Ask someone who is to redo it.',
+          SCHEMA_INVALID: 'The server didn’t recognise this change. Tell the store owner.',
+          SCOPE_VIOLATION: 'Not for this store. Tell the store owner.',
+          UNKNOWN_TYPE: 'Update the app so this can be sent.',
         },
         account: { menu: 'Account menu', switchUser: 'Switch user' },
       },
@@ -492,8 +463,8 @@ export const resources = {
           title: 'Who’s using this?',
           addUser: 'Add User',
           reenroll: 'Re-enroll Device',
-          emptyUsers: 'No users on this device yet. Ask the store owner to enroll this device.',
-          idleLocked: 'Locked after sitting idle. Your work is safe.',
+          emptyUsers: 'No one is set up on this phone yet. Ask the store owner to add people.',
+          idleLocked: 'Locked after a while unused. Your work is safe.',
           search: 'Search name',
           noMatches: 'No matching names',
           locked: 'PIN locked',
@@ -503,18 +474,16 @@ export const resources = {
         pin: {
           title: 'Enter your PIN',
           wrong: 'Wrong PIN.',
-          attemptsLeft: '{count, plural, one {# more try left.} other {# more tries left.}}',
+          attemptsLeft: '{count, plural, one {# try left.} other {# tries left.}}',
           wait: 'Too many wrong tries. Try again in {duration}.',
-          lockedOut:
-            'The PIN was wrong too many times. Ask the store owner to unlock it in Settings, under Staff PINs.',
-          forgot:
-            'Ask the store owner to make you a new PIN. They can do it on this phone in Settings, under Staff PINs, even offline.',
+          lockedOut: 'Ask the store owner to unlock it.',
+          forgot: 'Ask the store owner to make you a new PIN. Works offline.',
           setup: {
             title: 'Create a new PIN',
             repeat: 'Repeat the new PIN',
             mismatch: 'The PINs don’t match. Start again.',
             screenTitle: 'Create PIN',
-            hint: '6 digits to sign in on this phone. Avoid your birthday.',
+            hint: '6 digits. Avoid your birthday.',
             failed: 'The PIN couldn’t be saved. Try again.',
           },
           change: {
@@ -522,21 +491,21 @@ export const resources = {
             enterCurrent: 'Enter your current PIN',
             wrongCurrent: 'That’s not your current PIN. Try again.',
             done: 'Your PIN is changed',
-            doneBody: 'From now on, sign in with the new PIN.',
+            doneBody: 'Use the new PIN from now on.',
           },
           reset: {
             noUsers: 'There’s no other staff on this phone yet.',
-            done: '{name}’s new PIN is set',
+            done: 'New PIN is set',
             denied: 'Only a main owner can make a new PIN for another main owner.',
           },
           unlock: {
-            confirm: '{name} can sign in again right away with their old PIN.',
-            done: '{name}’s PIN is unlocked',
+            confirm: 'They can sign in with their old PIN right away.',
+            done: 'PIN unlocked',
             notLocked: '{name}’s PIN is no longer locked',
           },
           manage: {
             unauthorizedTitle: 'Owner permission needed',
-            unauthorizedBody: 'Only the store owner can unlock or make PINs. Ask the store owner.',
+            unauthorizedBody: 'Only the store owner can manage staff PINs.',
           },
           signIn: 'Sign in',
           lockedOutTitle: 'Your PIN is locked',
@@ -546,25 +515,18 @@ export const resources = {
             resetTitle: 'New PIN',
             unlock: 'Unlock PIN',
             reset: 'Make a new PIN',
-            handedOver: '{name} has the phone',
+            handedOver: 'Continue',
             handOverTitle: 'Hand the phone to {name}',
-            handOverBody: '{name} types their own new PIN, so you never see it.',
+            handOverBody: '{name} types the new PIN themselves.',
             finish: 'Done',
-            resetDoneBody: '{name} can now sign in with the new PIN.',
-            unlockDoneBody: '{name} can sign in again with their old PIN.',
+            resetDoneBody: '{name} can sign in with the new PIN.',
+            unlockDoneBody: '{name} can sign in again.',
             failedTitle: 'That didn’t work',
             unlockConfirmTitle: 'Unlock {name}’s PIN?',
-            lockedBody:
-              'The PIN was wrong too many times. Unlock it if {name} still remembers it, or make a new one.',
-            activeBody: 'The PIN isn’t locked. If {name} forgot it, make a new one.',
-            lockedUnlockBody:
-              'The PIN was wrong too many times. Unlock it if {name} still remembers it.',
-            lockedResetBody: 'The PIN was wrong too many times. Make a new one, typed by {name}.',
-            noPinBody: '{name} has no PIN on this phone yet. Make one, typed by {name}.',
+            lockedBody: 'Still remembers the old PIN? Just unlock it.',
           },
           noPinTitle: 'No PIN yet',
-          noPinBody:
-            'Ask the store owner to make one in Settings, under Staff PINs. You type the PIN yourself.',
+          noPinBody: 'Ask the store owner to make you a PIN.',
         },
         enroll: {
           title: 'Enroll this phone',
@@ -616,13 +578,12 @@ export const resources = {
       sync: {
         chip: { pending: 'Not sent yet', rejected: 'Rejected' },
         status: {
-          upToDate: 'All changes are safe on the server.',
+          upToDate: 'Your data is safe on the server.',
           syncing: 'Sending changes to the server.',
           pending: '{count, plural, one {# change not sent yet} other {# changes not sent yet}}',
           pendingMedia: '{count, plural, one {# photo not sent yet} other {# photos not sent yet}}',
           photosPending: 'Changes are sent. The photos will follow.',
-          attentionReassurance:
-            'The server refused some changes. They’re still saved on this phone.',
+          attentionReassurance: 'See the list below.',
           offline: 'Changes are saved on this phone and sent once you’re connected.',
           reconnected: 'Back online',
           lastSynced: 'Last connected {relative}',
@@ -647,17 +608,15 @@ export const resources = {
           banner:
             '{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}',
           title: 'Refused by the server ({count})',
-          explain:
-            'These changes won’t be sent, but they stay saved on this phone as a record. Tap one for details.',
+          explain: 'Not sent again, but still saved on this phone.',
           opMeta: '{opType} · {time}',
           technicalDetails: 'Technical details',
-          kept: 'This change stays saved on this phone as a record, but won’t be sent again.',
           noReason: 'The server sent no details.',
           more: 'Show {count} more',
         },
         quarantine: {
           title: 'Changes on hold',
-          body: 'Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner.',
+          body: 'Some changes from another device failed checks and are hidden. Tell the store owner.',
         },
         action: { syncNow: 'Send now', pullToRefresh: 'Pull to refresh' },
         firstSync: {
@@ -666,7 +625,7 @@ export const resources = {
           banner: 'Setting up store data ({percent}%). You can keep working.',
           chip: 'Setting up store data {percent}%',
           explain:
-            'This new device is downloading the store’s history. It can stop and resume at any time; nothing already downloaded is repeated.',
+            'A new phone downloads the store history. If it stops, it picks up where it left off.',
         },
         media: {
           failedTitle: 'Photos didn’t send',

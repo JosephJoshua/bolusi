@@ -55,12 +55,12 @@ describe('locale round-trip (07-i18n §1)', () => {
 
   it('renders ICU plurals in en and plain interpolation in id (§3.2)', () => {
     initI18n({ locale: 'en' });
-    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('1 more try left.');
-    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('3 more tries left.');
+    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('1 try left.');
+    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('3 tries left.');
 
     setLocale('id');
-    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('Masih bisa coba 1 kali lagi.');
-    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('Masih bisa coba 3 kali lagi.');
+    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('Sisa 1 kali coba.');
+    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('Sisa 3 kali coba.');
   });
 
   it('falls back zh → id, since zh is scaffolded with no catalog (§1, §6)', () => {
@@ -113,7 +113,7 @@ describe('missing keys (07-i18n §6)', () => {
     const instance = initI18n({ locale: 'id', logger: { warn } });
 
     const rendered = instance.t('auth.pin.attemptsLeft' as never, { count: 1 });
-    expect(rendered).toBe('Masih bisa coba 1 kali lagi.');
+    expect(rendered).toBe('Sisa 1 kali coba.');
 
     // A key in no catalog at all: the emergency degradation path.
     const absent = instance.t('auth.pin.neverDefined' as never);

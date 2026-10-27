@@ -90,15 +90,15 @@
     "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto."
   },
   "rejection": {
-    "BAD_SIGNATURE": "Perubahan ini gagal diverifikasi dan ditolak server. Laporkan ke pemilik toko.",
-    "CHAIN_BROKEN": "Riwayat perubahan di perangkat ini rusak. Pengiriman dihentikan. Segera hubungi pemilik toko.",
-    "CHAIN_GAP": "Ada perubahan yang tertinggal. Dikirim ulang otomatis.",
-    "CHAIN_HALTED": "Ditunda karena perubahan sebelumnya bermasalah.",
-    "DEVICE_REVOKED": "Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.",
-    "PERMISSION_DENIED": "Orang yang membuat perubahan ini tidak punya izin di toko ini, jadi perubahannya tidak disimpan. Minta orang yang berwenang untuk mengulanginya.",
-    "SCHEMA_INVALID": "Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.",
-    "SCOPE_VIOLATION": "Perubahan ini bukan untuk toko atau akun ini, jadi ditolak. Laporkan ke pemilik toko.",
-    "UNKNOWN_TYPE": "Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim."
+    "BAD_SIGNATURE": "Gagal diverifikasi server. Kabari pemilik toko.",
+    "CHAIN_BROKEN": "Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.",
+    "CHAIN_GAP": "Ada yang tertinggal. Dikirim ulang otomatis.",
+    "CHAIN_HALTED": "Menunggu perubahan sebelumnya beres.",
+    "DEVICE_REVOKED": "Perangkat ini sudah diblokir. Daftarkan ulang.",
+    "PERMISSION_DENIED": "Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.",
+    "SCHEMA_INVALID": "Server tidak mengenali perubahan ini. Kabari pemilik toko.",
+    "SCOPE_VIOLATION": "Bukan untuk toko ini. Kabari pemilik toko.",
+    "UNKNOWN_TYPE": "Perbarui aplikasi supaya bisa dikirim."
   },
   "account": {
     "menu": "Menu akun",

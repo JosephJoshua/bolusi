@@ -4,12 +4,12 @@
     "rejected": "Ditolak"
   },
   "status": {
-    "upToDate": "Semua perubahan sudah aman di server.",
+    "upToDate": "Datanya aman di server.",
     "syncing": "Sedang mengirim perubahan ke server.",
     "pending": "{count} perubahan belum terkirim",
     "pendingMedia": "{count} foto belum terkirim",
     "photosPending": "Perubahan sudah terkirim. Fotonya menyusul.",
-    "attentionReassurance": "Ada perubahan yang ditolak server. Datanya tetap tersimpan di HP ini.",
+    "attentionReassurance": "Cek daftarnya di bawah.",
     "offline": "Perubahan tersimpan di HP ini dan dikirim saat ada koneksi.",
     "reconnected": "Terhubung kembali",
     "lastSynced": "Terakhir terhubung {relative}",
@@ -32,16 +32,15 @@
   "rejected": {
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
     "title": "Ditolak server ({count})",
-    "explain": "Perubahan ini tidak akan terkirim, tapi tetap tersimpan di HP ini sebagai catatan. Ketuk untuk melihat detailnya.",
+    "explain": "Tidak dikirim lagi, tapi tetap tersimpan di HP ini.",
     "opMeta": "{opType} · {time}",
     "technicalDetails": "Detail teknis",
-    "kept": "Perubahan ini tetap tersimpan di HP ini sebagai catatan, tapi tidak akan dikirim lagi.",
     "noReason": "Server tidak mengirim keterangan.",
     "more": "Tampilkan {count} lainnya"
   },
   "quarantine": {
     "title": "Perubahan ditahan",
-    "body": "Beberapa perubahan dari perangkat lain gagal diverifikasi, jadi belum ditampilkan. Laporkan ke pemilik toko."
+    "body": "Beberapa perubahan dari HP lain gagal diperiksa, jadi belum tampil. Kabari pemilik toko."
   },
   "action": {
     "syncNow": "Kirim sekarang",
@@ -52,7 +51,7 @@
     "progress": "Riwayat sampai {date} · {percent}%",
     "banner": "Menyiapkan data toko ({percent}%). Kamu tetap bisa bekerja.",
     "chip": "Menyiapkan data toko {percent}%",
-    "explain": "Perangkat baru mengunduh riwayat toko. Bisa dilanjutkan kapan saja; yang sudah terunduh tidak diulang."
+    "explain": "HP baru mengunduh riwayat toko. Kalau terputus, lanjut dari yang terakhir."
   },
   "media": {
     "failedTitle": "Foto gagal dikirim",

@@ -4,12 +4,12 @@
     "rejected": "Rejected"
   },
   "status": {
-    "upToDate": "All changes are safe on the server.",
+    "upToDate": "Your data is safe on the server.",
     "syncing": "Sending changes to the server.",
     "pending": "{count, plural, one {# change not sent yet} other {# changes not sent yet}}",
     "pendingMedia": "{count, plural, one {# photo not sent yet} other {# photos not sent yet}}",
     "photosPending": "Changes are sent. The photos will follow.",
-    "attentionReassurance": "The server refused some changes. They’re still saved on this phone.",
+    "attentionReassurance": "See the list below.",
     "offline": "Changes are saved on this phone and sent once you’re connected.",
     "reconnected": "Back online",
     "lastSynced": "Last connected {relative}",
@@ -32,16 +32,15 @@
   "rejected": {
     "banner": "{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}",
     "title": "Refused by the server ({count})",
-    "explain": "These changes won’t be sent, but they stay saved on this phone as a record. Tap one for details.",
+    "explain": "Not sent again, but still saved on this phone.",
     "opMeta": "{opType} · {time}",
     "technicalDetails": "Technical details",
-    "kept": "This change stays saved on this phone as a record, but won’t be sent again.",
     "noReason": "The server sent no details.",
     "more": "Show {count} more"
   },
   "quarantine": {
     "title": "Changes on hold",
-    "body": "Some changes from another device failed verification, so they aren’t shown yet. Report this to the store owner."
+    "body": "Some changes from another device failed checks and are hidden. Tell the store owner."
   },
   "action": {
     "syncNow": "Send now",
@@ -52,7 +51,7 @@
     "progress": "History through {date} · {percent}%",
     "banner": "Setting up store data ({percent}%). You can keep working.",
     "chip": "Setting up store data {percent}%",
-    "explain": "This new device is downloading the store’s history. It can stop and resume at any time; nothing already downloaded is repeated."
+    "explain": "A new phone downloads the store history. If it stops, it picks up where it left off."
   },
   "media": {
     "failedTitle": "Photos didn’t send",

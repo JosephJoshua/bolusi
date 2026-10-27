@@ -211,7 +211,7 @@ export function StaffPinScreen({
           <OutcomeState
             tone="success"
             icon="success"
-            title={t('auth.pin.reset.done', { name: target.name })}
+            title={t('auth.pin.reset.done')}
             message={t('auth.pin.staff.resetDoneBody', { name: target.name })}
             testID="staff-pin-reset-done"
           />
@@ -249,7 +249,7 @@ export function StaffPinScreen({
           <OutcomeState
             tone="success"
             icon="success"
-            title={t('auth.pin.unlock.done', { name: unlock.target.name })}
+            title={t('auth.pin.unlock.done')}
             message={t('auth.pin.staff.unlockDoneBody', { name: unlock.target.name })}
             testID="staff-pin-unlock-done"
           />
@@ -274,6 +274,7 @@ export function StaffPinScreen({
   if (selected !== null) {
     const actions = staffPinActions(selected, { canUnlock, canReset });
     const [primary, secondary] = actions;
+    const body = staffPinBodyKey(selected, actions);
     const run = (action: 'unlock' | 'reset'): void => {
       if (action === 'unlock') dispatchUnlock({ kind: 'pick', target: selected });
       else dispatchReset({ kind: 'pick', target: selected });
@@ -296,7 +297,7 @@ export function StaffPinScreen({
           unlock.kind === 'confirming' ? (
             <ConfirmSheet
               title={t('auth.pin.staff.unlockConfirmTitle', { name: selected.name })}
-              message={t('auth.pin.unlock.confirm', { name: selected.name })}
+              message={t('auth.pin.unlock.confirm')}
               confirmLabel={t('auth.pin.staff.unlock')}
               onConfirm={() => dispatchUnlock({ kind: 'confirm' })}
               cancelLabel={t('core.action.cancel')}
@@ -318,10 +319,12 @@ export function StaffPinScreen({
                 testID="staff-pin-person-locked"
               />
             </View>
+          ) : selected.needsFirstPin === true ? (
+            <View style={styles.centred}>
+              <Chip label={t('auth.switcher.noPin')} icon="pin" testID="staff-pin-person-nopin" />
+            </View>
           ) : null}
-          <Text style={styles.status}>
-            {t(staffPinBodyKey(selected, actions), { name: selected.name })}
-          </Text>
+          {body === null ? null : <Text style={styles.status}>{t(body)}</Text>}
           {secondary === undefined ? null : (
             <View style={styles.secondary}>
               <TextButton
