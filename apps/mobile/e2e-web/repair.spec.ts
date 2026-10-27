@@ -594,6 +594,19 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await shoot(page, 'dp-ticket-owner');
 });
 
+test('a cancelled servisan waiting for pickup offers no down payment', async ({ page }) => {
+  for (const role of ['counter', 'owner'] as const) {
+    await open(page, role);
+    await tap(page, 'repair.board.views.pickup');
+    await tap(page, 'repair.board.row.t-5');
+    await expect(page.getByTestId('repair.ticket.status')).toContainText('Dibatalkan');
+    await expect(page.getByTestId('repair.ticket.total')).toBeVisible();
+    await expect(page.getByTestId('repair.ticket.downPayment.record')).toHaveCount(0);
+    await page.getByTestId('repair.ticket.total').scrollIntoViewIfNeeded();
+    await shoot(page, `dp-cancelled-${role}`);
+  }
+});
+
 test('the counter prints the handover slip, and the next print is a reprint', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
