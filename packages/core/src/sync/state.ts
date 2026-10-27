@@ -148,6 +148,25 @@ export async function writeSyncState<DB>(db: Kysely<DB>, patch: SyncStatePatch):
 }
 
 /**
+ * Start sync over for a new registration of this phone (re-enrolment). The old registration's
+ * verdicts no longer apply, and the pull starts from the beginning: a server that forgot the phone
+ * may also have lost history the old cursor claims was seen, and ops already held are skipped by id.
+ */
+export async function resetSyncStateForNewDevice<DB>(db: Kysely<DB>): Promise<void> {
+  await writeSyncState(db, {
+    cursor: 0,
+    devicesDirectoryVersion: 0,
+    pushHalted: false,
+    syncDisabled: false,
+    syncDisabledReason: null,
+    lastSyncError: null,
+    backoffUntil: null,
+    tokenRejectedSince: null,
+    tokenRejectedCount: 0,
+  });
+}
+
+/**
  * `pendingOperationCount` = `count(syncStatus = 'local')` (01 §5.2).
  *
  * DERIVED, NEVER STORED — 01 §5.2 is explicit ("stored derivables drift"), so this is a query and

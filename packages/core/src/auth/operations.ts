@@ -27,6 +27,7 @@ export const AUTH_OP = {
   pinLockedOut: 'auth.pin_locked_out',
   pinLockoutCleared: 'auth.pin_lockout_cleared',
   permissionDenied: 'auth.permission_denied',
+  deviceChangesTransferred: 'auth.device_changes_transferred',
 } as const;
 
 /** The entity types the auth ops carry (api/02-auth §6.2). */
@@ -78,6 +79,8 @@ export const AUTH_OP_PERMISSION: Readonly<Record<AuthOpType, string | null>> = {
   [AUTH_OP.pinLockedOut]: null,
   [AUTH_OP.pinLockoutCleared]: AUTH_PERMISSION.pinUnlock,
   [AUTH_OP.permissionDenied]: null,
+  // The owner who re-enrolled the phone approved re-sending its unsynced changes.
+  [AUTH_OP.deviceChangesTransferred]: AUTH_PERMISSION.deviceEnroll,
 };
 
 /** The record each auth op is about (`OperationDeclaration.entityType`). */
@@ -90,6 +93,7 @@ export const AUTH_OP_ENTITY: Readonly<Record<AuthOpType, string>> = {
   [AUTH_OP.pinLockedOut]: AUTH_ENTITY.userCredential,
   [AUTH_OP.pinLockoutCleared]: AUTH_ENTITY.userCredential,
   [AUTH_OP.permissionDenied]: AUTH_ENTITY.permissionDenial,
+  [AUTH_OP.deviceChangesTransferred]: AUTH_ENTITY.device,
 };
 
 /** Every auth op type declares `schemaVersion: 1` in v0. */

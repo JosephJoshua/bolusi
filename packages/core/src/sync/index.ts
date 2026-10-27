@@ -63,6 +63,7 @@ export {
   pendingMediaCount,
   pendingOperationCount,
   readSyncState,
+  resetSyncStateForNewDevice,
   writeSyncState,
   type SyncState,
   type SyncStatePatch,

@@ -49,6 +49,8 @@ export interface EnrollmentController {
     readonly login: LoginResult;
     readonly storeId: string;
     readonly deviceName: string;
+    /** The still-active registration a voluntary re-enrolment replaces (the server revokes it). */
+    readonly replacesDeviceId?: string;
   }): Promise<void>;
   /** Step 3 (§8.5): the owner acknowledges the success step ("Continue"). ONLY now does `onEnrolled`
    *  fire — the zone flips to the switcher and the sync loop / push registration start. Splitting this
@@ -165,6 +167,7 @@ export function createAppEnrollment(
           // The factory `runEnrollment` calls once, mid-flow, with the enroll response's identity
           // (tenant/store/device now known) to emit the genesis op through the sanctioned channel.
           runtimeFor: (identity: DeviceIdentity): CommandRuntime => runtime.runtimeFor(identity),
+          refold: (op) => app.engine.refoldEntityOf(op),
         },
         {
           ownerUserId: req.login.user.id,
@@ -173,6 +176,7 @@ export function createAppEnrollment(
           deviceName: req.deviceName,
           platform: platform.platform,
           appVersion: platform.appVersion,
+          ...(req.replacesDeviceId === undefined ? {} : { replacesDeviceId: req.replacesDeviceId }),
         },
       );
       // Persist the owner-typed device name to meta_kv (task 94), AFTER core wrote the ids AND ran

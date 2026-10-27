@@ -20,6 +20,13 @@ import {
   FIRST_PIN_USER_META_KEY,
   IDLE_LOCK_SECONDS_META_KEY,
   readMeta,
+  base64ToBytes,
+  completeDraft,
+  markSyncResult,
+  insertOpLogRow,
+  operationFromSignedCoreJcs,
+  readSyncState,
+  verifyOp,
   PermissionEvaluator,
   readDeviceId,
   readIdleLockSeconds,
@@ -105,6 +112,8 @@ interface Fixture {
   readonly ownerId: string;
   readonly tenantId: string;
   runtime(): CommandRuntime | null;
+  readonly refolded: string[];
+  readonly clock: ReturnType<typeof makeFakeClock>;
   genesisRuntimeBuilt(): boolean;
   close(): Promise<void>;
 }
@@ -184,6 +193,7 @@ async function fixture(
     createDirectorySource(db),
   );
 
+  const refolded: string[] = [];
   let builtRuntime: CommandRuntime | null = null;
   const runtimeFor = (device: DeviceIdentity): CommandRuntime => {
     // Called only for the genesis emit — which enrollment runs AFTER applyBundle (enrollment.ts code
@@ -234,6 +244,10 @@ async function fixture(
     keystore: usedKeystore,
     transport,
     runtimeFor,
+    refold: (op) => {
+      refolded.push(op.id);
+      return Promise.resolve();
+    },
   };
   const params: EnrollmentParams = {
     ownerUserId: ownerId,
@@ -256,6 +270,8 @@ async function fixture(
     ownerId,
     tenantId,
     runtime: () => builtRuntime,
+    refolded,
+    clock,
     genesisRuntimeBuilt: () => builtRuntime !== null,
     close: async () => {
       await db.destroy();
@@ -269,6 +285,20 @@ afterEach(async () => {
   await fx?.close();
   fx = null;
 });
+
+/** Mark ops sent, the way a push answer does. */
+async function markSynced(
+  db: Kysely<ClientDatabase>,
+  ops: readonly { id: string }[],
+): Promise<void> {
+  for (const op of ops) {
+    await markSyncResult(db as never, {
+      id: op.id,
+      currentStatus: 'local',
+      event: { kind: 'accepted', syncedAt: START },
+    });
+  }
+}
 
 async function countUsers(db: Kysely<ClientDatabase>): Promise<number> {
   const rows = await sql<{ n: number }>`SELECT COUNT(*) AS n FROM users_directory`.execute(db);
@@ -557,5 +587,241 @@ describe('applyBundle atomicity on the enrollment path (task 179)', () => {
     expect(keys).not.toContain(STORE_NAME_META_KEY);
     expect(keys).not.toContain(TENANT_NAME_META_KEY);
     expect(keys).not.toContain(IDLE_LOCK_SECONDS_META_KEY);
+  });
+});
+
+describe('re-enrolling a phone that still holds unsynced changes', () => {
+  interface OpRowLite {
+    id: string;
+    deviceId: string;
+    seq: number;
+    type: string;
+    userId: string;
+    syncStatus: string;
+    timestampMs: number;
+    signedCoreJcs: string;
+    hash: string;
+    signature: string;
+  }
+  const allOps = async (db: Kysely<ClientDatabase>): Promise<OpRowLite[]> =>
+    (await db
+      .selectFrom('operations')
+      .select([
+        'id',
+        'deviceId',
+        'seq',
+        'type',
+        'userId',
+        'syncStatus',
+        'timestampMs',
+        'signedCoreJcs',
+        'hash',
+        'signature',
+      ])
+      .orderBy('deviceId')
+      .orderBy('seq')
+      .execute()) as OpRowLite[];
+
+  /** Enrol once, then save three changes as the owner on that registration; the first one synced. */
+  async function enrolledWithBacklog(seed: number) {
+    const f = await fixture(seed);
+    const first = await runEnrollment(f.deps, f.params);
+    const runtime = f.runtime()!;
+    for (let i = 0; i < 3; i += 1) {
+      f.clock.advance(1_000);
+      await runtime.emitRuntimeOp({
+        type: 'auth.session_ended',
+        entityType: 'auth_session',
+        entityId: createUuidV7Generator({
+          now: () => f.clock.now(),
+          randomBytes: (n) => prngBytes(mulberry32(seed * 10 + i), n),
+        })(),
+        payload: { reason: 'manual_lock' },
+        userId: f.ownerId,
+      });
+    }
+    // The genesis and the first change reached the server; the other two did not.
+    const before = await allOps(f.db);
+    await markSynced(
+      f.db,
+      before.filter((op) => op.seq <= 2),
+    );
+    // The server stopped recognising the phone, so sync was switched off with that reason.
+    await sql`UPDATE sync_state SET sync_disabled = 1, sync_disabled_reason = 'device_unrecognised',
+      pull_cursor = 42, token_rejected_count = 4, token_rejected_since = 1`.execute(f.db);
+    return { f, oldDeviceId: first.deviceId, before };
+  }
+
+  it('re-signs only the unsynced changes under the new device, after an audit record, keeping ids, authors and times', async () => {
+    const { f, oldDeviceId, before } = await enrolledWithBacklog(41);
+    fx = f;
+    f.clock.advance(60_000);
+    const second = await runEnrollment(f.deps, f.params);
+    expect(second.deviceId).not.toBe(oldDeviceId);
+    expect(second.carriedOver).toBe(2);
+
+    const after = await allOps(f.db);
+    const unsynced = before.filter((op) => op.seq >= 3);
+    // Synced history is untouched, byte for byte.
+    for (const op of before.filter((o) => o.seq <= 2)) {
+      expect(after.find((row) => row.id === op.id)).toEqual({ ...op, syncStatus: 'synced' });
+    }
+    // The new chain: genesis, the audit record, then the carried changes in their old order.
+    const chain = after.filter((op) => op.deviceId === second.deviceId);
+    expect(chain.map((op) => [op.seq, op.type])).toEqual([
+      [1, 'auth.device_enrolled'],
+      [2, 'auth.device_changes_transferred'],
+      [3, 'auth.session_ended'],
+      [4, 'auth.session_ended'],
+    ]);
+    const audit = JSON.parse(chain[1]!.signedCoreJcs) as { userId: string; payload: unknown };
+    expect(audit.userId).toBe(f.ownerId);
+    expect(audit.payload).toEqual({ fromDeviceIds: [oldDeviceId], opCount: 2 });
+    for (const [i, old] of unsynced.entries()) {
+      const moved = chain[2 + i]!;
+      expect(moved.id).toBe(old.id);
+      expect(moved.userId).toBe(old.userId);
+      expect(moved.timestampMs).toBe(old.timestampMs);
+      expect(moved.syncStatus).toBe('local');
+      expect(moved.hash).not.toBe(old.hash);
+    }
+    // Nothing is left on the old registration that still waits to be sent.
+    expect(after.filter((op) => op.deviceId === oldDeviceId && op.syncStatus === 'local')).toEqual(
+      [],
+    );
+    // Every op on the new chain verifies under the new key and links to the one before it.
+    const publicKey = base64ToBytes(f.transport.calls.at(-1)!.body.devicePublicKeyB64);
+    let previousHash = '0'.repeat(64);
+    for (const row of chain) {
+      const op = operationFromSignedCoreJcs(row.signedCoreJcs, row);
+      expect(verifyOp(op, publicKey, noblePort)).toBe(true);
+      expect(op.previousHash).toBe(previousHash);
+      previousHash = op.hash;
+    }
+    // Each carried change's record was re-folded.
+    expect(f.refolded).toEqual(unsynced.map((op) => op.id));
+  });
+
+  it('starts sync over for the new registration', async () => {
+    const { f } = await enrolledWithBacklog(42);
+    fx = f;
+    await runEnrollment(f.deps, f.params);
+    const state = await readSyncState(f.db);
+    expect(state).toMatchObject({
+      cursor: 0,
+      syncDisabled: false,
+      syncDisabledReason: null,
+      pushHalted: false,
+      tokenRejectedCount: 0,
+      tokenRejectedSince: null,
+    });
+  });
+
+  it('a phone with nothing unsynced gets no audit record', async () => {
+    const { f } = await enrolledWithBacklog(43);
+    fx = f;
+    await markSynced(
+      f.db,
+      (await allOps(f.db)).filter((op) => op.syncStatus === 'local'),
+    );
+    const second = await runEnrollment(f.deps, f.params);
+    expect(second.carriedOver).toBe(0);
+    const types = (await allOps(f.db))
+      .filter((op) => op.deviceId === second.deviceId)
+      .map((op) => op.type);
+    expect(types).toEqual(['auth.device_enrolled']);
+  });
+
+  it('moves media refs and not-yet-uploaded photos to the new device', async () => {
+    const { f, oldDeviceId } = await enrolledWithBacklog(44);
+    fx = f;
+    const mediaId = createUuidV7Generator({
+      now: () => f.clock.now(),
+      randomBytes: (n) => prngBytes(mulberry32(4401), n),
+    })();
+    const uploadedId = createUuidV7Generator({
+      now: () => f.clock.now(),
+      randomBytes: (n) => prngBytes(mulberry32(4402), n),
+    })();
+    // A change carrying a photo ref naming the old device, next on the old chain.
+    const last = (await allOps(f.db)).filter((row) => row.deviceId === oldDeviceId).at(-1)!;
+    f.clock.advance(1_000);
+    const withRef = completeDraft(
+      {
+        type: 'auth.session_ended',
+        entityType: 'auth_session',
+        entityId: mediaId,
+        schemaVersion: 1,
+        payload: {
+          reason: 'manual_lock',
+          photo: { mediaId, deviceId: oldDeviceId, userId: f.ownerId },
+        },
+      },
+      {
+        id: createUuidV7Generator({
+          now: () => f.clock.now(),
+          randomBytes: (n) => prngBytes(mulberry32(4403), n),
+        })(),
+        tenantId: f.tenantId,
+        storeId: f.params.storeId,
+        userId: f.ownerId,
+        deviceId: oldDeviceId,
+        seq: last.seq + 1,
+        previousHash: last.hash,
+        timestamp: f.clock.now(),
+        location: null,
+      },
+      f.keystore.getSigningKey(),
+      noblePort,
+    );
+    await insertOpLogRow(
+      f.db,
+      { op: withRef.op, signedCoreJcs: withRef.jcs },
+      { syncStatus: 'local', syncedAt: null, arrivalSeq: null },
+    );
+    const op = withRef.op;
+    for (const [id, status] of [
+      [mediaId, 'pending'],
+      [uploadedId, 'uploaded'],
+    ] as const) {
+      await sql`INSERT INTO media_items (id, tenant_id, store_id, captured_by_user_id, device_id,
+        type, mime_type, byte_size, sha256, captured_at, upload_status)
+        VALUES (${id}, ${f.tenantId}, ${f.params.storeId}, ${f.ownerId}, ${oldDeviceId}, 'image',
+          'image/jpeg', 10, ${'0'.repeat(64)}, 1, ${status})`.execute(f.db);
+    }
+
+    const second = await runEnrollment(f.deps, f.params);
+    const moved = (await allOps(f.db)).find((row) => row.id === op.id)!;
+    expect(moved.deviceId).toBe(second.deviceId);
+    const payload = (JSON.parse(moved.signedCoreJcs) as { payload: { photo: unknown } }).payload;
+    expect(payload.photo).toEqual({ mediaId, deviceId: second.deviceId, userId: f.ownerId });
+    const media = await sql<{ id: string; deviceId: string }>`
+      SELECT id, device_id AS "deviceId" FROM media_items ORDER BY id`.execute(f.db);
+    expect(Object.fromEntries(media.rows.map((row) => [row.id, row.deviceId]))).toEqual({
+      [mediaId]: second.deviceId,
+      [uploadedId]: oldDeviceId,
+    });
+  });
+
+  it('refuses to bind a phone holding one store’s data to another store, before calling the server', async () => {
+    const { f } = await enrolledWithBacklog(45);
+    fx = f;
+    const calls = f.transport.calls.length;
+    const otherStore = createUuidV7Generator({
+      now: () => START,
+      randomBytes: (n) => prngBytes(mulberry32(4501), n),
+    })();
+    await expect(runEnrollment(f.deps, { ...f.params, storeId: otherStore })).rejects.toThrow(
+      /only be re-enrolled into that store/,
+    );
+    expect(f.transport.calls).toHaveLength(calls);
+  });
+
+  it('names the replaced registration only when asked to', async () => {
+    const { f, oldDeviceId } = await enrolledWithBacklog(46);
+    fx = f;
+    await runEnrollment(f.deps, { ...f.params, replacesDeviceId: oldDeviceId });
+    expect(f.transport.calls.at(-1)!.body.replacesDeviceId).toBe(oldDeviceId);
+    expect(f.transport.calls[0]!.body).not.toHaveProperty('replacesDeviceId');
   });
 });

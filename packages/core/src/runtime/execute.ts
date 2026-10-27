@@ -154,9 +154,9 @@ export interface CommandOutcome<TResult = void> {
   readonly timestamp: number;
 }
 
-/** An op the runtime appends without a command (04 §5.1's five sanctioned emissions). */
+/** An op the runtime appends without a command (04 §5.1's six sanctioned emissions). */
 export interface RuntimeEmissionDraft {
-  /** Compile-time restricted to the five; `assertSanctionedEmission` is the runtime backstop. */
+  /** Compile-time restricted to the six; `assertSanctionedEmission` is the runtime backstop. */
   readonly type: SanctionedRuntimeEmissionType;
   readonly entityType: string;
   readonly entityId: string;
@@ -164,7 +164,7 @@ export interface RuntimeEmissionDraft {
    * The emission's payload version.
    *
    * NOT resolved from the 04 §3 operation registry the way `ctx.op()` is — deliberately, for now.
-   * The five sanctioned types are appended by the runtime BEFORE any module could own them, and no
+   * The sanctioned types are appended by the runtime BEFORE any module could own them, and no
    * v0 manifest declares them yet: `auth.*` op types arrive with the auth module (tasks 13/25),
    * which will declare `auth.permission_denied` alongside the `auth_permission_denials` applier
    * (02 §7). WHEN THAT LANDS, this field should resolve from the registry exactly as `ctx.op()`
@@ -174,7 +174,7 @@ export interface RuntimeEmissionDraft {
   readonly schemaVersion?: number;
   readonly payload: Record<string, unknown>;
   /**
-   * The op's `userId` (05 §2.1). Explicit because the five do not share one answer: a lockout op
+   * The op's `userId` (05 §2.1). Explicit because the six do not share one answer: a lockout op
    * is attributed to the locked-out user, a denial to the denied actor, a user-switch to the user
    * being switched to.
    */
@@ -607,13 +607,16 @@ export class CommandRuntime {
   }
 
   /**
-   * Append one of the five sanctioned runtime emissions (04 §5.1) — no command, no permission
-   * check, by design (02 §4; see runtime-emissions.ts for why each of the five is exempt).
+   * Append one of the six sanctioned runtime emissions (04 §5.1) — no command, no permission
+   * check, by design (02 §4; see runtime-emissions.ts for why each of the six is exempt).
    *
    * @throws {RuntimeEmissionError} when `type` is not sanctioned — before anything is appended.
    */
-  async emitRuntimeOp(draft: RuntimeEmissionDraft): Promise<readonly AppendedOp[]> {
-    return this.#emitSanctioned(draft);
+  async emitRuntimeOp(
+    draft: RuntimeEmissionDraft,
+    options: { readonly withinAppend?: (ops: readonly AppendedOp[]) => Promise<void> } = {},
+  ): Promise<readonly AppendedOp[]> {
+    return this.#emitSanctioned(draft, options.withinAppend);
   }
 
   /**
@@ -644,7 +647,10 @@ export class CommandRuntime {
     );
   }
 
-  async #emitSanctioned(draft: RuntimeEmissionDraft): Promise<readonly AppendedOp[]> {
+  async #emitSanctioned(
+    draft: RuntimeEmissionDraft,
+    withinAppend?: (ops: readonly AppendedOp[]) => Promise<void>,
+  ): Promise<readonly AppendedOp[]> {
     // Deny by default, BEFORE any store work: a rejected type leaves the log untouched.
     assertSanctionedEmission(draft.type);
 
@@ -677,6 +683,7 @@ export class CommandRuntime {
       location,
       applyProjection: this.#applyProjection,
       ...(this.#checkOp !== undefined ? { checkOp: this.#checkOp } : {}),
+      ...(withinAppend === undefined ? {} : { withinAppend }),
     });
     this.#syncScheduler.schedule();
     return ops;
