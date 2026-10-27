@@ -155,7 +155,9 @@ async function writeTicketJourney(
   if (prng() < 0.25) {
     await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
   }
-  await h.run('startWork', { ticketId }, h.technicianId);
+  // Work photos are the technician's own captures, so the server binds them to the technician.
+  const techPhoto = (n: number) => ({ ...h.photo(n), userId: h.technicianId });
+  await h.run('startWork', { ticketId, beforePhotos: [techPhoto(9)] }, h.technicianId);
   if (prng() < 0.2) {
     await h.run(
       'markWaitingForParts',
@@ -180,7 +182,11 @@ async function writeTicketJourney(
   if (prng() < 0.08) {
     await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
   } else {
-    await h.run('markRepaired', { ticketId, note: 'Sudah dites' }, h.technicianId);
+    await h.run(
+      'markRepaired',
+      { ticketId, note: 'Sudah dites', afterPhotos: [techPhoto(10)] },
+      h.technicianId,
+    );
   }
   await h.run(
     'returnDevice',

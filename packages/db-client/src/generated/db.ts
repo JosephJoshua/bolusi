@@ -139,6 +139,19 @@ export interface Operations {
   userId: string;
 }
 
+export interface PendingPinVerifiers {
+  actorUserId: string;
+  algo: string;
+  asOfDeviceId: string;
+  asOfSeq: number;
+  asOfTimestamp: number;
+  hash: string;
+  params: string;
+  salt: string;
+  userId: string;
+  verifierRef: string | null;
+}
+
 export interface PhoneModels {
   announcedYear: number | null;
   brand: string;
@@ -374,6 +387,12 @@ export interface UsersDirectory {
   status: string;
 }
 
+export interface UserWork {
+  updatedAt: number;
+  userId: string | null;
+  work: string;
+}
+
 export interface DB {
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
@@ -384,6 +403,7 @@ export interface DB {
   migrations: Migrations;
   notes: Notes;
   operations: Operations;
+  pendingPinVerifiers: PendingPinVerifiers;
   phoneModels: PhoneModels;
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
@@ -404,4 +424,5 @@ export interface DB {
   userPrefs: UserPrefs;
   userRolesDirectory: UserRolesDirectory;
   usersDirectory: UsersDirectory;
+  userWork: UserWork;
 }

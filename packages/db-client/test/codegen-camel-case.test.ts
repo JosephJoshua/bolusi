@@ -67,7 +67,7 @@ test('the generated types were parsed (guards the parser itself)', () => {
   // testing-guide T-14: this guard must not be able to check nothing. `parseInterfaces` is a
   // regex over generated text, so a kysely-codegen emit change degrades it silently — the sweep
   // below would loop over fewer properties and still report green.
-  expect(tableMap.length).toBe(29);
+  expect(tableMap.length).toBe(31);
   for (const [, interfaceName] of tableMap) {
     expect(interfaces.get(interfaceName)?.length ?? 0).toBeGreaterThan(0);
   }

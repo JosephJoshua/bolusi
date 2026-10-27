@@ -134,6 +134,7 @@ export interface RootProps {
   readonly createSync?: (
     app: Bootstrapped,
     onBundleRefreshed?: () => void | Promise<void>,
+    onBundleChecked?: () => void | Promise<void>,
   ) => SyncClient | null;
   /**
    * Wire the enrollment caller over a booted app (api/02-auth §4) — injected for the same reason as
@@ -242,7 +243,7 @@ export interface RootProps {
   /**
    * The `POST /v1/users/:userId/pin-verifier` transport (api/02-auth §5.4; task 186a-2), injected for
    * the same reason as `createSync`/`postToken`: it binds the fetch wire + the SecureStore device
-   * bearer, neither Node-safe. Drained on `onBundleRefreshed` (online-only) so a locally-applied PIN
+   * bearer, neither Node-safe. Drained on `onBundleChecked` (every online bundle answer) so a locally-applied PIN
    * change reaches the server. Absent in tests that do not exercise the drain.
    */
   readonly uploadPinVerifier?: PinVerifierUploadPort | undefined;
@@ -413,12 +414,15 @@ export function Root({
                 // refresh that landed a tighter timeout in the database while the session kept the
                 // old one is a setting that "took effect" nowhere the user could see.
                 await sessionRef.current?.refreshSettings();
-                // A bundle refresh means the device is online (§5.2), so this is the moment to POST any
-                // PIN verifier queued by a local change (§5.4; task 186a-2). `drainVerifiers` never
-                // throws — an unreachable server re-queues, it does not block the refresh.
-                if (uploadPinVerifier !== undefined) {
-                  await sessionRef.current?.drainVerifiers(uploadPinVerifier);
-                }
+              },
+          // Any bundle answer, a 304 included, means the server was just reached (§5.2), so this is
+          // the moment to POST any PIN verifier queued by a local change (§5.4). It must not wait for
+          // a CHANGED bundle: an offline PIN change alters nothing the server sends back, so the next
+          // answer is a 304. `drainVerifiers` never throws, so it cannot block the sync cycle.
+          uploadPinVerifier === undefined
+            ? undefined
+            : async () => {
+                await sessionRef.current?.drainVerifiers(uploadPinVerifier);
               },
         ) ?? null;
       if (client === null || disposed) {
@@ -998,7 +1002,7 @@ export function Root({
         }
         // Owner Reset (api/02-auth §6.6; task 186b-2). `canReset` gates the Settings entry; `onResetPin`
         // runs the real `resetPin` flow as the acting owner — it enqueues a verifier carrying the owner
-        // as its actor, so the drain (already wired via `onBundleRefreshed`) POSTs the owner in
+        // as its actor, so the drain (already wired via `onBundleChecked`) POSTs the owner in
         // `X-Acting-User`. `session === null` is unreachable (Reset is a session-gated shell route).
         canReset={sessionSnapshot?.canReset ?? false}
         onResetPin={(targetUserId, newPin) =>

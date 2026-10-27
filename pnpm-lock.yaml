@@ -617,6 +617,9 @@ importers:
       '@bolusi/db-client':
         specifier: workspace:*
         version: link:../db-client
+      '@bolusi/db-server':
+        specifier: workspace:*
+        version: link:../db-server
       '@bolusi/sqlite-test-driver':
         specifier: workspace:*
         version: link:../sqlite-test-driver

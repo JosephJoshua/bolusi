@@ -48,6 +48,7 @@ import { unconfiguredPushPort, type PushPort } from './push/port.js';
 import { timerReceiptScheduler } from './push/receipts.js';
 import { nodeHubScheduler, RealtimeHub, type HubScheduler } from './realtime/hub.js';
 import { InProcessPokeHub, type PokeHub } from './realtime/poke-hub.js';
+import { createTenantQueue, type TenantQueue } from './sync/tenant-queue.js';
 import type { SurfacedConflict } from './sync/conflict-detection.js';
 import {
   buildConflictDetection,
@@ -231,6 +232,8 @@ export interface ServerDeps {
   readonly now: () => number;
   readonly newRequestId: () => string;
   readonly forTenant: ForTenant;
+  /** Queues each tenant's pushes in memory so waiting pushes hold no database connection. */
+  readonly tenantPushQueue: TenantQueue;
   readonly verifyToken: VerifyToken;
   /** The cross-tenant auth lookups (D14) — used by verifyToken and login (task 13). */
   readonly authDirectory: AuthDirectory;
@@ -416,6 +419,7 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     opRegistry: overrides.opRegistry ?? serverOpRegistry,
     projections: overrides.projections ?? serverModuleRegistry.projections,
     pokeHub: overrides.pokeHub ?? new InProcessPokeHub(),
+    tenantPushQueue: overrides.tenantPushQueue ?? createTenantQueue(),
     realtimeScheduler,
     realtimeHub,
     pushPort,

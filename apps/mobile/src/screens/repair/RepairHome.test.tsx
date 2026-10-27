@@ -3,7 +3,7 @@
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
-import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
@@ -159,6 +159,61 @@ describe('counter intake', () => {
     expect(onDraftChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ device: expect.objectContaining({ brand: 'Oppo', model: 'A57' }) }),
     );
+  });
+});
+
+describe('an intake restored after the app died mid-submit', () => {
+  const restored = (ticketId: string): IntakeDraft => {
+    const base = emptyIntakeDraft();
+    return {
+      ...base,
+      step: 5,
+      customer: { kind: 'new', name: 'Yohanis Wenda', phone: '0812-4455-6677' },
+      device: { ...base.device, brand: 'Samsung', model: 'Galaxy A14' },
+      complaint: 'Layar retak',
+      ticketId,
+    };
+  };
+
+  test('whose ticket was already opened shows that ticket and clears the draft', async () => {
+    h = await openRepairScreenHarness(5104);
+    const ticketId = '01920000-0000-7000-8000-00000000a151';
+    await h.run('openTicket', { ...intake(h), ticketId }, h.cashierId);
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: restored(ticketId),
+      onDraftChange,
+    });
+    await settle();
+
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+    expect(screen.query('repair.intake.step.review')).toBeNull();
+    expect(onDraftChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test('whose ticket was never opened stays on the intake with its id kept', async () => {
+    h = await openRepairScreenHarness(5105);
+    const ticketId = '01920000-0000-7000-8000-00000000a152';
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: restored(ticketId),
+      onDraftChange,
+    });
+    await settle();
+
+    expect(screen.query('repair.intake.step.review')).not.toBeNull();
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({ ticketId }));
+  });
+
+  test('a new intake takes its ticket id up front, so the saved draft carries it', async () => {
+    h = await openRepairScreenHarness(5106);
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, { onDraftChange });
+    await press(screen, 'repair.board.newIntake');
+    type(screen, 'repair.intake.customer.name', 'Ester');
+    await settle();
+    const saved = onDraftChange.mock.lastCall?.[0] as IntakeDraft;
+    expect(saved.ticketId).toEqual(expect.any(String));
   });
 });
 

@@ -130,3 +130,26 @@ and data loss. Copy edits and documentation changes do not need new tests. Do no
 add tests that parse guides, require task records, or count checklist coverage.
 When a runtime is unavailable, report what could not be verified; a mock or skipped
 test does not substitute for Docker, native builds, or physical hardware.
+
+## Benchmarks
+
+Two scripts measure sync with realistic repair tickets. Build first (`pnpm exec tsc -b`).
+
+```sh
+pnpm --filter @bolusi/modules bench:first-sync
+DATABASE_URL="$(pnpm -s db:url)" pnpm --filter @bolusi/modules bench:sync-load
+SCALE=x100 SCENARIOS=burst,outage DATABASE_URL=... pnpm --filter @bolusi/modules bench:sync-load
+```
+
+`bench:sync-load` starts the real server on a disposable `bolusi_load` database
+and drives simulated stores through a busy hour, a burst, a reconnect storm after
+an outage, and new phones doing their first sync. Its header lists the settings.
+To see which statements cost the most, run Postgres with pg_stat_statements:
+
+```sh
+docker run -d --name bolusi-load-pg --cpuset-cpus 1,2 -p 127.0.0.1:55432:5432 \
+  -e POSTGRES_USER=bolusi -e POSTGRES_PASSWORD=bolusi postgres:16 \
+  -c shared_preload_libraries=pg_stat_statements -c max_connections=200
+DATABASE_URL=postgres://bolusi:bolusi@127.0.0.1:55432/postgres PG_CONTAINER=bolusi-load-pg \
+  SERVER_CPUS=0 pnpm --filter @bolusi/modules bench:sync-load
+```

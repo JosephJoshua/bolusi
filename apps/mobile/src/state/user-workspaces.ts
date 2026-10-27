@@ -20,7 +20,7 @@
  * and therefore what makes it real.
  */
 
-import type { ShellRoute } from '../navigation/zone.js';
+import { SHELL_ROUTES, type ShellRoute } from '../navigation/zone.js';
 
 /**
  * One user's in-progress state, retained across a lock and restored on THEIR next unlock.
@@ -78,4 +78,18 @@ export function withDraft(
 /** Record where the user is in the shell, so a lock restores them to the same place. */
 export function withRoute(workspace: UserWorkspace, route: ShellRoute): UserWorkspace {
   return { ...workspace, route };
+}
+
+/**
+ * Read back a workspace saved by an earlier app run. Whatever is on disk is untrusted: an older
+ * build may have written another shape. Anything unusable reads as nothing (the user starts fresh);
+ * an unknown route falls back to home. Each module still parses its own draft before showing it.
+ */
+export function parseUserWorkspace(value: unknown): UserWorkspace | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { ownerUserId, route, drafts } = value as Record<string, unknown>;
+  if (typeof ownerUserId !== 'string') return undefined;
+  if (typeof drafts !== 'object' || drafts === null || Array.isArray(drafts)) return undefined;
+  const knownRoute = SHELL_ROUTES.find((candidate) => candidate === route) ?? 'home';
+  return { ownerUserId, route: knownRoute, drafts: drafts as Record<string, unknown> };
 }

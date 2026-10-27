@@ -12,7 +12,8 @@
  * exactly the work SEC-AUTH-08 exists to protect: `checkIdle()` ends the session, after which
  * `current` is null and the shell no longer knows WHOSE work was on screen. Any save that has not
  * already happened by then has lost its key. So `updateWorkspace` writes through to
- * `saveWork(userId, …)` on every edit — an in-memory map write, free on the 2 GB target — and the
+ * `saveWork(userId, …)` on every edit — an in-memory map write, plus a sealed disk write that
+ * `SessionManager` coalesces to the newest work — and the
  * lock becomes a pure identity-clearing event that cannot drop anything. The lock is then safe to
  * fire from anywhere, at any time, including mid-keystroke.
  *

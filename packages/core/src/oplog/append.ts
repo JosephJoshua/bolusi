@@ -74,6 +74,11 @@ export interface AppendLocalOpsOptions {
    * whole command back.
    */
   readonly checkOp?: OpCheck;
+  /**
+   * Runs once after every draft is inserted and applied, inside the same transaction, for a local
+   * write that must land with the ops or not at all. A throw rolls the whole command back.
+   */
+  readonly withinAppend?: (ops: readonly AppendedOp[]) => Promise<void>;
 }
 
 /** The op-rule seam: throws when the completed op must not be recorded. */
@@ -157,6 +162,7 @@ export async function appendLocalOps(
       });
     }
 
+    await options.withinAppend?.(appended);
     return { ops: appended };
   });
 }
