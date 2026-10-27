@@ -45,6 +45,22 @@ export function translateErrorCode(code: string, values?: TranslationValues): st
   return translateCode('errors', code, values);
 }
 
+/** A rule refusal's copy key (`<module>.refusal.<reason>`), when this locale ships it. */
+function refusalKey(failure: string | null): string | null {
+  if (failure === null || !/^[a-z][a-zA-Z0-9]*\.refusal\.[a-z][a-zA-Z0-9]*$/.test(failure))
+    return null;
+  return hasKey(failure, DEFAULT_LOCALE) ? failure : null;
+}
+
+/**
+ * Render why a command failed: a rule's own refusal copy when it named one (`RuleRefusal`), else
+ * the `DomainError` code's copy. `failure` is either, as `useActionRunner` keeps it.
+ */
+export function translateFailure(failure: string): string {
+  const key = refusalKey(failure);
+  return key === null ? translateErrorCode(failure) : t(key as TranslationKey);
+}
+
 /**
  * Render a sync rejection code (05-operation-log §8) for the rejected-changes screen.
  * The server's `rejectionReason` is diagnostic detail shown in a collapsed "technical details"
@@ -52,6 +68,16 @@ export function translateErrorCode(code: string, values?: TranslationValues): st
  */
 export function translateRejectionCode(code: string, values?: TranslationValues): string {
   return translateCode('rejection', code, values);
+}
+
+/**
+ * Render a refused op for the sync problems list. For RULE_VIOLATED the server's reason is the
+ * rule's refusal key, so the person reads what exactly was wrong; any other code, or a reason this
+ * build has no copy for, falls back to the code's copy.
+ */
+export function translateRejection(code: string, reason: string | null): string {
+  const key = code === 'RULE_VIOLATED' ? refusalKey(reason) : null;
+  return key === null ? translateRejectionCode(code) : t(key as TranslationKey);
 }
 
 /**

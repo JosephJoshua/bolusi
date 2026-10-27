@@ -95,6 +95,8 @@ export interface SyncLoopOptions<DB> {
   readonly timer: TimerPort;
   readonly deviceId: string;
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /** `ProjectionEngine.refoldRefused`: the push phase takes a refused op back out of its record. */
+  readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly pushBatchSize?: number;
   readonly pullLimit?: number;
   /** Passed to the pull phase: called after each committed batch (progress display only). */
@@ -238,6 +240,8 @@ export class SyncLoop<DB> {
           clock: this.options.clock,
           deviceId: this.options.deviceId,
           onBatchSettled: (settled) => this.notifyPushed(settled),
+          transaction: this.options.transaction,
+          refoldRefused: this.options.refoldRefused,
           onChainBroken: async () => {
             this.pushHalted = true;
             await writeSyncState(this.options.db, { pushHalted: true });

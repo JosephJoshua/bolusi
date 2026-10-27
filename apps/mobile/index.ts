@@ -8,7 +8,7 @@ import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
-import { bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
+import { bootOncePerRealm, bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
@@ -21,6 +21,7 @@ import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
 import {
   createSessionRepairRuntime,
+  galleryPickerFor,
   repairMediaSeamsFor,
   type RepairMediaSeams,
 } from './src/bootstrap/repair.js';
@@ -28,7 +29,7 @@ import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
-import { Root } from './src/bootstrap/Root.js';
+import { Root, type RootProps } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
 import { createBackgroundSyncHost, SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
@@ -36,9 +37,13 @@ import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-cl
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
+import { expoGallery } from './src/media/native-gallery.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
+import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
+import { createPhonePhotoLoader } from './src/media/phone-photos.js';
 import { appStatePort } from './src/ports/app-state.js';
+import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from './src/ports/clock.js';
 import { deviceColumnAead } from './src/ports/aead.js';
@@ -97,7 +102,7 @@ import './src/harness/register.js';
  */
 const APP_VERSION = '';
 
-function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
+function bootDataLayer(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
   // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
@@ -139,6 +144,10 @@ function boot(): Promise<Awaited<ReturnType<typeof bootstrap>>> {
     },
   });
 }
+
+// Root boots again whenever Android recreates the activity in the same process; the data layer must
+// not (see `bootOncePerRealm`).
+const boot = bootOncePerRealm(bootDataLayer);
 
 /**
  * THE OTHER NATIVE-BINDING SITE (task 89): NetInfo and RN `AppState` are native modules that cannot
@@ -356,11 +365,24 @@ function createRepair(
   media: MediaClient | null,
   capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
 ): RepairRuntime {
+  const keystore = new SecureStoreKeyStore();
+  const loadModelPhoto = createPhonePhotoLoader({
+    baseUrl: apiBaseUrl(),
+    deviceToken: () => keystore.loadDeviceToken(),
+    sha256Hex,
+    files: phonePhotoFiles,
+  });
   return createSessionRepairRuntime({
     app,
     runtime,
     identity,
-    media: repairMediaSeamsFor(media, capture, expoSharePlatform),
+    media: repairMediaSeamsFor(
+      media,
+      { ...capture, loadModelPhoto },
+      expoSharePlatform,
+      galleryPickerFor(media, identity, expoGallery),
+    ),
+    print: expoPrintPlatform,
   });
 }
 
@@ -430,8 +452,20 @@ const expoPushRouter: PushRouterPort = {
   },
 };
 
-function Bootstrapped(): React.JSX.Element | null {
-  return Root({
+/**
+ * Root's props, built ONCE. `Bootstrapped` calls `Root(...)` as a function, so Root's hooks run in
+ * this component and every prop built inline was a new object on every render. A seam that keys an
+ * effect then re-fired it on every render: a fresh `capturePlatform` rebuilt the capture callbacks,
+ * which rebuilt the signed-in user's screens, which rendered again, forever (the idle Servisan
+ * board at 120% CPU, October 2026; task 201's blank screen was the same churn on `readDeviceInfo`).
+ * Built on the first render and kept, every identity holds for the app's life. (First render, not
+ * module load: a build missing its API URL still fails where it always did, after the background
+ * tasks above are registered.)
+ */
+let rootProps: RootProps | null = null;
+
+function buildRootProps(): RootProps {
+  return {
     boot,
     createSync,
     createEnrollment,
@@ -474,7 +508,12 @@ function Bootstrapped(): React.JSX.Element | null {
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         appVersion: APP_VERSION,
       }),
-  });
+  };
+}
+
+function Bootstrapped(): React.JSX.Element | null {
+  rootProps ??= buildRootProps();
+  return Root(rootProps);
 }
 
 registerRootComponent(Bootstrapped);

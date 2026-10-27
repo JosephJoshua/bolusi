@@ -141,13 +141,14 @@ describe('counter intake', () => {
       kind: 'intake',
       step: 1,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: '', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: '',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const onDraftChange = vi.fn();
@@ -770,13 +771,14 @@ describe('price and assignment details', () => {
       kind: 'intake',
       step: 4,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: 'Mati',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const screen = await mount(h, h.cashierId, { restoredDraft: draft });
@@ -796,13 +798,14 @@ describe('price and assignment details', () => {
       kind: 'intake',
       step: 3,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: 'Mati',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: { front: kept, back: gone },
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const runtime = repairRuntimeFor(h, h.cashierId);

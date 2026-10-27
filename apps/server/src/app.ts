@@ -21,6 +21,7 @@ import { gzipDecompress } from './middleware/gzip-decompress.js';
 import { perDeviceRateLimit, perIpRateLimit } from './middleware/rate-limit.js';
 import { serverTime } from './middleware/server-time.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createCatalogRouter } from './routes/catalog.js';
 import { createDevicesRouter } from './routes/devices.js';
 import { createMediaRouter } from './routes/media.js';
 import { createPushRouter } from './routes/push.js';
@@ -185,7 +186,8 @@ export function createApp(overrides: Partial<ServerDeps> = {}) {
     .route('/v1/sync', createSyncRouter(deps))
     .route('/v1/media', createMediaRouter(deps))
     .route('/v1/push', createPushRouter(deps))
-    .route('/v1/realtime', createRealtimeRouter(deps));
+    .route('/v1/realtime', createRealtimeRouter(deps))
+    .route('/v1/catalog', createCatalogRouter(deps));
 }
 
 /** The production app instance (default deps): the RPC contract surface + boot handler. */

@@ -21,6 +21,7 @@ import type { CommandContext, InputParser } from '../runtime/ctx.js';
 import type { CommandHandlerResult } from '../runtime/execute.js';
 import type { QueryContext, QueryPage } from '../query/qctx.js';
 import { checkOpType } from './op-type.js';
+import type { OpRule } from './op-rules.js';
 import { isStrictSchema } from './strict-schema.js';
 
 /** A manifest defect (04 §3/§4.4). Thrown by `defineModule` — at import time, never at runtime. */
@@ -142,6 +143,15 @@ export interface OperationDeclaration<DB> {
    * refuses an op whose envelope says otherwise.
    */
   readonly entityType: string;
+  /**
+   * What must hold in the current records for an op of this type to be recorded (op-rules.ts):
+   * run by the device's append path before saving and by the server before accepting a push.
+   *
+   * Required, like `permission`, so every type states its answer. `null` only when no recorded
+   * state constrains the op: the payload schema, the permission and the server's scope step
+   * already say everything (a session record, a denial audit, the device genesis).
+   */
+  readonly rule: OpRule<DB> | null;
 }
 
 /**
@@ -241,6 +251,11 @@ export interface ModuleManifest<DB> {
   readonly queries?: Readonly<Record<string, AnyQueryDeclaration>>;
   /** Registry entries per 02 §3.1, keyed by permission id (02 §3.2). */
   readonly permissions?: Readonly<Record<string, PermissionDeclaration>>;
+  /**
+   * The reasons this module's op rules refuse with (`defineRefusals`), each with copy at
+   * `<id>.refusal.<reason>`. Required once any operation declares a rule.
+   */
+  readonly refusals?: readonly string[];
 }
 
 /**
@@ -353,6 +368,18 @@ function validateOperations<DB>(manifest: ModuleManifest<DB>): void {
     if (permission !== null && (typeof permission !== 'string' || permission.length === 0)) {
       throw new ModuleDefinitionError(
         `op type ${type} declares no permission — state the permission its author must hold, or null for a type no command emits`,
+      );
+    }
+
+    const { rule } = declaration;
+    if (rule !== null && typeof rule !== 'function') {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares no rule — state what must hold in the records for it to be recorded (op-rules.ts), or null with the reason nothing does`,
+      );
+    }
+    if (rule !== null && (manifest.refusals === undefined || manifest.refusals.length === 0)) {
+      throw new ModuleDefinitionError(
+        `op type ${type} declares a rule, but module ${manifest.id} declares no refusals — list the reasons its rules refuse with (defineRefusals), so a person is told what exactly was wrong`,
       );
     }
 

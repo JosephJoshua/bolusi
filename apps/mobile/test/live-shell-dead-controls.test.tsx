@@ -67,9 +67,10 @@ import type {
   SignedOperation,
 } from '@bolusi/schemas';
 import { sql } from 'kysely';
-import { act } from 'react';
+import { act, useEffect } from 'react';
+import { View } from 'react-native';
 
-import type { CameraShot } from '../src/media/capture.js';
+import type { CameraCapturePort, CameraShot } from '../src/media/capture.js';
 import type { CapturePlatform } from '../src/media/CaptureHost.js';
 import type { MediaClient, MediaStartReport } from '../src/media/client.js';
 import { createSyncClient, type SyncClient } from '../src/bootstrap/sync-client.js';
@@ -117,6 +118,9 @@ interface RecordingMediaClient extends MediaClient {
   readonly captureCalls: { readonly identity: { readonly userId: string } }[];
 }
 
+/** Where the fake media client says a decrypted copy of the scripted shot can be rendered from. */
+const RENDERED_SHOT_URI = 'file:///cache/media-render/shot.jpg';
+
 function fakeMediaClient(
   options: { readonly band?: StorageBand; readonly shot?: MediaRef } = {},
 ): RecordingMediaClient {
@@ -142,8 +146,15 @@ function fakeMediaClient(
       return Promise.resolve({ kind: 'captured', ref, localPath: '/docs/x.jpg', passes: 1 });
     },
     captureSignature: () => Promise.reject(new Error('not used')),
+    importImage: () => Promise.reject(new Error('not used')),
     attach: () => Promise.resolve(),
-    loadForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
+    // The captured file is encrypted at rest; rendering it goes through a decrypted copy.
+    loadForRender: (ref) =>
+      Promise.resolve(
+        ref.mediaId === options.shot?.mediaId
+          ? { kind: 'local', uri: RENDERED_SHOT_URI }
+          : { kind: 'unavailable', code: null },
+      ),
     loadLocalForRender: () => Promise.resolve({ kind: 'unavailable', code: null }),
     notifyAttached: () => undefined,
     requestManual: () => {
@@ -326,6 +337,7 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
         transport: new RejectingTransport(),
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
+        refoldRefused: (op) => booted.engine.refoldRefused(op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,
@@ -458,6 +470,7 @@ describe('quarantined ops (api/01-sync §4.2) — a held-out pull batch reaches 
         transport: new QuarantiningTransport(),
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
+        refoldRefused: (op) => booted.engine.refoldRefused(op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,
@@ -666,27 +679,39 @@ describe('the empty roster CTA is LIVE and reaches the wizard (design-system §5
   });
 });
 
+/** The viewfinder stand-in: reports ready after it mounts, and unpublishes on unmount. */
+function FakePreview({
+  publish,
+  camera,
+}: {
+  readonly publish: (camera: CameraCapturePort | null) => void;
+  readonly camera: CameraCapturePort;
+}): null {
+  useEffect(() => {
+    publish(camera);
+    return () => publish(null);
+  }, [publish, camera]);
+  return null;
+}
+
 /** A camera that hands back a fixed frame — the one thing that genuinely cannot exist under Node. */
 function fakeCapturePlatform(
   overrides: Partial<CapturePlatform> = {},
 ): CapturePlatform & { readonly shots: number } {
   let shots = 0;
+  const camera: CameraCapturePort = {
+    takePicture: (): Promise<CameraShot> => {
+      shots += 1;
+      return Promise.resolve({ uri: 'file:///cache/shot.jpg', width: 1600, height: 1200 });
+    },
+  };
   const platform: CapturePlatform = {
     ensurePermission: () => Promise.resolve(true),
-    // The real one renders `<CameraView onCameraReady=…>`; this publishes immediately, which is the
-    // same event ordering (`warming_up` until the camera says it is ready, then `ready`).
-    renderPreview: (publish) => {
-      queueMicrotask(() =>
-        publish({
-          takePicture: (): Promise<CameraShot> => {
-            shots += 1;
-            return Promise.resolve({ uri: 'file:///cache/shot.jpg', width: 1600, height: 1200 });
-          },
-        }),
-      );
-      return null;
-    },
-    renderStill: () => null,
+    // The real one renders `<CameraView onCameraReady=…>` and publishes only once that view is
+    // MOUNTED. So does this: it used to publish when `renderPreview` was merely called, which hid
+    // that the warming-up screen never mounted the preview and a real camera never became ready.
+    renderPreview: (publish) => <FakePreview publish={publish} camera={camera} />,
+    renderStill: (uri) => <View testID="capture-still" accessibilityLabel={uri} />,
     ...overrides,
   };
   return Object.assign(platform, {
@@ -748,9 +773,45 @@ describe('the in-app camera entry point (06 §2.1) and §7 storage bands', () =>
       fixture.userId,
     );
 
-    // And the review frame the user confirms from.
+    // And the review frame the user confirms from, showing a decrypted copy of the photo. The saved
+    // file itself is encrypted, so rendering its path showed an empty frame on Android.
     await waitUntil(() => screen.query('capture-review') !== null);
     expect(screen.query('capture-review')).not.toBeNull();
+    expect(screen.get('capture-still').props.accessibilityLabel).toBe(RENDERED_SHOT_URI);
+  });
+
+  test('a parent re-render with a fresh camera seam does not rebuild the signed-in screens', async () => {
+    // The idle Servisan board looped at 120% CPU on Android: `index.ts` called `Root(...)` with a
+    // camera platform built inline, so every render handed Root a new one, which rebuilt the capture
+    // callbacks, which re-ran the effect that builds the signed-in screens, which rendered again.
+    // Each `rerenderRoot` below is one such production render, bounded so the test can count them.
+    let built = 0;
+    const screen = await mountRoot(fixture, {
+      createMedia: () => fakeMediaClient({ band: 'normal' }),
+      capturePlatform: fakeCapturePlatform(),
+      onScreensBuilt: () => {
+        built += 1;
+      },
+    });
+    await signIn(screen);
+    await settle();
+    const afterSignIn = built;
+    expect(afterSignIn).toBeGreaterThan(0);
+    // Idle, nothing rebuilds on its own either.
+    for (let i = 0; i < 3; i += 1) await settle();
+    expect(built).toBe(afterSignIn);
+
+    for (let i = 0; i < 3; i += 1) {
+      screen.rerenderRoot({ capturePlatform: fakeCapturePlatform() });
+      await settle();
+    }
+    expect(built).toBe(afterSignIn);
+
+    // The camera still opens afterwards.
+    fireCreateNote(screen);
+    await settle();
+    fireOn(screen, 'notes.editor.attach');
+    expect(await waitUntil(() => screen.query('capture-shutter') !== null)).toBe(true);
   });
 
   test('the screen that asked for the photo stays mounted under the camera and gets the photo back', async () => {

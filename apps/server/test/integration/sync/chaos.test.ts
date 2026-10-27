@@ -148,7 +148,7 @@ describe('CHAOS-03 incremental pull (server leg)', () => {
 });
 
 describe('CHAOS-04 clock skew (server leg, 05 §6)', () => {
-  test('CHAOS-04 ±72h skewed ops are ACCEPTED and clockSkewFlagged; skew reaches no rejection path', async () => {
+  test('CHAOS-04 a +72h op is refused CLOCK_AHEAD; a −72h op is accepted and clockSkewFlagged', async () => {
     const now = h.clock.now();
 
     // Recently-synced devices (threshold ≈ 48h): the genesis push sets lastSyncAt = now.
@@ -166,14 +166,15 @@ describe('CHAOS-04 clock skew (server leg, 05 §6)', () => {
     const aRes = await pushJson(await h.push(a.auth, a.world.deviceId, [aSkew]));
     const bRes = await pushJson(await h.push(b.auth, b.world.deviceId, [bSkew]));
     const dRes = await pushJson(await h.push(d.auth, d.world.deviceId, [dHonest]));
-    // NEVER rejected — the timestamp is the device's honest belief (05 §6).
-    expect(aRes.results[0]?.status).toBe('accepted');
+    // A future stamp would win last-writer-wins over every honest change, so it is refused
+    // (core sync/clock-guard.ts). A past stamp is the device's honest belief and is kept.
+    expect(aRes.results[0]).toMatchObject({ status: 'rejected', code: 'CLOCK_AHEAD' });
     expect(bRes.results[0]?.status).toBe('accepted');
     expect(dRes.results[0]?.status).toBe('accepted');
 
     const rows = await logRows();
     const flagOf = (opId: string) => rows.find((r) => r.id === opId)?.clockSkewFlagged;
-    expect(flagOf(aSkew.id)).toBe(true); // +72h beyond the 48h window → flagged
+    expect(flagOf(aSkew.id)).toBeUndefined(); // refused, so never logged
     expect(flagOf(bSkew.id)).toBe(true); // −72h likewise (absolute difference)
     expect(flagOf(dHonest.id)).toBe(false); // honest device unflagged
 

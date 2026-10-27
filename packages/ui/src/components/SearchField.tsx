@@ -8,6 +8,7 @@
  */
 import { Pressable, TextInput as RNTextInput, StyleSheet, View } from 'react-native';
 
+import { useRevealOnFocus } from '../shell/keyboard.js';
 import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
@@ -59,10 +60,13 @@ export function SearchField({
   clearLabel,
   testID = 'ui.searchField',
 }: SearchFieldProps): React.JSX.Element {
+  const reveal = useRevealOnFocus();
   return (
     <View testID={testID} style={styles.box}>
       <Icon name="search" size={size.iconInline} color={color.textMuted} />
       <RNTextInput
+        ref={reveal.ref}
+        onFocus={reveal.onFocus}
         testID={`${testID}.field`}
         accessibilityLabel={accessibilityLabel}
         value={value}
