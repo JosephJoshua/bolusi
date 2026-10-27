@@ -5,7 +5,16 @@
  * Leaving with unsaved changes asks first.
  */
 import type { MediaRef } from '@bolusi/schemas';
-import { ConfirmSheet, SwitchRow, TextButton, TextInput, color, radius, space } from '@bolusi/ui';
+import {
+  ConfirmSheet,
+  SwitchRow,
+  TextButton,
+  TextInput,
+  color,
+  radius,
+  space,
+  type,
+} from '@bolusi/ui';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -196,7 +205,7 @@ function SettingsForm({
       }
       testID={testID}
     >
-      <Section title={tn('repair.printSettings.header')} testID={`${testID}.header`}>
+      <Section first title={tn('repair.printSettings.header')} testID={`${testID}.header`}>
         {runtime.pickPhoto === undefined && form.logo === null ? null : (
           // The logo and whether dot-matrix prints it read as one setting.
           <View style={styles.logoGroup}>
@@ -219,7 +228,11 @@ function SettingsForm({
             )}
           </View>
         )}
-        <View style={repairStyles.gap}>
+        <View
+          style={
+            form.logo === null && runtime.pickPhoto === undefined ? undefined : styles.afterLogo
+          }
+        >
           <TextInput
             label={tn('repair.printSettings.name')}
             value={form.name}
@@ -257,6 +270,8 @@ function SettingsForm({
         </View>
       </Section>
       <Section title={tn('repair.printSettings.terms')} testID={`${testID}.terms`}>
+        {/* Said once for both lists, before them. */}
+        <Text style={styles.termsHint}>{tn('repair.printSettings.termsHint')}</Text>
         <View style={repairStyles.gap}>
           <TextInput
             label={tn('repair.printSettings.intakeTerms')}
@@ -276,7 +291,6 @@ function SettingsForm({
             multiline
             testID={`${testID}.handoverTerms`}
           />
-          <Text style={repairStyles.caption}>{tn('repair.printSettings.termsHint')}</Text>
         </View>
       </Section>
     </FlowScreen>
@@ -359,6 +373,9 @@ function LogoRow({
 
 const styles = StyleSheet.create({
   logoGroup: { gap: space.md },
+  // The logo and the typed lines are two groups of the header.
+  afterLogo: { marginTop: space.xl },
+  termsHint: { ...type.bodySm, color: color.textMuted },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   logoBox: {
     width: 120,

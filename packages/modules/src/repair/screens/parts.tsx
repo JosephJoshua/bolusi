@@ -347,16 +347,19 @@ export function FlowScreen({
 export function Section({
   title,
   action,
+  first = false,
   children,
   testID,
 }: {
   readonly title: string;
   readonly action?: ReactNode;
+  /** The screen's first section: the screen's own top padding is room enough above it. */
+  readonly first?: boolean | undefined;
   readonly children: ReactNode;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   return (
-    <View style={styles.section} testID={testID}>
+    <View style={first ? undefined : styles.section} testID={testID}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}

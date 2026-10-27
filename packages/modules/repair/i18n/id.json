@@ -373,9 +373,8 @@
       "customer": "Pelanggan",
       "phone": "No. HP",
       "device": "HP",
-      "color": "Warna",
       "imei": "IMEI",
-      "receivedBy": "Diterima oleh",
+      "accessories": "Kelengkapan",
       "technician": "Teknisi",
       "status": "Status",
       "cancelReason": "Alasan batal"
@@ -383,12 +382,11 @@
     "section": {
       "complaint": "Keluhan",
       "condition": "Kondisi saat diterima",
-      "accessories": "Kelengkapan",
       "estimate": "Estimasi biaya",
       "costs": "Rincian biaya",
       "terms": "Ketentuan"
     },
-    "noAccessories": "Tidak ada kelengkapan yang dititipkan.",
+    "noAccessories": "Tidak ada",
     "estimateTotal": "Estimasi total",
     "total": "Total",
     "downPayment": "DP",
@@ -402,10 +400,10 @@
       "store": "Untuk toko",
       "customer": "Untuk pelanggan"
     },
-    "plyNote": "Lembar merah muda untuk toko, lembar kuning untuk pelanggan.",
+    "plyNote": "Merah muda: toko, kuning: pelanggan.",
     "terms": {
-      "intake": "Bawa nota ini saat mengambil HP.\nBiaya di atas masih perkiraan. Kalau ada biaya tambahan, toko akan konfirmasi ke pelanggan dulu.\nCadangkan data HP sebelum diservis. Toko tidak bertanggung jawab atas data yang hilang.\nKerusakan lain yang baru terlihat saat HP dibongkar akan dikabari sebelum dikerjakan.\nHP yang tidak diambil 30 hari setelah pelanggan dikabari di luar tanggung jawab toko.",
-      "handover": "Cek HP sebelum meninggalkan toko.\nGaransi berlaku untuk kerusakan dan sparepart yang sama, dengan menunjukkan nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
+      "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
+      "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     },
     "refund": "Dikembalikan"
   },
@@ -417,6 +415,7 @@
     "title": "Cetak nota",
     "print": "Cetak",
     "share": "Kirim PDF",
+    "slip": "Nota",
     "intake": "Tanda terima",
     "handover": "Nota servisan",
     "intakeAbout": "Bukti HP diterima toko.",

@@ -4,9 +4,9 @@
  * from the ticket as it reads at that moment, then logged so the next print says "Cetak ulang".
  */
 import { PAPER_PRESETS, renderHtml, type PaperSettings } from '@bolusi/core';
-import { ConfirmSheet, SegmentedControl } from '@bolusi/ui';
+import { ConfirmSheet, SegmentedControl, color, space, type } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import type { SlipKind } from '../constants.js';
 import { printableSlips } from '../flows.js';
@@ -151,26 +151,31 @@ export function PrintStep({
       }
       testID={testID}
     >
-      {slips.length > 1 ? (
-        <SegmentedControl
-          options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
-          value={slip}
-          onChange={setSlip}
-          testID={`${testID}.slip`}
-        />
-      ) : (
-        <Text style={repairStyles.heading} testID={`${testID}.slipTitle`}>
-          {tn(SLIP_KEY[slip].title)}
-        </Text>
-      )}
-      <Text style={repairStyles.caption} testID={`${testID}.about`}>
-        {tn(SLIP_KEY[slip].about)}
-      </Text>
-      {printed === 0 ? null : (
-        <Text style={repairStyles.caption} testID={`${testID}.reprint`}>
-          {tn('repair.print.reprint', { count: printed })}
-        </Text>
-      )}
+      <Section first title={tn('repair.print.slip')} testID={`${testID}.slipChoice`}>
+        {slips.length > 1 ? (
+          <SegmentedControl
+            options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
+            value={slip}
+            onChange={setSlip}
+            size="compact"
+            testID={`${testID}.slip`}
+          />
+        ) : (
+          <Text style={repairStyles.body} testID={`${testID}.slipTitle`}>
+            {tn(SLIP_KEY[slip].title)}
+          </Text>
+        )}
+        <View style={styles.about}>
+          <Text style={styles.aboutText} testID={`${testID}.about`}>
+            {tn(SLIP_KEY[slip].about)}
+          </Text>
+          {printed === 0 ? null : (
+            <Text style={styles.aboutText} testID={`${testID}.reprint`}>
+              {tn('repair.print.reprint', { count: printed })}
+            </Text>
+          )}
+        </View>
+      </Section>
       <Section title={tn('repair.print.paper')} testID={`${testID}.paper`}>
         <View>
           <SegmentedControl
@@ -192,3 +197,9 @@ export function PrintStep({
 function isPhonePaper(preset: string): preset is PhonePaper {
   return (PHONE_PAPERS as readonly string[]).includes(preset);
 }
+
+const styles = StyleSheet.create({
+  // What the chosen slip is, a little apart from the choice so it does not read as its label.
+  about: { marginTop: space.sm, gap: space.xs },
+  aboutText: { ...type.bodySm, color: color.textMuted },
+});

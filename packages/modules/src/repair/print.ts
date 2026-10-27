@@ -46,8 +46,13 @@ export function slipTerms(text: string): string[] {
     .filter((line) => line !== '');
 }
 
+/** Brand and model, with the colour after them: "Samsung Galaxy A15 (Hitam)". */
 function deviceName(ticket: TicketDetailRow): string {
-  return [ticket.deviceBrand, ticket.deviceModel].filter((part) => part.trim() !== '').join(' ');
+  const name = [ticket.deviceBrand, ticket.deviceModel]
+    .filter((part) => part.trim() !== '')
+    .join(' ');
+  const color = ticket.deviceColor.trim();
+  return color === '' ? name : `${name} (${color})`;
 }
 
 function common(
@@ -91,9 +96,6 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
     fields.push({ label: tn('repair.slip.field.phone'), value: ticket.customerPhone });
   }
   fields.push({ label: tn('repair.slip.field.device'), value: deviceName(ticket) });
-  if (ticket.deviceColor.trim() !== '') {
-    fields.push({ label: tn('repair.slip.field.color'), value: ticket.deviceColor });
-  }
   if (ticket.deviceImei !== null && ticket.deviceImei !== '') {
     fields.push({ label: tn('repair.slip.field.imei'), value: ticket.deviceImei });
   }
@@ -139,25 +141,41 @@ function termsBlocks(terms: string | null, fallback: string): PrintBlock[] {
       ];
 }
 
+/**
+ * The checklist by state, faults first, each fault with its note:
+ * "Rusak : Layar (retak di pojok kiri), Layar sentuh", "Normal : Kamera, Speaker, ...".
+ */
+function conditionFields(ticket: TicketDetailRow): PrintField[] {
+  return (['issue', 'ok', 'not_checked'] as const).flatMap((state) => {
+    const checks = ticket.checklist
+      .filter((check) => check.state === state)
+      .map((check) => {
+        const label = optionLabel('checks', { id: check.item, label: check.label });
+        const note = check.note.trim();
+        return note === '' ? label : `${label} (${note})`;
+      });
+    return checks.length === 0
+      ? []
+      : [{ label: tn(CHECK_STATE_KEY[state]), value: checks.join(', ') }];
+  });
+}
+
 /** The receipt the customer leaves with at intake: the phone as received and the price quoted. */
 export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocument {
   const meta = [tn('repair.slip.received', { date: formatDateTime(ticket.createdAt) })];
   if (ticket.estimatedReadyAt !== null) {
     meta.push(tn('repair.slip.readyBy', { date: formatDate(ticket.estimatedReadyAt) }));
   }
+  // Who received the phone signs under the store's line, so it is not a field as well.
   const fields = customerFields(ticket);
-  if (ticket.createdByName !== null) {
-    fields.push({ label: tn('repair.slip.field.receivedBy'), value: ticket.createdByName });
-  }
-  const checks = ticket.checklist.map((check) => {
-    const label = optionLabel('checks', { id: check.item, label: check.label });
-    const state = tn(CHECK_STATE_KEY[check.state]);
-    const note = check.note.trim();
-    return note === '' ? `${label}: ${state}` : `${label}: ${state} (${note})`;
-  });
   const accessories = ticket.peripherals.map(({ item, label }) =>
     optionLabel('accessories', { id: item, label }),
   );
+  fields.push({
+    label: tn('repair.slip.field.accessories'),
+    value: accessories.length === 0 ? tn('repair.slip.noAccessories') : accessories.join(', '),
+  });
+  const checks = conditionFields(ticket);
   // The price the customer left with; later changes belong on the handover slip.
   const lines = ticket.quoteLines.filter((line) => line.status === 'intake');
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
@@ -172,15 +190,9 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   if (checks.length > 0) {
     blocks.push(
       { kind: 'heading', text: tn('repair.slip.section.condition') },
-      { kind: 'list', items: checks },
+      { kind: 'fields', fields: checks },
     );
   }
-  blocks.push({ kind: 'heading', text: tn('repair.slip.section.accessories') });
-  blocks.push(
-    accessories.length === 0
-      ? { kind: 'paragraph', text: tn('repair.slip.noAccessories') }
-      : { kind: 'list', items: accessories },
-  );
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.estimate') },
     {
@@ -249,7 +261,8 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.costs') },
     amounts,
-    ...termsBlocks(ctx.terms, tn('repair.slip.terms.handover')),
+    // The terms are about the repair and its warranty, which a cancelled servisan does not have.
+    ...(cancelled ? [] : termsBlocks(ctx.terms, tn('repair.slip.terms.handover'))),
   ];
   const closing: PrintBlock[] = [
     {

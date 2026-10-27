@@ -49,8 +49,12 @@ interface Group {
 
 /** In 1/216 inch, ESC/P's finest line-feed unit: an image band is 8 dots at 72 dpi. */
 const IMAGE_BAND_UNITS = 24;
-/** Lines left blank above each perforation, so nothing prints across the tear. */
-const BOTTOM_LINES = 2;
+/** A blank line at the top of each form, so the first line never prints on the perforation. */
+const TOP_LINES = 1;
+/** A line left blank above each perforation, so nothing prints across the tear. */
+const BOTTOM_LINES = 1;
+/** At most this many spare lines go above the signatures, to sign in; the rest stays at the foot. */
+const MAX_STRETCH_LINES = 3;
 /** Characters between side-by-side columns. */
 const COLUMN_GAP = 3;
 /** Narrower than this and a body column beside an aside gets too cramped to read. */
@@ -154,13 +158,13 @@ function fieldRows(fields: readonly PrintField[], width: number): TextRow[] {
   const colWidth = twoColumns ? Math.floor((width - COLUMN_GAP) / 2) : width;
   // Labels are short words; a label longer than this wraps rather than squeezing the value.
   const labelWidth = Math.max(1, Math.min(longest, twoColumns ? 13 : 16, Math.floor(width / 3)));
-  const fitsHalf = (f: PrintField): boolean =>
-    twoColumns && f.value.length <= colWidth - labelWidth - 3;
+  // Paired only when every value fits half a line, so the labels line up down the block.
+  const paired = twoColumns && fields.every((f) => f.value.length <= colWidth - labelWidth - 3);
   const rows: TextRow[] = [];
   for (let i = 0; i < fields.length; i += 1) {
     const field = fields[i] as PrintField;
     const next = fields[i + 1];
-    if (next !== undefined && fitsHalf(field) && fitsHalf(next)) {
+    if (next !== undefined && paired) {
       const left = fieldLines(field, labelWidth, colWidth).map((line) => text(line));
       const right = fieldLines(next, labelWidth, colWidth).map((line) => text(line));
       rows.push(...zipColumns(left, colWidth, right, colWidth));
@@ -414,7 +418,9 @@ function headerGroup(doc: PrintDocument, copy: string | null, geometry: TextGeom
     rows.push({ kind: 'image', bitmap: logo, offset: Math.floor((width - logoCols) / 2) });
   }
   for (const line of wrapText(doc.header.name, width)) rows.push(text(center(line, width), true));
-  for (const line of doc.header.lines) {
+  // Short address and contact lines share one line, to leave the form's height for the slip.
+  const joined = doc.header.lines.join('  |  ');
+  for (const line of joined.length <= width ? [joined] : doc.header.lines) {
     for (const wrapped of wrapText(line, width)) rows.push(text(center(wrapped, width)));
   }
   rows.push(text('='.repeat(width)));
@@ -430,36 +436,40 @@ function footerGroup(
   width: number,
   compact: boolean,
 ): Group | null {
-  const notes = [doc.footer, carbonless ? doc.plyNote : null].filter(
+  const [left = '', right = ''] = [doc.footer, carbonless ? doc.plyNote : null].filter(
     (line): line is string => line !== null && line !== '',
   );
-  if (notes.length === 0) return null;
-  const lines = compact ? [notes.join('. ')] : notes;
+  if (left === '') return null;
   return {
     rows: [
       blank(),
       ...(compact ? [] : [text('-'.repeat(width))]),
-      ...lines.flatMap((line) => wrapText(line, width).map((l) => text(l))),
+      ...sideBySide(left, right, width),
     ],
     keepTogether: true,
     keepWithNext: false,
   };
 }
 
+/** Room on one form for rows, in 1/216 inch. */
+function pageCapacity(geometry: TextGeometry): number {
+  return (geometry.pageLines - BOTTOM_LINES) * lineUnits(geometry);
+}
+
 /** Fill pages with groups, breaking only where the groups allow. */
 function paginate(groups: readonly Group[], geometry: TextGeometry, reference: string): GridPage[] {
   const line = lineUnits(geometry);
-  const capacity = (geometry.pageLines - BOTTOM_LINES) * line;
-  const pages: GridRow[][] = [[]];
-  let used = 0;
+  const capacity = pageCapacity(geometry);
+  const top = (): GridRow[] => Array.from({ length: TOP_LINES }, blank);
+  const pages: GridRow[][] = [top()];
+  let used = TOP_LINES * line;
   const newPage = (): void => {
-    pages.push([]);
-    const marker = text(padLeft(`${reference} (${pages.length})`, geometry.columns));
-    (pages[pages.length - 1] as GridRow[]).push(marker, blank());
-    used = 2 * line;
+    const marker = text(padLeft(`${reference} (${pages.length + 1})`, geometry.columns));
+    pages.push([...top(), marker, blank()]);
+    used = (TOP_LINES + 2) * line;
   };
   const place = (row: GridRow): void => {
-    if (used + rowUnits(row, line) > capacity && used > 2 * line) newPage();
+    if (used + rowUnits(row, line) > capacity && used > (TOP_LINES + 2) * line) newPage();
     (pages[pages.length - 1] as GridRow[]).push(row);
     used += rowUnits(row, line);
   };
@@ -473,7 +483,10 @@ function paginate(groups: readonly Group[], geometry: TextGeometry, reference: s
         : group.keepTogether
           ? units
           : groupUnits(group.rows.slice(0, 1), line);
-    if (used + needed > capacity && needed <= capacity - 2 * line && used > 0) newPage();
+    const fresh = (TOP_LINES + 2) * line;
+    if (used + needed > capacity && needed <= capacity - fresh && used > TOP_LINES * line) {
+      newPage();
+    }
     group.rows.forEach(place);
   });
   return pages;
@@ -492,20 +505,50 @@ interface Variant {
   readonly compact: boolean;
 }
 
+/** The groups that make up a copy: what reads top down, then what sits at its foot. */
+interface CopyGroups {
+  readonly content: Group[];
+  /** The signatures (when not beside the aside) and the footer: spare lines go above these. */
+  readonly foot: Group[];
+}
+
+/** The closing blocks full width, a blank line above them even when compact: room to sign. */
+function closingGroups(doc: PrintDocument, width: number, compact: boolean): Group[] {
+  return blockGroups(doc.closing, width, compact).map((group, i) =>
+    i > 0 ? group : { ...group, rows: [blank(), ...group.rows] },
+  );
+}
+
 /**
  * The body and aside as columns, the closing (signatures) full width underneath, or at the foot of
  * the aside column when `closingBeside` and the aside still ends above the body.
+ *
+ * When the aside runs much longer than the body, its trailing sections (the terms, say) move under
+ * the body instead, wherever that makes the columns shortest.
  */
 function columnGroups(
   doc: PrintDocument,
   width: number,
   compact: boolean,
   closingBeside: boolean,
-): Group[] {
+): CopyGroups {
   const bodyWidth = Math.floor((width - COLUMN_GAP) * BODY_SHARE);
   const asideWidth = width - COLUMN_GAP - bodyWidth;
-  const body = columnRows(doc.blocks, bodyWidth, compact);
-  const aside = columnRows(doc.aside, asideWidth, compact);
+  let best: { body: TextRow[]; aside: TextRow[] } | null = null;
+  for (let cut = doc.aside.length; cut > 0; cut -= 1) {
+    // A heading stays with the section it names.
+    if (cut < doc.aside.length && doc.aside[cut - 1]?.kind === 'heading') continue;
+    const body = columnRows([...doc.blocks, ...doc.aside.slice(cut)], bodyWidth, compact);
+    const aside = columnRows(doc.aside.slice(0, cut), asideWidth, compact);
+    const height = Math.max(body.length, aside.length);
+    if (best === null || height < Math.max(best.body.length, best.aside.length)) {
+      best = { body, aside };
+    }
+  }
+  const { body, aside } = best ?? {
+    body: columnRows(doc.blocks, bodyWidth, compact),
+    aside: [],
+  };
   const beside = [blank(), ...columnRows(doc.closing, asideWidth, compact)];
   const fitsBeside =
     closingBeside && doc.closing.length > 0 && aside.length + beside.length <= body.length;
@@ -514,14 +557,24 @@ function columnGroups(
     keepTogether: false,
     keepWithNext: false,
   };
-  if (fitsBeside) return [columns];
-  const closing = blockGroups(doc.closing, width, compact);
-  return [
-    columns,
-    ...closing.map((group, i) =>
-      compact || i > 0 ? group : { ...group, rows: [blank(), ...group.rows] },
-    ),
-  ];
+  if (fitsBeside) return { content: [columns], foot: [] };
+  return { content: [columns], foot: closingGroups(doc, width, compact) };
+}
+
+/** Up to `MAX_STRETCH_LINES` blank lines above the foot, from what a one-form copy leaves spare. */
+function stretchFoot(
+  copy: CopyGroups,
+  geometry: TextGeometry,
+  pages: readonly GridPage[],
+): Group[] | null {
+  const [first, ...rest] = copy.foot;
+  if (pages.length !== 1 || first === undefined) return null;
+  const line = lineUnits(geometry);
+  const used = groupUnits(pages[0] as GridPage, line);
+  const spare = Math.min(MAX_STRETCH_LINES, Math.floor((pageCapacity(geometry) - used) / line));
+  if (spare <= 0) return null;
+  const stretched = { ...first, rows: [...Array.from({ length: spare }, blank), ...first.rows] };
+  return [...copy.content, stretched, ...rest];
 }
 
 function layoutCopy(
@@ -533,16 +586,22 @@ function layoutCopy(
   const geometry = textGeometry(paper, variant.linesPerInch);
   const width = geometry.columns;
   const { compact } = variant;
-  const groups: Group[] = [headerGroup(doc, copy, geometry)];
-  if (variant.sideBySide) {
-    groups.push(...columnGroups(doc, width, compact, variant.closingBeside));
-  } else {
-    // Stacked: the aside and the closing continue the body as more blocks.
-    groups.push(...blockGroups([...doc.blocks, ...doc.aside, ...doc.closing], width, compact));
-  }
+  const header = headerGroup(doc, copy, geometry);
+  // Stacked: the aside continues the body as more blocks, the closing under it.
+  const body: CopyGroups = variant.sideBySide
+    ? columnGroups(doc, width, compact, variant.closingBeside)
+    : {
+        content: blockGroups([...doc.blocks, ...doc.aside], width, compact),
+        foot: closingGroups(doc, width, compact),
+      };
   const footer = footerGroup(doc, paper.carbonless, width, compact);
-  if (footer !== null) groups.push(footer);
-  return paginate(groups, geometry, doc.reference);
+  const groups: CopyGroups = {
+    content: [header, ...body.content],
+    foot: footer === null ? body.foot : [...body.foot, footer],
+  };
+  const pages = paginate([...groups.content, ...groups.foot], geometry, doc.reference);
+  const stretched = stretchFoot(groups, geometry, pages);
+  return stretched === null ? pages : paginate(stretched, geometry, doc.reference);
 }
 
 /**
@@ -550,8 +609,9 @@ function layoutCopy(
  *
  * Paper the customer carries home should be one sheet, so layouts are tried roomiest first and the
  * first that needs the fewest forms wins. On landscape paper wide enough, the aside goes beside the
- * body (signatures under everything, then under the aside), else everything is stacked; each first
- * with blank lines between sections, then without; all at 6 lines per inch, then at 8.
+ * body, else everything is stacked; each first with blank lines between sections, then without;
+ * then the same with the signatures under the aside; all at 6 lines per inch, then at 8. Spare
+ * lines on a one-form slip go above the signatures.
  */
 export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLayout {
   const doc = asciiDocument(source);
@@ -568,9 +628,14 @@ export function layoutGrid(source: PrintDocument, paper: PaperSettings): GridLay
       : []),
     { sideBySide: false, closingBeside: false },
   ];
+  // Signatures squeezed beside the aside get short lines, so tighter spacing is tried first.
   const variants: Variant[] = ([6, 8] as const).flatMap((linesPerInch) =>
-    [false, true].flatMap((compact) =>
-      arrangements.map((arrangement) => ({ ...arrangement, linesPerInch, compact })),
+    [false, true].flatMap((beside) =>
+      [false, true].flatMap((compact) =>
+        arrangements
+          .filter((arrangement) => arrangement.closingBeside === beside)
+          .map((arrangement) => ({ ...arrangement, linesPerInch, compact })),
+      ),
     ),
   );
   const copies: (string | null)[] =
