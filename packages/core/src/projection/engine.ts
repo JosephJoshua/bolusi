@@ -76,6 +76,12 @@ export interface ProjectionEngineOptions<DB> {
   readonly logKeepsRefusedOps: boolean;
   /** Factory so rebuild can bind the store to a batch transaction (rebuild.ts). */
   readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
+  /**
+   * Leave the pull-path watermark to {@link ProjectionEngine.advancePulledWatermarks}, called once
+   * after a batch, instead of advancing it after every op. The server's push sets this: its whole
+   * batch is one transaction, so the watermark lands with the ops either way.
+   */
+  readonly batchPulledWatermarks?: boolean;
   readonly invalidation?: InvalidationBus;
   readonly stats?: ProjectionStats;
 }
@@ -93,6 +99,9 @@ export class ProjectionEngine<DB> {
   private readonly seqColumn: OpSeqColumn;
   private readonly fold: FoldReadOptions;
   private readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
+  private readonly batchPulledWatermarks: boolean;
+  /** Modules with pulled ops since the last {@link advancePulledWatermarks} (batch mode only). */
+  private readonly pulledModules = new Set<string>();
   readonly invalidation: InvalidationBus;
   readonly stats: ProjectionStats;
 
@@ -103,6 +112,7 @@ export class ProjectionEngine<DB> {
     this.seqColumn = options.seqColumn;
     this.fold = { skipRefused: options.logKeepsRefusedOps };
     this.makeRebuildStore = options.makeRebuildStore;
+    this.batchPulledWatermarks = options.batchPulledWatermarks ?? false;
     this.invalidation = options.invalidation ?? new InvalidationBus();
     this.stats = options.stats ?? new ProjectionStats();
   }
@@ -164,17 +174,29 @@ export class ProjectionEngine<DB> {
 
     if (source === 'append') {
       await this.watermarks.advanceLocalSeq(module.id, op.seq);
+    } else if (this.batchPulledWatermarks) {
+      this.pulledModules.add(module.id);
     } else {
-      const current = await this.watermarks.read(module.id);
-      const next = await highestContiguousSeq(this.db, current.appliedServerSeq, this.seqColumn);
-      if (next > current.appliedServerSeq) {
-        await this.watermarks.advanceServerSeq(module.id, next);
-      }
+      await this.advancePulledWatermark(module.id);
     }
 
     const written = new Set(entityTables.map((ref) => ref.table));
     this.invalidation.emit(written, { entityType: op.entityType, entityId: op.entityId });
     return { module: module.id, mode, writtenTables: [...written] };
+  }
+
+  /** Advance the watermark of every module a pulled op touched since the last call (batch mode). */
+  async advancePulledWatermarks(): Promise<void> {
+    for (const moduleId of this.pulledModules) await this.advancePulledWatermark(moduleId);
+    this.pulledModules.clear();
+  }
+
+  private async advancePulledWatermark(moduleId: string): Promise<void> {
+    const current = await this.watermarks.read(moduleId);
+    const next = await highestContiguousSeq(this.db, current.appliedServerSeq, this.seqColumn);
+    if (next > current.appliedServerSeq) {
+      await this.watermarks.advanceServerSeq(moduleId, next);
+    }
   }
 
   /**

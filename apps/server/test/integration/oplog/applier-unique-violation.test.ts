@@ -9,10 +9,10 @@
 // (05 §1), the client was told `synced` (api/01 §3 maps `duplicate`→synced), and the chain head
 // desynced into a permanent CHAIN_BROKEN brick (05 §8) on the device's next push.
 //
-// The fix (task 139): the dedupe catch is narrowed to `allocateServerSeq` + `insertOperationRow`
-// alone and keyed on the constraint NAME `operations_pkey` (the ONLY unique violation those two
-// statements raise — a cross-tenant global-PK collision, task 114/security-guide §2.2). The applier
-// fold runs AFTER that catch, still inside the savepoint, with its throw PROPAGATING out of
+// The fix (task 139): the dedupe mapping is narrowed to the op INSERT alone and keyed on the
+// constraint NAME `operations_pkey` (a cross-tenant global-PK collision, task 114/security-guide
+// §2.2); the insert now absorbs exactly that conflict (`ON CONFLICT ON CONSTRAINT operations_pkey DO
+// NOTHING`). The applier fold runs AFTER the insert, with its throw PROPAGATING out of
 // `forTenant` — a loud 500 that rolls back the whole batch atomically (10-db §3). There is no 05 §8
 // rejection code for a schema-valid-but-unfoldable op and minting one is out of scope (CLAUDE.md §6),
 // so a loud failure is the specified outcome: never accepted-and-logged, never silently dropped.
@@ -23,7 +23,7 @@
 // 500 with `ops in log: []` and the head unmoved: the second op is REPORTED (loud), never vanished.
 //
 // Since the per-type rules landed, the notes rule refuses that double-create before the fold, so the
-// first test now pins the refusal. The narrowed catch is still pinned by the constraint-name test
+// first test now pins the refusal. The narrowed mapping is still pinned by the constraint-name test
 // and the two positive controls below.
 //
 // Real PG16 in apps/server's own stamped testcontainer (T-14d), through the production `createApp`
@@ -138,7 +138,7 @@ describe('task 139 — an applier unique violation is a loud failure, never a si
     }
   });
 
-  test('constraint names (verified against the schema): the op-write catch keys on `operations_pkey`, which is a DIFFERENT constraint from the applier’s `notes_pkey`', async () => {
+  test('constraint names (verified against the schema): the op insert keys its conflict clause on `operations_pkey`, which is a DIFFERENT constraint from the applier’s `notes_pkey`', async () => {
     const h = await makeSyncHarness();
     try {
       const opsPk = await sql<{ conname: string }>`
@@ -154,11 +154,12 @@ describe('task 139 — an applier unique violation is a loud failure, never a si
       const notesName = notesPk.rows[0]?.conname;
       console.log(`[task-139] operations PK=${opsName} notes PK=${notesName} (${h.provenance})`);
 
-      // The name the narrowed catch matches is the REAL constraint (not a guessed string).
+      // The name the insert matches is the REAL constraint (not a guessed string).
       expect(opsName).toBe(OPERATIONS_PK_CONSTRAINT);
       expect(opsName).toBe('operations_pkey');
-      // The applier's collision trips a DISTINCT constraint — which is precisely why keying the catch
-      // on `operations_pkey` (not SQLSTATE 23505 alone) makes an applier throw re-throw, not absorb.
+      // The applier's collision trips a DISTINCT constraint — which is precisely why keying the
+      // conflict clause on `operations_pkey` (not any unique violation) lets an applier throw
+      // propagate instead of being absorbed.
       expect(notesName).toBe('notes_pkey');
       expect(opsName).not.toBe(notesName);
     } finally {
@@ -219,9 +220,9 @@ describe('task 139 — an applier unique violation is a loud failure, never a si
       );
 
       const aRes = await h.push(a.auth, a.world.deviceId, [colliding]);
-      // The narrowed catch STILL maps the `operations_pkey` collision to `duplicate`: if the
-      // constraint name were wrong, `isUniqueViolationOn` would return false, the error would
-      // propagate, and this would be a 500 existence oracle. So this is the runtime pin of the name.
+      // The insert STILL maps the `operations_pkey` collision to `duplicate`: if the constraint name
+      // were wrong, the ON CONFLICT clause would fail and this would be a 500 existence oracle. So
+      // this is the runtime pin of the name.
       expect(aRes.status, 'a colliding op id must not 500 (a cross-tenant existence oracle)').toBe(
         200,
       );
