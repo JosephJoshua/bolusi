@@ -503,7 +503,8 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
 
   const commands: Record<string, (input: Input) => unknown> = {
     openTicket: (input) => {
-      const id = `t-new-${String(counter)}`;
+      const id =
+        typeof input['ticketId'] === 'string' ? input['ticketId'] : `t-new-${String(counter)}`;
       const number = `K7Q-${String(counter).padStart(4, '0')}`;
       counter += 1;
       const customer = input['customer'] as {
@@ -783,6 +784,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
   };
 
   let permitted = new Set<string>(actor.permissions);
+  let ids = 0;
   const runtime = {
     get userId() {
       return actor.userId;
@@ -801,6 +803,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
       }
     },
     hasPermission: (id: string) => permitted.has(id),
+    newId: () => `t-new-id-${String((ids += 1))}`,
     colleagueHasPermission: (userId: string, id: string) =>
       id === P.work ? TECHNICIANS.includes(userId) : false,
     subscribe: (listener: () => void) => {
