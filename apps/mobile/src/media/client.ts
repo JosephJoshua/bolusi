@@ -66,6 +66,7 @@ import {
   type PruneReport,
   type RemoteCacheEntry,
 } from './pruning.js';
+import { importImage, type PickedImage } from './import.js';
 import { attachMediaToOperation } from './queue.js';
 import type { MediaRef } from '@bolusi/schemas';
 import {
@@ -145,6 +146,8 @@ export interface MediaClient {
     strokes: readonly SignatureStroke[],
     pad: PadSize,
   ): Promise<SignatureOutcome>;
+  /** A picture picked from the gallery (the store logo), through the same finalization tail. */
+  importImage(identity: CaptureIdentity, picked: PickedImage): ReturnType<typeof importImage>;
   /** 04 §5.1 step 5 — the command runtime's attach. Task 25 drives it from a real command. */
   attach(
     ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
@@ -280,6 +283,23 @@ class MediaClientImpl implements MediaClient {
       },
       strokes,
       pad,
+    );
+  }
+
+  importImage(identity: CaptureIdentity, picked: PickedImage): ReturnType<typeof importImage> {
+    return importImage(
+      {
+        db: this.deps.db.db,
+        identity,
+        files: this.deps.files,
+        moveToDocuments: this.deps.moveToDocuments,
+        location: this.deps.location,
+        clock: this.deps.clock,
+        newId: this.deps.newId,
+        freeSpaceBytes: this.deps.freeSpaceBytes,
+        onCaptured: () => this.triggers.notifyCapture(),
+      },
+      picked,
     );
   }
 

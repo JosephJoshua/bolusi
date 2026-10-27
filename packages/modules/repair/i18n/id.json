@@ -16,7 +16,11 @@
     "deviceReturned": "HP diambil pelanggan",
     "intakeOptionsChanged": "Pilihan saat terima HP diubah",
     "storeIntakeOptionsChanged": "Pilihan di toko ini diubah",
-    "storeCancelFeesChanged": "Biaya pembatalan diubah"
+    "storeCancelFeesChanged": "Biaya pembatalan diubah",
+    "downPaymentReceived": "DP diterima",
+    "downPaymentCorrected": "DP diubah",
+    "slipPrinted": "Nota dicetak",
+    "storePrintSettingsChanged": "Tampilan nota diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -210,7 +214,11 @@
     "alreadyAgreed": "Pelanggan sudah setuju?",
     "changeReason": "Alasan perubahan",
     "waitingEvent": "Perubahan harga menunggu pelanggan",
-    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju."
+    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju.",
+    "downPayment": "DP",
+    "downPaymentInput": "DP (kalau ada)",
+    "balance": "Sisa bayar",
+    "refund": "Dikembalikan"
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",
@@ -221,6 +229,7 @@
     "quoteLines": "Tambah minimal satu biaya.",
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
+    "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
@@ -260,7 +269,10 @@
   "done": {
     "claim": "Servisan ini sekarang jadi tugasmu.",
     "start": "Servisan mulai dikerjakan.",
-    "repaired": "Selesai! HP siap diambil pelanggan."
+    "repaired": "Selesai! HP siap diambil pelanggan.",
+    "printed": "Nota dicetak.",
+    "shared": "PDF nota sudah dikirim.",
+    "downPayment": "DP tersimpan."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -272,7 +284,10 @@
     "reason": "Tulis alasannya dulu.",
     "priceLine": "Isi keterangan, harga, dan alasannya dulu.",
     "cancelFee": "Isi biaya pembatalannya dulu.",
-    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan."
+    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan.",
+    "downPayment": "Isi jumlah DP dulu.",
+    "downPaymentCorrect": "Isi DP yang benar dulu.",
+    "downPaymentSame": "Jumlahnya masih sama."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -372,6 +387,109 @@
     "saved": "Biaya pembatalan disimpan.",
     "hint": "Isi kedua biaya dulu."
   },
+  "slip": {
+    "intakeTitle": "TANDA TERIMA SERVISAN",
+    "handoverTitle": "NOTA SERVISAN",
+    "job": {
+      "intake": "Tanda terima {number}",
+      "handover": "Nota servisan {number}"
+    },
+    "received": "Diterima {date}",
+    "readyBy": "Estimasi selesai {date}",
+    "returned": "Diambil {date}",
+    "reprint": "Cetak ulang ke-{count}",
+    "printed": "Dicetak {date}",
+    "printedBy": "Dicetak {date} oleh {name}",
+    "field": {
+      "customer": "Pelanggan",
+      "phone": "No. HP",
+      "device": "HP",
+      "imei": "IMEI",
+      "accessories": "Kelengkapan",
+      "technician": "Teknisi",
+      "status": "Status",
+      "cancelReason": "Alasan batal"
+    },
+    "section": {
+      "complaint": "Keluhan",
+      "condition": "Kondisi saat diterima",
+      "estimate": "Estimasi biaya",
+      "costs": "Rincian biaya",
+      "terms": "Ketentuan"
+    },
+    "noAccessories": "Tidak ada",
+    "estimateTotal": "Estimasi total",
+    "total": "Total",
+    "downPayment": "DP",
+    "balance": "Sisa bayar",
+    "sign": {
+      "customer": "Pelanggan",
+      "customerPickup": "Pelanggan, HP sudah diterima",
+      "staff": "Petugas toko"
+    },
+    "copy": {
+      "store": "Untuk toko",
+      "customer": "Untuk pelanggan"
+    },
+    "plyNote": "Merah muda: toko, kuning: pelanggan.",
+    "terms": {
+      "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
+      "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
+    },
+    "refund": "Dikembalikan"
+  },
+  "print": {
+    "askTitle": "Notanya sudah tercetak?",
+    "askMessage": "Cek apakah kertasnya sudah keluar.",
+    "askYes": "Sudah tercetak",
+    "askNo": "Belum",
+    "title": "Cetak nota",
+    "print": "Cetak",
+    "share": "Kirim PDF",
+    "slip": "Nota",
+    "intake": "Tanda terima",
+    "handover": "Nota servisan",
+    "intakeAbout": "Bukti HP diterima toko.",
+    "handoverAbout": "Tagihan sekaligus bukti HP sudah diambil.",
+    "reprint": "Sudah dicetak {count} kali.",
+    "paper": "Kertas",
+    "paperA4": "A4",
+    "paperA5": "A5"
+  },
+  "downPayment": {
+    "recordTitle": "Catat DP",
+    "correctTitle": "Ubah DP",
+    "change": "Ubah",
+    "save": "Simpan DP",
+    "amount": "Jumlah DP (Rp)",
+    "newAmount": "DP yang benar (Rp)",
+    "current": "DP tercatat",
+    "ofTotal": "Total biaya {amount}",
+    "reason": "Alasan perubahan",
+    "removeHint": "Isi 0 kalau DP-nya batal."
+  },
+  "printSettings": {
+    "title": "Tampilan nota",
+    "summary": "Nama toko, logo dan ketentuan di nota",
+    "header": "Kepala nota",
+    "name": "Nama toko",
+    "nameHint": "Kosongkan untuk pakai “{name}”.",
+    "address": "Alamat",
+    "phone": "No. HP atau WA",
+    "logo": "Logo",
+    "pickLogo": "Pilih logo",
+    "changeLogo": "Ganti",
+    "removeLogo": "Hapus",
+    "logoTitle": "Logo toko",
+    "logoOnDotMatrix": "Cetak logo di dot-matrix",
+    "logoOnDotMatrixHint": "Cetak jadi lebih lambat.",
+    "intakeTerms": "Di tanda terima",
+    "handoverTerms": "Di nota servisan",
+    "terms": "Ketentuan",
+    "termsHint": "Satu ketentuan per baris.",
+    "save": "Simpan",
+    "saved": "Tampilan nota disimpan."
+  },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
     "customerNotFound": "Pelanggan ini tidak ada di toko ini.",
@@ -400,6 +518,8 @@
     "invalidOptions": "Daftar pilihan ini tidak bisa disimpan.",
     "notThisStore": "Pengaturan ini hanya bisa diubah untuk toko perangkat ini.",
     "discountOwnerOnly": "Hanya pemilik toko yang bisa memberi diskon.",
-    "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi."
+    "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
+    "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
+    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
   }
 }

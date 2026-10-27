@@ -33,6 +33,7 @@ export type {
   SearchCustomersInput,
   GetTicketInput,
   GetCustomerInput,
+  PrintSettings,
 } from './queries.js';
 export type {
   RegisterCustomerInput,

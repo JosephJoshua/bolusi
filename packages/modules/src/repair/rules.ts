@@ -27,10 +27,12 @@ import {
 } from './constants.js';
 import { intakeListProblems } from './intake-options.js';
 import type {
+  downPaymentReceivedPayload,
   intakeOptionsChangedPayload,
   quoteChangedPayload,
   quoteChangeProposedPayload,
   quoteProposalDeclinedPayload,
+  slipPrintedPayload,
   technicianAssignedPayload,
   ticketOpenedPayload,
   workPhotosAddedPayload,
@@ -75,6 +77,8 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'notThisStore',
   'discountOwnerOnly',
   'customerAgreementMismatch',
+  'downPaymentAboveTotal',
+  'downPaymentRecorded',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -124,6 +128,21 @@ export function checkTotal(current: number, change: number): void {
       code: 'VALIDATION_FAILED',
       details: { field: 'amount', issue: 'the total price would be negative' },
       message: `the total price cannot be ${total}`,
+    });
+  }
+}
+
+/**
+ * A down payment cannot be more than the price quoted, which catches an extra zero typed at the
+ * counter. With no price yet (a total of 0) any amount is allowed: the customer may pay up front
+ * before the technician has priced the repair.
+ */
+export function checkDownPayment(amount: number, total: number): void {
+  if (total > 0 && amount > total) {
+    throw refuse('downPaymentAboveTotal', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'downPayment', issue: 'the down payment is more than the price' },
+      message: `a down payment of ${amount} is more than the total ${total}`,
     });
   }
 }
@@ -616,3 +635,46 @@ export const ownStoreSettingRule: Rule = (op) =>
           details: { reason: 'restriction_violated', entityId: op.entityId },
         }),
       );
+
+/**
+ * A down payment taken at intake or later: once per ticket, while the phone is in the store, and no
+ * more than the price. Changing a recorded amount is an owner's correction, since a lower figure is
+ * how cash would go missing.
+ */
+export const downPaymentReceivedRule: Rule = async (op, { db }) => {
+  const { amount } = payloadOf<Payload<typeof downPaymentReceivedPayload>>(op);
+  const ticket = await loadTicket(db, op);
+  if (ticket.location === 'returned') {
+    throw invalidTransition(ticket, op.type, 'returned', 'already returned');
+  }
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('downPayment')
+    .where('id', '=', ticket.id)
+    .executeTakeFirst();
+  if (row?.downPayment !== null && row?.downPayment !== undefined) {
+    throw invalidTransition(ticket, op.type, 'downPaymentRecorded', 'a down payment is recorded');
+  }
+  checkDownPayment(amount, ticket.quoteTotal);
+};
+
+/** An owner's correction, at any time, of a ticket in this store. */
+export const downPaymentCorrectedRule: Rule = async (op, { db }) => {
+  await loadTicket(db, op);
+};
+
+/**
+ * Any slip of a ticket in this store. The handover slip is the customer's bill and receipt, so it
+ * exists only once the phone is ready to collect or gone.
+ */
+export const slipPrintedRule: Rule = async (op, { db }) => {
+  const { slip } = payloadOf<Payload<typeof slipPrintedPayload>>(op);
+  const ticket = await loadTicket(db, op);
+  const ready =
+    ticket.location === 'returned' ||
+    ticket.outcome === 'repaired' ||
+    ticket.outcome === 'cancelled';
+  if (slip === 'handover' && !ready) {
+    throw invalidTransition(ticket, op.type, 'notFinished', 'not ready to hand over');
+  }
+};

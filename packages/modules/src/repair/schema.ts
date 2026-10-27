@@ -65,6 +65,10 @@ export interface RepairTicketsTable {
   cancelStandardFee: number | null;
   cancelledBy: string | null;
   cancelledAt: number | null;
+  /** Integer IDR the customer paid up front; null when nothing was. Not a cash ledger. */
+  downPayment: number | null;
+  downPaymentBy: string | null;
+  downPaymentAt: number | null;
 }
 
 export interface RepairQuoteLinesTable {
@@ -148,6 +152,26 @@ export interface RepairStoreCancelFeesTable {
   updatedAt: number;
 }
 
+/** What one store's slips print at the top and in their terms. A store that never set it prints its own name only. */
+export interface RepairStorePrintSettingsTable {
+  storeId: string;
+  tenantId: string;
+  /** The business name printed in large type; null prints the store's name. */
+  name: string | null;
+  address: string;
+  phone: string;
+  logoMediaId: string | null;
+  logoSha256: string | null;
+  logoMime: string | null;
+  /** 1 = the dot-matrix prints the logo too (slow, so off unless the owner turns it on). */
+  logoOnDotMatrix: number;
+  /** One term per line; null prints the app's default terms. */
+  intakeTerms: string | null;
+  handoverTerms: string | null;
+  updatedBy: string;
+  updatedAt: number;
+}
+
 /**
  * The phone catalog (client migration 8, server migration 0016). Not a repair projection: no op
  * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
@@ -181,4 +205,5 @@ export interface RepairDatabase {
   repairIntakeOptions: RepairIntakeOptionsTable;
   repairStoreIntakeOptions: RepairStoreIntakeOptionsTable;
   repairStoreCancelFees: RepairStoreCancelFeesTable;
+  repairStorePrintSettings: RepairStorePrintSettingsTable;
 }

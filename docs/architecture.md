@@ -24,6 +24,7 @@ continuity, and persists operations in PostgreSQL. Replay must not duplicate eff
 | Media                 | `apps/mobile/src/media`, `apps/server/src/media`                                |
 | Translations          | `packages/i18n/catalogs`, module screen catalogs                                |
 | Search                | `packages/core/src/search`, each module's `search.ts`                           |
+| Printing              | `packages/core/src/print` (HTML, ESC/P), each module's `print.ts` templates     |
 
 Search is shared: modules declare a `SearchSource` (what to load, which entity
 changes affect it) and query through `searchIndexFor`. Matching is fuzzy for

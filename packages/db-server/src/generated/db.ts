@@ -339,6 +339,22 @@ export interface RepairStoreIntakeOptions {
   updatedBy: string;
 }
 
+export interface RepairStorePrintSettings {
+  address: string;
+  handoverTerms: string | null;
+  intakeTerms: string | null;
+  logoMediaId: string | null;
+  logoMime: string | null;
+  logoOnDotMatrix: number;
+  logoSha256: string | null;
+  name: string | null;
+  phone: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RepairTicketEvents {
   actorId: string;
   at: Int8;
@@ -378,6 +394,9 @@ export interface RepairTickets {
   deviceImei: string | null;
   deviceModel: string;
   devicePasscode: string | null;
+  downPayment: Int8 | null;
+  downPaymentAt: Int8 | null;
+  downPaymentBy: string | null;
   estimatedReadyAt: Int8 | null;
   id: string;
   intakeNotes: string;
@@ -510,6 +529,7 @@ export interface DB {
   repairQuoteLines: RepairQuoteLines;
   repairStoreCancelFees: RepairStoreCancelFees;
   repairStoreIntakeOptions: RepairStoreIntakeOptions;
+  repairStorePrintSettings: RepairStorePrintSettings;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

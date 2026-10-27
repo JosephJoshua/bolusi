@@ -133,6 +133,51 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   phone cannot be handed back while a change waits. Technicians keep proposing,
   since they find the extra fault once the phone is open.
 
+## Printing repair slips (2026-10-26)
+
+Agreed with the owner before building printing.
+
+- **Paper:** two-ply carbonless continuous paper (pink kept by the store, yellow
+  for the customer) on whatever Epson-compatible dot-matrix the store has, or
+  plain paper. No printer model is assumed: text mode uses the basic ESC/P set,
+  and the store picks a paper preset (9.5" continuous half form, the landscape
+  default, or full form; A4 or A5 either way round) or types a size, then checks
+  it with a test page. Windows printing cannot report the paper, so it is never
+  auto-detected.
+- **Layout:** on landscape paper the money and terms sit beside the customer and
+  phone details. Every field is printed whole at its longest allowed length,
+  wrapping rather than cutting. An ordinary slip fits one half form at the
+  printer's default 6 lines per inch, a line down from the perforation; only a
+  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
+  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
+  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  slip has no warranty terms.
+- **Two documents:** the intake receipt ("Tanda terima servisan") and the
+  handover slip ("Nota servisan") for a pickup or a cancel, which is also the
+  customer's receipt. No technician job sheet. Repair counters have no separate
+  thermal printer, so receipts use the same paper; thermal stays for POS.
+- **Money on the slips:** the intake receipt shows the quoted lines and total;
+  the handover slip shows the lines that count (or the cancellation fee) and the
+  total. A down payment ("DP") taken at intake is recorded on the servisan now,
+  ahead of the payments slice, printed on both slips with what is left to pay,
+  and only an owner can change it.
+- **Signatures:** a signature line for the customer and the staff member on both
+  slips; the handover also keeps the on-screen signature, shown on plain paper.
+- **Header and terms:** owners edit the store name, address, phone, an optional
+  logo and the terms of each slip. The logo prints on plain paper and PDF, and
+  on dot-matrix only when switched on. The unlock code is never printed.
+- **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
+- **Phone-only counters** make a PDF to print through the phone's print dialog
+  or share (for example on WhatsApp), on A4 or A5 (remembered per phone).
+  Dot-matrix printing is the desktop app's. Android's print dialog does not
+  report a cancel, so the phone asks whether the slip printed before logging it;
+  a cancelled first print never makes the real one read "Cetak ulang".
+- **Logo from the gallery:** the store logo is the one picture that may come from
+  the phone's gallery. Evidence photos stay camera-only; the lint rule allows the
+  photo picker in exactly one file, which feeds only the slip settings screen.
+- **Code:** one shared printing layer (core `print`: document model, HTML and
+  ESC/P renderers) that POS receipts will reuse; slips are module templates.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.

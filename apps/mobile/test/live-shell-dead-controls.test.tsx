@@ -146,6 +146,7 @@ function fakeMediaClient(
       return Promise.resolve({ kind: 'captured', ref, localPath: '/docs/x.jpg', passes: 1 });
     },
     captureSignature: () => Promise.reject(new Error('not used')),
+    importImage: () => Promise.reject(new Error('not used')),
     attach: () => Promise.resolve(),
     // The captured file is encrypted at rest; rendering it goes through a decrypted copy.
     loadForRender: (ref) =>

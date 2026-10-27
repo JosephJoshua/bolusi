@@ -1,6 +1,6 @@
 // Small pieces every repair screen shares: the four read states around a query, a verified photo
 // thumbnail, the ticket status chip and the banner for a refused action.
-import { t, translateErrorCode, translateFailure } from '@bolusi/i18n';
+import { formatMoney, t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -24,9 +24,14 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
-import { staleStepMessage, statusLabel } from './labels.js';
-import { statusTone, type StaleStep, type TicketStatus } from '../flows.js';
+import { tn } from '../i18n.js';
+import { staleStepMessage, statusLabel } from '../labels.js';
+import {
+  balanceAfterDownPayment,
+  statusTone,
+  type StaleStep,
+  type TicketStatus,
+} from '../flows.js';
 import type { DeviceModelPhoto, DeviceModelRow } from '../device-models.js';
 import { specFacts, type SpecFactKey } from '../device-specs.js';
 import { useModelPhoto, useRepairQuery, useRepairThumbnail } from './runtime.js';
@@ -458,16 +463,19 @@ export function FlowScreen({
 export function Section({
   title,
   action,
+  first = false,
   children,
   testID,
 }: {
   readonly title: string;
   readonly action?: ReactNode;
+  /** The screen's first section: the screen's own top padding is room enough above it. */
+  readonly first?: boolean | undefined;
   readonly children: ReactNode;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   return (
-    <View style={styles.section} testID={testID}>
+    <View style={first ? undefined : styles.section} testID={testID}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
@@ -536,6 +544,47 @@ export function FactGrid({ children }: { readonly children: ReactNode }): React.
   return <View style={styles.factGrid}>{children}</View>;
 }
 
+/**
+ * Under a total: the down payment taken off it, then what the customer still pays, or what the
+ * store gives back when the down payment was more. Nothing when no down payment was taken. `action`
+ * sits beside the down payment, the one thing it changes.
+ */
+export function DownPaymentRows({
+  total,
+  downPayment,
+  action,
+  testID,
+}: {
+  readonly total: number;
+  readonly downPayment: number | null;
+  readonly action?: ReactNode;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  if (downPayment === null || downPayment === 0) return null;
+  const balance = balanceAfterDownPayment(total, downPayment);
+  return (
+    <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
+      <View style={[repairStyles.row, styles.paidRow]}>
+        <View style={styles.paidLabel}>
+          <Text style={styles.paidText}>{tn('repair.price.downPayment')}</Text>
+          {action}
+        </View>
+        <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>
+          {formatMoney(-downPayment)}
+        </Text>
+      </View>
+      <View style={[repairStyles.row, styles.paidRow]}>
+        <Text style={styles.balanceLabel}>
+          {tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}
+        </Text>
+        <Text style={[styles.balanceValue, styles.amount]} testID={`${testID}.balance`}>
+          {formatMoney(balance.amount)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 /** Photos laid out in a wrapping grid. */
 export function PhotoGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
   return <View style={styles.grid}>{children}</View>;
@@ -555,6 +604,14 @@ export const repairStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  // Room below "Sisa bayar" too, so the next row does not read as part of the sum.
+  paidRows: { marginBottom: space.sm },
+  paidRow: { marginTop: space.sm, minHeight: space['2xl'] },
+  paidLabel: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: space.md },
+  paidText: { ...type.bodySm, color: color.text },
+  balanceLabel: { ...type.bodyBold, color: color.text },
+  balanceValue: { ...type.heading, color: color.text },
+  amount: { fontVariant: ['tabular-nums'] },
   hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
   inert: { opacity: 0.45 },
   question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },

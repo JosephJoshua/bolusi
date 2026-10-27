@@ -4,6 +4,9 @@
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  balanceAfterDownPayment,
+  downPaymentAction,
+  printableSlips,
   boardFilter,
   boardSort,
   boardViews,
@@ -282,6 +285,35 @@ describe('ticket actions', () => {
     expect(
       ticketActions(row({ location: 'returned', outcome: 'repaired' }), cashier, h.cashierId),
     ).toEqual([]);
+  });
+});
+
+describe('down payment and slips', () => {
+  test('recording a down payment is offered exactly where the command accepts it', async () => {
+    h = await openRepairHarness(4109);
+    for (const state of ['received', 'repaired', 'returned'] as const) {
+      const ticketId = await ticketIn(h, state);
+      const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+      const offered = downPaymentAction(ticket, abilitiesOf(h, h.cashierId)) === 'record';
+      const run = h.run('recordDownPayment', { ticketId, amount: 20_000 }, h.cashierId);
+      if (offered) await expect(run).resolves.toBeDefined();
+      else await expect(run).rejects.toThrow();
+      expect(offered).toBe(state !== 'returned');
+    }
+  });
+
+  test('the handover slip prints once the phone is ready or gone, and a large deposit is a refund', () => {
+    expect(printableSlips({ outcome: 'in_repair', location: 'in_store' })).toEqual(['intake']);
+    expect(printableSlips({ outcome: 'repaired', location: 'in_store' })).toEqual([
+      'intake',
+      'handover',
+    ]);
+    expect(printableSlips({ outcome: 'cancelled', location: 'in_store' })).toEqual([
+      'intake',
+      'handover',
+    ]);
+    expect(balanceAfterDownPayment(50_000, 100_000)).toEqual({ kind: 'refund', amount: 50_000 });
+    expect(balanceAfterDownPayment(50_000, 50_000)).toEqual({ kind: 'due', amount: 0 });
   });
 });
 
@@ -576,6 +608,35 @@ describe('intake draft', () => {
     expect(ticket.intakePhotos.map((p: { slot: string }) => p.slot)).toEqual([
       ...INTAKE_PHOTO_SLOTS,
     ]);
+  });
+
+  test('a down payment at intake is checked like the command checks it, and opens with the ticket', async () => {
+    h = await openRepairHarness(4108);
+    const draft = { ...complete(h), downPayment: '700.000' };
+    // More than a known price is change, not a payment.
+    expect(stepProblems(draft, 'price', OPTIONS)).toEqual(['downPaymentAboveTotal']);
+    // With no price yet, any deposit stands.
+    const unpriced = {
+      ...draft,
+      lines: [{ kind: 'labour' as const, description: 'Cek dulu', amount: 0 }],
+    };
+    expect(stepProblems(unpriced, 'price', OPTIONS)).toEqual([]);
+    const paid = { ...draft, downPayment: '100.000' };
+    expect(stepProblems(paid, 'review', OPTIONS)).toEqual([]);
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(paid, OPTIONS, Date.now()),
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+    expect(ticket.downPayment).toBe(100_000);
+    expect(balanceAfterDownPayment(ticket.quoteTotal, ticket.downPayment!)).toEqual({
+      kind: 'due',
+      amount: 500_000,
+    });
+    // Recorded once: after that only an owner may change it, and the counter sees no action.
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.cashierId))).toBeNull();
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.ownerId))).toBe('correct');
   });
 
   test('a draft opens against the lists the store offers, and records their names', async () => {

@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import type { DiscardGuard } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
+import { tn } from '../i18n.js';
 
 /**
  * Leaving a step that holds photos or a signature not yet saved asks first, from the header back and

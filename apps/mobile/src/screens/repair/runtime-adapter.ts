@@ -27,7 +27,12 @@ import { readEntitySyncStatuses } from '../../bootstrap/entity-sync-statuses.js'
 /** The native half: capture, signing, verified thumbnails and sharing a photo. */
 export type RepairMediaSeams = Pick<
   RepairRuntime,
-  'capturePhoto' | 'captureSignature' | 'loadThumbnail' | 'sharePhoto' | 'loadModelPhoto'
+  | 'capturePhoto'
+  | 'captureSignature'
+  | 'loadThumbnail'
+  | 'sharePhoto'
+  | 'loadModelPhoto'
+  | 'pickPhoto'
 >;
 
 export interface RepairRuntimeDeps {
@@ -36,6 +41,7 @@ export interface RepairRuntimeDeps {
   readonly invalidation: InvalidationBus;
   readonly identity: CommandIdentity;
   readonly media: RepairMediaSeams;
+  readonly printing?: RepairRuntime['printing'];
 }
 
 /** Every repair table, the op log for each ticket's sync status, and the phone catalog (a
@@ -56,5 +62,6 @@ export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
         .filter((user) => port.colleagueHasPermission(user.id, REPAIR_PERMISSION.work))
         .map(({ id, name }) => ({ id, name })),
     ...deps.media,
+    ...(deps.printing === undefined ? {} : { printing: deps.printing }),
   };
 }

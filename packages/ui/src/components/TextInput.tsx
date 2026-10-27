@@ -76,6 +76,8 @@ export interface TextInputProps {
    * `textAlignVertical` and heights rather than `numberOfLines`.
    */
   readonly multiline?: boolean | undefined;
+  /** The most characters the field takes: what its command accepts, so typing past it is stopped. */
+  readonly maxLength?: number | undefined;
   /**
    * Where a focused field is scrolled to above the on-screen keyboard (shell/keyboard.tsx):
    * just into sight (default), or to the top when something opens below it as the user types.
@@ -134,6 +136,7 @@ export function TextInput({
   revealLabels,
   autoFocus = false,
   multiline = false,
+  maxLength,
   revealOnFocus = 'into-view',
   onBlur,
   testID = 'ui.textInput',
@@ -173,8 +176,10 @@ export function TextInput({
           keyboardType={keyboardType}
           secureTextEntry={secureTextEntry && !revealed}
           autoCorrect={autoCorrect}
+          spellCheck={autoCorrect}
           autoFocus={autoFocus}
           multiline={effectiveMultiline}
+          maxLength={maxLength}
           onFocus={() => {
             setFocused(true);
             reveal.onFocus();
