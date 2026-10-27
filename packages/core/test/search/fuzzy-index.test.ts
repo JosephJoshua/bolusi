@@ -5,6 +5,8 @@ import { describe, expect, test } from 'vitest';
 import {
   compileQuery,
   FuzzyIndex,
+  hasExactCode,
+  prepareDocument,
   scoreDocument,
   type SearchDocument,
 } from '../../src/search/index.js';
@@ -124,7 +126,8 @@ function queries(docs: readonly SearchDocument[], count: number, seed: number): 
 function scan(docs: readonly SearchDocument[], query: string, limit: number): string[] {
   const compiled = compileQuery(query);
   if (compiled === null) return [];
-  return docs
+  const exact = docs.filter((doc) => hasExactCode(compiled, prepareDocument(doc)));
+  return (exact.length > 0 ? exact : docs)
     .map((doc) => ({ doc, score: scoreDocument(compiled, doc) }))
     .filter((hit) => hit.score > 0)
     .sort((a, b) => b.score - a.score || b.doc.rank - a.doc.rank || (a.doc.id < b.doc.id ? -1 : 1))

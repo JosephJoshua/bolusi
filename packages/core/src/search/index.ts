@@ -7,6 +7,7 @@ export {
   compileQuery,
   digitScore,
   foldWord,
+  hasExactCode,
   MIN_SCORE,
   normalizeNumber,
   normalizePhone,
