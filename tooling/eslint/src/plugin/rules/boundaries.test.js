@@ -76,6 +76,11 @@ tester.run('boundaries', rule, {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
       filename: '/repo/apps/mobile/src/navigation.tsx',
     },
+    // the counter PC app imports the React DOM screens
+    {
+      code: `import { RepairBoardPage } from '@bolusi/modules/repair/desktop';`,
+      filename: '/repo/apps/desktop/src/renderer/App.tsx',
+    },
     // harness may value-import the server app (in-process, test-only)
     {
       code: `import { routes } from '@bolusi/server';`,
@@ -321,6 +326,12 @@ tester.run('boundaries', rule, {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
       filename: '/repo/apps/server/src/routers/sync.ts',
       errors: [{ messageId: 'screensOutsideMobile' }],
+    },
+    // React DOM screens outside the desktop app → error (the phone bundle must not pull react-dom)
+    {
+      code: `import { RepairBoardPage } from '@bolusi/modules/repair/desktop';`,
+      filename: '/repo/apps/mobile/src/app/index.tsx',
+      errors: [{ messageId: 'desktopOutsideApp' }],
     },
     // value-import of @bolusi/server outside harness → error (primary fixture)
     {

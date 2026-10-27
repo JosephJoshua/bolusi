@@ -994,7 +994,8 @@ export default function App(props: AppProps): React.JSX.Element {
                       (id) => id !== currentUser.id,
                     ).length
                   }
-                  // Owners and store owners only: each row for whoever may change it here.
+                  // Each row for whoever may change it here: the store's settings for owners, the
+                  // phone's paper for anyone who prints.
                   repair={{
                     section: tn('repair.board.title'),
                     rows: [
@@ -1031,6 +1032,18 @@ export default function App(props: AppProps): React.JSX.Element {
                             },
                           ]
                         : []),
+                      // The phone's own paper: anyone who prints here may set it.
+                      ...(props.repair?.printing !== undefined
+                        ? [
+                            {
+                              icon: 'paper' as const,
+                              title: tn('repair.paper.title'),
+                              summary: tn('repair.paper.phoneSummary'),
+                              onOpen: () => setRoute('printPaper'),
+                              testID: 'settings-print-paper',
+                            },
+                          ]
+                        : []),
                     ],
                   }}
                   syncChip={chip}
@@ -1042,7 +1055,8 @@ export default function App(props: AppProps): React.JSX.Element {
             if (
               (shellZone.route === 'intakeOptions' ||
                 shellZone.route === 'cancelFees' ||
-                shellZone.route === 'printSettings') &&
+                shellZone.route === 'printSettings' ||
+                shellZone.route === 'printPaper') &&
               props.repair !== undefined
             ) {
               return (
@@ -1328,6 +1342,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'staff',
   'staffPins',
   'printSettings',
+  'printPaper',
 ]);
 
 /**

@@ -156,8 +156,11 @@ export default tseslint.config(
       'apps/mobile/**/*.{ts,tsx,js,jsx}',
       'packages/modules/src/**/screens/**/*.{ts,tsx}',
       'packages/ui/src/**/*.{ts,tsx}',
+      'apps/desktop/src/**/*.{ts,tsx}',
+      'packages/modules/src/**/desktop/**/*.{ts,tsx}',
+      'packages/ui-web/src/**/*.{ts,tsx}',
     ],
-    ignores: ['packages/ui/src/**/*.test.{ts,tsx}'],
+    ignores: ['packages/ui/src/**/*.test.{ts,tsx}', 'packages/ui-web/src/**/*.test.{ts,tsx}'],
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
@@ -187,7 +190,13 @@ export default tseslint.config(
   },
   {
     name: 'bolusi/app-typed',
-    files: ['apps/server/src/**/*.ts', 'apps/mobile/src/**/*.ts', 'apps/mobile/src/**/*.tsx'],
+    files: [
+      'apps/server/src/**/*.ts',
+      'apps/mobile/src/**/*.ts',
+      'apps/mobile/src/**/*.tsx',
+      'apps/desktop/src/**/*.ts',
+      'apps/desktop/src/**/*.tsx',
+    ],
     ignores: ['**/*.test.ts', '**/*.test.tsx'],
     languageOptions: {
       parserOptions: { projectService: true },

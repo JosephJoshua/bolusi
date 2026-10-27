@@ -1,0 +1,10 @@
+{
+  "extends": "@bolusi/tsconfig/dom.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["vite/client"]
+  },
+  "include": ["src/renderer", "test", "vite.config.ts", "vitest.config.ts"]
+}
