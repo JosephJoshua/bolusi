@@ -59,6 +59,7 @@ import {
   resolveDisplayRoleKeys,
   readIdleLockSeconds,
   readPinAttempt,
+  readStaffDirectory,
   readVerifier,
   SessionManager,
   createWorkStore,
@@ -72,6 +73,7 @@ import {
   type PinAuthState,
   type PinFlowDeps,
   type PinVerifierUploadPort,
+  type StaffDirectory,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
@@ -129,6 +131,16 @@ export interface AppSessionSnapshot {
    * wrongly-shown entry fails closed.
    */
   readonly canReset: boolean;
+  /**
+   * Does the ACTIVE user hold `auth.user_create` here (owner decision 2026-10-27)? Gates the Settings
+   * "Karyawan" entry. A UX gate like the two above: the server decides every staff change.
+   */
+  readonly canManageStaff: boolean;
+  /**
+   * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
+   * offered owner roles and other owners to manage; the server enforces the same rule.
+   */
+  readonly tenantAdmin: boolean;
 }
 
 export interface AppSessionController {
@@ -194,6 +206,13 @@ export interface AppSessionController {
    * errors (they re-queue), so a bundle refresh is never blocked by an unreachable verifier POST.
    */
   drainVerifiers(port: PinVerifierUploadPort): Promise<void>;
+  /** The staff list and pickable roles from this device's directory mirrors (core `staff.ts`). */
+  listStaff(): Promise<StaffDirectory>;
+  /**
+   * Who a staff change is made as and for which store: the signed-in user and this device's store.
+   * Null with no session, so a change can never be sent anonymously.
+   */
+  staffContext(): { readonly actingUserId: string; readonly storeId: string } | null;
   /**
    * ONE idle check (api/02-auth §6.4). Driven by the platform ticker (`session/idle-ticker.ts`),
    * which owns the cadence; the DECISION is 14's `checkIdle()` and is not re-derived anywhere above
@@ -347,6 +366,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         workspace: shellState.workspace,
         canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
+        canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
+        tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },
 
@@ -503,6 +524,15 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       } finally {
         await controller.refresh().catch(() => undefined);
       }
+    },
+
+    listStaff: () => readStaffDirectory(db),
+
+    staffContext: () => {
+      const active = manager.current;
+      // A store device always has a store; only the server's system device has none.
+      if (active === null || device.storeId === null) return null;
+      return { actingUserId: active.userId, storeId: device.storeId };
     },
 
     async listPinTargets(): Promise<readonly PinTargetUser[]> {

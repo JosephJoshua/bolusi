@@ -13,6 +13,7 @@ import {
   type ProvisionResult,
 } from '../../src/cli/provision-tenant.js';
 import { InMemoryWindowLimitStore } from '../../src/identity/rate-limits.js';
+import { InProcessPokeHub, type PokeScope } from '../../src/realtime/poke-hub.js';
 import { RevocationHooks } from '../../src/identity/revocation.js';
 import { makeFakeClock, type FakeClock } from './app.js';
 import { makeIdentityDb, makeStubKdf, type IdentityDb } from './identity-db.js';
@@ -25,6 +26,8 @@ export interface IdentityHarness {
   readonly hooks: RevocationHooks;
   readonly kdf: PasswordKdf;
   readonly dummyCalls: () => number;
+  /** Every `sync.poke` scope the app published, in order. */
+  readonly pokes: PokeScope[];
   close(): Promise<void>;
 }
 
@@ -38,7 +41,11 @@ export async function makeIdentityHarness(
     : makeStubKdf();
   const rateStore = new InMemoryWindowLimitStore();
   const hooks = new RevocationHooks();
+  const pokeHub = new InProcessPokeHub();
+  const pokes: PokeScope[] = [];
+  pokeHub.subscribe((scope) => pokes.push(scope));
   const app = createApp({
+    pokeHub,
     now: () => clock.now(),
     forTenant: idb.forTenant,
     authDirectory: idb.authDirectory,
@@ -46,7 +53,7 @@ export async function makeIdentityHarness(
     identityRateStore: rateStore,
     revocationHooks: hooks,
   });
-  return { app, idb, clock, rateStore, hooks, kdf, dummyCalls, close: () => idb.close() };
+  return { app, idb, clock, rateStore, hooks, kdf, dummyCalls, pokes, close: () => idb.close() };
 }
 
 /** Provision a tenant through the real CLI code path, using the harness's clock + KDF. */

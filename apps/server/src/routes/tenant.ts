@@ -12,6 +12,7 @@ import { withIdentityErrors } from '../identity/errors.js';
 import { PERM } from '../identity/permissions.js';
 import { clampIdleLock, IDLE_LOCK_DEFAULT, TenantSettingsReq } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
+import { announceDirectoryChange } from '../realtime/announce.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 
 function readIdle(configuration: unknown): number {
@@ -73,6 +74,7 @@ export function createTenantRouter(deps: ServerDeps) {
         return { idleLockSeconds: clamped };
       });
 
+      announceDirectoryChange(deps, tenantId);
       return c.json({ settings });
     }),
   );

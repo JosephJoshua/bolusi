@@ -19,7 +19,8 @@ export interface UserRowProps {
   readonly roleKeys?: readonly string[] | undefined;
   /** A status chip ("PIN terkunci"), shown under the role so a long name keeps the full width. */
   readonly status?: ReactNode;
-  readonly onPress: () => void;
+  /** Absent for a row that only informs (someone the viewer may not change). */
+  readonly onPress?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }
 

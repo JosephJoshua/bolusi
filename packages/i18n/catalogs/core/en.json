@@ -44,7 +44,8 @@
     "store": "Store",
     "business": "Business",
     "appVersion": "App version",
-    "deviceId": "Device ID"
+    "deviceId": "Device ID",
+    "team": "Store team"
   },
   "language": {
     "id": "Bahasa Indonesia",

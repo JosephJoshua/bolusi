@@ -174,6 +174,28 @@ describe('PhotoSlot', () => {
   });
 });
 
+describe('ListRow as a checkbox', () => {
+  test('announces a combinable choice as a checkbox and shows a tick box, filled only when ticked', () => {
+    const onPress = vi.fn();
+    const r = render(
+      <>
+        <ListRow testID="on" primaryText="Kasir" checked onPress={onPress} />
+        <ListRow testID="off" primaryText="Teknisi" checked={false} onPress={onPress} />
+      </>,
+    );
+    expect(r.get('on').props['accessibilityRole']).toBe('checkbox');
+    expect(r.get('on').props['accessibilityState']).toEqual({ checked: true });
+    expect(r.get('off').props['accessibilityState']).toEqual({ checked: false });
+    // Both rows draw the box (the choice never rides on colour alone); only the ticked one has a tick.
+    expect(r.query('on.box')).not.toBeNull();
+    expect(r.query('off.box')).not.toBeNull();
+    expect(r.get('on.box').children.length).toBe(1);
+    expect(r.get('off.box').children.length).toBe(0);
+    fire(r.get('off'), 'onPress');
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('PatternLock', () => {
   test('shows a pattern read-only: drawn dots carry their order, and it is read out as steps', () => {
     const r = render(<PatternLock value="1475" accessibilityLabel="Pola" testID="lock" />);

@@ -180,6 +180,33 @@ describe('the screen title and section headers are distinct, correct labels (§1
     expect(nonOwner.query('settings-staff-pins')).toBeNull();
   });
 
+  test('"Karyawan" shows under the store team ONLY for someone who may add staff, and opens it', () => {
+    const onOpenStaff = vi.fn();
+    const owner = render(
+      <SettingsScreen
+        locale="id"
+        onSelectLocale={vi.fn()}
+        onOpenNotificationSettings={vi.fn()}
+        device={ENROLLED}
+        currentUser={{ id: 'user-1', name: 'Paulus Owner', roleKeys: ['owner'] }}
+        onBack={vi.fn()}
+        onOpenSwitcher={vi.fn()}
+        onOpenChangePin={vi.fn()}
+        onOpenStaff={onOpenStaff}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={vi.fn()}
+      />,
+    );
+    expect(lineText(owner, 'settings-section-team')).toBe(t('core.settings.team'));
+    fire(owner.get('settings-staff'), 'onPress');
+    expect(onOpenStaff).toHaveBeenCalledTimes(1);
+
+    const staff = renderSettings(ENROLLED);
+    expect(staff.query('settings-staff')).toBeNull();
+    expect(staff.query('settings-section-team')).toBeNull();
+  });
+
   test('the three section headers are mutually distinct (no two sections share a label)', () => {
     const screen = renderSettings(ENROLLED);
     const headers = [

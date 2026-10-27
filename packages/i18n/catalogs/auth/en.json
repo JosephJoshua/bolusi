@@ -113,5 +113,61 @@
     "pinLockedOut": "PIN locked",
     "pinLockoutCleared": "PIN unlocked",
     "permissionDenied": "Access denied"
+  },
+  "staff": {
+    "title": "Staff",
+    "add": "Add staff",
+    "addTitle": "New staff member",
+    "editTitle": "Edit staff member",
+    "name": "Name",
+    "nameHint": "Shown when picking an account on the store’s devices.",
+    "roles": "Role",
+    "rolesHint": "You can pick more than one.",
+    "roleHint": {
+      "cashier": "Take in devices, set prices and hand devices back",
+      "technician": "Work on repairs, including before and after photos",
+      "storeOwner": "Everything in the store, including staff, discounts and cancelling repairs"
+    },
+    "save": "Save",
+    "problem": {
+      "nameMissing": "Type the name first.",
+      "nameTooLong": "That name is too long. Use at most 64 letters.",
+      "nameTaken": "Someone here already has this name. Add a last name to tell them apart.",
+      "roleMissing": "Pick a role first."
+    },
+    "failure": {
+      "offline": "Changing staff needs the internet. Connect, then try again.",
+      "denied": "You can’t change this person. Ask the main owner.",
+      "lastOwner": "The business must keep one main owner.",
+      "rateLimited": "Too many staff changes today. Try again tomorrow.",
+      "unexpected": "The change wasn’t saved. Try again in a moment."
+    },
+    "you": "You",
+    "noPin": "No PIN yet",
+    "inactive": "Deactivated",
+    "inactiveSection": "Deactivated",
+    "empty": "No other staff yet",
+    "emptyBody": "Add staff so they can sign in with their own PIN.",
+    "addedTitle": "{name} was added",
+    "addedBody": "If they’re here, hand them the phone so they make their own PIN.",
+    "makePinNow": "Make PIN",
+    "later": "Later",
+    "notYetHere": "{name} will appear on this phone after it syncs. Make their PIN later under Staff PINs.",
+    "makePin": "Make PIN",
+    "deactivate": "Deactivate",
+    "deactivateTitle": "Deactivate {name}?",
+    "deactivateBody": "They can no longer sign in, and changes from their phone that haven’t been sent yet will be refused. Their work history stays.",
+    "deactivateConfirm": "Deactivate",
+    "inactiveBody": "They can’t sign in until reactivated.",
+    "reactivate": "Reactivate",
+    "saved": "Changes saved.",
+    "deactivated": "{name} was deactivated.",
+    "reactivated": "{name} is active again. If they forgot their PIN, make a new one under Staff PINs.",
+    "settingsSummary": "Add, change roles or deactivate",
+    "discardTitle": "Discard changes?",
+    "discardMessage": "Changes you haven’t saved will be lost.",
+    "discard": "Discard",
+    "keepEditing": "Keep editing",
+    "makePinHint": "Can’t sign in yet without a PIN."
   }
 }

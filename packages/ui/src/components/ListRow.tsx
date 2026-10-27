@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { border, color, size, space, touch, type } from '../tokens.js';
+import { border, color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
 export interface ListRowProps {
@@ -28,6 +28,12 @@ export interface ListRowProps {
    * Only meaningful with `onPress`.
    */
   readonly selected?: boolean | undefined;
+  /**
+   * Set on a row that is one of several choices the user may COMBINE (a person's roles): the row
+   * becomes a checkbox with a tick box at the end, filled when ticked. Use `selected` instead when
+   * only one may be picked. Only meaningful with `onPress`.
+   */
+  readonly checked?: boolean | undefined;
   /** The primary text is the thing to find (a person's name), so it is bold. */
   readonly emphasis?: boolean | undefined;
   /** A status under the text (a chip), so it never squeezes a long name the way a trailing chip does. */
@@ -58,6 +64,16 @@ const styles = StyleSheet.create({
   secondary: { ...type.bodySm, color: color.textMuted },
   below: { flexDirection: 'row', marginTop: space.xs },
   trailing: { flexDirection: 'row', alignItems: 'center', marginLeft: space.sm },
+  box: {
+    width: size.checkbox,
+    height: size.checkbox,
+    borderRadius: radius.xs,
+    borderWidth: border.focus,
+    borderColor: color.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  boxChecked: { backgroundColor: color.primary, borderColor: color.primary },
 });
 
 export function ListRow({
@@ -68,6 +84,7 @@ export function ListRow({
   onPress,
   showChevron = false,
   selected,
+  checked,
   emphasis = false,
   below,
   testID = 'ui.listRow',
@@ -99,9 +116,17 @@ export function ListRow({
         )}
       </View>
 
-      {trailing === undefined && !showChevron && selected !== true ? null : (
+      {trailing === undefined &&
+      !showChevron &&
+      selected !== true &&
+      checked === undefined ? null : (
         <View testID={`${testID}.trailing`} style={styles.trailing}>
           {trailing}
+          {checked === undefined ? null : (
+            <View testID={`${testID}.box`} style={[styles.box, checked ? styles.boxChecked : null]}>
+              {checked ? <Icon name="check" size={size.iconChip} color={color.onPrimary} /> : null}
+            </View>
+          )}
           {selected === true ? (
             <View testID={`${testID}.check`}>
               <Icon name="check" size={size.iconInline} color={color.primary} />
@@ -126,9 +151,15 @@ export function ListRow({
   return (
     <Pressable
       testID={testID}
-      accessibilityRole={selected === undefined ? 'button' : 'radio'}
+      accessibilityRole={
+        checked !== undefined ? 'checkbox' : selected === undefined ? 'button' : 'radio'
+      }
       accessibilityLabel={primaryText}
-      {...(selected === undefined ? {} : { accessibilityState: { checked: selected, selected } })}
+      {...(checked !== undefined
+        ? { accessibilityState: { checked } }
+        : selected === undefined
+          ? {}
+          : { accessibilityState: { checked: selected, selected } })}
       onPress={onPress}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [

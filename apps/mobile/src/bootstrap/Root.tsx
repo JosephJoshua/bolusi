@@ -74,6 +74,7 @@ import { REPAIR_REJECTED_SUBJECTS } from './repair.js';
 import type { AppRuntime } from './runtime.js';
 import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
+import { createStaffControls } from './staff.js';
 import type { UserWorkspace } from '../state/user-workspaces.js';
 import {
   NO_SYNC_STATUS_READS,
@@ -87,7 +88,12 @@ import type { AppStatePort } from './triggers.js';
 import { createIdleTicker } from '../session/idle-ticker.js';
 import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { MediaClient } from '../media/client.js';
-import type { CommandIdentity, PinVerifierUploadPort, TimerPort } from '@bolusi/core';
+import type {
+  CommandIdentity,
+  PinVerifierUploadPort,
+  StaffAdminPort,
+  TimerPort,
+} from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import type { PhotoCapture, SignatureCapture } from '@bolusi/modules/screen-kit';
@@ -253,6 +259,12 @@ export interface RootProps {
    */
   readonly uploadPinVerifier?: PinVerifierUploadPort | undefined;
   /**
+   * The owner's staff calls (`POST/PATCH /v1/users…`; owner decision 2026-10-27), injected for the
+   * same reason as `uploadPinVerifier`: the fetch wire + the SecureStore device bearer. Absent ⇒ no
+   * "Karyawan" row.
+   */
+  readonly staffAdmin?: StaffAdminPort | undefined;
+  /**
    * The in-app camera's native seams (06 §2.1; task 130) — `expo-camera`'s permission call, its
    * `CameraView`, and the still renderer. Injected for exactly the reason `createMedia` is: none of
    * them load under Node, and injecting them is what lets the composed test lane press a real
@@ -284,6 +296,7 @@ export function Root({
   createPushRegistration,
   pushRouter,
   uploadPinVerifier,
+  staffAdmin,
   capturePlatform,
   notificationPermission,
 }: RootProps): React.JSX.Element | null {
@@ -1061,6 +1074,25 @@ export function Root({
         // as its actor, so the drain (already wired via `onBundleChecked`) POSTs the owner in
         // `X-Acting-User`. `session === null` is unreachable (Reset is a session-gated shell route).
         canReset={sessionSnapshot?.canReset ?? false}
+        // Settings › Karyawan (owner decision 2026-10-27), for someone who may add staff here. Each
+        // change is a server call as the signed-in owner, then a sync so this phone's directory holds
+        // the server's answer before the screen re-reads it.
+        staff={
+          session === null || staffAdmin === undefined || sessionSnapshot?.canManageStaff !== true
+            ? undefined
+            : createStaffControls({
+                port: staffAdmin,
+                tenantAdmin: sessionSnapshot.tenantAdmin,
+                load: () => session.listStaff(),
+                context: () => session.staffContext(),
+                refreshDirectory: async () => {
+                  const client = syncRef.current;
+                  if (client === null) return;
+                  client.requestManual();
+                  await client.settle();
+                },
+              })
+        }
         onResetPin={(targetUserId, newPin) =>
           session === null
             ? Promise.reject(new Error('resetPin: no session controller (session-gated route)'))

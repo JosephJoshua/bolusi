@@ -51,6 +51,7 @@ import {
   demoRoleOf,
   type DemoRepairRole,
 } from './repair-demo.js';
+import { STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -177,6 +178,7 @@ function SettingsInteractive(): React.JSX.Element {
       onBack={noop}
       onOpenSwitcher={noop}
       onOpenChangePin={noop}
+      onOpenStaff={noop}
       onOpenStaffPins={noop}
       lockedStaffCount={1}
       repair={{
@@ -670,6 +672,26 @@ export const ENTRIES: readonly HarnessEntry[] = [
         ],
       }),
   },
+
+  // Karyawan (owner) — add, edit, deactivate, reactivate, over an in-memory server. A store owner
+  // sees owners but cannot open them; the main owner can. `offline` refuses every change.
+  ...(
+    [
+      ['ready', { members: STAFF_DEMO }],
+      ['main-owner', { members: STAFF_DEMO, tenantAdmin: true }],
+      ['many', { members: STAFF_MANY }],
+      ['empty', { members: STAFF_DEMO.filter((m) => m.id === STAFF_ACTOR) }],
+      ['offline', { members: STAFF_DEMO, offline: true }],
+    ] as const
+  ).map(([state, props]) => ({
+    screen: 'staff',
+    state,
+    render: () => (
+      <ApproxFrame screen="staff" state={state}>
+        <StaffDemo {...props} />
+      </ApproxFrame>
+    ),
+  })),
 
   // Settings — the live ID↔EN language toggle.
   {
