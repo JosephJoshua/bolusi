@@ -121,7 +121,9 @@ export function Handover({
                 // ticket cancelled before fees existed charged nothing.
                 <View style={styles.total}>
                   <View style={repairStyles.row}>
-                    <Text style={styles.totalLabel}>{tn('repair.cancel.fee')}</Text>
+                    <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                      {tn('repair.cancel.fee')}
+                    </Text>
                     <Text style={repairStyles.heading} testID={`${testID}.total`}>
                       {formatMoney(ticket.cancelFee ?? 0)}
                     </Text>
@@ -132,7 +134,9 @@ export function Handover({
                 </View>
               ) : (
                 <View style={[repairStyles.row, styles.total]}>
-                  <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
+                  <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                    {tn('repair.price.total')}
+                  </Text>
                   <Text style={repairStyles.heading} testID={`${testID}.total`}>
                     {formatMoney(ticket.quoteTotal)}
                   </Text>

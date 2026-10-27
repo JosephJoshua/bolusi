@@ -454,6 +454,14 @@ describe('cancelling (owners only)', () => {
     expect(
       StyleSheet.flatten(screen.get('repair.ticket.total').props['style']).textDecorationLine,
     ).toBe('line-through');
+    // At a large font the label wraps; the amount never splits into "Rp" and "0" on two lines.
+    const fee = screen.get('repair.ticket.cancelFee');
+    const label = fee.parent?.children[0];
+    expect(typeof label === 'object' && label.type).toBe('Text');
+    expect(
+      StyleSheet.flatten(typeof label === 'object' ? label.props['style'] : null).flexShrink,
+    ).toBe(1);
+    expect(StyleSheet.flatten(fee.props['style']).flexShrink ?? 0).toBe(0);
   });
 });
 
