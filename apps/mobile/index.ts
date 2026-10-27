@@ -1,4 +1,6 @@
 import { registerRootComponent } from 'expo';
+import { createElement } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -544,7 +546,8 @@ function buildRootProps(): RootProps {
 
 function Bootstrapped(): React.JSX.Element | null {
   rootProps ??= buildRootProps();
-  return Root(rootProps);
+  // Live system insets for the shell, so the header follows the status bar when a tablet turns.
+  return createElement(SafeAreaProvider, null, Root(rootProps));
 }
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.

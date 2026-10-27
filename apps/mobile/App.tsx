@@ -15,7 +15,8 @@ import {
   space,
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import {
   Platform,
   StatusBar as RNStatusBar,
@@ -258,6 +259,8 @@ export interface AppProps {
 }
 
 export default function App(props: AppProps): React.JSX.Element {
+  // Live system insets from the entry's SafeAreaProvider; null where there is none (tests, web).
+  const safeArea = useContext(SafeAreaInsetsContext);
   const [route, setRoute] = useState<ShellRoute>('home');
   /** "PIN karyawan" opened from "Karyawan" for one person's first PIN; back returns to Karyawan. */
   const [staffPinFor, setStaffPinFor] = useState<string | null>(null);
@@ -704,7 +707,7 @@ export default function App(props: AppProps): React.JSX.Element {
   // returns below — so the capture zone and the main zone can never drift on the top inset. The top
   // inset is read here (not at module scope) because `RNStatusBar.currentHeight` is not reliably ready
   // at bundle-eval; see `androidStatusBarInset`.
-  const shellStyle = [styles.shell, { paddingTop: androidStatusBarInset() }];
+  const shellStyle = [styles.shell, { paddingTop: topInset(safeArea) }];
 
   // The chrome for a capture or signature surface: the sync chip goes to Sync Status the way every
   // other screen's does; the avatar slot stays empty so the identity cannot switch mid-capture.
@@ -1340,9 +1343,8 @@ const ANDROID_STATUS_BAR_FALLBACK_DP = 24;
  * system status bar, whose window sits z-above ours and eats any touch that lands in it. The header
  * chrome (sync chip, language chip, avatar) is laid out at y=0, so at center it falls under the
  * status bar and is un-tappable — invisible to prop-level render tests, caught only on-device.
- * Inset the shell by the status-bar height so the header (and body) render below it. iOS is out of
- * v0 scope; `react-native-safe-area-context` is not a dependency, and `currentHeight` is the exact
- * occluding height, so it needs no extra package.
+ * Inset the shell by the status-bar height so the header (and body) render below it. This is the
+ * fallback behind the live safe-area inset (`topInset`), for a render before the insets arrive.
  *
  * READ AT RENDER, never at module-eval. `RNStatusBar.currentHeight` is a native constant marshalled
  * across the bridge; on a cold launch it is not reliably populated the instant the JS bundle evaluates.
@@ -1361,11 +1363,22 @@ function androidStatusBarInset(): number {
   return typeof measured === 'number' && measured > 0 ? measured : ANDROID_STATUS_BAR_FALLBACK_DP;
 }
 
+/**
+ * The shell's top inset. The live safe-area inset when the entry provides one: it follows a tablet
+ * turning, where the status bar's height changes and `currentHeight`, read once at launch, does not
+ * (a header launched in landscape slid under the taller portrait status bar). The status-bar read is
+ * the fallback for a render before the insets arrive, and where there is no provider.
+ */
+function topInset(safeArea: EdgeInsets | null): number {
+  if (safeArea !== null && safeArea.top > 0) return safeArea.top;
+  return androidStatusBarInset();
+}
+
 const styles = StyleSheet.create({
   /**
    * The app shell: fills the screen and clears the system nav bar so the bottom-docked primary action
    * stays tappable under edge-to-edge (§8.1). The TOP inset is applied per render via
-   * `androidStatusBarInset()` (see its docblock) — a static `paddingTop` here would freeze a possibly-
+   * `topInset()` (see its docblock) — a static `paddingTop` here would freeze a possibly-
    * unpopulated status-bar height at module-eval.
    *
    * `NAV_BAR_INSET` now lives in `@bolusi/ui` (`platform-insets.ts`), where its docblock explains the

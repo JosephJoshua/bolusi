@@ -51,6 +51,7 @@
     "react-native-nitro-modules": "catalog:",
     "react-native-quick-base64": "catalog:",
     "react-native-quick-crypto": "catalog:",
+    "react-native-safe-area-context": "5.7.0",
     "react-native-web": "0.21.2"
   },
   "devDependencies": {
