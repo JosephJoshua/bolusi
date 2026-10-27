@@ -12,15 +12,31 @@ import type { ValidationIssue } from '@bolusi/schemas';
 import type { AppEnv } from '../env.js';
 import { respondError } from '../errors.js';
 
+function validationHook(
+  result: { success: true } | { success: false; error: { issues: readonly ZodIssueLike[] } },
+  c: Context,
+) {
+  if (result.success) return undefined;
+  const issues: ValidationIssue[] = result.error.issues.map((issue) => ({
+    path: issue.path.map((seg) => (typeof seg === 'number' ? seg : String(seg))),
+    code: issue.code,
+    message: issue.message,
+  }));
+  return respondError(c as unknown as Context<AppEnv>, 'VALIDATION_FAILED', { issues });
+}
+
+interface ZodIssueLike {
+  readonly path: readonly PropertyKey[];
+  readonly code: string;
+  readonly message: string;
+}
+
 /** `zValidator('json', schema)` wired to the shared 422 hook. Use everywhere; never bare zValidator. */
 export function zJson<T extends ZodType>(schema: T) {
-  return zValidator('json', schema, (result, c) => {
-    if (result.success) return undefined;
-    const issues: ValidationIssue[] = result.error.issues.map((issue) => ({
-      path: issue.path.map((seg) => (typeof seg === 'number' ? seg : String(seg))),
-      code: issue.code,
-      message: issue.message,
-    }));
-    return respondError(c as unknown as Context<AppEnv>, 'VALIDATION_FAILED', { issues });
-  });
+  return zValidator('json', schema, validationHook);
+}
+
+/** The same for a GET's query string. */
+export function zQuery<T extends ZodType>(schema: T) {
+  return zValidator('query', schema, validationHook);
 }

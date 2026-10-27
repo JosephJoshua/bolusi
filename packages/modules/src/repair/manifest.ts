@@ -48,6 +48,7 @@ import {
   startWorkInput,
 } from './commands.js';
 import { REPAIR_MODULE_ID, REPAIR_PERMISSION, REPAIR_TABLE } from './constants.js';
+import { findDeviceModelQuery, searchDeviceModelsQuery } from './device-models.js';
 import { repairOperations } from './operations.js';
 import {
   cancelFeesQuery,
@@ -242,6 +243,8 @@ export const repairModuleManifest = {
     nextTicketCounter: nextTicketCounterQuery,
     technicianLoads: technicianLoadsQuery,
     intakeOptionSettings: intakeOptionSettingsQuery,
+    searchDeviceModels: searchDeviceModelsQuery,
+    findDeviceModel: findDeviceModelQuery,
     cancelFees: cancelFeesQuery,
   },
 } as const satisfies ModuleManifest<RepairDatabase>;

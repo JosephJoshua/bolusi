@@ -13,6 +13,7 @@ import {
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import {
+  PHONE_MODELS_TABLE,
   REPAIR_PERMISSION,
   REPAIR_TABLE,
   REPAIR_TICKET_ENTITY,
@@ -26,7 +27,7 @@ import { readEntitySyncStatuses } from '../../bootstrap/entity-sync-statuses.js'
 /** The native half: capture, signing, verified thumbnails and sharing a photo. */
 export type RepairMediaSeams = Pick<
   RepairRuntime,
-  'capturePhoto' | 'captureSignature' | 'loadThumbnail' | 'sharePhoto'
+  'capturePhoto' | 'captureSignature' | 'loadThumbnail' | 'sharePhoto' | 'loadModelPhoto'
 >;
 
 export interface RepairRuntimeDeps {
@@ -37,8 +38,9 @@ export interface RepairRuntimeDeps {
   readonly media: RepairMediaSeams;
 }
 
-/** Every repair table, and the op log for each ticket's sync status. */
-const LIVE_TABLES = [...Object.values(REPAIR_TABLE), OP_SYNC_STATUS_TABLE];
+/** Every repair table, the op log for each ticket's sync status, and the phone catalog (a
+ * download that lands while the device step is open updates its suggestions). */
+const LIVE_TABLES = [...Object.values(REPAIR_TABLE), OP_SYNC_STATUS_TABLE, PHONE_MODELS_TABLE];
 
 export function createRepairRuntime(deps: RepairRuntimeDeps): RepairRuntime {
   const port = bindModulePort(repairModule, deps.runtime, deps.identity);

@@ -91,6 +91,7 @@ export function repairRuntimeFor(h: RepairHarness, userId: string): RepairRuntim
       captureSignature: () =>
         Promise.resolve({ mediaRef: { ...h.photo((shot += 1)), mime: 'image/png' } }),
       loadThumbnail: () => Promise.resolve({ kind: 'unavailable' }),
+      loadModelPhoto: (photo) => Promise.resolve(`file:///phone-models/${photo.modelId}.jpg`),
     },
   });
 }

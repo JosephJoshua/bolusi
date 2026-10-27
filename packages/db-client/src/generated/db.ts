@@ -139,6 +139,18 @@ export interface Operations {
   userId: string;
 }
 
+export interface PhoneModels {
+  announcedYear: number | null;
+  brand: string;
+  id: Generated<number | null>;
+  kind: string;
+  modelCodes: string;
+  name: string;
+  photoSha256: string | null;
+  revision: number;
+  specs: Generated<string>;
+}
+
 export interface PinAttemptState {
   consecutiveFailures: Generated<number>;
   deviceId: string;
@@ -353,6 +365,7 @@ export interface DB {
   migrations: Migrations;
   notes: Notes;
   operations: Operations;
+  phoneModels: PhoneModels;
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;

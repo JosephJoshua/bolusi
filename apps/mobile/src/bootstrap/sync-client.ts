@@ -46,6 +46,7 @@ import type { FirstSyncProgress } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
+import { createPhoneCatalogRefresher } from './phone-catalog.js';
 import {
   createRealtimeController,
   type RealtimeHandle,
@@ -416,11 +417,29 @@ export function createSyncClientForApp(
       ? {}
       : { onBundleRefreshed: config.onBundleRefreshed }),
   });
+  const phoneCatalog = createPhoneCatalogRefresher({
+    baseUrl: config.baseUrl,
+    deviceToken: config.loadDeviceToken,
+    db: app.db,
+    invalidation: app.invalidation,
+    clock: config.clock,
+    ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+  });
+  // The bundle refresh is the last step of a drained cycle, so the catalog check starts there. It
+  // runs beside the loop, not inside it: a catalog failure must not put sync into backoff
+  // (phone-catalog.ts), and the next due check simply tries again.
+  const bundleThenCatalog: BundleRefreshPort = {
+    async refresh() {
+      const outcome = await bundle.refresh();
+      void phoneCatalog.refreshIfDue().catch(() => undefined);
+      return outcome;
+    },
+  };
   return createSyncClient({
     db: app.db,
     deviceId: config.deviceId,
     transport,
-    bundle,
+    bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
     crypto: config.crypto,
     clock: config.clock,

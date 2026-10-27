@@ -48,6 +48,7 @@ export {
   type SeededServerDevice,
   type SystemDeviceSeed,
 } from './server.js';
+export { LANE_CATALOG, drawLanePhone, seedLaneCatalog } from './lane-catalog.js';
 export { createPgliteAuthDirectory, type PgliteAuthDirectory } from './production-auth.js';
 export {
   LANE_OTP,

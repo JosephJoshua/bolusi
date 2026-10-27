@@ -49,6 +49,22 @@ Set `EXPO_ACCESS_TOKEN` in your local environment first. See
 Use `pnpm --filter @bolusi/server provision-tenant --help` for enrollment setup.
 Do not paste provisioning secrets into chats or commit them.
 
+The phone catalog (model names and photos for intake) is crawled from GSMArena by
+a slow, resumable CLI that writes as the table owner, so give it the owner role's
+URL, not the app role's. It honours robots.txt (including Crawl-delay), waits 1 s
+(with jitter) between requests, and on 429/503 waits, doubles the gap for the rest
+of the run and stops if refused repeatedly. A first full crawl is about 28k
+requests (listings, photos, spec pages), so most of a day; try a short run first:
+
+```sh
+DATABASE_URL=<owner url> pnpm --filter @bolusi/server crawl-phone-catalog --max-requests 20
+```
+
+`--brands "Samsung,Apple"`, `--phases list,photos,details` and `--delay-seconds`
+narrow a run. Devices download the catalog after sync and photos when shown.
+GSMArena refuses cloud and datacenter addresses (429s, a Cloudflare check), so
+run it from a home or office connection; the crawler never tries to get past a check.
+
 To click through the screens in a browser without a server or device, run
 `pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
 
