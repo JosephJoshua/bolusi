@@ -7,43 +7,11 @@
  * the target to actually be locked (`INVALID_TRANSITION` otherwise), and does the counter reset under
  * the same attempt lock `verifyPin` uses. This model only decides what the screen shows.
  *
- * TWO SECURITY-RELEVANT DECISIONS LIVE HERE:
- *  1. `clearListState` checks the permission FIRST — a caller without `auth.pin_unlock` sees the
- *     Unauthorized state, never an Empty one, even when nobody is locked (design-system §5 / FR-1036:
- *     denial must never masquerade as "nothing here"). Only locked users are ever offered as targets.
- *  2. `clearLockoutOutcome` maps the flow's `INVALID_TRANSITION` (the target got unlocked out from
+ * The list itself (and its permission-first gate) is `staff-pin.model.ts`. `clearLockoutOutcome` maps the flow's `INVALID_TRANSITION` (the target got unlocked out from
  *     under us — a race, or someone else cleared it) to a truthful "no longer locked" message rather
  *     than a false success.
  */
-import {
-  lockedTargets,
-  ownerListState,
-  type OwnerListState,
-  type PinTargetUser,
-} from './pin-target.js';
-
-/** What the screen needs to decide the target list. `users` is the full directory + lockout flags. */
-export interface ClearListInput {
-  /** Does the acting user hold `auth.pin_unlock` (02-permissions §12)? */
-  readonly canUnlock: boolean;
-  readonly loading: boolean;
-  /** A DomainError code if the directory read failed, else null. */
-  readonly error: string | null;
-  readonly users: readonly PinTargetUser[];
-}
-
-/**
- * The list state, via the shared owner precedence (`ownerListState`): permission first, so a caller
- * without `auth.pin_unlock` sees Unauthorized rather than Empty even when nobody is locked. The
- * `ready` targets are the LOCKED subset only — the sole users `clearPinLockout` can act on — so an
- * empty list is the reassuring "no one is locked out" case.
- */
-export function clearListState(input: ClearListInput): OwnerListState {
-  return ownerListState(
-    { permitted: input.canUnlock, loading: input.loading, error: input.error },
-    () => lockedTargets(input.users),
-  );
-}
+import type { PinTargetUser } from './pin-target.js';
 
 /** Why a clear attempt failed (a success needs no reason). */
 export type ClearFailure = 'notLocked' | 'error';

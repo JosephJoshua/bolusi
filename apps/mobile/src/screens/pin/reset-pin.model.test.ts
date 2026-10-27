@@ -2,72 +2,9 @@ import { DomainError } from '@bolusi/core';
 import { describe, expect, test } from 'vitest';
 
 import type { PinTargetUser } from './pin-target.js';
-import {
-  RESET_LIST,
-  resetListState,
-  resetOutcome,
-  resetPinReducer,
-  type ResetPhase,
-} from './reset-pin.model.js';
+import { RESET_LIST, resetOutcome, resetPinReducer, type ResetPhase } from './reset-pin.model.js';
 
-const OWNER: PinTargetUser = { id: 'u-owner', name: 'Ocep', lockedOut: false };
 const STAFF: PinTargetUser = { id: 'u-staff', name: 'Ani', lockedOut: false };
-
-describe('resetListState — permission first; the acting owner is not a reset target', () => {
-  test('no `auth.user_reset_pin` → Unauthorized, even with users present', () => {
-    const state = resetListState({
-      canReset: false,
-      loading: false,
-      error: null,
-      users: [OWNER, STAFF],
-      actorUserId: OWNER.id,
-    });
-    expect(state).toEqual({ kind: 'unauthorized' });
-  });
-
-  test('ready excludes the acting owner — reset is for someone else (self uses change-PIN)', () => {
-    const state = resetListState({
-      canReset: true,
-      loading: false,
-      error: null,
-      users: [OWNER, STAFF],
-      actorUserId: OWNER.id,
-    });
-    expect(state).toEqual({ kind: 'ready', targets: [STAFF] });
-  });
-
-  test('a device with only the owner has no other users to reset (meaningful Empty)', () => {
-    const state = resetListState({
-      canReset: true,
-      loading: false,
-      error: null,
-      users: [OWNER],
-      actorUserId: OWNER.id,
-    });
-    expect(state).toEqual({ kind: 'ready', targets: [] });
-  });
-
-  test('loading and directory errors are surfaced', () => {
-    expect(
-      resetListState({
-        canReset: true,
-        loading: true,
-        error: null,
-        users: [],
-        actorUserId: OWNER.id,
-      }),
-    ).toEqual({ kind: 'loading' });
-    expect(
-      resetListState({
-        canReset: true,
-        loading: false,
-        error: 'UNEXPECTED',
-        users: [],
-        actorUserId: OWNER.id,
-      }),
-    ).toEqual({ kind: 'error', code: 'UNEXPECTED' });
-  });
-});
 
 describe('resetPinReducer — choose → hand over → target enters new PIN → submit', () => {
   test('the happy path reaches submitting with the CONFIRMED new PIN', () => {

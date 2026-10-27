@@ -1,59 +1,104 @@
 {
   "switcher": {
     "title": "Siapa yang pakai?",
-    "instruction": "Ketuk nama kamu",
     "addUser": "Tambah Pengguna",
     "reenroll": "Daftarkan Ulang Perangkat",
-    "emptyUsers": "Belum ada pengguna di perangkat ini. Minta pemilik toko untuk mendaftarkannya.",
-    "idleLocked": "Layar terkunci karena lama tidak dipakai. Pekerjaanmu aman."
+    "emptyUsers": "Belum ada pengguna di HP ini. Minta pemilik toko menambahkannya.",
+    "idleLocked": "Terkunci karena lama tidak dipakai. Pekerjaanmu aman.",
+    "search": "Cari nama",
+    "noMatches": "Tidak ada nama yang cocok",
+    "locked": "PIN terkunci",
+    "noPin": "Belum ada PIN",
+    "current": "Sedang dipakai"
   },
   "pin": {
     "title": "Masukkan PIN",
-    "wrong": "PIN salah. Coba lagi.",
-    "attemptsLeft": "Sisa {count} kesempatan",
-    "wait": "Terlalu banyak salah. Tunggu {duration}.",
-    "lockedOut": "PIN terkunci. Minta pemilik toko untuk membukanya.",
-    "forgot": "Lupa PIN? Minta pemilik toko membuatkan yang baru.",
+    "wrong": "PIN salah.",
+    "attemptsLeft": "Sisa {count} kali coba.",
+    "wait": "Terlalu sering salah. Coba lagi dalam {duration}.",
+    "lockedOut": "Minta pemilik toko membuka kuncinya.",
+    "forgot": "Minta pemilik toko membuatkan PIN baru. Bisa tanpa internet.",
     "setup": {
-      "title": "Buat PIN Baru",
-      "repeat": "Ulangi PIN",
-      "mismatch": "PIN tidak sama. Coba lagi."
+      "title": "Buat PIN baru",
+      "repeat": "Ulangi PIN baru",
+      "mismatch": "PIN tidak sama. Buat lagi dari awal.",
+      "screenTitle": "Buat PIN",
+      "hint": "6 angka. Jangan pakai tanggal lahir.",
+      "failed": "PIN belum bisa dibuat. Coba lagi."
     },
     "change": {
       "title": "Ganti PIN",
-      "enterCurrent": "Masukkan PIN lama kamu",
+      "enterCurrent": "Masukkan PIN lama",
       "wrongCurrent": "PIN lama salah. Coba lagi.",
-      "done": "PIN kamu berhasil diganti."
+      "done": "PIN kamu sudah diganti",
+      "doneBody": "Masuk pakai PIN baru mulai sekarang."
     },
     "reset": {
-      "title": "Atur Ulang PIN",
-      "chooseUser": "Pilih pengguna yang lupa PIN-nya",
-      "noUsers": "Tidak ada pengguna lain di perangkat ini.",
-      "handOver": "Serahkan perangkat ke {name}. Mereka yang mengetik PIN baru — kamu tidak akan melihatnya.",
-      "done": "PIN {name} berhasil diatur ulang.",
-      "denied": "Hanya pemilik utama yang bisa mengatur ulang PIN pemilik utama lain."
+      "noUsers": "Belum ada karyawan lain di HP ini.",
+      "done": "PIN baru sudah dibuat",
+      "denied": "Hanya pemilik utama yang bisa membuat PIN baru untuk pemilik utama lain."
     },
     "unlock": {
-      "title": "Buka Kunci PIN",
-      "chooseUser": "Pilih pengguna yang terkunci",
-      "noneLocked": "Tidak ada pengguna yang terkunci.",
-      "confirm": "Buka kunci PIN {name}? Mereka bisa langsung mencoba PIN lagi.",
-      "done": "PIN {name} berhasil dibuka.",
-      "notLocked": "PIN {name} sudah tidak terkunci."
+      "confirm": "Bisa langsung masuk dengan PIN lamanya.",
+      "done": "Kunci PIN sudah dibuka",
+      "notLocked": "PIN {name} sudah tidak terkunci"
     },
     "manage": {
       "unauthorizedTitle": "Perlu izin pemilik",
-      "unauthorizedBody": "Hanya pemilik toko yang bisa mengatur ulang atau membuka kunci PIN. Minta pemilik toko."
-    }
+      "unauthorizedBody": "Hanya pemilik toko yang bisa mengatur PIN karyawan."
+    },
+    "signIn": "Masuk",
+    "lockedOutTitle": "PIN kamu terkunci",
+    "forgotTitle": "Lupa PIN?",
+    "staff": {
+      "title": "PIN karyawan",
+      "resetTitle": "Buat PIN baru",
+      "unlock": "Buka kunci PIN",
+      "reset": "Buat PIN baru",
+      "handedOver": "Lanjut",
+      "handOverTitle": "Berikan HP ke {name}",
+      "handOverBody": "Biar {name} sendiri yang mengetik PIN barunya.",
+      "finish": "Selesai",
+      "resetDoneBody": "{name} sudah bisa masuk dengan PIN baru.",
+      "unlockDoneBody": "{name} sudah bisa masuk lagi.",
+      "failedTitle": "Belum berhasil",
+      "unlockConfirmTitle": "Buka kunci PIN {name}?",
+      "lockedBody": "Masih ingat PIN lamanya? Cukup buka kuncinya."
+    },
+    "noPinTitle": "Belum ada PIN",
+    "noPinBody": "Minta pemilik toko membuatkan PIN untukmu.",
+    "saving": "Menyimpan PIN…"
   },
   "enroll": {
-    "title": "Daftarkan Perangkat Ini",
-    "instruction": "Masuk dengan akun kamu. Perangkat ini akan terdaftar untuk toko kamu.",
+    "title": "Daftarkan HP ini",
+    "progress": "{step} dari {total}",
+    "credentialsTitle": "Masuk dengan akun pemilik",
+    "instruction": "Cukup sekali di HP ini. Pastikan ada internet.",
     "identifierField": "Nama akun",
     "passwordField": "Kata sandi",
+    "passwordTooShort": "Kata sandi minimal {min} karakter.",
     "submit": "Masuk",
-    "needsConnection": "Pendaftaran perangkat butuh koneksi internet.",
-    "success": "Perangkat berhasil didaftarkan"
+    "storeTitle": "Pilih toko",
+    "nameTitle": "Hampir selesai",
+    "storeLabel": "Toko",
+    "account": "Akun {tenant}",
+    "deviceNameField": "Nama HP",
+    "deviceNamePlaceholder": "Contoh: HP Kasir 1",
+    "bind": "Daftarkan ke {store}",
+    "bindWithoutStore": "Daftarkan",
+    "pickStoreFirst": "Pilih tokonya dulu.",
+    "nameDeviceFirst": "Kasih nama HP-nya dulu.",
+    "needsConnection": "Belum ada internet. Sambungkan dulu, lalu coba lagi.",
+    "wrongCredentials": "Nama akun atau kata sandi salah. Coba lagi.",
+    "notOwner": "Akun ini bukan akun pemilik.",
+    "success": "Pendaftaran selesai",
+    "successStore": "Terdaftar di",
+    "successNext": "Berikutnya, pilih siapa yang pakai.",
+    "finish": "Lanjut",
+    "discardTitle": "Batalkan pendaftaran?",
+    "discardMessage": "Yang sudah kamu isi akan hilang.",
+    "discard": "Batalkan",
+    "keepEditing": "Lanjut isi"
   },
   "revoked": {
     "title": "Perangkat Diblokir",
@@ -68,5 +113,61 @@
     "pinLockedOut": "PIN terkunci",
     "pinLockoutCleared": "Kunci PIN dibuka",
     "permissionDenied": "Akses ditolak"
+  },
+  "staff": {
+    "title": "Karyawan",
+    "add": "Tambah karyawan",
+    "addTitle": "Karyawan baru",
+    "editTitle": "Ubah karyawan",
+    "name": "Nama",
+    "nameHint": "Nama ini tampil saat memilih akun di HP toko.",
+    "roles": "Tugas",
+    "rolesHint": "Boleh pilih lebih dari satu.",
+    "roleHint": {
+      "cashier": "Terima HP, atur harga, dan serahkan HP ke pelanggan",
+      "technician": "Kerjakan servisan, termasuk foto sebelum dan sesudah",
+      "storeOwner": "Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan"
+    },
+    "save": "Simpan",
+    "problem": {
+      "nameMissing": "Tulis namanya dulu.",
+      "nameTooLong": "Namanya kepanjangan. Maksimal 64 huruf.",
+      "nameTaken": "Nama ini sudah dipakai karyawan lain. Tambahkan nama belakang biar beda.",
+      "roleMissing": "Pilih tugasnya dulu."
+    },
+    "failure": {
+      "offline": "Butuh internet untuk mengubah karyawan. Sambungkan HP, lalu ulangi.",
+      "denied": "Kamu tidak bisa mengubah karyawan ini. Minta pemilik utama.",
+      "lastOwner": "Harus tetap ada satu pemilik utama.",
+      "rateLimited": "Sudah terlalu banyak perubahan karyawan hari ini. Coba lagi besok.",
+      "unexpected": "Perubahannya belum tersimpan. Coba lagi sebentar lagi."
+    },
+    "you": "Kamu",
+    "noPin": "Belum ada PIN",
+    "inactive": "Nonaktif",
+    "inactiveSection": "Nonaktif",
+    "empty": "Belum ada karyawan lain",
+    "emptyBody": "Tambahkan karyawan supaya mereka bisa masuk dengan PIN sendiri.",
+    "addedTitle": "{name} sudah ditambahkan",
+    "addedBody": "Kalau dia ada di sini, berikan HP supaya dia buat PIN sendiri.",
+    "makePinNow": "Buat PIN",
+    "later": "Nanti saja",
+    "notYetHere": "{name} akan muncul di HP ini setelah tersinkron. Buat PIN-nya nanti lewat PIN karyawan.",
+    "makePin": "Buat PIN",
+    "deactivate": "Nonaktifkan karyawan",
+    "deactivateTitle": "Nonaktifkan {name}?",
+    "deactivateBody": "Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum terkirim akan ditolak. Riwayat kerjanya tetap ada.",
+    "deactivateConfirm": "Nonaktifkan",
+    "inactiveBody": "Dia tidak bisa masuk sampai diaktifkan lagi.",
+    "reactivate": "Aktifkan lagi",
+    "saved": "Perubahan tersimpan.",
+    "deactivated": "{name} sudah dinonaktifkan.",
+    "reactivated": "{name} aktif lagi. Kalau lupa PIN-nya, buat PIN baru lewat PIN karyawan.",
+    "settingsSummary": "Tambah, ubah tugas, atau nonaktifkan",
+    "discardTitle": "Buang perubahan?",
+    "discardMessage": "Perubahan yang belum disimpan akan hilang.",
+    "discard": "Buang",
+    "keepEditing": "Lanjut ubah",
+    "makePinHint": "Belum bisa masuk karena belum punya PIN."
   }
 }

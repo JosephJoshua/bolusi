@@ -17,6 +17,7 @@ import {
   parseIntakeDraft,
   acceptsRupiahText,
   parseRupiah,
+  phoneText,
   readyAtFor,
   repairAbilities,
   restOfChecksOk,
@@ -469,6 +470,13 @@ describe('money and dates', () => {
     expect(acceptsRupiahText('10000000000000')).toBe(false);
     expect(acceptsRupiahText('')).toBe(true);
     expect(acceptsRupiahText('Rp 5.000')).toBe(true);
+  });
+
+  test('a phone field keeps digits, spaces, dashes and a leading plus only', () => {
+    expect(phoneText('081234567890.')).toBe('081234567890');
+    expect(phoneText('+62 812-3456-7890')).toBe('+62 812-3456-7890');
+    expect(phoneText('0812,34*56#78(90)N/')).toBe('081234567890');
+    expect(phoneText('08+12')).toBe('0812');
   });
 
   test('ready dates land at the end of the store day', () => {

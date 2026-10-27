@@ -359,6 +359,14 @@ export function acceptsRupiahText(text: string): boolean {
   return text.replace(/\D/g, '') === '' || parseRupiah(text) !== null;
 }
 
+/**
+ * What a phone field keeps of what was typed or pasted: digits, spaces and dashes, and a "+" only
+ * at the start. Android's phone keypad also offers ". , ( ) * # N /", which no number here needs.
+ */
+export function phoneText(text: string): string {
+  return text.replace(/[^\d\s+-]/g, '').replace(/(?!^)\+/g, '');
+}
+
 /** The signed amount a line contributes: discounts subtract. Adjustments are entered signed. */
 export function signedAmount(kind: QuoteLineKind, amount: number): number {
   return kind === 'discount' ? -Math.abs(amount) : amount;

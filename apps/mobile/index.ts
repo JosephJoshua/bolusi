@@ -25,9 +25,11 @@ import {
   repairMediaSeamsFor,
   type RepairMediaSeams,
 } from './src/bootstrap/repair.js';
+import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
+import { createFetchStaffAdmin } from './src/bootstrap/staff-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root, type RootProps } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
@@ -455,6 +457,25 @@ const expoPushRouter: PushRouterPort = {
 };
 
 /**
+ * THE NOTIFICATION PERMISSION SEAM (`src/push/permission.ts`), bound over `expo-notifications` here
+ * like the tap router. The "already asked" flag shares the prefs file the push token uses: UI state,
+ * not a secret.
+ */
+const NOTIFICATIONS_ASKED_KEY = 'bolusi.notifications_asked';
+
+const expoNotificationPermission: NotificationPermissionPort = {
+  async status() {
+    const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
+    return { granted, canAskAgain };
+  },
+  async request() {
+    await Notifications.requestPermissionsAsync();
+  },
+  readAsked: async () => (await fileLocaleStore.read(NOTIFICATIONS_ASKED_KEY)) !== null,
+  writeAsked: () => fileLocaleStore.write(NOTIFICATIONS_ASKED_KEY, '1'),
+};
+
+/**
  * Root's props, built ONCE. `Bootstrapped` calls `Root(...)` as a function, so Root's hooks run in
  * this component and every prop built inline was a new object on every render. A seam that keys an
  * effect then re-fired it on every render: a fresh `capturePlatform` rebuilt the capture callbacks,
@@ -481,11 +502,18 @@ function buildRootProps(): RootProps {
     // notification deep-links into the reachable shell route.
     createPushRegistration,
     pushRouter: expoPushRouter,
+    notificationPermission: expoNotificationPermission,
     // THE PIN-VERIFIER POST TRANSPORT (api/02-auth §5.4; task 186a-2). Bound here for the same reason
     // `postToken` is: the fetch wire + the SecureStore device bearer, neither Node-safe. `Root` drains
     // it on `onBundleChecked` (every online bundle answer), so a locally-applied PIN change reaches the server and
     // every other device (§5.2). A fresh keystore per call reads the bearer at call time (§7.3).
     uploadPinVerifier: createFetchPinVerifierUpload({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+    }),
+    // THE OWNER'S STAFF CALLS (owner decision 2026-10-27): online-only `POST/PATCH /v1/users…` as the
+    // signed-in owner, on the same per-call device bearer.
+    staffAdmin: createFetchStaffAdmin({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
     }),

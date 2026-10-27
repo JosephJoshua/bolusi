@@ -225,12 +225,12 @@ describe('media retry (06 §5.2 (e)) — the row, and the producer behind it', (
     await signIn(screen);
     await openSyncStatus(screen);
 
-    // The row itself is the first half of the finding: before this task the media queue was fed the
-    // literal `[]`, so this node could not exist on any device in any state.
-    expect(screen.query(`sync-media-${MEDIA_ID}`)).not.toBeNull();
+    // The section itself is the first half of the finding: before this task the media queue was fed
+    // the literal `[]`, so this node could not exist on any device in any state.
+    expect(screen.query('sync-media-section')).not.toBeNull();
     expect(media.manualRequests).toHaveLength(0);
 
-    fireOn(screen, `sync-media-retry-${MEDIA_ID}`);
+    fireOn(screen, 'sync-media-retry');
     await settle();
 
     // THE ASSERTION THAT A COMPONENT TEST CANNOT MAKE: the real client the composition root built
@@ -268,12 +268,7 @@ describe('media retry (06 §5.2 (e)) — the row, and the producer behind it', (
     // NULL`): exactly ONE, the attached row. Reading the rendered text, not the input, so this is the
     // number a shop owner actually sees. `media.length` (the pre-fix value) would read 2.
     expect(textsIn(screen.get('sync-counter-media')).join(' ')).toContain('1');
-
-    // And the list agrees with the counter — the attached row is there, the orphan is not. A queue
-    // that showed a row the counter did not count would promise an upload the drain never makes
-    // (`repository.ts` selects on the same `IS NOT NULL`, "load-bearing security, not tidiness").
-    expect(screen.query(`sync-media-${ATTACHED}`)).not.toBeNull();
-    expect(screen.query(`sync-media-${ORPHAN}`)).toBeNull();
+    expect(textsIn(screen.get('sync-counter-media')).join(' ')).not.toContain('2');
   });
 });
 

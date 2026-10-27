@@ -223,7 +223,6 @@ export function WaitForPartsStep({
         value={text}
         onChangeText={setText}
         multiline
-        autoFocus
         testID={`${testID}.text`}
       />
     </FlowScreen>

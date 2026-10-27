@@ -3,12 +3,14 @@ import { describe, expect, test } from 'vitest';
 
 import {
   CHANGE_PIN_START,
-  changeMessageKey,
+  changeFeedbackKey,
+  changePromptKey,
   changePadState,
   changePinFailure,
   changePinReducer,
   type ChangePinPhase,
 } from './change-pin.model.js';
+import { NEW_PIN_START } from './new-pin.js';
 
 /** Drive the reducer through a list of events from a start phase. */
 function run(
@@ -130,34 +132,33 @@ describe('changePadState — the hard lock is the only state that disables the k
   });
 });
 
-describe('changeMessageKey — key mapping per phase (never asserts copy)', () => {
-  test('each current-step feedback resolves its key', () => {
-    expect(changeMessageKey(CHANGE_PIN_START)).toBe('auth.pin.change.enterCurrent');
-    expect(changeMessageKey({ kind: 'current', feedback: 'wrongCurrent' })).toBe(
+describe('the question and feedback per phase — key mapping (never asserts copy)', () => {
+  test('the current step asks for the current PIN, and says why a try failed', () => {
+    expect(changePromptKey(CHANGE_PIN_START)).toBe('auth.pin.change.enterCurrent');
+    expect(changeFeedbackKey(CHANGE_PIN_START)).toBeNull();
+    expect(changeFeedbackKey({ kind: 'current', feedback: 'wrongCurrent' })).toBe(
       'auth.pin.change.wrongCurrent',
     );
-    expect(changeMessageKey({ kind: 'current', feedback: 'locked' })).toBe('auth.pin.lockedOut');
-    expect(changeMessageKey({ kind: 'current', feedback: 'rateLimited' })).toBe(
+    expect(changeFeedbackKey({ kind: 'current', feedback: 'locked' })).toBe('auth.pin.lockedOut');
+    expect(changeFeedbackKey({ kind: 'current', feedback: 'rateLimited' })).toBe(
       'core.errors.PIN_RATE_LIMITED',
     );
-    expect(changeMessageKey({ kind: 'current', feedback: 'error' })).toBe('core.errors.UNEXPECTED');
+    expect(changeFeedbackKey({ kind: 'current', feedback: 'error' })).toBe(
+      'core.errors.UNEXPECTED',
+    );
   });
 
-  test('the new-PIN step delegates to the shared sub-flow’s keys', () => {
-    expect(
-      changeMessageKey({
-        kind: 'new',
-        currentPin: '1',
-        entry: { kind: 'first', afterMismatch: false },
-      }),
-    ).toBe('auth.pin.setup.title');
-    expect(
-      changeMessageKey({ kind: 'new', currentPin: '1', entry: { kind: 'repeat', first: '2' } }),
-    ).toBe('auth.pin.setup.repeat');
+  test('the new-PIN step delegates to the shared sub-flow', () => {
+    const first = { kind: 'new', currentPin: '1', entry: NEW_PIN_START } as const;
+    expect(changePromptKey(first)).toBe('auth.pin.setup.title');
+    expect(changeFeedbackKey(first)).toBe('auth.pin.setup.hint');
+    const repeat = { kind: 'new', currentPin: '1', entry: { kind: 'repeat', first: '2' } } as const;
+    expect(changePromptKey(repeat)).toBe('auth.pin.setup.repeat');
+    expect(changeFeedbackKey(repeat)).toBeNull();
   });
 
-  test('submitting and done show no pad message', () => {
-    expect(changeMessageKey({ kind: 'submitting', currentPin: '1', newPin: '2' })).toBeNull();
-    expect(changeMessageKey({ kind: 'done' })).toBeNull();
+  test('submitting and done ask nothing', () => {
+    expect(changePromptKey({ kind: 'submitting', currentPin: '1', newPin: '2' })).toBeNull();
+    expect(changePromptKey({ kind: 'done' })).toBeNull();
   });
 });

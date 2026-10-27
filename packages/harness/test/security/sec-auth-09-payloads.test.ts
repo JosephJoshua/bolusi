@@ -33,6 +33,8 @@ import {
   resetPin,
   runPushPhase,
   setFirstPin,
+  writeMeta,
+  FIRST_PIN_USER_META_KEY,
   type PinFlowDeps,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
@@ -69,6 +71,8 @@ describe('I-13 PIN hash material never reaches the operation log or any pushed o
 
       // The cycle, through the production command layer (each flow runs the real permission check,
       // emits the real op, and writes the real verifier).
+      // The owner who enrolled this device is the one user allowed to make their own first PIN.
+      await writeMeta(fixture.db, FIRST_PIN_USER_META_KEY, fixture.ownerId);
       await setFirstPin(deps, { userId: fixture.ownerId, pin: OWNER_PIN });
       await capture(fixture.ownerId);
       await changePin(deps, {

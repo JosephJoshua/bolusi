@@ -44,7 +44,7 @@ export function UnauthorizedState({
   return (
     <View testID={testID} style={styles.root}>
       <Icon name="unauthorized" size={size.iconState} color={color.textMuted} />
-      <Text testID={`${testID}.title`} numberOfLines={2} style={styles.title}>
+      <Text testID={`${testID}.title`} style={styles.title}>
         {title}
       </Text>
       {hint === undefined ? null : (
@@ -52,7 +52,7 @@ export function UnauthorizedState({
         // (07-i18n §7.2), two Indonesian sentences that fill two `bodySm` lines at 360 dp and overflow
         // at the 1.3× scale §6.5 requires — truncating the "what to do" reads as "nothing here", the
         // FR-1036 trap. Matches EmptyState (item 13) and Banner (§3.6, task 23): one shared line budget.
-        <Text testID={`${testID}.hint`} numberOfLines={3} style={styles.hint}>
+        <Text testID={`${testID}.hint`} style={styles.hint}>
           {hint}
         </Text>
       )}
