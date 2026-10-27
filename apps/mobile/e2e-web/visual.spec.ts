@@ -60,7 +60,15 @@ const MATRIX: readonly Row[] = [
   { screen: 'pin', state: 'entry', testId: 'pin-pad', text: PROBE_USER },
   { screen: 'pin', state: 'wrong', testId: 'pin-pad.message' },
   { screen: 'pin', state: 'delayed', testId: 'pin-pad.message' },
-  { screen: 'pin', state: 'lockedOut', testId: 'pin-forgot' },
+  { screen: 'pin', state: 'lockedOut', testId: 'pin-locked-out' },
+  { screen: 'pin', state: 'needsFirstPin', testId: 'pin-needs-first', text: 'Belum ada PIN' },
+
+  // First PIN for a colleague with none, and the owner's staff PIN list (with a locked colleague).
+  { screen: 'pin-setup', state: 'interactive', testId: 'pin-setup-pad' },
+  { screen: 'staff-pins', state: 'ready', testId: 'staff-pin-list' },
+  { screen: 'staff-pins', state: 'many', testId: 'staff-pin-search' },
+  { screen: 'staff-pins', state: 'unauthorized', testId: 'staff-pin-screen' },
+  { screen: 'switcher', state: 'many', testId: 'switcher-search' },
 
   // Settings — the language surface (interaction covered separately).
   { screen: 'settings', state: 'ready', testId: 'settings-screen', text: 'Bahasa' },
@@ -68,23 +76,23 @@ const MATRIX: readonly Row[] = [
   // Sync-status — healthy / saved-here / photos-pending / offline / actively-syncing / needs-attention.
   { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
-  // task 147: ops sent, 3 photos queued. The headline reads "Foto Belum Terkirim" (Photos Not Sent
-  // Yet), NOT "Semua Terkirim" — the exact string the browser lane now witnesses over the counter.
+  // task 147: ops sent, 3 photos queued. The headline reads "Foto belum terkirim" (Photos not sent
+  // yet), NOT "Semua sudah terkirim" — the exact string the browser lane now witnesses over the counter.
   {
     screen: 'sync-status',
     state: 'photosPending',
     testId: 'sync-counter-media',
-    text: 'Foto Belum Terkirim',
+    text: 'Foto belum terkirim',
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   // task 144 item 5: the loop actively pushing — the fifth chip state, previously never screenshotted.
-  // Keyed on the syncing-specific header title ("Sedang Mengirim"), so a title regression (the 126/147
+  // Keyed on the syncing-specific headline ("Sedang mengirim"), so a title regression (the 126/147
   // bug class) reds this row rather than passing on a bare testID.
   {
     screen: 'sync-status',
     state: 'syncing',
     testId: 'sync-reassurance',
-    text: 'Sedang Mengirim',
+    text: 'Sedang mengirim',
   },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
   // The §8.4-item-4 disclosure (task 130). Probed on the REASON node, not the section: the section
@@ -188,13 +196,13 @@ test('Settings language toggle switches labels between Indonesian and English', 
   await open(page, 'settings', 'ready');
   await expect(page.getByText('Bahasa', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Language', { exact: true })).toHaveCount(0);
-  await expect(page.getByTestId('settings-locale-active-id')).toBeVisible();
+  await expect(page.getByTestId('settings-locale-id.check')).toBeVisible();
 
   await page.getByTestId('settings-locale-en').click();
 
   await expect(page.getByText('Language', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Bahasa', { exact: true })).toHaveCount(0);
-  await expect(page.getByTestId('settings-locale-active-en')).toBeVisible();
+  await expect(page.getByTestId('settings-locale-en.check')).toBeVisible();
   await shoot(page, 'settings-ready-en');
 });
 
@@ -234,7 +242,7 @@ test('the running shell opens Settings from its header — the language escape h
   // REAL content, not merely a testID: the active-locale marker plus the device-identity readout the
   // screen exists to show ("so the shop can read its own device's identity to an owner over the
   // phone"). A blank Settings would satisfy the testID and fail these.
-  await expect(page.getByTestId('settings-locale-active-id')).toBeVisible();
+  await expect(page.getByTestId('settings-locale-id.check')).toBeVisible();
   await expect(page.getByText('dev_7Q2K9Z4M', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Servis Ponsel Maju', { exact: true }).first()).toBeVisible();
   await shoot(page, 'app-settings');

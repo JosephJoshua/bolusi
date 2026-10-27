@@ -178,6 +178,19 @@ Agreed with the owner before building printing.
 - **Code:** one shared printing layer (core `print`: document model, HTML and
   ESC/P renderers) that POS receipts will reuse; slips are module templates.
 
+## Who makes a first PIN (2026-10-26)
+
+A phone that is offline or behind can show "no PIN yet" for someone who made one
+elsewhere, so a self-made first PIN there would let a coworker sign in as them.
+
+- **The owner who set up the phone** makes their own first PIN on it, right after
+  setup, and only if the server has no PIN for them.
+- **Everyone else** gets their first PIN from an owner (Settings → PIN karyawan),
+  typed by the person themselves. Their name in the switcher says "Belum ada PIN"
+  and tells them to ask an owner.
+- Phones set up before this change have no such owner on record, so an owner
+  without a PIN there gets theirs from another owner.
+
 ## Decision
 
 The first shippable v1 workflow is the **complete repair journey**, not an intake-only prototype or a retail sale: customer/device intake, condition and evidence, diagnosis and quote, technician assignment and parts consumption, QC, pickup and handover, payment, printed repair order, and warranty handling. Deliver this through smaller vertical slices with an end-to-end offline/sync acceptance case before calling the milestone shippable. Build the minimum real customer, inventory/stock, and finance/payment foundations the journey needs; do not substitute fake stock deductions or unbalanced payment records. Standalone retail POS checkout is **not** a prerequisite and is deferred to a later scope decision.

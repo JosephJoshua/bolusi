@@ -425,6 +425,9 @@ export function Root({
                 // refresh that landed a tighter timeout in the database while the session kept the
                 // old one is a setting that "took effect" nowhere the user could see.
                 await sessionRef.current?.refreshSettings();
+                // The bundle may carry new staff or PINs made elsewhere (or reset by an owner), so the
+                // switcher's roster and "no PIN yet" marks are re-read with it.
+                await sessionRef.current?.refresh();
               },
           // Any bundle answer, a 304 included, means the server was just reached (§5.2), so this is
           // the moment to POST any PIN verifier queued by a local change (§5.4). It must not wait for
@@ -895,9 +898,17 @@ export function Root({
     if (app === null) return;
     let cancelled = false;
     const reread = (): void => {
-      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS).then((rows) => {
-        if (!cancelled) setSyncReads(rows);
-      });
+      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS)
+        .then((rows) => {
+          if (!cancelled) setSyncReads(rows);
+        })
+        .catch((error: unknown) => {
+          // The screen keeps its last rows and the next bump reads again. A read that lands after
+          // the database closed must not become an unhandled rejection.
+          consoleDiagnostics.warn('sync status read failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     };
     reread();
     const unsubscribe = app.invalidation.subscribe(reread);
@@ -1016,6 +1027,13 @@ export function Root({
                 .submitPin(userId, pin)
                 .then((outcome) => outcome.kind === 'opened')
                 .catch(() => false)
+        }
+        // First PIN (api/02-auth §6.6): the owner who enrolled this phone makes their PIN, then is signed
+        // in with it. Staff get their first PIN from an owner (Settings, staff PINs).
+        onSetFirstPin={(userId, pin) =>
+          session === null
+            ? Promise.reject(new Error('setFirstPin: no session controller'))
+            : session.setFirstPin(userId, pin)
         }
         // Change PIN (api/02-auth §6.6; task 186a). Delegates to the session controller, which runs
         // the real `auth.changePin` flow and REJECTS with its DomainError — propagated to the screen's

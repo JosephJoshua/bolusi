@@ -10,37 +10,37 @@
  *    whether they just lost the note they were typing. Answering it on the lock screen, before they
  *    ask, is what stops the shop from raising `idleLockSeconds` to its ceiling.
  *
- *  - The grid rides `List` via `toGridRows` (see model.ts) — virtualized, because a shop with 30
- *    staff must not mount 30 avatars.
+ *  - A list, not a grid of discs: names never truncate, the role and status ("PIN terkunci") fit
+ *    beside them, and it stays virtualized for a store with 30 staff. A search box joins once the
+ *    list outgrows a screen (`SWITCHER_SEARCH_MIN`).
  */
-import { t, translateRoleKey } from '@bolusi/i18n';
+import { t } from '@bolusi/i18n';
 import {
   AppShell,
-  Avatar,
   Banner,
+  Chip,
   List,
+  SearchField,
   SyncChip,
-  color,
   space,
-  touch,
-  type,
   type ListState,
   type SyncChipState,
 } from '@bolusi/ui';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import type { SwitcherMode } from '../../navigation/zone.js';
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
-  initialsOf,
+  filterUsers,
   SWITCHER_EMPTY_HINT_KEY,
   SWITCHER_LOCK_KEY,
-  toGridRows,
-  type SwitcherGridRow,
+  SWITCHER_SEARCH_MIN,
   type SwitcherState,
   type SwitcherUser,
 } from './model.js';
+import { UserRow } from './UserRow.js';
 
 export interface SwitcherScreenProps {
   readonly state: SwitcherState;
@@ -77,6 +77,10 @@ export interface SwitcherScreenProps {
   /** Count of unsent `local` ops — the `pending` chip shows it and its a11y label announces it. */
   readonly pendingCount: number;
   readonly onOpenSync: () => void;
+  /** Who is signed in when the switcher was opened from a session; null on the lock or at start. */
+  readonly currentUserId?: string | null | undefined;
+  /** Users whose PIN is locked after too many wrong tries, so they know before they tap. */
+  readonly lockedUserIds?: ReadonlySet<string> | undefined;
 }
 
 export function SwitcherScreen({
@@ -90,8 +94,17 @@ export function SwitcherScreen({
   syncChip,
   pendingCount,
   onOpenSync,
+  currentUserId = null,
+  lockedUserIds = NO_IDS,
 }: SwitcherScreenProps): React.JSX.Element {
-  const listState: ListState<SwitcherGridRow> =
+  const [query, setQuery] = useState('');
+  const users = state.kind === 'ready' ? state.users : [];
+  const searchable = users.length >= SWITCHER_SEARCH_MIN;
+  const shown = useMemo(
+    () => (searchable ? filterUsers(users, query) : users),
+    [searchable, users, query],
+  );
+  const listState: ListState<SwitcherUser> =
     state.kind === 'loading'
       ? { kind: 'loading' }
       : state.kind === 'empty'
@@ -137,7 +150,12 @@ export function SwitcherScreen({
                   testID: 'switcher-unauthorized',
                 },
               }
-            : { kind: 'ready', items: toGridRows(state.users) };
+            : shown.length === 0
+              ? {
+                  kind: 'empty',
+                  empty: { title: t('auth.switcher.noMatches'), testID: 'switcher-no-matches' },
+                }
+              : { kind: 'ready', items: shown };
 
   return (
     <AppShell
@@ -159,105 +177,80 @@ export function SwitcherScreen({
       }
       testID="switcher-screen"
     >
-      <Text style={styles.instruction} testID="switcher-instruction">
-        {t('auth.switcher.instruction')}
-      </Text>
-      <List
-        state={listState}
-        keyExtractor={(row) => row.key}
-        renderRow={(row) => <GridRow row={row} onSelect={onSelect} />}
-        testID="switcher-list"
-      />
+      {searchable ? (
+        <View style={styles.search}>
+          <SearchField
+            placeholder={t('auth.switcher.search')}
+            accessibilityLabel={t('core.action.search')}
+            clearLabel={t('core.action.clearSearch')}
+            value={query}
+            onChangeText={setQuery}
+            testID="switcher-search"
+          />
+        </View>
+      ) : null}
+      <View style={styles.list}>
+        <List
+          state={listState}
+          keyExtractor={(user) => user.id}
+          renderRow={(user) => (
+            <UserRow
+              id={user.id}
+              name={user.name}
+              roleKeys={user.roleKeys}
+              status={statusChip(user, currentUserId, lockedUserIds)}
+              onPress={() => onSelect(user)}
+              testID={`switcher-user-${user.id}`}
+            />
+          )}
+          testID="switcher-list"
+        />
+      </View>
     </AppShell>
   );
 }
 
-/** One grid row — up to two cards, then a spacer so an odd count leaves a gap, not a ghost. */
-function GridRow({
-  row,
-  onSelect,
-}: {
-  readonly row: SwitcherGridRow;
-  readonly onSelect: (user: SwitcherUser) => void;
-}): React.JSX.Element {
-  return (
-    <View style={styles.row}>
-      {row.users.map((user) => (
-        <UserCard key={user.id} user={user} onSelect={onSelect} />
-      ))}
-      {row.users.length === 1 ? <View style={styles.cardSlot} testID="switcher-spacer" /> : null}
-    </View>
-  );
+/**
+ * What the person should know before tapping: their PIN is locked (only the owner can open it), they
+ * have no PIN yet (they will make one), or they are the one already signed in.
+ */
+function statusChip(
+  user: SwitcherUser,
+  currentUserId: string | null,
+  lockedUserIds: ReadonlySet<string>,
+): React.JSX.Element | undefined {
+  if (lockedUserIds.has(user.id)) {
+    return (
+      <Chip
+        label={t('auth.switcher.locked')}
+        icon="lock"
+        tone="warning"
+        testID={`switcher-user-locked-${user.id}`}
+      />
+    );
+  }
+  if (user.needsFirstPin) {
+    return (
+      <Chip label={t('auth.switcher.noPin')} icon="pin" testID={`switcher-user-nopin-${user.id}`} />
+    );
+  }
+  if (user.id === currentUserId) {
+    return (
+      <Chip
+        label={t('auth.switcher.current')}
+        icon="success"
+        tone="success"
+        testID={`switcher-user-current-${user.id}`}
+      />
+    );
+  }
+  return undefined;
 }
 
-function UserCard({
-  user,
-  onSelect,
-}: {
-  readonly user: SwitcherUser;
-  readonly onSelect: (user: SwitcherUser) => void;
-}): React.JSX.Element {
-  // design-system §8.2: the top-privilege role name(s) sit UNDER the name in muted bodySm. A future
-  // custom role with no catalog row resolves to null (translateRoleKey), so it drops out here rather
-  // than printing a raw key; ties on privilege list all, joined — the model already de-duplicated.
-  const roleLabel = user.roleKeys
-    .map((key) => translateRoleKey(key))
-    .filter((label): label is string => label !== null)
-    .join(', ');
-  return (
-    <Pressable
-      style={styles.cardSlot}
-      onPress={() => onSelect(user)}
-      accessibilityRole="button"
-      accessibilityLabel={user.name}
-      testID={`switcher-user-${user.id}`}
-      android_ripple={RIPPLE}
-    >
-      <View style={styles.card}>
-        <Avatar userId={user.id} initials={initialsOf(user.name)} size="switcher" />
-        <Text style={styles.name} numberOfLines={2} testID={`switcher-user-name-${user.id}`}>
-          {user.name}
-        </Text>
-        {roleLabel === '' ? null : (
-          <Text style={styles.role} numberOfLines={1} testID={`switcher-user-role-${user.id}`}>
-            {roleLabel}
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
-}
-
-const RIPPLE = { color: color.surfaceAlt } as const;
+const NO_IDS: ReadonlySet<string> = new Set();
 
 const styles = StyleSheet.create({
-  instruction: {
-    ...type.bodySm,
-    color: color.textMuted,
-    marginBottom: space.lg,
-    textAlign: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: space.md,
-  },
-  cardSlot: {
-    flex: 1,
-  },
-  card: {
-    alignItems: 'center',
-    gap: space.sm,
-    paddingVertical: space.lg,
-    minHeight: touch.row,
-  },
-  name: {
-    ...type.body,
-    color: color.text,
-    textAlign: 'center',
-  },
-  role: {
-    ...type.bodySm,
-    color: color.textMuted,
-    textAlign: 'center',
-  },
+  search: { marginBottom: space.sm },
+  // Rows run edge to edge, like every list; their text lines up with the search field.
+  list: { flex: 1, marginHorizontal: -space.lg },
 });

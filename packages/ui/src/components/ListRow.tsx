@@ -1,10 +1,8 @@
 /**
  * ListRow (design-system §3.4) — the default collection surface.
  *
- * The fixed height is a PERFORMANCE CONTRACT, not a style choice (§3.4, §7): `FlatList` gets
- * `getItemLayout` from it, which is what keeps long lists cheap on the 2 GB target (§0). A row
- * that grows to fit its content silently removes that guarantee — hence single-line text with
- * tail ellipsis rather than wrapping.
+ * Text wraps instead of truncating (design guide §4/§9): a long name or a 1.3x font grows the row
+ * from its 64 dp default rather than cutting a word off.
  */
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -30,13 +28,17 @@ export interface ListRowProps {
    * Only meaningful with `onPress`.
    */
   readonly selected?: boolean | undefined;
+  /** The primary text is the thing to find (a person's name), so it is bold. */
+  readonly emphasis?: boolean | undefined;
+  /** A status under the text (a chip), so it never squeezes a long name the way a trailing chip does. */
+  readonly below?: ReactNode;
   readonly testID?: string | undefined;
 }
 
 const styles = StyleSheet.create({
   base: {
-    height: touch.row,
-    minHeight: touch.rowMin,
+    minHeight: touch.row,
+    paddingVertical: space.sm,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.lg,
@@ -54,6 +56,7 @@ const styles = StyleSheet.create({
   primary: { ...type.body, color: color.text },
   primarySelected: { fontWeight: '600' },
   secondary: { ...type.bodySm, color: color.textMuted },
+  below: { flexDirection: 'row', marginTop: space.xs },
   trailing: { flexDirection: 'row', alignItems: 'center', marginLeft: space.sm },
 });
 
@@ -65,6 +68,8 @@ export function ListRow({
   onPress,
   showChevron = false,
   selected,
+  emphasis = false,
+  below,
   testID = 'ui.listRow',
 }: ListRowProps): React.JSX.Element {
   const content = (
@@ -78,21 +83,19 @@ export function ListRow({
       <View style={styles.texts}>
         <Text
           testID={`${testID}.primary`}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={[styles.primary, selected === true ? styles.primarySelected : null]}
+          style={[styles.primary, selected === true || emphasis ? styles.primarySelected : null]}
         >
           {primaryText}
         </Text>
         {secondaryText === undefined ? null : (
-          <Text
-            testID={`${testID}.secondary`}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={styles.secondary}
-          >
+          <Text testID={`${testID}.secondary`} style={styles.secondary}>
             {secondaryText}
           </Text>
+        )}
+        {below === undefined ? null : (
+          <View testID={`${testID}.below`} style={styles.below}>
+            {below}
+          </View>
         )}
       </View>
 
