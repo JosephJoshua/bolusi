@@ -33,7 +33,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ENTRIES, findEntry } from './gallery.js';
-import { DEMO_REPAIR_ROLES, type DemoRepairRole } from './repair-demo.js';
+import { DEMO_REPAIR_ROLES, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 
 /** Parse `?screen=&state=` from the browser URL. Empty when neither is present. */
 export function readTarget(search: string): {

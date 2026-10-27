@@ -1,6 +1,6 @@
 /**
  * The repair flows driven through the real screens in a browser, over the in-memory demo runtime
- * (`src/web/repair-demo.ts`): each test taps through a flow the way a counter person or technician
+ * (`packages/modules/src/repair/demo.ts`): each test taps through a flow the way a counter person or technician
  * would and asserts what the screen shows, with a screenshot per flow into `artifacts/repair/`.
  *
  * HONEST CEILING: a browser approximation of the phone screens. Device QA (camera, signature pad,
@@ -594,6 +594,19 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await shoot(page, 'dp-ticket-owner');
 });
 
+test('a cancelled servisan waiting for pickup offers no down payment', async ({ page }) => {
+  for (const role of ['counter', 'owner'] as const) {
+    await open(page, role);
+    await tap(page, 'repair.board.views.pickup');
+    await tap(page, 'repair.board.row.t-5');
+    await expect(page.getByTestId('repair.ticket.status')).toContainText('Dibatalkan');
+    await expect(page.getByTestId('repair.ticket.total')).toBeVisible();
+    await expect(page.getByTestId('repair.ticket.downPayment.record')).toHaveCount(0);
+    await page.getByTestId('repair.ticket.total').scrollIntoViewIfNeeded();
+    await shoot(page, `dp-cancelled-${role}`);
+  }
+});
+
 test('the counter prints the handover slip, and the next print is a reprint', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.views.pickup');
@@ -623,6 +636,29 @@ test('the counter prints the handover slip, and the next print is a reprint', as
   await tap(page, 'repair.ticket.action.print');
   await expect(page.getByTestId('repair.print.reprint')).toBeVisible();
   await shoot(page, 'print-step-reprint');
+});
+
+test('the counter sets the paper once in Settings, and printing uses it', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'ui.avatarButton');
+  await tap(page, 'shell-open-settings');
+  await tap(page, 'settings-print-paper');
+  await expect(page.getByTestId('repair.paper.choice')).toBeVisible();
+  await tap(page, 'repair.paper.choice.a5');
+  await shoot(page, 'print-paper');
+  await tap(page, 'repair.paper.back');
+  await tap(page, 'settings-screen.back');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.print');
+  await expect(page.getByTestId('repair.print.paper')).toHaveText('Kertas A5');
+  await shoot(page, 'print-step-paper');
+  const popup = page.waitForEvent('popup');
+  await tap(page, 'repair.print.primary');
+  const slip = await popup;
+  await slip.waitForLoadState();
+  expect(await slip.content()).toContain('size: 148mm 210mm');
+  await slip.close();
 });
 
 test('the owner sets what the slips print at the top', async ({ page }) => {

@@ -58,6 +58,10 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   not grids that eat the screen. Tap opens `PhotoViewer` (zoom, swipe, share).
 - Avatars and icons sit inside their bar with padding (36 dp disc), never
   touching its edges.
+- The counter PC app (`packages/ui-web`) is read closer and denser, so its
+  ladder is a step smaller: display 28, title 22, heading 17, body 15, small 14.
+  The 14 floor is the same. Mouse-first controls are 32 to 40 px tall; tables,
+  not cards, carry lists.
 
 ## 4. Alignment and spacing
 

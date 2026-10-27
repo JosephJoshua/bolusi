@@ -121,9 +121,11 @@ const styles = StyleSheet.create({
    * `flex: 1` would clamp the content to the viewport height and defeat scrolling entirely; the
    * screen would clip exactly as it did before. `flexGrow: 1` lets short content still fill the
    * viewport (so the centered empty / loading / error states stay centered) while tall content is
-   * free to exceed it and scroll.
+   * free to exceed it and scroll. The padding moves onto the measured view inside, so a field's
+   * measured position is its scroll position (keyboard.tsx).
    */
-  contentContainer: { flexGrow: 1, padding: space.lg },
+  scrollContainer: { flexGrow: 1 },
+  contentInner: { flexGrow: 1, padding: space.lg },
   /**
    * The plain slot is exactly the space between the header and the action bar. A list inside
    * windows its rows against this height; a slot that grew with its content (`flexGrow` alone)
@@ -131,10 +133,6 @@ const styles = StyleSheet.create({
    * action bar slid off screen.
    */
   contentFixed: { flex: 1, padding: space.lg },
-  // Scrolling, the padding moves onto the measured view inside, so a field's measured position
-  // is its scroll position (keyboard.tsx).
-  scrollContainer: { flexGrow: 1 },
-  contentInner: { flexGrow: 1, padding: space.lg },
   actionBar: {
     padding: space.lg,
     borderTopWidth: border.hairline,

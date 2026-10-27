@@ -28,16 +28,17 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 
 import { tn } from '../i18n.js';
-import { staleStepMessage, statusLabel } from '../labels.js';
+import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
 import {
   balanceAfterDownPayment,
   statusTone,
   type StaleStep,
   type TicketStatus,
 } from '../flows.js';
-import type { DeviceModelPhoto, DeviceModelRow } from '../device-models.js';
-import { specFacts, type SpecFactKey } from '../device-specs.js';
-import { useModelPhoto, useRepairQuery, useRepairThumbnail } from './runtime.js';
+import type { DeviceModelPhoto } from '../device-models.js';
+import { specFacts } from '../device-specs.js';
+import { useCatalogModel } from '../model-picker.js';
+import { useModelPhoto, useRepairThumbnail } from '../runtime.js';
 
 /**
  * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
@@ -183,19 +184,6 @@ export function PhotoThumb({
   }
 }
 
-/** The catalog model a brand and model name are, when the catalog surely has it (findDeviceModel). */
-export function useCatalogModel(brand: string, model: string): DeviceModelRow | null {
-  const query = useRepairQuery(
-    async (rt) =>
-      model.trim() === ''
-        ? null
-        : ((await rt.query('findDeviceModel', { brand: brand.trim(), model: model.trim() }))
-            .rows[0] ?? null),
-    `deviceModel:${brand.trim()}\u0000${model.trim()}`,
-  );
-  return query.status === 'ready' ? query.data : null;
-}
-
 /**
  * A catalog picture of a phone model, the whole phone shown uncropped. While it loads, or when there
  * is none (offline, not in the catalog), a plain phone glyph holds its place so rows do not jump.
@@ -246,17 +234,6 @@ export function CatalogPhoto({
   );
 }
 
-const SPEC_LABEL = {
-  memory: 'repair.spec.memory',
-  screen: 'repair.spec.screen',
-  chipset: 'repair.spec.chipset',
-  battery: 'repair.spec.battery',
-  port: 'repair.spec.port',
-  sim: 'repair.spec.sim',
-  cardSlot: 'repair.spec.cardSlot',
-  os: 'repair.spec.os',
-} as const satisfies Record<SpecFactKey, string>;
-
 /**
  * The catalog's specs for a ticket's phone, as the viewer needs them (`specFacts`): memory
  * variants for everyone, the inside of the phone for someone who repairs it. Nothing when the
@@ -282,7 +259,7 @@ export function DeviceSpecs({
         {facts.map((fact) => (
           <Fact
             key={fact.key}
-            label={tn(SPEC_LABEL[fact.key])}
+            label={tn(SPEC_FACT_KEY[fact.key])}
             // GSMArena's "No" for a phone without a card slot.
             value={fact.value === 'No' ? tn('repair.spec.none') : fact.value}
             testID={`${testID}.${fact.key}`}

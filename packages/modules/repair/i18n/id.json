@@ -74,7 +74,7 @@
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
-    "consequence": "Servisan dihentikan. Saat ambil HP, pelanggan cukup bayar biaya pembatalan. HP tetap di toko sampai diambil.",
+    "consequence": "Pelanggan cukup bayar biaya pembatalan saat ambil HP.",
     "fee": "Biaya pembatalan",
     "beforeWork": "Belum mulai dikerjakan",
     "afterWork": "Sudah mulai dikerjakan",
@@ -136,7 +136,7 @@
     "signAgain": "Ulangi tanda tangan",
     "signature": "Tanda tangan pelanggan",
     "signatureTitle": "Tanda tangan pelanggan",
-    "cancelled": "Servisan dibatalkan, biaya perbaikan tidak ditagih."
+    "cancelled": "Biaya perbaikan tidak ditagih."
   },
   "intake": {
     "discard": "Buang",
@@ -185,7 +185,7 @@
     "open": "Buka foto",
     "position": "{index} dari {total}",
     "share": "Simpan atau kirim",
-    "shareFailed": "Fotonya belum bisa disimpan. Coba lagi nanti.",
+    "shareFailed": "Foto gagal disimpan. Coba lagi.",
     "beforeN": "Sebelum {n}",
     "afterN": "Sesudah {n}"
   },
@@ -215,15 +215,15 @@
     "alreadyAgreed": "Pelanggan sudah setuju?",
     "changeReason": "Alasan perubahan",
     "waitingEvent": "Perubahan harga menunggu pelanggan",
-    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju.",
+    "waitsHint": "Kalau belum, total berubah setelah pelanggan setuju.",
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
     "refund": "Dikembalikan"
   },
   "problem": {
-    "complaint": "Keluhannya belum diisi.",
-    "customerName": "Isi nama pelanggan atau pilih yang sudah terdaftar.",
+    "complaint": "Keluhan belum diisi.",
+    "customerName": "Nama pelanggan belum diisi.",
     "deviceBrand": "Merek belum diisi.",
     "deviceModel": "Tipe belum diisi.",
     "photos": "Masih ada foto yang belum diambil.",
@@ -280,19 +280,19 @@
     "hide": "Sembunyikan"
   },
   "hint": {
-    "handover": "Ambil foto dan tanda tangan pelanggan dulu.",
+    "handover": "Ambil foto dan tanda tangan dulu.",
     "photo": "Ambil minimal satu foto dulu.",
     "reason": "Tulis alasannya dulu.",
     "priceLine": "Isi keterangan, harga, dan alasannya dulu.",
     "cancelFee": "Isi biaya pembatalannya dulu.",
-    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan.",
+    "discountOwner": "Diskon hanya bisa disetujui pemilik.",
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
     "downPaymentSame": "Jumlahnya masih sama."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
-    "message": "Foto dan catatan yang sudah kamu isi di sini akan hilang.",
+    "message": "Isian yang belum disimpan akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
   },
@@ -454,8 +454,11 @@
     "handoverAbout": "Tagihan sekaligus bukti HP sudah diambil.",
     "reprint": "Sudah dicetak {count} kali.",
     "paper": "Kertas",
+    "paperHalf": "Continuous ½",
+    "paperFull": "Continuous penuh",
     "paperA4": "A4",
-    "paperA5": "A5"
+    "paperA5": "A5",
+    "onPaper": "Kertas {paper}"
   },
   "downPayment": {
     "recordTitle": "Catat DP",
@@ -491,6 +494,69 @@
     "save": "Simpan",
     "saved": "Tampilan nota disimpan."
   },
+  "desk": {
+    "checksOk": "Berfungsi normal",
+    "closeTicket": "Tutup detail",
+    "col": {
+      "customer": "Pelanggan",
+      "device": "HP",
+      "number": "No.",
+      "status": "Status",
+      "technician": "Teknisi",
+      "received": "Diterima",
+      "cancelledBy": "Dibatalkan oleh",
+      "cancelledAt": "Dibatalkan"
+    },
+    "copied": "Nomor disalin",
+    "copyPhone": "Salin nomor HP",
+    "currency": "Rp",
+    "done": {
+      "handover": "HP sudah diserahkan ke pelanggan."
+    },
+    "photoCount": "{taken} dari {total}",
+    "photoDownload": "Simpan foto",
+    "photoMismatch": "Foto rusak",
+    "photoNext": "Foto berikutnya",
+    "photoPrevious": "Foto sebelumnya",
+    "photoUnavailable": "Belum ada di PC ini",
+    "priceKind": "Jenis",
+    "receivedBy": "Diterima {name} · {at}",
+    "results": "{count} servisan ditemukan",
+    "useCustomer": "Pakai",
+    "copyFailed": "Nomor belum bisa disalin",
+    "incomplete": "Belum lengkap",
+    "price": "Harga",
+    "filter": {
+      "status": "Status",
+      "technician": "Teknisi",
+      "received": "Diterima",
+      "brand": "Merek",
+      "clear": "Hapus filter",
+      "reset": "Hapus semua filter",
+      "search": "Cari",
+      "noMatches": "Tidak ada yang cocok",
+      "chosen": "{count} dipilih",
+      "from": "Dari",
+      "to": "Sampai",
+      "range": "{from} – {to}",
+      "since": "Sejak {from}",
+      "until": "Sampai {to}",
+      "today": "Hari ini",
+      "last7": "7 hari terakhir",
+      "last30": "30 hari terakhir",
+      "thisMonth": "Bulan ini",
+      "empty": "Tidak ada servisan yang cocok dengan filter"
+    },
+    "table": {
+      "columns": "Kolom",
+      "range": "{from}–{to} dari {total}",
+      "perPage": "{size} per halaman",
+      "previous": "Halaman sebelumnya",
+      "next": "Halaman berikutnya",
+      "page": "Halaman {page}",
+      "pages": "Halaman"
+    }
+  },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
     "customerNotFound": "Pelanggan ini tidak ada di toko ini.",
@@ -522,5 +588,11 @@
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
+  },
+  "paper": {
+    "title": "Kertas nota",
+    "phoneSummary": "Ukuran kertas di HP ini",
+    "phoneHint": "Semua nota dari HP ini dicetak di kertas ini.",
+    "deskHint": "Semua nota dari komputer ini dicetak di kertas ini."
   }
 }

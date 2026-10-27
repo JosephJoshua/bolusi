@@ -1,5 +1,5 @@
 /**
- * A small phone catalog for the browser harness (repair-demo.ts), searched with the same shared
+ * A small phone catalog for the browser harnesses (demo.ts), searched with the same shared
  * fuzzy index and the same identity rule (`catalogKeys`) the device uses.
  *
  * The pictures are drawn stand-ins, labelled as such: the harness cannot reach GSMArena, and a
@@ -13,7 +13,7 @@ import {
   type DeviceModelKind,
   type DeviceModelPhoto,
   type DeviceModelRow,
-} from '@bolusi/modules/repair';
+} from './device-models.js';
 
 interface DemoModel {
   readonly id: number;

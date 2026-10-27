@@ -10,7 +10,7 @@ import type { ThumbnailRef } from '../../screen-kit/index.js';
 
 import { tn } from '../i18n.js';
 import { PhotoGrid, PhotoThumb, Section, repairStyles, usePhotoGridCell } from './parts.js';
-import { useRepairRuntime } from './runtime.js';
+import { useRepairRuntime } from '../runtime.js';
 
 export interface BrowsablePhoto {
   readonly key: string;

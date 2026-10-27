@@ -63,6 +63,25 @@ export const identityPalette = Object.freeze([
   '#3F3F46',
 ] as const);
 
+/**
+ * FNV-1a over the id. Any stable hash works; what matters is that it is deterministic across
+ * devices and rebuilds — two technicians looking at two phones must see the same person in the same
+ * colour, or the colour is worse than useless.
+ */
+function hueIndex(userId: string, buckets: number): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < userId.length; i += 1) {
+    hash ^= userId.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % buckets;
+}
+
+/** A person's identity hue, a pure function of their id, so every device and client agrees. */
+export function identityColor(userId: string): string {
+  return identityPalette[hueIndex(userId, identityPalette.length)] ?? identityPalette[0]!;
+}
+
 /** Opacity of the ConfirmSheet scrim (design-system §1.1 `color.overlay` = `#18181B` @ 40%). */
 export const overlayOpacity = 0.4;
 

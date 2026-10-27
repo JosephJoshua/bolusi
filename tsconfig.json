@@ -14,7 +14,13 @@
       "path": "packages/ui/tsconfig.build.json"
     },
     {
+      "path": "packages/ui-web/tsconfig.build.json"
+    },
+    {
       "path": "packages/modules/tsconfig.build.json"
+    },
+    {
+      "path": "packages/modules/tsconfig.desktop.json"
     },
     {
       "path": "packages/db-client/tsconfig.build.json"

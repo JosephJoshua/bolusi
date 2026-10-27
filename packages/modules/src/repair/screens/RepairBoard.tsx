@@ -20,13 +20,14 @@ import {
   touch,
   type,
   type ListState,
+  type OperationSyncStatus,
 } from '@bolusi/ui';
-import { useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { TicketSummaryRow } from '../queries.js';
-import { statusesFor, type EntitySyncStatuses } from '../../screen-kit/index.js';
+import { statusesFor, useSettledValue, type EntitySyncStatuses } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
@@ -40,7 +41,7 @@ import {
 } from '../flows.js';
 import { statusLabel } from '../labels.js';
 import { StatusChip, repairStyles } from './parts.js';
-import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 const PAGE = 50;
 /** Search is ranked, so its best matches come first and one page is enough. */
@@ -90,7 +91,11 @@ export function RepairBoard({
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const searching = text.trim() !== '';
+  // Search once the user pauses, not on every key; clearing the box shows the queue at once.
+  const typed = text.trim();
+  const settledText = useSettledValue(typed);
+  const searchText = typed === '' ? '' : settledText;
+  const searching = searchText !== '';
 
   const query = useRepairQuery<LoadedBoard>(
     async (rt) => {
@@ -98,7 +103,7 @@ export function RepairBoard({
       let hasMore = false;
       if (searching) {
         rows = [
-          ...(await rt.query('searchTickets', { text: text.trim(), limit: SEARCH_LIMIT })).rows,
+          ...(await rt.query('searchTickets', { text: searchText, limit: SEARCH_LIMIT })).rows,
         ];
       } else {
         // Every page the user has scrolled to, re-read on each refresh so the live board stays whole.
@@ -122,10 +127,11 @@ export function RepairBoard({
       const statuses = await rt.ticketSyncStatuses(rows.map((row) => row.id));
       return { rows, statuses, hasMore };
     },
-    `board:${searching ? `q:${text.trim()}` : view}:${String(pages)}:${String(reloadNonce)}`,
+    `board:${searching ? `q:${searchText}` : view}:${String(pages)}:${String(reloadNonce)}`,
   );
 
-  const listState = ((): ListState<TicketSummaryRow> => {
+  // Recomputed only when the read settles, so typing re-renders the search box, not the list.
+  const listState = useMemo((): ListState<TicketSummaryRow> => {
     switch (query.status) {
       case 'loading':
         return { kind: 'loading' };
@@ -162,9 +168,31 @@ export function RepairBoard({
         }
         return { kind: 'ready', items: query.data.rows };
     }
-  })();
+  }, [query, searching, onOpenSyncStatus]);
 
   const loaded = query.status === 'ready' ? query.data : null;
+  const statuses = loaded?.statuses;
+  const showCancel = !searching && view === 'cancelled';
+  // The parent may pass new callbacks each render; rows keep one stable handler that calls the latest.
+  const handlers = useRef({ onOpenTicket, onOpenSyncStatus });
+  handlers.current = { onOpenTicket, onOpenSyncStatus };
+  const openTicket = useCallback((id: string) => handlers.current.onOpenTicket(id), []);
+  const openSyncStatus = useCallback(() => handlers.current.onOpenSyncStatus(), []);
+  const renderRow = useCallback(
+    (row: TicketSummaryRow) => (
+      <TicketRow
+        row={row}
+        selected={row.id === selectedTicketId}
+        showCancel={showCancel}
+        syncStatuses={statusesFor(statuses ?? {}, row.id)}
+        onOpen={openTicket}
+        onOpenSyncStatus={openSyncStatus}
+        testID={`${testID}.row.${row.id}`}
+        syncTestID={`${testID}.sync.${row.id}`}
+      />
+    ),
+    [selectedTicketId, showCancel, statuses, openTicket, openSyncStatus, testID],
+  );
 
   return (
     <AppShell
@@ -214,6 +242,8 @@ export function RepairBoard({
       )}
 
       <List
+        // A new view or search starts at the top, not at the depth the last list was scrolled to.
+        key={searching ? `q:${searchText}` : view}
         state={listState}
         keyExtractor={(row) => row.id}
         onEndReached={
@@ -221,24 +251,7 @@ export function RepairBoard({
             ? () => setPages((current) => current + 1)
             : undefined
         }
-        renderRow={(row) => (
-          <TicketRow
-            row={row}
-            selected={row.id === selectedTicketId}
-            showCancel={!searching && view === 'cancelled'}
-            syncChip={
-              <SyncStatusChip
-                syncStatuses={statusesFor(loaded?.statuses ?? {}, row.id)}
-                pendingLabel={t('sync.chip.pending')}
-                rejectedLabel={t('sync.chip.rejected')}
-                onPressRejected={onOpenSyncStatus}
-                testID={`${testID}.sync.${row.id}`}
-              />
-            }
-            onPress={() => onOpenTicket(row.id)}
-            testID={`${testID}.row.${row.id}`}
-          />
-        )}
+        renderRow={renderRow}
         testID={`${testID}.items`}
       />
     </AppShell>
@@ -250,27 +263,54 @@ export function NoTicketOpen(): React.JSX.Element {
   return <EmptyState title={tn('repair.board.pickTicket')} testID="repair.board.noTicketOpen" />;
 }
 
+interface TicketRowProps {
+  readonly row: TicketSummaryRow;
+  /** The ticket open beside the board on a tablet. */
+  readonly selected: boolean;
+  /** The owners' cancelled view: who cancelled, why, and a fee that differs from the store's. */
+  readonly showCancel: boolean;
+  readonly syncStatuses: readonly OperationSyncStatus[];
+  readonly onOpen: (ticketId: string) => void;
+  readonly onOpenSyncStatus: () => void;
+  readonly testID: string;
+  readonly syncTestID: string;
+}
+
+/**
+ * Every live re-read brings new row objects, so rows compare by content: a change to one ticket
+ * redraws that row only. Summary rows hold only primitives, so a shallow compare is exact.
+ */
+function sameRow(prev: TicketRowProps, next: TicketRowProps): boolean {
+  const keys = Object.keys(next.row) as (keyof TicketSummaryRow)[];
+  return (
+    prev.selected === next.selected &&
+    prev.showCancel === next.showCancel &&
+    prev.onOpen === next.onOpen &&
+    prev.onOpenSyncStatus === next.onOpenSyncStatus &&
+    prev.testID === next.testID &&
+    prev.syncTestID === next.syncTestID &&
+    prev.syncStatuses.length === next.syncStatuses.length &&
+    prev.syncStatuses.every((status, i) => status === next.syncStatuses[i]) &&
+    keys.length === Object.keys(prev.row).length &&
+    keys.every((key) => Object.is(prev.row[key], next.row[key]))
+  );
+}
+
 /**
  * One repair on the board, readable at a glance: number and status, who it belongs to and what it
  * costs, the device and its technician, and a price change waiting on the counter. A plain list row
  * truncated all of that into one line.
  */
-function TicketRow({
+const TicketRow = memo(function TicketRow({
   row,
   selected,
   showCancel,
-  syncChip,
-  onPress,
+  syncStatuses,
+  onOpen,
+  onOpenSyncStatus,
   testID,
-}: {
-  readonly row: TicketSummaryRow;
-  readonly selected: boolean;
-  /** The owners' cancelled view: who cancelled, why, and a fee that differs from the store's. */
-  readonly showCancel: boolean;
-  readonly syncChip: ReactNode;
-  readonly onPress: () => void;
-  readonly testID: string;
-}): React.JSX.Element {
+  syncTestID,
+}: TicketRowProps): React.JSX.Element {
   const device = [row.deviceBrand, row.deviceModel].filter((s) => s !== '').join(' ');
   const who = showCancel
     ? row.cancelledByName === null
@@ -306,7 +346,7 @@ function TicketRow({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
-      onPress={onPress}
+      onPress={() => onOpen(row.id)}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [
         styles.row,
@@ -350,7 +390,13 @@ function TicketRow({
               testID={`${testID}.priceWaiting`}
             />
           ) : null}
-          {syncChip}
+          <SyncStatusChip
+            syncStatuses={syncStatuses}
+            pendingLabel={t('sync.chip.pending')}
+            rejectedLabel={t('sync.chip.rejected')}
+            onPressRejected={onOpenSyncStatus}
+            testID={syncTestID}
+          />
           <Text style={styles.number}>
             {showCancel && row.cancelledAt !== null
               ? `${formatDateTime(row.cancelledAt)} · ${row.ticketNumber}`
@@ -360,7 +406,7 @@ function TicketRow({
       </View>
     </Pressable>
   );
-}
+}, sameRow);
 
 const styles = StyleSheet.create({
   search: { marginBottom: space.sm },

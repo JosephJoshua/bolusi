@@ -26,7 +26,7 @@
  */
 import { StyleSheet, Text, View } from 'react-native';
 
-import { color, identityPalette, radius, size, type } from '../tokens.js';
+import { color, identityColor, radius, size, type } from '../tokens.js';
 
 export type AvatarSize = 'row' | 'header' | 'hero' | 'switcher';
 
@@ -60,24 +60,7 @@ const TYPE: Record<AvatarSize, object> = {
   switcher: type.display,
 };
 
-/**
- * FNV-1a over the id. Any stable hash works; what matters is that it is deterministic across
- * devices and rebuilds — two technicians looking at two phones must see the same person in the same
- * colour, or the colour is worse than useless.
- */
-function hueIndex(userId: string, buckets: number): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < userId.length; i += 1) {
-    hash ^= userId.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash % buckets;
-}
-
-/** Exported for the Gallery and for tests: the identity hue is a pure function of the id. */
-export function identityColor(userId: string): string {
-  return identityPalette[hueIndex(userId, identityPalette.length)] ?? identityPalette[0]!;
-}
+export { identityColor };
 
 const styles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center', borderRadius: radius.full },

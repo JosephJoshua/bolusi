@@ -111,6 +111,32 @@ describe('down payment', () => {
     expect(t.downPayment).toBeNull();
   });
 
+  test('a cancelled servisan takes none, but an owner can still correct one taken before', async () => {
+    const h = await harness(6106);
+    const ticketId = await openTicket(h);
+    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+    const other = await openTicket(h);
+    for (const id of [ticketId, other]) {
+      await h.run(
+        'cancelTicket',
+        { ticketId: id, reason: 'Pelanggan batal', fee: 0 },
+        h.storeOwnerId,
+      );
+    }
+    await expectCode(
+      h.run('recordDownPayment', { ticketId: other, amount: 50_000 }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+    );
+    expect((await ticket(h, other)).downPayment).toBeNull();
+    // The refund of a deposit taken before the cancel stays an owner's correction.
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 0, reason: 'Uang dikembalikan' },
+      h.storeOwnerId,
+    );
+    expect((await ticket(h, ticketId)).downPayment).toBeNull();
+  });
+
   test('a technician cannot record one', async () => {
     const h = await harness(6105);
     const ticketId = await openTicket(h);

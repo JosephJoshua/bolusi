@@ -1,0 +1,138 @@
+/*
+ * Tailwind theme for desktop and web, over the variables `applyTheme()` installs from the shared
+ * tokens. Import after `tailwindcss` in the app stylesheet. The spacing scale is Tailwind's 4 px
+ * grid; use only 1, 2, 3, 4, 6, 8 and 12 (4, 8, 12, 16, 24, 32, 48 px) like the phone.
+ */
+@theme inline {
+  --color-primary: var(--b-primary);
+  --color-primary-pressed: var(--b-primary-pressed);
+  --color-on-primary: var(--b-on-primary);
+  --color-success: var(--b-success);
+  --color-success-bg: var(--b-success-bg);
+  --color-on-success-bg: var(--b-on-success-bg);
+  --color-warning: var(--b-warning);
+  --color-warning-bg: var(--b-warning-bg);
+  --color-danger: var(--b-danger);
+  --color-danger-pressed: var(--b-danger-pressed);
+  --color-danger-bg: var(--b-danger-bg);
+  --color-on-danger-bg: var(--b-on-danger-bg);
+  --color-on-danger: var(--b-on-danger);
+  --color-info: var(--b-info);
+  --color-info-bg: var(--b-info-bg);
+  --color-surface: var(--b-surface);
+  --color-surface-alt: var(--b-surface-alt);
+  --color-border: var(--b-border);
+  --color-text: var(--b-text);
+  --color-text-muted: var(--b-text-muted);
+  --color-text-disabled: var(--b-text-disabled);
+  --color-overlay: var(--b-overlay);
+
+  --radius-xs: var(--b-radius-xs);
+  --radius-sm: var(--b-radius-sm);
+  --radius-md: var(--b-radius-md);
+
+  --text-display: var(--b-text-display);
+  --text-display--line-height: var(--b-text-display-line);
+  --text-title: var(--b-text-title);
+  --text-title--line-height: var(--b-text-title-line);
+  --text-heading: var(--b-text-heading);
+  --text-heading--line-height: var(--b-text-heading-line);
+  --text-body: var(--b-text-body);
+  --text-body--line-height: var(--b-text-body-line);
+  --text-small: var(--b-text-small);
+  --text-small--line-height: var(--b-text-small-line);
+
+  /* Motion: short and calm, so a counter used all day never waits on an animation. Overlays fade,
+   * dialogs and menus grow from just under their size, a side pane slides in from its edge. Tailwind
+   * v4 positions with the `translate` property, so these `transform` keyframes compose with it. */
+  --animate-fade-in: fade-in 140ms ease-out;
+  --animate-fade-out: fade-out 120ms ease-in forwards;
+  --animate-dialog-in: dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-dialog-out: dialog-out 120ms ease-in forwards;
+  --animate-pop-in: pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pop-out: fade-out 100ms ease-in forwards;
+  --animate-pane-in: pane-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-rise-in: rise-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--b-surface);
+    color: var(--b-text);
+    font-family: var(--font-sans);
+    font-size: var(--b-text-body);
+    line-height: var(--b-text-body-line);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--b-primary);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--b-info-bg);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Someone who asked the system for less motion gets none: every change lands at once. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

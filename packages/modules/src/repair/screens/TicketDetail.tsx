@@ -4,7 +4,7 @@
  * own full-screen step (TicketSteps.tsx); the rest run in place. The rejected-op banner shows here,
  * where the change was made (05-operation-log §8).
  */
-import { formatDateTime, formatMoney, t, translateOpType } from '@bolusi/i18n';
+import { formatDateTime, formatMoney, formatPhone, t, translateOpType } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -41,7 +41,9 @@ import {
 import { tn, type RepairKey } from '../i18n.js';
 import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
+  amountOwed,
   downPaymentAction,
+  downPaymentStale,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -67,7 +69,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
-import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
 import {
   AssignStep,
@@ -205,9 +207,7 @@ export function TicketDetail({
     step.kind === 'none' || step.kind === 'print' || ticket === undefined
       ? null
       : step.kind === 'downPayment'
-        ? downPaymentAction(ticket, can) === step.mode
-          ? null
-          : { kind: ticket.location === 'returned' ? 'returned' : 'changed' }
+        ? downPaymentStale(ticket, can, step.mode)
         : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
@@ -427,7 +427,7 @@ export function TicketDetail({
               testID={`${testID}.phone`}
             >
               <Icon name="phone" size={size.iconChip} color={color.primary} />
-              <Text style={styles.link}>{row.customerPhone}</Text>
+              <Text style={styles.link}>{formatPhone(row.customerPhone)}</Text>
             </Pressable>
           )}
           <View style={styles.deviceBox}>
@@ -748,11 +748,6 @@ export function TicketDetail({
       </Section>
     );
   }
-}
-
-/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
-function amountOwed(row: TicketDetailRow): number {
-  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
 }
 
 function lineCaption(line: QuoteLineRow): string {
