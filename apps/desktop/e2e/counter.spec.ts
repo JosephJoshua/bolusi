@@ -60,6 +60,11 @@ for (const [width, height] of [
       );
       expect(overflow).toBe(false);
       await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
+      // Only the table and the pane scroll; the window never does, so paging stays in reach.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
+      ).toBe(true);
+      await expect(page.getByTestId('repair.desk.board.pagination')).toBeInViewport({ ratio: 1 });
     };
     await fits();
     await page.getByText('Maria Kogoya').click();

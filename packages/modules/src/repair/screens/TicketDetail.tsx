@@ -39,7 +39,9 @@ import {
 import { tn, type RepairKey } from '../i18n.js';
 import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
+  amountOwed,
   downPaymentAction,
+  downPaymentStale,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -198,9 +200,7 @@ export function TicketDetail({
     step.kind === 'none' || step.kind === 'print' || ticket === undefined
       ? null
       : step.kind === 'downPayment'
-        ? downPaymentAction(ticket, can) === step.mode
-          ? null
-          : { kind: ticket.location === 'returned' ? 'returned' : 'changed' }
+        ? downPaymentStale(ticket, can, step.mode)
         : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
@@ -695,11 +695,6 @@ export function TicketDetail({
       </Section>
     );
   }
-}
-
-/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
-function amountOwed(row: TicketDetailRow): number {
-  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
 }
 
 function lineCaption(line: QuoteLineRow): string {

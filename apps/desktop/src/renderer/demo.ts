@@ -3,6 +3,8 @@
 import { demoRepairRuntime, type DemoRepairRole } from '@bolusi/modules/repair/demo';
 import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
 
+import { desktopPrinting } from './print.js';
+
 export const DEMO_STORE_NAME = 'Toko Sorong Kota';
 
 export interface DemoPerson {
@@ -22,5 +24,8 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
 
 /** A fresh store's worth of servisan for this person; switching people starts over. */
 export function demoRuntimeFor(person: DemoPerson): RepairRuntime {
-  return demoRepairRuntime(person.role, { now: Date.now(), volume: 'store' });
+  const runtime = demoRepairRuntime(person.role, { now: Date.now(), volume: 'store' });
+  return runtime.printing === undefined
+    ? runtime
+    : { ...runtime, printing: desktopPrinting(runtime.printing, DEMO_STORE_NAME) };
 }

@@ -4,6 +4,7 @@
 // results the same way, so a filter means the same thing in both.
 import { IN_PROGRESS_OUTCOMES, REPAIR_OUTCOMES, type RepairOutcome } from './constants.js';
 import {
+  amountOwed,
   boardFilter,
   boardSort,
   ticketStatus,
@@ -218,11 +219,6 @@ export function tableSort(view: BoardView, sort: ColumnSort | null): TicketSort 
     : `${sort.column as 'number' | 'total'}.${direction}`;
 }
 
-/** What the customer owes on a row: a cancelled servisan's fee, never its repair price. */
-export function rowTotal(row: TicketSummaryRow): number {
-  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
-}
-
 /** Sorts search results by a column, the way the query sorts a queue; unsorted keeps the ranking. */
 export function sortRows(
   rows: readonly TicketSummaryRow[],
@@ -238,7 +234,7 @@ export function sortRows(
       case 'received':
         return row.createdAt;
       case 'total':
-        return rowTotal(row);
+        return amountOwed(row);
     }
   };
   const sign = sort.descending ? -1 : 1;

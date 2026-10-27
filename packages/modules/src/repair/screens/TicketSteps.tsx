@@ -26,10 +26,11 @@ import { standardCancelFee, type QuoteLineRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { PRICE_KIND_KEY } from '../labels.js';
+import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
 import {
   acceptsRupiahText,
   capturedThumbnailRef,
+  downPaymentEntry,
   parseRupiah,
   priceKinds,
   signedAmount,
@@ -387,13 +388,14 @@ export function DownPaymentStep({
   const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const correcting = mode === 'correct';
-  // A correction may bring it to nothing (removing it); a new one is at least Rp 1.
-  const amount = parseRupiah(amountText) ?? (correcting ? null : 0);
-  const aboveTotal = amount !== null && total > 0 && amount > total;
-  const complete =
-    amount !== null &&
-    !aboveTotal &&
-    (correcting ? amount !== current && reason.trim() !== '' : amount > 0);
+  const { amount, aboveTotal, gap } = downPaymentEntry({
+    mode,
+    typed: parseRupiah(amountText),
+    reason,
+    current,
+    total,
+  });
+  const complete = gap === null;
 
   const submit = (): void => {
     if (!complete || amount === null) return;
@@ -416,17 +418,7 @@ export function DownPaymentStep({
       primaryLabel={tn('repair.downPayment.save')}
       onPrimary={submit}
       primaryDisabled={!complete}
-      primaryHint={tn(
-        aboveTotal
-          ? 'repair.problem.downPaymentAboveTotal'
-          : !correcting
-            ? 'repair.hint.downPayment'
-            : amount === null
-              ? 'repair.hint.downPaymentCorrect'
-              : amount === current
-                ? 'repair.hint.downPaymentSame'
-                : 'repair.hint.reason',
-      )}
+      primaryHint={gap === null ? undefined : tn(DOWN_PAYMENT_GAP_KEY[gap])}
       busy={runner.busy}
       errorCode={runner.errorCode}
       stale={stale}

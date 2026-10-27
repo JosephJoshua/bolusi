@@ -422,6 +422,8 @@
     "handoverAbout": "The bill and proof of pickup.",
     "reprint": "Printed {count} times already.",
     "paper": "Paper",
+    "paperHalf": "Half form",
+    "paperFull": "Full form",
     "paperA4": "A4",
     "paperA5": "A5"
   },

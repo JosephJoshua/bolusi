@@ -14,22 +14,36 @@ import {
   TextArea,
   TextField,
 } from '@bolusi/ui-web';
-import { Check, Signature } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { PAPER_PRESETS } from '@bolusi/core';
+import { Check, Printer, Signature } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { useActionRunner, type ActionRunner } from '../../screen-kit/index.js';
-import { REPAIR_PERMISSION, WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
+import {
+  REPAIR_PERMISSION,
+  WORK_PHOTOS_MAX,
+  type SlipKind,
+  type WorkPhotoStage,
+} from '../constants.js';
 import {
   capturedThumbnailRef,
+  downPaymentEntry,
+  printableSlips,
   priceKinds,
   signedAmount,
   type PriceKind,
   type StaleStep,
 } from '../flows.js';
-import { standardCancelFee, type QuoteLineRow } from '../queries.js';
+import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { PRICE_KIND_KEY } from '../labels.js';
-import { useCancelFees, useRepairQuery, useRepairRuntime } from '../runtime.js';
+import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
+import {
+  useCancelFees,
+  useRepairQuery,
+  useRepairRuntime,
+  type RepairPrinting,
+} from '../runtime.js';
+import { outputSlip } from '../slip-output.js';
 
 import {
   ActionError,
@@ -900,4 +914,261 @@ export function HandoverDialog({
       {leave.confirm}
     </>
   );
+}
+
+// ── down payment ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Recording a down payment the customer left after intake, or (owners only) correcting one: the
+ * same rules as the phone (`downPaymentEntry` and the commands), as one small dialog.
+ */
+export function DownPaymentDialog({
+  ticketId,
+  stale,
+  mode,
+  current,
+  total,
+  onDone,
+  onClose,
+}: StepDialogProps & {
+  readonly mode: 'record' | 'correct';
+  /** The down payment recorded now; null when none is. */
+  readonly current: number | null;
+  readonly total: number;
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const [typed, setTyped] = useState<number | null>(null);
+  const [reason, setReason] = useState('');
+  const correcting = mode === 'correct';
+  const { amount, aboveTotal, gap } = downPaymentEntry({ mode, typed, reason, current, total });
+  const testId = `repair.desk.downPayment.${mode}`;
+
+  const submit = (): void => {
+    if (gap !== null || amount === null) return;
+    void runner
+      .run(() =>
+        correcting
+          ? runtime.run('correctDownPayment', { ticketId, amount, reason })
+          : runtime.run('recordDownPayment', { ticketId, amount }),
+      )
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  const leave = useLeaveGuard(stale === null && (typed !== null || reason.trim() !== ''), onClose);
+  return (
+    <>
+      <StepDialog
+        title={tn(
+          correcting ? 'repair.downPayment.correctTitle' : 'repair.downPayment.recordTitle',
+        )}
+        runner={runner}
+        stale={stale}
+        onRequestClose={leave.requestClose}
+        size="sm"
+        testId={testId}
+        footer={
+          <>
+            {/* Above the total is said under the amount; anything else missing is said here. */}
+            {gap === null || gap === 'aboveTotal' ? null : (
+              <p className="mr-auto text-small text-text-muted">{tn(DOWN_PAYMENT_GAP_KEY[gap])}</p>
+            )}
+            <CancelButton onClick={leave.requestClose} />
+            <Button
+              label={tn('repair.downPayment.save')}
+              variant="primary"
+              onClick={submit}
+              busy={runner.busy}
+              disabled={gap !== null || stale !== null}
+              data-testid={`${testId}.submit`}
+            />
+          </>
+        }
+      >
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          {correcting && current !== null ? (
+            <div className="flex items-baseline justify-between gap-4 rounded-sm bg-surface-alt px-4 py-3">
+              <span className="text-body text-text-muted">{tn('repair.downPayment.current')}</span>
+              <span className="tabular text-body font-semibold text-text">
+                {formatMoney(current)}
+              </span>
+            </div>
+          ) : null}
+          <MoneyField
+            label={tn(correcting ? 'repair.downPayment.newAmount' : 'repair.downPayment.amount')}
+            hint={
+              aboveTotal
+                ? undefined
+                : tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })
+            }
+            error={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
+            value={typed}
+            onChange={setTyped}
+            autoFocus
+            data-testid={`${testId}.amount`}
+          />
+          {correcting ? (
+            <TextArea
+              label={tn('repair.downPayment.reason')}
+              hint={tn('repair.downPayment.removeHint')}
+              rows={2}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              data-testid={`${testId}.reason`}
+            />
+          ) : null}
+        </form>
+      </StepDialog>
+      {leave.confirm}
+    </>
+  );
+}
+
+// ── print ───────────────────────────────────────────────────────────────────────────────────
+
+/** What a counter PC prints on: the store's carbonless dot-matrix forms, or plain paper. */
+const DESK_PAPERS = ['continuous_half', 'continuous_full', 'a4', 'a5'] as const;
+type DeskPaper = (typeof DESK_PAPERS)[number];
+
+const DESK_PAPER_KEY: Readonly<Record<DeskPaper, RepairKey>> = {
+  continuous_half: 'repair.print.paperHalf',
+  continuous_full: 'repair.print.paperFull',
+  a4: 'repair.print.paperA4',
+  a5: 'repair.print.paperA5',
+};
+
+const SLIP_KEY: Readonly<Record<SlipKind, { title: RepairKey; about: RepairKey }>> = {
+  intake: { title: 'repair.print.intake', about: 'repair.print.intakeAbout' },
+  handover: { title: 'repair.print.handover', about: 'repair.print.handoverAbout' },
+};
+
+/**
+ * Printing a slip from the PC: which slip (once the bill exists) and which paper, then the same
+ * `outputSlip` the phone runs. A print the platform cannot confirm is asked about before it counts.
+ */
+export function PrintDialog({
+  ticket,
+  printing,
+  onDone,
+  onClose,
+}: {
+  readonly ticket: TicketDetailRow;
+  readonly printing: RepairPrinting;
+  readonly onDone: () => void;
+  readonly onClose: () => void;
+}): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const slips = printableSlips(ticket);
+  // Once the phone is ready, the bill is what the counter is likeliest to print.
+  const [slip, setSlip] = useState<SlipKind>(slips[slips.length - 1]!);
+  const [paper, setPaper] = useState<DeskPaper>('continuous_half');
+  const [asking, setAsking] = useState(false);
+  const testId = 'repair.desk.print';
+
+  useEffect(() => {
+    let live = true;
+    void printing.readPaper().then((saved) => {
+      if (live && saved !== null && isDeskPaper(saved.preset)) setPaper(saved.preset);
+    });
+    return () => {
+      live = false;
+    };
+  }, [printing]);
+
+  const print = (): void => {
+    void runner
+      .run(() => outputSlip(runtime, printing, ticket, slip, PAPER_PRESETS[paper], 'print'))
+      .then((outcome) => {
+        if (outcome === 'unconfirmed') setAsking(true);
+        else if (outcome === 'done') onDone();
+      });
+  };
+  const confirmPrinted = (): void => {
+    setAsking(false);
+    void runner
+      .run(() => runtime.run('recordSlipPrinted', { ticketId: ticket.id, slip }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+
+  const printed = ticket.slipPrints[slip];
+  return (
+    <>
+      <StepDialog
+        title={tn('repair.print.title')}
+        runner={runner}
+        stale={null}
+        onRequestClose={onClose}
+        size="sm"
+        testId={testId}
+        footer={
+          <>
+            <CancelButton onClick={onClose} />
+            <Button
+              label={tn('repair.print.print')}
+              icon={Printer}
+              variant="primary"
+              onClick={print}
+              busy={runner.busy}
+              data-testid={`${testId}.submit`}
+            />
+          </>
+        }
+      >
+        <div className="flex flex-col gap-6">
+          <div>
+            {slips.length > 1 ? (
+              <Segmented
+                label={tn('repair.print.slip')}
+                options={slips.map((value) => ({ value, label: tn(SLIP_KEY[value].title) }))}
+                value={slip}
+                onChange={setSlip}
+                testId={`${testId}.slip`}
+              />
+            ) : (
+              <p className="text-body font-semibold text-text">{tn(SLIP_KEY[slip].title)}</p>
+            )}
+            <p className="mt-2 text-small text-text-muted" data-testid={`${testId}.about`}>
+              {tn(SLIP_KEY[slip].about)}
+              {printed === 0 ? null : <> {tn('repair.print.reprint', { count: printed })}</>}
+            </p>
+          </div>
+          <div>
+            <p className="mb-2 text-small font-semibold text-text">{tn('repair.print.paper')}</p>
+            <Segmented
+              label={tn('repair.print.paper')}
+              options={DESK_PAPERS.map((value) => ({ value, label: tn(DESK_PAPER_KEY[value]) }))}
+              value={paper}
+              onChange={setPaper}
+              testId={`${testId}.paper`}
+            />
+          </div>
+        </div>
+      </StepDialog>
+      <ConfirmDialog
+        open={asking}
+        title={tn('repair.print.askTitle')}
+        message={tn('repair.print.askMessage')}
+        confirmLabel={tn('repair.print.askYes')}
+        cancelLabel={tn('repair.print.askNo')}
+        closeLabel={t('core.action.close')}
+        onConfirm={confirmPrinted}
+        onCancel={() => setAsking(false)}
+        testId={`${testId}.ask`}
+      />
+    </>
+  );
+}
+
+function isDeskPaper(preset: string): preset is DeskPaper {
+  return (DESK_PAPERS as readonly string[]).includes(preset);
 }

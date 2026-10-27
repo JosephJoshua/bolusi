@@ -422,6 +422,8 @@
     "handoverAbout": "Tagihan sekaligus bukti HP sudah diambil.",
     "reprint": "Sudah dicetak {count} kali.",
     "paper": "Kertas",
+    "paperHalf": "Continuous ½",
+    "paperFull": "Continuous penuh",
     "paperA4": "A4",
     "paperA5": "A5"
   },

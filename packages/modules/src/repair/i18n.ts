@@ -348,6 +348,8 @@ export const REPAIR_KEYS = [
   'repair.print.handoverAbout',
   'repair.print.reprint',
   'repair.print.paper',
+  'repair.print.paperHalf',
+  'repair.print.paperFull',
   'repair.print.paperA4',
   'repair.print.paperA5',
   'repair.downPayment.recordTitle',

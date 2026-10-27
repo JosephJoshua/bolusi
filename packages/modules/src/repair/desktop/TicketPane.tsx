@@ -17,13 +17,28 @@ import {
   Timeline,
   Tooltip,
 } from '@bolusi/ui-web';
-import { Check, CloudOff, Copy, Eye, EyeOff, Phone, SearchX, TriangleAlert, X } from 'lucide-react';
+import {
+  Check,
+  CloudOff,
+  Copy,
+  Eye,
+  EyeOff,
+  Phone,
+  Plus,
+  Printer,
+  SearchX,
+  TriangleAlert,
+  X,
+} from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { hasRejectedOp, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import {
+  amountOwed,
   balanceAfterDownPayment,
+  downPaymentAction,
+  downPaymentStale,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -32,6 +47,7 @@ import {
   ticketStatus,
   workPhotos,
   type TicketAction,
+  type StaleStep,
   type TicketStep,
 } from '../flows.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
@@ -44,8 +60,10 @@ import { ActionError, QueryPanel, StatusChip, photoLabels, usePhotoState } from 
 import {
   AssignDialog,
   CancelDialog,
+  DownPaymentDialog,
   HandoverDialog,
   PriceChangeDialog,
+  PrintDialog,
   ProposalDialog,
   WaitForPartsDialog,
   WorkPhotosDialog,
@@ -83,7 +101,9 @@ const CONTEXTUAL: ReadonlySet<TicketAction> = new Set(['assign', 'changePrice', 
 type Step =
   | { readonly kind: 'none' }
   | Exclude<TicketStep, { readonly kind: 'proposal' }>
-  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow };
+  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
+  | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
+  | { readonly kind: 'print' };
 
 interface LoadedTicket {
   readonly ticket: TicketDetailRow | undefined;
@@ -105,6 +125,7 @@ export function TicketPane({
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
   const runner = useActionRunner();
+  const printing = runtime.printing;
   const [step, setStep] = useState<Step>({ kind: 'none' });
   const [done, setDone] = useState<RepairKey | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -124,10 +145,12 @@ export function TicketPane({
   const stepTicket = ticket ?? lastTicket.current;
   const statuses = query.status === 'ready' ? (query.data.statuses[ticketId] ?? []) : [];
   const actions = ticket === undefined ? [] : ticketActions(ticket, can, runtime.userId);
-  const stale =
-    step.kind === 'none' || ticket === undefined
+  const stale: StaleStep | null =
+    step.kind === 'none' || step.kind === 'print' || ticket === undefined
       ? null
-      : staleStep(step, ticket, can, runtime.userId);
+      : step.kind === 'downPayment'
+        ? downPaymentStale(ticket, can, step.mode)
+        : staleStep(step, ticket, can, runtime.userId);
 
   const closeStep = (): void => setStep({ kind: 'none' });
   const finishStep = (said: RepairKey | undefined): void => {
@@ -308,7 +331,7 @@ export function TicketPane({
             </span>
           </div>
         </div>
-        {primary === undefined && rowActions.length === 0 ? null : (
+        {primary === undefined && rowActions.length === 0 && printing === undefined ? null : (
           <div className="flex flex-wrap gap-2">
             {primary === undefined ? null : (
               <Button
@@ -328,6 +351,19 @@ export function TicketPane({
                 data-testid={`repair.desk.ticket.action.${action}`}
               />
             ))}
+            {printing === undefined ? null : (
+              <Button
+                label={tn('repair.print.title')}
+                icon={Printer}
+                className={primary === undefined && rowActions.length === 0 ? undefined : 'ml-auto'}
+                onClick={() => {
+                  setDone(null);
+                  setStep({ kind: 'print' });
+                }}
+                disabled={runner.busy}
+                data-testid="repair.desk.ticket.action.print"
+              />
+            )}
           </div>
         )}
         {banner}
@@ -485,14 +521,21 @@ export function TicketPane({
             {formatMoney(row.quoteTotal)}
           </p>
         </div>
-        {!cancelled && row.downPayment !== null && row.downPayment > 0 ? (
-          <DownPaymentLines total={row.quoteTotal} downPayment={row.downPayment} />
-        ) : null}
         {cancelled ? (
           <p className="text-small text-text-muted">
             {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
           </p>
         ) : null}
+        <DownPaymentLines
+          total={amountOwed(row)}
+          downPayment={row.downPayment}
+          action={downPaymentAction(row, can)}
+          disabled={runner.busy}
+          onAction={(mode) => {
+            setDone(null);
+            setStep({ kind: 'downPayment', mode });
+          }}
+        />
         {!deciding || pending.length === 0 ? null : (
           <p className="flex items-center gap-1 text-small font-semibold text-warning">
             <TriangleAlert size={14} aria-hidden />
@@ -602,6 +645,26 @@ export function TicketPane({
             {...common}
             line={row.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
             onDone={() => finishStep(undefined)}
+          />
+        );
+      case 'downPayment':
+        return (
+          <DownPaymentDialog
+            {...common}
+            mode={step.mode}
+            current={row.downPayment}
+            total={amountOwed(row)}
+            onDone={() => finishStep('repair.done.downPayment')}
+          />
+        );
+      case 'print':
+        if (printing === undefined) return null;
+        return (
+          <PrintDialog
+            ticket={row}
+            printing={printing}
+            onClose={closeStep}
+            onDone={() => finishStep('repair.done.printed')}
           />
         );
       case 'handover':
@@ -851,19 +914,56 @@ function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
   return null;
 }
 
-/** What was paid up front and what is left, under the total. */
+/**
+ * What was paid up front and what is left, under the total, with recording or changing it beside
+ * the figure as the phone offers it.
+ */
 function DownPaymentLines({
   total,
   downPayment,
+  action,
+  disabled,
+  onAction,
 }: {
   readonly total: number;
-  readonly downPayment: number;
-}): React.JSX.Element {
+  readonly downPayment: number | null;
+  readonly action: 'record' | 'correct' | null;
+  readonly disabled: boolean;
+  readonly onAction: (mode: 'record' | 'correct') => void;
+}): React.JSX.Element | null {
+  if (downPayment === null || downPayment === 0) {
+    return action === 'record' ? (
+      <Button
+        label={tn('repair.downPayment.recordTitle')}
+        icon={Plus}
+        variant="text"
+        size="sm"
+        className="-ml-2 self-start"
+        onClick={() => onAction('record')}
+        disabled={disabled}
+        data-testid="repair.desk.ticket.downPayment.record"
+      />
+    ) : null;
+  }
   const balance = balanceAfterDownPayment(total, downPayment);
   return (
     <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
-      <div className="flex justify-between gap-4 text-body text-text-muted">
-        <dt>{tn('repair.price.downPayment')}</dt>
+      <div className="flex items-center justify-between gap-4 text-body text-text-muted">
+        <dt className="flex items-center gap-2">
+          {tn('repair.price.downPayment')}
+          {action === 'correct' ? (
+            <Button
+              label={tn('repair.downPayment.change')}
+              aria-label={tn('repair.downPayment.correctTitle')}
+              variant="text"
+              size="sm"
+              className="-my-1"
+              onClick={() => onAction('correct')}
+              disabled={disabled}
+              data-testid="repair.desk.ticket.downPayment.correct"
+            />
+          ) : null}
+        </dt>
         <dd className="tabular">{formatMoney(-downPayment)}</dd>
       </div>
       <div className="flex justify-between gap-4 text-body font-semibold text-text">

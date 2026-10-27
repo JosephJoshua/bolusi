@@ -3,7 +3,7 @@
  * The user picks the slip when there are two and the paper this device prints on; the page is built
  * from the ticket as it reads at that moment, then logged so the next print says "Cetak ulang".
  */
-import { PAPER_PRESETS, renderHtml, type PaperSettings } from '@bolusi/core';
+import { PAPER_PRESETS } from '@bolusi/core';
 import { ConfirmSheet, SegmentedControl, color, space, type } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -11,7 +11,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { SlipKind } from '../constants.js';
 import { printableSlips } from '../flows.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { slipDocument, slipPictures } from '../print.js';
+import { outputSlip } from '../slip-output.js';
 import type { TicketDetailRow } from '../queries.js';
 import { useActionRunner } from '../../screen-kit/index.js';
 import { FlowScreen, Section, repairStyles, type RepairChrome } from './parts.js';
@@ -66,42 +66,7 @@ export function PrintStep({
 
   const output = (how: 'print' | 'share'): void => {
     void runner
-      .run(async () => {
-        // The ticket as it reads now, so the print count and a payment just recorded are right.
-        const [fresh, settings, storeName, userName] = await Promise.all([
-          runtime.query('getTicket', { ticketId: ticket.id }),
-          runtime.query('printSettings', {}),
-          printing.storeName(),
-          printing.userName(),
-        ]);
-        const row = fresh.rows[0] ?? ticket;
-        // Reopened since this screen opened: there is no bill to print yet, so print nothing.
-        if (!printableSlips(row).includes(slip)) return 'cancelled' as const;
-        const sources = settings.rows[0]!;
-        const pictures = slipPictures(row, slip, sources);
-        const [logo, signature] = await Promise.all(
-          [pictures.logo, pictures.signature].map(async (ref) => {
-            const dataUri = ref === null ? null : await printing.imageDataUri(ref);
-            return dataUri === null ? null : { dataUri, mono: null };
-          }),
-        );
-        const doc = slipDocument(row, slip, {
-          settings: sources,
-          storeName,
-          logo: logo ?? null,
-          signature: signature ?? null,
-          printedAt: Date.now(),
-          printedByName: userName,
-        });
-        const sheet: PaperSettings = PAPER_PRESETS[paper];
-        await printing.writePaper(sheet);
-        const outcome = await printing.output(
-          { html: renderHtml(doc, sheet), jobName: doc.jobName, paper: sheet },
-          how,
-        );
-        if (outcome === 'done') await runtime.run('recordSlipPrinted', { ticketId: row.id, slip });
-        return outcome;
-      })
+      .run(() => outputSlip(runtime, printing, ticket, slip, PAPER_PRESETS[paper], how))
       .then((outcome) => {
         if (outcome === 'unconfirmed') setAsking(true);
         else if (outcome === 'done')

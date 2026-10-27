@@ -4,7 +4,7 @@ import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
 
@@ -27,6 +27,12 @@ const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
 async function openTicket(name: string): Promise<void> {
   fireEvent.click(await screen.findByText(name));
   await screen.findByTestId('repair.desk.ticket.customer');
+}
+
+async function showView(view: string): Promise<void> {
+  const tab = await screen.findByTestId(`repair.desk.board.views.${view}`);
+  fireEvent.mouseDown(tab, { button: 0 });
+  fireEvent.click(tab);
 }
 
 describe('counter app over demo data', () => {
@@ -128,6 +134,81 @@ describe('counter app over demo data', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
     await openTicket('Benny Kambu');
     expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
+  });
+
+  it('records a down payment at the counter, and only an owner changes one', async () => {
+    renderApp();
+    await openTicket('Petrus Yikwa');
+    fireEvent.click(byTestId('repair.desk.ticket.downPayment.record'));
+    await screen.findByTestId('repair.desk.downPayment.record');
+    fireEvent.change(byTestId('repair.desk.downPayment.record.amount'), {
+      target: { value: '60000' },
+    });
+    expect(screen.getByText('DP-nya lebih besar dari total biaya.')).toBeTruthy();
+    expect(byTestId('repair.desk.downPayment.record.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.downPayment.record.amount'), {
+      target: { value: '20000' },
+    });
+    fireEvent.click(byTestId('repair.desk.downPayment.record.submit'));
+    await waitFor(() =>
+      expect(byTestId('repair.desk.ticket.balance').textContent).toContain('30.000'),
+    );
+    expect(screen.queryByTestId('repair.desk.ticket.downPayment.correct')).toBeNull();
+
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.downPayment.correct'));
+    await screen.findByTestId('repair.desk.downPayment.correct');
+    fireEvent.change(byTestId('repair.desk.downPayment.correct.amount'), {
+      target: { value: '80000' },
+    });
+    // A changed DP needs a reason before it saves.
+    expect(byTestId('repair.desk.downPayment.correct.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('repair.desk.downPayment.correct.reason'), {
+      target: { value: 'Salah ketik' },
+    });
+    fireEvent.click(byTestId('repair.desk.downPayment.correct.submit'));
+    await waitFor(() =>
+      expect(byTestId('repair.desk.ticket.balance').textContent).toContain('35.000'),
+    );
+  });
+
+  it('prints a slip and counts it once the counter says it printed', async () => {
+    const print = vi.fn();
+    const frames: HTMLIFrameElement[] = [];
+    const append = document.body.append.bind(document.body);
+    const spy = vi.spyOn(document.body, 'append').mockImplementation((...nodes) => {
+      append(...nodes);
+      for (const node of nodes) {
+        if (node instanceof HTMLIFrameElement) {
+          frames.push(node);
+          Object.defineProperty(node, 'contentWindow', {
+            value: { print, addEventListener: () => undefined },
+          });
+        }
+      }
+    });
+    renderApp();
+    await showView('pickup');
+    await openTicket('Ester Mandowen');
+    fireEvent.click(byTestId('repair.desk.ticket.action.print'));
+    await screen.findByTestId('repair.desk.print');
+    // Repaired, so the bill is the slip offered first.
+    expect(byTestId('repair.desk.print.about').textContent).toContain('Tagihan');
+    fireEvent.click(byTestId('repair.desk.print.submit'));
+    await screen.findByTestId('repair.desk.print.ask');
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(frames[0]?.srcdoc).toContain('Ester Mandowen');
+    fireEvent.click(screen.getByRole('button', { name: 'Sudah tercetak' }));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.print')).toBeNull());
+
+    fireEvent.click(byTestId('repair.desk.ticket.action.print'));
+    expect((await screen.findByTestId('repair.desk.print.about')).textContent).toContain(
+      'Sudah dicetak 1 kali.',
+    );
+    spy.mockRestore();
   });
 
   it('filters, sorts and pages the queue, and keeps the choice across an intake', async () => {

@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { statusesFor, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import {
+  amountOwed,
   boardViews,
   defaultBoardView,
   repairAbilities,
@@ -49,7 +50,6 @@ import {
   matchesFacets,
   statusChoices,
   presetRange,
-  rowTotal,
   sortRows,
   tableFilter,
   tableSort,
@@ -452,8 +452,8 @@ export function RepairBoardPage({
         <div
           className={
             selectedTicketId === null
-              ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] @[1048px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1048px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -715,7 +715,7 @@ function boardColumns({
     {
       id: 'total',
       // A cancelled servisan costs the customer its fee, never the repair price.
-      accessorFn: rowTotal,
+      accessorFn: amountOwed,
       header: tn('repair.price.total'),
       meta: { track: '116px', align: 'end' },
       cell: ({ getValue }) => (
