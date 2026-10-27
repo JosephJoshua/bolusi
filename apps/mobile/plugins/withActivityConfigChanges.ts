@@ -70,7 +70,6 @@ export const FONT_SCALE_SYNC_KOTLIN = `
     syncedFontScale = resources.configuration.fontScale
     DisplayMetricsHolder.initDisplayMetrics(reactContext)
     (reactContext.getNativeModule("DeviceInfo") as? LifecycleEventListener)?.onHostResume()
-    android.util.Log.i("BolusiFontScale", "synced fontScale=$syncedFontScale app=\${applicationContext.resources.configuration.fontScale} scaledDensity=\${DisplayMetricsHolder.getScreenDisplayMetrics().scaledDensity}")
   }
 
   private fun remeasureReactRoots(view: View) {
