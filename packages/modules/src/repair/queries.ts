@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -27,6 +27,7 @@ import {
   type QuoteLineKind,
   type QuoteLineStatus,
   type RepairOutcome,
+  type SlipKind,
 } from './constants.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -82,6 +83,8 @@ export interface TicketSummaryRow {
   readonly cancelledBy: string | null;
   readonly cancelledByName: string | null;
   readonly cancelledAt: number | null;
+  /** Integer IDR the customer paid up front; null when nothing was. */
+  readonly downPayment: number | null;
 }
 
 export interface QuoteLineRow {
@@ -140,9 +143,15 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly createdBy: string;
   readonly createdByName: string | null;
   readonly returnedBy: string | null;
+  readonly returnedByName: string | null;
   readonly returnedAt: number | null;
   /** A technician has started work on it at least once, so the after-work cancellation fee applies. */
   readonly workStarted: boolean;
+  readonly downPaymentBy: string | null;
+  readonly downPaymentByName: string | null;
+  readonly downPaymentAt: number | null;
+  /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
+  readonly slipPrints: Readonly<Record<SlipKind, number>>;
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -196,6 +205,7 @@ function summaryQuery(qctx: Qctx) {
       't.cancelStandardFee',
       't.cancelledBy',
       't.cancelledAt',
+      't.downPayment',
       eb
         .selectFrom('repairQuoteLines as l')
         .select(eb.fn.countAll<number>().as('n'))
@@ -236,6 +246,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledBy: row.cancelledBy,
     cancelledByName: row.cancelledBy === null ? null : (names.get(row.cancelledBy) ?? null),
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
+    downPayment: row.downPayment === null ? null : Number(row.downPayment),
   };
 }
 
@@ -249,47 +260,82 @@ async function toSummaries(qctx: Qctx, rows: readonly RawSummary[]): Promise<Tic
 
 // ── listTickets ────────────────────────────────────────────────────────────────────────────────
 
-export const listTicketsInput = z
+const ticketFilter = z
   .object({
-    filter: z
-      .object({
-        outcomes: z.array(z.enum(REPAIR_OUTCOMES)).min(1).optional(),
-        location: z.enum(DEVICE_LOCATIONS).optional(),
-        technicianId: z.string().min(1).optional(),
-        unassigned: z.boolean().optional(),
-        customerId: z.string().min(1).optional(),
-        hasPendingProposals: z.boolean().optional(),
-      })
-      .strict()
-      .optional(),
-    /** `cancelledAt.desc` lists only cancelled tickets, latest cancel first (the owner's view). */
-    sort: z.enum(['createdAt.desc', 'createdAt.asc', 'cancelledAt.desc']).default('createdAt.desc'),
-    cursor: z.string().optional(),
-    limit: z.number().int().min(1).max(100).default(50),
+    outcomes: z.array(z.enum(REPAIR_OUTCOMES)).min(1).optional(),
+    location: z.enum(DEVICE_LOCATIONS).optional(),
+    technicianId: z.string().min(1).optional(),
+    /** Any of these technicians; with `unassigned`, tickets nobody holds yet count too. */
+    technicianIds: z.array(z.string().min(1)).min(1).max(100).optional(),
+    unassigned: z.boolean().optional(),
+    customerId: z.string().min(1).optional(),
+    hasPendingProposals: z.boolean().optional(),
+    /** Received at or after this time (epoch ms). */
+    receivedFrom: z.number().int().nonnegative().optional(),
+    /** Received before this time (epoch ms). */
+    receivedBefore: z.number().int().nonnegative().optional(),
+    /** Any of these brands, as the board's brand list offers them (case does not matter). */
+    brands: z.array(z.string().min(1).max(100)).min(1).max(100).optional(),
   })
   .strict();
 
+/**
+ * Sorts a cursor can page through; the column sorts page by offset (a table's page numbers). No
+ * sort by customer name: names are encrypted at rest, so SQL would order the ciphertext.
+ */
+const CURSOR_SORTS = ['createdAt.desc', 'createdAt.asc', 'cancelledAt.desc'] as const;
+const COLUMN_SORTS = [
+  'number.asc',
+  'number.desc',
+  'total.asc',
+  'total.desc',
+  'readyBy.asc',
+  'readyBy.desc',
+] as const;
+
+export const listTicketsInput = z
+  .object({
+    filter: ticketFilter.optional(),
+    /** `cancelledAt.desc` lists only cancelled tickets, latest cancel first (the owner's view). */
+    sort: z.enum([...CURSOR_SORTS, ...COLUMN_SORTS]).default('createdAt.desc'),
+    cursor: z.string().optional(),
+    /** Rows to skip, for a table that jumps to a page number. Not with a cursor. */
+    offset: z.number().int().min(0).max(1_000_000).optional(),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict()
+  .refine((input) => input.cursor === undefined || input.offset === undefined, {
+    message: 'cursor and offset cannot be combined',
+  })
+  .refine(
+    (input) =>
+      input.cursor === undefined || (CURSOR_SORTS as readonly string[]).includes(input.sort),
+    { message: 'this sort pages by offset, not by cursor' },
+  );
+
 export type ListTicketsInput = z.infer<typeof listTicketsInput>;
+export type TicketFilter = z.infer<typeof ticketFilter>;
+export type TicketSort = ListTicketsInput['sort'];
 
-export async function listTicketsHandler(
-  input: ListTicketsInput,
-  qctx: Qctx,
-): Promise<QueryPage<TicketSummaryRow>> {
-  const descending = input.sort !== 'createdAt.asc';
-  const byCancel = input.sort === 'cancelledAt.desc';
-  const column = byCancel ? 't.cancelledAt' : 't.createdAt';
-  const filter = input.filter ?? {};
-  let query = summaryQuery(qctx)
-    .orderBy(column, descending ? 'desc' : 'asc')
-    .orderBy('t.id', descending ? 'desc' : 'asc');
-  if (byCancel) query = query.where('t.cancelledAt', 'is not', null);
-
+/** The store's tickets narrowed by `filter`; shared by the list and its count so they agree. */
+function filteredSummaries(qctx: Qctx, filter: TicketFilter, cancelledOnly: boolean) {
+  let query = summaryQuery(qctx);
+  if (cancelledOnly) query = query.where('t.cancelledAt', 'is not', null);
   if (filter.outcomes !== undefined) query = query.where('t.outcome', 'in', filter.outcomes);
   if (filter.location !== undefined) query = query.where('t.location', '=', filter.location);
   if (filter.technicianId !== undefined) {
     query = query.where('t.technicianId', '=', filter.technicianId);
   }
-  if (filter.unassigned === true) query = query.where('t.technicianId', 'is', null);
+  const { technicianIds, unassigned } = filter;
+  if (technicianIds !== undefined) {
+    query = query.where((eb) =>
+      unassigned === true
+        ? eb.or([eb('t.technicianId', 'in', technicianIds), eb('t.technicianId', 'is', null)])
+        : eb('t.technicianId', 'in', technicianIds),
+    );
+  } else if (unassigned === true) {
+    query = query.where('t.technicianId', 'is', null);
+  }
   if (filter.customerId !== undefined) query = query.where('t.customerId', '=', filter.customerId);
   if (filter.hasPendingProposals === true) {
     query = query.where((eb) =>
@@ -302,16 +348,66 @@ export async function listTicketsHandler(
       ),
     );
   }
+  if (filter.receivedFrom !== undefined) {
+    query = query.where('t.createdAt', '>=', filter.receivedFrom);
+  }
+  if (filter.receivedBefore !== undefined) {
+    query = query.where('t.createdAt', '<', filter.receivedBefore);
+  }
+  if (filter.brands !== undefined) {
+    // The brands come from `ticketBrands`, so this picks recorded values rather than matching
+    // typed text; case is folded so "samsung" and "Samsung" are one brand.
+    const brands = filter.brands.map((brand) => brand.trim().toLowerCase());
+    query = query.where((eb) => eb(eb.fn('lower', ['t.deviceBrand']), 'in', brands));
+  }
+  return query;
+}
 
+/** The ORDER BY column behind each column sort, with the ticket id as the tie-breaker. */
+const SORT_COLUMN = {
+  number: sql.ref('t.ticketNumber'),
+  // What the customer owes: a cancelled servisan's fee, never its repair price.
+  total: sql`case when ${sql.ref('t.outcome')} = 'cancelled' then coalesce(${sql.ref('t.cancelFee')}, 0) else ${sql.ref('t.quoteTotal')} end`,
+  readyBy: sql.ref('t.estimatedReadyAt'),
+  createdAt: sql.ref('t.createdAt'),
+  cancelledAt: sql.ref('t.cancelledAt'),
+} as const;
+
+export async function listTicketsHandler(
+  input: ListTicketsInput,
+  qctx: Qctx,
+): Promise<QueryPage<TicketSummaryRow>> {
+  const filter = input.filter ?? {};
+  const byCancel = input.sort === 'cancelledAt.desc';
+  const query = filteredSummaries(qctx, filter, byCancel);
+
+  if (!(CURSOR_SORTS as readonly string[]).includes(input.sort) || input.offset !== undefined) {
+    const [key, direction] = input.sort.split('.') as [string, 'asc' | 'desc'];
+    const column = SORT_COLUMN[key as keyof typeof SORT_COLUMN];
+    const rows = await query
+      .orderBy(sql`${column} ${sql.raw(direction)}`)
+      .orderBy('t.createdAt', 'desc')
+      .orderBy('t.id', 'desc')
+      .limit(input.limit)
+      .offset(input.offset ?? 0)
+      .execute();
+    return { rows: await toSummaries(qctx, rows), nextCursor: null };
+  }
+
+  const descending = input.sort !== 'createdAt.asc';
+  const column = byCancel ? 't.cancelledAt' : 't.createdAt';
+  let paged = query
+    .orderBy(column, descending ? 'desc' : 'asc')
+    .orderBy('t.id', descending ? 'desc' : 'asc');
   if (input.cursor !== undefined) {
     const position = decodeCursor(input.cursor, input.sort);
-    query = query.where((eb) =>
+    paged = paged.where((eb) =>
       keysetPredicate(eb, { column, idColumn: 't.id', position, descending }),
     );
   }
 
   const { rows, nextCursor } = await fetchKeysetPage({
-    fetch: (limitPlusOne) => query.limit(limitPlusOne).execute(),
+    fetch: (limitPlusOne) => paged.limit(limitPlusOne).execute(),
     limit: input.limit,
     sort: input.sort,
     cursorValues: (last) => [Number(byCancel ? last.cancelledAt : last.createdAt), last.id],
@@ -324,6 +420,66 @@ export const listTicketsQuery = {
   permission: REPAIR_PERMISSION.read,
   input: listTicketsInput,
   handler: listTicketsHandler,
+} as const;
+
+// ── countTickets ───────────────────────────────────────────────────────────────────────────────
+
+export const countTicketsInput = z
+  .object({ filter: ticketFilter.optional(), cancelledOnly: z.boolean().optional() })
+  .strict();
+export type CountTicketsInput = z.infer<typeof countTicketsInput>;
+
+/** How many tickets `listTickets` would list with the same filter: a table's "1–50 of 312". */
+export async function countTicketsHandler(
+  input: CountTicketsInput,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly count: number }>> {
+  const row = await qctx.db
+    .selectFrom(filteredSummaries(qctx, input.filter ?? {}, input.cancelledOnly === true).as('s'))
+    .select((eb) => eb.fn.countAll<number>().as('count'))
+    .executeTakeFirst();
+  return { rows: [{ count: Number(row?.count ?? 0) }], nextCursor: null };
+}
+
+export const countTicketsQuery = {
+  name: 'countTickets',
+  permission: REPAIR_PERMISSION.read,
+  input: countTicketsInput,
+  handler: countTicketsHandler,
+} as const;
+
+// ── ticketBrands ───────────────────────────────────────────────────────────────────────────────
+
+export const ticketBrandsInput = z.object({}).strict();
+export type TicketBrandsInput = z.infer<typeof ticketBrandsInput>;
+
+/** The brands this store has taken in, most common first: the options of the brand filter. */
+export async function ticketBrandsHandler(
+  _input: TicketBrandsInput,
+  qctx: Qctx,
+): Promise<QueryPage<{ readonly brand: string; readonly count: number }>> {
+  const rows = await qctx.db
+    .selectFrom('repairTickets')
+    .select((eb) => [eb.fn.min('deviceBrand').as('brand'), eb.fn.countAll<number>().as('count')])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .groupBy((eb) => eb.fn('lower', ['deviceBrand']))
+    .orderBy('count', 'desc')
+    .orderBy('brand')
+    .execute();
+  return {
+    rows: rows
+      .filter((row) => row.brand !== null && row.brand.trim() !== '')
+      .map((row) => ({ brand: row.brand!.trim(), count: Number(row.count) })),
+    nextCursor: null,
+  };
+}
+
+export const ticketBrandsQuery = {
+  name: 'ticketBrands',
+  permission: REPAIR_PERMISSION.read,
+  input: ticketBrandsInput,
+  handler: ticketBrandsHandler,
 } as const;
 
 // ── searchTickets ──────────────────────────────────────────────────────────────────────────────
@@ -475,6 +631,8 @@ export async function getTicketHandler(
       'createdBy',
       'returnedBy',
       'returnedAt',
+      'downPaymentBy',
+      'downPaymentAt',
     ])
     .where('id', '=', input.ticketId)
     .executeTakeFirstOrThrow();
@@ -507,8 +665,15 @@ export async function getTicketHandler(
   const names = await userNames(qctx, [
     summary.technicianId,
     detail.createdBy,
+    detail.downPaymentBy,
     ...events.map((event) => event.actorId),
   ]);
+  const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
+  for (const event of events) {
+    if (event.kind !== REPAIR_OP.slipPrinted) continue;
+    const { slip } = parseJson<{ slip?: string }>(event.detailJson, {});
+    if (slip === 'intake' || slip === 'handover') slipPrints[slip] += 1;
+  }
 
   return {
     rows: [
@@ -525,8 +690,14 @@ export async function getTicketHandler(
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,
         returnedBy: detail.returnedBy,
+        returnedByName: detail.returnedBy === null ? null : (names.get(detail.returnedBy) ?? null),
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
+        downPaymentBy: detail.downPaymentBy,
+        downPaymentByName:
+          detail.downPaymentBy === null ? null : (names.get(detail.downPaymentBy) ?? null),
+        downPaymentAt: detail.downPaymentAt === null ? null : Number(detail.downPaymentAt),
+        slipPrints,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,
@@ -718,4 +889,71 @@ export const cancelFeesQuery = {
   permission: REPAIR_PERMISSION.read,
   input: cancelFeesInput,
   handler: cancelFeesHandler,
+} as const;
+
+// ── printSettings (what this store's slips print besides the servisan) ──────────────────────
+
+export interface PrintSettings {
+  /** The business name in large type; null prints the store's own name. */
+  readonly name: string | null;
+  readonly address: string;
+  readonly phone: string;
+  /** The logo picture, to fetch like any synced photo; null when there is none. */
+  readonly logo: {
+    readonly mediaId: string;
+    readonly sha256: string;
+    readonly mime: string;
+  } | null;
+  readonly logoOnDotMatrix: boolean;
+  /** One term per line; null prints the app's default terms. */
+  readonly intakeTerms: string | null;
+  readonly handoverTerms: string | null;
+}
+
+/** A store that never set anything prints its name and the default terms. */
+export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
+  name: null,
+  address: '',
+  phone: '',
+  logo: null,
+  logoOnDotMatrix: false,
+  intakeTerms: null,
+  handoverTerms: null,
+};
+
+export const printSettingsInput = z.object({}).strict();
+
+export async function printSettingsHandler(
+  _input: z.infer<typeof printSettingsInput>,
+  qctx: Qctx,
+): Promise<QueryPage<PrintSettings>> {
+  const row = await qctx.db
+    .selectFrom('repairStorePrintSettings')
+    .selectAll()
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .executeTakeFirst();
+  const settings: PrintSettings =
+    row === undefined
+      ? DEFAULT_PRINT_SETTINGS
+      : {
+          name: row.name,
+          address: row.address,
+          phone: row.phone,
+          logo:
+            row.logoMediaId === null || row.logoSha256 === null || row.logoMime === null
+              ? null
+              : { mediaId: row.logoMediaId, sha256: row.logoSha256, mime: row.logoMime },
+          logoOnDotMatrix: Number(row.logoOnDotMatrix) === 1,
+          intakeTerms: row.intakeTerms,
+          handoverTerms: row.handoverTerms,
+        };
+  return { rows: [settings], nextCursor: null };
+}
+
+export const printSettingsQuery = {
+  name: 'printSettings',
+  permission: REPAIR_PERMISSION.read,
+  input: printSettingsInput,
+  handler: printSettingsHandler,
 } as const;

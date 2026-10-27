@@ -88,6 +88,13 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.intake.line.0.amount'), {
       target: { value: '1250000' },
     });
+    // A down payment above the total is refused beside the field; a fair one shows what is left.
+    fireEvent.change(byTestId('repair.desk.intake.downPayment'), { target: { value: '2000000' } });
+    expect(await screen.findByText('DP-nya lebih besar dari total biaya.')).toBeTruthy();
+    fireEvent.change(byTestId('repair.desk.intake.downPayment'), { target: { value: '500000' } });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.intake.balance').textContent).toContain('750.000'),
+    );
     await waitFor(() => expect(screen.queryByTestId(/^repair\.desk\.intake\.jump\./)).toBeNull());
 
     fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
@@ -96,6 +103,7 @@ describe('counter app over demo data', () => {
     );
     expect(byTestId('repair.desk.ticket.phone').textContent).toContain('0813-4455-6677');
     expect(byTestId('repair.desk.ticket.total').textContent).toContain('1.250.000');
+    expect(byTestId('repair.desk.ticket.balance').textContent).toContain('750.000');
   });
 
   it('closes only the dialog on Escape, keeping the servisan open', async () => {
@@ -120,5 +128,62 @@ describe('counter app over demo data', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
     await openTicket('Benny Kambu');
     expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
+  });
+
+  it('filters, sorts and pages the queue, and keeps the choice across an intake', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    const range = (): string => byTestId('repair.desk.board.pagination.range').textContent ?? '';
+    await waitFor(() => expect(range()).toMatch(/^1–\d+ dari \d+$/));
+    const all = Number(range().split(' dari ')[1]!.replace(/\./g, ''));
+
+    fireEvent.pointerDown(byTestId('repair.desk.board.pagination.size'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: '25 per halaman' }));
+    await waitFor(() => expect(range()).toBe(`1–25 dari ${String(all)}`));
+    fireEvent.click(byTestId('repair.desk.board.pagination.page.2'));
+    await waitFor(() => expect(range()).toMatch(/^26–/));
+
+    // A status narrows the queue, starts again from page 1, and every row shows it.
+    fireEvent.click(byTestId('repair.desk.filter.status'));
+    fireEvent.click(
+      await screen.findByTestId('repair.desk.filter.status.option.waiting_for_parts'),
+    );
+    await waitFor(() => expect(range()).toMatch(/^1–\d+ dari \d+$/));
+    fireEvent.keyDown(byTestId('repair.desk.filter.status.popover'), { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByTestId('repair.desk.filter.status.popover')).toBeNull(),
+    );
+    const narrowed = Number(range().split(' dari ')[1]!.replace(/\./g, ''));
+    expect(narrowed).toBeLessThan(all);
+    const rows = screen.getAllByTestId(/^repair\.desk\.board\.table\.row\./);
+    for (const row of rows) expect(row.textContent).toContain('Tunggu sparepart');
+
+    // Sorting by total puts the largest first, across every page the query holds.
+    const header = (): HTMLElement => screen.getByRole('columnheader', { name: /Total/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Total' }));
+    await waitFor(() => expect(header().getAttribute('aria-sort')).not.toBeNull());
+    if (header().getAttribute('aria-sort') === 'ascending') {
+      fireEvent.click(screen.getByRole('button', { name: 'Total' }));
+    }
+    await waitFor(() =>
+      expect(screen.getByRole('columnheader', { name: /Total/ }).getAttribute('aria-sort')).toBe(
+        'descending',
+      ),
+    );
+    const totals = screen
+      .getAllByTestId(/^repair\.desk\.board\.table\.row\./)
+      .map((row) =>
+        Number(/Rp\s?([\d.]+)\s*$/.exec(row.textContent ?? '')![1]!.replace(/\./g, '')),
+      );
+    expect(totals).toEqual([...totals].sort((a, b) => b - a));
+
+    fireEvent.keyDown(window, { key: 'F2' });
+    await screen.findByTestId('repair.desk.intake');
+    fireEvent.click(byTestId('repair.desk.intake.back'));
+    await screen.findByTestId('repair.desk.board');
+    expect(byTestId('repair.desk.filter.status').textContent).toContain('Tunggu sparepart');
   });
 });

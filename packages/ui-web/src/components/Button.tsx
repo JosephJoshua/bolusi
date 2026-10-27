@@ -72,7 +72,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled === true || busy}
       aria-busy={busy || undefined}
       className={clsx(
-        'inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-sm font-semibold transition-colors disabled:cursor-not-allowed',
+        'inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-sm font-semibold transition-[color,background-color,border-color,box-shadow,scale] duration-150 enabled:active:scale-[0.98] disabled:cursor-not-allowed',
         VARIANT[variant],
         (textual ? TEXT_SIZE : SIZE)[size],
         className,

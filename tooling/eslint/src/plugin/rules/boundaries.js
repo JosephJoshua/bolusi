@@ -40,16 +40,19 @@ const FORBIDDEN_EVERYWHERE = new Map([
   // 06-media-pipeline §2.1 (FR-818): evidence media is capturable ONLY through the in-app camera,
   // and the enforcement is deliberately STRUCTURAL rather than per-screen — "the shared
   // MediaCapture component is the only capture surface, and `expo-image-picker` is a banned
-  // import (lint rule, same class as the no-UPDATE-on-operations rule)". v0 has no non-evidence
-  // media surface, so the ban is repo-wide with no exemption. Added task 18. The package is not
-  // installed today, which is exactly when to add the ban: it costs nothing now and refuses the
-  // one-line `expo install expo-image-picker` that would otherwise quietly re-open gallery import
-  // of "evidence" a technician never photographed.
+  // import (lint rule, same class as the no-UPDATE-on-operations rule)". Added task 18. The one
+  // non-evidence picture, the store logo on printed slips, may come from the gallery, so exactly
+  // one file may import it (GALLERY_FILE below); it feeds only `RepairRuntime.pickPhoto`, which the
+  // print settings screen alone uses. Every other import still refuses gallery "evidence" a
+  // technician never photographed.
   [
     'expo-image-picker',
     'gallery selection may never exist where evidence is required — live capture only, via the shared MediaCapture component (06-media-pipeline §2.1, FR-818)',
   ],
 ]);
+
+/** The store-logo gallery binding: the only file that may import `expo-image-picker`. */
+const GALLERY_FILE = /(?:^|\/)apps\/mobile\/src\/media\/native-gallery\.ts$/;
 
 // Styling / animation libraries banned in v0 (design-system §7 lint (c) + 08 §2.6). No workspace
 // legitimately imports these — the design system is tokens + StyleSheet, zero styling deps, on the
@@ -279,7 +282,7 @@ export default {
     function check(node, source, importKind) {
       // 1. Banned packages, anywhere.
       const banReason = FORBIDDEN_EVERYWHERE.get(source);
-      if (banReason) {
+      if (banReason && !(source === 'expo-image-picker' && GALLERY_FILE.test(filename))) {
         context.report({
           node,
           messageId: 'forbiddenEverywhere',

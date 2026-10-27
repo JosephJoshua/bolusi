@@ -28,6 +28,17 @@ export {
   type TextAreaProps,
   type TextFieldProps,
 } from './components/Field.js';
+export {
+  ColumnsMenu,
+  DayRangeFilter,
+  FilterPopover,
+  FilterToggle,
+  OptionsFilter,
+  type ColumnChoice,
+  type DayRangePreset,
+  type DayRangeValue,
+  type FilterOption,
+} from './components/Filters.js';
 export { IconButton, type IconButtonProps } from './components/IconButton.js';
 export { Kbd } from './components/Kbd.js';
 export { Card, Fact, FactGrid, Section } from './components/Layout.js';
@@ -41,6 +52,7 @@ export {
   type PhotoViewerLabels,
   type ViewerPhoto,
 } from './components/Photo.js';
+export { Pagination, pageWindow, type PaginationLabels } from './components/Pagination.js';
 export { SearchField } from './components/SearchField.js';
 export { Segmented, type SegmentedOption } from './components/Segmented.js';
 export { AppShell, PageHeader, Sidebar, type NavItem } from './components/Shell.js';

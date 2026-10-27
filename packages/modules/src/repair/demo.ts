@@ -7,7 +7,7 @@
  *
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
-import { FuzzyIndex } from '@bolusi/core';
+import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
 import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
@@ -16,8 +16,8 @@ import {
   NOTHING_HIDDEN,
   type IntakeOptionSettings,
 } from './intake-options.js';
-import type { QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
-import type { RepairRuntime } from './runtime.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
+import type { RepairPrinting, RepairRuntime } from './runtime.js';
 
 /** The phone harness's fixed clock, so its screenshots never change. */
 export const DEMO_NOW = Date.UTC(2026, 6, 21, 3, 0, 0);
@@ -27,7 +27,8 @@ let HARNESS_NOW = DEMO_NOW;
 
 /** The browser globals the harness touches, without a DOM lib in this package. */
 const browser = globalThis as unknown as {
-  window?: Record<string, unknown>;
+  window?: Record<string, unknown> & { open(url: string, target: string): unknown };
+  Blob?: new (parts: string[], options: { type: string }) => Blob;
   document?: { createElement(tag: 'a'): { href: string; download: string; click(): void } };
 };
 
@@ -56,6 +57,8 @@ export const DEMO_REPAIR_ROLES = {
       P.cancel,
       P.discount,
       P.setCancelFees,
+      P.correctDownPayment,
+      P.setPrintSettings,
     ],
   },
 } as const;
@@ -140,6 +143,8 @@ function ticket(spec: {
   extraPhotos?: TicketPhotoRow[];
   location?: TicketDetailRow['location'];
   cancel?: { fee: number; standardFee: number; by: string; reason: string; hoursAgo: number };
+  downPayment?: number;
+  returnedBy?: string;
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -185,8 +190,14 @@ function ticket(spec: {
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',
     createdByName: 'Siti Rahayu',
-    returnedBy: null,
-    returnedAt: null,
+    returnedBy: spec.returnedBy ?? null,
+    returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
+    returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
+    downPayment: spec.downPayment ?? null,
+    downPaymentBy: spec.downPayment === undefined ? null : 'u-siti',
+    downPaymentByName: spec.downPayment === undefined ? null : 'Siti Rahayu',
+    downPaymentAt: spec.downPayment === undefined ? null : createdAt,
+    slipPrints: { intake: 1, handover: 0 },
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
     events: [
@@ -240,6 +251,7 @@ function seedTickets(): TicketDetailRow[] {
       ],
       hoursAgo: 20,
       extraPhotos: [photoRow('before:m1'), photoRow('before:m2')],
+      downPayment: 50_000,
     }),
     ticket({
       id: 't-3',
@@ -270,6 +282,7 @@ function seedTickets(): TicketDetailRow[] {
       lines: [line('part', 'Speaker Y21', 75_000), line('labour', 'Pasang speaker', 40_000)],
       hoursAgo: 70,
       extraPhotos: [photoRow('before:m4'), photoRow('after:m5')],
+      downPayment: 100_000,
     }),
     ticket({
       id: 't-5',
@@ -308,6 +321,7 @@ function seedTickets(): TicketDetailRow[] {
       hoursAgo: 120,
       extraPhotos: [photoRow('before:m7')],
       location: 'returned',
+      returnedBy: 'u-siti',
       cancel: {
         fee: 0,
         standardFee: 50_000,
@@ -452,6 +466,16 @@ export function demoRepairRuntime(
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
   let optionIds = 0;
   let cancelFees = { beforeWork: 0, afterWork: 50_000 };
+  let printSettings: PrintSettings = {
+    name: null,
+    address: 'Jl. Trikora No. 12, Wamena',
+    phone: '0821-9876-5432',
+    logo: null,
+    logoOnDotMatrix: false,
+    intakeTerms: null,
+    handoverTerms: null,
+  };
+  let paper: PaperSettings | null = null;
   const listeners = new Set<() => void>();
   const notify = (): void => {
     for (const listener of listeners) listener();
@@ -494,25 +518,80 @@ export function demoRepairRuntime(
   const page = <T>(rows: readonly T[]) => Promise.resolve({ rows, nextCursor: null });
   const summary = (t: TicketDetailRow) => t;
 
+  // The same filters and sorts `listTickets` applies on a device, over the demo's rows.
+  const filterTickets = (raw: unknown, cancelledOnly: boolean): TicketDetailRow[] => {
+    const f = (raw ?? {}) as Record<string, unknown>;
+    const outcomes = f['outcomes'] as string[] | undefined;
+    const technicianIds = f['technicianIds'] as string[] | undefined;
+    const brands = (f['brands'] as string[] | undefined)?.map((b) => b.trim().toLowerCase());
+    const from = f['receivedFrom'] as number | undefined;
+    const before = f['receivedBefore'] as number | undefined;
+    return tickets.filter(
+      (t) =>
+        (outcomes === undefined || outcomes.includes(t.outcome)) &&
+        (f['location'] === undefined || t.location === f['location']) &&
+        (f['technicianId'] === undefined || t.technicianId === f['technicianId']) &&
+        (technicianIds === undefined
+          ? f['unassigned'] !== true || t.technicianId === null
+          : (t.technicianId !== null && technicianIds.includes(t.technicianId)) ||
+            (f['unassigned'] === true && t.technicianId === null)) &&
+        (f['hasPendingProposals'] !== true || t.pendingProposals > 0) &&
+        (from === undefined || t.createdAt >= from) &&
+        (before === undefined || t.createdAt < before) &&
+        (brands === undefined || brands.includes(t.deviceBrand.trim().toLowerCase())) &&
+        (!cancelledOnly || t.cancelledAt !== null),
+    );
+  };
+  const compareBy = (sort: string) => {
+    const [key, direction] = sort.split('.');
+    const value = (t: TicketDetailRow): number | string =>
+      key === 'number'
+        ? t.ticketNumber
+        : key === 'total'
+          ? t.outcome === 'cancelled'
+            ? (t.cancelFee ?? 0)
+            : t.quoteTotal
+          : key === 'readyBy'
+            ? (t.estimatedReadyAt ?? 0)
+            : key === 'cancelledAt'
+              ? (t.cancelledAt ?? 0)
+              : t.createdAt;
+    const sign = direction === 'asc' ? 1 : -1;
+    return (a: TicketDetailRow, b: TicketDetailRow): number => {
+      const x = value(a);
+      const y = value(b);
+      const order =
+        typeof x === 'string' && typeof y === 'string'
+          ? x.localeCompare(y, 'id')
+          : Number(x) - Number(y);
+      return order === 0 ? b.createdAt - a.createdAt : sign * order;
+    };
+  };
+
   type Input = Record<string, unknown>;
   const queries: Record<string, (input: Input) => Promise<unknown>> = {
     listTickets: (input) => {
-      const f = (input['filter'] ?? {}) as Record<string, unknown>;
-      const outcomes = f['outcomes'] as string[] | undefined;
-      return page(
-        tickets
-          .filter((t) => outcomes === undefined || outcomes.includes(t.outcome))
-          .filter((t) => f['location'] === undefined || t.location === f['location'])
-          .filter((t) => f['technicianId'] === undefined || t.technicianId === f['technicianId'])
-          .filter((t) => f['unassigned'] !== true || t.technicianId === null)
-          .filter((t) => input['sort'] !== 'cancelledAt.desc' || t.cancelledAt !== null)
-          .sort((a, b) =>
-            input['sort'] === 'cancelledAt.desc'
-              ? (b.cancelledAt ?? 0) - (a.cancelledAt ?? 0)
-              : b.createdAt - a.createdAt,
-          )
-          .map(summary),
+      const sort = String(input['sort'] ?? 'createdAt.desc');
+      const offset = Number(input['offset'] ?? 0);
+      const limit = Number(input['limit'] ?? 50);
+      const rows = filterTickets(input['filter'], sort === 'cancelledAt.desc').sort(
+        compareBy(sort),
       );
+      // Without an offset the whole list comes back as one page, as the phone board expects.
+      const shown = input['offset'] === undefined ? rows : rows.slice(offset, offset + limit);
+      return page(shown.map(summary));
+    },
+    countTickets: (input) =>
+      page([{ count: filterTickets(input['filter'], input['cancelledOnly'] === true).length }]),
+    ticketBrands: () => {
+      const counts = new Map<string, { brand: string; count: number }>();
+      for (const t of tickets) {
+        const key = t.deviceBrand.trim().toLowerCase();
+        const entry = counts.get(key) ?? { brand: t.deviceBrand.trim(), count: 0 };
+        entry.count += 1;
+        counts.set(key, entry);
+      }
+      return page([...counts.values()].sort((a, b) => b.count - a.count));
     },
     technicianLoads: () => {
       const loads = new Map<string, number>();
@@ -562,6 +641,7 @@ export function demoRepairRuntime(
     getTicket: (input) => page([find(String(input['ticketId']))]),
     intakeOptionSettings: () => page([options]),
     cancelFees: () => page([cancelFees]),
+    printSettings: () => page([printSettings]),
   };
 
   const commands: Record<string, (input: Input) => unknown> = {
@@ -607,6 +687,11 @@ export function demoRepairRuntime(
         intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
         createdAt: HARNESS_NOW,
+        downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
+        downPaymentBy: Number(input['downPayment'] ?? 0) > 0 ? actor.userId : null,
+        downPaymentByName: Number(input['downPayment'] ?? 0) > 0 ? actor.name : null,
+        downPaymentAt: Number(input['downPayment'] ?? 0) > 0 ? HARNESS_NOW : null,
+        slipPrints: { intake: 0, handover: 0 },
         quoteLines: (
           input['quoteLines'] as {
             kind: QuoteLineRow['kind'];
@@ -699,11 +784,53 @@ export function demoRepairRuntime(
       notify();
       return { list };
     },
+    recordDownPayment: (input) =>
+      update(String(input['ticketId']), 'repair.down_payment_received', {
+        downPayment: Number(input['amount']),
+        downPaymentBy: actor.userId,
+        downPaymentByName: actor.name,
+        downPaymentAt: HARNESS_NOW,
+      }),
+    correctDownPayment: (input) =>
+      update(String(input['ticketId']), 'repair.down_payment_corrected', {
+        downPayment: Number(input['amount']) > 0 ? Number(input['amount']) : null,
+        downPaymentBy: actor.userId,
+        downPaymentByName: actor.name,
+        downPaymentAt: HARNESS_NOW,
+      }),
+    recordSlipPrinted: (input) => {
+      const t = find(String(input['ticketId']));
+      const slip = input['slip'] as keyof TicketDetailRow['slipPrints'];
+      return update(t.id, 'repair.slip_printed', {
+        slipPrints: { ...t.slipPrints, [slip]: t.slipPrints[slip] + 1 },
+      });
+    },
+    setPrintSettings: (input) => {
+      const name = String(input['name'] ?? '').trim();
+      const logo = input['logo'] as MediaRef | null | undefined;
+      printSettings = {
+        name: name === '' ? null : name,
+        address: String(input['address'] ?? ''),
+        phone: String(input['phone'] ?? ''),
+        logo:
+          logo === undefined
+            ? printSettings.logo
+            : logo === null
+              ? null
+              : { mediaId: logo.mediaId, sha256: logo.sha256, mime: logo.mime },
+        logoOnDotMatrix: input['logoOnDotMatrix'] === true,
+        intakeTerms: (input['intakeTerms'] as string | null | undefined) ?? null,
+        handoverTerms: (input['handoverTerms'] as string | null | undefined) ?? null,
+      };
+      notify();
+      return printSettings;
+    },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
       return update(t.id, 'repair.device_returned', {
         location: 'returned',
         returnedBy: actor.userId,
+        returnedByName: actor.name,
         returnedAt: HARNESS_NOW,
         photos: [
           ...t.photos,
@@ -765,6 +892,36 @@ export function demoRepairRuntime(
     browser.window[DEMO_COLLEAGUE_HOOK] = { run: colleague };
   }
 
+  // The browser stand-in for the print dialog: the slip opens in a new tab, ready for Ctrl+P, so a
+  // reviewer sees the very page a phone would print. "Share" downloads the same page.
+  const printing: RepairPrinting = {
+    storeName: () => Promise.resolve('Bolusi Wamena'),
+    userName: () => Promise.resolve(actor.name),
+    readPaper: () => Promise.resolve(paper),
+    writePaper: (next) => {
+      paper = next;
+      return Promise.resolve();
+    },
+    output: (slip, how) => {
+      const { window, document, Blob: PageBlob } = browser;
+      if (window === undefined || document === undefined || PageBlob === undefined) {
+        return Promise.resolve('done');
+      }
+      const url = URL.createObjectURL(new PageBlob([slip.html], { type: 'text/html' }));
+      if (how === 'print') {
+        window.open(url, '_blank');
+        // A browser tab cannot say whether it was printed either, so the screen asks.
+        return Promise.resolve('unconfirmed');
+      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${slip.jobName}.html`;
+      link.click();
+      return Promise.resolve('done');
+    },
+    imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
+  };
+
   const permitted = new Set<string>(DEMO_REPAIR_ROLES[role].permissions);
   const runtime = {
     userId: actor.userId,
@@ -788,6 +945,8 @@ export function demoRepairRuntime(
       Promise.resolve(TECHNICIANS.map((id) => ({ id, name: NAMES.get(id) ?? id }))),
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    pickPhoto: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    printing,
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.

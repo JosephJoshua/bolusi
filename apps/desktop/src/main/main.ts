@@ -37,6 +37,9 @@ function createWindow(): void {
   else void window.loadFile(RENDERER_INDEX);
 }
 
+// Indonesian for what Chromium draws itself, such as a date field's dd/mm/yyyy order.
+app.commandLine.appendSwitch('lang', 'id');
+
 // One counter window per PC: a second launch (a double click on the shortcut) brings the open one
 // forward instead of starting a second copy over the same local data.
 const primary = app.requestSingleInstanceLock();

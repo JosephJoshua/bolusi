@@ -27,7 +27,7 @@ export function Tooltip({
         <RadixTooltip.Content
           side={side}
           sideOffset={6}
-          className="z-50 max-w-72 rounded-sm bg-text px-2 py-1 text-small text-surface shadow-md"
+          className="z-50 max-w-72 rounded-sm bg-text px-2 py-1 text-small text-surface shadow-md data-[state=delayed-open]:animate-fade-in data-[state=instant-open]:animate-fade-in data-[state=closed]:animate-fade-out"
         >
           {label}
         </RadixTooltip.Content>

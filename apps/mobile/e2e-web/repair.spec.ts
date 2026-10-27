@@ -351,3 +351,117 @@ test('a phone handed back on another device stops the handover', async ({ page }
   await expect(page.getByTestId('repair.handover.discard')).toHaveCount(0);
   await expect(page.getByTestId('repair.ticket.status')).toContainText('Sudah diambil');
 });
+
+test('a down payment at intake shows what is left to pay, and opens with the ticket', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.device.brandChoice.Oppo');
+  await fill(page, 'repair.intake.device.model', 'A57');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.condition.complaint', 'Mati total');
+  await tap(page, 'repair.intake.condition.restOk');
+  await tap(page, 'repair.intake.primary');
+  for (let shot = 0; shot < 6; shot += 1) await tap(page, 'repair.intake.primary');
+  await tap(page, 'repair.intake.primary');
+  await fill(page, 'repair.intake.price.description.0', 'LCD A57');
+  await fill(page, 'repair.intake.price.amount.0', '650000');
+  // More than the price is refused where it is typed.
+  await fill(page, 'repair.intake.price.downPaymentInput', '700000');
+  await expect(page.getByText('DP-nya lebih besar dari total biaya.').first()).toBeVisible();
+  await fill(page, 'repair.intake.price.downPaymentInput', '200000');
+  await expect(page.getByTestId('repair.intake.price.balance')).toHaveText('Rp 450.000');
+  await shoot(page, 'dp-intake-price');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.review.balance')).toHaveText('Rp 450.000');
+  await page.getByTestId('repair.intake.review.balance').scrollIntoViewIfNeeded();
+  await shoot(page, 'dp-intake-review');
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 200.000');
+  await expect(page.getByTestId('repair.ticket.balance')).toHaveText('Rp 450.000');
+  // Recorded once; the counter cannot change it afterwards.
+  await expect(page.getByTestId('repair.ticket.downPayment.correct')).toHaveCount(0);
+  await page.getByTestId('repair.ticket.balance').scrollIntoViewIfNeeded();
+  await shoot(page, 'dp-ticket');
+});
+
+test('the counter records a down payment later, and an owner corrects it with a reason', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-1');
+  await tap(page, 'repair.ticket.downPayment.record');
+  await fill(page, 'repair.downPayment.amount', '100000');
+  await shoot(page, 'dp-record');
+  await tap(page, 'repair.downPayment.primary');
+  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 100.000');
+  await expect(page.getByTestId('repair.ticket.downPayment.record')).toHaveCount(0);
+
+  await open(page, 'owner');
+  await tap(page, 'repair.board.row.t-2');
+  await tap(page, 'repair.ticket.downPayment.correct');
+  // The recorded amount is shown above; the field waits for the correct one.
+  await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('');
+  await expect(page.getByText('Isi DP yang benar dulu.')).toBeVisible();
+  await fill(page, 'repair.downPayment.amount', '50000');
+  await expect(page.getByText('Jumlahnya masih sama.')).toBeVisible();
+  await fill(page, 'repair.downPayment.amount', '30000');
+  await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('30.000');
+  await fill(page, 'repair.downPayment.reason', 'Salah ketik, pelanggan bayar 30 ribu.');
+  await shoot(page, 'dp-correct');
+  await tap(page, 'repair.downPayment.primary');
+  await expect(page.getByTestId('repair.ticket.downPayment')).toHaveText('-Rp 30.000');
+  await page.getByTestId('repair.ticket.balance').scrollIntoViewIfNeeded();
+  await shoot(page, 'dp-ticket-owner');
+});
+
+test('the counter prints the handover slip, and the next print is a reprint', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-4');
+  await tap(page, 'repair.ticket.action.print');
+  await expect(page.getByTestId('repair.print')).toBeVisible();
+  await shoot(page, 'print-step');
+  const popup = page.waitForEvent('popup');
+  await tap(page, 'repair.print.primary');
+  const slip = await popup;
+  await slip.waitForLoadState();
+  await expect(slip.getByText('Nota servisan').first()).toBeVisible();
+  await slip.screenshot({ path: path.join(ARTIFACTS, 'print-slip-a4.png'), fullPage: true });
+  await slip.close();
+  // Nothing is logged until the counter says the paper came out.
+  await expect(page.getByTestId('repair.print.ask')).toBeVisible();
+  await shoot(page, 'print-ask');
+  await tap(page, 'repair.print.ask.cancel');
+  await tap(page, 'repair.print.back');
+  await tap(page, 'repair.ticket.action.print');
+  await expect(page.getByTestId('repair.print.reprint')).toHaveCount(0);
+  const again = page.waitForEvent('popup');
+  await tap(page, 'repair.print.primary');
+  await (await again).close();
+  await tap(page, 'repair.print.ask.confirm');
+  await expect(page.getByTestId('repair.ticket.done')).toBeVisible();
+  await tap(page, 'repair.ticket.action.print');
+  await expect(page.getByTestId('repair.print.reprint')).toBeVisible();
+  await shoot(page, 'print-step-reprint');
+});
+
+test('the owner sets what the slips print at the top', async ({ page }) => {
+  await open(page, 'owner');
+  await tap(page, 'ui.avatarButton');
+  await tap(page, 'shell-open-settings');
+  await tap(page, 'settings-print-settings');
+  await expect(page.getByTestId('repair.printSettings')).toBeVisible();
+  await shoot(page, 'print-settings');
+  await tap(page, 'repair.printSettings.logo.pick');
+  await expect(page.getByTestId('repair.printSettings.logoOnDotMatrix')).toBeVisible();
+  await fill(page, 'repair.printSettings.name', 'Bolusi Cell Wamena');
+  await shoot(page, 'print-settings-logo');
+  await page.getByTestId('repair.printSettings.handoverTerms').scrollIntoViewIfNeeded();
+  await shoot(page, 'print-settings-terms');
+  await tap(page, 'repair.printSettings.primary');
+  await expect(page.getByText('Tampilan nota disimpan.').first()).toBeVisible();
+});

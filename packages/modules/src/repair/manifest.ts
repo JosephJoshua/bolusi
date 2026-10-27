@@ -6,6 +6,7 @@ import {
   repairIntakeOptionsTable,
   repairStoreCancelFeesTable,
   repairStoreIntakeOptionsTable,
+  repairStorePrintSettingsTable,
   repairQuoteLinesTable,
   repairTicketEventsTable,
   repairTicketPhotosTable,
@@ -28,6 +29,8 @@ import {
   claimTicketInput,
   correctCustomerDetailsHandler,
   correctCustomerDetailsInput,
+  correctDownPaymentHandler,
+  correctDownPaymentInput,
   declineProposalHandler,
   declineProposalInput,
   markRepairedHandler,
@@ -38,12 +41,18 @@ import {
   openTicketInput,
   proposeQuoteChangeHandler,
   proposeQuoteChangeInput,
+  recordDownPaymentHandler,
+  recordDownPaymentInput,
+  recordSlipPrintedHandler,
+  recordSlipPrintedInput,
   registerCustomerHandler,
   registerCustomerInput,
   returnDeviceHandler,
   returnDeviceInput,
   setCancelFeesHandler,
   setCancelFeesInput,
+  setPrintSettingsHandler,
+  setPrintSettingsInput,
   startWorkHandler,
   startWorkInput,
 } from './commands.js';
@@ -51,14 +60,17 @@ import { REPAIR_MODULE_ID, REPAIR_PERMISSION, REPAIR_TABLE } from './constants.j
 import { repairOperations } from './operations.js';
 import {
   cancelFeesQuery,
+  countTicketsQuery,
   getCustomerQuery,
   getTicketQuery,
   intakeOptionSettingsQuery,
   listTicketsQuery,
   technicianLoadsQuery,
   nextTicketCounterQuery,
+  printSettingsQuery,
   searchCustomersQuery,
   searchTicketsQuery,
+  ticketBrandsQuery,
 } from './queries.js';
 import type { RepairDatabase } from './schema.js';
 
@@ -78,6 +90,7 @@ export const repairModuleManifest = {
       [REPAIR_TABLE.intakeOptions]: repairIntakeOptionsTable,
       [REPAIR_TABLE.storeIntakeOptions]: repairStoreIntakeOptionsTable,
       [REPAIR_TABLE.storeCancelFees]: repairStoreCancelFeesTable,
+      [REPAIR_TABLE.storePrintSettings]: repairStorePrintSettingsTable,
     },
   },
 
@@ -142,6 +155,17 @@ export const repairModuleManifest = {
       scope: 'store',
       isDangerous: false,
       description: "Can set the store's cancellation fees, before and after work starts.",
+    },
+    [REPAIR_PERMISSION.correctDownPayment]: {
+      scope: 'store',
+      // Recording less than the customer paid is how a down payment would go missing.
+      isDangerous: true,
+      description: 'Can change or remove a down payment already recorded on a repair.',
+    },
+    [REPAIR_PERMISSION.setPrintSettings]: {
+      scope: 'store',
+      isDangerous: false,
+      description: "Can change the store's name, address, logo and terms printed on repair slips.",
     },
   },
 
@@ -231,10 +255,32 @@ export const repairModuleManifest = {
       input: setCancelFeesInput,
       handler: setCancelFeesHandler,
     },
+    recordDownPayment: {
+      permission: REPAIR_PERMISSION.intake,
+      input: recordDownPaymentInput,
+      handler: recordDownPaymentHandler,
+    },
+    correctDownPayment: {
+      permission: REPAIR_PERMISSION.correctDownPayment,
+      input: correctDownPaymentInput,
+      handler: correctDownPaymentHandler,
+    },
+    recordSlipPrinted: {
+      permission: REPAIR_PERMISSION.read,
+      input: recordSlipPrintedInput,
+      handler: recordSlipPrintedHandler,
+    },
+    setPrintSettings: {
+      permission: REPAIR_PERMISSION.setPrintSettings,
+      input: setPrintSettingsInput,
+      handler: setPrintSettingsHandler,
+    },
   },
 
   queries: {
     listTickets: listTicketsQuery,
+    countTickets: countTicketsQuery,
+    ticketBrands: ticketBrandsQuery,
     searchTickets: searchTicketsQuery,
     getTicket: getTicketQuery,
     searchCustomers: searchCustomersQuery,
@@ -243,6 +289,7 @@ export const repairModuleManifest = {
     technicianLoads: technicianLoadsQuery,
     intakeOptionSettings: intakeOptionSettingsQuery,
     cancelFees: cancelFeesQuery,
+    printSettings: printSettingsQuery,
   },
 } as const satisfies ModuleManifest<RepairDatabase>;
 

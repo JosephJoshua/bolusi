@@ -221,14 +221,14 @@ export function PhotoViewer({
       }}
     >
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-neutral-950" />
+        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-neutral-950 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <RadixDialog.Content
           aria-describedby={undefined}
           onKeyDown={(event) => {
             if (event.key === 'ArrowLeft') go(-1);
             if (event.key === 'ArrowRight') go(1);
           }}
-          className="fixed inset-0 z-50 flex flex-col text-white focus:outline-none"
+          className="fixed inset-0 z-50 flex flex-col text-white focus:outline-none data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out"
           data-testid="photoViewer"
         >
           {photo === undefined || index === null ? null : (

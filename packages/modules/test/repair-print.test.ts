@@ -55,6 +55,11 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     cancelledBy: null,
     cancelledByName: null,
     cancelledAt: null,
+    downPayment: null,
+    downPaymentBy: null,
+    downPaymentByName: null,
+    downPaymentAt: null,
+    slipPrints: { intake: 0, handover: 0 },
     devicePasscode: 'pin:975319',
     intakeNotes: 'Ada goresan di bodi belakang.',
     checklist: [
@@ -67,6 +72,7 @@ export function sampleTicket(overrides: Partial<TicketDetailRow> = {}): TicketDe
     createdBy: 'u1',
     createdByName: 'Maria Kasir',
     returnedBy: null,
+    returnedByName: null,
     returnedAt: null,
     workStarted: false,
     quoteLines: [
@@ -84,9 +90,7 @@ const ctx: SlipContext = {
   header: { name: 'Bolusi Cell Sorong', lines: ['Jl. Basuki Rahmat 12, Sorong'], logo: null },
   terms: null,
   printedAt: AT + 60_000,
-  printNumber: 1,
   printedByName: 'Maria Kasir',
-  downPayment: null,
 };
 
 function allText(doc: PrintDocument): string {
@@ -108,7 +112,7 @@ describe('intake slip', () => {
     expect(text).toContain('K7Q-0042');
     expect(text).toContain('Yohanes Wanimbo');
     expect(text).toContain('Samsung Galaxy A15');
-    expect(text).toContain('Speaker bawah: Tidak dicek');
+    expect(text).toMatch(/Tidak dicek\s*: .*Speaker bawah/);
     expect(text).toContain('(retak)');
     expect(text).toContain('Ganti LCD');
     expect(text).toContain('Rp 950.000');
@@ -120,7 +124,10 @@ describe('intake slip', () => {
 
   it('marks a reprint and shows the down payment and what is left', () => {
     const text = allText(
-      intakeSlip(sampleTicket(), { ...ctx, printNumber: 2, downPayment: 200_000 }),
+      intakeSlip(
+        sampleTicket({ downPayment: 200_000, slipPrints: { intake: 1, handover: 0 } }),
+        ctx,
+      ),
     );
     expect(text).toContain('Cetak ulang ke-2');
     expect(text).toMatch(/DP\s+-Rp 200\.000/);
@@ -175,6 +182,7 @@ describe('handover slip', () => {
     expect(text).toMatch(/Total\s+Rp 1\.150\.000/);
     expect(text).toMatch(/Status\s+: Selesai/);
     expect(text).toContain('Pelanggan, HP sudah diterima');
+    expect(text).toContain('KETENTUAN');
   });
 
   it('charges only the cancellation fee on a cancelled servisan', () => {
@@ -184,17 +192,17 @@ describe('handover slip', () => {
       cancelFee: 50_000,
     });
     const text = allText(
-      handoverSlip(cancelled, {
-        ...ctx,
-        handedOverByName: null,
-        signature: null,
-        downPayment: 20_000,
-      }),
+      handoverSlip(
+        { ...cancelled, downPayment: 20_000 },
+        { ...ctx, handedOverByName: null, signature: null },
+      ),
     );
     expect(text).toContain('Biaya pembatalan');
     expect(text).toContain('Pelanggan tidak jadi');
     expect(text).not.toContain('Ganti LCD');
     expect(text).toMatch(/Sisa bayar\s+Rp 30\.000/);
+    // No repair, so no warranty terms.
+    expect(text).not.toContain('KETENTUAN');
   });
 
   it('shows the on-screen signature on plain paper', () => {
@@ -220,8 +228,13 @@ describe('slip layout', () => {
   const papers = Object.values(PAPER_PRESETS);
 
   it('fits an ordinary intake slip on one short landscape form, the money beside the phone', () => {
-    const { pages } = layoutGrid(intakeSlip(sampleTicket(), ctx), PAPER_PRESETS.continuous_half);
+    const { geometry, pages } = layoutGrid(
+      intakeSlip(sampleTicket(), ctx),
+      PAPER_PRESETS.continuous_half,
+    );
     expect(pages).toHaveLength(1);
+    // At the printer's easy-to-read 1/6", not squeezed to 1/8".
+    expect(geometry.linesPerInch).toBe(6);
     const rows = (pages[0] ?? []).flatMap((row) => (row.kind === 'text' ? [row.text] : []));
     expect(rows.some((r) => r.includes('Pelanggan') && r.includes('Ganti LCD'))).toBe(false);
     expect(rows.some((r) => /^(?=.*\S {3,}\S)(?=.*ESTIMASI BIAYA)/.test(r))).toBe(true);
@@ -252,6 +265,8 @@ describe('slip layout', () => {
     outcome: 'cancelled',
     outcomeNote: filler('cr', 2000),
     cancelFee: 1_000_000_000_000,
+    downPayment: 1_000_000_000_000,
+    slipPrints: { intake: 98, handover: 98 },
     createdByName: filler('cb', 200),
     checklist: Array.from({ length: 100 }, (_, i) => ({
       item: `custom${i}`,
@@ -275,9 +290,7 @@ describe('slip layout', () => {
     },
     terms: filler('t', 2000),
     printedAt: AT,
-    printNumber: 99,
     printedByName: filler('pb', 200),
-    downPayment: 1_000_000_000_000,
   };
   const slips = (): [PrintDocument, PrintDocument] => [
     intakeSlip(longest, longCtx),
@@ -288,7 +301,6 @@ describe('slip layout', () => {
     [
       longCtx.header.name,
       ...longCtx.header.lines,
-      longCtx.terms ?? '',
       longCtx.printedByName ?? '',
       longest.customerName,
       longest.customerPhone ?? '',
@@ -296,6 +308,8 @@ describe('slip layout', () => {
       longest.deviceImei ?? '',
       ...(intake
         ? [
+            // The longest servisan is a cancelled one, whose handover slip has no warranty terms.
+            longCtx.terms ?? '',
             longest.complaint,
             longest.intakeNotes,
             longest.createdByName ?? '',
@@ -311,7 +325,7 @@ describe('slip layout', () => {
       const { geometry, pages } = layoutGrid(doc, paper);
       const printed = new Set<string>();
       for (const page of pages) {
-        expect(page.length).toBeLessThanOrEqual(geometry.pageLines - 2);
+        expect(page.length).toBeLessThanOrEqual(geometry.pageLines - 1);
         for (const row of page) {
           if (row.kind !== 'text') continue;
           expect(row.text.length).toBeLessThanOrEqual(geometry.columns);

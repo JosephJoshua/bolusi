@@ -162,8 +162,12 @@ Agreed with the owner before building printing.
   auto-detected.
 - **Layout:** on landscape paper the money and terms sit beside the customer and
   phone details. Every field is printed whole at its longest allowed length,
-  wrapping rather than cutting. Dot-matrix slips tighten to 8 lines per inch
-  before spilling onto a second form; plain paper gets more spacing.
+  wrapping rather than cutting. An ordinary slip fits one half form at the
+  printer's default 6 lines per inch, a line down from the perforation; only a
+  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
+  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
+  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  slip has no warranty terms.
 - **Two documents:** the intake receipt ("Tanda terima servisan") and the
   handover slip ("Nota servisan") for a pickup or a cancel, which is also the
   customer's receipt. No technician job sheet. Repair counters have no separate
@@ -180,7 +184,13 @@ Agreed with the owner before building printing.
   on dot-matrix only when switched on. The unlock code is never printed.
 - **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
 - **Phone-only counters** make a PDF to print through the phone's print dialog
-  or share (for example on WhatsApp). Dot-matrix printing is the desktop app's.
+  or share (for example on WhatsApp), on A4 or A5 (remembered per phone).
+  Dot-matrix printing is the desktop app's. Android's print dialog does not
+  report a cancel, so the phone asks whether the slip printed before logging it;
+  a cancelled first print never makes the real one read "Cetak ulang".
+- **Logo from the gallery:** the store logo is the one picture that may come from
+  the phone's gallery. Evidence photos stay camera-only; the lint rule allows the
+  photo picker in exactly one file, which feeds only the slip settings screen.
 - **Code:** one shared printing layer (core `print`: document model, HTML and
   ESC/P renderers) that POS receipts will reuse; slips are module templates.
 

@@ -7,12 +7,15 @@ export type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
 export { Handover, type HandoverProps } from './Handover.js';
 export { IntakeOptionsScreen, type IntakeOptionsScreenProps } from './IntakeOptionsScreen.js';
 export { CancelFeesScreen, type CancelFeesScreenProps } from './CancelFeesScreen.js';
+export { PrintSettingsScreen, type PrintSettingsScreenProps } from './PrintSettingsScreen.js';
 export type { RepairChrome } from './parts.js';
 export {
   RepairRuntimeProvider,
   useRepairRuntime,
+  type RepairPrinting,
   type RepairRuntime,
   type RepairTechnician,
+  type SlipOutput,
 } from '../runtime.js';
 export {
   REPAIR_KEYS,

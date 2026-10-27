@@ -43,7 +43,7 @@ export function Dialog({
       }}
     >
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay/40" />
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay/40 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <RadixDialog.Content
           data-testid={testId}
           // A stray click beside a dialog must not throw away what was typed in it; it closes
@@ -51,7 +51,7 @@ export function Dialog({
           onPointerDownOutside={(event) => event.preventDefault()}
           aria-describedby={description === undefined ? undefined : `${testId ?? 'dialog'}-desc`}
           className={clsx(
-            'fixed left-1/2 top-1/2 z-50 flex max-h-[min(88vh,820px)] w-[calc(100vw-48px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-md bg-surface shadow-2xl focus:outline-none',
+            'fixed left-1/2 top-1/2 z-50 flex max-h-[min(88vh,820px)] w-[calc(100vw-48px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-md bg-surface shadow-2xl focus:outline-none data-[state=open]:animate-dialog-in data-[state=closed]:animate-dialog-out',
             WIDTH[size],
           )}
         >

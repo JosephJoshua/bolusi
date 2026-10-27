@@ -33,7 +33,7 @@ export function Menu({
         <RadixMenu.Content
           align={align}
           sideOffset={6}
-          className="z-50 min-w-56 rounded-sm border border-border bg-surface p-1 shadow-lg"
+          className="z-50 min-w-56 origin-(--radix-dropdown-menu-content-transform-origin) rounded-sm border border-border bg-surface p-1 shadow-lg data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out"
         >
           {header === undefined ? null : (
             <RadixMenu.Label className="px-3 py-2">{header}</RadixMenu.Label>

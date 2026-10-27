@@ -16,7 +16,11 @@
     "deviceReturned": "Device handed back",
     "intakeOptionsChanged": "Intake choices changed",
     "storeIntakeOptionsChanged": "Choices at this store changed",
-    "storeCancelFeesChanged": "Cancellation fees changed"
+    "storeCancelFeesChanged": "Cancellation fees changed",
+    "downPaymentReceived": "Down payment received",
+    "downPaymentCorrected": "Down payment changed",
+    "slipPrinted": "Slip printed",
+    "storePrintSettingsChanged": "Slip details changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -205,7 +209,11 @@
     "alreadyAgreed": "Has the customer agreed?",
     "changeReason": "Reason for the change",
     "waitingEvent": "Price change waiting for the customer",
-    "waitsHint": "If not, the total changes once the customer agrees."
+    "waitsHint": "If not, the total changes once the customer agrees.",
+    "downPayment": "Down payment",
+    "downPaymentInput": "Down payment (if any)",
+    "balance": "Left to pay",
+    "refund": "Refunded"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -215,7 +223,8 @@
     "photos": "All six photos are required.",
     "quoteLines": "Add at least one price line.",
     "incompleteLine": "Describe every line that has an amount.",
-    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero."
+    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
+    "downPaymentAboveTotal": "The down payment is more than the total."
   },
   "ready": {
     "today": "Today",
@@ -253,7 +262,10 @@
   "done": {
     "claim": "This repair is now yours.",
     "start": "Repair started.",
-    "repaired": "Marked repaired. Ready to hand back."
+    "repaired": "Marked repaired. Ready to hand back.",
+    "printed": "Slip printed.",
+    "shared": "Slip PDF sent.",
+    "downPayment": "Down payment saved."
   },
   "passcode": {
     "show": "Show",
@@ -265,7 +277,10 @@
     "reason": "Write the reason first.",
     "priceLine": "Fill in the description, amount and reason.",
     "cancelFee": "Enter the cancellation fee first.",
-    "discountOwner": "Only an owner can approve a discount."
+    "discountOwner": "Only an owner can approve a discount.",
+    "downPayment": "Enter the amount first.",
+    "downPaymentCorrect": "Enter the correct down payment first.",
+    "downPaymentSame": "The amount has not changed."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -358,9 +373,8 @@
       "customer": "Customer",
       "phone": "Phone no.",
       "device": "Phone",
-      "color": "Colour",
       "imei": "IMEI",
-      "receivedBy": "Received by",
+      "accessories": "Accessories",
       "technician": "Technician",
       "status": "Status",
       "cancelReason": "Cancel reason"
@@ -368,12 +382,11 @@
     "section": {
       "complaint": "Complaint",
       "condition": "Condition when received",
-      "accessories": "Accessories",
       "estimate": "Estimated cost",
       "costs": "Costs",
       "terms": "Terms"
     },
-    "noAccessories": "No accessories left with the phone.",
+    "noAccessories": "None",
     "estimateTotal": "Estimated total",
     "total": "Total",
     "downPayment": "Down payment",
@@ -387,11 +400,64 @@
       "store": "Store copy",
       "customer": "Customer copy"
     },
-    "plyNote": "Pink copy for the store, yellow copy for the customer.",
+    "plyNote": "Pink: store, yellow: customer.",
     "terms": {
-      "intake": "Bring this receipt to collect the phone.\nThe price above is an estimate. The store will check with the customer before adding any cost.\nBack up the phone’s data before the repair. The store is not responsible for lost data.\nOther faults found once the phone is opened will be reported before any work on them.\nThe store is not responsible for a phone left uncollected 30 days after the customer is told it is ready.",
-      "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and the parts replaced, on showing this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
-    }
+      "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 30 days after you are told.",
+      "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and parts only. Bring this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
+    },
+    "refund": "Refund"
+  },
+  "print": {
+    "askTitle": "Did the slip print?",
+    "askMessage": "Check whether the paper came out.",
+    "askYes": "Printed",
+    "askNo": "Not yet",
+    "title": "Print slip",
+    "print": "Print",
+    "share": "Send PDF",
+    "slip": "Slip",
+    "intake": "Receipt",
+    "handover": "Repair bill",
+    "intakeAbout": "Proof the store received the phone.",
+    "handoverAbout": "The bill and proof of pickup.",
+    "reprint": "Printed {count} times already.",
+    "paper": "Paper",
+    "paperA4": "A4",
+    "paperA5": "A5"
+  },
+  "downPayment": {
+    "recordTitle": "Record down payment",
+    "correctTitle": "Change down payment",
+    "change": "Change",
+    "save": "Save down payment",
+    "amount": "Down payment (Rp)",
+    "newAmount": "Correct down payment (Rp)",
+    "current": "Recorded down payment",
+    "ofTotal": "Total {amount}",
+    "reason": "Reason for the change",
+    "removeHint": "Enter 0 if the down payment is void."
+  },
+  "printSettings": {
+    "title": "Slip details",
+    "summary": "Store name, logo and terms on slips",
+    "header": "Slip header",
+    "name": "Store name",
+    "nameHint": "Leave empty to use “{name}”.",
+    "address": "Address",
+    "phone": "Phone or WhatsApp",
+    "logo": "Logo",
+    "pickLogo": "Choose logo",
+    "changeLogo": "Change",
+    "removeLogo": "Remove",
+    "logoTitle": "Store logo",
+    "logoOnDotMatrix": "Print the logo on dot-matrix",
+    "logoOnDotMatrixHint": "Printing gets slower.",
+    "intakeTerms": "On the receipt",
+    "handoverTerms": "On the repair bill",
+    "terms": "Terms",
+    "termsHint": "One term per line.",
+    "save": "Save",
+    "saved": "Slip details saved."
   },
   "desk": {
     "checksOk": "Working",
@@ -424,6 +490,36 @@
     "useCustomer": "Use",
     "copyFailed": "Couldn’t copy the number",
     "incomplete": "Incomplete",
-    "price": "Price"
+    "price": "Price",
+    "filter": {
+      "status": "Status",
+      "technician": "Technician",
+      "received": "Received",
+      "brand": "Brand",
+      "clear": "Clear filter",
+      "reset": "Clear all filters",
+      "search": "Search",
+      "noMatches": "Nothing matches",
+      "chosen": "{count} selected",
+      "from": "From",
+      "to": "To",
+      "range": "{from} – {to}",
+      "since": "Since {from}",
+      "until": "Until {to}",
+      "today": "Today",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days",
+      "thisMonth": "This month",
+      "empty": "No repairs match the filters"
+    },
+    "table": {
+      "columns": "Columns",
+      "range": "{from}–{to} of {total}",
+      "perPage": "{size} per page",
+      "previous": "Previous page",
+      "next": "Next page",
+      "page": "Page {page}",
+      "pages": "Pages"
+    }
   }
 }

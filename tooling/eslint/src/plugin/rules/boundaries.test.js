@@ -36,6 +36,11 @@ tester.run('boundaries', rule, {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/core/test/jcs-vectors/run.test.ts',
     },
+    // The store-logo gallery binding is the one file that may open the photo picker.
+    {
+      code: `import * as ImagePicker from 'expo-image-picker';`,
+      filename: '/repo/apps/mobile/src/media/native-gallery.ts',
+    },
     // db-client is THE importer of op-sqlite (08 §3.2)
     {
       code: `import { open } from '@op-engineering/op-sqlite';`,
@@ -626,6 +631,17 @@ tester.run('boundaries', rule, {
     {
       code: `import { createNodeWebSocket } from '@hono/node-ws';`,
       filename: '/repo/apps/server/src/realtime.ts',
+      errors: [{ messageId: 'forbiddenEverywhere' }],
+    },
+    // gallery import anywhere else could pass off a picked picture as evidence (FR-818)
+    {
+      code: `import * as ImagePicker from 'expo-image-picker';`,
+      filename: '/repo/apps/mobile/src/media/CaptureScreen.tsx',
+      errors: [{ messageId: 'forbiddenEverywhere' }],
+    },
+    {
+      code: `import * as ImagePicker from 'expo-image-picker';`,
+      filename: '/repo/packages/modules/src/repair/screens/native-gallery.ts',
       errors: [{ messageId: 'forbiddenEverywhere' }],
     },
     // expo-file-system/legacy throws at runtime in SDK 57 (08 §2.2)

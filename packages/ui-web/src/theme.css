@@ -42,6 +42,18 @@
   --text-small: var(--b-text-small);
   --text-small--line-height: var(--b-text-small-line);
 
+  /* Motion: short and calm, so a counter used all day never waits on an animation. Overlays fade,
+   * dialogs and menus grow from just under their size, a side pane slides in from its edge. Tailwind
+   * v4 positions with the `translate` property, so these `transform` keyframes compose with it. */
+  --animate-fade-in: fade-in 140ms ease-out;
+  --animate-fade-out: fade-out 120ms ease-in forwards;
+  --animate-dialog-in: dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-dialog-out: dialog-out 120ms ease-in forwards;
+  --animate-pop-in: pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pop-out: fade-out 100ms ease-in forwards;
+  --animate-pane-in: pane-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-rise-in: rise-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
 }
 
@@ -71,4 +83,56 @@
 
 @utility tabular {
   font-variant-numeric: tabular-nums;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Someone who asked the system for less motion gets none: every change lands at once. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

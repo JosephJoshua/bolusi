@@ -15,10 +15,13 @@ import {
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
+  downPaymentChangedApplier,
   markedRepairedApplier,
   quoteChangedApplier,
   quoteChangeProposedApplier,
   quoteProposalDeclinedApplier,
+  slipPrintedApplier,
+  storePrintSettingsChangedApplier,
   technicianAssignedApplier,
   ticketCancelledApplier,
   ticketClaimedApplier,
@@ -39,7 +42,9 @@ import {
   REPAIR_PERMISSION,
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_TICKET_ENTITY,
+  SLIP_KINDS,
   WORK_PHOTO_STAGES,
   WORK_PHOTOS_MAX,
 } from './constants.js';
@@ -234,6 +239,36 @@ export const deviceReturnedPayload = z
   .object({ handoverPhoto: zMediaRef, signature: zMediaRef, note: zLongText })
   .strict();
 
+/** Money the customer paid up front: a positive amount when received. */
+export const downPaymentReceivedPayload = z.object({ amount: zFee.min(1) }).strict();
+
+/** An owner's correction: the amount it should be (0 removes it), and why. */
+export const downPaymentCorrectedPayload = z
+  .object({ amount: zFee, reason: z.string().trim().min(1).max(MAX_TEXT) })
+  .strict();
+
+export const slipPrintedPayload = z.object({ slip: z.enum(SLIP_KINDS) }).strict();
+
+/** Longest terms a slip prints, all lines together. */
+export const MAX_TERMS = 2000;
+const zTerms = z.string().trim().min(1).max(MAX_TERMS).nullable();
+
+/**
+ * Everything a store's slips print besides the servisan, replacing the previous settings. A logo
+ * left out keeps the one already set, so changing the terms needs no copy of the picture's ref.
+ */
+export const storePrintSettingsChangedPayload = z
+  .object({
+    name: z.string().trim().min(1).max(100).nullable(),
+    address: z.string().trim().max(300),
+    phone: z.string().trim().max(100),
+    logo: zMediaRef.nullable().optional(),
+    logoOnDotMatrix: z.boolean(),
+    intakeTerms: zTerms,
+    handoverTerms: zTerms,
+  })
+  .strict();
+
 const NO_UNDO = 'Corrected by a later op on the same ticket; the original stays in the log.';
 
 export const repairOperations: Readonly<Record<string, OperationDeclaration<RepairDatabase>>> = {
@@ -388,5 +423,39 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     apply: storeCancelFeesChangedApplier,
     permission: REPAIR_PERMISSION.setCancelFees,
     entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
+  },
+  [REPAIR_OP.downPaymentReceived]: {
+    schemaVersion: 1,
+    payload: downPaymentReceivedPayload,
+    reversal: 'Corrected by an owner with repair.down_payment_corrected.',
+    apply: downPaymentChangedApplier,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.downPayment, severity: 'significant' },
+  },
+  [REPAIR_OP.downPaymentCorrected]: {
+    schemaVersion: 1,
+    payload: downPaymentCorrectedPayload,
+    reversal: 'Reversed by another repair.down_payment_corrected with the previous amount.',
+    apply: downPaymentChangedApplier,
+    permission: REPAIR_PERMISSION.correctDownPayment,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.downPayment, severity: 'significant' },
+  },
+  [REPAIR_OP.slipPrinted]: {
+    schemaVersion: 1,
+    payload: slipPrintedPayload,
+    reversal: 'Not reversible: the paper exists. A reprint is logged as another print.',
+    apply: slipPrintedApplier,
+    permission: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+  },
+  [REPAIR_OP.storePrintSettingsChanged]: {
+    schemaVersion: 1,
+    payload: storePrintSettingsChangedPayload,
+    reversal: 'Reversed by saving the previous settings again; printed paper keeps what it said.',
+    apply: storePrintSettingsChangedApplier,
+    permission: REPAIR_PERMISSION.setPrintSettings,
+    entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   },
 };

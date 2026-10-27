@@ -14,10 +14,13 @@ import type {
   PrintImage,
 } from '@bolusi/core';
 
-import { ticketStatus } from './flows.js';
+import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
+
+import type { SlipKind } from './constants.js';
+import { balanceAfterDownPayment, photoInSlot, photoThumbnailRef, ticketStatus } from './flows.js';
 import { tn } from './i18n.js';
 import { CHECK_STATE_KEY, PRICE_KIND_KEY, optionLabel, statusLabel } from './labels.js';
-import type { QuoteLineRow, TicketDetailRow } from './queries.js';
+import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
@@ -25,11 +28,7 @@ export interface SlipContext {
   /** The store's terms for this slip, one per line; null prints the app's default terms. */
   readonly terms: string | null;
   readonly printedAt: number;
-  /** 1 for the first print of this slip, 2 for the first reprint, and so on. */
-  readonly printNumber: number;
   readonly printedByName: string | null;
-  /** Integer IDR the customer paid up front, or null when nothing was paid. */
-  readonly downPayment: number | null;
 }
 
 export interface HandoverSlipContext extends SlipContext {
@@ -47,13 +46,19 @@ export function slipTerms(text: string): string[] {
     .filter((line) => line !== '');
 }
 
+/** Brand and model, with the colour after them: "Samsung Galaxy A15 (Hitam)". */
 function deviceName(ticket: TicketDetailRow): string {
-  return [ticket.deviceBrand, ticket.deviceModel].filter((part) => part.trim() !== '').join(' ');
+  const name = [ticket.deviceBrand, ticket.deviceModel]
+    .filter((part) => part.trim() !== '')
+    .join(' ');
+  const color = ticket.deviceColor.trim();
+  return color === '' ? name : `${name} (${color})`;
 }
 
 function common(
   ticket: TicketDetailRow,
   ctx: SlipContext,
+  slip: SlipKind,
   title: string,
   jobName: string,
   meta: readonly string[],
@@ -71,8 +76,11 @@ function common(
     header: ctx.header,
     title,
     reference: ticket.ticketNumber,
+    // The print log counts earlier prints, so this one is the next.
     meta:
-      ctx.printNumber > 1 ? [...meta, tn('repair.slip.reprint', { count: ctx.printNumber })] : meta,
+      ticket.slipPrints[slip] > 0
+        ? [...meta, tn('repair.slip.reprint', { count: ticket.slipPrints[slip] + 1 })]
+        : meta,
     ...parts,
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
     plyNote: tn('repair.slip.plyNote'),
@@ -88,9 +96,6 @@ function customerFields(ticket: TicketDetailRow): PrintField[] {
     fields.push({ label: tn('repair.slip.field.phone'), value: ticket.customerPhone });
   }
   fields.push({ label: tn('repair.slip.field.device'), value: deviceName(ticket) });
-  if (ticket.deviceColor.trim() !== '') {
-    fields.push({ label: tn('repair.slip.field.color'), value: ticket.deviceColor });
-  }
   if (ticket.deviceImei !== null && ticket.deviceImei !== '') {
     fields.push({ label: tn('repair.slip.field.imei'), value: ticket.deviceImei });
   }
@@ -105,16 +110,21 @@ function lineRow(line: QuoteLineRow): PrintAmountRow {
   };
 }
 
-/** Total, then DP and what is left, when something was paid up front. */
+/**
+ * Total, then the down payment and what is left to pay, or what the store gives back when the
+ * down payment was more (a cancelled servisan whose fee is below it).
+ */
 function totals(totalLabel: string, total: number, downPayment: number | null): PrintAmountRow[] {
+  const paid = downPayment ?? 0;
   const rows: PrintAmountRow[] = [
-    { label: totalLabel, amount: formatMoney(total), strong: downPayment === null },
+    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 },
   ];
-  if (downPayment !== null && downPayment > 0) {
-    rows.push({ label: tn('repair.slip.downPayment'), amount: formatMoney(-downPayment) });
+  if (paid > 0) {
+    const balance = balanceAfterDownPayment(total, paid);
+    rows.push({ label: tn('repair.slip.downPayment'), amount: formatMoney(-paid) });
     rows.push({
-      label: tn('repair.slip.balance'),
-      amount: formatMoney(Math.max(0, total - downPayment)),
+      label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
+      amount: formatMoney(balance.amount),
       strong: true,
     });
   }
@@ -131,25 +141,41 @@ function termsBlocks(terms: string | null, fallback: string): PrintBlock[] {
       ];
 }
 
+/**
+ * The checklist by state, faults first, each fault with its note:
+ * "Rusak : Layar (retak di pojok kiri), Layar sentuh", "Normal : Kamera, Speaker, ...".
+ */
+function conditionFields(ticket: TicketDetailRow): PrintField[] {
+  return (['issue', 'ok', 'not_checked'] as const).flatMap((state) => {
+    const checks = ticket.checklist
+      .filter((check) => check.state === state)
+      .map((check) => {
+        const label = optionLabel('checks', { id: check.item, label: check.label });
+        const note = check.note.trim();
+        return note === '' ? label : `${label} (${note})`;
+      });
+    return checks.length === 0
+      ? []
+      : [{ label: tn(CHECK_STATE_KEY[state]), value: checks.join(', ') }];
+  });
+}
+
 /** The receipt the customer leaves with at intake: the phone as received and the price quoted. */
 export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocument {
   const meta = [tn('repair.slip.received', { date: formatDateTime(ticket.createdAt) })];
   if (ticket.estimatedReadyAt !== null) {
     meta.push(tn('repair.slip.readyBy', { date: formatDate(ticket.estimatedReadyAt) }));
   }
+  // Who received the phone signs under the store's line, so it is not a field as well.
   const fields = customerFields(ticket);
-  if (ticket.createdByName !== null) {
-    fields.push({ label: tn('repair.slip.field.receivedBy'), value: ticket.createdByName });
-  }
-  const checks = ticket.checklist.map((check) => {
-    const label = optionLabel('checks', { id: check.item, label: check.label });
-    const state = tn(CHECK_STATE_KEY[check.state]);
-    const note = check.note.trim();
-    return note === '' ? `${label}: ${state}` : `${label}: ${state} (${note})`;
-  });
   const accessories = ticket.peripherals.map(({ item, label }) =>
     optionLabel('accessories', { id: item, label }),
   );
+  fields.push({
+    label: tn('repair.slip.field.accessories'),
+    value: accessories.length === 0 ? tn('repair.slip.noAccessories') : accessories.join(', '),
+  });
+  const checks = conditionFields(ticket);
   // The price the customer left with; later changes belong on the handover slip.
   const lines = ticket.quoteLines.filter((line) => line.status === 'intake');
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
@@ -164,21 +190,15 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   if (checks.length > 0) {
     blocks.push(
       { kind: 'heading', text: tn('repair.slip.section.condition') },
-      { kind: 'list', items: checks },
+      { kind: 'fields', fields: checks },
     );
   }
-  blocks.push({ kind: 'heading', text: tn('repair.slip.section.accessories') });
-  blocks.push(
-    accessories.length === 0
-      ? { kind: 'paragraph', text: tn('repair.slip.noAccessories') }
-      : { kind: 'list', items: accessories },
-  );
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.estimate') },
     {
       kind: 'amounts',
       rows: lines.map(lineRow),
-      totals: totals(tn('repair.slip.estimateTotal'), total, ctx.downPayment),
+      totals: totals(tn('repair.slip.estimateTotal'), total, ticket.downPayment),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
   ];
@@ -194,6 +214,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   return common(
     ticket,
     ctx,
+    'intake',
     tn('repair.slip.intakeTitle'),
     tn('repair.slip.job.intake', { number: ticket.ticketNumber }),
     meta,
@@ -227,7 +248,7 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
     ? {
         kind: 'amounts',
         rows: [{ label: tn('repair.cancel.fee'), amount: formatMoney(ticket.cancelFee ?? 0) }],
-        totals: totals(tn('repair.slip.total'), ticket.cancelFee ?? 0, ctx.downPayment),
+        totals: totals(tn('repair.slip.total'), ticket.cancelFee ?? 0, ticket.downPayment),
       }
     : {
         kind: 'amounts',
@@ -235,12 +256,13 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
         rows: ticket.quoteLines
           .filter((line) => line.status === 'intake' || line.status === 'applied')
           .map(lineRow),
-        totals: totals(tn('repair.slip.total'), ticket.quoteTotal, ctx.downPayment),
+        totals: totals(tn('repair.slip.total'), ticket.quoteTotal, ticket.downPayment),
       };
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.costs') },
     amounts,
-    ...termsBlocks(ctx.terms, tn('repair.slip.terms.handover')),
+    // The terms are about the repair and its warranty, which a cancelled servisan does not have.
+    ...(cancelled ? [] : termsBlocks(ctx.terms, tn('repair.slip.terms.handover'))),
   ];
   const closing: PrintBlock[] = [
     {
@@ -258,9 +280,64 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
   return common(
     ticket,
     ctx,
+    'handover',
     tn('repair.slip.handoverTitle'),
     tn('repair.slip.job.handover', { number: ticket.ticketNumber }),
     meta,
     { blocks: [{ kind: 'fields', fields }], aside, closing },
   );
+}
+
+/** The pictures a slip shows, to load before building it: the store logo, the handover signature. */
+export function slipPictures(
+  ticket: TicketDetailRow,
+  slip: SlipKind,
+  settings: PrintSettings,
+): { readonly logo: ThumbnailRef | null; readonly signature: ThumbnailRef | null } {
+  const signature = slip === 'handover' ? photoInSlot(ticket, 'signature') : null;
+  return {
+    logo:
+      settings.logo === null
+        ? null
+        : { kind: 'signed', ...settings.logo, mime: settings.logo.mime as MediaRefMime },
+    signature: signature === null ? null : photoThumbnailRef(signature),
+  };
+}
+
+/** Everything besides the ticket that goes on a slip, as the platform resolved it. */
+export interface SlipSources {
+  readonly settings: PrintSettings;
+  /** The store's own name, printed when the owner has not set another. */
+  readonly storeName: string;
+  /** The pictures `slipPictures` named, loaded; null leaves one out. */
+  readonly logo: PrintImage | null;
+  readonly signature: PrintImage | null;
+  readonly printedAt: number;
+  readonly printedByName: string | null;
+}
+
+/** A slip with this store's header and terms: what every platform prints. */
+export function slipDocument(
+  ticket: TicketDetailRow,
+  slip: SlipKind,
+  sources: SlipSources,
+): PrintDocument {
+  const { settings } = sources;
+  const ctx: SlipContext = {
+    header: {
+      name: settings.name ?? sources.storeName,
+      lines: [settings.address, settings.phone].filter((line) => line.trim() !== ''),
+      logo: sources.logo,
+    },
+    terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
+    printedAt: sources.printedAt,
+    printedByName: sources.printedByName,
+  };
+  return slip === 'intake'
+    ? intakeSlip(ticket, ctx)
+    : handoverSlip(ticket, {
+        ...ctx,
+        handedOverByName: ticket.returnedByName,
+        signature: sources.signature,
+      });
 }

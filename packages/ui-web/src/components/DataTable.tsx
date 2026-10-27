@@ -97,6 +97,13 @@ export interface DataTableProps<T> {
   readonly sortable?: boolean;
   readonly sorting?: SortingState;
   readonly onSortingChange?: (sorting: SortingState) => void;
+  /**
+   * The rows arrive already sorted (by the query, across every page); the headers only say which
+   * order to ask for. Columns opt out with `enableSorting: false`.
+   */
+  readonly manualSorting?: boolean;
+  /** Changing it scrolls back to the first row, such as on a new page of results. */
+  readonly scrollKey?: string | undefined;
   readonly onEndReached?: (() => void) | undefined;
   readonly loading?: boolean;
   /** Shown in place of rows when there are none (and not loading). */
@@ -123,6 +130,8 @@ export function DataTable<T>({
   sortable = true,
   sorting: sortingProp,
   onSortingChange,
+  manualSorting = false,
+  scrollKey,
   onEndReached,
   loading = false,
   empty,
@@ -170,8 +179,10 @@ export function DataTable<T>({
       else onSortingChange(next);
     },
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    ...(manualSorting ? { manualSorting: true } : { getSortedRowModel: getSortedRowModel() }),
     enableSorting: sortable,
+    // A server-sorted column goes ascending, descending, then back to the list's own order.
+    enableSortingRemoval: true,
   });
 
   const visibleColumns = table.getVisibleLeafColumns();
@@ -189,6 +200,10 @@ export function DataTable<T>({
     overscan: 8,
   });
   const items = virtualizer.getVirtualItems();
+  useEffect(() => {
+    const body = scrollRef.current;
+    if (scrollKey !== undefined && body !== null) body.scrollTop = 0;
+  }, [scrollKey, scrollRef]);
 
   // Ask for more once the last rendered row is within a screen of the end.
   const lastIndex = items[items.length - 1]?.index ?? -1;

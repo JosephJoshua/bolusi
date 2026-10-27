@@ -148,6 +148,7 @@ describe('counter intake', () => {
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const onDraftChange = vi.fn();
@@ -777,6 +778,7 @@ describe('price and assignment details', () => {
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const screen = await mount(h, h.cashierId, { restoredDraft: draft });
@@ -803,6 +805,7 @@ describe('price and assignment details', () => {
       peripherals: [],
       photos: { front: kept, back: gone },
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const runtime = repairRuntimeFor(h, h.cashierId);

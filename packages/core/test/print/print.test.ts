@@ -121,7 +121,8 @@ describe('text-mode layout', () => {
     (paper) => {
       const { geometry, pages } = layoutGrid(sampleDoc(), paper);
       for (const page of pages) {
-        expect(page.length).toBeLessThanOrEqual(geometry.pageLines - 2);
+        expect(page.length).toBeLessThanOrEqual(geometry.pageLines - 1);
+        expect(page[0]).toMatchObject({ kind: 'text', text: '' });
         for (const row of page)
           if (row.kind === 'text') expect(row.text.length).toBeLessThanOrEqual(geometry.columns);
       }
@@ -161,7 +162,7 @@ describe('text-mode layout', () => {
       withRole[0]?.some((r) => r.includes('Yohanes Wanimbo') && r.trim().startsWith('Yohanes')),
     ).toBe(true);
     // A continuation page says which document it belongs to.
-    expect(pages[1]?.[0]).toMatch(/K7Q-0042 \(2\)$/);
+    expect(pages[1]?.[1]).toMatch(/K7Q-0042 \(2\)$/);
   });
 
   it('sets the money and terms beside the body on landscape paper, and under it on portrait', () => {
@@ -209,6 +210,47 @@ describe('text-mode layout', () => {
     // ESC 0 (1/8") set before ESC C 44, the form length in those lines.
     const at = bytes.indexOf(0x43, 5);
     expect(bytes.slice(at - 3, at + 2)).toEqual([0x1b, 0x30, 0x1b, 0x43, 44]);
+  });
+
+  it("moves the aside's trailing sections under the body when that makes the columns shorter", () => {
+    const terms = Array.from(
+      { length: 6 },
+      (_, i) => `Ketentuan nomor ${i + 1} yang cukup panjang.`,
+    );
+    const doc = sampleDoc({
+      blocks: sampleDoc().blocks.slice(0, 1),
+      aside: [
+        ...sampleDoc().aside.slice(0, 1),
+        { kind: 'heading', text: 'Ketentuan' },
+        { kind: 'terms', items: terms },
+      ],
+    });
+    const rows = textRows(PAPER_PRESETS.continuous_half, doc)[0] ?? [];
+    // Under the body, at the left margin, rather than squeezed beside it.
+    expect(rows.some((r) => r.startsWith('KETENTUAN'))).toBe(true);
+    expect(rows.some((r) => r.startsWith('1. Ketentuan nomor 1'))).toBe(true);
+    expect(rows.some((r) => r.startsWith('Pelanggan') && r.includes('Ganti LCD'))).toBe(true);
+  });
+
+  it('starts each form a line down and gives spare lines to the signatures', () => {
+    const { geometry, pages } = layoutGrid(sampleDoc(), PAPER_PRESETS.continuous_half);
+    const rows = (pages[0] ?? []).flatMap((r) => (r.kind === 'text' ? [r.text] : []));
+    expect(rows[0]).toBe('');
+    expect(rows[1]?.trim()).toBe('Bolusi Cell Sorong');
+    const roles = rows.findIndex((r) => r.includes('Petugas toko'));
+    const above = rows
+      .slice(0, roles)
+      .reverse()
+      .findIndex((r) => r !== '');
+    // The blank line every closing gets, plus what the form had spare, so the footer ends at the
+    // last line above the perforation.
+    expect(above).toBeGreaterThan(1);
+    expect(rows).toHaveLength(geometry.pageLines - 1);
+    // The note of who printed and the ply note share the last line when they fit.
+    const short = sampleDoc({ plyNote: 'Merah muda: toko, kuning: pelanggan.' });
+    expect((textRows(PAPER_PRESETS.continuous_half, short)[0] ?? []).at(-1)).toMatch(
+      /^Dicetak .* {3}Merah muda: toko, kuning: pelanggan\.$/,
+    );
   });
 
   it('puts the title and the reference on one line', () => {

@@ -36,6 +36,7 @@ import {
   checksWithIssue,
   chosenAccessories,
   chosenReady,
+  intakeDownPayment,
   intakeTotal,
   acceptsRupiahText,
   parseRupiah,
@@ -46,7 +47,7 @@ import {
   type QuoteLineDraft,
 } from '../flows.js';
 import type { IntakeOption, IntakeOptionLists } from '../intake-options.js';
-import { Field, PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
+import { DownPaymentRows, Field, PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
 import { useRepairQuery } from '../runtime.js';
 import { usePriceKinds, type PriceKind } from './TicketSteps.js';
 
@@ -377,8 +378,12 @@ export function PriceStep({
   update,
   options,
   lineError,
+  downPaymentError,
   testID,
-}: StepProps & { readonly lineError: string | undefined }): React.JSX.Element {
+}: StepProps & {
+  readonly lineError: string | undefined;
+  readonly downPaymentError: string | undefined;
+}): React.JSX.Element {
   const kinds = usePriceKinds();
   const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
   const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
@@ -449,6 +454,23 @@ export function PriceStep({
           {formatMoney(intakeTotal(draft.lines))}
         </Text>
       </View>
+      <View style={repairStyles.gap}>
+        <TextInput
+          label={tn('repair.price.downPaymentInput')}
+          value={amountText(intakeDownPayment(draft))}
+          onChangeText={(text) => {
+            if (acceptsRupiahText(text)) update({ downPayment: text.replace(/\D/g, '') });
+          }}
+          keyboardType="number-pad"
+          errorMessage={downPaymentError}
+          testID={`${testID}.downPaymentInput`}
+        />
+      </View>
+      <DownPaymentRows
+        total={intakeTotal(draft.lines)}
+        downPayment={intakeDownPayment(draft)}
+        testID={testID}
+      />
       <Section title={tn('repair.ticket.readyBy')}>
         <SegmentedControl
           options={options.readyBy.map(({ id }) => ({ value: id, label: readyLabel(id) }))}
@@ -561,6 +583,11 @@ export function ReviewStep({
               {formatMoney(intakeTotal(draft.lines))}
             </Text>
           </View>
+          <DownPaymentRows
+            total={intakeTotal(draft.lines)}
+            downPayment={intakeDownPayment(draft)}
+            testID={testID}
+          />
           <Field
             label={tn('repair.ticket.readyBy')}
             value={readyLabel(chosenReady(draft, options.readyBy))}

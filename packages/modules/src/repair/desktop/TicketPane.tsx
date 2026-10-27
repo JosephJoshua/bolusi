@@ -23,6 +23,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { hasRejectedOp, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
 import {
+  balanceAfterDownPayment,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -484,6 +485,9 @@ export function TicketPane({
             {formatMoney(row.quoteTotal)}
           </p>
         </div>
+        {!cancelled && row.downPayment !== null && row.downPayment > 0 ? (
+          <DownPaymentLines total={row.quoteTotal} downPayment={row.downPayment} />
+        ) : null}
         {cancelled ? (
           <p className="text-small text-text-muted">
             {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
@@ -845,4 +849,27 @@ function eventNote(detail: Readonly<Record<string, unknown>>): string | null {
     if (typeof value === 'string' && value.trim() !== '') return value;
   }
   return null;
+}
+
+/** What was paid up front and what is left, under the total. */
+function DownPaymentLines({
+  total,
+  downPayment,
+}: {
+  readonly total: number;
+  readonly downPayment: number;
+}): React.JSX.Element {
+  const balance = balanceAfterDownPayment(total, downPayment);
+  return (
+    <dl className="flex flex-col gap-1" data-testid="repair.desk.ticket.balance">
+      <div className="flex justify-between gap-4 text-body text-text-muted">
+        <dt>{tn('repair.price.downPayment')}</dt>
+        <dd className="tabular">{formatMoney(-downPayment)}</dd>
+      </div>
+      <div className="flex justify-between gap-4 text-body font-semibold text-text">
+        <dt>{tn(balance.kind === 'due' ? 'repair.price.balance' : 'repair.price.refund')}</dt>
+        <dd className="tabular">{formatMoney(balance.amount)}</dd>
+      </div>
+    </dl>
+  );
 }

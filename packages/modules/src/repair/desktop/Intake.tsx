@@ -34,6 +34,8 @@ import {
   stepProblems,
   toOpenTicketInput,
   acceptsRupiahText,
+  balanceAfterDownPayment,
+  intakeDownPayment,
   parseRupiah,
   type IntakeDraft,
   type IntakeProblem,
@@ -59,7 +61,7 @@ import {
 import { useIntakeOptionSettings, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import type { MediaRef } from '@bolusi/schemas';
 
-import { ActionError, photoLabels, rupiahText, usePhotoState } from './parts.js';
+import { ActionError, MoneyField, photoLabels, rupiahText, usePhotoState } from './parts.js';
 
 /** The sections in page order; the phone's review step is the summary column here. */
 const SECTIONS = [
@@ -80,6 +82,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   quoteLines: 'repair.problem.quoteLines',
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
+  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
 };
 
 /** Where the cursor goes for each problem, so "what is missing" is one keystroke from fixed. */
@@ -92,6 +95,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   quoteLines: 'repair.desk.intake.line.0.description',
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
+  downPaymentAboveTotal: 'repair.desk.intake.downPayment',
 };
 
 const CHECK_TONE: Readonly<Record<ChecklistState, 'success' | 'danger' | 'neutral'>> = {
@@ -329,6 +333,7 @@ export function IntakePage({
                   kinds={priceKinds(runtime.hasPermission(REPAIR_PERMISSION.discount))}
                   lineError={problemText('incompleteLine')}
                   totalError={problemText('negativeTotal') ?? problemText('quoteLines')}
+                  downPaymentError={problemText('downPaymentAboveTotal')}
                 />
               </IntakeSection>
             </div>
@@ -777,6 +782,7 @@ function PriceFields({
   kinds,
   lineError,
   totalError,
+  downPaymentError,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
@@ -784,6 +790,7 @@ function PriceFields({
   readonly kinds: readonly PriceKind[];
   readonly lineError: string | undefined;
   readonly totalError: string | undefined;
+  readonly downPaymentError: string | undefined;
 }): React.JSX.Element {
   const lines = draft.lines.length === 0 ? [EMPTY_LINE] : draft.lines;
   const setLine = (index: number, patch: Partial<QuoteLineDraft>): void =>
@@ -888,6 +895,15 @@ function PriceFields({
         {totalError === undefined ? null : (
           <p className="mt-1 text-right text-small text-danger">{totalError}</p>
         )}
+        <div className="mt-4 ml-auto w-60">
+          <MoneyField
+            label={tn('repair.price.downPaymentInput')}
+            value={draft.downPayment === '' ? null : intakeDownPayment(draft)}
+            onChange={(amount) => update({ downPayment: amount === null ? '' : String(amount) })}
+            error={downPaymentError}
+            data-testid="repair.desk.intake.downPayment"
+          />
+        </div>
       </div>
       <div>
         <p className="mb-2 text-small font-semibold text-text">{tn('repair.ticket.readyBy')}</p>
@@ -949,6 +965,9 @@ function Summary({
     </button>
   );
   const flagged = (section: Section): boolean => showProblems && problemsBy[section].length > 0;
+  const total = intakeTotal(draft.lines);
+  const downPayment = intakeDownPayment(draft);
+  const balance = balanceAfterDownPayment(total, downPayment);
   return (
     <aside
       className="sticky top-2 flex flex-col gap-4 self-start"
@@ -986,9 +1005,23 @@ function Summary({
         </dl>
         <div className="mt-4 border-t border-border pt-4">
           <p className="text-small text-text-muted">{tn('repair.price.total')}</p>
-          <p className="tabular text-display font-bold text-text">
-            {formatMoney(intakeTotal(draft.lines))}
-          </p>
+          <p className="tabular text-display font-bold text-text">{formatMoney(total)}</p>
+          {/* An up-front payment above the total is refused beside the field, so nothing is owed back here. */}
+          {downPayment > 0 && balance.kind === 'due' ? (
+            <dl
+              className="mt-1 flex flex-col gap-1 text-small"
+              data-testid="repair.desk.intake.balance"
+            >
+              <div className="flex justify-between gap-3 text-text-muted">
+                <dt>{tn('repair.price.downPayment')}</dt>
+                <dd className="tabular">{formatMoney(-downPayment)}</dd>
+              </div>
+              <div className="flex justify-between gap-3 font-semibold text-text">
+                <dt>{tn('repair.price.balance')}</dt>
+                <dd className="tabular">{formatMoney(balance.amount)}</dd>
+              </div>
+            </dl>
+          ) : null}
           <p className="text-small text-text-muted">
             {tn('repair.ticket.readyBy')}: {readyLabel(chosenReady(draft, options.readyBy))}
           </p>
