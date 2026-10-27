@@ -545,3 +545,45 @@ test('a custom role with any power over accounts counts as an owner role, not ju
   });
   expect(refused.status).toBe(403);
 });
+
+test('every staff change pokes the whole tenant so other phones pull it now; a refusal pokes nobody', async () => {
+  const s = await storeWithOwners();
+  const tenantPoke = { tenantId: s.tenantId, storeId: null };
+  const pokesAfter = async (
+    request: Response | Promise<Response>,
+    status: number,
+  ): Promise<number> => {
+    const before = h.pokes.length;
+    expect((await request).status).toBe(status);
+    return h.pokes.length - before;
+  };
+
+  const created = await h.app.request('http://srv.test/v1/users', {
+    method: 'POST',
+    headers: s.as(s.storeOwner),
+    body: newStaff(s.s1, [s.cashier]),
+  });
+  expect(created.status).toBe(201);
+  expect(h.pokes.at(-1)).toEqual(tenantPoke);
+  const { userId } = (await created.json()) as { userId: string };
+
+  const patch = (body: object) =>
+    h.app.request(`http://srv.test/v1/users/${userId}`, {
+      method: 'PATCH',
+      headers: s.as(s.storeOwner),
+      body: JSON.stringify(body),
+    });
+  const post = (path: string) =>
+    h.app.request(`http://srv.test/v1/users/${userId}/${path}`, {
+      method: 'POST',
+      headers: s.as(s.storeOwner),
+    });
+
+  expect(await pokesAfter(patch({ roleIds: [s.technician] }), 200)).toBe(1);
+  expect(await pokesAfter(post('deactivate'), 200)).toBe(1);
+  expect(await pokesAfter(post('reactivate'), 200)).toBe(1);
+  expect(h.pokes.at(-1)).toEqual(tenantPoke);
+
+  // Refused: a store owner may not make an owner. Nothing changed, so nothing is announced.
+  expect(await pokesAfter(patch({ roleIds: [s.storeOwnerRole] }), 403)).toBe(0);
+});

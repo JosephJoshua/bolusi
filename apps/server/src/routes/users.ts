@@ -29,6 +29,7 @@ import {
   type CanonicalRef,
 } from '@bolusi/schemas';
 import { zJson } from '../middleware/validator-hook.js';
+import { announceDirectoryChange } from '../realtime/announce.js';
 import { createWithTenant, tenantIdFromContext } from '../tenant.js';
 import { uuidv7 } from '../uuidv7.js';
 
@@ -254,6 +255,7 @@ export function createUsersRouter(deps: ServerDeps) {
             return newUserId;
           });
 
+          announceDirectoryChange(deps, tenantId);
           return c.json({ userId }, 201);
         }),
       )
@@ -354,6 +356,7 @@ export function createUsersRouter(deps: ServerDeps) {
             });
           });
 
+          announceDirectoryChange(deps, tenantId);
           return c.json({ userId: targetUserId });
         }),
       )
@@ -410,6 +413,7 @@ export function createUsersRouter(deps: ServerDeps) {
             });
           });
 
+          announceDirectoryChange(deps, tenantId);
           return c.json({ userId: targetUserId, status: 'deactivated' });
         }),
       )
@@ -455,6 +459,7 @@ export function createUsersRouter(deps: ServerDeps) {
             });
           });
 
+          announceDirectoryChange(deps, tenantId);
           return c.json({ userId: targetUserId, status: 'active' });
         }),
       )
@@ -557,6 +562,8 @@ export function createUsersRouter(deps: ServerDeps) {
             return true;
           });
 
+          // A stale verifier changed nothing, so nobody needs to pull.
+          if (applied) announceDirectoryChange(deps, tenantId);
           return c.json({ userId: targetUserId, applied });
         }),
       )
