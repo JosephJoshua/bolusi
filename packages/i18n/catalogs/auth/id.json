@@ -135,7 +135,7 @@
       "roleMissing": "Pilih tugasnya dulu."
     },
     "failure": {
-      "offline": "Butuh internet untuk mengubah karyawan. Sambungkan HP, lalu coba lagi.",
+      "offline": "Butuh internet untuk mengubah karyawan. Sambungkan HP, lalu ulangi.",
       "denied": "Kamu tidak bisa mengubah karyawan ini. Minta pemilik utama.",
       "lastOwner": "Harus tetap ada satu pemilik utama.",
       "rateLimited": "Sudah terlalu banyak perubahan karyawan hari ini. Coba lagi besok.",
