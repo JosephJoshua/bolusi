@@ -18,6 +18,7 @@ import { GENESIS_PREVIOUS_HASH, type SignedCore, type SignedOperation } from '@b
 import { connectRawSql, type RawSqlConnection } from '@bolusi/db-server/testing';
 import { opensslPort, toSignedCore } from '@bolusi/test-support';
 
+import { formatTicketNumber } from '../../src/repair/index.js';
 import { writeStoreHistory } from '../store-history.js';
 
 export interface FleetShape {
@@ -258,6 +259,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 export class ChangeStream {
   #seq = 0;
   #previousHash: string = GENESIS_PREVIOUS_HASH;
+  #tickets = 0;
   #action = 0;
   #ids = new Map<string, string>();
   readonly #fixed: Map<string, string>;
@@ -318,6 +320,14 @@ export class ChangeStream {
         deviceName: 'Load test device',
         devicePublicKeyB64: this.device.publicKeyB64,
       };
+    }
+    if (core.type === 'repair.ticket_opened') {
+      // The server accepts only numbers this device minted, each once (formatTicketNumber).
+      this.#tickets += 1;
+      (core.payload as { ticketNumber: string }).ticketNumber = formatTicketNumber(
+        this.device.deviceId,
+        this.#tickets,
+      );
     }
     this.#seq += 1;
     const signed = signOp(
