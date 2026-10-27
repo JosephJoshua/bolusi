@@ -53,7 +53,9 @@ import { assertConvergence, canonicalFold, notesRows } from '../src/oracle.js';
 import { CountingTransport, HttpTransport, pullDevice, pushDevice } from '../src/transport.js';
 import { activeVolumes, nightlyX4Seeds, resolveSeeds, withSeed } from '../src/index.js';
 
-const CLOCK_BASE = 1_726_100_000_000;
+// Before the harness server's now (its clock base, 1_726_100_000_000): the server refuses a timestamp
+// ahead of its own clock (core sync/clock-guard.ts), and the offline week is authored in the past and sync later.
+const CLOCK_BASE = 1_726_100_000_000 - 8 * 24 * 60 * 60 * 1_000;
 const PUSH_BATCH = 500; // api/01 §3 cap.
 const PULL_LIMIT = 500;
 const DAY_MS = 24 * 60 * 60 * 1_000;

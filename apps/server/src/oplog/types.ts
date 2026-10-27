@@ -1,6 +1,6 @@
 // Shared types for the server op-acceptance pipeline (05 §8–9, 10-db §3). No HTTP here — the
 // pipeline is a pure function of deps + batch (task 16 wires it to POST /v1/sync/push).
-import type { CryptoPort, OperationScope, ProjectionRegistry } from '@bolusi/core';
+import type { CryptoPort, OperationScope, OpRuleContext, ProjectionRegistry } from '@bolusi/core';
 import type { DB, ForTenant, TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
 
@@ -48,6 +48,12 @@ export interface OpRegistry {
    * detection key on `(entityType, entityId)`, so the kind must not be the author's to choose.
    */
   entityTypeOf(type: string): string | undefined;
+  /**
+   * Run the op type's declared rule (core module/op-rules.ts) against the server's records. Throws
+   * the rule's DomainError when the op must not be accepted. The module registry's own entry point,
+   * so the server runs exactly the rule the device ran before saving.
+   */
+  checkRule(op: SignedOperation, ctx: OpRuleContext<DB>): Promise<void>;
 }
 
 /** Everything the pipeline needs that is an I/O boundary or a not-yet-built collaborator. */

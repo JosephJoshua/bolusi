@@ -65,6 +65,7 @@ import {
   type PushRouteRequest,
   type PushRouterPort,
 } from '../push/router.js';
+import { REPAIR_REJECTED_SUBJECTS } from './repair.js';
 import type { AppRuntime } from './runtime.js';
 import type { AppSessionController as AppSession } from './session.js';
 import { resolveShellInputs } from './shell-inputs.js';
@@ -852,7 +853,7 @@ export function Root({
     if (app === null) return;
     let cancelled = false;
     const reread = (): void => {
-      void readSyncStatusRows(app.db.db).then((rows) => {
+      void readSyncStatusRows(app.db.db, REPAIR_REJECTED_SUBJECTS).then((rows) => {
         if (!cancelled) setSyncReads(rows);
       });
     };

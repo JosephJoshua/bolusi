@@ -58,7 +58,9 @@ import type { ConvergenceSeams } from './seams.js';
 import { HttpTransport, pullDevice, pushDevice, type FetchLike } from './transport.js';
 import { deviceSeed } from './wire-helpers.js';
 
-const CLOCK_BASE = 1_726_100_000_000;
+// Before the harness server's now (its clock base, 1_726_100_000_000): the server refuses a timestamp
+// ahead of its own clock (core sync/clock-guard.ts), and these devices author in the past and sync later.
+const CLOCK_BASE = 1_726_100_000_000 - 2 * 60 * 60 * 1_000;
 const DEFAULT_PUSH_BATCH = 60; // well under the api/01 §3 cap of 500.
 const DEFAULT_PULL_LIMIT = 500;
 

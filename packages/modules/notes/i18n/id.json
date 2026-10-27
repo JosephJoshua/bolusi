@@ -32,5 +32,9 @@
     "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",
     "emptyArchived": "Belum ada catatan arsip.",
     "title": "Catatan"
+  },
+  "refusal": {
+    "alreadyRecorded": "Catatan ini sudah tercatat sebelumnya.",
+    "noteNotFound": "Catatan ini tidak ada di toko ini."
   }
 }

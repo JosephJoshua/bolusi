@@ -252,6 +252,11 @@ export class VirtualDevice {
     return this.engine.applyPulledOp(op);
   }
 
+  /** Take an op the server refused back out of its record, as the push phase does. */
+  refoldRefused(op: SignedOperation): Promise<void> {
+    return this.engine.refoldRefused(op);
+  }
+
   /** Run (or resume) a full projection rebuild via the REAL engine (04 §4.3) — CHAOS-08 drives this. */
   rebuild(moduleId: string, options?: RunRebuildOptions): Promise<RebuildOutcome> {
     return this.engine.rebuild(moduleId, options);

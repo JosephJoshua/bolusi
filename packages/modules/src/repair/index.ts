@@ -6,6 +6,7 @@ export * from './options-editor.js';
 export * from './screen-lock.js';
 export type * from './schema.js';
 export * from './search.js';
+export { REPAIR_REFUSALS } from './rules.js';
 export {
   PHONE_MODELS_TABLE,
   catalogKeys,

@@ -49,6 +49,7 @@ import {
 } from './commands.js';
 import { REPAIR_MODULE_ID, REPAIR_PERMISSION, REPAIR_TABLE } from './constants.js';
 import { findDeviceModelQuery, searchDeviceModelsQuery } from './device-models.js';
+import { REPAIR_REFUSALS } from './rules.js';
 import { repairOperations } from './operations.js';
 import {
   cancelFeesQuery,
@@ -67,6 +68,7 @@ export const repairModuleManifest = {
   id: REPAIR_MODULE_ID,
 
   operations: repairOperations,
+  refusals: REPAIR_REFUSALS.reasons,
 
   // DDL lives in the client and server migrations, as for notes.
   projections: {

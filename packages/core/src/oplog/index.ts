@@ -25,6 +25,7 @@ export {
   type OpAppendStore,
   type OpAppendTx,
   type OpRow,
+  type OpCheck,
   type ProjectionApply,
 } from './append.js';
 export {

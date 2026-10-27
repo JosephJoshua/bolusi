@@ -24,6 +24,7 @@ import {
   editNoteBodyInput,
 } from './commands.js';
 import { NOTES_MODULE_ID, NOTES_PERMISSION, NOTES_TABLE } from './constants.js';
+import { NOTES_REFUSALS } from './rules.js';
 import { notesOperations } from './operations.js';
 import { getNoteQuery, listNotesQuery } from './queries.js';
 import type { NotesDatabase } from './schema.js';
@@ -33,6 +34,7 @@ export const notesModuleManifest = {
   id: NOTES_MODULE_ID,
 
   operations: notesOperations,
+  refusals: NOTES_REFUSALS.reasons,
 
   projections: {
     tables: {

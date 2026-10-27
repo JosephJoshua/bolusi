@@ -13,6 +13,7 @@ import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
   REPAIR_PERMISSION,
+  REPAIR_REFUSALS,
   type IntakeOptionSettings,
   type QuoteLineRow,
   type RepairOutcome,
@@ -364,6 +365,13 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRun
     return found;
   };
   const update = (ticketId: string, kind: string, patch: Partial<TicketDetailRow>) => {
+    // The one rule every step but the handover shares (repair rules.ts): a change that raced a
+    // cancel or a handover on another device is refused with its own reason, as on a phone.
+    const current = find(ticketId);
+    if (kind !== 'repair.device_returned') {
+      if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      if (current.outcome === 'cancelled') throw REPAIR_REFUSALS.refuse('cancelled');
+    }
     tickets = tickets.map((t) =>
       t.id === ticketId
         ? withTotals({

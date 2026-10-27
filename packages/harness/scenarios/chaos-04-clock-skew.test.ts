@@ -1,17 +1,18 @@
-// CHAOS-04 — clock skew (testing-guide §3.6 / 05 §6). Flags drift, NEVER rejects (assume drift, not
-// malice). The whole point: the SAME +72h skew is FLAGGED for a just-synced device (narrow ~48h
+// CHAOS-04 — clock skew (testing-guide §3.6 / 05 §6). A PAST timestamp is flagged, never rejected
+// (assume drift, not malice): the SAME −72h skew is FLAGGED for a just-synced device (narrow ~48h
 // allowance) and NOT flagged for a 5-days-offline device (allowance widened to ~168h) — the flag is a
-// function of the device's offline window, not of the timestamp alone.
+// function of the device's offline window, not of the timestamp alone. A FUTURE timestamp beyond the
+// margin is refused CLOCK_AHEAD (owner decision 2026-10-26, core sync/clock-guard.ts): it would win
+// last-writer-wins over every honest change until then.
 //
-// Setup (§3.6): A clock +72h, B clock −72h, both `lastSyncAt` < 1h ago (threshold ≈ 48h → flagged);
-// C offline 5 days with +72h skew (threshold ≈ 48h + 120h → within allowance, unflagged); D honest.
-// All push to the REAL server (its production `isClockSkewed` step runs verbatim — T-7). PASS: A/B
-// flagged, C/D unflagged, none rejected, flagged ops project like any other, and the merged projection
-// converges (canonical order uses `timestamp` as written, so A's "future" ops still sort deterministically).
+// Setup (§3.6): A clock −72h and `lastSyncAt` < 1h ago (threshold ≈ 48h → flagged); B +72h (refused);
+// C offline 5 days with −72h skew (threshold ≈ 48h + 120h → within allowance, unflagged); D honest;
+// E +5 min (inside the margin → accepted, unflagged). All push to the REAL server (its production
+// steps run verbatim — T-7). PASS: A flagged, C/D/E unflagged, B refused with a device alarm and
+// nothing of B's in the log, flagged ops project like any other, and the merged projection converges.
 //
-// Falsification (§2.11): the flag matrix carries BOTH values in one run — A is `true`, D is `false`.
-// A flag stuck at either constant fails one half; the manual control (reduce A's skew to 0 → the "A
-// flagged" assertion goes RED) was watched red before this was believed.
+// Falsification (§2.11): the flag matrix carries BOTH values in one run — A is `true`, D is `false`,
+// and the refusal matrix carries both too (B refused, E accepted at +5 min).
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 
@@ -30,20 +31,23 @@ const H = 3_600_000;
 const R = 1_726_100_000_000; // == HarnessServer's SERVER_CLOCK_BASE: the server receivedAt.
 
 interface SkewDevice {
-  readonly label: 'A' | 'B' | 'C' | 'D';
+  readonly label: 'A' | 'B' | 'C' | 'D' | 'E';
   readonly clockBase: number;
   readonly lastSyncAt: number | null;
-  readonly expectFlagged: boolean;
+  /** `refused`: every op comes back CLOCK_AHEAD; otherwise accepted with this flag. */
+  readonly expect: 'flagged' | 'unflagged' | 'refused';
 }
 
-// A +72h, B −72h: just synced (lastSyncAt 30m ago → threshold ~48.5h) → 72h > threshold → FLAGGED.
-// C +72h: 5 days offline (lastSyncAt 120h ago → threshold 168h) → 72h < threshold → unflagged.
-// D honest → unflagged.
+// A −72h: just synced (lastSyncAt 30m ago → threshold ~48.5h) → 72h > threshold → FLAGGED.
+// B +72h: ahead of the server beyond the margin → REFUSED.
+// C −72h: 5 days offline (lastSyncAt 120h ago → threshold 168h) → 72h < threshold → unflagged.
+// D honest → unflagged. E +5 min: ordinary drift inside the margin → accepted, unflagged.
 const PLAN: readonly SkewDevice[] = [
-  { label: 'A', clockBase: R + 72 * H, lastSyncAt: R - 30 * 60_000, expectFlagged: true },
-  { label: 'B', clockBase: R - 72 * H, lastSyncAt: R - 30 * 60_000, expectFlagged: true },
-  { label: 'C', clockBase: R + 72 * H, lastSyncAt: R - 120 * H, expectFlagged: false },
-  { label: 'D', clockBase: R, lastSyncAt: null, expectFlagged: false },
+  { label: 'A', clockBase: R - 72 * H, lastSyncAt: R - 30 * 60_000, expect: 'flagged' },
+  { label: 'B', clockBase: R + 72 * H, lastSyncAt: R - 30 * 60_000, expect: 'refused' },
+  { label: 'C', clockBase: R - 72 * H, lastSyncAt: R - 120 * H, expect: 'unflagged' },
+  { label: 'D', clockBase: R, lastSyncAt: null, expect: 'unflagged' },
+  { label: 'E', clockBase: R + 5 * 60_000, lastSyncAt: null, expect: 'unflagged' },
 ];
 
 async function setLastSync(
@@ -67,20 +71,20 @@ async function flagsByDevice(server: HarnessServer): Promise<Map<string, boolean
   return byDevice;
 }
 
-describe('CHAOS-04 clock skew (flag, never reject)', () => {
+describe('CHAOS-04 clock skew (flag the past, refuse the future)', () => {
   for (const seed of resolveSeeds()) {
-    test(`CHAOS-04 A/B flagged, C/D unflagged, never rejected, projections converge [seed ${seed}]`, async () => {
+    test(`CHAOS-04 A flagged, B refused, C/D/E unflagged, projections converge [seed ${seed}]`, async () => {
       await withSeed(
         seed,
         async () => {
           const server = await HarnessServer.boot();
-          const ids = mintIdentities(seed, 4);
+          const ids = mintIdentities(seed, PLAN.length);
           const devices = await Promise.all(
             PLAN.map((plan, i) =>
               VirtualDevice.open({
                 identity: ids.devices[i]!,
                 clock: new FakeClock(plan.clockBase),
-                prng: mulberry32(seed * 4 + i),
+                prng: mulberry32(seed * PLAN.length + i),
               }),
             ),
           );
@@ -101,8 +105,14 @@ describe('CHAOS-04 clock skew (flag, never reject)', () => {
                 deviceId: ids.devices[i]!.deviceId,
                 ops,
               });
-              // NEVER rejected — every op accepted regardless of skew (05 §6).
-              expect(res.results.every((r) => r.status === 'accepted')).toBe(true);
+              if (PLAN[i]!.expect === 'refused') {
+                expect(
+                  res.results.every((r) => r.status === 'rejected' && r.code === 'CLOCK_AHEAD'),
+                ).toBe(true);
+              } else {
+                // A past timestamp is never rejected, however skewed (05 §6).
+                expect(res.results.every((r) => r.status === 'accepted')).toBe(true);
+              }
             }
 
             // The flag matrix, read off the REAL server's persisted column.
@@ -110,10 +120,21 @@ describe('CHAOS-04 clock skew (flag, never reject)', () => {
             for (let i = 0; i < PLAN.length; i += 1) {
               const plan = PLAN[i]!;
               const deviceFlags = flags.get(ids.devices[i]!.deviceId) ?? [];
+              if (plan.expect === 'refused') {
+                // Nothing of B's entered the log, and its clock raised a device alarm.
+                expect(deviceFlags).toEqual([]);
+                const alarms = await sql<{ kind: string }>`
+                  SELECT kind FROM device_anomalies WHERE device_id = ${ids.devices[i]!.deviceId}
+                `.execute(server.db);
+                expect(alarms.rows.length).toBeGreaterThan(0);
+                expect(alarms.rows.every((row) => row.kind === 'CLOCK_SKEW')).toBe(true);
+                continue;
+              }
+              const flagged = plan.expect === 'flagged';
               expect(deviceFlags.length).toBeGreaterThan(0); // denominator (T-14)
               expect(
-                deviceFlags.every((f) => f === plan.expectFlagged),
-                `device ${plan.label} expected clockSkewFlagged=${plan.expectFlagged}, got ${JSON.stringify(deviceFlags)}`,
+                deviceFlags.every((f) => f === flagged),
+                `device ${plan.label} expected clockSkewFlagged=${flagged}, got ${JSON.stringify(deviceFlags)}`,
               ).toBe(true);
             }
             // The matrix genuinely carries both values (a constant flag would fail one, §2.11).
@@ -122,9 +143,10 @@ describe('CHAOS-04 clock skew (flag, never reject)', () => {
 
             // Convergence: cross-feed every device's notes ops, then all digests == canonical fold —
             // flagged ops project like any other and the future timestamps still sort deterministically.
+            const merged = devices.filter((_, i) => PLAN[i]!.expect !== 'refused');
             const universe: SignedOperation[] = [];
-            for (const device of devices) universe.push(...notesOnly(await device.wireOps()));
-            for (const device of devices) {
+            for (const device of merged) universe.push(...notesOnly(await device.wireOps()));
+            for (const device of merged) {
               const held = new Set((await device.wireOps()).map((op) => op.id));
               for (const op of universe) if (!held.has(op.id)) await device.applyForeign(op);
             }
@@ -132,15 +154,15 @@ describe('CHAOS-04 clock skew (flag, never reject)', () => {
             assertConvergence(
               reference,
               await Promise.all(
-                devices.map(async (device, i) => ({
-                  name: `device-${PLAN[i]!.label}`,
+                merged.map(async (device, i) => ({
+                  name: `device-${i}`,
                   digest: await device.digest(),
                   rows: await notesRows(device.db),
                 })),
               ),
             );
-            // Flagged ops ARE in the projection (A's + B's notes present) — 4 devices × 5 notes.
-            expect(reference.rows).toHaveLength(PLAN.length * 5);
+            // Flagged ops ARE in the projection (A's notes present) — 4 accepted devices × 5 notes.
+            expect(reference.rows).toHaveLength(merged.length * 5);
           } finally {
             for (const device of devices) await device.close();
             await server.close();

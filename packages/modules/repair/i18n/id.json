@@ -240,6 +240,7 @@
   "ticket": {
     "history": "Riwayat",
     "lastNote": "Catatan terakhir",
+    "numbered": "Servisan {number}",
     "price": "Biaya",
     "readyBy": "Estimasi selesai",
     "technician": "Teknisi",
@@ -370,5 +371,35 @@
     "save": "Simpan",
     "saved": "Biaya pembatalan disimpan.",
     "hint": "Isi kedua biaya dulu."
+  },
+  "refusal": {
+    "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
+    "customerNotFound": "Pelanggan ini tidak ada di toko ini.",
+    "ticketNotFound": "Servisan ini tidak ada di toko ini.",
+    "priceChangeNotFound": "Usulan harga ini tidak ditemukan.",
+    "wrongSign": "Diskon harus mengurangi harga, sparepart dan jasa harus menambah.",
+    "belowZero": "Total harga tidak boleh kurang dari nol.",
+    "numberNotThisDevice": "Nomor servisan ini bukan dari perangkat ini.",
+    "numberUsed": "Nomor servisan ini sudah dipakai.",
+    "returned": "HP-nya sudah diambil pelanggan.",
+    "cancelled": "Servisan ini sudah dibatalkan.",
+    "notStarted": "Servisan ini belum mulai dikerjakan.",
+    "inRepair": "Servisan ini sedang dikerjakan.",
+    "waitingForParts": "Servisan ini sedang menunggu sparepart.",
+    "repaired": "Servisan ini sudah selesai dikerjakan.",
+    "notFinished": "Servisan ini belum selesai dikerjakan.",
+    "alreadyYours": "Servisan ini sudah kamu pegang.",
+    "alreadyAssigned": "Servisan ini sudah dipegang teknisi itu.",
+    "notTechnician": "Orang ini tidak bisa mengerjakan servisan di toko ini.",
+    "noTechnician": "Servisan ini belum dipegang teknisi.",
+    "needsBeforePhoto": "Foto HP-nya dulu sebelum mulai dikerjakan.",
+    "needsAfterPhoto": "Foto HP-nya dulu setelah selesai dikerjakan.",
+    "priceChangeDecided": "Usulan harga ini sudah dikonfirmasi atau ditolak.",
+    "priceChangeDifferent": "Usulan harga ini sudah berubah. Cek lagi dulu.",
+    "priceChangesPending": "Masih ada usulan harga yang belum dikonfirmasi.",
+    "invalidOptions": "Daftar pilihan ini tidak bisa disimpan.",
+    "notThisStore": "Pengaturan ini hanya bisa diubah untuk toko perangkat ini.",
+    "discountOwnerOnly": "Hanya pemilik toko yang bisa memberi diskon.",
+    "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi."
   }
 }

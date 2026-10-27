@@ -1,6 +1,6 @@
 // Small pieces every repair screen shares: the four read states around a query, a verified photo
 // thumbnail, the ticket status chip and the banner for a refused action.
-import { t, translateErrorCode } from '@bolusi/i18n';
+import { t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -98,7 +98,7 @@ export function ActionErrorBanner({
   return (
     <Banner
       variant="danger"
-      message={translateErrorCode(errorCode)}
+      message={translateFailure(errorCode)}
       onPress={onDismiss}
       testID={testID}
     />
