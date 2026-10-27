@@ -1,11 +1,12 @@
 // The repair screens' runtime port (04 §7), the same pattern as notes: screens read and write
 // through a small typed port the platform binds, never the database or the op log. The commands and
 // queries come straight from the module through `ModulePort`, so a new command needs no new wiring.
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { ModulePort, PaperSettings } from '@bolusi/core';
 
 import type { IntakeOptionSettings } from '../intake-options.js';
+import type { DeviceModelPhoto } from '../device-models.js';
 import type { CancelFees, PrintSettings } from '../queries.js';
 import type { repairModule } from '../manifest.js';
 import {
@@ -65,6 +66,11 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
   readonly capturePhoto: PhotoCapture;
   readonly captureSignature: SignatureCapture;
   readonly loadThumbnail: ThumbnailLoader;
+  /**
+   * A catalog photo of a phone model, downloaded the first time it is shown and cached. Resolves
+   * null when it cannot be had now (offline, not on the server): the screen shows no picture.
+   */
+  readonly loadModelPhoto: (photo: DeviceModelPhoto) => Promise<string | null>;
   /**
    * Hand one photo to the platform to save or send (the share sheet on a phone, a download on the
    * web). Absent ⇒ this build cannot, and the photo viewer shows no share button.
@@ -126,4 +132,30 @@ export function useIntakeOptionSettings(): QueryState<IntakeOptionSettings> {
     async (rt) => (await rt.query('intakeOptionSettings', {})).rows[0]!,
     'intakeOptionSettings',
   );
+}
+
+/** A model photo's uri once loaded; null while loading or when there is none to show. */
+export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
+  const load = useRepairRuntime().loadModelPhoto;
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const key = photo === null ? null : `${photo.modelId}:${photo.sha256}`;
+  const [loaded, setLoaded] = useState<{ key: string; uri: string | null } | null>(null);
+  useEffect(() => {
+    if (photo === null || key === null) return;
+    let active = true;
+    loadRef.current(photo).then(
+      (uri) => {
+        if (active) setLoaded({ key, uri });
+      },
+      () => {
+        if (active) setLoaded({ key, uri: null });
+      },
+    );
+    return () => {
+      active = false;
+    };
+    // The key is the photo's identity; a new object for the same photo must not reload it.
+  }, [key]);
+  return loaded !== null && loaded.key === key ? loaded.uri : null;
 }

@@ -68,7 +68,16 @@ export interface AppendLocalOpsOptions {
   /** Resolved best-available fix, or null; never blocks (04 §5.1 / 05 §2.1). */
   readonly location: Location | null;
   readonly applyProjection: ProjectionApply;
+  /**
+   * The op type's rule (module/op-rules.ts), run on each completed op before it is inserted, inside
+   * the transaction, so it sees the ops of the same command folded before it. A throw rolls the
+   * whole command back.
+   */
+  readonly checkOp?: OpCheck;
 }
+
+/** The op-rule seam: throws when the completed op must not be recorded. */
+export type OpCheck = (op: SignedOperation) => Promise<void>;
 
 export type AppendedOp =
   | {
@@ -135,6 +144,7 @@ export async function appendLocalOps(
         crypto,
       );
 
+      await options.checkOp?.(completed.op);
       await tx.insertOp({ op: completed.op, signedCoreJcs: completed.jcs });
       await applyProjection(completed.op);
 

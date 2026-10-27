@@ -45,6 +45,9 @@ const config: ExpoConfig = {
     // test/ios-config.test.ts.
     bundleIdentifier: 'com.bolusi.app',
   },
+  // Where the web preview is served from, e.g. `/bolusi/pr-preview/pr-12` on GitHub Pages
+  // (docs/previews.md). Empty for local runs. Native builds ignore it.
+  experiments: { baseUrl: process.env['EXPO_BASE_URL'] ?? '' },
   extra: {
     apiUrl: process.env['EXPO_PUBLIC_API_URL'] ?? null,
   },

@@ -177,6 +177,7 @@ function syncHarness(): Harness {
         // 304 — the steady state; the bundle is not what this file measures.
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
+        refoldRefused: (op) => booted.engine.refoldRefused(op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,

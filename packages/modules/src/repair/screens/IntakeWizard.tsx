@@ -46,6 +46,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   customerName: 'repair.problem.customerName',
   deviceBrand: 'repair.problem.deviceBrand',
   deviceModel: 'repair.problem.deviceModel',
+  screenLock: 'repair.problem.screenLock',
   complaint: 'repair.problem.complaint',
   photos: 'repair.problem.photos',
   quoteLines: 'repair.problem.quoteLines',
@@ -242,6 +243,7 @@ export function IntakeWizard({
       chrome={chrome}
       title={tn('repair.action.newIntake')}
       onBack={back}
+      scrollKey={step}
       primaryLabel={
         missingPhoto !== null
           ? tn('repair.photo.takeNext', { slot: optionLabel('photoAngles', missingPhoto) })
@@ -328,6 +330,7 @@ export function IntakeWizard({
             options={options}
             brandError={problemText('deviceBrand')}
             modelError={problemText('deviceModel')}
+            lockError={problemText('screenLock')}
             testID={`${testID}.device`}
           />
         );

@@ -22,11 +22,13 @@
 // under Node against noble + a fake keystore + a seeded IdSource (T-6). The native bindings are
 // supplied by index.ts, the one op-sqlite/SecureStore site.
 import {
+  assertDeviceClockTrusted,
   createModuleRuntime,
   SearchIndexCache,
   createDirectorySource,
   mediaRefsInPayload,
   PermissionEvaluator,
+  readSyncState,
   type ClockPort,
   type CommandRuntime,
   type CryptoPort,
@@ -207,6 +209,10 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         // core guards the sink call so even a throwing sink cannot change a decided denial.
         // Proven by runtime.test.ts, which stops observing the loss when this line is removed.
         denialAuditDiagnostics,
+        // A phone whose clock ran ahead at the last sync saves nothing until the clock is fixed:
+        // the server would refuse every op it stamps (sync/clock-guard.ts).
+        guardClock: async () =>
+          assertDeviceClockTrusted(await readSyncState(app.db.db), deps.clock.now()),
       }) as unknown as ModuleRuntime<ClientDatabase>;
     },
   };

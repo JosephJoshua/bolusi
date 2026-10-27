@@ -121,7 +121,12 @@
     "passcode": "Kunci layar (opsional)",
     "colorField": "Warna (opsional)",
     "imeiField": "IMEI (opsional)",
-    "passcodeLabel": "Kunci layar"
+    "passcodeLabel": "Kunci layar",
+    "modelHint": "Contoh: Galaxy A55, Redmi Note 13",
+    "released": "Rilis {year}",
+    "servicedBefore": "Pernah diservis di sini",
+    "tablet": "Tablet",
+    "watch": "Jam tangan"
   },
   "handover": {
     "note": "Catatan (opsional)",
@@ -224,7 +229,8 @@
     "quoteLines": "Tambah minimal satu biaya.",
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
-    "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya."
+    "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
+    "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
     "today": "Hari ini",
@@ -243,6 +249,7 @@
   "ticket": {
     "history": "Riwayat",
     "lastNote": "Catatan terakhir",
+    "numbered": "Servisan {number}",
     "price": "Biaya",
     "readyBy": "Estimasi selesai",
     "technician": "Teknisi",
@@ -268,7 +275,7 @@
     "downPayment": "DP tersimpan."
   },
   "passcode": {
-    "show": "Lihat",
+    "show": "Tampilkan",
     "hide": "Sembunyikan"
   },
   "hint": {
@@ -337,6 +344,30 @@
       "tooMany": "Maksimal 40 pilihan.",
       "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
     }
+  },
+  "spec": {
+    "battery": "Baterai",
+    "cardSlot": "Slot memori",
+    "chipset": "Chipset",
+    "memory": "Memori",
+    "none": "Tidak ada",
+    "os": "Sistem",
+    "port": "Port",
+    "screen": "Layar",
+    "sim": "SIM",
+    "title": "Spesifikasi"
+  },
+  "lock": {
+    "none": "Tidak ada",
+    "pin": "PIN",
+    "password": "Sandi",
+    "pattern": "Pola",
+    "pinField": "PIN",
+    "passwordField": "Kata sandi",
+    "patternHint": "Gambar polanya seperti di HP pelanggan.",
+    "patternShort": "Hubungkan minimal 4 titik, lalu gambar lagi.",
+    "patternRedo": "Gambar ulang",
+    "patternLabel": "Pola kunci layar"
   },
   "stale": {
     "cancelled": "Servisan ini baru saja dibatalkan dari perangkat lain.",
@@ -458,5 +489,37 @@
     "termsHint": "Satu ketentuan per baris.",
     "save": "Simpan",
     "saved": "Tampilan nota disimpan."
+  },
+  "refusal": {
+    "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
+    "customerNotFound": "Pelanggan ini tidak ada di toko ini.",
+    "ticketNotFound": "Servisan ini tidak ada di toko ini.",
+    "priceChangeNotFound": "Usulan harga ini tidak ditemukan.",
+    "wrongSign": "Diskon harus mengurangi harga, sparepart dan jasa harus menambah.",
+    "belowZero": "Total harga tidak boleh kurang dari nol.",
+    "numberNotThisDevice": "Nomor servisan ini bukan dari perangkat ini.",
+    "numberUsed": "Nomor servisan ini sudah dipakai.",
+    "returned": "HP-nya sudah diambil pelanggan.",
+    "cancelled": "Servisan ini sudah dibatalkan.",
+    "notStarted": "Servisan ini belum mulai dikerjakan.",
+    "inRepair": "Servisan ini sedang dikerjakan.",
+    "waitingForParts": "Servisan ini sedang menunggu sparepart.",
+    "repaired": "Servisan ini sudah selesai dikerjakan.",
+    "notFinished": "Servisan ini belum selesai dikerjakan.",
+    "alreadyYours": "Servisan ini sudah kamu pegang.",
+    "alreadyAssigned": "Servisan ini sudah dipegang teknisi itu.",
+    "notTechnician": "Orang ini tidak bisa mengerjakan servisan di toko ini.",
+    "noTechnician": "Servisan ini belum dipegang teknisi.",
+    "needsBeforePhoto": "Foto HP-nya dulu sebelum mulai dikerjakan.",
+    "needsAfterPhoto": "Foto HP-nya dulu setelah selesai dikerjakan.",
+    "priceChangeDecided": "Usulan harga ini sudah dikonfirmasi atau ditolak.",
+    "priceChangeDifferent": "Usulan harga ini sudah berubah. Cek lagi dulu.",
+    "priceChangesPending": "Masih ada usulan harga yang belum dikonfirmasi.",
+    "invalidOptions": "Daftar pilihan ini tidak bisa disimpan.",
+    "notThisStore": "Pengaturan ini hanya bisa diubah untuk toko perangkat ini.",
+    "discountOwnerOnly": "Hanya pemilik toko yang bisa memberi diskon.",
+    "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
+    "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
+    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
   }
 }

@@ -171,6 +171,8 @@ export function pushDevice(
     surface: options.surface ?? SILENT_SURFACE,
     clock: { now: () => device.clock.now() },
     deviceId: device.identity.deviceId,
+    transaction: (fn) => device.transaction(fn),
+    refoldRefused: (op) => device.refoldRefused(op),
     onChainBroken: options.onChainBroken ?? (() => Promise.resolve()),
     ...(options.batchSize === undefined ? {} : { batchSize: options.batchSize }),
   });

@@ -121,7 +121,12 @@
     "passcode": "Screen lock code (optional)",
     "colorField": "Colour (optional)",
     "imeiField": "IMEI (optional)",
-    "passcodeLabel": "Screen lock"
+    "passcodeLabel": "Screen lock",
+    "modelHint": "e.g. Galaxy A55, Redmi Note 13",
+    "released": "Released {year}",
+    "servicedBefore": "Serviced here before",
+    "tablet": "Tablet",
+    "watch": "Smartwatch"
   },
   "handover": {
     "note": "Note (optional)",
@@ -224,7 +229,8 @@
     "quoteLines": "Add at least one price line.",
     "incompleteLine": "Describe every line that has an amount.",
     "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
-    "downPaymentAboveTotal": "The down payment is more than the total."
+    "downPaymentAboveTotal": "The down payment is more than the total.",
+    "screenLock": "Enter the screen lock, or choose None."
   },
   "ready": {
     "today": "Today",
@@ -243,6 +249,7 @@
   "ticket": {
     "history": "History",
     "lastNote": "Last note",
+    "numbered": "Repair {number}",
     "price": "Price",
     "readyBy": "Ready by",
     "technician": "Technician",
@@ -337,6 +344,30 @@
       "tooMany": "40 choices at most.",
       "hidesAll": "At least one choice must show at this store."
     }
+  },
+  "spec": {
+    "battery": "Battery",
+    "cardSlot": "Card slot",
+    "chipset": "Chipset",
+    "memory": "Memory",
+    "none": "None",
+    "os": "System",
+    "port": "Port",
+    "screen": "Screen",
+    "sim": "SIM",
+    "title": "Specs"
+  },
+  "lock": {
+    "none": "None",
+    "pin": "PIN",
+    "password": "Password",
+    "pattern": "Pattern",
+    "pinField": "PIN",
+    "passwordField": "Password",
+    "patternHint": "Draw the pattern the way the customer does.",
+    "patternShort": "Connect at least 4 dots, then draw it again.",
+    "patternRedo": "Draw again",
+    "patternLabel": "Screen lock pattern"
   },
   "stale": {
     "cancelled": "This repair was just cancelled on another device.",
@@ -458,5 +489,37 @@
     "termsHint": "One term per line.",
     "save": "Save",
     "saved": "Slip details saved."
+  },
+  "refusal": {
+    "alreadyRecorded": "This was already recorded.",
+    "customerNotFound": "This customer isn’t in this store.",
+    "ticketNotFound": "This repair isn’t in this store.",
+    "priceChangeNotFound": "This price proposal wasn’t found.",
+    "wrongSign": "A discount must lower the price; parts and labour must raise it.",
+    "belowZero": "The total price can’t go below zero.",
+    "numberNotThisDevice": "This repair number wasn’t issued by this device.",
+    "numberUsed": "This repair number is already used.",
+    "returned": "The phone was already picked up.",
+    "cancelled": "This repair was cancelled.",
+    "notStarted": "Work on this repair hasn’t started.",
+    "inRepair": "This repair is being worked on.",
+    "waitingForParts": "This repair is waiting for parts.",
+    "repaired": "This repair is already done.",
+    "notFinished": "This repair isn’t finished yet.",
+    "alreadyYours": "You already have this repair.",
+    "alreadyAssigned": "That technician already has this repair.",
+    "notTechnician": "This person can’t do repairs in this store.",
+    "noTechnician": "No technician has this repair yet.",
+    "needsBeforePhoto": "Take a photo of the phone before starting.",
+    "needsAfterPhoto": "Take a photo of the phone after the repair.",
+    "priceChangeDecided": "This price proposal was already accepted or declined.",
+    "priceChangeDifferent": "This price proposal changed. Check it again first.",
+    "priceChangesPending": "Some price proposals still need a decision.",
+    "invalidOptions": "This list of choices can’t be saved.",
+    "notThisStore": "This setting can only be changed for this device’s store.",
+    "discountOwnerOnly": "Only a store owner can give a discount.",
+    "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
+    "downPaymentAboveTotal": "The down payment is more than the total.",
+    "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it."
   }
 }

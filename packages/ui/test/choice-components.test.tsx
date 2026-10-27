@@ -2,6 +2,7 @@
 import { StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
+import { PatternLock } from '../src/components/PatternLock.js';
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
 import { StepHeader } from '../src/components/StepHeader.js';
@@ -120,5 +121,16 @@ describe('PhotoSlot', () => {
     const filled = render(<PhotoSlot testID="p" label="Depan" image={<></>} actionLabel="Ulang" />);
     expect(filled.query('p.done')).not.toBeNull();
     expect(filled.query('p.press')).toBeNull();
+  });
+});
+
+describe('PatternLock', () => {
+  test('shows a pattern read-only: drawn dots carry their order, and it is read out as steps', () => {
+    const r = render(<PatternLock value="1475" accessibilityLabel="Pola" testID="lock" />);
+    expect(r.get('lock').props['accessibilityLabel']).toBe('Pola: 1-4-7-5');
+    expect(textsIn(r.get('lock.dot.1'))).toEqual(['1']);
+    expect(textsIn(r.get('lock.dot.4'))).toEqual(['2']);
+    expect(textsIn(r.get('lock.dot.5'))).toEqual(['4']);
+    expect(textsIn(r.get('lock.dot.9'))).toEqual([]);
   });
 });

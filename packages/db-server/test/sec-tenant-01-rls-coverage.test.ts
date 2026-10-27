@@ -30,8 +30,17 @@ import { createTestDb, type TestDb } from './helpers/test-db.js';
  *  - `permissions`  — global, code-defined, deploy-seeded reference data with no tenant_id
  *                     (10-db-schema §4). App role gets SELECT only.
  *  - `kysely_*`     — the migrator's own bookkeeping, written by the provisioning role only.
+ *  - `phone_*`      — the crawled phone catalog (migration 0016): the same public models for every
+ *                     tenant, written by the crawler as the table owner. App role gets SELECT only.
  */
-const RLS_EXEMPT = new Set(['permissions', 'kysely_migration', 'kysely_migration_lock']);
+const RLS_EXEMPT = new Set([
+  'permissions',
+  'kysely_migration',
+  'kysely_migration_lock',
+  'phone_catalog_brands',
+  'phone_models',
+  'phone_model_photos',
+]);
 
 /** pg_policy.polcmd → the verbs a policy covers. '*' is Postgres's FOR ALL (all four). */
 const POLCMD_VERBS: Record<string, readonly string[]> = {
@@ -389,5 +398,8 @@ test('the RLS allowlist contains only genuinely global tables', async () => {
     'kysely_migration',
     'kysely_migration_lock',
     'permissions',
+    'phone_catalog_brands',
+    'phone_model_photos',
+    'phone_models',
   ]);
 });
