@@ -22,7 +22,13 @@ export { setI18nLogger } from './logger.js';
 export type { TranslationValues } from './t.js';
 export { hasKey, t } from './t.js';
 
-export { translateErrorCode, translateOpType, translateRejectionCode } from './errors.js';
+export {
+  translateErrorCode,
+  translateFailure,
+  translateOpType,
+  translateRejection,
+  translateRejectionCode,
+} from './errors.js';
 
 export { translateRoleKey } from './role.js';
 

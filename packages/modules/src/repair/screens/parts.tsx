@@ -1,6 +1,6 @@
 // Small pieces every repair screen shares: the four read states around a query, a verified photo
 // thumbnail, the ticket status chip and the banner for a refused action.
-import { formatMoney, t, translateErrorCode } from '@bolusi/i18n';
+import { formatMoney, t, translateErrorCode, translateFailure } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
@@ -32,7 +32,9 @@ import {
   type StaleStep,
   type TicketStatus,
 } from '../flows.js';
-import { useRepairThumbnail } from '../runtime.js';
+import type { DeviceModelPhoto, DeviceModelRow } from '../device-models.js';
+import { specFacts, type SpecFactKey } from '../device-specs.js';
+import { useModelPhoto, useRepairQuery, useRepairThumbnail } from '../runtime.js';
 
 /**
  * Render a read's loading, unauthorized and error states, and `ready` through `children`. A missing
@@ -101,7 +103,7 @@ export function ActionErrorBanner({
   return (
     <Banner
       variant="danger"
-      message={translateErrorCode(errorCode)}
+      message={translateFailure(errorCode)}
       onPress={onDismiss}
       testID={testID}
     />
@@ -178,6 +180,116 @@ export function PhotoThumb({
   }
 }
 
+/** The catalog model a brand and model name are, when the catalog surely has it (findDeviceModel). */
+export function useCatalogModel(brand: string, model: string): DeviceModelRow | null {
+  const query = useRepairQuery(
+    async (rt) =>
+      model.trim() === ''
+        ? null
+        : ((await rt.query('findDeviceModel', { brand: brand.trim(), model: model.trim() }))
+            .rows[0] ?? null),
+    `deviceModel:${brand.trim()}\u0000${model.trim()}`,
+  );
+  return query.status === 'ready' ? query.data : null;
+}
+
+/**
+ * A catalog picture of a phone model, the whole phone shown uncropped. While it loads, or when there
+ * is none (offline, not in the catalog), a plain phone glyph holds its place so rows do not jump.
+ */
+export function ModelPhoto({
+  photo,
+  large = false,
+  testID,
+}: {
+  readonly photo: DeviceModelPhoto | null;
+  /** The confirmation card's size; rows use the small one. */
+  readonly large?: boolean;
+  readonly testID: string;
+}): React.JSX.Element {
+  const uri = useModelPhoto(photo);
+  const frame = large ? styles.modelLarge : styles.modelSmall;
+  return uri === null ? (
+    <View style={[frame, styles.modelEmpty]} testID={`${testID}.none`}>
+      <Icon name="device" size={size.iconInline} color={color.textMuted} />
+    </View>
+  ) : (
+    <Image source={{ uri }} contentFit="contain" style={frame} testID={`${testID}.image`} />
+  );
+}
+
+/** The catalog picture of a ticket's phone, or nothing when the catalog has no picture of it. */
+export function CatalogPhoto({
+  brand,
+  model,
+  large = false,
+  testID,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly large?: boolean;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const uri = useModelPhoto(found?.photo ?? null);
+  if (uri === null) return null;
+  return (
+    <Image
+      source={{ uri }}
+      contentFit="contain"
+      style={large ? styles.modelLarge : styles.modelSmall}
+      testID={`${testID}.image`}
+    />
+  );
+}
+
+const SPEC_LABEL = {
+  memory: 'repair.spec.memory',
+  screen: 'repair.spec.screen',
+  chipset: 'repair.spec.chipset',
+  battery: 'repair.spec.battery',
+  port: 'repair.spec.port',
+  sim: 'repair.spec.sim',
+  cardSlot: 'repair.spec.cardSlot',
+  os: 'repair.spec.os',
+} as const satisfies Record<SpecFactKey, string>;
+
+/**
+ * The catalog's specs for a ticket's phone, as the viewer needs them (`specFacts`): memory
+ * variants for everyone, the inside of the phone for someone who repairs it. Nothing when the
+ * catalog does not know the model or has no specs for it.
+ */
+export function DeviceSpecs({
+  brand,
+  model,
+  repairs,
+  testID,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly repairs: boolean;
+  readonly testID: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const facts = found === null ? [] : specFacts(found.specs, repairs);
+  if (facts.length === 0) return null;
+  return (
+    <Section title={tn('repair.spec.title')} testID={testID}>
+      <FactGrid>
+        {facts.map((fact) => (
+          <Fact
+            key={fact.key}
+            label={tn(SPEC_LABEL[fact.key])}
+            // GSMArena's "No" for a phone without a card slot.
+            value={fact.value === 'No' ? tn('repair.spec.none') : fact.value}
+            testID={`${testID}.${fact.key}`}
+          />
+        ))}
+      </FactGrid>
+    </Section>
+  );
+}
+
 /** The chrome every full-screen repair step shares: the shell's sync chip and avatar. */
 export interface RepairChrome {
   readonly syncChip: ReactNode;
@@ -208,6 +320,7 @@ export function FlowScreen({
   onClearNotice,
   overlay,
   stale,
+  scrollKey,
   testID,
   children,
 }: {
@@ -245,6 +358,8 @@ export function FlowScreen({
    * and the step's `onDone` closes it in the same batched update, so the notice never shows.
    */
   readonly stale?: StaleStep | null | undefined;
+  /** A multi-step flow's step: each step opens scrolled to the top (AppShell `scrollKey`). */
+  readonly scrollKey?: string | number | undefined;
   readonly testID: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -252,6 +367,7 @@ export function FlowScreen({
   return (
     <AppShell
       scrollable
+      scrollKey={scrollKey}
       title={title}
       titleVariant="detail"
       onBack={onBack}
@@ -392,21 +508,26 @@ export function Field({
 
 /**
  * A key fact on a detail screen: a small label over its value, laid out two to a row by `FactGrid`.
- * The value can carry the one action that changes it ("Ganti" beside the technician).
+ * The value can carry the one action that changes it ("Ganti" beside the technician). A `wide` fact
+ * takes the whole row, for a value with an action and something drawn under it.
  */
 export function Fact({
   label,
   value,
   action,
+  wide = false,
+  children,
   testID,
 }: {
   readonly label: string;
   readonly value: string;
   readonly action?: ReactNode;
+  readonly wide?: boolean | undefined;
+  readonly children?: ReactNode;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   return (
-    <View style={styles.fact}>
+    <View style={[styles.fact, wide ? styles.factWide : null]}>
       <Text style={styles.factLabel}>{label}</Text>
       <View style={styles.factValueRow}>
         <Text style={styles.factValue} testID={testID}>
@@ -414,6 +535,7 @@ export function Fact({
         </Text>
         {action}
       </View>
+      {children}
     </View>
   );
 }
@@ -510,6 +632,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   full: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  // GSMArena's pictures are 160×212 portraits on white, so the frames keep that shape.
+  modelSmall: { width: 30, height: 40 },
+  modelLarge: { width: 60, height: 80 },
+  modelEmpty: {
+    borderRadius: radius.sm,
+    backgroundColor: color.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   section: { marginTop: space.xl },
   sectionHeader: {
     flexDirection: 'row',
@@ -522,6 +653,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
   factGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
   fact: { width: '50%', paddingRight: space.sm },
+  factWide: { width: '100%' },
   factLabel: { ...type.caption, color: color.textMuted },
   factValueRow: { flexDirection: 'row', alignItems: 'center', minHeight: size.control },
   factValue: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },

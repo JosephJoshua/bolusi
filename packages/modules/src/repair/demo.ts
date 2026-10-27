@@ -18,6 +18,12 @@ import {
 } from './intake-options.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { REPAIR_REFUSALS } from './rules.js';
+import {
+  demoFindDeviceModel,
+  demoModelPhoto,
+  demoSearchDeviceModels,
+} from './phone-catalog-demo.js';
 
 /** The phone harness's fixed clock, so its screenshots never change. */
 export const DEMO_NOW = Date.UTC(2026, 6, 21, 3, 0, 0);
@@ -455,12 +461,22 @@ export interface DemoRepairOptions {
   readonly volume?: 'sample' | 'store' | undefined;
 }
 
+/** The demo runtime, plus switching who acts, so "switch user" in the preview keeps the same tickets. */
+export type DemoRepairRuntime = RepairRuntime & { actAs(role: DemoRepairRole): void };
+
+/** The demo role a roster user signs in as, if they have one. */
+export function demoRoleOf(userId: string): DemoRepairRole | undefined {
+  return (Object.keys(DEMO_REPAIR_ROLES) as DemoRepairRole[]).find(
+    (role) => DEMO_REPAIR_ROLES[role].userId === userId,
+  );
+}
+
 export function demoRepairRuntime(
   role: DemoRepairRole = 'owner',
   { now = DEMO_NOW, volume = 'sample' }: DemoRepairOptions = {},
-): RepairRuntime {
+): DemoRepairRuntime {
   HARNESS_NOW = now;
-  let actor: { readonly userId: string; readonly name: string } = DEMO_REPAIR_ROLES[role];
+  let actor: (typeof DEMO_REPAIR_ROLES)[DemoRepairRole] = DEMO_REPAIR_ROLES[role];
   let tickets = volume === 'store' ? [...seedTickets(), ...storeTickets()] : seedTickets();
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
@@ -488,6 +504,13 @@ export function demoRepairRuntime(
     return found;
   };
   const update = (ticketId: string, kind: string, patch: Partial<TicketDetailRow>) => {
+    // The one rule every step but the handover shares (repair rules.ts): a change that raced a
+    // cancel or a handover on another device is refused with its own reason, as on a phone.
+    const current = find(ticketId);
+    if (kind !== 'repair.device_returned') {
+      if (current.location === 'returned') throw REPAIR_REFUSALS.refuse('returned');
+      if (current.outcome === 'cancelled') throw REPAIR_REFUSALS.refuse('cancelled');
+    }
     tickets = tickets.map((t) =>
       t.id === ticketId
         ? withTotals({
@@ -616,6 +639,10 @@ export function demoRepairRuntime(
       );
       return page(index.search(String(input['text']), 50).map((hit) => find(hit.id)));
     },
+    searchDeviceModels: (input) =>
+      page(demoSearchDeviceModels(String(input['text']), Number(input['limit'] ?? 6))),
+    findDeviceModel: (input) =>
+      page(demoFindDeviceModel(String(input['brand']), String(input['model']))),
     searchCustomers: (input) => {
       const customers = new Map(tickets.map((t) => [t.customerId, t]));
       const index = new FuzzyIndex(
@@ -655,7 +682,12 @@ export function demoRepairRuntime(
         customerId?: string;
       };
       const existing = tickets.find((t) => t.customerId === customer.customerId);
-      const device = input['device'] as { brand: string; model: string; color: string };
+      const device = input['device'] as {
+        brand: string;
+        model: string;
+        color: string;
+        passcode?: string | null;
+      };
       const photos = input['photos'] as { slot: string; label: string | null; ref: MediaRef }[];
       const created = withTotals({
         ...seedTickets()[0]!,
@@ -680,6 +712,7 @@ export function demoRepairRuntime(
         deviceBrand: device.brand,
         deviceModel: device.model,
         deviceColor: device.color,
+        devicePasscode: device.passcode ?? null,
         complaint: String(input['complaint']),
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
@@ -922,9 +955,16 @@ export function demoRepairRuntime(
     imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
   };
 
-  const permitted = new Set<string>(DEMO_REPAIR_ROLES[role].permissions);
+  let permitted = new Set<string>(actor.permissions);
   const runtime = {
-    userId: actor.userId,
+    get userId() {
+      return actor.userId;
+    },
+    actAs: (next: DemoRepairRole) => {
+      actor = DEMO_REPAIR_ROLES[next];
+      permitted = new Set<string>(actor.permissions);
+      notify();
+    },
     query: (name: string, input: Input) => queries[name]!(input),
     run: (name: string, input: Input) => {
       try {
@@ -947,6 +987,7 @@ export function demoRepairRuntime(
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
     pickPhoto: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
     printing,
+    loadModelPhoto: demoModelPhoto,
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.
@@ -959,5 +1000,5 @@ export function demoRepairRuntime(
       return Promise.resolve('done');
     },
   };
-  return runtime as unknown as RepairRuntime;
+  return runtime as unknown as DemoRepairRuntime;
 }

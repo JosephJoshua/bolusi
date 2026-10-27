@@ -47,6 +47,7 @@ import type { AppProps } from '../../App.js';
 import {
   DEMO_REPAIR_ROLES,
   demoRepairRuntime,
+  demoRoleOf,
   type DemoRepairRole,
 } from '@bolusi/modules/repair/demo';
 import {
@@ -246,6 +247,14 @@ function AppMode({
   const [repair] = useState(() =>
     repairRole === undefined ? undefined : demoRepairRuntime(repairRole),
   );
+  // "Switch user" works: any PIN opens the chosen person, who acts on the same demo tickets.
+  const [current, setCurrent] = useState(session);
+  const onSubmitPin = (userId: string): Promise<boolean> => {
+    const role = demoRoleOf(userId);
+    if (role !== undefined) repair?.actAs(role);
+    setCurrent({ userId });
+    return Promise.resolve(true);
+  };
   return (
     <App
       device="active"
@@ -253,7 +262,7 @@ function AppMode({
       usersError={null}
       pinRow={() => null}
       now={HARNESS_NOW}
-      session={session}
+      session={current}
       notes={notes}
       repair={repair}
       locked={false}
@@ -261,7 +270,7 @@ function AppMode({
       onSyncNow={noop}
       onRetryMedia={noop}
       onRetryUsers={noop}
-      onSubmitPin={noop}
+      onSubmitPin={onSubmitPin}
       onChangePin={() => Promise.resolve()}
       canUnlock
       listPinTargets={() => Promise.resolve([])}

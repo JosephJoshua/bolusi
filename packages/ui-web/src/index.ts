@@ -53,6 +53,7 @@ export {
   type ViewerPhoto,
 } from './components/Photo.js';
 export { Pagination, pageWindow, type PaginationLabels } from './components/Pagination.js';
+export { PatternPad } from './components/PatternPad.js';
 export { SearchField } from './components/SearchField.js';
 export { Segmented, type SegmentedOption } from './components/Segmented.js';
 export { AppShell, PageHeader, Sidebar, type NavItem } from './components/Shell.js';

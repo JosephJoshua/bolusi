@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   IconButton,
   PageHeader,
+  PatternPad,
   SecretField,
   Skeleton,
   Segmented,
@@ -22,6 +23,7 @@ import { ArrowLeft, Check, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
+import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
 import { CHECKLIST_STATES, type ChecklistState } from '../constants.js';
 import {
   capturedThumbnailRef,
@@ -54,6 +56,7 @@ import { tn, type RepairKey } from '../i18n.js';
 import {
   CHECK_STATE_KEY,
   INTAKE_STEP_KEY,
+  LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
   readyLabel,
@@ -83,6 +86,7 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
   downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
+  screenLock: 'repair.problem.screenLock',
 };
 
 /** Where the cursor goes for each problem, so "what is missing" is one keystroke from fixed. */
@@ -96,6 +100,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   incompleteLine: 'repair.desk.intake.lines',
   negativeTotal: 'repair.desk.intake.lines',
   downPaymentAboveTotal: 'repair.desk.intake.downPayment',
+  screenLock: 'repair.desk.intake.lock.kind',
 };
 
 const CHECK_TONE: Readonly<Record<ChecklistState, 'success' | 'danger' | 'neutral'>> = {
@@ -302,6 +307,7 @@ export function IntakePage({
                   options={options}
                   brandError={problemText('deviceBrand')}
                   modelError={problemText('deviceModel')}
+                  lockError={problemText('screenLock')}
                 />
               </IntakeSection>
               <IntakeSection n={3} section="condition" complete={problemsBy.condition.length === 0}>
@@ -533,12 +539,14 @@ function DeviceFields({
   options,
   brandError,
   modelError,
+  lockError,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
   readonly options: IntakeOptionLists;
   readonly brandError: string | undefined;
   readonly modelError: string | undefined;
+  readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
   const set = (patch: Partial<IntakeDraft['device']>): void =>
@@ -598,15 +606,113 @@ function DeviceFields({
           inputClassName="tabular"
           data-testid="repair.desk.intake.imei"
         />
-        <SecretField
+      </div>
+      <ScreenLockFields
+        kind={device.lockKind}
+        value={device.passcode}
+        onChange={(lockKind, passcode) => set({ lockKind, passcode })}
+        error={lockError}
+      />
+    </div>
+  );
+}
+
+/**
+ * How the phone is unlocked: nothing, a PIN, a password, or the pattern, drawn with the mouse the
+ * way the customer draws it (or typed as dot numbers). A typed PIN or password stays hidden, with
+ * an eye button to check it with the customer. The rules are the phone's (`stepProblems`).
+ */
+function ScreenLockFields({
+  kind,
+  value,
+  onChange,
+  error,
+}: {
+  readonly kind: IntakeDraft['device']['lockKind'];
+  readonly value: string;
+  readonly onChange: (kind: IntakeDraft['device']['lockKind'], value: string) => void;
+  /** Set when a lock kind is chosen but nothing was entered for it. */
+  readonly error: string | undefined;
+}): React.JSX.Element {
+  const [tooShort, setTooShort] = useState(false);
+  const secret = {
+    showLabel: tn('repair.passcode.show'),
+    hideLabel: tn('repair.passcode.hide'),
+    error,
+    autoFocus: true,
+    autoComplete: 'off',
+    className: 'max-w-80',
+  };
+  return (
+    <div className="flex flex-col gap-3" data-testid="repair.desk.intake.lock">
+      <div>
+        <p className="mb-2 text-small font-semibold text-text">{tn('repair.device.passcode')}</p>
+        <Segmented
           label={tn('repair.device.passcode')}
-          showLabel={tn('repair.passcode.show')}
-          hideLabel={tn('repair.passcode.hide')}
-          value={device.passcode}
-          onChange={(event) => set({ passcode: event.target.value })}
-          data-testid="repair.desk.intake.passcode"
+          options={(['none', ...SCREEN_LOCK_KINDS] as const).map((option) => ({
+            value: option,
+            label: tn(LOCK_KIND_KEY[option]),
+          }))}
+          value={kind}
+          onChange={(next) => {
+            setTooShort(false);
+            if (next !== kind) onChange(next, '');
+          }}
+          testId="repair.desk.intake.lock.kind"
         />
       </div>
+      {kind === 'pin' ? (
+        <SecretField
+          {...secret}
+          label={tn('repair.lock.pinField')}
+          inputMode="numeric"
+          value={value}
+          onChange={(event) => onChange('pin', event.target.value.replace(/\D/g, ''))}
+          data-testid="repair.desk.intake.lock.pin"
+        />
+      ) : null}
+      {kind === 'password' ? (
+        <SecretField
+          {...secret}
+          label={tn('repair.lock.passwordField')}
+          value={value}
+          onChange={(event) => onChange('password', event.target.value)}
+          data-testid="repair.desk.intake.lock.password"
+        />
+      ) : null}
+      {kind === 'pattern' ? (
+        <div className="flex items-start gap-6">
+          <PatternPad
+            value={value}
+            onChange={(drawn) => {
+              // A pattern shorter than Android allows was not finished: draw it again.
+              const finished = drawn.length >= PATTERN_MIN_DOTS;
+              setTooShort(!finished);
+              onChange('pattern', finished ? drawn : '');
+            }}
+            label={tn('repair.lock.patternLabel')}
+            testId="repair.desk.intake.lock.pattern"
+          />
+          <div className="flex flex-col items-start gap-2 pt-1">
+            <p
+              role={tooShort || error !== undefined ? 'alert' : undefined}
+              className={`max-w-60 text-small ${tooShort || error !== undefined ? 'text-danger' : 'text-text-muted'}`}
+            >
+              {tooShort ? tn('repair.lock.patternShort') : (error ?? tn('repair.lock.patternHint'))}
+            </p>
+            {value === '' ? null : (
+              <Button
+                label={tn('repair.lock.patternRedo')}
+                variant="text"
+                size="sm"
+                className="-ml-2"
+                onClick={() => onChange('pattern', '')}
+                data-testid="repair.desk.intake.lock.redo"
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

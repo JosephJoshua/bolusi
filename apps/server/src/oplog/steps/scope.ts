@@ -48,24 +48,57 @@ function mediaRefsIn(payload: unknown): MediaRefLike[] {
   return found;
 }
 
-async function userHoldsRole(db: TenantDb, userId: string, roleName: string): Promise<boolean> {
-  const row = await db
-    .selectFrom('userRoles')
-    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
-    .select('roles.id')
-    .where('userRoles.userId', '=', userId)
-    .where('roles.name', '=', roleName)
-    .executeTakeFirst();
-  return row !== undefined;
+/** The directory reads the scope step needs, each made once per push batch. */
+export interface ScopeLookup {
+  storeExists(storeId: string): Promise<boolean>;
+  userExists(userId: string): Promise<boolean>;
+  holdsRole(userId: string, roleName: string): Promise<boolean>;
 }
 
 /**
- * Validate scope for a chain-valid, signature-valid op. All queries run under RLS (tenant-bound
+ * Memoizes the scope step's reads for one push transaction. A batch is one device's ops, nearly
+ * always one store and one author, so this turns per-op reads into one per batch. Lives only for one
+ * transaction, so a directory change between pushes is always seen.
+ */
+export function createScopeLookup(db: TenantDb): ScopeLookup {
+  const cache = new Map<string, Promise<boolean>>();
+  const once = (key: string, load: () => Promise<unknown>) => {
+    let value = cache.get(key);
+    if (value === undefined) {
+      value = load().then((row) => row !== undefined);
+      cache.set(key, value);
+    }
+    return value;
+  };
+  return {
+    storeExists: (storeId) =>
+      once(`store:${storeId}`, () =>
+        db.selectFrom('stores').select('id').where('id', '=', storeId).executeTakeFirst(),
+      ),
+    userExists: (userId) =>
+      once(`user:${userId}`, () =>
+        db.selectFrom('users').select('id').where('id', '=', userId).executeTakeFirst(),
+      ),
+    holdsRole: (userId, roleName) =>
+      once(`role:${roleName}:${userId}`, () =>
+        db
+          .selectFrom('userRoles')
+          .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+          .select('roles.id')
+          .where('userRoles.userId', '=', userId)
+          .where('roles.name', '=', roleName)
+          .executeTakeFirst(),
+      ),
+  };
+}
+
+/**
+ * Validate scope for a chain-valid, signature-valid op. All lookups run under RLS (tenant-bound
  * handle), so a store/user id belonging to another tenant is simply invisible → not found →
  * SCOPE_VIOLATION.
  */
 export async function checkScope(
-  db: TenantDb,
+  lookup: ScopeLookup,
   op: SignedOperation,
   device: DeviceRecord,
   registry: OpRegistry,
@@ -77,12 +110,9 @@ export async function checkScope(
 
   // §9.2: op store is null (tenant-scoped) or a store of the tenant.
   if (op.storeId !== null) {
-    const store = await db
-      .selectFrom('stores')
-      .select('id')
-      .where('id', '=', op.storeId)
-      .executeTakeFirst();
-    if (store === undefined) return { reason: 'op storeId is not a store of the tenant' };
+    if (!(await lookup.storeExists(op.storeId))) {
+      return { reason: 'op storeId is not a store of the tenant' };
+    }
   }
 
   // §9.2 (D22, task 157) LEG 1 — a STORE-scoped op TYPE must carry a store. An op whose declared
@@ -138,12 +168,9 @@ export async function checkScope(
   // §9.3: op userId is a MEMBER of the tenant directory. Membership only: an author deactivated
   // while the device was offline is the authorization step's refusal (owner decision 2026-10-26),
   // not a scope violation, so it raises no tamper alarm.
-  const user = await db
-    .selectFrom('users')
-    .select('id')
-    .where('id', '=', op.userId)
-    .executeTakeFirst();
-  if (user === undefined) return { reason: 'op userId is not a member of the tenant directory' };
+  if (!(await lookup.userExists(op.userId))) {
+    return { reason: 'op userId is not a member of the tenant directory' };
+  }
 
   // §9 media-ref binding (task 140 Leg B; 06 §3.2). A payload's `mediaRef` is self-describing: it
   // carries its OWN `userId`/`deviceId` (06 §3.2 — "capture and attach happen in one command", so
@@ -202,8 +229,8 @@ export async function checkScope(
       // If the TARGET holds main_owner, the actor must too (blocks store_owner → main_owner
       // impersonation, api/02-auth §6.6; unlocking an owner's PIN is the same takeover's first step).
       // The permission itself is the authorization step's.
-      const targetIsMainOwner = await userHoldsRole(db, op.entityId, MAIN_OWNER_ROLE);
-      if (targetIsMainOwner && !(await userHoldsRole(db, op.userId, MAIN_OWNER_ROLE))) {
+      const targetIsMainOwner = await lookup.holdsRole(op.entityId, MAIN_OWNER_ROLE);
+      if (targetIsMainOwner && !(await lookup.holdsRole(op.userId, MAIN_OWNER_ROLE))) {
         return { reason: `${op.type} on a main_owner requires the actor to hold main_owner` };
       }
       return null;

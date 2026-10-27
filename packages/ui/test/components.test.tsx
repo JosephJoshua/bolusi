@@ -491,6 +491,21 @@ describe('TextInput (§3.2)', () => {
     expect(plainMultiline.get('ui.textInput.field').props.multiline).toBe(true);
   });
 
+  test('a hidden field with reveal labels has an eye button that shows and hides it', () => {
+    const labels = { show: 'Tampilkan', hide: 'Sembunyikan' };
+    const r = render(<TextInput {...base} secureTextEntry revealLabels={labels} />);
+    expect(r.get('ui.textInput.field').props.secureTextEntry).toBe(true);
+    expect(r.get('ui.textInput.reveal').props['accessibilityLabel']).toBe('Tampilkan');
+    fire(r.get('ui.textInput.reveal'), 'onPress');
+    expect(r.get('ui.textInput.field').props.secureTextEntry).toBe(false);
+    expect(r.get('ui.textInput.reveal').props['accessibilityLabel']).toBe('Sembunyikan');
+    // Without labels, or on a field that is not hidden, there is no button.
+    expect(render(<TextInput {...base} secureTextEntry />).query('ui.textInput.reveal')).toBeNull();
+    expect(
+      render(<TextInput {...base} revealLabels={labels} />).query('ui.textInput.reveal'),
+    ).toBeNull();
+  });
+
   test('error outranks focus — a focused field with an error still reads as an error', () => {
     const r = render(<TextInput {...base} errorMessage="Wajib diisi" />);
     fire(r.get('ui.textInput.field'), 'onFocus');

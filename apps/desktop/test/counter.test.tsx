@@ -82,6 +82,11 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.intake.complaint'), {
       target: { value: 'Layar bergaris' },
     });
+    // The lock as the customer draws it, typed as dot numbers on the PC.
+    fireEvent.click(screen.getByRole('radio', { name: 'Pola' }));
+    const pad = byTestId('repair.desk.intake.lock.pattern');
+    for (const key of ['1', '5', '9', '6', 'Enter']) fireEvent.keyDown(pad, { key });
+    await waitFor(() => expect(pad.getAttribute('data-value')).toBe('1596'));
     fireEvent.click(byTestId('repair.desk.intake.restOk'));
     for (const tile of screen.getAllByTestId(/^repair\.desk\.intake\.photo\./)) {
       await act(async () => {
@@ -110,6 +115,10 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.phone').textContent).toContain('0813-4455-6677');
     expect(byTestId('repair.desk.ticket.total').textContent).toContain('1.250.000');
     expect(byTestId('repair.desk.ticket.balance').textContent).toContain('750.000');
+    expect(byTestId('repair.desk.ticket.passcode').textContent).toContain('Pola');
+    expect(byTestId('repair.desk.ticket.passcode').textContent).not.toContain('1-5-9-6');
+    fireEvent.click(screen.getByRole('button', { name: 'Tampilkan' }));
+    expect(byTestId('repair.desk.ticket.passcode').textContent).toContain('1-5-9-6');
   });
 
   it('closes only the dialog on Escape, keeping the servisan open', async () => {

@@ -85,6 +85,12 @@ export const ICON_GLYPHS = Object.freeze({
   dragHandle: 'drag-horizontal-variant',
   /** Avatar menu: switch to another staff member. */
   switchUser: 'account-switch-outline',
+  /** Repair: a phone model with no picture to show (yet). */
+  device: 'cellphone',
+  /** TextInput: shows what a hidden field holds (a phone's PIN), beside its label for readers. */
+  reveal: 'eye-outline',
+  /** TextInput: hides it again. */
+  conceal: 'eye-off-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;

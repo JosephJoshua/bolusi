@@ -12,6 +12,7 @@ import {
   Card,
   Chip,
   Icon,
+  PatternLock,
   TextButton,
   Timeline,
   border,
@@ -27,6 +28,7 @@ import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -37,7 +39,7 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   amountOwed,
   downPaymentAction,
@@ -56,6 +58,8 @@ import {
 import {
   ActionErrorBanner,
   DownPaymentRows,
+  CatalogPhoto,
+  DeviceSpecs,
   Fact,
   FactGrid,
   QueryView,
@@ -385,6 +389,7 @@ export function TicketDetail({
   );
 
   function renderTicket(row: TicketDetailRow): React.JSX.Element {
+    const lock = row.devicePasscode === null ? null : decodeScreenLock(row.devicePasscode);
     const device = [row.deviceBrand, row.deviceModel, row.deviceColor]
       .filter((s) => s !== '')
       .join(' · ');
@@ -423,13 +428,21 @@ export function TicketDetail({
             </Pressable>
           )}
           <View style={styles.deviceBox}>
-            <Text style={styles.device} testID={`${testID}.device`}>
-              {device}
-            </Text>
-            <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
-            <Text style={styles.complaint} testID={`${testID}.complaint`}>
-              {row.complaint}
-            </Text>
+            <CatalogPhoto
+              brand={row.deviceBrand}
+              model={row.deviceModel}
+              large
+              testID={`${testID}.devicePhoto`}
+            />
+            <View style={styles.deviceText}>
+              <Text style={styles.device} testID={`${testID}.device`}>
+                {device}
+              </Text>
+              <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
+              <Text style={styles.complaint} testID={`${testID}.complaint`}>
+                {row.complaint}
+              </Text>
+            </View>
           </View>
         </Card>
 
@@ -457,13 +470,24 @@ export function TicketDetail({
             {row.deviceImei === null ? null : (
               <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
             )}
-            {row.devicePasscode === null ? null : (
+            {lock === null ? null : (
               // The technician needs it to test the phone; hidden until asked so it is not read
               // over a shoulder at the counter.
               <Fact
-                label={tn('repair.device.passcodeLabel')}
-                value={passcodeShown ? row.devicePasscode : '••••'}
+                label={
+                  lock.kind === 'unknown'
+                    ? tn('repair.device.passcodeLabel')
+                    : `${tn('repair.device.passcodeLabel')} · ${tn(LOCK_KIND_KEY[lock.kind])}`
+                }
+                value={
+                  !passcodeShown
+                    ? '••••'
+                    : lock.kind === 'pattern'
+                      ? patternSteps(lock.value)
+                      : lock.value
+                }
                 testID={`${testID}.passcode`}
+                wide
                 action={
                   <TextButton
                     label={tn(passcodeShown ? 'repair.passcode.hide' : 'repair.passcode.show')}
@@ -471,7 +495,16 @@ export function TicketDetail({
                     testID={`${testID}.passcode.toggle`}
                   />
                 }
-              />
+              >
+                {passcodeShown && lock.kind === 'pattern' ? (
+                  <PatternLock
+                    value={lock.value}
+                    size={168}
+                    accessibilityLabel={tn('repair.lock.patternLabel')}
+                    testID={`${testID}.passcode.pattern`}
+                  />
+                ) : null}
+              </Fact>
             )}
           </FactGrid>
           {row.outcomeNote === null || row.outcomeNote === '' ? null : (
@@ -511,6 +544,12 @@ export function TicketDetail({
         {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
         {photos.section}
         {renderCondition(row)}
+        <DeviceSpecs
+          brand={row.deviceBrand}
+          model={row.deviceModel}
+          repairs={can.work}
+          testID={`${testID}.specs`}
+        />
 
         <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
           <Timeline
@@ -784,11 +823,15 @@ const styles = StyleSheet.create({
   },
   link: { ...type.bodySm, fontWeight: '600', color: color.primary },
   deviceBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: space.md,
     marginTop: space.sm,
     padding: space.md,
     borderRadius: radius.sm,
     backgroundColor: color.surfaceAlt,
   },
+  deviceText: { flex: 1 },
   device: { ...type.bodyBold, color: color.text },
   complaintLabel: { ...type.caption, color: color.textMuted, marginTop: space.sm },
   complaint: { ...type.bodySm, color: color.text },

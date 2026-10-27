@@ -10,6 +10,7 @@ import {
   Fact,
   FactGrid,
   IconButton,
+  PatternPad,
   PhotoTile,
   PhotoViewer,
   Section,
@@ -34,6 +35,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { hasRejectedOp, useActionRunner, type EntitySyncStatuses } from '../../screen-kit/index.js';
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import {
   amountOwed,
   balanceAfterDownPayment,
@@ -52,7 +54,7 @@ import {
 } from '../flows.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
+import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
@@ -710,12 +712,37 @@ function CopyablePhone({ phone }: { readonly phone: string }): React.JSX.Element
 }
 
 /** The screen lock, hidden until asked so it is not read over a shoulder at the counter. */
+/**
+ * The phone's screen lock, hidden until asked so it is not read over a shoulder at the counter:
+ * the technician needs it to test the phone. A pattern shows its steps and the drawing.
+ */
 function Passcode({ value }: { readonly value: string }): React.JSX.Element {
   const [shown, setShown] = useState(false);
+  const lock = decodeScreenLock(value);
   return (
     <Fact
-      label={tn('repair.device.passcodeLabel')}
-      value={<span className="tabular">{shown ? value : '••••'}</span>}
+      label={
+        lock.kind === 'unknown'
+          ? tn('repair.device.passcodeLabel')
+          : `${tn('repair.device.passcodeLabel')} · ${tn(LOCK_KIND_KEY[lock.kind])}`
+      }
+      value={
+        !shown ? (
+          <span className="tabular">••••</span>
+        ) : lock.kind === 'pattern' ? (
+          <span className="flex flex-col gap-2">
+            <span className="tabular">{patternSteps(lock.value)}</span>
+            <PatternPad
+              value={lock.value}
+              size={144}
+              label={tn('repair.lock.patternLabel')}
+              testId="repair.desk.ticket.passcode.pattern"
+            />
+          </span>
+        ) : (
+          <span className="tabular">{lock.value}</span>
+        )
+      }
       testId="repair.desk.ticket.passcode"
       action={
         <Tooltip label={tn(shown ? 'repair.passcode.hide' : 'repair.passcode.show')}>
@@ -724,7 +751,7 @@ function Passcode({ value }: { readonly value: string }): React.JSX.Element {
             aria-label={tn(shown ? 'repair.passcode.hide' : 'repair.passcode.show')}
             aria-pressed={shown}
             onClick={() => setShown((current) => !current)}
-            className="flex size-7 cursor-pointer items-center justify-center rounded-xs text-text-muted hover:bg-surface-alt hover:text-text"
+            className="flex size-7 cursor-pointer items-center justify-center self-start rounded-xs text-text-muted hover:bg-surface-alt hover:text-text"
           >
             {shown ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
           </button>

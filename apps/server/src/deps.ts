@@ -2,7 +2,15 @@
 // touch that is an I/O boundary or a not-yet-built collaborator is injected here — so tests swap
 // fakes (rate-limit stores, token verifier, forTenant, clock) and later tasks (13/16/…) drop in
 // real implementations without reshaping the skeleton.
-import { forTenant as dbForTenant, type DB, type ForTenant } from '@bolusi/db-server';
+import {
+  forTenant as dbForTenant,
+  readPhoneModelPhoto,
+  readPhoneModels,
+  type DB,
+  type ForTenant,
+  type PhoneModelPhoto,
+  type PhoneModelRecord,
+} from '@bolusi/db-server';
 import {
   payloadSchemaFor,
   registerModules,
@@ -141,6 +149,8 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       return byType.get(type)?.entityType;
     },
 
+    checkRule: (op, ctx) => registry.checkOpRule(op, ctx),
+
     resolve(type, schemaVersion) {
       const declaration = byType.get(type);
       if (declaration === undefined) return { kind: 'unknown' };
@@ -210,6 +220,12 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
  * `projections` below, so a validated type always has an applier and vice versa.
  */
 export const serverOpRegistry: OpRegistry = deriveOpRegistry(serverModuleRegistry);
+
+/** The crawled phone catalog's reads (db-server phone-catalog.ts), for routes/catalog.ts. */
+export interface PhoneCatalogReader {
+  readonly models: (after: number, limit: number) => Promise<PhoneModelRecord[]>;
+  readonly photo: (modelId: number) => Promise<PhoneModelPhoto | null>;
+}
 
 export interface ServerDeps {
   readonly now: () => number;
@@ -282,6 +298,7 @@ export interface ServerDeps {
   /** WS/SSE fan-out hub (api/00 §12.1). `createRealtimeRouter` subscribes it to `pokeHub` and
    *  registers a revocation hook (SEC-RT-02); the WS/SSE routes register connections into it. */
   readonly realtimeHub: RealtimeHub;
+  readonly phoneCatalog: PhoneCatalogReader;
   /** TEST-ONLY observability: called with a route key when a stub handler executes. */
   readonly onStub?: (routeKey: string) => void;
   /** TEST-ONLY observability: cumulative decompressed bytes per gzip request (bound witness). */
@@ -406,6 +423,10 @@ export function resolveDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     deliveryDispatcher,
     onConflictSurfaced,
     onDeviceAnomaly,
+    phoneCatalog: overrides.phoneCatalog ?? {
+      models: readPhoneModels,
+      photo: readPhoneModelPhoto,
+    },
     ...(detectConflicts === undefined ? {} : { detectConflicts }),
     ...(overrides.systemKeyStore === undefined ? {} : { systemKeyStore: overrides.systemKeyStore }),
     ...(overrides.onStub !== undefined ? { onStub: overrides.onStub } : {}),

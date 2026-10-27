@@ -5,6 +5,7 @@ import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants
 
 import { tn, type RepairKey } from './i18n.js';
 import type { DownPaymentGap, IntakeStep, StaleStep, TicketStatus } from './flows.js';
+import type { ScreenLockKind } from './screen-lock.js';
 import {
   READY_UNKNOWN,
   readyDays,
@@ -37,6 +38,14 @@ export const PRICE_KIND_KEY: Readonly<Record<QuoteLineKind, RepairKey>> = {
   labour: 'repair.price.kind.labour',
   discount: 'repair.price.kind.discount',
   adjustment: 'repair.price.kind.adjustment',
+};
+
+/** A screen lock's kind, as the intake step offers it and the ticket names it. */
+export const LOCK_KIND_KEY: Readonly<Record<'none' | ScreenLockKind, RepairKey>> = {
+  none: 'repair.lock.none',
+  pin: 'repair.lock.pin',
+  password: 'repair.lock.password',
+  pattern: 'repair.lock.pattern',
 };
 
 const CHECK_KEY: Readonly<Record<IntakeCheck, RepairKey>> = {

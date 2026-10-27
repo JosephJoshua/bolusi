@@ -56,6 +56,7 @@
     "PIN_LOCKED": "PIN locked. Ask the store owner to unlock it or set a new PIN.",
     "LAST_ADMIN_PROTECTED": "Not allowed. There must always be at least one active main owner.",
     "ROLE_IN_USE": "This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.",
+    "CLOCK_AHEAD": "This device’s clock is ahead. Turn on automatic date and time in settings, then try again.",
     "IDEMPOTENCY_CONFLICT": "This request clashed with an earlier one. Try again.",
     "RATE_LIMITED": "Too many requests. Wait a moment, then try again.",
     "UNEXPECTED": "Something went wrong. Try again.",
@@ -82,8 +83,10 @@
     "CHAIN_BROKEN": "This device’s change history is broken. Sending has stopped. Contact the store owner right away.",
     "CHAIN_GAP": "Some changes were missing. They’re being resent automatically.",
     "CHAIN_HALTED": "On hold because an earlier change has a problem.",
+    "CLOCK_AHEAD": "This device’s clock was ahead when this change was made, so it wasn’t saved. Turn on automatic date and time, then redo it.",
     "DEVICE_REVOKED": "This device has been revoked, so the change was rejected. Enroll this device again.",
     "PERMISSION_DENIED": "The person who made this change isn’t allowed to do it in this store, so it wasn’t saved. Ask someone who is allowed to do it again.",
+    "RULE_VIOLATED": "The record changed on another device, so this change wasn’t saved. Check the record and redo it if it’s still needed.",
     "SCHEMA_INVALID": "The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.",
     "SCOPE_VIOLATION": "This change doesn’t belong to this store or account, so it was rejected. Report it to the store owner.",
     "UNKNOWN_TYPE": "This device’s app needs an update before this change can be sent."

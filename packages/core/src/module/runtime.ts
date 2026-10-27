@@ -23,7 +23,10 @@ import type { ModuleRegistry } from './registry.js';
  * two things this factory derives from the module list (`operations`) or builds itself
  * (`queryExecutor`).
  */
-export type ModuleRuntimeOptions = Omit<CommandRuntimeOptions, 'operations' | 'queryExecutor'> & {
+export type ModuleRuntimeOptions = Omit<
+  CommandRuntimeOptions,
+  'operations' | 'queryExecutor' | 'checkOp'
+> & {
   /** Live search indexes for every query (search/live-index.ts). Devices pass one. */
   readonly search?: SearchIndexCache;
 };
@@ -82,6 +85,21 @@ export function createModuleRuntime<DB>(
     ...commandOptions,
     operations: registry.operations,
     queryExecutor,
+    // Every op a command produces passes its type's rule before it is saved, judged against this
+    // device's projection and directory: the same rule the server runs on push (op-rules.ts).
+    checkOp: (op) =>
+      registry.checkOpRule(op, {
+        db,
+        holdsPermission: (userId, permissionId) =>
+          Promise.resolve(
+            options.evaluator.hasPermission({
+              userId,
+              tenantId: op.tenantId,
+              storeId: op.storeId,
+              permissionId,
+            }).allowed,
+          ),
+      }),
   });
 
   queryRuntime = new QueryRuntime<DB>({

@@ -3,5 +3,9 @@
     "conflictDetected": "Data bentrok terdeteksi",
     "conflictAcknowledged": "Data bentrok diputuskan",
     "userLocaleChanged": "Bahasa diubah"
+  },
+  "refusal": {
+    "conflictNotFound": "Data bentrok ini tidak ditemukan.",
+    "notYourPreference": "Bahasa hanya bisa diubah oleh pemilik akunnya."
   }
 }

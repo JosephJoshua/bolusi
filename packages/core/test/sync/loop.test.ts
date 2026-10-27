@@ -323,6 +323,7 @@ describe('trigger guards (03 §10)', () => {
       timer: harness.timer,
       deviceId: device.id,
       applyPulledOp: async () => undefined,
+      refoldRefused: async () => undefined,
       bundle: { refresh: async () => 'unchanged' as const },
     });
     expect(() => loop.requestSync('manual')).toThrow(/hydrate/);
