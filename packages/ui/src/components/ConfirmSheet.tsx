@@ -30,17 +30,14 @@ export interface ConfirmSheetProps {
   readonly title: string;
   /** Already-localized consequence text, short (§3.10). Never cut off: at a large font it wraps. */
   readonly message?: string | undefined;
-  /** Already-localized label for the confirming action. */
+  /** Already-localized label for the confirming action, destructive unless `tone` says not. */
   readonly confirmLabel: string;
+  /** `primary` for a confirmation that loses nothing ("yes, it printed", allowing notifications). */
+  readonly tone?: 'destructive' | 'primary' | undefined;
   readonly onConfirm: () => void;
   /** Already-localized label for the safe action. */
   readonly cancelLabel: string;
   readonly onCancel: () => void;
-  /**
-   * `destructive` (default) for a step that loses something; `primary` for a yes that only turns
-   * something on (allowing notifications), which would read as a warning in red.
-   */
-  readonly tone?: 'destructive' | 'primary' | undefined;
   readonly testID?: string | undefined;
 }
 

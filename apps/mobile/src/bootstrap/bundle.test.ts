@@ -176,4 +176,37 @@ describe('the conditional GET /v1/devices/me/bundle (api/02-auth §5.2)', () => 
     // Still once — a 304 wrote no directory table, so there is nothing to invalidate.
     expect(onBundleRefreshed).toHaveBeenCalledTimes(1);
   });
+
+  test('onBundleChecked fires on a "refreshed" AND on a "304" (the server was reached either way)', async () => {
+    const onBundleChecked = vi.fn();
+    for (const answer of [
+      () => jsonResponse(200, { bundle: BUNDLE, etag: 'etag-9', serverTime: 2 }),
+      () => new Response(null, { status: 304 }),
+    ]) {
+      await createFetchBundleRefresh({
+        baseUrl: 'https://api.example.com',
+        deviceToken: () => Promise.resolve('bdt_secret'),
+        db,
+        onBundleChecked,
+        fetchImpl: vi.fn(async () => answer()) as unknown as typeof fetch,
+      }).refresh();
+    }
+    // A steady device only ever gets 304s, and an offline PIN change does not change the bundle, so
+    // work waiting for "next online contact" must run on the 304 too.
+    expect(onBundleChecked).toHaveBeenCalledTimes(2);
+
+    // A failed answer is not contact.
+    await expect(
+      createFetchBundleRefresh({
+        baseUrl: 'https://api.example.com',
+        deviceToken: () => Promise.resolve('bdt_secret'),
+        db,
+        onBundleChecked,
+        fetchImpl: vi.fn(
+          async () => new Response(null, { status: 503 }),
+        ) as unknown as typeof fetch,
+      }).refresh(),
+    ).rejects.toThrow();
+    expect(onBundleChecked).toHaveBeenCalledTimes(2);
+  });
 });

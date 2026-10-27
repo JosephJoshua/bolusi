@@ -27,6 +27,7 @@ import {
   type QuoteLineKind,
   type QuoteLineStatus,
   type RepairOutcome,
+  type SlipKind,
 } from './constants.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -82,6 +83,8 @@ export interface TicketSummaryRow {
   readonly cancelledBy: string | null;
   readonly cancelledByName: string | null;
   readonly cancelledAt: number | null;
+  /** Integer IDR the customer paid up front; null when nothing was. */
+  readonly downPayment: number | null;
 }
 
 export interface QuoteLineRow {
@@ -140,9 +143,15 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly createdBy: string;
   readonly createdByName: string | null;
   readonly returnedBy: string | null;
+  readonly returnedByName: string | null;
   readonly returnedAt: number | null;
   /** A technician has started work on it at least once, so the after-work cancellation fee applies. */
   readonly workStarted: boolean;
+  readonly downPaymentBy: string | null;
+  readonly downPaymentByName: string | null;
+  readonly downPaymentAt: number | null;
+  /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
+  readonly slipPrints: Readonly<Record<SlipKind, number>>;
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -196,6 +205,7 @@ function summaryQuery(qctx: Qctx) {
       't.cancelStandardFee',
       't.cancelledBy',
       't.cancelledAt',
+      't.downPayment',
       eb
         .selectFrom('repairQuoteLines as l')
         .select(eb.fn.countAll<number>().as('n'))
@@ -236,6 +246,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     cancelledBy: row.cancelledBy,
     cancelledByName: row.cancelledBy === null ? null : (names.get(row.cancelledBy) ?? null),
     cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
+    downPayment: row.downPayment === null ? null : Number(row.downPayment),
   };
 }
 
@@ -475,6 +486,8 @@ export async function getTicketHandler(
       'createdBy',
       'returnedBy',
       'returnedAt',
+      'downPaymentBy',
+      'downPaymentAt',
     ])
     .where('id', '=', input.ticketId)
     .executeTakeFirstOrThrow();
@@ -507,8 +520,15 @@ export async function getTicketHandler(
   const names = await userNames(qctx, [
     summary.technicianId,
     detail.createdBy,
+    detail.downPaymentBy,
     ...events.map((event) => event.actorId),
   ]);
+  const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
+  for (const event of events) {
+    if (event.kind !== REPAIR_OP.slipPrinted) continue;
+    const { slip } = parseJson<{ slip?: string }>(event.detailJson, {});
+    if (slip === 'intake' || slip === 'handover') slipPrints[slip] += 1;
+  }
 
   return {
     rows: [
@@ -525,8 +545,14 @@ export async function getTicketHandler(
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,
         returnedBy: detail.returnedBy,
+        returnedByName: detail.returnedBy === null ? null : (names.get(detail.returnedBy) ?? null),
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
+        downPaymentBy: detail.downPaymentBy,
+        downPaymentByName:
+          detail.downPaymentBy === null ? null : (names.get(detail.downPaymentBy) ?? null),
+        downPaymentAt: detail.downPaymentAt === null ? null : Number(detail.downPaymentAt),
+        slipPrints,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,
@@ -718,4 +744,71 @@ export const cancelFeesQuery = {
   permission: REPAIR_PERMISSION.read,
   input: cancelFeesInput,
   handler: cancelFeesHandler,
+} as const;
+
+// ── printSettings (what this store's slips print besides the servisan) ──────────────────────
+
+export interface PrintSettings {
+  /** The business name in large type; null prints the store's own name. */
+  readonly name: string | null;
+  readonly address: string;
+  readonly phone: string;
+  /** The logo picture, to fetch like any synced photo; null when there is none. */
+  readonly logo: {
+    readonly mediaId: string;
+    readonly sha256: string;
+    readonly mime: string;
+  } | null;
+  readonly logoOnDotMatrix: boolean;
+  /** One term per line; null prints the app's default terms. */
+  readonly intakeTerms: string | null;
+  readonly handoverTerms: string | null;
+}
+
+/** A store that never set anything prints its name and the default terms. */
+export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
+  name: null,
+  address: '',
+  phone: '',
+  logo: null,
+  logoOnDotMatrix: false,
+  intakeTerms: null,
+  handoverTerms: null,
+};
+
+export const printSettingsInput = z.object({}).strict();
+
+export async function printSettingsHandler(
+  _input: z.infer<typeof printSettingsInput>,
+  qctx: Qctx,
+): Promise<QueryPage<PrintSettings>> {
+  const row = await qctx.db
+    .selectFrom('repairStorePrintSettings')
+    .selectAll()
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .executeTakeFirst();
+  const settings: PrintSettings =
+    row === undefined
+      ? DEFAULT_PRINT_SETTINGS
+      : {
+          name: row.name,
+          address: row.address,
+          phone: row.phone,
+          logo:
+            row.logoMediaId === null || row.logoSha256 === null || row.logoMime === null
+              ? null
+              : { mediaId: row.logoMediaId, sha256: row.logoSha256, mime: row.logoMime },
+          logoOnDotMatrix: Number(row.logoOnDotMatrix) === 1,
+          intakeTerms: row.intakeTerms,
+          handoverTerms: row.handoverTerms,
+        };
+  return { rows: [settings], nextCursor: null };
+}
+
+export const printSettingsQuery = {
+  name: 'printSettings',
+  permission: REPAIR_PERMISSION.read,
+  input: printSettingsInput,
+  handler: printSettingsHandler,
 } as const;

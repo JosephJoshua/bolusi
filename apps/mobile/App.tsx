@@ -670,6 +670,8 @@ export default function App(props: AppProps): React.JSX.Element {
       props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
   const canSetCancelFees =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
+  const canSetPrintSettings =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
@@ -945,6 +947,16 @@ export default function App(props: AppProps): React.JSX.Element {
                             },
                           ]
                         : []),
+                      ...(canSetPrintSettings
+                        ? [
+                            {
+                              title: tn('repair.printSettings.title'),
+                              summary: tn('repair.printSettings.summary'),
+                              onOpen: () => setRoute('printSettings'),
+                              testID: 'settings-print-settings',
+                            },
+                          ]
+                        : []),
                     ],
                   }}
                   syncChip={chip}
@@ -954,7 +966,9 @@ export default function App(props: AppProps): React.JSX.Element {
               );
             }
             if (
-              (shellZone.route === 'intakeOptions' || shellZone.route === 'cancelFees') &&
+              (shellZone.route === 'intakeOptions' ||
+                shellZone.route === 'cancelFees' ||
+                shellZone.route === 'printSettings') &&
               props.repair !== undefined
             ) {
               return (
@@ -1197,6 +1211,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
   'intakeOptions',
   'cancelFees',
+  'printSettings',
 ]);
 
 /**

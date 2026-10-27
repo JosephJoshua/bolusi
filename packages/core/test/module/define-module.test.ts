@@ -8,6 +8,7 @@ import { describe, expect, test } from 'vitest';
 import {
   defineModule,
   ModuleDefinitionError,
+  type ModuleManifest,
   payloadSchemaFor,
   type InputParser,
 } from '../../src/index.js';
@@ -257,6 +258,38 @@ describe('authorization contract: permission + entityType (server-enforced on pu
   });
 });
 
+describe('rule: required, and a module with rules declares its refusal reasons', () => {
+  const opOf = (seed: number) => `${moduleIdFor(seed)}.widget_created`;
+  type Manifest = ModuleManifest<FixtureSuiteDatabase>;
+  const define = (manifest: Manifest) => defineModule<FixtureSuiteDatabase, Manifest>(manifest);
+  const withRule = (seed: number, refusals?: readonly string[]): Manifest => {
+    const manifest = validManifest(seed);
+    const declaration = manifest.operations[opOf(seed)]!;
+    return {
+      ...manifest,
+      operations: { [opOf(seed)]: { ...declaration, rule: () => Promise.resolve() } },
+      ...(refusals === undefined ? {} : { refusals }),
+    };
+  };
+
+  test('rejects a rule from a module that declares no refusals', () => {
+    expect(() => define(withRule(140))).toThrow(ModuleDefinitionError);
+    expect(() => define(withRule(141, []))).toThrow(/declares no refusals/);
+  });
+
+  test('accepts it once the refusals are declared', () => {
+    expect(() => define(withRule(142, ['widgetGone']))).not.toThrow();
+  });
+
+  test('rejects a declaration that leaves the rule out', () => {
+    const manifest = validManifest(143);
+    const withoutRule: Record<string, unknown> = { ...manifest.operations[opOf(143)]! };
+    delete withoutRule['rule'];
+    const broken = { ...manifest, operations: { [opOf(143)]: withoutRule } };
+    expect(() => define(broken as unknown as Manifest)).toThrow(/declares no rule/);
+  });
+});
+
 describe('payload .strict() (04 §3)', () => {
   test('rejects a payload schema that strips unknown keys (zod default)', () => {
     const seed = 121;
@@ -485,6 +518,7 @@ describe('payloadSchemaFor — (type, schemaVersion) → the schema that validat
     payloadByVersion: { 1: retainedV1, 2: retainedV2 },
     reversal: 'n/a',
     apply: () => Promise.resolve(),
+    rule: null,
     permission: null,
     entityType: 'widget',
   };

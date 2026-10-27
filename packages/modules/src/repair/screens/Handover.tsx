@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
+import { tn } from '../i18n.js';
 import { capturedThumbnailRef, repairAbilities, staleStep, ticketStatus } from '../flows.js';
 import {
   FlowScreen,

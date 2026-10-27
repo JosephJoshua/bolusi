@@ -12,9 +12,10 @@
 //
 // The client arm of the anti-escalation rules lives here; the server push-validates the same rules
 // (§6.3) as the backstop against a tampered client that skips this layer.
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 
 import { utf8ToBytes } from '../crypto/bytes.js';
+import type { AppendedOp } from '../oplog/append.js';
 import type { CryptoPort, KdfParams } from '../crypto/port.js';
 import { DomainError } from '../errors/domain-error.js';
 import type { CommandContext, InputParser } from '../runtime/ctx.js';
@@ -42,13 +43,16 @@ import {
   readPinAttempt,
   readVerifier,
   refFromOp,
+  sealedVerifierValues,
   userInDirectory,
+  verifierFromRow,
   writePinAttempt,
   writeVerifier,
+  type StoredVerifierRow,
 } from './repo.js';
 import {
-  buildPinVerifier,
   chooseEffectiveVerifier,
+  hashNewPin,
   type CanonicalRef,
   type PinVerifier,
 } from './verifier.js';
@@ -184,49 +188,76 @@ export type DrainOutcome =
   | { readonly verifierRef: string; readonly sent: false; readonly error: unknown };
 
 /**
- * The verifier-POST queue (api/02-auth §5.4). A verifier computed offline is POSTed on next online
- * contact; the server applies the §5.3 greatest-`asOf` rule, so an `applied: false` answer is
- * TERMINAL-idempotent — the queue drops the item and never retries (no rollback, no loop). A network
- * error leaves it queued for the next contact; because the POST is idempotent, replaying it after a
- * crash converges.
+ * The verifier-POST queue (api/02-auth §5.4), one `pending_pin_verifiers` row per verifier. A verifier
+ * computed offline is POSTed on next online contact; the server applies the §5.3 greatest-`asOf`
+ * rule, so an `applied: false` answer is TERMINAL-idempotent — the row is deleted and never retried
+ * (no rollback, no loop). A network error leaves it queued for the next contact. The rows are on disk
+ * because the PIN op syncs on its own: a queue lost to an app kill would leave the server with the op
+ * but never the verifier, so no other device would ever learn the new PIN. Because the POST is
+ * idempotent, replaying it after a crash converges. `salt`, `params` and `hash` are sealed at rest.
  *
- * Keyed by `verifierRef`, so a change followed by another change to the same user leaves only the
- * latest pending (the older ref is superseded — the server would answer `applied: false` anyway).
+ * Keyed by `verifierRef`: every change mints a new ref, so two changes to one user queue two rows and
+ * the server keeps the newer by `asOf`.
  */
-export class PinVerifierQueue {
-  readonly #pending = new Map<string, PendingVerifier>();
+export async function enqueuePendingVerifier<DB>(
+  db: Kysely<DB>,
+  item: PendingVerifier,
+): Promise<void> {
+  await sql`
+    INSERT INTO pending_pin_verifiers
+      (verifier_ref, user_id, actor_user_id,
+       algo, salt, params, hash, as_of_timestamp, as_of_device_id, as_of_seq)
+    VALUES (${item.verifierRef}, ${item.userId}, ${item.actorUserId},
+            ${sealedVerifierValues(db, item.verifier)})
+    ON CONFLICT (verifier_ref) DO NOTHING
+  `.execute(db);
+}
 
-  enqueue(item: PendingVerifier): void {
-    this.#pending.set(item.verifierRef, item);
-  }
+/** Every verifier still waiting for its POST, oldest change first. */
+export async function readPendingVerifiers<DB>(db: Kysely<DB>): Promise<PendingVerifier[]> {
+  const rows = await sql<
+    StoredVerifierRow & { verifierRef: string; userId: string; actorUserId: string }
+  >`
+    SELECT verifier_ref AS "verifierRef", user_id AS "userId", actor_user_id AS "actorUserId",
+           algo, salt, params, hash,
+           as_of_timestamp AS "asOfTimestamp",
+           as_of_device_id AS "asOfDeviceId",
+           as_of_seq AS "asOfSeq"
+    FROM pending_pin_verifiers
+    ORDER BY as_of_timestamp, as_of_device_id, as_of_seq
+  `.execute(db);
+  return rows.rows.map((row) => ({
+    userId: row.userId,
+    actorUserId: row.actorUserId,
+    verifierRef: row.verifierRef,
+    verifier: verifierFromRow(row, 'pending_pin_verifiers'),
+  }));
+}
 
-  get pending(): readonly PendingVerifier[] {
-    return [...this.#pending.values()];
-  }
-
-  get size(): number {
-    return this.#pending.size;
-  }
-
-  /** POST every pending verifier. Terminal on any HTTP answer; a thrown transport error re-queues. */
-  async drain(upload: PinVerifierUploadPort): Promise<DrainOutcome[]> {
-    const outcomes: DrainOutcome[] = [];
-    for (const item of [...this.#pending.values()]) {
-      try {
-        const result = await upload.upload(
-          item.userId,
-          item.verifierRef,
-          item.verifier,
-          item.actorUserId,
-        );
-        this.#pending.delete(item.verifierRef); // terminal: applied true OR false (§5.4)
-        outcomes.push({ verifierRef: item.verifierRef, sent: true, result });
-      } catch (error) {
-        outcomes.push({ verifierRef: item.verifierRef, sent: false, error }); // stays queued
-      }
+/** POST every pending verifier. Terminal on any HTTP answer; a thrown transport error keeps the row. */
+export async function drainPendingVerifiers<DB>(
+  db: Kysely<DB>,
+  upload: PinVerifierUploadPort,
+): Promise<DrainOutcome[]> {
+  const outcomes: DrainOutcome[] = [];
+  for (const item of await readPendingVerifiers(db)) {
+    try {
+      const result = await upload.upload(
+        item.userId,
+        item.verifierRef,
+        item.verifier,
+        item.actorUserId,
+      );
+      // Terminal: applied true OR false (§5.4).
+      await sql`DELETE FROM pending_pin_verifiers WHERE verifier_ref = ${item.verifierRef}`.execute(
+        db,
+      );
+      outcomes.push({ verifierRef: item.verifierRef, sent: true, result });
+    } catch (error) {
+      outcomes.push({ verifierRef: item.verifierRef, sent: false, error }); // stays queued
     }
-    return outcomes;
   }
+  return outcomes;
 }
 
 // ── orchestrators (the "offline PIN command handlers", 02-permissions §5.4.6) ─────────────────────
@@ -238,7 +269,6 @@ export interface PinFlowDeps<DB> {
   readonly clock: ClockPort;
   readonly idSource: IdSource;
   readonly deviceId: string;
-  readonly queue: PinVerifierQueue;
   /** The KDF profile a new verifier is built with. Defaults to the §5.3 default; the floor (or any
    *  in-bounds profile) may be swapped in (D12) — the value is never hardcoded past this seam. */
   readonly kdfParams?: KdfParams;
@@ -383,9 +413,9 @@ export async function clearPinLockoutFlow<DB>(
 }
 
 /**
- * The shared change/reset body: mint the `verifierRef`, run the command (append the op), then build
- * the verifier at the op's canonical `asOf` (§5.3), merge it locally (greatest-`asOf`), clear the
- * target's lockout (§6.5), and queue the POST.
+ * The shared change/reset body: hash the new PIN, mint the `verifierRef`, and run the command. In the
+ * op's own transaction, place the verifier at the op's canonical `asOf` (§5.3), queue the POST and
+ * merge it locally (greatest-`asOf`). Then clear the target's lockout (§6.5).
  */
 async function emitVerifierChange<DB>(
   deps: PinFlowDeps<DB>,
@@ -396,26 +426,44 @@ async function emitVerifierChange<DB>(
     readonly command: CommandDefinition<PinChangeInput>;
   },
 ): Promise<PendingVerifier> {
-  const verifierRef = deps.idSource();
-  const ctx = deps.runtime.createContext(args.actorUserId);
-  const outcome = await deps.runtime.execute(
-    args.command,
-    { targetUserId: args.targetUserId, verifierRef },
-    ctx,
-  );
-  const asOf = refFromAppended(outcome);
-
+  // The KDF runs BEFORE the command, so the expensive part is done when the transaction opens.
   const salt = deps.crypto.randomBytes(PIN_KDF_BOUNDS.saltBytes); // 16 FRESH bytes (SEC-AUTH-06)
-  const verifier = await buildPinVerifier(
+  const material = await hashNewPin(
     deps.crypto,
     utf8ToBytes(args.newPin),
     deps.kdfParams ?? DEFAULT_KDF_PARAMS,
     salt,
-    asOf,
   );
-  const existing = await readVerifier(deps.db, args.targetUserId);
-  const winner = chooseEffectiveVerifier(existing, verifier) ?? verifier;
-  await writeVerifier(deps.db, args.targetUserId, winner);
+  const verifierRef = deps.idSource();
+  const ctx = deps.runtime.createContext(args.actorUserId);
+  const placed: { pending?: PendingVerifier } = {};
+  await deps.runtime.execute(args.command, { targetUserId: args.targetUserId, verifierRef }, ctx, {
+    // The queued upload and the local verifier commit WITH the op. The op syncs on its own, so an
+    // op that landed without its queued verifier would give the server a PIN change it can never
+    // apply, and no other device would learn the new PIN.
+    withinAppend: async (ops) => {
+      const verifier: PinVerifier = { ...material, asOf: refFromAppended(ops) };
+      const pending = {
+        userId: args.targetUserId,
+        actorUserId: args.actorUserId,
+        verifierRef,
+        verifier,
+      };
+      placed.pending = pending;
+      await enqueuePendingVerifier(deps.db, pending);
+      const existing = await readVerifier(deps.db, args.targetUserId);
+      await writeVerifier(
+        deps.db,
+        args.targetUserId,
+        chooseEffectiveVerifier(existing, verifier) ?? verifier,
+      );
+    },
+  });
+  const { pending } = placed;
+  if (pending === undefined) {
+    throw new Error('expected the PIN op to be appended (api/02-auth §6.6)');
+  }
+
   // A new verifier clears the target's lockout and counter (§6.5) — the auth runtime, not an applier,
   // touches pin_attempt_state (03 §9.2). Under the SAME attempt lock as `verifyPin`: this reset would
   // otherwise clobber (or be clobbered by) a concurrent losing attempt's counter write — the same
@@ -423,24 +471,16 @@ async function emitVerifierChange<DB>(
   await withAttemptLock(attemptLockKey(args.targetUserId, deps.deviceId), () =>
     writePinAttempt(deps.db, resetForNewVerifier(args.targetUserId, deps.deviceId)),
   );
-
-  const pending: PendingVerifier = {
-    userId: args.targetUserId,
-    actorUserId: args.actorUserId,
-    verifierRef,
-    verifier,
-  };
-  deps.queue.enqueue(pending);
   return pending;
 }
 
-function refFromAppended(outcome: CommandOutcome): CanonicalRef {
-  const appended = outcome.ops[0];
+function refFromAppended(ops: readonly AppendedOp[]): CanonicalRef {
+  const appended = ops[0];
   if (appended === undefined || appended.status !== 'appended') {
     throw new Error('expected the PIN op to be appended (api/02-auth §6.6)');
   }
   return refFromOp({
-    timestamp: outcome.timestamp,
+    timestamp: appended.op.timestamp,
     deviceId: appended.op.deviceId,
     seq: appended.seq,
   });

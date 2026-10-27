@@ -458,6 +458,24 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  ChipRow: [
+    {
+      id: 'many',
+      render: (l) => (
+        <componentInventory.ChipRow>
+          {Array.from({ length: 12 }, (_, i) => (
+            <componentInventory.ToggleChip
+              key={i}
+              label={`${l.primaryText} ${i + 1}`}
+              selected={i === 1}
+              onToggle={noop}
+            />
+          ))}
+        </componentInventory.ChipRow>
+      ),
+    },
+  ],
+
   SwitchRow: [
     {
       id: 'on',
@@ -542,6 +560,29 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           label={l.primaryText}
           image={<Text>{l.secondaryText}</Text>}
           actionLabel={l.action}
+        />
+      ),
+    },
+  ],
+
+  PatternLock: [
+    {
+      id: 'drawn',
+      render: (l) => (
+        <componentInventory.PatternLock
+          value="14753"
+          onChange={noop}
+          accessibilityLabel={l.primaryText}
+        />
+      ),
+    },
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.PatternLock
+          value=""
+          onChange={noop}
+          accessibilityLabel={l.primaryText}
         />
       ),
     },

@@ -51,7 +51,14 @@ import { HttpTransport } from '../src/transport.js';
 import { resolveSeeds, withSeed } from '../src/index.js';
 import { mintSystemDevice, systemSignerKeyStore } from '../src/system-identity.js';
 
-const GENESIS_CLOCK = 1_726_000_000_000;
+/**
+ * Where member devices' clocks start: shortly before the scripted fixture timestamps (chaos07Cases
+ * bases them near 1_726_500_000_000), so the server, set to {@link SERVER_NOW}, sees every op within
+ * its skew window and after none of them.
+ */
+const GENESIS_CLOCK = 1_726_490_000_000;
+/** The server's now: after every scripted timestamp, since it refuses one ahead of its clock. */
+const SERVER_NOW = 1_726_510_000_000;
 const NOTE_CREATED = 'notes.note_created';
 const NOTE_EDITED = 'notes.note_body_edited';
 const NOTE_ARCHIVED = 'notes.note_archived';
@@ -63,9 +70,8 @@ const platformExtra = {
 } as unknown as ExtraModule;
 
 // ── system identity (the actor for platform.conflict_detected, 01 §3.6) ──────────────────────────
-// Minted by the shared host-only `mintSystemDevice` (@bolusi/harness/system-identity). Its internal
-// `SYSTEM_CLOCK_BASE` equals this file's `GENESIS_CLOCK`, so the identity is byte-identical to the old
-// inline `mintSystem` this replaced (task 198 rule-of-three extraction).
+// Minted by the shared host-only `mintSystemDevice` (@bolusi/harness/system-identity), byte-identical
+// to the old inline `mintSystem` this replaced (task 198 rule-of-three extraction).
 
 // ── one tenant's devices, opened + seeded, keyed by fixture device name (A/B/C) ──────────────────
 
@@ -376,9 +382,18 @@ async function runConcurrentEdits(
     const entityToId = await driveAuthoring(byName, caseData);
     const noteId = entityToId.get('note-1')!;
 
-    // Push in a PRNG-permuted order — Rule 1 is order-independent (whichever pushes later finds the
-    // earlier as a candidate), so the conflict SET is invariant under the shuffle (§3.6).
-    const order = shuffle(deviceNames, mulberry32((tenantSeed ^ 0xc07) >>> 0));
+    // The creator syncs first: the server records an edit only of a note it already has, as on real
+    // devices, where the others could only edit the note after pulling it. The editors then push in
+    // a PRNG-permuted order; Rule 1 is order-independent (whichever pushes later finds the earlier
+    // as a candidate), so the conflict SET is invariant under the shuffle (§3.6).
+    const creator = caseData.ops.find((o) => o.type === NOTE_CREATED)!.device;
+    const order = [
+      creator,
+      ...shuffle(
+        deviceNames.filter((name) => name !== creator),
+        mulberry32((tenantSeed ^ 0xc07) >>> 0),
+      ),
+    ];
     await pushAll(server, byName, order);
 
     // ── the conflicts the REAL detector produced ──
@@ -439,6 +454,13 @@ async function runEditAfterArchive(
     const a = byName.get('A')!;
     const b = byName.get('B')!;
 
+    // The server mints the detection op at its own now, which must precede the owner's ack (the
+    // ack applier needs the detection folded first) and follow every authored op.
+    const ackTimestamp = caseData.ops.find(
+      (o) => o.type === PLATFORM_OP.conflictAcknowledged,
+    )!.timestamp;
+    server.clock.set(ackTimestamp - 1);
+
     // Archive (A) synced before the edit (B) — the causal order the Rule-2 check needs.
     await pushAll(server, byName, ['A', 'B']);
 
@@ -473,9 +495,6 @@ async function runEditAfterArchive(
     const detectionOp = await readServerOp(server, tenantId, PLATFORM_OP.conflictDetected);
     expect(detectionOp.entityId).toBe(conflictId);
 
-    const ackTimestamp = caseData.ops.find(
-      (o) => o.type === PLATFORM_OP.conflictAcknowledged,
-    )!.timestamp;
     const ackWorldRaw = makeWorld((tenantSeed ^ 0xac6) >>> 0, noblePort);
     const ackWorld: ChainWorld = { ...ackWorldRaw, tenantId, storeId: a.identity.storeId };
     const ackIdentity: DeviceIdentity = {
@@ -555,7 +574,7 @@ async function runIntraDeviceTie(
   const { byName, tenantId, close } = await setupTenant(server, systemSecrets, tenantSeed, ['A']);
   try {
     const a = byName.get('A')!;
-    const ts = 1_726_800_000_000 + (seed % 1000);
+    const ts = 1_726_502_000_000 + (seed % 1000);
     a.device.clock.set(ts - 5_000);
     const noteId = await a.device.createNote({ title: `iiseq-${seed}`, body: `create-${seed}` });
     // Two edits at the SAME timestamp — seq is the only key that differs.
@@ -621,6 +640,7 @@ describe('CHAOS-07 concurrent same-entity edits', () => {
               surfaced.push(c);
             },
           });
+          server.clock.set(SERVER_NOW);
           try {
             const [distinct, tie, archive] = chaos07Cases(seed) as readonly [
               Chaos07Case,
@@ -650,6 +670,7 @@ describe('CHAOS-07 concurrent same-entity edits', () => {
   test('CHAOS-07 positive control: detection DISABLED → the identical colliding push produces ZERO conflicts', async () => {
     const seed = 1;
     const server = await HarnessServer.boot(); // no systemKeyStore ⇒ no detection
+    server.clock.set(SERVER_NOW);
     try {
       const caseData = chaos07Cases(seed)[0]!; // the distinct-timestamps case (3 conflicts WHEN detecting)
       const deviceNames = [...new Set(caseData.ops.map((o) => o.device))];

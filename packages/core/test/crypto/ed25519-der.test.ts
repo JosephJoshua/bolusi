@@ -1,18 +1,14 @@
-// Host oracle for the pure Ed25519 DER framing in `./ed25519-der`.
+// Host oracle for the pure Ed25519 DER framing in `src/crypto/ed25519-der.ts`.
 //
-// WHY THIS SUITE EXISTS. The device `CryptoPort` (`crypto.ts`) frames raw Ed25519 seeds/points into
-// PKCS8/SPKI DER by prepending a FIXED prefix, because quick-crypto's raw-seed / raw-public handle is
-// broken on the Android build. Those prefix bytes are load-bearing: a wrong byte would make
-// `createPrivateKey`/`createPublicKey` reject the key (bricking enrollment) or — worse — accept a
-// malformed key. But `crypto.ts` imports a JSI native module, so it cannot be loaded under Node, and its
-// only proof was the emulator lane. The framing itself needs no native crypto to COMPUTE, only to be
-// used — so it is extracted here and pinned against two independent oracles Node can run:
-//   1. `node:crypto`'s OWN Ed25519 DER export — the prefixes must be byte-identical to what OpenSSL emits;
-//   2. the shared RFC 8032 golden vectors (`@bolusi/test-support` `ed25519Vectors`) — a framed seed must
+// WHY THIS SUITE EXISTS. The OpenSSL-backed `CryptoPort`s (the device's quick-crypto port, which cannot
+// load under Node, and the server's `node:crypto` port) frame raw Ed25519 seeds/points into PKCS8/SPKI DER
+// by prepending a FIXED prefix. Those prefix bytes are load-bearing: a wrong byte would make
+// `createPrivateKey`/`createPublicKey` reject the key (bricking enrollment) or, worse, accept a malformed
+// key. The framing needs no native crypto to COMPUTE, so it is pinned here against two oracles Node runs:
+//   1. `node:crypto`'s OWN Ed25519 DER export: the prefixes must be byte-identical to what OpenSSL emits;
+//   2. the shared RFC 8032 golden vectors (`@bolusi/test-support` `ed25519Vectors`): a framed seed must
 //      derive the recorded public key and produce the recorded (deterministic) KAT signature.
-// If any prefix byte were wrong, oracle 1's `toStrictEqual` fails, or `createPrivateKey` throws, or the
-// KAT signature diverges. This does NOT prove quick-crypto's on-device behaviour (that is the emulator
-// lane's job) — it proves the ASN.1 framing the on-device path feeds into is correct.
+// This does NOT prove quick-crypto's on-device behaviour (that is the emulator lane's job).
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from 'node:crypto';
 
 import { ed25519Vectors } from '@bolusi/test-support';
@@ -25,7 +21,7 @@ import {
   PKCS8_ED25519_PREFIX,
   pointFromSpkiDer,
   SPKI_ED25519_PREFIX,
-} from './ed25519-der';
+} from '@bolusi/core';
 
 /** Hex string -> plain Uint8Array (`''` -> empty), normalised off Buffer so matchers compare contents. */
 function hex(value: string): Uint8Array {

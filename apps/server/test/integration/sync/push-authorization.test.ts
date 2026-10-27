@@ -19,7 +19,14 @@ import { DEFAULT_ROLES, type RoleKey } from '../../../src/identity/permissions.j
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { readAnomalies, readOps, seedUser, seedWorld, testId } from '../oplog/helpers.js';
+import {
+  readAnomalies,
+  readOps,
+  seedRepairTicket,
+  seedUser,
+  seedWorld,
+  testId,
+} from '../oplog/helpers.js';
 
 let db: Kysely<DB>;
 let appForTenant: ForTenant;
@@ -71,6 +78,7 @@ async function setupWorld(seed: number): Promise<{ world: ChainWorld; builder: C
   const builder = new ChainBuilder(world, serverCryptoPort);
   const genesis = builder.genesis();
   await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash, grants: 'none' });
+  await seedRepairTicket(db, world, TICKET);
   return { world, builder };
 }
 
@@ -122,12 +130,23 @@ function cancel(builder: ChainBuilder, userId?: string) {
 }
 
 /** A cashier's op: declining a proposed price change. */
-function decline(builder: ChainBuilder) {
+/** A cashier's own price change (repair.quote_change), on a fresh line each time. */
+function changePrice(builder: ChainBuilder, n: number) {
   return builder.append({
-    type: 'repair.quote_proposal_declined',
+    type: 'repair.quote_changed',
     entityType: 'repair_ticket',
     entityId: TICKET,
-    payload: { lineId: '01920000-0000-7000-8000-0000000d0002', note: '' },
+    schemaVersion: 2,
+    payload: {
+      lineId: `01920000-0000-7000-8000-0000000d00${n.toString().padStart(2, '0')}`,
+      kind: 'part',
+      description: 'LCD',
+      amount: 100_000,
+      reason: 'Ganti LCD',
+      customerAgreed: true,
+      fromProposal: false,
+      waitsForCustomer: false,
+    },
   });
 }
 
@@ -237,13 +256,13 @@ describe('every pushed op is authorized against the server directory', () => {
       status: 'rejected',
       code: 'PERMISSION_DENIED',
     });
-    expect((await push(world, [decline(builder)])).results[0]).toMatchObject({
+    expect((await push(world, [changePrice(builder, 1)])).results[0]).toMatchObject({
       status: 'accepted',
     });
 
     await db.deleteFrom('userRoles').where('roleId', '=', roleId).execute();
 
-    expect((await push(world, [decline(builder)])).results[0]).toMatchObject({
+    expect((await push(world, [changePrice(builder, 2)])).results[0]).toMatchObject({
       status: 'rejected',
       code: 'PERMISSION_DENIED',
     });

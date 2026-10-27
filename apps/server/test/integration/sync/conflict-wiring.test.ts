@@ -36,6 +36,7 @@ import {
   seedDevice,
   seedWorld,
   testEntityTypeOf,
+  testCheckRule,
   testPermissionOf,
   testScopeOf,
 } from '../oplog/helpers.js';
@@ -200,6 +201,8 @@ function threadTestDeps(
   ]);
   const registry: OpRegistry = {
     scopeOf: testScopeOf((type) => knownTypes.has(type)),
+    // The production rule per type (a test-only type declares none).
+    checkRule: testCheckRule,
     permissionOf: testPermissionOf((type) => knownTypes.has(type)),
     entityTypeOf: testEntityTypeOf((type) => knownTypes.has(type)),
     resolve: (type) =>

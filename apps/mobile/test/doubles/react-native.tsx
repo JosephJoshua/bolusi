@@ -28,6 +28,7 @@ export {
   PanResponder,
   FlatList,
   Keyboard,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,

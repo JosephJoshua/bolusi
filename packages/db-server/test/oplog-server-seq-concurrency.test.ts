@@ -7,12 +7,12 @@
 // (testing-guide T-11). Only `pnpm test:rls` (real postgres:16 + a pg Pool) can race, and `pg` is
 // boundary-locked to THIS package (08 §3.3), so apps/server test code cannot open a pool.
 //
-// MIRROR — keep in sync with apps/server/src/oplog/server-seq.ts. These two statements ARE the
+// MIRROR — keep in sync with apps/server/src/oplog/server-seq.ts. These statements ARE the
 // tenant_op_counters contract (10-db §3); the pipeline cannot be imported here (the boundary rule
 // forbids db-server value-importing @bolusi/server, and it would invert the dependency). The other
 // half of the proof lives in apps/server/test/integration/oplog/server-seq.test.ts, which asserts
-// the pipeline EMITS exactly these statements (FOR UPDATE + UPDATE ... RETURNING) and allocates
-// once per accepted op. This lane proves those statements are correct under contention.
+// the pipeline EMITS these statements (FOR UPDATE, then one counter write per batch) and numbers
+// each accepted op once. This lane proves those statements are correct under contention.
 import { sql, type Transaction } from 'kysely';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
@@ -45,16 +45,26 @@ async function seedCounter(tenantId: string): Promise<void> {
 }
 
 /** MIRROR of server-seq.ts `lockTenantCounter`: the FOR UPDATE taken at transaction start. */
-async function lockCounter(db: Transaction<DB>, tenantId: string): Promise<void> {
-  await db
+async function lockCounter(db: Transaction<DB>, tenantId: string): Promise<number> {
+  const row = await db
     .selectFrom('tenantOpCounters')
     .select('nextServerSeq')
     .where('tenantId', '=', tenantId)
     .forUpdate()
     .executeTakeFirstOrThrow();
+  return Number(row.nextServerSeq);
 }
 
-/** MIRROR of server-seq.ts `allocateServerSeq`: increment, return the value just consumed. */
+/** MIRROR of server-seq.ts `storeTenantCounter`: the push's one counter write. */
+async function storeCounter(db: Transaction<DB>, tenantId: string, next: number): Promise<void> {
+  await db
+    .updateTable('tenantOpCounters')
+    .set({ nextServerSeq: String(next) })
+    .where('tenantId', '=', tenantId)
+    .execute();
+}
+
+/** MIRROR of server-seq.ts `allocateServerSeq` (system ops): increment, return the value consumed. */
 async function allocate(db: Transaction<DB>, tenantId: string): Promise<number> {
   const row = await db
     .updateTable('tenantOpCounters')
@@ -73,12 +83,16 @@ function deferred<T = void>() {
   return { promise, resolve };
 }
 
-/** One simulated push: take the lock, then allocate `count` values (one per accepted op). */
+/**
+ * One simulated push: take the lock, number `count` accepted ops in memory and write the counter
+ * once, then allocate one system op (conflict detection) from the row, as the pipeline does.
+ */
 async function simulatedPush(tenantId: string, count: number): Promise<number[]> {
   return testDb.appForTenant(tenantId, async (db) => {
-    await lockCounter(db, tenantId);
-    const allocated: number[] = [];
-    for (let i = 0; i < count; i += 1) allocated.push(await allocate(db, tenantId));
+    const first = await lockCounter(db, tenantId);
+    const allocated = Array.from({ length: count }, (_, i) => first + i);
+    await storeCounter(db, tenantId, first + count);
+    allocated.push(await allocate(db, tenantId));
     return allocated;
   });
 }
@@ -122,9 +136,10 @@ describe('same-tenant concurrent allocation is gapless and duplicate-free', () =
     );
 
     const all = batches.flat().sort((a, b) => a - b);
-    const expected = Array.from({ length: CONCURRENCY * PER_PUSH }, (_, i) => start + i);
+    // Each push takes PER_PUSH op numbers plus one system op.
+    const expected = Array.from({ length: CONCURRENCY * (PER_PUSH + 1) }, (_, i) => start + i);
     expect(all).toEqual(expected); // exact set ⇒ no duplicate, no gap, monotonic
-    expect(new Set(all).size).toBe(CONCURRENCY * PER_PUSH);
+    expect(new Set(all).size).toBe(CONCURRENCY * (PER_PUSH + 1));
   });
 
   test('each concurrent push receives a CONTIGUOUS block (the lock held for the whole batch)', async () => {
@@ -137,7 +152,7 @@ describe('same-tenant concurrent allocation is gapless and duplicate-free', () =
     // dense rather than merely unique.
     for (const batch of batches) {
       const first = batch[0] as number;
-      expect(batch).toEqual(Array.from({ length: 10 }, (_, i) => first + i));
+      expect(batch).toEqual(Array.from({ length: 11 }, (_, i) => first + i));
     }
   });
 
@@ -155,7 +170,7 @@ describe('same-tenant concurrent allocation is gapless and duplicate-free', () =
       .select('nextServerSeq')
       .where('tenantId', '=', tenantA.tenantId)
       .executeTakeFirstOrThrow();
-    expect(Number(after.nextServerSeq) - Number(before.nextServerSeq)).toBe(15);
+    expect(Number(after.nextServerSeq) - Number(before.nextServerSeq)).toBe(20);
   });
 });
 
@@ -243,7 +258,7 @@ describe.runIf(ENGINE === 'postgres')('the lock is per-row: exclusive within a t
 
     const aAll = aBatches.flat().sort((x, y) => x - y);
     const bAll = bBatches.flat().sort((x, y) => x - y);
-    expect(aAll).toEqual(Array.from({ length: 20 }, (_, i) => Number(a0.nextServerSeq) + i));
-    expect(bAll).toEqual(Array.from({ length: 20 }, (_, i) => Number(b0.nextServerSeq) + i));
+    expect(aAll).toEqual(Array.from({ length: 24 }, (_, i) => Number(a0.nextServerSeq) + i));
+    expect(bAll).toEqual(Array.from({ length: 24 }, (_, i) => Number(b0.nextServerSeq) + i));
   });
 });

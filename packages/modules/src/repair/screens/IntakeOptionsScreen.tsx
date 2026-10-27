@@ -47,8 +47,8 @@ import {
   type RowProblem,
 } from '../options-editor.js';
 
-import { tn, type RepairKey } from './i18n.js';
-import { builtInLabel, optionLabel } from './labels.js';
+import { tn, type RepairKey } from '../i18n.js';
+import { builtInLabel, optionLabel } from '../labels.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useIntakeOptionSettings, useRepairRuntime } from './runtime.js';
 

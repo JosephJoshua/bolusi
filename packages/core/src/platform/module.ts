@@ -26,6 +26,7 @@ import {
   PLATFORM_PERMISSION,
   USER_PREFS_TABLE,
 } from './constants.js';
+import { PLATFORM_REFUSALS } from './rules.js';
 import { platformOperations } from './operations.js';
 import { conflictsTable } from './projections/conflicts.js';
 import { userPrefsTable } from './projections/user-prefs.js';
@@ -37,6 +38,7 @@ export const platformModuleManifest = {
   id: PLATFORM_MODULE_ID,
 
   operations: platformOperations,
+  refusals: PLATFORM_REFUSALS.reasons,
 
   projections: {
     tables: {
