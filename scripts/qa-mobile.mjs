@@ -146,6 +146,15 @@ async function androidUp(build) {
   run('adb', ['wait-for-device']);
   while (out('adb', ['shell', 'getprop', 'sys.boot_completed']) !== '1') await sleep(2000);
 
+  // The lane server starts empty each time, so start the app from a clean install too. Uninstall
+  // before building: the previous run's app is still enrolled against the old database, and its
+  // background sync would hit the new server with 401s during the build.
+  try {
+    run('adb', ['uninstall', APP_ID]);
+  } catch {
+    // not installed yet
+  }
+
   const apk = path.join(MOBILE, 'android/app/build/outputs/apk/release/app-release.apk');
   if (build || !existsSync(apk)) {
     // A release build blocks cleartext HTTP; the harness flag (as in CI) allows it to 10.0.2.2 only.
@@ -170,12 +179,6 @@ async function androidUp(build) {
         env: buildEnv,
       },
     );
-  }
-  // The lane server starts empty each time, so start the app from a clean install too.
-  try {
-    run('adb', ['uninstall', APP_ID]);
-  } catch {
-    // not installed yet
   }
   run('adb', ['install', apk]);
   run('adb', ['shell', 'monkey', '-p', APP_ID, '-c', 'android.intent.category.LAUNCHER', '1']);
