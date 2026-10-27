@@ -9,6 +9,7 @@ import {
   CaptureTile,
   ConfirmDialog,
   IconButton,
+  Kbd,
   PageHeader,
   PatternPad,
   SecretField,
@@ -128,6 +129,9 @@ export interface IntakePageProps {
   readonly onOpened: (ticketId: string) => void;
   readonly onCancel: () => void;
 }
+
+/** Saves the intake from anywhere on the page; the same keys on every keyboard layout. */
+const SAVE_KEYS = 'Ctrl+Enter';
 
 export function IntakePage({
   now,
@@ -1292,19 +1296,22 @@ function Summary({
             <p className="mt-1">{jump('price', tn('repair.desk.incomplete'))}</p>
           ) : null}
         </div>
-        {/* The key shows on the button where the summary is wide enough, and in its tooltip always. */}
-        <Tooltip label={tn('repair.action.openTicket')} shortcut="Ctrl+Enter">
+        {/* The key goes under the button, not on it: on it, a narrow summary or a wider fallback
+            font squeezed the label into it. */}
+        <Tooltip label={tn('repair.action.openTicket')} shortcut={SAVE_KEYS}>
           <Button
             label={tn('repair.action.openTicket')}
             variant="primary"
             size="lg"
-            shortcut="Ctrl+Enter"
-            className="mt-5 w-full [&_kbd]:hidden @[18rem]:[&_kbd]:inline-flex"
+            className="mt-5 w-full"
             onClick={onSave}
             busy={busy}
             data-testid="repair.desk.intake.save"
           />
         </Tooltip>
+        <p className="mt-2 flex justify-center">
+          <Kbd>{SAVE_KEYS}</Kbd>
+        </p>
       </div>
       {error}
     </aside>
