@@ -349,7 +349,10 @@ export function normalizeNumber(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-/** A code query against a stored code, in [0, 1]. The counter alone ("0042") also matches. */
+/**
+ * A code query against a stored code, in [0, 1]. The counter alone ("0042") also matches, and so
+ * does a number still being typed ("K7Q", "K7Q-00").
+ */
 export function codeScore(query: string, stored: string): number {
   if (query.length < 3 || stored === '') return 0;
   if (query === stored) return 1;
@@ -359,6 +362,10 @@ export function codeScore(query: string, stored: string): number {
   if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
   const suffix = alignDistance(query, stored, 'suffix', tolerance);
   if (suffix <= tolerance) best = Math.max(best, 0.8 * closeness(suffix, query.length));
+  // A start typed exactly: with an edit allowed, "K7Q-001" would also list 0009, 0008 and on.
+  if (query.length < stored.length && stored.startsWith(query)) {
+    best = Math.max(best, 0.7 + 0.15 * (query.length / stored.length));
+  }
   return best;
 }
 
