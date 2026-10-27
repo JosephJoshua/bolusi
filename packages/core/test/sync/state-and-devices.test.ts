@@ -189,8 +189,10 @@ describe('pending counts are DERIVED queries, never stored (01 §5.2)', () => {
   });
 
   it('pendingMediaCount excludes orphans — unattached captures are debris, not pending work', async () => {
+    // A distinct seed per row: a random seed collided on the primary key about 1 run in 100.
+    let seed = 100;
     const insertMedia = async (attached: string | null, status: string): Promise<void> => {
-      const id = uuidV7(prngFor(Math.random() * 1000), 1_726_000_000_000);
+      const id = uuidV7(prngFor((seed += 1)), 1_726_000_000_000);
       await sql`
         INSERT INTO media_items (
           id, tenant_id, store_id, captured_by_user_id, device_id, type, mime_type, byte_size,
