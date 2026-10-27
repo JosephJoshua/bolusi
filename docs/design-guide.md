@@ -65,7 +65,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   2xl 32, 3xl 48). Screen gutter is `space.lg`.
 - One left edge per column. Text links that sit under content align their text
   with that edge (offset the `TextButton` padding), not with their hit box.
-- Label left, control right on the same row; controls in a
+- Label left, control right on the same row (condition checks); controls in a
   list line up on one right edge, with real room (`space.md`) above and below
   each row's divider. When the control does not fit beside its label (narrow
   phone, large font), every row stacks the same way, label on top and the

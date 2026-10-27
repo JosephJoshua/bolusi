@@ -7,6 +7,8 @@ import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import { __windowMetrics } from '../../../test/doubles/react-native.js';
+
 import {
   ensureRepairCatalog,
   intake,
@@ -72,9 +74,10 @@ async function ticketRow(harness: RepairHarness, ticketId: string) {
 }
 
 describe('counter intake', () => {
-  // Beside the name Android 16 drew "Tidak dicek" as "Tidak" (QA runs 1 to 4): each check is its
-  // name with the states under it, and every pill keeps its text's width.
-  test('condition checks put the states under the name, pills unsqueezed', async () => {
+  // On the first Android run "Tidak dicek" showed as "Tidak": squeezed beside the check's name.
+  // Where the states fit they sit on the name's line; on a narrow phone or a large system font they
+  // go under the name. Either way each pill keeps its text's width.
+  test('condition checks stack under the name on a narrow phone or a large font', async () => {
     h = await openRepairScreenHarness(5150);
     const screen = await mount(h, h.cashierId);
     await press(screen, 'repair.board.newIntake');
@@ -83,14 +86,33 @@ describe('counter intake', () => {
     type(screen, 'repair.intake.device.brand', 'Samsung');
     type(screen, 'repair.intake.device.model', 'Galaxy A14');
     await press(screen, 'repair.intake.primary');
-    const row = StyleSheet.flatten(
-      screen.get('repair.intake.condition.checkRow.screen').props['style'],
-    );
-    expect(row['flexDirection'] ?? 'column').toBe('column');
-    const pill = StyleSheet.flatten(
-      screen.get('repair.intake.condition.check.screen.not_checked').props['style'],
-    );
-    expect(pill['flexShrink']).toBe(0);
+    const original = { ...__windowMetrics };
+    try {
+      for (const [width, fontScale, stacked] of [
+        [411, 1, false],
+        [360, 1, true],
+        [411, 1.3, true],
+      ] as const) {
+        Object.assign(__windowMetrics, { width, fontScale });
+        // Any edit re-renders the step, which reads the window again.
+        type(
+          screen,
+          'repair.intake.condition.complaint',
+          `Layar retak ${String(width * fontScale)}`,
+        );
+        await settle();
+        const row = StyleSheet.flatten(
+          screen.get('repair.intake.condition.checkRow.screen').props['style'],
+        );
+        expect(row['flexDirection']).toBe(stacked ? 'column' : 'row');
+        const pill = StyleSheet.flatten(
+          screen.get('repair.intake.condition.check.screen.not_checked').props['style'],
+        );
+        expect(pill['flexShrink']).toBe(0);
+      }
+    } finally {
+      Object.assign(__windowMetrics, original);
+    }
   });
 
   // The keyboard opened by itself on intake steps and covered "Lanjut" (Android QA): no step

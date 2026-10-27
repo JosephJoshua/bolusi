@@ -147,6 +147,9 @@ const config: ExpoConfig = {
     // A system font-size or display-size change must not restart the activity (it blanked the app
     // and lost the intake in progress). See withActivityConfigChanges.ts.
     './plugins/withActivityConfigChanges',
+    // Android 15+ TextViews must lay text out the way React Native measured it, or a label sized to
+    // fit drops its last word. See withTextViewBoundsForWidth.ts.
+    './plugins/withTextViewBoundsForWidth',
   ],
 };
 

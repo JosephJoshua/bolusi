@@ -18,7 +18,7 @@ import {
   type,
 } from '@bolusi/ui';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
 
@@ -241,6 +241,8 @@ export function ConditionStep({
   complaintError,
   testID,
 }: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
+  const { width, fontScale } = useWindowDimensions();
+  const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
   const togglePeripheral = (item: string): void =>
     update({
       peripherals: draft.peripherals.includes(item)
@@ -270,15 +272,22 @@ export function ConditionStep({
           }
         >
           {options.checks.map((option, index) => (
-            // The name, then its states under it. Beside the name (in a flex row or pinned to the
-            // edge) Android 16 drew "Tidak dicek" as "Tidak" in every row but the first while its
-            // measured box held one line (QA runs 1 to 4); only this layout drew the pills whole.
+            // One line per check: the name on the left, its state lined up on the right, so the
+            // column of choices reads straight down. On a narrow phone or a large system font the
+            // states do not fit beside the name, and squeezing them cut "Tidak dicek" to "Tidak"
+            // on the first Android run; there the states go under the name instead.
             <View
               key={option.id}
-              style={[styles.check, index === 0 ? null : styles.checkDivider]}
+              style={[
+                styles.check,
+                stackChecks ? styles.checkStacked : null,
+                index === 0 ? null : styles.checkDivider,
+              ]}
               testID={`${testID}.checkRow.${option.id}`}
             >
-              <Text style={styles.checkLabel}>{optionLabel('checks', option)}</Text>
+              <Text style={[styles.checkLabel, stackChecks ? null : styles.checkLabelBeside]}>
+                {optionLabel('checks', option)}
+              </Text>
               <SegmentedControl
                 options={CHECKLIST_STATES.map((value) => ({
                   value,
@@ -578,11 +587,26 @@ export function ReviewStep({
   );
 }
 
+/**
+ * When a condition check fits on one line: its three compact state pills plus a short name need
+ * about 340 dp of text room, which grows with the system font; the gutters and gaps do not. A
+ * 411 dp phone at normal font keeps one line; a 360 dp phone, or a large font, stacks.
+ */
+const CHECK_ROW_TEXT = 340;
+const CHECK_ROW_CHROME = 2 * space.lg + space.md;
+
 const styles = StyleSheet.create({
   // The divider gets real room on both sides: tight against the pills it read as cramped.
-  check: { alignItems: 'flex-start', rowGap: space.sm, paddingVertical: space.md },
+  check: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: space.md,
+    paddingVertical: space.md,
+  },
+  checkStacked: { flexDirection: 'column', alignItems: 'flex-start', rowGap: space.sm },
   checkDivider: { borderTopWidth: border.hairline, borderTopColor: color.border },
   checkLabel: { ...type.bodySm, color: color.text },
+  checkLabelBeside: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   suggestions: { marginTop: space.sm },
   remove: { alignSelf: 'flex-end', marginTop: space.md },
