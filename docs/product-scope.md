@@ -89,6 +89,18 @@ Agreed with the owner after slice 1's phone screens.
   photos, knowingly accepting its terms-of-use and image-copyright risk. Models
   learned from intakes supplement it. The catalog syncs to devices for offline
   typo-tolerant model search; photos download only when shown.
+  Built with these defaults: one request a second, slowing down by itself when
+  refused, robots.txt obeyed; phones, tablets and watches all kept; learned
+  models come from the store's own intakes. The model is typed first and a
+  catalog match fills the brand. Specs are kept per model: the counter sees
+  memory variants and colour choices, someone who repairs also sees screen,
+  chipset, battery and charging, port, SIM, card slot and system.
+- **Screen lock at intake:** none, PIN, password or pattern (drawn on a 3 x 3
+  pad the way the customer draws it). It stays in the ticket's one passcode
+  text as `kind:value` (`pattern:14789`), so no operation changed; older
+  passcodes show as typed. Hidden on the ticket until someone taps to show it.
+  Choice chips from lists that grow (colours, quick brands, accessories) scroll
+  sideways in one row instead of wrapping.
 
 ## Cancelling a servisan (2026-10-26)
 

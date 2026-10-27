@@ -15,7 +15,13 @@ import { PGlite } from '@electric-sql/pglite';
 import { serve, type ServerType } from '@hono/node-server';
 import { CamelCasePlugin, Kysely, PGliteDialect, sql } from 'kysely';
 
-import { migrateToLatest, type DB, type TenantDb } from '@bolusi/db-server';
+import {
+  migrateToLatest,
+  readPhoneModelPhotoFrom,
+  readPhoneModelsFrom,
+  type DB,
+  type TenantDb,
+} from '@bolusi/db-server';
 import { createApp } from '@bolusi/server';
 import { createVerifyToken, InMemoryTokenStore } from '@bolusi/server/test-support';
 import { FakeClock } from '@bolusi/test-support';
@@ -280,6 +286,11 @@ export class HarnessServer {
       deliveryDispatcher: deliveries,
       ...(productionAuth ? { authDirectory: createPgliteAuthDirectory(db) } : { verifyToken }),
       accessLogSink: (record: unknown) => accessLogs.push(JSON.stringify(record)),
+      // The catalog is global data on the plain pool in production; here it is this PGlite's.
+      phoneCatalog: {
+        models: (after: number, limit: number) => readPhoneModelsFrom(db, after, limit),
+        photo: (modelId: number) => readPhoneModelPhotoFrom(db, modelId),
+      },
       ...(options?.gzipOnProgress === undefined ? {} : { gzipOnProgress: options.gzipOnProgress }),
       // CHAOS-07: forwarded structurally to production `resolveDeps` (deps.ts). `systemKeyStore`
       // is the enable-switch — with it, `detectConflicts` is built from SERVER_MODULES; without it,

@@ -209,6 +209,38 @@ export interface Permissions {
   scope: string;
 }
 
+export interface PhoneCatalogBrands {
+  listedAt: Int8 | null;
+  name: string;
+  path: string;
+}
+
+export interface PhoneModelPhotos {
+  bytes: Buffer;
+  fetchedAt: Int8;
+  mime: string;
+  modelId: number;
+  sha256: string;
+}
+
+export interface PhoneModels {
+  announcedYear: number | null;
+  brand: string;
+  createdAt: Int8;
+  detailsAt: Int8 | null;
+  id: number;
+  kind: string;
+  modelCodes: Generated<string>;
+  name: string;
+  pagePath: string;
+  photoAt: Int8 | null;
+  photoSha256: string | null;
+  photoUrl: string | null;
+  revision: Int8;
+  specs: Generated<Json>;
+  updatedAt: Int8;
+}
+
 export interface PinLockoutEvents {
   at: Int8;
   deviceId: string;
@@ -466,6 +498,9 @@ export interface DB {
   notes: Notes;
   operations: Operations;
   permissions: Permissions;
+  phoneCatalogBrands: PhoneCatalogBrands;
+  phoneModelPhotos: PhoneModelPhotos;
+  phoneModels: PhoneModels;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;

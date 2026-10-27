@@ -117,7 +117,12 @@
     "passcode": "Screen lock code (optional)",
     "colorField": "Colour (optional)",
     "imeiField": "IMEI (optional)",
-    "passcodeLabel": "Screen lock"
+    "passcodeLabel": "Screen lock",
+    "modelHint": "e.g. Galaxy A55, Redmi Note 13",
+    "released": "Released {year}",
+    "servicedBefore": "Serviced here before",
+    "tablet": "Tablet",
+    "watch": "Smartwatch"
   },
   "handover": {
     "note": "Note (optional)",
@@ -215,7 +220,8 @@
     "photos": "All six photos are required.",
     "quoteLines": "Add at least one price line.",
     "incompleteLine": "Describe every line that has an amount.",
-    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero."
+    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
+    "screenLock": "Enter the screen lock, or choose None."
   },
   "ready": {
     "today": "Today",
@@ -323,6 +329,30 @@
       "tooMany": "40 choices at most.",
       "hidesAll": "At least one choice must show at this store."
     }
+  },
+  "spec": {
+    "battery": "Battery",
+    "cardSlot": "Card slot",
+    "chipset": "Chipset",
+    "memory": "Memory",
+    "none": "None",
+    "os": "System",
+    "port": "Port",
+    "screen": "Screen",
+    "sim": "SIM",
+    "title": "Specs"
+  },
+  "lock": {
+    "none": "None",
+    "pin": "PIN",
+    "password": "Password",
+    "pattern": "Pattern",
+    "pinField": "PIN",
+    "passwordField": "Password",
+    "patternHint": "Draw the pattern the way the customer does.",
+    "patternShort": "Connect at least 4 dots, then draw it again.",
+    "patternRedo": "Draw again",
+    "patternLabel": "Screen lock pattern"
   },
   "stale": {
     "cancelled": "This repair was just cancelled on another device.",

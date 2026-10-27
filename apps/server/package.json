@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Hono app on Node 22 — sub-routers, middleware chain, WS/SSE, push sender (08 §3.2; endpoints owned by api/00)",
+  "description": "Hono app on Node 22 \u2014 sub-routers, middleware chain, WS/SSE, push sender (08 \u00a73.2; endpoints owned by api/00)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -25,7 +25,8 @@
     "build": "tsc -b tsconfig.build.json",
     "dev": "tsx watch src/main.ts",
     "provision-tenant": "tsx src/cli/provision-tenant.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "crawl-phone-catalog": "tsx src/cli/crawl-phone-catalog.ts"
   },
   "dependencies": {
     "@bolusi/core": "workspace:*",

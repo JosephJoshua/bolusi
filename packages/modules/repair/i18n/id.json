@@ -117,7 +117,12 @@
     "passcode": "Kunci layar (opsional)",
     "colorField": "Warna (opsional)",
     "imeiField": "IMEI (opsional)",
-    "passcodeLabel": "Kunci layar"
+    "passcodeLabel": "Kunci layar",
+    "modelHint": "Contoh: Galaxy A55, Redmi Note 13",
+    "released": "Rilis {year}",
+    "servicedBefore": "Pernah diservis di sini",
+    "tablet": "Tablet",
+    "watch": "Jam tangan"
   },
   "handover": {
     "note": "Catatan (opsional)",
@@ -215,7 +220,8 @@
     "photos": "Masih ada foto yang belum diambil.",
     "quoteLines": "Tambah minimal satu biaya.",
     "incompleteLine": "Biaya ini belum ada keterangannya.",
-    "negativeTotal": "Diskonnya lebih besar dari total biaya."
+    "negativeTotal": "Diskonnya lebih besar dari total biaya.",
+    "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
     "today": "Hari ini",
@@ -257,7 +263,7 @@
     "repaired": "Selesai! HP siap diambil pelanggan."
   },
   "passcode": {
-    "show": "Lihat",
+    "show": "Tampilkan",
     "hide": "Sembunyikan"
   },
   "hint": {
@@ -323,6 +329,30 @@
       "tooMany": "Maksimal 40 pilihan.",
       "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
     }
+  },
+  "spec": {
+    "battery": "Baterai",
+    "cardSlot": "Slot memori",
+    "chipset": "Chipset",
+    "memory": "Memori",
+    "none": "Tidak ada",
+    "os": "Sistem",
+    "port": "Port",
+    "screen": "Layar",
+    "sim": "SIM",
+    "title": "Spesifikasi"
+  },
+  "lock": {
+    "none": "Tidak ada",
+    "pin": "PIN",
+    "password": "Sandi",
+    "pattern": "Pola",
+    "pinField": "PIN",
+    "passwordField": "Kata sandi",
+    "patternHint": "Gambar polanya seperti di HP pelanggan.",
+    "patternShort": "Hubungkan minimal 4 titik, lalu gambar lagi.",
+    "patternRedo": "Gambar ulang",
+    "patternLabel": "Pola kunci layar"
   },
   "stale": {
     "cancelled": "Servisan ini baru saja dibatalkan dari perangkat lain.",

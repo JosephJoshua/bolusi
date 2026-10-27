@@ -22,6 +22,11 @@ import {
 } from '@bolusi/modules/repair';
 import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 
+import {
+  demoFindDeviceModel,
+  demoModelPhoto,
+  demoSearchDeviceModels,
+} from './phone-catalog-demo.js';
 import { HARNESS_NOW } from './seed.js';
 
 const HOUR = 3_600_000;
@@ -331,8 +336,18 @@ function placeholderUri(mediaId: string): string {
   )}`;
 }
 
-export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime {
-  let actor: { readonly userId: string; readonly name: string } = DEMO_REPAIR_ROLES[role];
+/** The demo runtime, plus switching who acts, so "switch user" in the preview keeps the same tickets. */
+export type DemoRepairRuntime = RepairRuntime & { actAs(role: DemoRepairRole): void };
+
+/** The demo role a roster user signs in as, if they have one. */
+export function demoRoleOf(userId: string): DemoRepairRole | undefined {
+  return (Object.keys(DEMO_REPAIR_ROLES) as DemoRepairRole[]).find(
+    (role) => DEMO_REPAIR_ROLES[role].userId === userId,
+  );
+}
+
+export function demoRepairRuntime(role: DemoRepairRole = 'owner'): DemoRepairRuntime {
+  let actor: (typeof DEMO_REPAIR_ROLES)[DemoRepairRole] = DEMO_REPAIR_ROLES[role];
   let tickets = seedTickets();
   let counter = 13;
   let options: IntakeOptionSettings = { lists: DEFAULT_INTAKE_OPTIONS, hidden: NOTHING_HIDDEN };
@@ -430,6 +445,10 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       );
       return page(index.search(String(input['text']), 50).map((hit) => find(hit.id)));
     },
+    searchDeviceModels: (input) =>
+      page(demoSearchDeviceModels(String(input['text']), Number(input['limit'] ?? 6))),
+    findDeviceModel: (input) =>
+      page(demoFindDeviceModel(String(input['brand']), String(input['model']))),
     searchCustomers: (input) => {
       const customers = new Map(tickets.map((t) => [t.customerId, t]));
       const index = new FuzzyIndex(
@@ -468,7 +487,12 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         customerId?: string;
       };
       const existing = tickets.find((t) => t.customerId === customer.customerId);
-      const device = input['device'] as { brand: string; model: string; color: string };
+      const device = input['device'] as {
+        brand: string;
+        model: string;
+        color: string;
+        passcode?: string | null;
+      };
       const photos = input['photos'] as { slot: string; label: string | null; ref: MediaRef }[];
       const created = withTotals({
         ...seedTickets()[0]!,
@@ -493,6 +517,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
         deviceBrand: device.brand,
         deviceModel: device.model,
         deviceColor: device.color,
+        devicePasscode: device.passcode ?? null,
         complaint: String(input['complaint']),
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
@@ -658,9 +683,16 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
     (window as unknown as Record<string, unknown>)[DEMO_COLLEAGUE_HOOK] = { run: colleague };
   }
 
-  const permitted = new Set<string>(DEMO_REPAIR_ROLES[role].permissions);
+  let permitted = new Set<string>(actor.permissions);
   const runtime = {
-    userId: actor.userId,
+    get userId() {
+      return actor.userId;
+    },
+    actAs: (next: DemoRepairRole) => {
+      actor = DEMO_REPAIR_ROLES[next];
+      permitted = new Set<string>(actor.permissions);
+      notify();
+    },
     query: (name: string, input: Input) => queries[name]!(input),
     run: (name: string, input: Input) => {
       try {
@@ -681,6 +713,7 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       Promise.resolve(TECHNICIANS.map((id) => ({ id, name: NAMES.get(id) ?? id }))),
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    loadModelPhoto: demoModelPhoto,
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.
@@ -693,5 +726,5 @@ export function demoRepairRuntime(role: DemoRepairRole = 'owner'): RepairRuntime
       return Promise.resolve('done');
     },
   };
-  return runtime as unknown as RepairRuntime;
+  return runtime as unknown as DemoRepairRuntime;
 }
