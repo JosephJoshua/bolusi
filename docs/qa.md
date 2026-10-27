@@ -54,7 +54,10 @@ pnpm qa:mobile up ios           # Mac only
 ```
 
 `up` starts `scripts/harness-serve-lane.mjs` on `127.0.0.1:3000` (PGlite, empty every start) and
-prints the enrollment login, one-time password and PIN for the provisioned owner. Pass `--no-build`
+prints the enrollment login, one-time password and PIN for the provisioned owner. The app talks to
+it through `scripts/qa-proxy.mjs` on `127.0.0.1:3091`, which writes one line per request (method,
+path, status, time, sizes; no bodies or tokens) to `.qa/requests.log`. Release builds have no JS logs
+and no `run-as`, so that log is how to tell whether a sync or upload was sent. Pass `--no-build`
 to reuse the last build. Screenshots land in `qa-artifacts/`. Always finish with `down`; if `up`
 fails, `down` also clears the lock.
 

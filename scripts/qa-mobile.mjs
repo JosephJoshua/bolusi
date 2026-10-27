@@ -17,12 +17,14 @@ const MOBILE = path.join(ROOT, 'apps/mobile');
 const STATE = path.join(ROOT, '.qa');
 const SHOTS = path.join(ROOT, 'qa-artifacts');
 const SERVER_LOG = path.join(STATE, 'server.log');
-const SERVER_PID = path.join(STATE, 'server.pid');
+// Every request the app sends goes through scripts/qa-proxy.mjs and lands here (no bodies or tokens).
+const REQUEST_LOG = path.join(STATE, 'requests.log');
 const READY_PREFIX = 'BOLUSI_LANE_READY: ';
 const APP_ID = 'com.bolusi.app';
 const AVD = 'bolusi-qa';
 const SIM = 'bolusi-qa';
 const PORT = 3000;
+const PROXY_PORT = 3091;
 // One QA run per machine at a time, so threads sharing the QA VPS don't stack emulators.
 const LOCK = path.join(homedir(), '.bolusi-qa.lock');
 // Caps for a shared machine: one emulator with 4 cores and 4 GB, and a gentle build.
@@ -59,37 +61,50 @@ function out(cmd, args) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function startServer() {
-  if (existsSync(SERVER_PID)) stopServer();
+/** Start a script as a detached background process logging to `log`; `stopProcess(name)` ends it. */
+function startProcess(name, script, log, extraEnv = {}) {
+  stopProcess(name);
   mkdirSync(STATE, { recursive: true });
-  const log = openSync(SERVER_LOG, 'w');
-  const child = spawn(process.execPath, [path.join(ROOT, 'scripts/harness-serve-lane.mjs')], {
+  const out = openSync(log, 'w');
+  const child = spawn(process.execPath, [path.join(ROOT, 'scripts', script)], {
     cwd: ROOT,
-    env,
+    env: { ...env, ...extraEnv },
     detached: true,
-    stdio: ['ignore', log, log],
+    stdio: ['ignore', out, out],
   });
   child.unref();
-  writeFileSync(SERVER_PID, String(child.pid));
+  writeFileSync(path.join(STATE, `${name}.pid`), String(child.pid));
+  return child;
+}
+
+function stopProcess(name) {
+  const pidFile = path.join(STATE, `${name}.pid`);
+  if (!existsSync(pidFile)) return;
+  try {
+    process.kill(-Number(readFileSync(pidFile, 'utf8')), 'SIGTERM');
+  } catch {
+    // already gone
+  }
+  rmSync(pidFile);
+}
+
+async function startServer() {
+  const child = startProcess('server', 'harness-serve-lane.mjs', SERVER_LOG);
   for (let waited = 0; waited < 120_000; waited += 500) {
     const line = readFileSync(SERVER_LOG, 'utf8')
       .split('\n')
       .find((l) => l.startsWith(READY_PREFIX));
-    if (line) return JSON.parse(line.slice(READY_PREFIX.length));
+    if (line) {
+      startProcess('proxy', 'qa-proxy.mjs', REQUEST_LOG, {
+        QA_PROXY_PORT: String(PROXY_PORT),
+        QA_UPSTREAM_PORT: String(PORT),
+      });
+      return JSON.parse(line.slice(READY_PREFIX.length));
+    }
     if (child.exitCode !== null) break;
     await sleep(500);
   }
   throw new Error(`lane server did not become ready; see ${SERVER_LOG}`);
-}
-
-function stopServer() {
-  if (!existsSync(SERVER_PID)) return;
-  try {
-    process.kill(-Number(readFileSync(SERVER_PID, 'utf8')), 'SIGTERM');
-  } catch {
-    // already gone
-  }
-  rmSync(SERVER_PID);
 }
 
 async function androidUp(build) {
@@ -134,7 +149,7 @@ async function androidUp(build) {
     // A release build blocks cleartext HTTP; the harness flag (as in CI) allows it to 10.0.2.2 only.
     const buildEnv = {
       ...env,
-      EXPO_PUBLIC_API_URL: `http://10.0.2.2:${PORT}`,
+      EXPO_PUBLIC_API_URL: `http://10.0.2.2:${PROXY_PORT}`,
       EXPO_PUBLIC_BOLUSI_TEST_HARNESS: '1',
     };
     run('pnpm', ['exec', 'expo', 'prebuild', '--platform', 'android', '--no-install'], {
@@ -193,7 +208,7 @@ async function iosUp(build) {
     return name && path.join(products, name);
   };
   if (build || !findApp()) {
-    const buildEnv = { ...env, EXPO_PUBLIC_API_URL: `http://127.0.0.1:${PORT}` };
+    const buildEnv = { ...env, EXPO_PUBLIC_API_URL: `http://127.0.0.1:${PROXY_PORT}` };
     run('pnpm', ['exec', 'expo', 'prebuild', '--platform', 'ios', '--no-install'], {
       cwd: MOBILE,
       env: buildEnv,
@@ -262,7 +277,8 @@ function takeLock() {
 
 function down() {
   rmSync(LOCK, { recursive: true, force: true });
-  stopServer();
+  stopProcess('proxy');
+  stopProcess('server');
   try {
     run('adb', ['emu', 'kill']);
   } catch {
@@ -294,6 +310,7 @@ async function main() {
   const ready = await startServer();
   await (platform === 'android' ? androidUp(build) : iosUp(build));
   console.log(`\nApp is up on ${platform}. Lane server: ${ready.url} (log ${SERVER_LOG})`);
+  console.log(`App requests: ${REQUEST_LOG}`);
   console.log(`Enrollment credentials: ${JSON.stringify(ready.credentials)}`);
 }
 
