@@ -545,6 +545,8 @@ describe('intake draft', () => {
     ).toEqual([]);
     expect(intakeDirty(draft)).toBe(false);
     expect(intakeDirty({ ...draft, step: 3 })).toBe(false);
+    // The id an intake takes up front is not an answer: an untouched intake is still clean.
+    expect(intakeDirty({ ...draft, ticketId: '01920000-0000-7000-8000-00000000a161' })).toBe(false);
     expect(intakeDirty({ ...draft, complaint: 'x' })).toBe(true);
   });
 

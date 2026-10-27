@@ -155,6 +155,11 @@ export async function correctCustomerDetailsHandler(
 
 export const openTicketInput = z
   .object({
+    /**
+     * The id the intake took when it started. Opening the same id again returns the ticket that
+     * already exists, so a draft restored after the app died mid-submit cannot open it twice.
+     */
+    ticketId: z.string().min(1).optional(),
     /** An existing customer, or a new one registered in the same command. */
     customer: z.union([
       z.object({ customerId: z.string().min(1) }).strict(),
@@ -196,6 +201,10 @@ export async function openTicketHandler(
   input: z.output<typeof openTicketInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<OpenTicketResult>> {
+  if (input.ticketId !== undefined) {
+    const existing = await openedTicket(ctx, input.ticketId);
+    if (existing !== null) return { ops: [], result: existing };
+  }
   // Every angle this store asks for right now, so a list that changed under an open intake is
   // caught here rather than producing a ticket short of the evidence the owner wants.
   const angles = storeIntakeOptions(await loadIntakeOptions(ctx)).photoAngles;
@@ -230,7 +239,7 @@ export async function openTicketHandler(
   const counter = (await ctx.query(nextTicketCounterQuery, { deviceId: ctx.deviceId })).rows[0]!
     .counter;
   const ticketNumber = formatTicketNumber(ctx.deviceId, counter);
-  const ticketId = ctx.newId();
+  const ticketId = input.ticketId ?? ctx.newId();
 
   ops.push(
     ticketOp(ctx, ticketId, REPAIR_OP.ticketOpened, {
@@ -251,6 +260,20 @@ export async function openTicketHandler(
   }
 
   return { ops, result: { ticketId, ticketNumber, customerId } };
+}
+
+/** The ticket already opened under `ticketId`, or null when there is none in this store. */
+async function openedTicket(
+  ctx: CommandContext,
+  ticketId: string,
+): Promise<OpenTicketResult | null> {
+  try {
+    const row = (await ctx.query(getTicketQuery, { ticketId })).rows[0]!;
+    return { ticketId: row.id, ticketNumber: row.ticketNumber, customerId: row.customerId };
+  } catch (error: unknown) {
+    if (error instanceof DomainError && error.code === 'ENTITY_NOT_FOUND') return null;
+    throw error;
+  }
 }
 
 // ── technician ─────────────────────────────────────────────────────────────────────────────────

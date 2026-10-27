@@ -29,6 +29,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  createWorkStore,
   drainPendingVerifiers,
   enqueuePendingVerifier,
   insertOpLogRow,
@@ -907,6 +908,35 @@ describe('at-rest column encryption — repair customer data', () => {
     const bytes = readFileSync(opened.file);
     for (const [column, plaintext] of Object.entries(secret)) {
       expect(bytes.includes(Buffer.from(plaintext, 'utf8')), `${column} stored in the clear`).toBe(
+        false,
+      );
+    }
+  });
+});
+
+describe('at-rest column encryption — drafts kept across app restarts', () => {
+  test('a saved half-entered servisan is sealed on disk and reads back through the real store', async () => {
+    opened = await openAt(DB_KEY);
+    const secret = {
+      name: 'PLAINTEXT-DRAFTNAME-Ester Kambu',
+      phone: 'PLAINTEXT-DRAFTPHONE-081399887766',
+      passcode: 'PLAINTEXT-DRAFTPASSCODE-1357',
+    };
+    const work = {
+      drafts: { repair: { customer: secret.name, phone: secret.phone, passcode: secret.passcode } },
+    };
+    const store = createWorkStore(
+      opened.db.db,
+      (value) => value as typeof work,
+      () => 1,
+    );
+    await store.save('user-1', work);
+    expect(await store.load('user-1')).toEqual(work);
+
+    await closeClientDb();
+    const bytes = readFileSync(opened.file);
+    for (const [field, plaintext] of Object.entries(secret)) {
+      expect(bytes.includes(Buffer.from(plaintext, 'utf8')), `${field} stored in the clear`).toBe(
         false,
       );
     }

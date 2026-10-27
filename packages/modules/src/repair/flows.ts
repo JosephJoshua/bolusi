@@ -442,6 +442,8 @@ const zIntakeDraft = z.strictObject({
   downPayment: z.string().default(''),
   /** The ready-by option id picked, or '' while the store's default stands. */
   ready: z.string().transform((ready) => LEGACY_READY[ready] ?? ready),
+  /** The id the ticket will get, taken when the intake starts so it can only be opened once. */
+  ticketId: z.string().optional(),
 });
 
 export type IntakeDraft = z.infer<typeof zIntakeDraft>;
@@ -472,7 +474,7 @@ export function emptyIntakeDraft(): IntakeDraft {
 /** Whether the draft holds anything worth keeping or asking before discarding. */
 export function intakeDirty(draft: IntakeDraft): boolean {
   const empty = emptyIntakeDraft();
-  return JSON.stringify({ ...draft, step: 0 }) !== JSON.stringify(empty);
+  return JSON.stringify({ ...draft, step: 0, ticketId: undefined }) !== JSON.stringify(empty);
 }
 
 /**
@@ -631,6 +633,7 @@ export function toOpenTicketInput(
     return state === undefined ? [] : [{ item: id, label, state, note: '' }];
   });
   return {
+    ...(draft.ticketId === undefined ? {} : { ticketId: draft.ticketId }),
     customer:
       draft.customer.kind === 'existing'
         ? { customerId: draft.customer.customerId }

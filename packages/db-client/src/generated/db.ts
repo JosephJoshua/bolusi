@@ -387,6 +387,12 @@ export interface UsersDirectory {
   status: string;
 }
 
+export interface UserWork {
+  updatedAt: number;
+  userId: string | null;
+  work: string;
+}
+
 export interface DB {
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
@@ -418,4 +424,5 @@ export interface DB {
   userPrefs: UserPrefs;
   userRolesDirectory: UserRolesDirectory;
   usersDirectory: UsersDirectory;
+  userWork: UserWork;
 }
