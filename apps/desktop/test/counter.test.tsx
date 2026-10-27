@@ -145,6 +145,25 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.ticket.action.cancel')).toBeTruthy();
   });
 
+  it('suggests catalog models as the model is typed and fills in the brand', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.keyDown(window, { key: 'F2' });
+    const model = await screen.findByTestId('repair.desk.intake.model');
+    fireEvent.change(model, { target: { value: 'a55' } });
+    const list = await screen.findByTestId('repair.desk.intake.models');
+    expect(list.textContent).toContain('Galaxy A55');
+    fireEvent.keyDown(model, { key: 'Enter' });
+    await waitFor(() =>
+      expect(byTestId('repair.desk.intake.brand')).toHaveProperty('value', 'Samsung'),
+    );
+    expect(model).toHaveProperty('value', 'Galaxy A55');
+    expect((await screen.findByTestId('repair.desk.intake.modelMatch')).textContent).toContain(
+      'Samsung Galaxy A55',
+    );
+    expect(screen.queryByTestId('repair.desk.intake.models')).toBeNull();
+  });
+
   it('records a down payment at the counter, and only an owner changes one', async () => {
     renderApp();
     await openTicket('Petrus Yikwa');

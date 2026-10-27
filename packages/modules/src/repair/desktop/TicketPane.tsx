@@ -58,7 +58,15 @@ import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
-import { ActionError, QueryPanel, StatusChip, photoLabels, usePhotoState } from './parts.js';
+import {
+  ActionError,
+  CatalogPhoto,
+  DeviceSpecs,
+  QueryPanel,
+  StatusChip,
+  photoLabels,
+  usePhotoState,
+} from './parts.js';
 import {
   AssignDialog,
   CancelDialog,
@@ -379,14 +387,20 @@ export function TicketPane({
       .join(' · ');
     return (
       <>
-        <div className="rounded-sm bg-surface-alt px-4 py-3">
-          <p className="text-body font-semibold text-text" data-testid="repair.desk.ticket.device">
-            {device}
-          </p>
-          <p className="mt-2 text-small text-text-muted">{tn('repair.condition.complaint')}</p>
-          <p className="text-body text-text" data-testid="repair.desk.ticket.complaint">
-            {row.complaint}
-          </p>
+        <div className="flex items-start gap-4 rounded-sm bg-surface-alt px-4 py-3">
+          <CatalogPhoto brand={row.deviceBrand} model={row.deviceModel} />
+          <div className="min-w-0">
+            <p
+              className="text-body font-semibold text-text"
+              data-testid="repair.desk.ticket.device"
+            >
+              {device}
+            </p>
+            <p className="mt-2 text-small text-text-muted">{tn('repair.condition.complaint')}</p>
+            <p className="text-body text-text" data-testid="repair.desk.ticket.complaint">
+              {row.complaint}
+            </p>
+          </div>
         </div>
 
         <FactGrid>
@@ -420,6 +434,7 @@ export function TicketPane({
         {renderPrice(row)}
         <TicketPhotos ticket={row} />
         {renderCondition(row)}
+        <DeviceSpecs brand={row.deviceBrand} model={row.deviceModel} repairs={can.work} />
 
         <Section title={tn('repair.ticket.history')} testId="repair.desk.ticket.history">
           <Timeline

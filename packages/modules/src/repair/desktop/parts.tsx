@@ -4,6 +4,9 @@ import { formatNumber, t, translateErrorCode } from '@bolusi/i18n';
 import {
   Banner,
   Chip,
+  Fact,
+  FactGrid,
+  Section,
   StatePanel,
   TextField,
   type PhotoLabels,
@@ -19,6 +22,7 @@ import {
   LoaderCircle,
   Lock,
   PackageCheck,
+  Smartphone,
   TriangleAlert,
   Wrench,
   type LucideIcon,
@@ -34,8 +38,11 @@ import {
   type TicketStatus,
 } from '../flows.js';
 import { tn } from '../i18n.js';
-import { staleStepMessage, statusLabel } from '../labels.js';
-import { useRepairThumbnail } from '../runtime.js';
+import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
+import { specFacts } from '../device-specs.js';
+import type { DeviceModelPhoto } from '../device-models.js';
+import { useCatalogModel } from '../model-picker.js';
+import { useModelPhoto, useRepairThumbnail } from '../runtime.js';
 
 const STATUS_ICON: Readonly<Record<TicketStatus, LucideIcon>> = {
   received: Inbox,
@@ -166,5 +173,85 @@ export function MoneyField({
         if (acceptsRupiahText(text)) onChange(parseRupiah(text));
       }}
     />
+  );
+}
+
+/**
+ * A catalog picture of a phone model, the whole phone shown uncropped. While it loads, or when
+ * there is none (offline, not in the catalog), a plain phone glyph holds its place.
+ */
+export function ModelPhoto({
+  photo,
+  large = false,
+}: {
+  readonly photo: DeviceModelPhoto | null;
+  readonly large?: boolean;
+}): React.JSX.Element {
+  const uri = useModelPhoto(photo);
+  const frame = large ? 'h-20 w-16' : 'h-10 w-8';
+  return uri === null ? (
+    <span
+      aria-hidden
+      className={`${frame} flex shrink-0 items-center justify-center rounded-xs bg-surface-alt text-text-muted`}
+    >
+      <Smartphone size={large ? 24 : 16} />
+    </span>
+  ) : (
+    <img src={uri} alt="" className={`${frame} shrink-0 object-contain`} />
+  );
+}
+
+/** The catalog picture of a ticket's phone, or nothing when the catalog has no picture of it. */
+export function CatalogPhoto({
+  brand,
+  model,
+}: {
+  readonly brand: string;
+  readonly model: string;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const uri = useModelPhoto(found?.photo ?? null);
+  if (uri === null) return null;
+  return (
+    <img
+      src={uri}
+      alt=""
+      className="h-20 w-16 shrink-0 object-contain"
+      data-testid="repair.desk.ticket.devicePhoto"
+    />
+  );
+}
+
+/**
+ * The catalog's specs for a ticket's phone, as the viewer needs them (`specFacts`): memory
+ * variants for everyone, the inside of the phone for someone who repairs it. Nothing when the
+ * catalog does not know the model or has no specs for it.
+ */
+export function DeviceSpecs({
+  brand,
+  model,
+  repairs,
+}: {
+  readonly brand: string;
+  readonly model: string;
+  readonly repairs: boolean;
+}): React.JSX.Element | null {
+  const found = useCatalogModel(brand, model);
+  const facts = found === null ? [] : specFacts(found.specs, repairs);
+  if (facts.length === 0) return null;
+  return (
+    <Section title={tn('repair.spec.title')} testId="repair.desk.ticket.specs">
+      <FactGrid>
+        {facts.map((fact) => (
+          <Fact
+            key={fact.key}
+            label={tn(SPEC_FACT_KEY[fact.key])}
+            // GSMArena's "No" for a phone without a card slot.
+            value={fact.value === 'No' ? tn('repair.spec.none') : fact.value}
+            testId={`repair.desk.ticket.specs.${fact.key}`}
+          />
+        ))}
+      </FactGrid>
+    </Section>
   );
 }

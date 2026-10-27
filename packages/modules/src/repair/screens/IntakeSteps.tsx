@@ -19,12 +19,11 @@ import {
   space,
   type,
 } from '@bolusi/ui';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Keyboard, StyleSheet, Text, View } from 'react-native';
 
 import { CHECKLIST_STATES } from '../constants.js';
-import { sameDeviceModel, type DeviceModelRow } from '../device-models.js';
-import { colourChoices, memoryVariants } from '../device-specs.js';
+import { modelCaption, useModelPicker } from '../model-picker.js';
 import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
 
 import { tn } from '../i18n.js';
@@ -62,7 +61,6 @@ import {
   PhotoThumb,
   Section,
   repairStyles,
-  useCatalogModel,
 } from './parts.js';
 import { useRepairQuery } from '../runtime.js';
 import { usePriceKinds, type PriceKind } from './TicketSteps.js';
@@ -161,16 +159,6 @@ export function CustomerStep({
   );
 }
 
-/** "Samsung · 2024", "Samsung · Tablet · 2024", or "Evercoss · Serviced here before". */
-function modelCaption(row: DeviceModelRow): string {
-  const parts = [row.brand];
-  if (row.kind === 'tablet') parts.push(tn('repair.device.tablet'));
-  if (row.kind === 'watch') parts.push(tn('repair.device.watch'));
-  if (row.learned) parts.push(tn('repair.device.servicedBefore'));
-  else if (row.announcedYear !== null) parts.push(String(row.announcedYear));
-  return parts.join(' · ');
-}
-
 /**
  * The phone being taken in. The model comes first and is all most intakes need: as it is typed,
  * models from the phone catalog and from earlier intakes are suggested with their picture, and a
@@ -192,53 +180,9 @@ export function DeviceStep({
   readonly lockError: string | undefined;
 }): React.JSX.Element {
   const device = draft.device;
-  // The brand this step filled in from the catalog. While the field still holds it, a different
-  // catalog model may replace it; once the user types their own brand, it is theirs.
-  const [autoBrand, setAutoBrand] = useState<string | null>(null);
   const set = (patch: Partial<IntakeDraft['device']>): void =>
     update({ device: { ...device, ...patch } });
-
-  const brand = device.brand.trim();
-  const model = device.model.trim();
-  const brandIsOurs = brand === '' || device.brand === autoBrand;
-  const searchText = (brandIsOurs ? model : `${brand} ${model}`).trim();
-  const matched = useCatalogModel(brandIsOurs ? '' : brand, model);
-  const suggestions = useRepairQuery(
-    async (rt) =>
-      model === ''
-        ? []
-        : (await rt.query('searchDeviceModels', { text: searchText, limit: 5 })).rows,
-    `deviceModels:${searchText}`,
-  );
-
-  useEffect(() => {
-    if (matched === null || !brandIsOurs || device.brand === matched.brand) return;
-    setAutoBrand(matched.brand);
-    set({ brand: matched.brand });
-    // Only a newly found model fills the brand; `set` and the draft are this render's.
-  }, [matched?.key]);
-
-  const pick = (row: DeviceModelRow): void => {
-    setAutoBrand(row.brand);
-    set({ brand: row.brand, model: row.model });
-    Keyboard.dismiss();
-  };
-  // "samsung a55" typed in the model field is the catalog's Galaxy A55: write it the catalog's
-  // way once the user moves on, so the ticket and the search agree on the name.
-  const tidyModel = (): void => {
-    if (matched === null || (device.model === matched.model && device.brand === matched.brand)) {
-      return;
-    }
-    setAutoBrand(matched.brand);
-    set({ brand: matched.brand, model: matched.model });
-  };
-
-  const picked =
-    matched !== null ||
-    (suggestions.status === 'ready' &&
-      suggestions.data.some((row) => sameDeviceModel(row, { brand, model })));
-  const memory = matched === null ? [] : memoryVariants(matched.specs.internalMemory);
-  const colours = matched === null ? [] : colourChoices(matched.specs.colors);
+  const { matched, suggestions, memory, colours, pick, tidyModel } = useModelPicker(device, set);
 
   return (
     <View>
@@ -253,15 +197,18 @@ export function DeviceStep({
         revealOnFocus="to-top"
         testID={`${testID}.model`}
       />
-      {!picked && suggestions.status === 'ready' && suggestions.data.length > 0 ? (
+      {suggestions.length > 0 ? (
         <View style={styles.modelList} testID={`${testID}.models`}>
-          {suggestions.data.map((row) => (
+          {suggestions.map((row) => (
             <ListRow
               key={row.key}
               leading={<ModelPhoto photo={row.photo} testID={`${testID}.model.${row.key}.photo`} />}
               primaryText={row.model}
               secondaryText={modelCaption(row)}
-              onPress={() => pick(row)}
+              onPress={() => {
+                pick(row);
+                Keyboard.dismiss();
+              }}
               testID={`${testID}.model.${row.key}`}
             />
           ))}

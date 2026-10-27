@@ -24,6 +24,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useActionRunner } from '../../screen-kit/index.js';
 import { PATTERN_MIN_DOTS, SCREEN_LOCK_KINDS } from '../screen-lock.js';
+import type { DeviceModelRow } from '../device-models.js';
+import { modelCaption, useModelPicker, type ModelPicker } from '../model-picker.js';
 import { CHECKLIST_STATES, type ChecklistState } from '../constants.js';
 import {
   capturedThumbnailRef,
@@ -64,7 +66,14 @@ import {
 import { useIntakeOptionSettings, useRepairQuery, useRepairRuntime } from '../runtime.js';
 import type { MediaRef } from '@bolusi/schemas';
 
-import { ActionError, MoneyField, photoLabels, rupiahText, usePhotoState } from './parts.js';
+import {
+  ActionError,
+  ModelPhoto,
+  MoneyField,
+  photoLabels,
+  rupiahText,
+  usePhotoState,
+} from './parts.js';
 
 /** The sections in page order; the phone's review step is the summary column here. */
 const SECTIONS = [
@@ -551,9 +560,17 @@ function DeviceFields({
   const device = draft.device;
   const set = (patch: Partial<IntakeDraft['device']>): void =>
     update({ device: { ...device, ...patch } });
+  const picker = useModelPicker(device, set);
+  const { matched, colours, memory } = picker;
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-4">
+        <ModelField
+          value={device.model}
+          onChange={(model) => set({ model })}
+          picker={picker}
+          error={modelError}
+        />
         <div className="flex flex-col gap-2">
           <TextField
             label={tn('repair.device.brand')}
@@ -563,40 +580,77 @@ function DeviceFields({
             autoComplete="off"
             data-testid="repair.desk.intake.brand"
           />
-          <div
-            className="flex flex-wrap gap-2"
-            aria-label={tn('repair.options.list.brands')}
-            role="group"
-          >
-            {options.brands.map((option) => {
-              const brand = optionLabel('brands', option);
-              return (
-                <ToggleChip
-                  key={option.id}
-                  label={brand}
-                  selected={device.brand === brand}
-                  onToggle={() => set({ brand })}
-                  skipTab
-                />
-              );
-            })}
+          {/* Quick picks only while the brand is still open; a catalog model already gave it. */}
+          {matched !== null ? null : (
+            <div
+              className="flex flex-wrap gap-2"
+              aria-label={tn('repair.options.list.brands')}
+              role="group"
+            >
+              {options.brands.map((option) => {
+                const brand = optionLabel('brands', option);
+                return (
+                  <ToggleChip
+                    key={option.id}
+                    label={brand}
+                    selected={device.brand === brand}
+                    onToggle={() => set({ brand })}
+                    skipTab
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      {matched === null ? null : (
+        <div
+          className="flex items-center gap-4 rounded-sm bg-surface-alt px-4 py-3"
+          data-testid="repair.desk.intake.modelMatch"
+        >
+          <ModelPhoto photo={matched.photo} large />
+          <div className="min-w-0">
+            <p className="text-body font-semibold text-text">
+              {matched.brand} {matched.model}
+            </p>
+            {matched.announcedYear === null ? null : (
+              <p className="text-small text-text-muted">
+                {tn('repair.device.released', { year: String(matched.announcedYear) })}
+              </p>
+            )}
+            {memory.length === 0 ? null : (
+              <p className="text-small text-text-muted">{memory.join(' · ')}</p>
+            )}
           </div>
         </div>
-        <TextField
-          label={tn('repair.device.model')}
-          value={device.model}
-          onChange={(event) => set({ model: event.target.value })}
-          error={modelError}
-          autoComplete="off"
-          data-testid="repair.desk.intake.model"
-        />
-        <TextField
-          label={tn('repair.device.colorField')}
-          value={device.color}
-          onChange={(event) => set({ color: event.target.value })}
-          autoComplete="off"
-          data-testid="repair.desk.intake.color"
-        />
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <TextField
+            label={tn('repair.device.colorField')}
+            value={device.color}
+            onChange={(event) => set({ color: event.target.value })}
+            autoComplete="off"
+            data-testid="repair.desk.intake.color"
+          />
+          {colours.length === 0 ? null : (
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label={tn('repair.device.colorField')}
+            >
+              {colours.map((colour) => (
+                <ToggleChip
+                  key={colour}
+                  label={colour}
+                  selected={device.color === colour}
+                  onToggle={() => set({ color: device.color === colour ? '' : colour })}
+                  skipTab
+                />
+              ))}
+            </div>
+          )}
+        </div>
         <TextField
           label={tn('repair.device.imeiField')}
           value={device.imei}
@@ -613,6 +667,103 @@ function DeviceFields({
         onChange={(lockKind, passcode) => set({ lockKind, passcode })}
         error={lockError}
       />
+    </div>
+  );
+}
+
+/**
+ * The model, typed the way the customer says it. As it is typed, models from the phone catalog and
+ * from earlier intakes are offered with their picture; arrow keys and Enter pick one, Escape closes
+ * the list. Nothing has to match: a model nobody has heard of is kept as typed.
+ */
+function ModelField({
+  value,
+  onChange,
+  picker,
+  error,
+}: {
+  readonly value: string;
+  readonly onChange: (model: string) => void;
+  readonly picker: ModelPicker;
+  readonly error: string | undefined;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(true);
+  const [active, setActive] = useState(0);
+  const rows = open ? picker.suggestions : [];
+  const listId = 'repair.desk.intake.models';
+  const choose = (row: DeviceModelRow): void => {
+    picker.pick(row);
+    setOpen(false);
+  };
+  return (
+    <div className="relative self-start">
+      <TextField
+        label={tn('repair.device.model')}
+        placeholder={tn('repair.device.modelHint')}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+          setActive(0);
+        }}
+        onBlur={() => {
+          setOpen(false);
+          picker.tidyModel();
+        }}
+        onKeyDown={(event) => {
+          if (rows.length === 0) return;
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            setActive((current) => (current + step + rows.length) % rows.length);
+          } else if (event.key === 'Enter' && !event.ctrlKey) {
+            event.preventDefault();
+            choose(rows[active] ?? rows[0]!);
+          } else if (event.key === 'Escape') {
+            // Closes the list only, not the page around it.
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+        role="combobox"
+        aria-expanded={rows.length > 0}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={rows.length > 0 ? `${listId}.${String(active)}` : undefined}
+        error={error}
+        autoComplete="off"
+        data-testid="repair.desk.intake.model"
+      />
+      {rows.length === 0 ? null : (
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={tn('repair.device.model')}
+          data-testid={listId}
+          className="absolute inset-x-0 top-full z-20 mt-1 animate-pop-in overflow-hidden rounded-sm border border-border bg-surface p-1 shadow-lg"
+        >
+          {rows.map((row, index) => (
+            <li
+              key={row.key}
+              id={`${listId}.${String(index)}`}
+              role="option"
+              aria-selected={index === active}
+              // Keeps the focus in the field, so picking does not count as leaving it.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choose(row)}
+              onMouseEnter={() => setActive(index)}
+              className={`flex cursor-pointer items-center gap-3 rounded-xs px-2 py-1 ${index === active ? 'bg-surface-alt' : ''}`}
+            >
+              <ModelPhoto photo={row.photo} />
+              <span className="min-w-0">
+                <span className="block text-body font-semibold text-text">{row.model}</span>
+                <span className="block text-small text-text-muted">{modelCaption(row)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
