@@ -45,6 +45,9 @@ const config: ExpoConfig = {
     // test/ios-config.test.ts.
     bundleIdentifier: 'com.bolusi.app',
   },
+  // Where the web preview is served from, e.g. `/bolusi/pr-preview/pr-12` on GitHub Pages
+  // (docs/previews.md). Empty for local runs. Native builds ignore it.
+  experiments: { baseUrl: process.env['EXPO_BASE_URL'] ?? '' },
   extra: {
     apiUrl: process.env['EXPO_PUBLIC_API_URL'] ?? null,
   },
@@ -129,6 +132,16 @@ const config: ExpoConfig = {
         cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
         microphonePermission: false,
         recordAudioAndroid: false,
+      },
+    ],
+    // The store logo is picked from the gallery (repair print settings). The camera string repeats
+    // expo-camera's on purpose: `false` here would delete the key expo-camera just wrote.
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'Izinkan aplikasi membuka galeri untuk memilih logo toko.',
+        cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+        microphonePermission: false,
       },
     ],
     // ── The on-device harness entry activity (task 27a/175) ───────────────────────────────────────

@@ -239,6 +239,24 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('GET', () => '/v1/devices/me/bundle'),
   },
+  'GET /v1/catalog/phones': {
+    crossTenant: {
+      kind: 'absent',
+      reason: 'the phone catalog is global reference data with no tenant (migration 0016)',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the catalog has no store scope' },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('GET', () => '/v1/catalog/phones'),
+  },
+  'GET /v1/catalog/phones/:id/photo': {
+    crossTenant: {
+      kind: 'absent',
+      reason: 'a catalog model id names global reference data, not a tenant’s row',
+    },
+    unassignedStore: { kind: 'absent', reason: 'same — the catalog has no store scope' },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('GET', () => '/v1/catalog/phones/1/photo'),
+  },
   'GET /v1/devices/me': {
     crossTenant: {
       kind: 'absent',

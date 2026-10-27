@@ -19,7 +19,9 @@ this host only. Keep machine-specific paths out of shared config.
 On restricted networks, installation with `--ignore-scripts` can help, but native
 dependencies still need valid build artifacts before SQLite tests can run.
 The pre-commit hook formats staged files and scans the staged diff with gitleaks;
-install gitleaks before committing. CI also scans committed history.
+install gitleaks before committing. Claude Code cloud sessions install a pinned,
+checksum-verified gitleaks through `.claude/hooks/session-start.sh`. CI also
+scans committed history.
 
 ## Run
 
@@ -46,6 +48,25 @@ Set `EXPO_ACCESS_TOKEN` in your local environment first. See
 `apps/server/.env.example`, `src/config.ts` and `src/main.ts` for boot requirements.
 Use `pnpm --filter @bolusi/server provision-tenant --help` for enrollment setup.
 Do not paste provisioning secrets into chats or commit them.
+
+The phone catalog (model names and photos for intake) is crawled from GSMArena by
+a slow, resumable CLI that writes as the table owner, so give it the owner role's
+URL, not the app role's. It honours robots.txt (including Crawl-delay), waits 1 s
+(with jitter) between requests, and on 429/503 waits, doubles the gap for the rest
+of the run and stops if refused repeatedly. A first full crawl is about 28k
+requests (listings, photos, spec pages), so most of a day; try a short run first:
+
+```sh
+DATABASE_URL=<owner url> pnpm --filter @bolusi/server crawl-phone-catalog --max-requests 20
+```
+
+`--brands "Samsung,Apple"`, `--phases list,photos,details` and `--delay-seconds`
+narrow a run. Devices download the catalog after sync and photos when shown.
+GSMArena refuses cloud and datacenter addresses (429s, a Cloudflare check), so
+run it from a home or office connection; the crawler never tries to get past a check.
+
+To click through the screens in a browser without a server or device, run
+`pnpm dev:web`; hosted previews of main and each PR are in [Previews](previews.md).
 
 Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 `http://10.0.2.2:3000` on Android emulator; a phone needs a reachable LAN address).
@@ -96,3 +117,26 @@ and data loss. Copy edits and documentation changes do not need new tests. Do no
 add tests that parse guides, require task records, or count checklist coverage.
 When a runtime is unavailable, report what could not be verified; a mock or skipped
 test does not substitute for Docker, native builds, or physical hardware.
+
+## Benchmarks
+
+Two scripts measure sync with realistic repair tickets. Build first (`pnpm exec tsc -b`).
+
+```sh
+pnpm --filter @bolusi/modules bench:first-sync
+DATABASE_URL="$(pnpm -s db:url)" pnpm --filter @bolusi/modules bench:sync-load
+SCALE=x100 SCENARIOS=burst,outage DATABASE_URL=... pnpm --filter @bolusi/modules bench:sync-load
+```
+
+`bench:sync-load` starts the real server on a disposable `bolusi_load` database
+and drives simulated stores through a busy hour, a burst, a reconnect storm after
+an outage, and new phones doing their first sync. Its header lists the settings.
+To see which statements cost the most, run Postgres with pg_stat_statements:
+
+```sh
+docker run -d --name bolusi-load-pg --cpuset-cpus 1,2 -p 127.0.0.1:55432:5432 \
+  -e POSTGRES_USER=bolusi -e POSTGRES_PASSWORD=bolusi postgres:16 \
+  -c shared_preload_libraries=pg_stat_statements -c max_connections=200
+DATABASE_URL=postgres://bolusi:bolusi@127.0.0.1:55432/postgres PG_CONTAINER=bolusi-load-pg \
+  SERVER_CPUS=0 pnpm --filter @bolusi/modules bench:sync-load
+```

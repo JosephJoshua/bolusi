@@ -207,8 +207,14 @@ export function testEntityTypeOf(
   };
 }
 
+/** A test registry's `checkRule`: the production rules, so a type production knows is judged as in production. */
+export const testCheckRule: OpRegistry['checkRule'] = (op, ctx) =>
+  serverOpRegistry.checkRule(op, ctx);
+
 export const testRegistry: OpRegistry = {
   scopeOf: testScopeOf((type) => type in SCHEMAS),
+  // The production rule per type (a test-only type declares none).
+  checkRule: testCheckRule,
   permissionOf: testPermissionOf((type) => type in SCHEMAS),
   entityTypeOf: testEntityTypeOf((type) => type in SCHEMAS),
 
@@ -495,5 +501,79 @@ export async function readAnomalies(
     .selectAll()
     .where('deviceId', '=', deviceId)
     .orderBy('at')
+    .execute();
+}
+
+/**
+ * A repair ticket already on the server, as an accepted intake would have folded it: in the store,
+ * `received`, taken by `technicianId` (or nobody) and, unless told otherwise, with a before photo,
+ * so the repair rules let it be started or cancelled. For tests about who may act, not about the
+ * ticket's history.
+ */
+export async function seedRepairTicket(
+  db: Kysely<DB>,
+  world: ChainWorld,
+  ticketId: string,
+  options: { readonly technicianId?: string | null; readonly beforePhoto?: boolean } = {},
+): Promise<void> {
+  const customerId = `${ticketId.slice(0, -4)}cccc`;
+  const at = 1_726_000_000_000n;
+  const scope = { tenantId: world.tenantId, storeId: world.storeId };
+  await db
+    .insertInto('repairCustomers')
+    .values({
+      ...scope,
+      id: customerId,
+      name: 'Pelanggan',
+      phone: null,
+      createdBy: world.userId,
+      createdAt: at,
+      updatedBy: world.userId,
+      updatedAt: at,
+    })
+    .execute();
+  await db
+    .insertInto('repairTickets')
+    .values({
+      ...scope,
+      id: ticketId,
+      ticketNumber: 'SEED-0001',
+      customerId,
+      deviceBrand: 'Samsung',
+      deviceModel: 'A14',
+      deviceColor: '',
+      deviceImei: null,
+      devicePasscode: null,
+      complaint: 'Layar retak',
+      intakeNotes: '',
+      checklistJson: '[]',
+      peripheralsJson: '[]',
+      estimatedReadyAt: null,
+      outcome: 'received',
+      outcomeNote: null,
+      location: 'in_store',
+      technicianId: options.technicianId === undefined ? world.userId : options.technicianId,
+      quoteTotal: 650_000n,
+      createdBy: world.userId,
+      createdAt: at,
+      updatedAt: at,
+      returnedBy: null,
+      returnedAt: null,
+    })
+    .execute();
+  if (options.beforePhoto === false) return;
+  await db
+    .insertInto('repairTicketPhotos')
+    .values({
+      ...scope,
+      ticketId,
+      slot: `before:${customerId}`,
+      mediaId: customerId,
+      mediaSha256: 'd'.repeat(64),
+      mediaMime: 'image/jpeg',
+      capturedAt: at,
+      addedBy: world.userId,
+      addedAt: at,
+    })
     .execute();
 }

@@ -25,6 +25,7 @@ import {
   delayMsForFailureCount,
   DomainError,
   PIN_FREE_ATTEMPTS,
+  readPendingVerifiers,
   PIN_HARD_LOCK_THRESHOLD,
   PIN_LOCKOUT_SCHEDULE,
   clearPinLockoutFlow,
@@ -181,9 +182,9 @@ describe('CHAOS-11 PIN rate-limit escalation timing', () => {
       // Load-bearing offline proof: the new verifier is QUEUED for a later online POST but has NOT
       // been sent — recovery already succeeded locally, without any server round-trip (§5.4).
       expect(
-        recoveryDeps.queue.size,
+        await readPendingVerifiers(f.db),
         'the verifier POST is pending, not sent — recovery was offline',
-      ).toBe(1);
+      ).toHaveLength(1);
 
       // The NEW PIN verifies, the OLD PIN does not — the lockout is cleared and the verifier rotated.
       expect((await verifyPin(deps, { userId: f.staffId, pin: '135791' })).ok).toBe(true);

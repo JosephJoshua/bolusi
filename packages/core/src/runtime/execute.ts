@@ -50,6 +50,7 @@ import {
   type AppendContext,
   type AppendedOp,
   type OpAppendStore,
+  type OpCheck,
   type ProjectionApply,
 } from '../oplog/append.js';
 import type { OpDraft } from '../oplog/draft.js';
@@ -134,6 +135,17 @@ export interface CommandDefinition<TInput = unknown, TResult = void> {
   ) => CommandHandlerResult<TResult> | Promise<CommandHandlerResult<TResult>>;
 }
 
+/** Per-call options for `execute`. */
+export interface ExecuteOptions {
+  /**
+   * A local write that must commit atomically with the command's ops, such as a secret that cannot
+   * ride in a payload. Runs inside the append transaction after the ops are inserted and projected;
+   * a throw rolls the command back. It runs after the permission check and the handler, so it can
+   * never let a refused command write anything.
+   */
+  readonly withinAppend?: (ops: readonly AppendedOp[]) => Promise<void>;
+}
+
 /** What `execute` returns: the appended ops and the handler's optional typed result. */
 export interface CommandOutcome<TResult = void> {
   readonly ops: readonly AppendedOp[];
@@ -194,6 +206,16 @@ export interface CommandRuntimeOptions {
   readonly queryExecutor: QueryExecutorPort;
   /** Task 08's engine plugs in here; it runs INSIDE the append transaction (§5.1 steps 5–6). */
   readonly applyProjection: ProjectionApply;
+  /**
+   * The op-type rules (module/op-rules.ts), run on every op before it is saved. `createModuleRuntime`
+   * always wires the registry's; only a runtime built by hand for modules without rules omits it.
+   */
+  readonly checkOp?: OpCheck;
+  /**
+   * Refuses a command when this device's clock is known to run ahead of the server
+   * (sync/clock-guard.ts), before the handler runs. Devices wire it; the harness and tests may not.
+   */
+  readonly guardClock?: () => Promise<void>;
   readonly syncScheduler: SyncSchedulerPort;
   /** Overrides the §7 denial-throttle window. For the suite's boundary cases only. */
   readonly denialThrottleWindowMs?: number;
@@ -244,6 +266,8 @@ export class CommandRuntime {
   readonly #signingKey: SigningKeyPort;
   readonly #queryExecutor: QueryExecutorPort;
   readonly #applyProjection: ProjectionApply;
+  readonly #checkOp: OpCheck | undefined;
+  readonly #guardClock: (() => Promise<void>) | undefined;
   readonly #syncScheduler: SyncSchedulerPort;
   readonly #denialEmitter: DenialEmitter;
   /**
@@ -266,6 +290,8 @@ export class CommandRuntime {
     this.#signingKey = options.signingKey;
     this.#queryExecutor = options.queryExecutor;
     this.#applyProjection = options.applyProjection;
+    this.#checkOp = options.checkOp;
+    this.#guardClock = options.guardClock;
     this.#syncScheduler = options.syncScheduler;
 
     // The emitter is constructed HERE, with its port bound to this runtime's emission channel —
@@ -432,6 +458,7 @@ export class CommandRuntime {
     command: CommandDefinition<TInput, TResult>,
     rawInput: unknown,
     ctx: CommandContext,
+    options: ExecuteOptions = {},
   ): Promise<CommandOutcome<TResult>> {
     // Step 0 — provenance. A ctx this runtime did not mint has an identity this runtime never
     // established, so there is nothing trustworthy to evaluate the permission against. Fail closed
@@ -481,6 +508,9 @@ export class CommandRuntime {
       'command',
       invocation,
     );
+
+    // A device whose clock runs ahead would stamp ops the server refuses, so it saves nothing.
+    await this.#guardClock?.();
 
     // Step 3 — the handler. PURE (§5.2): its whole surface is the ctx built here.
     //
@@ -563,6 +593,8 @@ export class CommandRuntime {
       now: () => timestamp,
       location,
       applyProjection: this.#applyProjection,
+      ...(this.#checkOp !== undefined ? { checkOp: this.#checkOp } : {}),
+      ...(options.withinAppend === undefined ? {} : { withinAppend: options.withinAppend }),
     });
 
     // Step 7 — schedule sync (debounced; task 15 owns the loop). AFTER the transaction committed,
@@ -644,6 +676,7 @@ export class CommandRuntime {
       now: () => timestamp,
       location,
       applyProjection: this.#applyProjection,
+      ...(this.#checkOp !== undefined ? { checkOp: this.#checkOp } : {}),
     });
     this.#syncScheduler.schedule();
     return ops;

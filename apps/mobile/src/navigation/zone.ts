@@ -34,6 +34,7 @@ export const SHELL_ROUTES = [
   'resetPin',
   'intakeOptions',
   'cancelFees',
+  'printSettings',
 ] as const;
 export type ShellRoute = (typeof SHELL_ROUTES)[number];
 
@@ -171,6 +172,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'resetPin') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'printSettings') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
   }
 }

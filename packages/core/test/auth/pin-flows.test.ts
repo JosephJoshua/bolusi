@@ -1,6 +1,7 @@
 // SEC-AUTH-06 (PIN reset authorization, client arm) + SEC-AUTH-11 (privileged-target, client arm) +
 // the PIN set/change/reset flows + the verifier-POST queue. The forged-op push rejection
 // (SCOPE_VIOLATION) is the SERVER arm — tasks 13/16 — cross-referenced here, never implemented.
+import { sql } from 'kysely';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -9,7 +10,8 @@ import {
   clearPinLockoutFlow,
   createLockedOutEmitter,
   DomainError,
-  PinVerifierQueue,
+  drainPendingVerifiers,
+  readPendingVerifiers,
   readVerifier,
   resetPin,
   setFirstPin,
@@ -31,7 +33,6 @@ afterEach(async () => {
 
 interface Setup {
   readonly h: AuthHarness;
-  readonly queue: PinVerifierQueue;
   flowDeps(): PinFlowDeps<ClientDatabase>;
   pinOps(): Promise<
     {
@@ -55,11 +56,9 @@ async function setup(
     ...(verifiers ? { verifiers } : {}),
   });
   harness = h;
-  const queue = new PinVerifierQueue();
   const emitter = createLockedOutEmitter(h.runtime);
   return {
     h,
-    queue,
     flowDeps: () => ({
       runtime: h.runtime,
       db: h.db,
@@ -67,7 +66,6 @@ async function setup(
       clock: h.clock,
       idSource: h.idSource,
       deviceId: h.deviceId,
-      queue,
       emitter,
     }),
     pinOps: async () => {
@@ -160,6 +158,7 @@ describe('SEC-AUTH-06 client arm — PIN command permission/targeting denials', 
     expect(denials, 'the denial is logged (02 §7)').toHaveLength(1);
     expect(denials[0]!.userId).toBe(s.h.staffId);
     expect((await s.pinOps()).filter((o) => o.type === 'auth.pin_reset')).toHaveLength(0);
+    expect(await readPendingVerifiers(s.h.db), 'a refused reset queues no upload').toEqual([]);
   });
 
   it('reset target absent from users_directory → denied restriction_violated, AUDITED (§5.4.6, §7)', async () => {
@@ -392,10 +391,31 @@ describe('PIN flows (api/02-auth §6.6) — verifier-free payloads, asOf, fresh 
 });
 
 describe('verifier-POST queue (api/02-auth §5.4)', () => {
+  it('queues the upload on disk with the op’s verifierRef, acting as the resetting owner', async () => {
+    const s = await setup(12, { staff: '111111' });
+    const pending = await resetPin(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+      newPin: '222222',
+    });
+    const [op] = (await s.pinOps()).filter((o) => o.type === 'auth.pin_reset');
+    expect(JSON.parse(op!.payload)).toMatchObject({ verifierRef: pending.verifierRef });
+
+    // Read back from the table, not from anything the flow returned: this is all an app restart keeps.
+    expect(await readPendingVerifiers(s.h.db)).toEqual([
+      {
+        userId: s.h.staffId,
+        actorUserId: s.h.ownerId,
+        verifierRef: pending.verifierRef,
+        verifier: await readVerifier(s.h.db, s.h.staffId),
+      },
+    ]);
+  });
+
   it('drains on next contact with the op’s verifierRef; applied:false is terminal (no retry)', async () => {
     const s = await setup(10);
     const pending = await setFirstPin(s.flowDeps(), { userId: s.h.staffId, pin: '123456' });
-    expect(s.queue.size).toBe(1);
+    expect(await readPendingVerifiers(s.h.db)).toHaveLength(1);
 
     const sent: { userId: string; verifierRef: string }[] = [];
     const staleServer: PinVerifierUploadPort = {
@@ -404,19 +424,38 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
         return Promise.resolve({ userId, applied: false }); // server already has a newer verifier
       },
     };
-    const first = await s.queue.drain(staleServer);
+    const first = await drainPendingVerifiers(s.h.db, staleServer);
     expect(first[0]).toMatchObject({
       verifierRef: pending.verifierRef,
       sent: true,
       result: { applied: false },
     });
     expect(sent[0]!.verifierRef).toBe(pending.verifierRef);
-    expect(s.queue.size, 'applied:false is terminal — dropped, not retried').toBe(0);
+    expect(
+      await readPendingVerifiers(s.h.db),
+      'applied:false is terminal — dropped, not retried',
+    ).toHaveLength(0);
 
     // Draining again sends nothing (no retry loop, no rollback).
-    const second = await s.queue.drain(staleServer);
+    const second = await drainPendingVerifiers(s.h.db, staleServer);
     expect(second).toHaveLength(0);
     expect(sent).toHaveLength(1);
+  });
+
+  it('a PIN change whose upload cannot be queued does not land at all (one transaction)', async () => {
+    const s = await setup(13, { staff: '111111' });
+    const before = await readVerifier(s.h.db, s.h.staffId);
+    // Stand-in for the app dying mid-change: the queue write fails after the op row is inserted.
+    await sql`DROP TABLE pending_pin_verifiers`.execute(s.h.db);
+
+    await expect(
+      changePin(s.flowDeps(), { userId: s.h.staffId, currentPin: '111111', newPin: '222222' }),
+    ).rejects.toThrow();
+    expect(
+      (await s.pinOps()).filter((o) => o.type === 'auth.pin_changed'),
+      'no PIN op is left to sync without its verifier',
+    ).toHaveLength(0);
+    expect(await readVerifier(s.h.db, s.h.staffId), 'the old PIN still stands').toEqual(before);
   });
 
   it('a transport error re-queues; the idempotent replay then converges', async () => {
@@ -431,11 +470,11 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
         return Promise.resolve({ userId, applied: true });
       },
     };
-    await s.queue.drain(flaky); // throws internally → stays queued
-    expect(s.queue.size).toBe(1);
-    const retry = await s.queue.drain(flaky); // idempotent replay converges
+    await drainPendingVerifiers(s.h.db, flaky); // throws internally → stays queued
+    expect(await readPendingVerifiers(s.h.db)).toHaveLength(1);
+    const retry = await drainPendingVerifiers(s.h.db, flaky); // idempotent replay converges
     expect(retry[0]).toMatchObject({ sent: true, result: { applied: true } });
-    expect(s.queue.size).toBe(0);
+    expect(await readPendingVerifiers(s.h.db)).toHaveLength(0);
   });
 });
 

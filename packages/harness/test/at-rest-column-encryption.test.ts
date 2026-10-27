@@ -30,16 +30,21 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import {
   createWorkStore,
+  drainPendingVerifiers,
+  enqueuePendingVerifier,
   insertOpLogRow,
   insertQuarantinedOp,
   listSwitcherUsers,
   operationFromSignedCoreJcs,
   readEntityOps,
+  readPendingVerifiers,
   readVerifier,
   replaceUsersDirectory,
   SIGNED_CORE_SEAL,
   writeVerifier,
+  type PendingVerifier,
   type PinVerifier,
+  type PinVerifierUploadPort,
 } from '@bolusi/core';
 import {
   Aes256GcmColumnCipher,
@@ -83,7 +88,25 @@ const PLAIN = {
   params: 'PLAINTEXT-KDFPARAMS-19456',
   quarantineJcs: 'PLAINTEXT-QUARANTINEJCS-forged-op-42',
   userName: 'PLAINTEXT-USERNAME-Budi Santoso',
+  pendingSalt: 'PLAINTEXTPENDINGSALTCCCCCCCCCCCC=',
+  pendingHash: 'PLAINTEXTPENDINGHASHDDDDDDDDDDDDDDDDDDDDDDDA=',
 } as const;
+
+/** An owner's offline PIN reset, still waiting to be uploaded. */
+const PENDING: PendingVerifier = {
+  userId: 'user-2',
+  actorUserId: 'user-1',
+  verifierRef: 'ref-1',
+  verifier: {
+    algorithm: 'argon2id',
+    saltB64: PLAIN.pendingSalt,
+    mKiB: 19456,
+    t: 2,
+    p: 1,
+    hashB64: PLAIN.pendingHash,
+    asOf: { timestamp: 1_700_000_000_500, deviceId: 'device-1', seq: 7 },
+  },
+};
 
 interface OpenedDb {
   readonly db: ClientDb;
@@ -202,6 +225,8 @@ async function writeAllTheSensitiveThings(db: ClientDb): Promise<void> {
   // `params` is JSON built inside writeVerifier; plant our marker via the memory cost so the raw-file
   // hunt has something unique to look for in that column too.
   await writeVerifier(db.db, 'user-2', { ...verifier, mKiB: 19456 });
+  // The same material waiting for its upload (client migration 14), via core's real queue writer.
+  await enqueuePendingVerifier(db.db, PENDING);
 
   // 9. quarantined_ops.signed_core_jcs — core's real quarantine writer (api/01 §4.2).
   await insertQuarantinedOp(db.db, {
@@ -259,6 +284,9 @@ describe('at-rest column encryption — the raw file (D22 addendum 2 signed-off 
       ['user_pin_verifiers', 'salt', COLUMN_CIPHER_SCHEME_PREFIX],
       ['user_pin_verifiers', 'hash', COLUMN_CIPHER_SCHEME_PREFIX],
       ['user_pin_verifiers', 'params', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['pending_pin_verifiers', 'salt', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['pending_pin_verifiers', 'hash', COLUMN_CIPHER_SCHEME_PREFIX],
+      ['pending_pin_verifiers', 'params', COLUMN_CIPHER_SCHEME_PREFIX],
       ['quarantined_ops', 'signed_core_jcs', COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX],
       ['users_directory', 'name', COLUMN_CIPHER_SCHEME_PREFIX],
     ] as const;
@@ -748,6 +776,35 @@ async function reopen(file: string, dir: string, key: string): Promise<{ db: Cli
   });
   return { db };
 }
+
+describe('queued PIN verifier uploads survive an app restart', () => {
+  test('a verifier queued before the app died is read back intact and drained after reopening', async () => {
+    opened = await openAt(DB_KEY);
+    await enqueuePendingVerifier(opened.db.db, PENDING);
+    // The app is killed: nothing in memory survives, only the file.
+    await closeClientDb();
+
+    opened = { ...opened, db: (await reopen(opened.file, opened.dir, DB_KEY)).db };
+    expect(await readPendingVerifiers(opened.db.db)).toEqual([PENDING]);
+
+    const sent: unknown[][] = [];
+    const server: PinVerifierUploadPort = {
+      upload: (...args) => {
+        sent.push(args);
+        return Promise.resolve({ userId: args[0], applied: true });
+      },
+    };
+    await drainPendingVerifiers(opened.db.db, server);
+    // The reset is sent as the owner who made it, for the user it targets.
+    expect(sent).toEqual([['user-2', 'ref-1', PENDING.verifier, 'user-1']]);
+    expect(await readPendingVerifiers(opened.db.db)).toEqual([]);
+
+    // Once applied it is gone for good, across another restart too.
+    await closeClientDb();
+    opened = { ...opened, db: (await reopen(opened.file, opened.dir, DB_KEY)).db };
+    expect(await readPendingVerifiers(opened.db.db)).toEqual([]);
+  });
+});
 
 describe('at-rest column encryption — repair customer data', () => {
   test('customer name/phone, device passcode and event notes are sealed by the real repair appliers', async () => {

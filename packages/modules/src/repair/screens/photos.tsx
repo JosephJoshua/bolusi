@@ -8,7 +8,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ThumbnailRef } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
+import { tn } from '../i18n.js';
 import { PhotoGrid, PhotoThumb, Section, repairStyles } from './parts.js';
 import { useRepairRuntime } from './runtime.js';
 

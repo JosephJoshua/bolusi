@@ -80,7 +80,10 @@ const withRepair: MountOptions['createRepair'] = (app, runtime, identity, media,
     app,
     runtime,
     identity,
-    media: repairMediaSeamsFor(media, capture),
+    media: repairMediaSeamsFor(media, {
+      ...capture,
+      loadModelPhoto: () => Promise.reject(new Error('no phone photos in this test')),
+    }),
   });
 
 /** Mount the live `Root` over the fixture's database file, as a fresh app start does. */
@@ -138,7 +141,8 @@ async function typeHalfAnIntake(target: Fixture): Promise<void> {
   await type(app.screen, 'repair.intake.customer.phone', PHONE);
   await press(app.screen, 'repair.intake.primary');
   await type(app.screen, 'repair.intake.device.brand', 'Samsung');
-  await type(app.screen, 'repair.intake.device.passcode', PASSCODE);
+  await press(app.screen, 'repair.intake.device.lock.kind.pin');
+  await type(app.screen, 'repair.intake.device.lock.pin', PASSCODE);
   // Denominator: the draft is on disk before the app goes away, so a pass below is a real restore.
   expect(
     await waitUntil(
@@ -168,7 +172,7 @@ describe('a half-entered servisan survives the app being torn down', () => {
       true,
     );
     expect(valueOf(app.screen, 'repair.intake.device.brand')).toBe('Samsung');
-    expect(valueOf(app.screen, 'repair.intake.device.passcode')).toBe(PASSCODE);
+    expect(valueOf(app.screen, 'repair.intake.device.lock.pin')).toBe(PASSCODE);
     expect(app.controller.snapshot().workspace?.drafts['repair']).toMatchObject({
       customer: { name: CUSTOMER, phone: PHONE },
     });
@@ -198,6 +202,6 @@ describe('a half-entered servisan survives the app being torn down', () => {
     expect(await waitUntil(() => second.screen.query('repair.intake.step.device') !== null)).toBe(
       true,
     );
-    expect(valueOf(second.screen, 'repair.intake.device.passcode')).toBe(PASSCODE);
+    expect(valueOf(second.screen, 'repair.intake.device.lock.pin')).toBe(PASSCODE);
   });
 });

@@ -32,5 +32,9 @@
     "empty": "No notes yet. Tap “New Note” to start.",
     "emptyArchived": "No archived notes yet.",
     "title": "Notes"
+  },
+  "refusal": {
+    "alreadyRecorded": "This note was already recorded.",
+    "noteNotFound": "This note isn’t in this store."
   }
 }

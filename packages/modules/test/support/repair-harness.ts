@@ -142,6 +142,8 @@ export async function openRepairHarness(
                 P.cancel,
                 P.discount,
                 P.setCancelFees,
+                P.correctDownPayment,
+                P.setPrintSettings,
               ]),
             ],
           ]),

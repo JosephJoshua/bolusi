@@ -3,7 +3,7 @@
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
-import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
@@ -141,13 +141,14 @@ describe('counter intake', () => {
       kind: 'intake',
       step: 1,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: '', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: '',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const onDraftChange = vi.fn();
@@ -162,20 +163,17 @@ describe('counter intake', () => {
 });
 
 describe('an intake restored after the app died mid-submit', () => {
-  const restored = (ticketId: string): IntakeDraft => ({
-    kind: 'intake',
-    step: 5,
-    customer: { kind: 'new', name: 'Yohanis Wenda', phone: '0812-4455-6677' },
-    device: { brand: 'Samsung', model: 'Galaxy A14', color: '', imei: '', passcode: '' },
-    complaint: 'Layar retak',
-    intakeNotes: '',
-    checks: {},
-    peripherals: [],
-    photos: {},
-    lines: [],
-    ready: '',
-    ticketId,
-  });
+  const restored = (ticketId: string): IntakeDraft => {
+    const base = emptyIntakeDraft();
+    return {
+      ...base,
+      step: 5,
+      customer: { kind: 'new', name: 'Yohanis Wenda', phone: '0812-4455-6677' },
+      device: { ...base.device, brand: 'Samsung', model: 'Galaxy A14' },
+      complaint: 'Layar retak',
+      ticketId,
+    };
+  };
 
   test('whose ticket was already opened shows that ticket and clears the draft', async () => {
     h = await openRepairScreenHarness(5104);
@@ -828,13 +826,14 @@ describe('price and assignment details', () => {
       kind: 'intake',
       step: 4,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: 'Mati',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const screen = await mount(h, h.cashierId, { restoredDraft: draft });
@@ -854,13 +853,14 @@ describe('price and assignment details', () => {
       kind: 'intake',
       step: 3,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: 'Mati',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: { front: kept, back: gone },
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const runtime = repairRuntimeFor(h, h.cashierId);
