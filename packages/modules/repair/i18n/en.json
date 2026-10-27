@@ -69,7 +69,7 @@
   },
   "cancel": {
     "reason": "Why is it cancelled?",
-    "consequence": "The repair stops. When collecting the phone, the customer only pays the cancellation fee. The phone stays in the store until then.",
+    "consequence": "The customer only pays the cancellation fee when collecting the phone.",
     "fee": "Cancellation fee",
     "beforeWork": "Work hasn’t started",
     "afterWork": "Work has started",
@@ -126,7 +126,7 @@
     "signAgain": "Sign again",
     "signature": "Customer signature",
     "signatureTitle": "Customer signs to receive the phone",
-    "cancelled": "The repair was cancelled, so the repair price is not charged."
+    "cancelled": "Repair charges are not billed."
   },
   "intake": {
     "discard": "Discard intake",
@@ -175,7 +175,7 @@
     "open": "Open photo",
     "position": "{index} of {total}",
     "share": "Save or send",
-    "shareFailed": "Couldn’t save this photo. Try again later.",
+    "shareFailed": "Couldn’t save the photo. Try again.",
     "beforeN": "Before {n}",
     "afterN": "After {n}"
   },
@@ -201,15 +201,15 @@
     "addRow": "Add a price line",
     "pendingTotal": "Not yet confirmed by the customer: {amount}",
     "customerAgrees": "Does the customer agree to this price?",
-    "notCharged": "Not charged because it was cancelled. The customer pays the cancellation fee of {amount}.",
+    "notCharged": "The customer pays the cancellation fee of {amount}.",
     "alreadyAgreed": "Has the customer agreed?",
     "changeReason": "Reason for the change",
     "waitingEvent": "Price change waiting for the customer",
-    "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree."
+    "waitsHint": "If not, the total changes once the customer agrees."
   },
   "problem": {
-    "complaint": "Write what the customer says is wrong.",
-    "customerName": "Enter the customer name or pick an existing customer.",
+    "complaint": "Enter the complaint.",
+    "customerName": "Enter the customer name.",
     "deviceBrand": "Enter the brand.",
     "deviceModel": "Enter the model.",
     "photos": "All six photos are required.",
@@ -260,16 +260,16 @@
     "hide": "Hide"
   },
   "hint": {
-    "handover": "Take the handover photo and the customer’s signature first.",
+    "handover": "Take the photo and signature first.",
     "photo": "Take at least one photo first.",
     "reason": "Write the reason first.",
     "priceLine": "Fill in the description, amount and reason.",
     "cancelFee": "Enter the cancellation fee first.",
-    "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide."
+    "discountOwner": "Only an owner can approve a discount."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
-    "message": "The photos and notes you’ve added here will be lost.",
+    "message": "Anything not saved here will be lost.",
     "confirm": "Leave",
     "keep": "Stay"
   },
@@ -422,6 +422,8 @@
     "receivedBy": "Received by {name} · {at}",
     "results": "{count, plural, one {# repair found} other {# repairs found}}",
     "useCustomer": "Use",
-    "copyFailed": "Couldn’t copy the number"
+    "copyFailed": "Couldn’t copy the number",
+    "incomplete": "Incomplete",
+    "price": "Price"
   }
 }

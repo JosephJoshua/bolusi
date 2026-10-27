@@ -3,7 +3,7 @@ import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
@@ -61,11 +61,11 @@ describe('counter app over demo data', () => {
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('repair.desk.intake');
 
-    // Saving early lists what is missing instead of saving.
+    // Saving early marks what is missing beside each field, once, and the summary jumps there.
     fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
-    expect(
-      within(byTestId('repair.desk.intake.problems')).getAllByRole('listitem').length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('Nama pelanggan belum diisi.')).toHaveLength(1);
+    fireEvent.click(byTestId('repair.desk.intake.jump.customer'));
+    expect(document.activeElement).toBe(byTestId('repair.desk.intake.name'));
 
     fireEvent.change(byTestId('repair.desk.intake.name'), {
       target: { value: 'Yakobus Mandowen' },
@@ -88,7 +88,7 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.intake.line.0.amount'), {
       target: { value: '1250000' },
     });
-    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake.problems')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId(/^repair\.desk\.intake\.jump\./)).toBeNull());
 
     fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
     await waitFor(() =>

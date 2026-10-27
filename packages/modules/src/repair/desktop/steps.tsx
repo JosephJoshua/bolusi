@@ -644,7 +644,8 @@ export function PriceChangeDialog({
               data-testid={`${testId}.description`}
             />
             <MoneyField
-              label={tn('repair.price.amount')}
+              // The field already shows "Rp", so the label does not repeat it.
+              label={tn('repair.desk.price')}
               hint={
                 amount === null || kind !== 'discount'
                   ? undefined

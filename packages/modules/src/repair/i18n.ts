@@ -345,6 +345,8 @@ export const REPAIR_KEYS = [
   'repair.desk.receivedBy',
   'repair.desk.results',
   'repair.desk.useCustomer',
+  'repair.desk.incomplete',
+  'repair.desk.price',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];

@@ -69,7 +69,7 @@
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
-    "consequence": "Servisan dihentikan. Saat ambil HP, pelanggan cukup bayar biaya pembatalan. HP tetap di toko sampai diambil.",
+    "consequence": "Pelanggan cukup bayar biaya pembatalan saat ambil HP.",
     "fee": "Biaya pembatalan",
     "beforeWork": "Belum mulai dikerjakan",
     "afterWork": "Sudah mulai dikerjakan",
@@ -126,7 +126,7 @@
     "signAgain": "Ulangi tanda tangan",
     "signature": "Tanda tangan pelanggan",
     "signatureTitle": "Tanda tangan pelanggan",
-    "cancelled": "Servisan dibatalkan, biaya perbaikan tidak ditagih."
+    "cancelled": "Biaya perbaikan tidak ditagih."
   },
   "intake": {
     "discard": "Buang",
@@ -175,7 +175,7 @@
     "open": "Buka foto",
     "position": "{index} dari {total}",
     "share": "Simpan atau kirim",
-    "shareFailed": "Fotonya belum bisa disimpan. Coba lagi nanti.",
+    "shareFailed": "Foto gagal disimpan. Coba lagi.",
     "beforeN": "Sebelum {n}",
     "afterN": "Sesudah {n}"
   },
@@ -201,15 +201,15 @@
     "addRow": "Tambah biaya",
     "pendingTotal": "Belum dikonfirmasi pelanggan: {amount}",
     "customerAgrees": "Pelanggan setuju dengan harga ini?",
-    "notCharged": "Tidak ditagih karena dibatalkan. Pelanggan bayar biaya pembatalan {amount}.",
+    "notCharged": "Pelanggan bayar biaya pembatalan {amount}.",
     "alreadyAgreed": "Pelanggan sudah setuju?",
     "changeReason": "Alasan perubahan",
     "waitingEvent": "Perubahan harga menunggu pelanggan",
-    "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju."
+    "waitsHint": "Kalau belum, total berubah setelah pelanggan setuju."
   },
   "problem": {
-    "complaint": "Keluhannya belum diisi.",
-    "customerName": "Isi nama pelanggan atau pilih yang sudah terdaftar.",
+    "complaint": "Keluhan belum diisi.",
+    "customerName": "Nama pelanggan belum diisi.",
     "deviceBrand": "Merek belum diisi.",
     "deviceModel": "Tipe belum diisi.",
     "photos": "Masih ada foto yang belum diambil.",
@@ -260,16 +260,16 @@
     "hide": "Sembunyikan"
   },
   "hint": {
-    "handover": "Ambil foto dan tanda tangan pelanggan dulu.",
+    "handover": "Ambil foto dan tanda tangan dulu.",
     "photo": "Ambil minimal satu foto dulu.",
     "reason": "Tulis alasannya dulu.",
     "priceLine": "Isi keterangan, harga, dan alasannya dulu.",
     "cancelFee": "Isi biaya pembatalannya dulu.",
-    "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan."
+    "discountOwner": "Diskon hanya bisa disetujui pemilik."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
-    "message": "Foto dan catatan yang sudah kamu isi di sini akan hilang.",
+    "message": "Isian yang belum disimpan akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
   },
@@ -422,6 +422,8 @@
     "receivedBy": "Diterima {name} · {at}",
     "results": "{count} servisan ditemukan",
     "useCustomer": "Pakai",
-    "copyFailed": "Nomor belum bisa disalin"
+    "copyFailed": "Nomor belum bisa disalin",
+    "incomplete": "Belum lengkap",
+    "price": "Harga"
   }
 }

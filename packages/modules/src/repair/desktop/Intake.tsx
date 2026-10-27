@@ -937,7 +937,18 @@ function Summary({
       value: tn('repair.desk.photoCount', { taken, total: options.photoAngles.length }),
     },
   ];
-  const remaining = SECTIONS.flatMap((section) => problemsBy[section]);
+  // What is missing is said once, beside the field; the summary only marks the section and jumps there.
+  const jump = (section: Section, label: string): React.JSX.Element => (
+    <button
+      type="button"
+      onClick={() => onJump(problemsBy[section][0]!)}
+      data-testid={`repair.desk.intake.jump.${section}`}
+      className="cursor-pointer text-left text-body font-semibold text-danger underline-offset-2 hover:underline"
+    >
+      {label}
+    </button>
+  );
+  const flagged = (section: Section): boolean => showProblems && problemsBy[section].length > 0;
   return (
     <aside
       className="sticky top-2 flex flex-col gap-4 self-start"
@@ -954,7 +965,7 @@ function Summary({
                   className={
                     missing.length === 0
                       ? 'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-success-bg text-success'
-                      : 'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-border'
+                      : `mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${flagged(row.key) ? 'border-danger' : 'border-border'}`
                   }
                 >
                   {missing.length === 0 ? <Check size={12} strokeWidth={3} /> : null}
@@ -962,7 +973,11 @@ function Summary({
                 <div className="min-w-0">
                   <dt className="text-small text-text-muted">{tn(INTAKE_STEP_KEY[row.key])}</dt>
                   <dd className="line-clamp-2 break-words text-body font-semibold text-text">
-                    {row.value === '' ? '–' : row.value}
+                    {flagged(row.key)
+                      ? jump(row.key, row.value === '' ? tn('repair.desk.incomplete') : row.value)
+                      : row.value === ''
+                        ? '–'
+                        : row.value}
                   </dd>
                 </div>
               </div>
@@ -977,6 +992,9 @@ function Summary({
           <p className="text-small text-text-muted">
             {tn('repair.ticket.readyBy')}: {readyLabel(chosenReady(draft, options.readyBy))}
           </p>
+          {flagged('price') ? (
+            <p className="mt-1">{jump('price', tn('repair.desk.incomplete'))}</p>
+          ) : null}
         </div>
         <Button
           label={tn('repair.action.openTicket')}
@@ -988,21 +1006,6 @@ function Summary({
           busy={busy}
           data-testid="repair.desk.intake.save"
         />
-        {showProblems && remaining.length > 0 ? (
-          <ul className="mt-4 flex flex-col gap-1" data-testid="repair.desk.intake.problems">
-            {remaining.map((problem) => (
-              <li key={problem}>
-                <button
-                  type="button"
-                  onClick={() => onJump(problem)}
-                  className="cursor-pointer text-left text-small text-danger underline-offset-2 hover:underline"
-                >
-                  {tn(PROBLEM_KEY[problem])}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </div>
       {error}
     </aside>
