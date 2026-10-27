@@ -166,13 +166,26 @@ function SettingsInteractive(): React.JSX.Element {
 function EnrollmentInteractive({
   revoked,
   step,
+  over = {},
 }: {
   readonly revoked: boolean;
   readonly step: EnrollmentStep;
+  /** A case on top of the step: one store, a picked store, a failed attempt. */
+  readonly over?: Partial<EnrollmentState>;
 }): React.JSX.Element {
-  const [state, setState] = useState<EnrollmentState>(() => {
+  const [state, setState] = useState<EnrollmentState>(() => ({ ...initial(), ...over }));
+  function initial(): EnrollmentState {
     const base = initialEnrollmentState(revoked);
     if (step === 'confirm') {
+      return {
+        ...base,
+        step,
+        login: DEMO_LOGIN,
+        // Two stores: nothing is preselected, as in the app (App.tsx runLogin).
+        selectedStoreId: null,
+      };
+    }
+    if (step === 'done') {
       return {
         ...base,
         step,
@@ -180,9 +193,8 @@ function EnrollmentInteractive({
         selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
       };
     }
-    if (step === 'done') return { ...base, step, login: DEMO_LOGIN };
     return base;
-  });
+  }
   const [discardPrompt, setDiscardPrompt] = useState(false);
   return (
     <View style={styles.body}>
@@ -194,7 +206,7 @@ function EnrollmentInteractive({
             ...s,
             step: 'confirm',
             login: DEMO_LOGIN,
-            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+            selectedStoreId: null,
           }))
         }
         onEnroll={() => setState((s) => ({ ...s, step: 'done' }))}
@@ -653,6 +665,86 @@ export const ENTRIES: readonly HarnessEntry[] = [
     render: () => (
       <ApproxFrame screen="enrollment" state="done">
         <EnrollmentInteractive revoked={false} step="done" />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'confirmPicked',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="confirmPicked">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{ selectedStoreId: DEMO_LOGIN.stores[1]?.id ?? null, deviceName: 'HP Kasir 1' }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'confirmOneStore',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="confirmOneStore">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{
+            login: { ...DEMO_LOGIN, stores: DEMO_LOGIN.stores.slice(0, 1) },
+            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'wrongPassword',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="wrongPassword">
+        <EnrollmentInteractive
+          revoked={false}
+          step="credentials"
+          over={{
+            loginIdentifier: 'maju',
+            password: 'salah-sandi-1',
+            failure: { kind: 'credentials' },
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'offline',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="offline">
+        <EnrollmentInteractive
+          revoked={false}
+          step="credentials"
+          over={{
+            loginIdentifier: 'maju',
+            password: 'sandi-benar-1',
+            failure: { kind: 'offline' },
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'notOwner',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="notOwner">
+        <EnrollmentInteractive
+          revoked={false}
+          step="credentials"
+          over={{
+            loginIdentifier: 'kasir',
+            password: 'sandi-benar-1',
+            failure: { kind: 'notPermitted' },
+          }}
+        />
       </ApproxFrame>
     ),
   },

@@ -460,13 +460,6 @@ export function TicketDetail({
                 value={formatDateTime(row.estimatedReadyAt)}
               />
             )}
-            {row.outcome === 'cancelled' && row.cancelFee !== null ? (
-              <Fact
-                label={tn('repair.cancel.fee')}
-                value={formatMoney(row.cancelFee)}
-                testID={`${testID}.cancelFee`}
-              />
-            ) : null}
             {row.deviceImei === null ? null : (
               <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
             )}
@@ -636,21 +629,39 @@ export function TicketDetail({
           );
         })}
         <View style={[repairStyles.row, styles.total]}>
-          <Text style={[styles.totalLabel, cancelled && styles.notCharged]}>
+          <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
           <Text
-            style={[styles.totalValue, styles.amount, cancelled && styles.notCharged]}
+            style={[
+              cancelled ? styles.notCharged : styles.totalValue,
+              styles.amount,
+              repairStyles.rowValue,
+            ]}
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
         {cancelled ? (
-          // The repair price stays as history, struck through: the customer owes only the fee.
-          <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
-            {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
-          </Text>
+          // The repair price stays as quiet history; the number that leads is what the customer
+          // owes, the same fee the board and the handover show (Rp 0 when none was set).
+          <>
+            <View style={[repairStyles.row, styles.owed]}>
+              <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                {tn('repair.cancel.fee')}
+              </Text>
+              <Text
+                style={[styles.totalValue, styles.amount, repairStyles.rowValue]}
+                testID={`${testID}.cancelFee`}
+              >
+                {formatMoney(row.cancelFee ?? 0)}
+              </Text>
+            </View>
+            <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
+              {tn('repair.price.notCharged')}
+            </Text>
+          </>
         ) : null}
         {!deciding || pending.length === 0 ? null : (
           // The total is what the customer agreed to; what a decision would add is said, not summed.
@@ -860,7 +871,8 @@ const styles = StyleSheet.create({
   totalLabel: { ...type.bodyBold, color: color.text },
   totalValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },
-  notCharged: { color: color.textMuted, textDecorationLine: 'line-through' },
+  notCharged: { ...type.bodySm, color: color.textMuted, textDecorationLine: 'line-through' },
+  owed: { marginTop: space.sm },
   chipGroup: { marginBottom: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
 });

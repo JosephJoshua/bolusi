@@ -100,7 +100,7 @@ const MATRIX: readonly Row[] = [
   // Enrollment — steps + revoked banner.
   { screen: 'enrollment', state: 'credentials', testId: 'enroll-step-credentials' },
   { screen: 'enrollment', state: 'confirm', testId: 'enroll-step-confirm' },
-  { screen: 'enrollment', state: 'done', testId: 'enroll-progress' },
+  { screen: 'enrollment', state: 'done', testId: 'enroll-step-done' },
   { screen: 'enrollment', state: 'revoked', testId: 'enroll-revoked-banner' },
 
   // Capture (media) — camera is a labelled placeholder, never a faked photo.

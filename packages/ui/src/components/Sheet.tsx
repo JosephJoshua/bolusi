@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
@@ -68,6 +69,8 @@ export function Sheet({
   children,
   testID = 'ui.sheet',
 }: SheetProps): React.JSX.Element {
+  // Like ConfirmSheet, it never opens under the keyboard.
+  useDismissKeyboard();
   return (
     <View testID={testID} style={styles.root}>
       <Pressable
@@ -80,7 +83,7 @@ export function Sheet({
       <View testID={`${testID}.sheet`} style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1} testID={`${testID}.title`}>
+          <Text style={styles.title} testID={`${testID}.title`}>
             {title}
           </Text>
           <Pressable

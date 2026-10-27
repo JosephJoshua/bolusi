@@ -55,6 +55,11 @@ import { readSessionIdentity } from './notes.js';
 import { createUserLocaleWriter } from './user-locale.js';
 import { createNotificationChannels } from './notifications.js';
 import {
+  answerNotificationAsk,
+  shouldAskForNotifications,
+  type NotificationPermissionPort,
+} from '../push/permission.js';
+import {
   registerPushTokenOnAppStart,
   registerPushTokenOnEnrollment,
   type PushRegistrationPorts,
@@ -257,6 +262,11 @@ export interface RootProps {
    * `UNWIRED_NOTES_MEDIA.capturePhoto` rather than a stub that behaves like a cancel.
    */
   readonly capturePlatform?: CapturePlatform | undefined;
+  /**
+   * The notification permission (Android 13+ POST_NOTIFICATIONS), bound over `expo-notifications` at
+   * index.ts. `undefined` ⇒ never asked (tests, web). See `push/permission.ts` for when it asks.
+   */
+  readonly notificationPermission?: NotificationPermissionPort | undefined;
 }
 
 export function Root({
@@ -275,6 +285,7 @@ export function Root({
   pushRouter,
   uploadPinVerifier,
   capturePlatform,
+  notificationPermission,
 }: RootProps): React.JSX.Element | null {
   // `setLocaleState`, NOT `setLocale`. This setter holds the locale the SHELL RENDERS WITH; the
   // function that changes the language the catalog resolves in is `@bolusi/i18n`'s `setLocale`,
@@ -564,9 +575,9 @@ export function Root({
       // AOSP CI emulator, a de-Googled or location-off phone) `watchPositionAsync` never resolves and
       // the app hangs on a white screen forever (task 199). `getBestFix()` already returns `null` until
       // a fix lands — a late fix stamps the next op, a fix that never arrives is a supported state. The
-      // `.catch` swallows a native rejection (a throwing permission request or a rejecting
+      // `.catch` swallows a native rejection (a throwing permission check or a rejecting
       // `watchPositionAsync`) so a failed start never surfaces as an unhandled rejection; a denied
-      // permission just resolves and takes the port's `if (!granted) return` fast path.
+      // permission (never asked for here) just takes the port's `if (!granted) return` fast path.
       void startLocationWatcher().catch(() => {});
 
       // The data layer. Deliberately NOT wrapped in a try/catch that renders the shell anyway: a
@@ -652,6 +663,33 @@ export function Root({
 
   const sessionSnapshot = session?.snapshot() ?? null;
   const sessionUserId = sessionSnapshot?.session?.userId ?? null;
+  const unlocked = sessionUserId !== null && !(sessionSnapshot?.locked ?? false);
+
+  /**
+   * The one-time notification ask: after someone unlocks on an enrolled device, so the sheet lands
+   * on the work screen with its reason, never at boot or during setup (`push/permission.ts`).
+   */
+  const [notificationAsk, setNotificationAsk] = useState(false);
+  const enrolled = app !== null && app.deviceId !== null;
+  useEffect(() => {
+    if (notificationPermission === undefined || !enrolled || !unlocked) return;
+    let live = true;
+    void shouldAskForNotifications(notificationPermission).then((ask) => {
+      if (live && ask) setNotificationAsk(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [notificationPermission, enrolled, unlocked]);
+  const answerNotifications = useCallback(
+    (allow: boolean) => {
+      setNotificationAsk(false);
+      if (notificationPermission !== undefined) {
+        void answerNotificationAsk(notificationPermission, allow);
+      }
+    },
+    [notificationPermission],
+  );
 
   /**
    * The retention write-back (SEC-AUTH-08; task 155), as a STABLE callback.
@@ -1037,6 +1075,7 @@ export function Root({
         // The notification-tap deep link (api/04-push §4), or null until a tap resolves to a reachable
         // route. `App` applies it via `setRoute`; the gate still decides what actually shows.
         pushRoute={pushRoute}
+        onAnswerNotifications={notificationAsk ? answerNotifications : null}
       />
     </View>
   );

@@ -371,6 +371,12 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
         />
       ),
     },
+    {
+      id: 'selected',
+      render: (l) => (
+        <componentInventory.ListRow primaryText={l.primaryText} onPress={noop} selected />
+      ),
+    },
   ],
 
   Card: [

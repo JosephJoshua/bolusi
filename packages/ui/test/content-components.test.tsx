@@ -1,7 +1,9 @@
 // Search, inline actions, the timeline and the photo strip/viewer: what a person can do with each.
 import { act } from 'react';
+import { Keyboard } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
+import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { PhotoStrip } from '../src/components/PhotoStrip.js';
 import { PhotoViewer, type PhotoShareResult } from '../src/components/PhotoViewer.js';
 import { SearchField } from '../src/components/SearchField.js';
@@ -102,6 +104,55 @@ describe('Sheet', () => {
     fire(r.get('sh.close'), 'onPress');
     fire(r.get('sh.scrim'), 'onPress');
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+// A sheet opened while a field is focused sat under the keyboard, its buttons out of sight (first
+// Android QA run). Each overlay closes the keyboard as it opens.
+describe('overlays never open under the keyboard', () => {
+  const dismissals = (): number => (Keyboard as unknown as { dismissCount: number }).dismissCount;
+
+  test('ConfirmSheet', () => {
+    const before = dismissals();
+    render(
+      <ConfirmSheet
+        title="Buang?"
+        confirmLabel="Buang"
+        onConfirm={vi.fn()}
+        cancelLabel="Lanjut isi"
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(dismissals()).toBe(before + 1);
+  });
+
+  test('Sheet', () => {
+    const before = dismissals();
+    render(
+      <Sheet title="Semua foto" closeLabel="Tutup" onClose={vi.fn()}>
+        {null}
+      </Sheet>,
+    );
+    expect(dismissals()).toBe(before + 1);
+  });
+
+  test('PhotoViewer', () => {
+    const before = dismissals();
+    render(
+      <PhotoViewer
+        photos={[{ key: 'front', label: 'Depan' }]}
+        initialIndex={0}
+        renderImage={() => null}
+        labels={{
+          close: 'Tutup',
+          share: 'Kirim',
+          position: () => '1 dari 1',
+          shareFailed: 'Gagal',
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(dismissals()).toBe(before + 1);
   });
 });
 

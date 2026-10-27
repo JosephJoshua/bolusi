@@ -24,6 +24,12 @@ export interface ListRowProps {
   readonly onPress?: (() => void) | undefined;
   /** §3.4: a chevron marks a row that navigates. Only meaningful with `onPress`. */
   readonly showChevron?: boolean | undefined;
+  /**
+   * Set on a row that is one choice of several (the store a device joins): the row becomes a radio,
+   * and the chosen one shows a check and bold text, so the choice never rides on colour alone.
+   * Only meaningful with `onPress`.
+   */
+  readonly selected?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -46,6 +52,7 @@ const styles = StyleSheet.create({
   },
   texts: { flex: 1, justifyContent: 'center' },
   primary: { ...type.body, color: color.text },
+  primarySelected: { fontWeight: '600' },
   secondary: { ...type.bodySm, color: color.textMuted },
   trailing: { flexDirection: 'row', alignItems: 'center', marginLeft: space.sm },
 });
@@ -57,6 +64,7 @@ export function ListRow({
   trailing,
   onPress,
   showChevron = false,
+  selected,
   testID = 'ui.listRow',
 }: ListRowProps): React.JSX.Element {
   const content = (
@@ -72,7 +80,7 @@ export function ListRow({
           testID={`${testID}.primary`}
           numberOfLines={1}
           ellipsizeMode="tail"
-          style={styles.primary}
+          style={[styles.primary, selected === true ? styles.primarySelected : null]}
         >
           {primaryText}
         </Text>
@@ -88,9 +96,14 @@ export function ListRow({
         )}
       </View>
 
-      {trailing === undefined && !showChevron ? null : (
+      {trailing === undefined && !showChevron && selected !== true ? null : (
         <View testID={`${testID}.trailing`} style={styles.trailing}>
           {trailing}
+          {selected === true ? (
+            <View testID={`${testID}.check`}>
+              <Icon name="check" size={size.iconInline} color={color.primary} />
+            </View>
+          ) : null}
           {showChevron ? (
             <Icon name="chevron" size={size.iconInline} color={color.textMuted} />
           ) : null}
@@ -110,8 +123,9 @@ export function ListRow({
   return (
     <Pressable
       testID={testID}
-      accessibilityRole="button"
+      accessibilityRole={selected === undefined ? 'button' : 'radio'}
       accessibilityLabel={primaryText}
+      {...(selected === undefined ? {} : { accessibilityState: { checked: selected, selected } })}
       onPress={onPress}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [

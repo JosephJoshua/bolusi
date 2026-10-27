@@ -101,7 +101,15 @@ describe('Button (§3.1)', () => {
 
   test('height is the 56 dp primary target (§1.4)', () => {
     const r = render(<Button testID="b" label="x" onPress={vi.fn()} />);
-    expect(r.styleOf('b')['height']).toBe(56);
+    expect(r.styleOf('b')['minHeight']).toBe(56);
+  });
+
+  test('a label that wraps grows the button instead of touching its edges', () => {
+    const r = render(
+      <Button testID="b" label="Daftarkan ke Cabang Pasar Baru" onPress={vi.fn()} />,
+    );
+    expect(r.styleOf('b')['height']).toBeUndefined();
+    expect(r.styleOf('b')['paddingVertical']).toBeGreaterThan(0);
   });
 });
 
