@@ -5,14 +5,17 @@
  * the green emulator lane could not disprove them. The assertions below are therefore about
  * GEOMETRY — what the layout actually reserves — not about presence.
  */
-import { useEffect } from 'react';
+import { act, useEffect } from 'react';
+import { Keyboard } from 'react-native';
 import { expect, test } from 'vitest';
 
 import { AppShell } from '../src/shell/AppShell.js';
+import { TextInput } from '../src/components/TextInput.js';
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { NAV_BAR_INSET } from '../src/platform-insets.js';
 import { space } from '../src/tokens.js';
-import { render } from './render.js';
+import { contentLayout, scrollCalls, windowLayout } from './doubles/react-native.js';
+import { fire, render } from './render.js';
 
 function sheet() {
   return render(
@@ -92,14 +95,30 @@ test('the scrolling content container grows without being clamped to the viewpor
 });
 
 test('the content keeps its padding in both shapes', () => {
-  // The padding moved off the outer view onto the shared container style; losing it in either
-  // branch would be a silent regression no other test covers.
-  const scrolling = shell(true).get('ui.appShell.content').props['contentContainerStyle'] as Record<
-    string,
-    unknown
-  >;
-  expect(scrolling['padding']).toBe(space.lg);
+  // Losing the padding in either branch would be a silent regression no other test covers.
+  // Scrolling, it sits on the view inside the ScrollView, the one a focused field is measured
+  // against when it is scrolled above the keyboard (shell/keyboard.tsx).
+  expect(shell(true).styleOf('ui.appShell.contentInner')['padding']).toBe(space.lg);
   expect(shell().styleOf('ui.appShell.content')['padding']).toBe(space.lg);
+});
+
+// ── the on-screen keyboard: the shell lifts its bottom action clear of the keyboard's top edge ──
+
+test('the shell is lifted by exactly how far the keyboard covers it, measured in the window', () => {
+  // Regression (Android 16 emulator): KeyboardAvoidingView measured itself against its parent,
+  // so under the status bar inset the bottom action stayed tucked under the keyboard's top edge.
+  // The shell sits 24 dp down the window (below the status bar) and is 820 dp tall.
+  windowLayout.set('ui.appShell', { y: 24, height: 820 });
+  const r = shell(true);
+  expect(r.styleOf('ui.appShell')['paddingBottom']).toBeUndefined();
+
+  act(() => Keyboard.emit('keyboardDidShow', { endCoordinates: { screenY: 544 } }));
+  expect(r.styleOf('ui.appShell')['paddingBottom']).toBe(24 + 820 - 544);
+
+  act(() => Keyboard.emit('keyboardDidHide'));
+  expect(r.styleOf('ui.appShell')['paddingBottom']).toBeUndefined();
+  r.unmount();
+  windowLayout.delete('ui.appShell');
 });
 
 // ── a wizard's next step opens at the top, not at the last step's scroll position ────────────────
@@ -124,4 +143,24 @@ test('a new scrollKey starts the scrolled content over; the same key keeps it', 
   expect(mounts).toBe(1);
   screen.rerender(at('review'));
   expect(mounts).toBe(2);
+});
+
+test('a field on the next step is scrolled into sight from the top, not from the last step', () => {
+  // The new step's ScrollView starts at the top. Measured from the previous step's offset, a
+  // field below the fold looked already visible and the keyboard covered it.
+  contentLayout.set('field', { y: 900, height: 56 });
+  const at = (scrollKey: string) => (
+    <AppShell title="t" syncChip={null} avatar={null} scrollable scrollKey={scrollKey}>
+      <TextInput label="l" value="" onChangeText={() => {}} testID="field" />
+    </AppShell>
+  );
+  const r = render(at('device'));
+  fire(r.get('ui.appShell.content'), 'onLayout', { nativeEvent: { layout: { height: 400 } } });
+  fire(r.get('ui.appShell.content'), 'onScroll', { nativeEvent: { contentOffset: { y: 800 } } });
+  r.rerender(at('condition'));
+  scrollCalls.length = 0;
+  fire(r.get('field.field'), 'onFocus');
+  expect(scrollCalls).toEqual([{ y: 900 + 56 + space.lg - 400 }]);
+  r.unmount();
+  contentLayout.delete('field');
 });

@@ -38,6 +38,8 @@ import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
 import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
+import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
+import { createPhonePhotoLoader } from './src/media/phone-photos.js';
 import { appStatePort } from './src/ports/app-state.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from './src/ports/clock.js';
@@ -360,11 +362,18 @@ function createRepair(
   media: MediaClient | null,
   capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
 ): RepairRuntime {
+  const keystore = new SecureStoreKeyStore();
+  const loadModelPhoto = createPhonePhotoLoader({
+    baseUrl: apiBaseUrl(),
+    deviceToken: () => keystore.loadDeviceToken(),
+    sha256Hex,
+    files: phonePhotoFiles,
+  });
   return createSessionRepairRuntime({
     app,
     runtime,
     identity,
-    media: repairMediaSeamsFor(media, capture, expoSharePlatform),
+    media: repairMediaSeamsFor(media, { ...capture, loadModelPhoto }, expoSharePlatform),
   });
 }
 

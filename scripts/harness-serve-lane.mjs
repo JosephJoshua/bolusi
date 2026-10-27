@@ -21,6 +21,7 @@ import {
   formatLaneReady,
   LANE_PORT,
   provisionLaneOwner,
+  seedLaneCatalog,
   startHarnessServer,
 } from '../packages/harness/dist/index.js';
 
@@ -58,6 +59,8 @@ async function main() {
   running = await startHarnessServer({ productionAuth: true, port });
 
   const credentials = await provisionLaneOwner(running.server);
+  // A few catalog phones, so model search, the brand fill and the photo preview have something to show.
+  await seedLaneCatalog(running.server);
   console.log(
     formatLaneReady({
       url: running.url,
