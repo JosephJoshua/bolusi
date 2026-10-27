@@ -10,12 +10,17 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
 
 export interface SheetProps {
   /** Already-localized. */
   readonly title: string;
+  /** Already-localized line under the title ("Pemilik Toko · Toko Utama"). */
+  readonly subtitle?: string | undefined;
+  /** Shown before the title: the avatar of the person an account menu belongs to. */
+  readonly leading?: ReactNode;
   /** Already-localized label of the close button. */
   readonly closeLabel: string;
   readonly onClose: () => void;
@@ -56,18 +61,25 @@ const styles = StyleSheet.create({
     paddingRight: space.xs,
     minHeight: size.header,
   },
-  title: { ...type.heading, color: color.text, flex: 1 },
+  leading: { marginRight: space.md },
+  titles: { flex: 1, paddingVertical: space.sm },
+  title: { ...type.heading, color: color.text },
+  subtitle: { ...type.bodySm, color: color.textMuted },
   close: { width: touch.min, height: touch.min, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: space.lg, paddingBottom: space.lg },
 });
 
 export function Sheet({
   title,
+  subtitle,
+  leading,
   closeLabel,
   onClose,
   children,
   testID = 'ui.sheet',
 }: SheetProps): React.JSX.Element {
+  // Like ConfirmSheet, it never opens under the keyboard.
+  useDismissKeyboard();
   return (
     <View testID={testID} style={styles.root}>
       <Pressable
@@ -80,9 +92,17 @@ export function Sheet({
       <View testID={`${testID}.sheet`} style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1} testID={`${testID}.title`}>
-            {title}
-          </Text>
+          {leading === undefined ? null : <View style={styles.leading}>{leading}</View>}
+          <View style={styles.titles}>
+            <Text style={styles.title} testID={`${testID}.title`}>
+              {title}
+            </Text>
+            {subtitle === undefined ? null : (
+              <Text style={styles.subtitle} testID={`${testID}.subtitle`}>
+                {subtitle}
+              </Text>
+            )}
+          </View>
           <Pressable
             testID={`${testID}.close`}
             accessibilityRole="button"

@@ -96,7 +96,10 @@ export interface AppShellProps {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.surface },
   header: {
-    height: size.header,
+    // A floor, not a fixed height: a title that wraps at a large font grows the bar instead of
+    // spilling out of it.
+    minHeight: size.header,
+    paddingVertical: space.xs,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.sm,
@@ -189,9 +192,9 @@ export function AppShell({
 
           <Text
             testID={`${testID}.title`}
-            // §0: buttons and titles wrap or ellipsize, never silently truncate mid-word; the title
-            // is one line by §8.1 geometry, so tail-ellipsis is the honest fallback.
-            numberOfLines={1}
+            // Labels never truncate (design guide): at a large font a long title takes a second line
+            // instead of losing its end ("Siapa yang ..."); the bar grows to hold it.
+            numberOfLines={2}
             ellipsizeMode="tail"
             style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
           >

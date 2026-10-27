@@ -206,6 +206,17 @@ describe('ticket search', () => {
     expect(ids(searchTickets(tickets, '0043'))[0]).toBe('t2');
   });
 
+  test('a ticket number still being typed', () => {
+    expect(ids(searchTickets(tickets, 'K7Q'))).toEqual(['t2', 't1']);
+    expect(ids(searchTickets(tickets, 'k7q-00'))).toEqual(['t2', 't1']);
+    expect(ids(searchTickets(tickets, 'K7Q-004'))).toEqual(['t2', 't1']);
+    expect(ids(searchTickets(tickets, 'm2x'))).toEqual(['t3']);
+    expect(ids(searchTickets(tickets, 'K7Q-0042'))[0]).toBe('t1');
+    // The start must be typed right, or one wrong digit lists the neighbouring counters too.
+    expect(searchTickets(tickets, 'K7R')).toEqual([]);
+    expect(searchTickets(tickets, 'K7R-00')).toEqual([]);
+  });
+
   test('ticket number typos: a wrong character, O for 0, swapped digits', () => {
     expect(ids(searchTickets(tickets, 'K7Q-0034'))[0]).toBe('t2');
     expect(ids(searchTickets(tickets, 'K7Q-OO43'))[0]).toBe('t2');

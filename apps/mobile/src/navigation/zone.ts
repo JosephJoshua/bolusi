@@ -30,8 +30,8 @@ export const SHELL_ROUTES = [
   'syncStatus',
   'settings',
   'changePin',
-  'unlockPin',
-  'resetPin',
+  'staff',
+  'staffPins',
   'intakeOptions',
   'cancelFees',
   'printSettings',
@@ -169,8 +169,8 @@ export function backTarget(zone: Zone): BackTarget | null {
       // (task 186a); every other one-level-deep surface (Sync Status, Settings) backs to Home.
       if (zone.route === 'home') return { kind: 'exitApp' };
       if (zone.route === 'changePin') return { kind: 'shellRoute', route: 'settings' };
-      if (zone.route === 'unlockPin') return { kind: 'shellRoute', route: 'settings' };
-      if (zone.route === 'resetPin') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'staff') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'staffPins') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'printSettings') return { kind: 'shellRoute', route: 'settings' };

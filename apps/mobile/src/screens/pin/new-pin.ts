@@ -54,19 +54,27 @@ export function advanceNewPin(entry: NewPinEntry, pin: string): NewPinEntry {
 }
 
 /**
- * The label key the PIN pad's message slot shows for an entry state (keys only — copy lives in the
- * catalog, 07-i18n). `first` normally invites a new PIN; after a mismatch it says so; `repeat` asks
- * for the repeat. `matched` renders no message (the caller has moved on to submit).
+ * The question asked for an entry state (keys only — copy lives in the catalog, 07-i18n): make a new
+ * PIN, or repeat it. Shown above the dots by `PinEntry`, so it never turns red.
  */
-export function newPinMessageKey(
+export function newPinPromptKey(
   entry: NewPinEntry,
-): 'auth.pin.setup.title' | 'auth.pin.setup.repeat' | 'auth.pin.setup.mismatch' | null {
-  switch (entry.kind) {
-    case 'first':
-      return entry.afterMismatch ? 'auth.pin.setup.mismatch' : 'auth.pin.setup.title';
-    case 'repeat':
-      return 'auth.pin.setup.repeat';
-    case 'matched':
-      return null;
-  }
+): 'auth.pin.setup.title' | 'auth.pin.setup.repeat' {
+  return entry.kind === 'repeat' ? 'auth.pin.setup.repeat' : 'auth.pin.setup.title';
+}
+
+/**
+ * The feedback under the dots: the PINs did not match (an error), a short tip while choosing a new
+ * PIN, or nothing while repeating it.
+ */
+export function newPinFeedbackKey(
+  entry: NewPinEntry,
+): 'auth.pin.setup.mismatch' | 'auth.pin.setup.hint' | null {
+  if (entry.kind !== 'first') return null;
+  return entry.afterMismatch ? 'auth.pin.setup.mismatch' : 'auth.pin.setup.hint';
+}
+
+/** The pad's state for an entry: red after a mismatch, otherwise ready for digits. */
+export function newPinPadState(entry: NewPinEntry): 'entry' | 'error' {
+  return entry.kind === 'first' && entry.afterMismatch ? 'error' : 'entry';
 }

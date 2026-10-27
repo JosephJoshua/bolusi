@@ -153,7 +153,7 @@ describe('the LIVE shell reaches the User Switcher from an open session (task 14
     //    the directory the fixture applied through `applyBundle`, echoed back through the live session
     //    controller's `refresh()`. A `switcher-screen` testID alone would go green over an empty grid.
     expect(screen.query(`switcher-user-${userId}`)).not.toBeNull();
-    expect(textsIn(screen.get(`switcher-user-name-${userId}`)).join(' ')).toContain(
+    expect(textsIn(screen.get(`switcher-user-${userId}.primary`)).join(' ')).toContain(
       SEEDED_USER_NAME,
     );
   });

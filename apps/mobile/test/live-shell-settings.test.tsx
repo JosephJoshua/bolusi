@@ -149,7 +149,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     //    wrong locale which row is currently theirs.
     expect(screen.query('settings-locale-id')).not.toBeNull();
     expect(screen.query('settings-locale-en')).not.toBeNull();
-    expect(screen.query('settings-locale-active-id')).not.toBeNull();
+    expect(screen.query('settings-locale-id.check')).not.toBeNull();
   });
 
   test('THE REPRODUCTION (task 211): tapping the English row renders the shell IN English', async () => {
@@ -186,7 +186,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     await settle();
 
     // 3. The marker moves. This is the ENTIRE old assertion surface; it passes either way.
-    expect(screen.query('settings-locale-active-en')).not.toBeNull();
+    expect(screen.query('settings-locale-en.check')).not.toBeNull();
 
     // 4. THE DEFECT. The active locale and the rendered string must follow the tap. On an
     //    Indonesian-first product these rows are documented (07-i18n §1.2) as the only way out of a

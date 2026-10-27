@@ -21,9 +21,9 @@ import {
 } from '@bolusi/i18n';
 import { describe, expect, test, vi } from 'vitest';
 
-import { render, textsIn } from '../../../../../packages/ui/test/render.js';
+import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
 
-import { SyncStatusScreen } from './SyncStatusScreen.js';
+import { REJECTED_SHOWN, SyncStatusScreen } from './SyncStatusScreen.js';
 import {
   manualSync,
   SYNC_TITLE_KEY,
@@ -100,8 +100,8 @@ const REJECTED: readonly RejectedOpRow[] = [
   },
 ];
 
-/** The AppShell header title node (`AppShell.tsx` derives it from the screen's own testID). */
-const TITLE_NODE = 'sync-status-screen.title';
+// The header is a neutral "Status data"; the state itself is the page's headline.
+const TITLE_NODE = 'sync-headline';
 
 function titleOf(over: Partial<SyncStatusInput>): string {
   return textsIn(renderSync(over).get(TITLE_NODE)).join('');
@@ -188,7 +188,7 @@ describe('the header title states the actual sync state (task 126/147, design-sy
   });
 
   test('no state is titled with the rejected-SECTION header — the regression itself', () => {
-    const sectionHeader = t('sync.rejected.title');
+    const sectionHeader = t('sync.rejected.title', { count: 1 });
     for (const [kind, over] of STATE_FIXTURES) {
       expect(titleOf(over), `${kind} is titled with the rejected-section header`).not.toBe(
         sectionHeader,
@@ -200,7 +200,9 @@ describe('the header title states the actual sync state (task 126/147, design-sy
     // The fix must not have made the phrase disappear: §8.4 item 4 keeps it as the section header.
     // Reading the section subtree (not the whole screen) is what proves it moved rather than went.
     const attention = renderSync({ rejected: REJECTED });
-    expect(textsIn(attention.get('sync-rejected-section'))).toContain(t('sync.rejected.title'));
+    expect(textsIn(attention.get('sync-rejected-section'))).toContain(
+      t('sync.rejected.title', { count: REJECTED.length }),
+    );
     expect(renderSync({}).query('sync-rejected-section')).toBeNull();
   });
 });
@@ -237,7 +239,7 @@ describe('the chip and title are witnessed together on the pending-media screen 
     // The counter that contradicted the old headline is still on screen, still counting the photos —
     // the headline now agrees with it instead of denying it.
     const screen = renderSync(over);
-    expect(textsIn(screen.get('sync-counter-media'))).toContain('3');
+    expect(textsIn(screen.get('sync-counter-media')).join(' ')).toContain('3');
   });
 
   test('POSITIVE CONTROL: an all-clear device renders the `synced` chip AND the "All Sent" title', () => {
@@ -316,13 +318,14 @@ describe('the chip and title are witnessed together on the pending-media screen 
     expect(reassuranceText.length).toBeGreaterThan(0); // still says something reassuring
   });
 
-  test('the two pending counters each sit in a flex cell so they share the row (task 129 item 7)', () => {
-    // There is no pixel lane in this harness; this guards the STRUCTURE that prevents the 360 dp
-    // overflow — each counter is wrapped in a `flex: 1` cell, so the two split the row instead of sizing
-    // to content and pushing the right card off-screen. Dropping `flex: 1` from `counterCell` reds this.
-    const screen = renderSync({ pendingOperationCount: 3, pendingMediaCount: 2 });
-    expect(screen.styleOf('sync-counter-ops-cell').flex).toBe(1);
-    expect(screen.styleOf('sync-counter-media-cell').flex).toBe(1);
+  test('only what is waiting is counted: a zero counter is left out', () => {
+    const both = renderSync({ pendingOperationCount: 3, pendingMediaCount: 2 });
+    expect(textsIn(both.get('sync-counter-ops')).join(' ')).toContain('3');
+    expect(textsIn(both.get('sync-counter-media')).join(' ')).toContain('2');
+    const opsOnly = renderSync({ pendingOperationCount: 3 });
+    expect(opsOnly.query('sync-counter-media')).toBeNull();
+    // Nothing waiting: no counters box at all, the headline already says everything was sent.
+    expect(renderSync({}).query('sync-counters')).toBeNull();
   });
 });
 
@@ -391,6 +394,14 @@ describe('the rejected row names which change was rejected, not only when (task 
   });
 });
 
+describe('the refused-changes banner is not repeated on the screen it points to', () => {
+  test('rejected changes show the section, not the banner', () => {
+    const screen = renderSync({ rejected: REJECTED });
+    expect(screen.query('sync-rejected-section')).not.toBeNull();
+    expect(screen.query('sync-banner')).toBeNull();
+  });
+});
+
 describe('a new device in its first sync', () => {
   const DAY = 86_400_000;
   const firstSync = { historyStart: NOW - 100 * DAY, reachedAt: NOW - 40 * DAY, serverTime: NOW };
@@ -411,5 +422,30 @@ describe('a new device in its first sync', () => {
     const screen = renderSync({ loopState: 'pulling' });
     expect(screen.query('sync-first-sync')).toBeNull();
     expect(screen.query('ui.syncChip.progress')).toBeNull();
+  });
+});
+
+describe('a long refused list can be read to the end', () => {
+  const many: readonly RejectedOpRow[] = Array.from({ length: REJECTED_SHOWN * 2 + 3 }, (_, i) => ({
+    ...REJECTED[0]!,
+    opId: `op-many-${i}`,
+  }));
+  const rows = (screen: ReturnType<typeof renderSync>) =>
+    many.filter((row) => screen.query(`sync-rejected-${row.opId}`) !== null).length;
+
+  test('"show more" adds a page at a time and disappears once all are shown', () => {
+    const screen = renderSync({ rejected: many });
+    expect(rows(screen)).toBe(REJECTED_SHOWN);
+    expect(textsIn(screen.get('sync-rejected-more'))).toContain(
+      t('sync.rejected.more', { count: REJECTED_SHOWN }),
+    );
+    fire(screen.get('sync-rejected-more'), 'onPress');
+    expect(rows(screen)).toBe(REJECTED_SHOWN * 2);
+    expect(textsIn(screen.get('sync-rejected-more'))).toContain(
+      t('sync.rejected.more', { count: 3 }),
+    );
+    fire(screen.get('sync-rejected-more'), 'onPress');
+    expect(rows(screen)).toBe(many.length);
+    expect(screen.query('sync-rejected-more')).toBeNull();
   });
 });

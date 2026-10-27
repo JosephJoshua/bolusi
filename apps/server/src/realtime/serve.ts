@@ -2,8 +2,9 @@
 // `{ noServer: true }` and passed to `serve({ ..., websocket: { server } })` — @hono/node-server
 // 2.x owns the HTTP `upgrade` handshake and links this server to the `upgradeWebSocket` helper the
 // realtime route uses (NEVER the deprecated `@hono/node-ws`, 08 §2.6). One definition, shared by
-// the boot entry (main.ts) and the real-socket integration test, so the payload cap can't drift.
-import type { WebSocketServerLike } from '@hono/node-server';
+// the boot entry (main.ts), the harness lane server and the real-socket tests, so they cannot drift.
+import { serve, type ServerType, type WebSocketServerLike } from '@hono/node-server';
+import type { AddressInfo } from 'node:net';
 import { WebSocketServer } from 'ws';
 
 /**
@@ -23,9 +24,26 @@ export const REALTIME_MAX_PAYLOAD_BYTES = 64 * 1024;
  * (`ws` types it `boolean | undefined`, the Like type requires `boolean`), so the cast is confined to
  * this single boundary. node-server's own runtime guard re-checks `noServer === true`.
  */
-export function makeRealtimeWebSocketServer(): WebSocketServerLike {
+function makeRealtimeWebSocketServer(): WebSocketServerLike {
   return new WebSocketServer({
     noServer: true,
     maxPayload: REALTIME_MAX_PAYLOAD_BYTES,
   }) as unknown as WebSocketServerLike;
+}
+
+/**
+ * Serve `fetch` over HTTP with the realtime WebSocket server attached. Every listener (the boot entry,
+ * the harness lane server, the real-socket tests) goes through here: a plain `serve()` without
+ * `websocket` makes `upgradeWebSocket` answer every authenticated upgrade with a bare 500, and devices
+ * silently fall back to polling.
+ */
+export function serveWithRealtime(
+  options: {
+    fetch: (request: Request) => Response | Promise<Response>;
+    port?: number;
+    hostname?: string;
+  },
+  onListen?: (info: AddressInfo) => void,
+): ServerType {
+  return serve({ ...options, websocket: { server: makeRealtimeWebSocketServer() } }, onListen);
 }

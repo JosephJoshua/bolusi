@@ -34,6 +34,7 @@ import {
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
+  phoneText,
   priceKinds,
   restOfChecksOk,
   stepProblems,
@@ -498,7 +499,9 @@ function CustomerFields({
           label={tn('repair.customer.phone')}
           placeholder={tn('repair.customer.phoneHint')}
           value={customer.phone}
-          onChange={(event) => update({ customer: { ...customer, phone: event.target.value } })}
+          onChange={(event) =>
+            update({ customer: { ...customer, phone: phoneText(event.target.value) } })
+          }
           inputMode="tel"
           autoComplete="off"
           data-testid="repair.desk.intake.phone"

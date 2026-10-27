@@ -57,9 +57,9 @@ tags:
     id: 'enroll-step-confirm'
 - takeScreenshot:
     path: 03-enrollment-confirm
-# Pick the (single) provisioned store. The row's testID carries the store's UUIDv7 — unknown ahead of
-# time — so match it by prefix; the leading hex class excludes the `enroll-store-name` summary label
-# (a UUIDv7 starts 0-9a-f; the label starts `n`), which renders BEFORE the selectable row.
+# Pick the (single) provisioned store; it is preselected, and tapping it again keeps it picked. The
+# row's testID carries the store's UUIDv7 — unknown ahead of time — so match it by prefix; the
+# leading hex class excludes `enroll-store-name` (a UUIDv7 starts 0-9a-f; the label starts `n`).
 - tapOn:
     id: 'enroll-store-[0-9a-f].*'
 # A device name is REQUIRED before binding: canSubmitConfirm gates enroll-bind on deviceNameError === null
@@ -67,9 +67,7 @@ tags:
 - tapOn:
     id: 'enroll-device-name.field'
 - inputText: 'Tablet Kasir'
-# Tick the tenant/store confirmation (enabled once a store is selected), then bind.
-- tapOn:
-    id: 'enroll-confirm-toggle'
+# Bind. The button names the picked store ("Daftarkan ke Toko Utama"); pressing it is the confirmation.
 - tapOn:
     id: 'enroll-bind'
 # The enroll POST succeeded → the wizard shows its done step. This asserts enrollment actually LANDED on

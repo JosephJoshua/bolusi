@@ -530,21 +530,36 @@ export function TicketPane({
         </div>
         <div className="flex items-baseline justify-between gap-4 border-t-2 border-text pt-3">
           <p
-            className={`text-body font-semibold ${cancelled ? 'text-text-muted line-through' : 'text-text'}`}
+            className={
+              cancelled
+                ? 'text-small text-text-muted line-through'
+                : 'text-body font-semibold text-text'
+            }
           >
             {tn('repair.price.total')}
           </p>
           <p
-            className={`tabular text-title font-bold ${cancelled ? 'text-text-muted line-through' : 'text-text'}`}
+            className={`tabular ${cancelled ? 'text-small text-text-muted line-through' : 'text-title font-bold text-text'}`}
             data-testid="repair.desk.ticket.total"
           >
             {formatMoney(row.quoteTotal)}
           </p>
         </div>
         {cancelled ? (
-          <p className="text-small text-text-muted">
-            {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
-          </p>
+          // The repair price stays as quiet history; the number that leads is what the customer
+          // owes, the same fee the board and the handover show (Rp 0 when none was set).
+          <>
+            <div className="flex items-baseline justify-between gap-4">
+              <p className="text-body font-semibold text-text">{tn('repair.cancel.fee')}</p>
+              <p
+                className="tabular text-title font-bold text-text"
+                data-testid="repair.desk.ticket.cancelFee"
+              >
+                {formatMoney(row.cancelFee ?? 0)}
+              </p>
+            </div>
+            <p className="text-small text-text-muted">{tn('repair.price.notCharged')}</p>
+          </>
         ) : null}
         <DownPaymentLines
           total={amountOwed(row)}

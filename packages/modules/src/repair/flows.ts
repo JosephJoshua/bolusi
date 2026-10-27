@@ -201,15 +201,16 @@ export function ticketActions(
 
 /**
  * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
- * the counter records one while the phone is in the store and none is recorded; only an owner
+ * the counter records one while the servisan is open and none is recorded; only an owner
  * changes one already recorded, since a lower figure is how cash would go missing.
  */
 export function downPaymentAction(
-  ticket: Pick<TicketSummaryRow, 'location' | 'downPayment'>,
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
   can: RepairAbilities,
 ): 'record' | 'correct' | null {
   if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
-  return can.intake && ticket.location === 'in_store' ? 'record' : null;
+  const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
+  return can.intake && open ? 'record' : null;
 }
 
 /** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
@@ -221,7 +222,7 @@ export function amountOwed(
 
 /** Why an open down payment step can no longer finish: what it would do is no longer offered. */
 export function downPaymentStale(
-  ticket: Pick<TicketSummaryRow, 'location' | 'downPayment'>,
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
   can: RepairAbilities,
   mode: 'record' | 'correct',
 ): StaleStep | null {
@@ -424,6 +425,14 @@ export type PriceKind = (typeof PRICE_KINDS)[number];
 /** The kinds a user may add: a discount lowers the price, so only those who may discount see it. */
 export function priceKinds(discount: boolean): readonly PriceKind[] {
   return PRICE_KINDS.filter((kind) => kind !== 'discount' || discount);
+}
+
+/**
+ * What a phone field keeps of what was typed or pasted: digits, spaces and dashes, and a "+" only
+ * at the start. Android's phone keypad also offers ". , ( ) * # N /", which no number here needs.
+ */
+export function phoneText(text: string): string {
+  return text.replace(/[^\d\s+-]/g, '').replace(/(?!^)\+/g, '');
 }
 
 /** The signed amount a line contributes: discounts subtract. Adjustments are entered signed. */

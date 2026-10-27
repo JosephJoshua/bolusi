@@ -18,6 +18,7 @@ import {
   parseIntakeDraft,
   acceptsRupiahText,
   parseRupiah,
+  phoneText,
   readyAtFor,
   repairAbilities,
   restOfChecksOk,
@@ -292,14 +293,14 @@ describe('ticket actions', () => {
 describe('down payment and slips', () => {
   test('recording a down payment is offered exactly where the command accepts it', async () => {
     h = await openRepairHarness(4109);
-    for (const state of ['received', 'repaired', 'returned'] as const) {
+    for (const state of ['received', 'repaired', 'returned', 'cancelled'] as const) {
       const ticketId = await ticketIn(h, state);
       const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
       const offered = downPaymentAction(ticket, abilitiesOf(h, h.cashierId)) === 'record';
       const run = h.run('recordDownPayment', { ticketId, amount: 20_000 }, h.cashierId);
       if (offered) await expect(run).resolves.toBeDefined();
       else await expect(run).rejects.toThrow();
-      expect(offered).toBe(state !== 'returned');
+      expect(offered).toBe(state !== 'returned' && state !== 'cancelled');
     }
   });
 
@@ -470,6 +471,13 @@ describe('money and dates', () => {
     expect(acceptsRupiahText('10000000000000')).toBe(false);
     expect(acceptsRupiahText('')).toBe(true);
     expect(acceptsRupiahText('Rp 5.000')).toBe(true);
+  });
+
+  test('a phone field keeps digits, spaces, dashes and a leading plus only', () => {
+    expect(phoneText('081234567890.')).toBe('081234567890');
+    expect(phoneText('+62 812-3456-7890')).toBe('+62 812-3456-7890');
+    expect(phoneText('0812,34*56#78(90)N/')).toBe('081234567890');
+    expect(phoneText('08+12')).toBe('0812');
   });
 
   test('ready dates land at the end of the store day', () => {

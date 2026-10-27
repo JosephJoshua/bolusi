@@ -226,6 +226,32 @@ describe('every pushed op is authorized against the server directory', () => {
     ]);
   });
 
+  test('only an owner may correct a down payment: a cashier’s lower figure is refused', async () => {
+    // Recording less than the customer paid is how a down payment would go missing.
+    const { world, builder } = await setupWorld(3208);
+    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3208);
+    const owner = testId(32081);
+    await seedUser(db, world.tenantId, owner);
+    await grantDefaultRole(world, owner, 'store_owner', world.storeId, 32082);
+    const correct = (userId?: string) =>
+      builder.append({
+        type: 'repair.down_payment_corrected',
+        entityType: 'repair_ticket',
+        entityId: TICKET,
+        payload: { amount: 10_000, reason: 'Salah ketik' },
+        ...(userId === undefined ? {} : { userId }),
+      });
+
+    const result = await push(world, [correct(), correct(owner)]);
+
+    expect(result.results[0]).toMatchObject({
+      status: 'rejected',
+      code: 'PERMISSION_DENIED',
+      reason: expect.stringContaining('repair.correct_down_payment'),
+    });
+    expect(result.results[1]).toMatchObject({ status: 'accepted' });
+  });
+
   test('a store-owner grant in ANOTHER store does not authorize this store', async () => {
     const { world, builder } = await setupWorld(3203);
     const otherStore = testId(32031);

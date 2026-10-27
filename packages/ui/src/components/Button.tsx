@@ -46,7 +46,10 @@ const LABEL_COLOR = {
 
 const styles = StyleSheet.create({
   base: {
-    height: touch.primary,
+    // minHeight, not height: a label that wraps to its second line grows the button instead of
+    // touching its edges (a long store name at 1.3x font).
+    minHeight: touch.primary,
+    paddingVertical: space.sm,
     borderRadius: radius.md,
     paddingHorizontal: space.lg,
     alignItems: 'center',
@@ -58,7 +61,8 @@ const styles = StyleSheet.create({
     borderColor: color.border,
   },
   compact: {
-    height: sizes.control,
+    minHeight: sizes.control,
+    paddingVertical: 0,
     borderRadius: radius.full,
     paddingHorizontal: space.lg,
   },

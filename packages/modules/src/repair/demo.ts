@@ -673,7 +673,9 @@ export function demoRepairRuntime(
 
   const commands: Record<string, (input: Input) => unknown> = {
     openTicket: (input) => {
-      const id = `t-new-${String(counter)}`;
+      // The wizard mints the id when intake starts (so a double submit opens one ticket).
+      const id =
+        typeof input['ticketId'] === 'string' ? input['ticketId'] : `t-new-${String(counter)}`;
       const number = `K7Q-${String(counter).padStart(4, '0')}`;
       counter += 1;
       const customer = input['customer'] as {
@@ -974,6 +976,7 @@ export function demoRepairRuntime(
       }
     },
     hasPermission: (id: string) => permitted.has(id),
+    newId: () => `t-new-${String(counter)}-${String(Math.random()).slice(2, 8)}`,
     colleagueHasPermission: (userId: string, id: string) =>
       id === P.work ? TECHNICIANS.includes(userId) : false,
     subscribe: (listener: () => void) => {

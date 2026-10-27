@@ -1,33 +1,25 @@
-// THE WRONG-STORE CONTROL (design-system §8.5) — `EnrollmentScreen.tsx`'s
-// `onChange({ selectedStoreId: store.id, confirmed: false })`.
-//
-// ── WHY THIS FILE EXISTS (task 24's review, carried to task 50) ────────────────────────────────
-// That single `confirmed: false` is the ONLY thing enforcing §8.5's wrong-store control, and store
-// binding is IRREVERSIBLE (api/02-auth §7.4) — undoing it costs an operator round-trip. Until this
-// file, there was no `EnrollmentScreen.test.tsx` at all: the model tests covered `canSubmitConfirm`'s
-// gating, and nothing covered the line that FEEDS it. **Delete `confirmed: false` in a refactor and
-// nothing went red.** An irreversible, operator-costly binding whose sole guard was untested.
-//
-// ── WHAT review-05 GOT RIGHT, AND WHY IT IS PROTECTED BY CONSTRUCTION ─────────────────────────
-// review-05 hypothesised the real hole — confirm store A → transport fails → switch to store B →
-// bind B unconfirmed — and DISPROVED it: that line re-arms the confirmation on every store change,
-// so flapping the network rebinds the same confirmed store. Task 24's judgement (`confirmed`
-// survives a transport failure: "the network failed, not the user's intent") is correct. The
-// finding was never that the behaviour is wrong; it is that NOTHING PROVED IT. This file is the
-// proof, and the `re-confirming B re-enables submit` test below is the positive control that keeps
-// it honest — a test that only ever asserts "blocked" passes on a screen that blocks everything
-// (T-14b).
-import { render, fire } from '../../../../../packages/ui/test/render.js';
-import { describe, expect, test, vi } from 'vitest';
+// The enrolment wizard at the render boundary. The confirm step is where §8.5's wrong-store
+// control lives, and store binding is IRREVERSIBLE (api/02-auth §7.4): undoing it costs an operator
+// round trip. The control is now the step's one button NAMING the picked store, with the picked row
+// checked; a separate "Ya, lanjutkan" toggle above a "Masuk" button used to do this job, and the
+// first Android QA run found the pair confusing. These tests pin the replacement.
+import { initI18n, t } from '@bolusi/i18n';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
+
+import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
 
 import { EnrollmentScreen } from './EnrollmentScreen.js';
-import { canSubmitConfirm, initialEnrollmentState, type EnrollmentState } from './model.js';
+import { initialEnrollmentState, type EnrollmentState } from './model.js';
 
 const STORE_A = { id: 'store-a', name: 'Cabang Sorong' };
 const STORE_B = { id: 'store-b', name: 'Cabang Manokwari' };
 
-/** A state parked on the confirm step with two stores offered and store A already confirmed. */
-function confirmedOnA(over: Partial<EnrollmentState> = {}): EnrollmentState {
+beforeAll(() => {
+  initI18n({ locale: 'id' });
+});
+
+/** A state parked on the confirm step with two stores offered and store A picked. */
+function onA(over: Partial<EnrollmentState> = {}): EnrollmentState {
   return {
     ...initialEnrollmentState(),
     step: 'confirm',
@@ -40,21 +32,21 @@ function confirmedOnA(over: Partial<EnrollmentState> = {}): EnrollmentState {
       stores: [STORE_A, STORE_B],
     },
     selectedStoreId: STORE_A.id,
-    confirmed: true,
     ...over,
   };
 }
 
-function renderConfirm(
+function renderScreen(
   state: EnrollmentState,
   onChange: (patch: Partial<EnrollmentState>) => void,
+  onEnroll: () => void = () => undefined,
 ) {
   return render(
     <EnrollmentScreen
       state={state}
       onChange={onChange}
       onLogin={() => undefined}
-      onEnroll={() => undefined}
+      onEnroll={onEnroll}
       onFinish={() => undefined}
       onBack={() => undefined}
       discardPrompt={false}
@@ -64,61 +56,130 @@ function renderConfirm(
   );
 }
 
-describe('changing the store RE-ARMS the confirmation (design-system §8.5)', () => {
-  test('confirm A → tap B ⇒ the patch carries confirmed: false, not just the new store id', () => {
-    // THE ASSERTION THE WHOLE FILE IS FOR. A patch of `{ selectedStoreId: 'store-b' }` alone would
-    // carry store A's confirmation onto store B — binding this device, irreversibly, to a store
-    // nobody confirmed. The screen must re-arm.
-    const onChange = vi.fn();
-    const screen = renderConfirm(confirmedOnA(), onChange);
+describe('the store step: one choice, one button that names it (design-system §8.5)', () => {
+  test('the bind button names the picked store, and binds on press', () => {
+    const onEnroll = vi.fn();
+    const screen = renderScreen(onA(), vi.fn(), onEnroll);
+    const bind = screen.get('enroll-bind');
+    expect(textsIn(bind)).toContain(t('auth.enroll.bind', { store: STORE_A.name }));
+    fire(bind, 'onPress');
+    expect(onEnroll).toHaveBeenCalledTimes(1);
+  });
 
+  test('switching stores changes what the button says, so it cannot bind the old one unseen', () => {
+    const screen = renderScreen(onA({ selectedStoreId: STORE_B.id }), vi.fn());
+    expect(textsIn(screen.get('enroll-bind'))).toContain(
+      t('auth.enroll.bind', { store: STORE_B.name }),
+    );
+  });
+
+  test('only the picked store row is checked', () => {
+    const screen = renderScreen(onA(), vi.fn());
+    expect(screen.get(`enroll-store-${STORE_A.id}`).props['accessibilityState']).toEqual({
+      checked: true,
+      selected: true,
+    });
+    expect(screen.get(`enroll-store-${STORE_B.id}`).props['accessibilityState']).toEqual({
+      checked: false,
+      selected: false,
+    });
+  });
+
+  test('tapping a store picks it', () => {
+    const onChange = vi.fn();
+    const screen = renderScreen(onA(), onChange);
     fire(screen.get(`enroll-store-${STORE_B.id}`), 'onPress');
-
-    expect(onChange).toHaveBeenCalledWith({ selectedStoreId: STORE_B.id, confirmed: false });
+    expect(onChange).toHaveBeenCalledWith({ selectedStoreId: STORE_B.id });
   });
 
-  test('the re-armed state GATES submit — the consequence, not just the patch', () => {
-    // The patch assertion above proves the screen SAYS `confirmed: false`. This proves it MATTERS:
-    // applying that patch produces a state whose submit is blocked. Asserting the patch alone would
-    // stay green if `canSubmitConfirm` stopped reading `confirmed`.
-    const state = confirmedOnA();
-    expect(canSubmitConfirm(state)).toBe(true); // precondition: A really was submittable
-
-    const switched: EnrollmentState = { ...state, selectedStoreId: STORE_B.id, confirmed: false };
-    expect(canSubmitConfirm(switched)).toBe(false);
-  });
-
-  test('the bind button is DISABLED after switching stores', () => {
-    // The user-visible half, at the render boundary: §8.5's control is only real if the button the
-    // user would press is actually inert.
-    const switched = confirmedOnA({ selectedStoreId: STORE_B.id, confirmed: false });
-    const screen = renderConfirm(switched, vi.fn());
-
+  test('with no store picked the button is disabled and says to pick one first', () => {
+    const screen = renderScreen(onA({ selectedStoreId: null }), vi.fn());
     expect(screen.get('enroll-bind').props['disabled']).toBe(true);
+    expect(textsIn(screen.get('enroll-hint'))).toEqual([t('auth.enroll.pickStoreFirst')]);
   });
 
-  test('POSITIVE CONTROL: re-confirming B re-enables submit — the screen does not block everything', () => {
-    // T-14b. Without this, every assertion above would pass on a screen that disabled the bind
-    // button unconditionally — i.e. on an app that can never enroll. A guard that blocks the happy
-    // path is not a guard, it is an outage.
-    const reconfirmed = confirmedOnA({ selectedStoreId: STORE_B.id, confirmed: true });
-    expect(canSubmitConfirm(reconfirmed)).toBe(true);
-
-    const screen = renderConfirm(reconfirmed, vi.fn());
-    expect(screen.get('enroll-bind').props['disabled']).toBe(false);
+  test('without a device name the button is disabled and asks for one', () => {
+    const screen = renderScreen(onA({ deviceName: '' }), vi.fn());
+    expect(screen.get('enroll-bind').props['disabled']).toBe(true);
+    expect(textsIn(screen.get('enroll-hint'))).toEqual([t('auth.enroll.nameDeviceFirst')]);
   });
 
-  test('re-tapping the SAME store still re-arms — confirmation is per-tap, not per-store', () => {
-    // The subtle one. If the screen only re-armed when the id CHANGED, a user who tapped their
-    // already-confirmed store would keep a confirmation they did not re-give. Cheap to hold, and it
-    // is the behaviour the one-line implementation already has — asserted so a "smarter" refactor
-    // (`if (store.id !== state.selectedStoreId)`) fails here rather than shipping.
+  test('the device field is labelled as the device, not the account', () => {
+    const screen = renderScreen(onA(), vi.fn());
+    expect(textsIn(screen.get('enroll-device-name.label'))).toEqual([
+      t('auth.enroll.deviceNameField'),
+    ]);
+    expect(t('auth.enroll.deviceNameField')).not.toBe(t('auth.enroll.identifierField'));
+  });
+
+  test('store rows are inert while the device is being bound', () => {
     const onChange = vi.fn();
-    const screen = renderConfirm(confirmedOnA(), onChange);
+    const screen = renderScreen(onA({ busy: true }), onChange);
+    expect(screen.get(`enroll-store-${STORE_B.id}`).props['onPress']).toBeUndefined();
+  });
 
-    fire(screen.get(`enroll-store-${STORE_A.id}`), 'onPress');
+  test('with one store there is nothing to pick: it is shown, and the button names it', () => {
+    const one = onA({ login: { ...onA().login!, stores: [STORE_A] }, selectedStoreId: null });
+    const screen = renderScreen(one, vi.fn());
+    expect(textsIn(screen.get(`enroll-store-${STORE_A.id}`))).toContain(STORE_A.name);
+    expect(screen.get(`enroll-store-${STORE_A.id}`).props['accessibilityRole']).toBeUndefined();
+    expect(screen.get('enroll-bind').props['disabled']).toBe(false);
+    expect(textsIn(screen.get('enroll-bind'))).toContain(
+      t('auth.enroll.bind', { store: STORE_A.name }),
+    );
+  });
+});
 
-    expect(onChange).toHaveBeenCalledWith({ selectedStoreId: STORE_A.id, confirmed: false });
+describe('a failed attempt says what to do, in the banner slot', () => {
+  const failing = (failure: EnrollmentState['failure'], revoked = false) =>
+    renderScreen({ ...initialEnrollmentState(revoked), failure }, vi.fn());
+
+  test.each([
+    [{ kind: 'credentials' } as const, 'auth.enroll.wrongCredentials'],
+    [{ kind: 'offline' } as const, 'auth.enroll.needsConnection'],
+    [{ kind: 'notPermitted' } as const, 'auth.enroll.notOwner'],
+    [{ kind: 'rateLimited', retryAfterSeconds: 30 } as const, 'core.errors.RATE_LIMITED'],
+  ])('%o', (failure, key) => {
+    const screen = failing(failure);
+    expect(textsIn(screen.get(`enroll-failure-${failure.kind}`))).toContain(
+      t(key as Parameters<typeof t>[0]),
+    );
+  });
+
+  test('a failure replaces the blocked-phone banner while it is showing', () => {
+    expect(failing(null, true).query('enroll-revoked-banner')).not.toBeNull();
+    const screen = failing({ kind: 'offline' }, true);
+    expect(screen.query('enroll-revoked-banner')).toBeNull();
+    expect(screen.query('enroll-failure-offline')).not.toBeNull();
+  });
+
+  test('a short password says how long it must be', () => {
+    const screen = renderScreen(
+      { ...initialEnrollmentState(), loginIdentifier: 'maju', password: 'abc' },
+      vi.fn(),
+    );
+    expect(textsIn(screen.get('enroll-hint'))).toEqual([
+      t('auth.enroll.passwordTooShort', { min: 10 }),
+    ]);
+  });
+});
+
+describe('the done step', () => {
+  test('names the store the phone joined', () => {
+    const screen = renderScreen(onA({ step: 'done' }), vi.fn());
+    expect(textsIn(screen.get('enroll-store-name'))).toEqual([STORE_A.name]);
+  });
+});
+
+describe('before enrolment there is no sync to report', () => {
+  test('the header carries no sync chip', () => {
+    const screen = renderScreen(initialEnrollmentState(), vi.fn());
+    expect(
+      screen.container.queryAll(
+        (n) =>
+          typeof n.props['testID'] === 'string' && /syncChip/i.test(n.props['testID'] as string),
+      ),
+    ).toHaveLength(0);
   });
 });
 
@@ -130,7 +191,7 @@ describe('changing the store RE-ARMS the confirmation (design-system §8.5)', ()
 // component's own default passing proves nothing about what these three actually pass.
 describe('enrollment fields stay single-line after the §8.6 multiline variant (task 128)', () => {
   test('identifier and password declare multiline false', () => {
-    const screen = renderConfirm(initialEnrollmentState(), vi.fn());
+    const screen = renderScreen(initialEnrollmentState(), vi.fn());
 
     expect(screen.get('enroll-identifier.field').props['multiline']).toBe(false);
     expect(screen.get('enroll-password.field').props['multiline']).toBe(false);
@@ -139,7 +200,7 @@ describe('enrollment fields stay single-line after the §8.6 multiline variant (
   });
 
   test('the device-name field on the confirm step declares multiline false', () => {
-    const screen = renderConfirm(confirmedOnA(), vi.fn());
+    const screen = renderScreen(onA(), vi.fn());
 
     expect(screen.get('enroll-device-name.field').props['multiline']).toBe(false);
   });

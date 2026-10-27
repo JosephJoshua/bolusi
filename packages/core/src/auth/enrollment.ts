@@ -27,6 +27,7 @@ import { AUTH_ENTITY, AUTH_OP } from './operations.js';
 import type { EnrollResponse, EnrollTransportPort, KeyStorePort } from './ports.js';
 import {
   deleteMeta,
+  FIRST_PIN_USER_META_KEY,
   deviceHasGenesis,
   readMeta,
   writeMeta,
@@ -148,6 +149,12 @@ export async function runEnrollment<DB>(
   // writing it here is the one place a store binding may be set (bundle-apply.ts writes only tenant).
   await writeMeta(deps.db, DEVICE_ID_META_KEY, draft.deviceId);
   await writeMeta(deps.db, STORE_ID_META_KEY, response.store.id);
+  // The enrolling owner proved who they are with a password just now, so they alone may make their
+  // own first PIN here, and only if the server has none for them (pin-flows.ts `setFirstPin`).
+  const owner = response.bundle.users.find((user) => user.id === params.ownerUserId);
+  if (owner !== undefined && owner.pinVerifier === null) {
+    await writeMeta(deps.db, FIRST_PIN_USER_META_KEY, params.ownerUserId);
+  }
 
   await deleteMeta(deps.db, ENROLLMENT_DRAFT_KEY); // enrollment complete — the draft is spent
   return { deviceId: draft.deviceId, response, genesis, loggedIn: false };

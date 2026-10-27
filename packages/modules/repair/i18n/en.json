@@ -210,7 +210,7 @@
     "addRow": "Add a price line",
     "pendingTotal": "Not yet confirmed by the customer: {amount}",
     "customerAgrees": "Does the customer agree to this price?",
-    "notCharged": "The customer pays the cancellation fee of {amount}.",
+    "notCharged": "The repair price isn’t charged.",
     "alreadyAgreed": "Has the customer agreed?",
     "changeReason": "Reason for the change",
     "waitingEvent": "Price change waiting for the customer",

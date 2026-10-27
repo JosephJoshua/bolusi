@@ -228,8 +228,17 @@ export class RealtimeController {
     this.#rung = to;
     this.#backoffAttempt = 0;
     if (to === 'sse') this.#sseConnectFailures = 0;
+    this.#notifyRungChange();
     this.#ensureDegradedRetry();
     this.#connectPrimary();
+  }
+
+  #notifyRungChange(): void {
+    try {
+      this.#deps.onRungChange?.(this.#rung);
+    } catch {
+      // Diagnostics must never break the ladder.
+    }
   }
 
   #promoteRecovery(conn: Conn): void {
@@ -248,6 +257,7 @@ export class RealtimeController {
     this.#wsConnectFailures = 0;
     this.#sseConnectFailures = 0;
     this.#connected = true;
+    this.#notifyRungChange();
     this.#fireBackfill();
   }
 

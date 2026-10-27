@@ -33,16 +33,30 @@ let lastFix: Location.LocationObject | null = null;
 let watcher: Location.LocationSubscription | null = null;
 
 /**
- * Start the background watcher. Safe to call twice; a denied permission simply leaves every fix
- * `null`, which is a supported state and never an error the user is shown — location is telemetry on
- * an envelope (PRD-009 FR-802), not a feature anyone asked for.
+ * Start the background watcher, but only on a device that already allows it. Safe to call twice.
+ *
+ * It NEVER asks. No feature in the app needs location yet: it is telemetry on an envelope (PRD-009
+ * FR-802), and a `null` fix is a supported state. Asking for it on every cold start, with no
+ * explanation, put Android's permission dialog and then Google's "Location Accuracy" dialog in
+ * front of a cashier who had done nothing location-related (first Android QA run, 2026-10-26).
+ * The feature that needs it (attendance check-in) asks there, in context, when it is built.
+ *
+ * So: permission already granted AND location services already on, or nothing. And the watch is
+ * started with `mayShowUserSettingsDialog: false`, so even a granted device with Wi-Fi scanning
+ * off is never shown the accuracy dialog; it just gets coarser fixes.
  */
 export async function startLocationWatcher(): Promise<void> {
   if (watcher !== null) return;
-  const { granted } = await Location.requestForegroundPermissionsAsync();
+  const { granted } = await Location.getForegroundPermissionsAsync();
   if (!granted) return;
+  if (!(await Location.hasServicesEnabledAsync())) return;
   watcher = await Location.watchPositionAsync(
-    { accuracy: Location.Accuracy.Balanced, timeInterval: MAX_FIX_AGE_MS, distanceInterval: 50 },
+    {
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: MAX_FIX_AGE_MS,
+      distanceInterval: 50,
+      mayShowUserSettingsDialog: false,
+    },
     (fix) => {
       lastFix = fix;
     },

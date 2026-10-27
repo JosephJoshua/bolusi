@@ -154,6 +154,9 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
   negative adjustment) needs an owner, at intake or later. Counter staff and
   technicians can still raise a price or propose a part or labour; the counter
   can decline an owner's proposed discount but not apply it.
+- **Any drop in what a customer owes is an owner's** (2026-10-27): a lower
+  price, a lower or removed down payment, a lower cancellation fee. Every later
+  module follows this rule (for example a POS discount or a refund).
 - **A price change counts only once the customer agrees:** whether a technician
   proposes it or the counter enters it, a change waits ("Menunggu persetujuan
   pelanggan") and is left out of the total until the counter records the
@@ -206,6 +209,19 @@ Agreed with the owner before building printing.
   photo picker in exactly one file, which feeds only the slip settings screen.
 - **Code:** one shared printing layer (core `print`: document model, HTML and
   ESC/P renderers) that POS receipts will reuse; slips are module templates.
+
+## Who makes a first PIN (2026-10-26)
+
+A phone that is offline or behind can show "no PIN yet" for someone who made one
+elsewhere, so a self-made first PIN there would let a coworker sign in as them.
+
+- **The owner who set up the phone** makes their own first PIN on it, right after
+  setup, and only if the server has no PIN for them.
+- **Everyone else** gets their first PIN from an owner (Settings → PIN karyawan),
+  typed by the person themselves. Their name in the switcher says "Belum ada PIN"
+  and tells them to ask an owner.
+- Phones set up before this change have no such owner on record, so an owner
+  without a PIN there gets theirs from another owner.
 
 ## Decision
 

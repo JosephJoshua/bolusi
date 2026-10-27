@@ -8,6 +8,8 @@ import {
   Chip,
   EmptyState,
   ErrorState,
+  Fact,
+  FactGrid,
   Icon,
   LoadingState,
   UnauthorizedState,
@@ -483,43 +485,8 @@ export function Field({
   );
 }
 
-/**
- * A key fact on a detail screen: a small label over its value, laid out two to a row by `FactGrid`.
- * The value can carry the one action that changes it ("Ganti" beside the technician). A `wide` fact
- * takes the whole row, for a value with an action and something drawn under it.
- */
-export function Fact({
-  label,
-  value,
-  action,
-  wide = false,
-  children,
-  testID,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly action?: ReactNode;
-  readonly wide?: boolean | undefined;
-  readonly children?: ReactNode;
-  readonly testID?: string | undefined;
-}): React.JSX.Element {
-  return (
-    <View style={[styles.fact, wide ? styles.factWide : null]}>
-      <Text style={styles.factLabel}>{label}</Text>
-      <View style={styles.factValueRow}>
-        <Text style={styles.factValue} testID={testID}>
-          {value}
-        </Text>
-        {action}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-export function FactGrid({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  return <View style={styles.factGrid}>{children}</View>;
-}
+/** Moved to `@bolusi/ui`; re-exported so the repair screens keep importing it from here. */
+export { Fact, FactGrid };
 
 /**
  * Under a total: the down payment taken off it, then what the customer still pays, or what the
@@ -577,6 +544,8 @@ export const repairStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   /** The growing side of a `row`: wraps instead of pushing the amount beside it off screen. */
   rowText: { flexShrink: 1, marginRight: space.md },
+  /** The amount side of a `row`: never shrinks, so "Rp" and its number stay on one line. */
+  rowValue: { flexShrink: 0 },
   warning: { ...type.bodySm, color: color.warning },
 });
 
@@ -628,12 +597,6 @@ const styles = StyleSheet.create({
   },
   sectionAction: { marginRight: -space.sm },
   sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
-  factGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.md },
-  fact: { width: '50%', paddingRight: space.sm },
-  factWide: { width: '100%' },
-  factLabel: { ...type.caption, color: color.textMuted },
-  factValueRow: { flexDirection: 'row', alignItems: 'center', minHeight: size.control },
-  factValue: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },
   field: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },
   fieldLabel: { ...type.bodySm, color: color.textMuted, marginRight: space.md },
   fieldValue: { ...type.bodySm, color: color.text, flexShrink: 1, textAlign: 'right' },

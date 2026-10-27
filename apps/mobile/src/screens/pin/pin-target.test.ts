@@ -1,22 +1,8 @@
 import { describe, expect, test } from 'vitest';
 
-import { lockedTargets, ownerListState, type PinTargetUser } from './pin-target.js';
+import { ownerListState, type PinTargetUser } from './pin-target.js';
 
 const LOCKED: PinTargetUser = { id: 'a', name: 'Ani', lockedOut: true };
-const OPEN: PinTargetUser = { id: 'b', name: 'Budi', lockedOut: false };
-
-describe('lockedTargets', () => {
-  test('keeps only locked users and returns a fresh array (never the caller’s)', () => {
-    const users = [LOCKED, OPEN];
-    const result = lockedTargets(users);
-    expect(result).toEqual([LOCKED]);
-    expect(result).not.toBe(users);
-  });
-
-  test('empty when nobody is locked', () => {
-    expect(lockedTargets([OPEN])).toEqual([]);
-  });
-});
 
 describe('ownerListState — the shared §5 precedence for both owner screens', () => {
   test('permission is checked FIRST — denial wins over loading, error, AND a non-empty list', () => {

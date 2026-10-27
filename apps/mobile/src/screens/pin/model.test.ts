@@ -20,7 +20,6 @@ import {
   PIN_MESSAGE_KEY,
   pinPadState,
   pinView,
-  showsForgotAffordance,
   type LastAttempt,
   type PinView,
 } from './model.js';
@@ -178,13 +177,6 @@ describe('`locked_out` — the hard lock, and what it must not say', () => {
     expect(keysAreLive(lockedRow, NOW)).toBe(false);
     expect(pinPadState(view)).toBe('locked');
     expect(PIN_MESSAGE_KEY[view.kind]).toBe('auth.pin.lockedOut');
-  });
-
-  test('offers the auth.pin.forgot affordance — and ONLY here, where it is actionable', () => {
-    expect(showsForgotAffordance(pinView(lockedRow, NOW))).toBe(true);
-    expect(showsForgotAffordance(pinView(null, NOW))).toBe(false);
-    expect(showsForgotAffordance(pinView(row(1), NOW, 'wrong'))).toBe(false);
-    expect(showsForgotAffordance(pinView(row(PIN_FREE_ATTEMPTS, NOW + 1), NOW))).toBe(false);
   });
 
   test('waiting does NOT clear a hard lock — time is not the recovery path (api/02-auth §6.5)', () => {

@@ -7,42 +7,16 @@
  * enforces the permission, the directory-membership restriction, and the §6.6 privileged-target rule
  * (only a main owner may reset another main owner); this model decides what the screen shows.
  *
- * THREE SECURITY-RELEVANT DECISIONS LIVE HERE:
- *  1. `resetListState` gates on the permission FIRST (shared `ownerListState`) — a non-owner sees
- *     Unauthorized, never Empty. The acting owner is excluded from the target list: reset is for
- *     SOMEONE ELSE (self-service is the change-PIN screen), which is also what makes "no other users"
- *     a meaningful Empty.
- *  2. The reset is only submittable after the shared `advanceNewPin` sub-flow reaches `matched` — the
+ * The list (permission first, the acting owner left out) is `staff-pin.model.ts`. Two decisions
+ * live here:
+ *  1. The reset is only submittable after the shared `advanceNewPin` sub-flow reaches `matched` — the
  *     target's repeat must equal their first entry, so a mistyped confirmation never sets a PIN the
  *     target cannot reproduce (which would lock them straight back out).
- *  3. `resetOutcome` maps the flow's `restriction_violated` denial to the truthful privileged-target
+ *  2. `resetOutcome` maps the flow's `restriction_violated` denial to the truthful privileged-target
  *     message, never a false success.
  */
 import { advanceNewPin, NEW_PIN_START, type NewPinEntry } from './new-pin.js';
-import { ownerListState, type OwnerListState, type PinTargetUser } from './pin-target.js';
-
-/** What the screen needs to decide the target list. */
-export interface ResetListInput {
-  /** Does the acting user hold `auth.user_reset_pin` (02-permissions §12)? */
-  readonly canReset: boolean;
-  readonly loading: boolean;
-  /** A DomainError code if the directory read failed, else null. */
-  readonly error: string | null;
-  readonly users: readonly PinTargetUser[];
-  /** The acting owner, excluded from the target list (reset is for another user). */
-  readonly actorUserId: string;
-}
-
-/**
- * The list state, via the shared owner precedence. `ready` targets are every directory user EXCEPT
- * the acting owner, so an empty list truthfully means "no other users on this device".
- */
-export function resetListState(input: ResetListInput): OwnerListState {
-  return ownerListState(
-    { permitted: input.canReset, loading: input.loading, error: input.error },
-    () => input.users.filter((user) => user.id !== input.actorUserId),
-  );
-}
+import type { PinTargetUser } from './pin-target.js';
 
 /** Why a reset failed (a success needs no reason). */
 export type ResetFailure = 'denied' | 'error';
