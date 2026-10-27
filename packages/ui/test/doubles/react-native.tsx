@@ -203,6 +203,10 @@ export const __windowMetrics = { width: 411, height: 914, scale: 2.625, fontScal
 export function useWindowDimensions(): typeof __windowMetrics {
   return { ...__windowMetrics };
 }
+/** The same recorded metrics for a non-hook read; the screen and the window are the same here. */
+export const Dimensions = {
+  get: (_dimension: 'window' | 'screen'): typeof __windowMetrics => ({ ...__windowMetrics }),
+};
 
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };
 

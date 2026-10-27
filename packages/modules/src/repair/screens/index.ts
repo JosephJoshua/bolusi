@@ -1,6 +1,6 @@
 // The `repair` module's phone screens, importable only from apps (08 §3.2): the board, ticket detail
 // with its action steps, the intake wizard, the handover and the owner's settings, over a `RepairRuntime` the app binds.
-export { RepairBoard, type RepairBoardProps } from './RepairBoard.js';
+export { NoTicketOpen, RepairBoard, type RepairBoardProps } from './RepairBoard.js';
 export { TicketDetail, type TicketDetailProps } from './TicketDetail.js';
 export { IntakeWizard, type IntakeWizardProps } from './IntakeWizard.js';
 export type { DiscardGuard, StepBack } from '../../screen-kit/index.js';

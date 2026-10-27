@@ -69,7 +69,8 @@
     "clearSearch": "Clear search",
     "checkSync": "Check sync status",
     "cancelledBy": "by {name}",
-    "feeChanged": "Fee changed"
+    "feeChanged": "Fee changed",
+    "pickTicket": "Pick a repair to see its details."
   },
   "cancel": {
     "reason": "Why is it cancelled?",

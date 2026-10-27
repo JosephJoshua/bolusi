@@ -9,6 +9,7 @@ import {
   AppShell,
   Button,
   Chip,
+  EmptyState,
   List,
   SearchField,
   SegmentedControl,
@@ -60,6 +61,11 @@ export interface RepairBoardProps {
   readonly onOpenTicket: (ticketId: string) => void;
   readonly onNewIntake: () => void;
   readonly onOpenSyncStatus: () => void;
+  /**
+   * The ticket open beside the board on a tablet, marked so the eye finds it in the list. Its next
+   * step is then the screen's primary action, so "Servisan baru" steps back to an outlined button.
+   */
+  readonly selectedTicketId?: string | null | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -75,6 +81,7 @@ export function RepairBoard({
   onOpenTicket,
   onNewIntake,
   onOpenSyncStatus,
+  selectedTicketId = null,
   testID = 'repair.board',
 }: RepairBoardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -169,6 +176,8 @@ export function RepairBoard({
         can.intake ? (
           <Button
             label={tn('repair.action.newIntake')}
+            // One primary on screen: with a ticket open beside the board, its next step leads.
+            variant={selectedTicketId === null ? 'primary' : 'secondary'}
             onPress={onNewIntake}
             testID={`${testID}.newIntake`}
           />
@@ -215,6 +224,7 @@ export function RepairBoard({
         renderRow={(row) => (
           <TicketRow
             row={row}
+            selected={row.id === selectedTicketId}
             showCancel={!searching && view === 'cancelled'}
             syncChip={
               <SyncStatusChip
@@ -235,6 +245,11 @@ export function RepairBoard({
   );
 }
 
+/** The space beside the board on a tablet before a ticket is picked. */
+export function NoTicketOpen(): React.JSX.Element {
+  return <EmptyState title={tn('repair.board.pickTicket')} testID="repair.board.noTicketOpen" />;
+}
+
 /**
  * One repair on the board, readable at a glance: number and status, who it belongs to and what it
  * costs, the device and its technician, and a price change waiting on the counter. A plain list row
@@ -242,12 +257,14 @@ export function RepairBoard({
  */
 function TicketRow({
   row,
+  selected,
   showCancel,
   syncChip,
   onPress,
   testID,
 }: {
   readonly row: TicketSummaryRow;
+  readonly selected: boolean;
   /** The owners' cancelled view: who cancelled, why, and a fee that differs from the store's. */
   readonly showCancel: boolean;
   readonly syncChip: ReactNode;
@@ -288,11 +305,14 @@ function TicketRow({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ selected }}
       onPress={onPress}
       android_ripple={{ color: color.surfaceAlt }}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: pressed ? color.surfaceAlt : color.surface },
+        {
+          backgroundColor: selected ? color.infoBg : pressed ? color.surfaceAlt : color.surface,
+        },
       ]}
     >
       <View style={styles.rowBody}>

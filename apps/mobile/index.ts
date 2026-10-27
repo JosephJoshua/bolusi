@@ -32,6 +32,7 @@ import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-trans
 import { createFetchStaffAdmin } from './src/bootstrap/staff-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root, type RootProps } from './src/bootstrap/Root.js';
+import { lockPhonesToPortrait } from './src/ports/orientation.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
 import { createBackgroundSyncHost, SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
@@ -546,4 +547,6 @@ function Bootstrapped(): React.JSX.Element | null {
   return Root(rootProps);
 }
 
+// Before the first screen, so a phone held sideways at launch turns upright straight away.
+void lockPhonesToPortrait();
 registerRootComponent(Bootstrapped);

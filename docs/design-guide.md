@@ -86,6 +86,21 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   field on its own (it covered "Lanjut" on intake); `autoFocus` is only for a
   field that appears because the person just asked to type (Tambah, Ubah biaya).
 
+### Phones and tablets
+
+- Lay out by the room on screen (`useViewport().widthClass`: compact under
+  600 dp, medium, expanded from 840 dp), never by device type. Phones are
+  locked upright; tablets turn.
+- `AppShell` keeps content and the bottom action in one centred column of at
+  most `size.contentMax`; sheets rise at the same width. Never stretch a form,
+  a button or a line of text across a tablet.
+- A list with a detail (the servisan board) shows both side by side when
+  expanded; a task from start to finish (intake) keeps the whole screen.
+  Exactly one filled primary across both panes.
+- Check every changed screen at 360 x 640, 800 x 1280, 960 x 600 and
+  1280 x 800, and at 1.3x font. A short landscape tablet is the tightest case:
+  put things side by side rather than making the person scroll to a key.
+
 ## 5. No redundancy
 
 - No label that repeats the placeholder or the obvious ("Cari" above a search

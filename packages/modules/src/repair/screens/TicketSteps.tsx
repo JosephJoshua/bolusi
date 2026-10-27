@@ -46,6 +46,7 @@ import {
   QueryView,
   repairStyles,
   type RepairChrome,
+  usePhotoGridCell,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
 import { useCancelFees, useRepairQuery, useRepairRuntime } from './runtime.js';
@@ -100,6 +101,7 @@ export function WorkPhotosStep({
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [photos, setPhotos] = useState<readonly MediaRef[]>([]);
+  const gridCell = usePhotoGridCell();
   const [note, setNote] = useState('');
   const copy = STAGE_COPY[stage];
   const discard = useDiscardConfirm({
@@ -150,12 +152,12 @@ export function WorkPhotosStep({
       <View style={repairStyles.gap}>
         <PhotoGrid>
           {photos.map((photo, index) => (
-            <View key={photo.mediaId} style={repairStyles.gridCell}>
+            <View key={photo.mediaId} style={gridCell}>
               <PhotoThumb photo={capturedThumbnailRef(photo)} testID={`${testID}.photo.${index}`} />
             </View>
           ))}
           {photos.length < WORK_PHOTOS_MAX ? (
-            <View style={repairStyles.gridCell}>
+            <View style={gridCell}>
               <PhotoSlot
                 label={tn(copy.shot, { n: photos.length + 1 })}
                 image={null}

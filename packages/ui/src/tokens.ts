@@ -170,6 +170,11 @@ export const size = Object.freeze({
    * one screen where identity IS the content.
    */
   avatarSwitcher: 96,
+  /**
+   * The widest a screen's content and bottom action get. On a tablet a form, a ticket or a PIN pad
+   * stays one readable column in the middle instead of stretching lines and buttons edge to edge.
+   */
+  contentMax: 720,
   /** A person's identity at the top of a PIN screen or their own page: a face, not a bullet. */
   avatarHero: 64,
   /** §3.11 FreshnessCell geometry — the battery-cell signature. */

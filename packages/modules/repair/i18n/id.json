@@ -69,7 +69,8 @@
     "clearSearch": "Hapus pencarian",
     "checkSync": "Cek status sinkron",
     "cancelledBy": "oleh {name}",
-    "feeChanged": "Biaya diubah"
+    "feeChanged": "Biaya diubah",
+    "pickTicket": "Pilih servisan untuk melihat detailnya."
   },
   "cancel": {
     "reason": "Kenapa dibatalkan?",
