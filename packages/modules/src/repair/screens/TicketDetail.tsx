@@ -545,7 +545,11 @@ export function TicketDetail({
             {tn('repair.price.total')}
           </Text>
           <Text
-            style={[cancelled ? styles.notCharged : styles.totalValue, styles.amount]}
+            style={[
+              cancelled ? styles.notCharged : styles.totalValue,
+              styles.amount,
+              repairStyles.rowValue,
+            ]}
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
@@ -559,7 +563,10 @@ export function TicketDetail({
               <Text style={[styles.totalLabel, repairStyles.rowText]}>
                 {tn('repair.cancel.fee')}
               </Text>
-              <Text style={[styles.totalValue, styles.amount]} testID={`${testID}.cancelFee`}>
+              <Text
+                style={[styles.totalValue, styles.amount, repairStyles.rowValue]}
+                testID={`${testID}.cancelFee`}
+              >
                 {formatMoney(row.cancelFee ?? 0)}
               </Text>
             </View>

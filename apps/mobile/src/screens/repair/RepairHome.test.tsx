@@ -461,7 +461,7 @@ describe('cancelling (owners only)', () => {
     expect(
       StyleSheet.flatten(typeof label === 'object' ? label.props['style'] : null).flexShrink,
     ).toBe(1);
-    expect(StyleSheet.flatten(fee.props['style']).flexShrink ?? 0).toBe(0);
+    expect(StyleSheet.flatten(fee.props['style']).flexShrink).toBe(0);
   });
 });
 

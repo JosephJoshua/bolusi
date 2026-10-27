@@ -429,6 +429,8 @@ export const repairStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   /** The growing side of a `row`: wraps instead of pushing the amount beside it off screen. */
   rowText: { flexShrink: 1, marginRight: space.md },
+  /** The amount side of a `row`: never shrinks, so "Rp" and its number stay on one line. */
+  rowValue: { flexShrink: 0 },
   warning: { ...type.bodySm, color: color.warning },
 });
 

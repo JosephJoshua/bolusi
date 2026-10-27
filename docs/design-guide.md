@@ -165,7 +165,7 @@ name), whose full text is one tap away.
 
 **Values never split mid-phrase.** A money amount, a date or a name stays on
 one line ("Rp" and "50.000" together). Let the label beside it wrap instead
-(`repairStyles.rowText`), or give the value its own line.
+(`repairStyles.rowText` beside `rowValue`), or give the value its own line.
 
 Supported range: 360 dp wide phones and the system font up to 1.3×.
 
