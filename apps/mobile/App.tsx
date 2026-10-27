@@ -355,9 +355,25 @@ export default function App(props: AppProps): React.JSX.Element {
    * — B's own landing surface, never the outgoing user's.
    */
   const [routeOwner, setRouteOwner] = useState<string | null>(sessionUserId);
+  /**
+   * Where Back from Sync Status goes: the route it was opened from, however it was opened (a header
+   * chip, the Settings row, a notification tap). Recorded during render, like `routeOwner`, so the
+   * frame that first shows Sync Status already knows its way back. When that is `home`, the home
+   * surface also stays mounted underneath (see the `shell` renderer), so the open servisan, its step
+   * and anything typed are still there.
+   */
+  const [shownRoute, setShownRoute] = useState<ShellRoute>(route);
+  const [syncReturn, setSyncReturn] = useState<ShellRoute>('home');
   if (routeOwner !== sessionUserId) {
+    const restored = workspace?.route ?? 'home';
     setRouteOwner(sessionUserId);
-    setRoute(workspace?.route ?? 'home');
+    setRoute(restored);
+    // Never another user's way back: a restored Sync Status returns home.
+    setShownRoute(restored);
+    setSyncReturn('home');
+  } else if (shownRoute !== route) {
+    setShownRoute(route);
+    if (route === 'syncStatus') setSyncReturn(shownRoute);
   }
 
   /**
@@ -611,11 +627,12 @@ export default function App(props: AppProps): React.JSX.Element {
       // switcher and the load-bearing clear on it — without it `resolveZone` would re-open the roster.
       setPinFor(null);
       setSwitching(false);
-      setRoute(target.route);
+      // Sync Status backs to where it was opened from, the same as its header back.
+      setRoute(zone.kind === 'shell' && zone.route === 'syncStatus' ? syncReturn : target.route);
       return true;
     }
     return false; // Let Android exit.
-  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface]);
+  }, [accountMenu, zone, enrollment, captureSurface, signatureSurface, syncReturn]);
 
   // An idle lock or a sign-out takes the shell away under an open menu; it must not reappear after.
   useEffect(() => {
@@ -945,12 +962,12 @@ export default function App(props: AppProps): React.JSX.Element {
             );
           },
           shell: (shellZone) => {
-            if (shellZone.route === 'syncStatus') {
-              return (
+            const syncStatus =
+              shellZone.route === 'syncStatus' ? (
                 <SyncStatusScreen
                   input={props.sync}
                   currentUser={currentUser}
-                  onBack={() => setRoute('home')}
+                  onBack={() => setRoute(syncReturn)}
                   onSyncNow={props.onSyncNow}
                   // 05 §2.3 / 06 §8: "rejections must be surfaced, never silent". The row already
                   // carries the code's explanation; the tap discloses the server's own words under
@@ -966,10 +983,19 @@ export default function App(props: AppProps): React.JSX.Element {
                   // there is no per-item retry to call and pretending otherwise would be a control
                   // that looks more precise than the engine underneath it.
                   onRetryMedia={props.onRetryMedia}
-                  onOpenSwitcher={() => setSwitching(true)}
+                  // Switching user unmounts the home surface kept under Sync Status, so go back to it
+                  // first and let its discard question run where the person can see it.
+                  onOpenSwitcher={() => {
+                    if (syncReturn !== 'home') {
+                      setSwitching(true);
+                      return;
+                    }
+                    setRoute('home');
+                    leaveHome(() => setSwitching(true));
+                  }}
                 />
-              );
-            }
+              ) : null;
+            if (syncStatus !== null && syncReturn !== 'home') return syncStatus;
             if (shellZone.route === 'settings' && currentUser !== null) {
               return (
                 <SettingsScreen
@@ -1048,7 +1074,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   }}
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
-                  onOpenSync={() => setRoute('syncStatus')}
+                  onOpenSync={openSyncStatus}
                 />
               );
             }
@@ -1138,88 +1164,108 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
-            // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
-            // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
-            // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
-            // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
-            // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
-            // the copy the label catalog exists to prevent (07-i18n).
-            if (props.notes === undefined && props.repair === undefined) {
-              return <View testID="shell-home" style={FILL} />;
-            }
-            // The header chrome every home surface shares (§8.1).
-            const homeSyncChip = (
-              <SyncChip
-                state={chip}
-                pendingCount={props.sync.pendingOperationCount}
-                progressPercent={setupPercent}
-                accessibilityLabels={syncChipAccessibilityLabels({
-                  relative:
-                    props.sync.state.lastSuccessfulSyncAt === null
-                      ? t('core.status.empty')
-                      : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
-                  pendingCount: props.sync.pendingOperationCount,
-                  firstSyncPercent: setupPercent,
-                })}
-                onPress={() => leaveHome(() => setRoute('syncStatus'))}
-              />
-            );
-            const homeAvatar =
-              currentUser === null ? (
-                <View testID="notes-no-avatar" />
-              ) : (
-                // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
-                // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
-                //
-                // Settings holds the language toggle, the owner's intake lists, the PIN and
-                // notification rows and the device readout. On an Indonesian-first product the
-                // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
-                // rows carry an icon that reads by shape: a cog and a person swap.
-                //
-                // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
-                // `setSwitching(true)` produces the switcher zone from a live session, and
-                // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
-                // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
-                // before either leaves the surface.
-                <AvatarButton
-                  userId={currentUser.id}
-                  initials={currentUser.initials}
-                  accessibilityLabel={t('core.account.menu')}
-                  onPress={() => setAccountMenu(true)}
+            const homeSurface = (): React.JSX.Element => {
+              // `home` is the module surface (task 96): the notes screens, when a live `NotesRuntime` is
+              // available. The session IS wired now (task 119); `props.notes` is `undefined` only when there
+              // is no runtime at all — an unenrolled device, or the Node/test harness with no media pipeline
+              // (`CaptureHost`: "null on a device with no media pipeline (never enrolled)"). In that case it
+              // stays the empty shell rather than a placeholder string — a hardcoded "coming soon" is exactly
+              // the copy the label catalog exists to prevent (07-i18n).
+              if (props.notes === undefined && props.repair === undefined) {
+                return <View testID="shell-home" style={FILL} />;
+              }
+              // The header chrome every home surface shares (§8.1).
+              const homeSyncChip = (
+                <SyncChip
+                  state={chip}
+                  pendingCount={props.sync.pendingOperationCount}
+                  progressPercent={setupPercent}
+                  accessibilityLabels={syncChipAccessibilityLabels({
+                    relative:
+                      props.sync.state.lastSuccessfulSyncAt === null
+                        ? t('core.status.empty')
+                        : formatRelative(props.now - props.sync.state.lastSuccessfulSyncAt),
+                    pendingCount: props.sync.pendingOperationCount,
+                    firstSyncPercent: setupPercent,
+                  })}
+                  // No leave guard: Sync Status keeps the surface mounted, so nothing is lost.
+                  onPress={openSyncStatus}
                 />
               );
-            // Repair is the slice-1 home; notes stays the home on a build without it.
-            if (props.repair !== undefined) {
+              const homeAvatar =
+                currentUser === null ? (
+                  <View testID="notes-no-avatar" />
+                ) : (
+                  // THE HEADER CHROME (§8.1): the avatar, which opens the account menu: switch user
+                  // (the User Switcher) and Settings. It is the ONLY producer of `route: 'settings'`.
+                  //
+                  // Settings holds the language toggle, the owner's intake lists, the PIN and
+                  // notification rows and the device readout. On an Indonesian-first product the
+                  // language rows are the ONLY way out of a wrong locale (07-i18n §1.2), so both menu
+                  // rows carry an icon that reads by shape: a cog and a person swap.
+                  //
+                  // THE AVATAR → SWITCHER HOP §8.1 DESCRIBES (task 143) now goes through the menu.
+                  // `setSwitching(true)` produces the switcher zone from a live session, and
+                  // `backTarget` returns to `home` (this surface's route) when the switch is abandoned.
+                  // Both rows go through `leaveHome` (task 145), so an open editor's discard gate runs
+                  // before either leaves the surface.
+                  <AvatarButton
+                    userId={currentUser.id}
+                    initials={currentUser.initials}
+                    accessibilityLabel={t('core.account.menu')}
+                    onPress={() => setAccountMenu(true)}
+                  />
+                );
+              // Repair is the slice-1 home; notes stays the home on a build without it.
+              if (props.repair !== undefined) {
+                return (
+                  <RepairHome
+                    runtime={props.repair}
+                    // The clock itself, not this render's reading: an intake can sit open for hours.
+                    now={systemClock.now}
+                    onRegisterSurfaceNav={registerSurfaceNav}
+                    restoredDraft={restoredIntakeDraft}
+                    onDraftChange={publishIntakeDraft}
+                    onOpenSyncStatus={openSyncStatus}
+                    syncChip={homeSyncChip}
+                    avatar={homeAvatar}
+                  />
+                );
+              }
+              if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
               return (
-                <RepairHome
-                  runtime={props.repair}
-                  // The clock itself, not this render's reading: an intake can sit open for hours.
-                  now={systemClock.now}
+                <NotesHome
+                  runtime={props.notes}
+                  now={props.now}
+                  // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
                   onRegisterSurfaceNav={registerSurfaceNav}
-                  restoredDraft={restoredIntakeDraft}
-                  onDraftChange={publishIntakeDraft}
-                  onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
+                  // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
+                  // locked (owner-checked above, so it is theirs), and the write-back that keeps it
+                  // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
+                  restoredDraft={restoredNotesDraft}
+                  onDraftChange={publishNotesDraft}
+                  onOpenSyncStatus={openSyncStatus}
                   syncChip={homeSyncChip}
                   avatar={homeAvatar}
                 />
               );
-            }
-            if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
+            };
+            // Sync Status opened from home sits OVER the home surface instead of replacing it: the
+            // surface keeps its own state (the open servisan, its step, anything typed), so Back lands
+            // exactly where the person was. Same element shape on both routes, so React keeps it mounted.
             return (
-              <NotesHome
-                runtime={props.notes}
-                now={props.now}
-                // The surface publishes its internal back/leave here (task 145) — see `leaveHome`/`goBack`.
-                onRegisterSurfaceNav={registerSurfaceNav}
-                // SEC-AUTH-08 retention (task 155): the draft this user had in flight when they last
-                // locked (owner-checked above, so it is theirs), and the write-back that keeps it
-                // current. On a clean editor `restoredNotesDraft` is null and nothing is restored.
-                restoredDraft={restoredNotesDraft}
-                onDraftChange={publishNotesDraft}
-                onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
-                syncChip={homeSyncChip}
-                avatar={homeAvatar}
-              />
+              <>
+                <View
+                  key="home"
+                  testID="shell-home-surface"
+                  style={syncStatus === null ? FILL : HIDDEN}
+                  accessibilityElementsHidden={syncStatus !== null}
+                  importantForAccessibility={syncStatus === null ? 'auto' : 'no-hide-descendants'}
+                >
+                  {homeSurface()}
+                </View>
+                {syncStatus}
+              </>
             );
           },
         })}
@@ -1330,6 +1376,7 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
 }
 
 const FILL = { flex: 1 } as const;
+const HIDDEN = { display: 'none' } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
