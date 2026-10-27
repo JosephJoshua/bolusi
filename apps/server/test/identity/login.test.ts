@@ -99,6 +99,25 @@ test('a successful login returns the tenant display name for the enrollment conf
   expect(res.body['tenantId']).toBeDefined();
 });
 
+test('login lists only the stores the user may enroll a phone into, so a non-owner is refused at the first step', async () => {
+  const p = await ownerTenant();
+  const storeId = p.storeIds[0] as string;
+  await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'Kasir',
+    loginIdentifier: 'kasir',
+    passwordVerifier: await h.kdf.createVerifier(PASSWORD),
+    storeIds: [storeId],
+    roleKeys: ['staff'],
+  });
+
+  const owner = await login(h, 'ocep', PASSWORD);
+  expect(owner.body['stores']).toEqual([{ id: storeId, name: 'S' }]);
+  const cashier = await login(h, 'kasir', PASSWORD);
+  expect(cashier.status).toBe(200);
+  expect(cashier.body['stores']).toEqual([]);
+});
+
 test('§9 login limits: 6th failure for one identifier within 15 min → 429 (locked), unlocks after the window; 31st request/IP/hour → 429', async () => {
   await ownerTenant();
 

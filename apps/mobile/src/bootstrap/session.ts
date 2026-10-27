@@ -32,11 +32,7 @@
  * stays 14's `checkIdle()` (§2.8: one implementation, and it is core's).
  *
  * ── WHAT IS STILL DELIBERATELY NOT HERE ─────────────────────────────────────────────────────────
- * The §6.6 first-PIN SETUP screen. `submitPin` REPORTS `needs_first_pin` for a user with no verifier
- * rather than inventing a setup flow — an honest dead end the switcher already signals
- * (`needsFirstPin` on the roster row), not a silent failure.
- *
- * And the DRAFT PRODUCER. `updateWorkspace` is live and its retention round-trips through 14's
+ * The DRAFT PRODUCER. `updateWorkspace` is live and its retention round-trips through 14's
  * per-user map. **Task 155 wired the producer:** `NoteEditor` now write-throughs its in-flight
  * title/body/mediaRef into the workspace on every keystroke (a draft seam on `NoteEditor`, a prop on
  * `App`), so an idle lock PRESERVES a half-typed note and the SAME user's unlock restores it — the
@@ -50,19 +46,24 @@
 import {
   AUTH_PERMISSION,
   changePin as changePinFlow,
+  firstPinUserOnThisDevice,
+  setFirstPin as setFirstPinFlow,
   clearPinLockoutFlow as clearLockoutFlow,
   createLockedOutEmitter,
   derivePinAuthState,
+  drainPendingVerifiers,
   resetPin as resetPinFlow,
   DomainError,
   errorCodeOrUnexpected,
   listSwitcherUsers,
   resolveDisplayRoleKeys,
-  PinVerifierQueue,
   readIdleLockSeconds,
   readPinAttempt,
+  readStaffDirectory,
   readVerifier,
   SessionManager,
+  createWorkStore,
+  deleteWorkExcept,
   verifyPin,
   type ActiveSession,
   type ClockPort,
@@ -72,14 +73,16 @@ import {
   type PinAuthState,
   type PinFlowDeps,
   type PinVerifierUploadPort,
+  type StaffDirectory,
 } from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
 import { sql, type Kysely } from 'kysely';
 
+import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { PinTargetUser } from '../screens/pin/pin-target.js';
 import type { SwitcherUser } from '../screens/switcher/model.js';
 import { ShellSession, type LockReason } from '../session/shell-session.js';
-import type { UserWorkspace } from '../state/user-workspaces.js';
+import { parseUserWorkspace, type UserWorkspace } from '../state/user-workspaces.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { readDeviceIdentity } from './notes.js';
@@ -91,7 +94,7 @@ export type PinOutcome =
   | { readonly kind: 'opened'; readonly session: ActiveSession }
   /** Wrong PIN. `state` is 14's own `PinAuthState`, rendered as-is (task 24 renders, never re-derives). */
   | { readonly kind: 'wrong'; readonly state: PinAuthState; readonly lockedOut: boolean }
-  /** api/02-auth §6.6: this user has no verifier yet. No setup screen exists — see the file header. */
+  /** api/02-auth §6.6: this user has no verifier yet; the shell sends them to make one first. */
   | { readonly kind: 'needs_first_pin' }
   /** The attempt was refused BEFORE the KDF ran (SEC-AUTH-02): `PIN_LOCKED` / `PIN_RATE_LIMITED`. */
   | { readonly kind: 'gated'; readonly code: string };
@@ -128,6 +131,16 @@ export interface AppSessionSnapshot {
    * wrongly-shown entry fails closed.
    */
   readonly canReset: boolean;
+  /**
+   * Does the ACTIVE user hold `auth.user_create` here (owner decision 2026-10-27)? Gates the Settings
+   * "Karyawan" entry. A UX gate like the two above: the server decides every staff change.
+   */
+  readonly canManageStaff: boolean;
+  /**
+   * Is the ACTIVE user a tenant admin (tenant-wide `auth.role_manage`, the main owner)? Only they are
+   * offered owner roles and other owners to manage; the server enforces the same rule.
+   */
+  readonly tenantAdmin: boolean;
 }
 
 export interface AppSessionController {
@@ -139,6 +152,13 @@ export interface AppSessionController {
    *  and after every attempt, so the pad's lockout view reflects the row the last attempt wrote. */
   pinRow(userId: string): PinAttemptRow | null;
   submitPin(userId: string, pin: string): Promise<PinOutcome>;
+  /**
+   * The owner who enrolled this device makes their own first PIN (api/02-auth §6.6), before any
+   * session exists: the roster marks them `canMakeOwnPin`. Core refuses it for anyone else and for a
+   * user who already has a PIN. Re-reads the roster so the mark clears; the caller then signs them in
+   * with `submitPin`.
+   */
+  setFirstPin(userId: string, pin: string): Promise<void>;
   /**
    * Change the SIGNED-IN user's own PIN (api/02-auth §6.6). Runs core's `changePin` flow: it verifies
    * the CURRENT PIN locally (gated by the lockout machine), computes + applies the new verifier at the
@@ -179,13 +199,20 @@ export interface AppSessionController {
   listPinTargets(): Promise<readonly PinTargetUser[]>;
   /**
    * POST every queued PIN verifier to the server (api/02-auth §5.4; task 186a-2). Called on next
-   * online contact (Root wires it to the sync client's `onBundleRefreshed`, which fires only online):
+   * online contact (Root wires it to the sync client's `onBundleChecked`, which fires on every online bundle answer):
    * a change applied LOCALLY at once (`changePin`) reaches the server here, and from there every other
    * device via bundle refresh (§5.2). Idempotent — a stale POST is a no-op (§5.3); a network fault
    * keeps the item queued for the next contact. Never throws: the drain swallows per-item transport
    * errors (they re-queue), so a bundle refresh is never blocked by an unreachable verifier POST.
    */
   drainVerifiers(port: PinVerifierUploadPort): Promise<void>;
+  /** The staff list and pickable roles from this device's directory mirrors (core `staff.ts`). */
+  listStaff(): Promise<StaffDirectory>;
+  /**
+   * Who a staff change is made as and for which store: the signed-in user and this device's store.
+   * Null with no session, so a change can never be sent anonymously.
+   */
+  staffContext(): { readonly actingUserId: string; readonly storeId: string } | null;
   /**
    * ONE idle check (api/02-auth §6.4). Driven by the platform ticker (`session/idle-ticker.ts`),
    * which owns the cadence; the DECISION is 14's `checkIdle()` and is not re-derived anywhere above
@@ -227,6 +254,10 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   if (device === null) return null;
 
   const db = deps.app.db.db;
+  const reportWorkStoreError = (error: unknown): void =>
+    consoleDiagnostics.warn('saved work store failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   // The command runtime session ops are emitted through — the SAME composition the genesis and every
   // note write use, so a session op joins the one hash chain rather than a second one.
   const commands = deps.runtime.runtimeFor(device);
@@ -242,14 +273,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     // Omitting this — which is what happened until task 133 — silently pinned every device to the
     // 300 s default, so a shop that tightened the lock to 60 s got 300 s and never knew.
     idleLockSeconds: await readIdleLockSeconds(db),
+    // Each user's drafts also go to disk (sealed), so a half-entered servisan survives Android
+    // recreating the activity or killing the app; only that user's next PIN unlock reads it back.
+    workStore: createWorkStore(db, parseUserWorkspace, () => deps.clock.now()),
+    onWorkStoreError: reportWorkStoreError,
   });
   const lockedOut = createLockedOutEmitter(commands);
-  // The pending-verifier queue (api/02-auth §5.4): a PIN change computes the verifier offline and
-  // queues it here; it is POSTed to the server on next online contact so other devices pick up the
-  // new PIN via bundle refresh. Long-lived (one per session) so a queued verifier survives until a
-  // drain sends it. The drain wiring is task 186a-2; today the change is honored LOCALLY at once.
-  const verifierQueue = new PinVerifierQueue();
-
   let users: readonly SwitcherUser[] | null = null;
   let usersError: string | null = null;
   const rows = new Map<string, PinAttemptRow | null>();
@@ -306,7 +335,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     clock: deps.clock,
     idSource: deps.idSource,
     deviceId: device.deviceId,
-    queue: verifierQueue,
     emitter: lockedOut,
   };
   const runPinFlow = async (
@@ -326,7 +354,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     }
   };
 
-  return {
+  const controller: AppSessionController = {
     snapshot: () => {
       const shellState = shell.snapshot();
       return {
@@ -338,6 +366,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         workspace: shellState.workspace,
         canUnlock: actingUserHolds(AUTH_PERMISSION.pinUnlock),
         canReset: actingUserHolds(AUTH_PERMISSION.userResetPin),
+        canManageStaff: actingUserHolds(AUTH_PERMISSION.userCreate),
+        tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
       };
     },
 
@@ -358,7 +388,16 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
 
     async refresh(): Promise<void> {
       try {
-        const directory = await listSwitcherUsers(db);
+        const [directory, firstPinUserId] = await Promise.all([
+          listSwitcherUsers(db),
+          firstPinUserOnThisDevice(db),
+        ]);
+        // Someone who left the roster can never unlock again: drop their saved drafts. Best
+        // effort, so a failed delete never costs the switcher its list.
+        await deleteWorkExcept(
+          db,
+          directory.map((user) => user.id),
+        ).catch(reportWorkStoreError);
         users = await Promise.all(
           directory.map(async (user) => {
             const [verifier, lastActiveAt, roleKeys] = await Promise.all([
@@ -366,6 +405,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
               lastActiveOnThisDevice(db, user.id, device.deviceId),
               resolveDisplayRoleKeys(db, user.id),
             ]);
+            const ownFirstPin = user.id === firstPinUserId;
             return {
               id: user.id,
               name: user.name,
@@ -373,6 +413,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
               lastActiveAt,
               // §6.6: a bundle row with no verifier is a user who has never set a PIN here.
               needsFirstPin: verifier === null,
+              canMakeOwnPin: verifier === null && ownFirstPin,
               // design-system §8.2: the top-privilege role name(s); empty ⇒ no role line.
               roleKeys,
             } satisfies SwitcherUser;
@@ -442,6 +483,14 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
       return outcome;
     },
 
+    async setFirstPin(userId, pin): Promise<void> {
+      try {
+        await setFirstPinFlow(pinFlowDeps, { userId, pin });
+      } finally {
+        await controller.refresh().catch(() => undefined);
+      }
+    },
+
     // Change the signed-in user's OWN PIN. Affects the acting user's row; a wrong current PIN burns a
     // lockout attempt, a success clears the counter (§6.5) — either way `runPinFlow` re-reads it.
     changePin: (currentPin, newPin) =>
@@ -463,36 +512,61 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
 
     // Reset another user's PIN as the acting owner. Enqueues a verifier carrying THIS owner as
     // `actorUserId`, so the drain POSTs the owner in `X-Acting-User` (task 186b-2). Affects the target.
-    resetPin: (targetUserId, newPin) =>
-      runPinFlow(
-        'resetPin',
-        () => targetUserId,
-        (flowDeps, session) =>
-          resetPinFlow(flowDeps, { actorUserId: session.userId, targetUserId, newPin }),
-      ),
+    // A reset can also give a first PIN to someone who had none, so the roster is re-read too.
+    async resetPin(targetUserId, newPin): Promise<void> {
+      try {
+        await runPinFlow(
+          'resetPin',
+          () => targetUserId,
+          (flowDeps, session) =>
+            resetPinFlow(flowDeps, { actorUserId: session.userId, targetUserId, newPin }),
+        );
+      } finally {
+        await controller.refresh().catch(() => undefined);
+      }
+    },
+
+    listStaff: () => readStaffDirectory(db),
+
+    staffContext: () => {
+      const active = manager.current;
+      // A store device always has a store; only the server's system device has none.
+      if (active === null || device.storeId === null) return null;
+      return { actingUserId: active.userId, storeId: device.storeId };
+    },
 
     async listPinTargets(): Promise<readonly PinTargetUser[]> {
       const directory = await listSwitcherUsers(db);
       return Promise.all(
-        directory.map(async (user) => ({
-          id: user.id,
-          name: user.name,
-          // Caller-derived lockout (pin-target.ts's contract): the ONE lockout machine (task 14), read
-          // fresh here and never re-derived in the screen. Locked iff this device's attempt row for this
-          // user is at the hard-lock threshold.
-          lockedOut:
-            derivePinAuthState(await readPinAttempt(db, user.id, device.deviceId)) === 'locked_out',
-        })),
+        directory.map(async (user) => {
+          const [roleKeys, attempt, verifier] = await Promise.all([
+            resolveDisplayRoleKeys(db, user.id),
+            readPinAttempt(db, user.id, device.deviceId),
+            readVerifier(db, user.id),
+          ]);
+          return {
+            id: user.id,
+            name: user.name,
+            roleKeys,
+            needsFirstPin: verifier === null,
+            // Caller-derived lockout (pin-target.ts's contract): the ONE lockout machine (task 14), read
+            // fresh here and never re-derived in the screen. Locked iff this device's attempt row for this
+            // user is at the hard-lock threshold.
+            lockedOut: derivePinAuthState(attempt) === 'locked_out',
+          };
+        }),
       );
     },
 
     async drainVerifiers(port): Promise<void> {
-      // `PinVerifierQueue.drain` is itself total — it POSTs each pending verifier, drops the ones the
-      // server answered (applied true OR false), and re-queues the ones whose POST threw. It never
-      // rejects, so a bundle refresh is never blocked by an unreachable server.
-      await verifierQueue.drain(port);
+      // A PIN change queues its verifier on disk (`pending_pin_verifiers`), so one made before the app
+      // was killed is still sent here. The drain POSTs each, drops the ones the server answered
+      // (applied true OR false), and keeps the ones whose POST threw. A failed read of the queue is
+      // swallowed too: the rows stay on disk and the next bundle refresh tries again.
+      await drainPendingVerifiers(db, port).catch(() => undefined);
     },
   };
+  return controller;
 }
 
 /**

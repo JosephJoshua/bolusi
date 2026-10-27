@@ -27,6 +27,7 @@
  *
  * ── §5's FOUR STATES, AND THE HONEST ACCOUNT OF THE FOURTH ──────────────────────────────────────
  *   loading       — `permission_pending` / `warming_up`: a spinner (§3.9 — non-list content under 1 s).
+ *                   In `warming_up` it covers the mounted preview, which must exist to become ready.
  *   unauthorized  — `permission_denied`: `UnauthorizedState`, NOT an empty box (§5: denial must never
  *                   masquerade as Empty). §5 also wants what went wrong AND how to fix it, and the
  *                   fix is NOT another in-app prompt — Android answers a second request on a denied
@@ -230,8 +231,21 @@ function content(
 ): ReactNode {
   switch (state.kind) {
     case 'permission_pending':
-    case 'warming_up':
       return <LoadingState variant="spinner" testID="capture-loading" />;
+
+    case 'warming_up':
+      // The preview has to be MOUNTED for the camera to start: `ready` comes from the camera's own
+      // ready event, which an unmounted view never fires, so a spinner in its place waited forever.
+      // It mounts under an opaque cover instead, so the black frame of an attaching camera never
+      // shows, and it stays the same element into `ready`, so the camera does not restart.
+      return (
+        <View style={styles.viewfinder} testID="capture-viewfinder">
+          {preview}
+          <View style={styles.cover}>
+            <LoadingState variant="spinner" testID="capture-loading" />
+          </View>
+        </View>
+      );
 
     case 'permission_denied':
       // The OS camera permission was declined. That is the DEVICE's setting, not the workspace's
@@ -305,6 +319,14 @@ const styles = StyleSheet.create({
     backgroundColor: color.surfaceAlt,
     borderRadius: radius.md,
     overflow: 'hidden',
+  },
+  cover: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: color.surfaceAlt,
   },
   reviewActions: { gap: space.sm },
 });

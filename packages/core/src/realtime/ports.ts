@@ -10,6 +10,7 @@
 // frames, error, close — so ONE factory shape serves both legs (two instances: `ws`, `sse`). The
 // controller never sends (v0 realtime is server→client only, api/00 §12.1), so there is no `send`.
 import type { ClockPort, RuntimeTimerPort } from '../runtime/ports.js';
+import type { RealtimeRung } from './controller.js';
 
 /** A live transport the controller can tear down. Returned by `RealtimeTransportFactory.open`. */
 export interface RealtimeTransportHandle {
@@ -57,4 +58,10 @@ export interface RealtimeControllerDeps {
   readonly trigger: () => void;
   readonly clock: ClockPort;
   readonly timer: RuntimeTimerPort;
+  /**
+   * Told when the ladder moves to another rung (WS→SSE, SSE→polling, or a recovery back to WS), so
+   * the app can log a degraded channel instead of falling back silently. Diagnostics only: a throw is
+   * swallowed and nothing here feeds back into sync.
+   */
+  readonly onRungChange?: (rung: RealtimeRung) => void;
 }

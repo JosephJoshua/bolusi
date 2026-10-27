@@ -18,7 +18,11 @@ import { t } from '@bolusi/i18n';
 import type { SyncChipState } from './model.js';
 
 export interface SyncChipLabelInput {
-  /** `synced` only — the humanized "last connected" relative time. Empty ⇒ no suffix. */
+  /**
+   * `synced` only — the humanized "last connected" relative time. Missing or empty ⇒ the chip says
+   * "all changes sent" instead: "Terakhir terhubung " with nothing after it is what the switcher and
+   * PIN screens announced (first Android QA run).
+   */
   readonly relative?: string;
   /**
    * The count of `local` ops the `pending` chip also shows numerically. REQUIRED, never defaulted: a
@@ -43,7 +47,10 @@ export function syncChipAccessibilityLabels(
   input: SyncChipLabelInput,
 ): Record<SyncChipState, string> {
   return {
-    synced: t('sync.status.lastSynced', { relative: input.relative ?? '' }),
+    synced:
+      input.relative === undefined || input.relative === ''
+        ? t('sync.status.upToDate')
+        : t('sync.status.lastSynced', { relative: input.relative }),
     pending: t('sync.status.pending', { count: input.pendingCount }),
     syncing:
       input.firstSyncPercent === undefined || input.firstSyncPercent === null

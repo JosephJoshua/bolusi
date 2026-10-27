@@ -156,6 +156,9 @@ export async function writeStoreHistory(options: StoreHistoryOptions): Promise<S
   return { ops: await readWireOps(writer.db), tickets, writer };
 }
 
+/** Work photos are the technician's own captures, so the server binds them to the technician. */
+const techPhoto = (h: RepairHarness, n: number) => ({ ...h.photo(n), userId: h.technicianId });
+
 async function openStoreTicket(h: RepairHarness, prng: Prng, customers: string[]) {
   const returning = customers.length > 0 && prng() < 0.35;
   const [brand, model] = pick(prng, DEVICES);
@@ -189,7 +192,7 @@ async function writeOpenTicket(h: RepairHarness, prng: Prng, customers: string[]
   if (stage < 0.3) return;
   await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
   if (stage < 0.45) return;
-  await h.run('startWork', { ticketId, beforePhotos: [h.photo(5)] }, h.technicianId);
+  await h.run('startWork', { ticketId, beforePhotos: [techPhoto(h, 9)] }, h.technicianId);
   if (prng() < 0.3) {
     await h.run(
       'proposeQuoteChange',
@@ -208,7 +211,7 @@ async function writeOpenTicket(h: RepairHarness, prng: Prng, customers: string[]
   }
   await h.run(
     'markRepaired',
-    { ticketId, note: 'Sudah dites', afterPhotos: [h.photo(6)] },
+    { ticketId, note: 'Sudah dites', afterPhotos: [techPhoto(h, 10)] },
     h.technicianId,
   );
 }
@@ -224,7 +227,7 @@ async function writeTicketJourney(
   if (prng() < 0.25) {
     await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
   }
-  await h.run('startWork', { ticketId, beforePhotos: [h.photo(5)] }, h.technicianId);
+  await h.run('startWork', { ticketId, beforePhotos: [techPhoto(h, 9)] }, h.technicianId);
   if (prng() < 0.2) {
     await h.run(
       'markWaitingForParts',
@@ -251,7 +254,7 @@ async function writeTicketJourney(
   } else {
     await h.run(
       'markRepaired',
-      { ticketId, note: 'Sudah dites', afterPhotos: [h.photo(6)] },
+      { ticketId, note: 'Sudah dites', afterPhotos: [techPhoto(h, 10)] },
       h.technicianId,
     );
   }

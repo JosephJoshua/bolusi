@@ -16,9 +16,11 @@ import {
   type ChecklistState,
   type QuoteLineKind,
   type RepairOutcome,
+  type SlipKind,
   type WorkPhotoStage,
 } from './constants.js';
 import { readyDays, type IntakeOption, type IntakeOptionLists } from './intake-options.js';
+import { SCREEN_LOCK_KINDS, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
   TicketDetailRow,
@@ -116,6 +118,10 @@ export interface RepairAbilities {
   readonly hideIntakeOptions: boolean;
   /** Set this store's cancellation fees. */
   readonly setCancelFees: boolean;
+  /** Change or remove a down payment already recorded (owners). */
+  readonly correctDownPayment: boolean;
+  /** Edit what this store's slips print. */
+  readonly setPrintSettings: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -132,6 +138,8 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     manageIntakeOptions: hasPermission(P.manageIntakeOptions),
     hideIntakeOptions: hasPermission(P.hideIntakeOptions),
     setCancelFees: hasPermission(P.setCancelFees),
+    correctDownPayment: hasPermission(P.correctDownPayment),
+    setPrintSettings: hasPermission(P.setPrintSettings),
   };
 }
 
@@ -189,6 +197,44 @@ export function ticketActions(
   if (open && can.work && ticket.outcome === 'repaired') actions.push('reopen');
   if (open && can.cancel) actions.push('cancel');
   return actions;
+}
+
+/**
+ * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
+ * the counter records one while the servisan is open and none is recorded; only an owner
+ * changes one already recorded, since a lower figure is how cash would go missing.
+ */
+export function downPaymentAction(
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
+  can: RepairAbilities,
+): 'record' | 'correct' | null {
+  if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
+  const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
+  return can.intake && open ? 'record' : null;
+}
+
+/** The slips a ticket can print: the intake receipt always, the handover slip once it is ready. */
+export function printableSlips(
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'location'>,
+): readonly SlipKind[] {
+  const ready =
+    ticket.location === 'returned' ||
+    ticket.outcome === 'repaired' ||
+    ticket.outcome === 'cancelled';
+  return ready ? ['intake', 'handover'] : ['intake'];
+}
+
+/**
+ * What the customer still owes once a down payment is taken off the total, or what the store gives
+ * back when the down payment was more (a cancelled servisan whose fee is below it).
+ */
+export function balanceAfterDownPayment(
+  total: number,
+  downPayment: number,
+): { readonly kind: 'due' | 'refund'; readonly amount: number } {
+  return downPayment > total
+    ? { kind: 'refund', amount: downPayment - total }
+    : { kind: 'due', amount: total - downPayment };
 }
 
 // ── an open step after the ticket changed ────────────────────────────────────────────────────
@@ -313,6 +359,14 @@ export function acceptsRupiahText(text: string): boolean {
   return text.replace(/\D/g, '') === '' || parseRupiah(text) !== null;
 }
 
+/**
+ * What a phone field keeps of what was typed or pasted: digits, spaces and dashes, and a "+" only
+ * at the start. Android's phone keypad also offers ". , ( ) * # N /", which no number here needs.
+ */
+export function phoneText(text: string): string {
+  return text.replace(/[^\d\s+-]/g, '').replace(/(?!^)\+/g, '');
+}
+
 /** The signed amount a line contributes: discounts subtract. Adjustments are entered signed. */
 export function signedAmount(kind: QuoteLineKind, amount: number): number {
   return kind === 'discount' ? -Math.abs(amount) : amount;
@@ -371,13 +425,21 @@ const zIntakeDraft = z.strictObject({
     }),
     z.strictObject({ kind: z.literal('new'), name: z.string(), phone: z.string() }),
   ]),
-  device: z.strictObject({
-    brand: z.string(),
-    model: z.string(),
-    color: z.string(),
-    imei: z.string(),
-    passcode: z.string(),
-  }),
+  device: z
+    .strictObject({
+      brand: z.string(),
+      model: z.string(),
+      color: z.string(),
+      imei: z.string(),
+      /** How the phone is locked; `passcode` holds the PIN, password or pattern (screen-lock.ts). */
+      lockKind: z.enum(['none', ...SCREEN_LOCK_KINDS]).optional(),
+      passcode: z.string(),
+    })
+    // A draft saved before lock kinds kept a typed passcode only.
+    .transform(({ lockKind, ...device }) => ({
+      ...device,
+      lockKind: lockKind ?? (device.passcode === '' ? ('none' as const) : ('password' as const)),
+    })),
   complaint: z.string(),
   intakeNotes: z.string(),
   checks: z.record(z.string(), z.enum(CHECKLIST_STATES)),
@@ -385,8 +447,12 @@ const zIntakeDraft = z.strictObject({
   /** Photo per angle id. */
   photos: z.record(z.string(), zMediaRef),
   lines: z.array(zLineDraft),
+  /** Rupiah the customer paid up front, as typed; '' when nothing was paid. */
+  downPayment: z.string().default(''),
   /** The ready-by option id picked, or '' while the store's default stands. */
   ready: z.string().transform((ready) => LEGACY_READY[ready] ?? ready),
+  /** The id the ticket will get, taken when the intake starts so it can only be opened once. */
+  ticketId: z.string().optional(),
 });
 
 export type IntakeDraft = z.infer<typeof zIntakeDraft>;
@@ -402,13 +468,14 @@ export function emptyIntakeDraft(): IntakeDraft {
     kind: 'intake',
     step: 0,
     customer: { kind: 'new', name: '', phone: '' },
-    device: { brand: '', model: '', color: '', imei: '', passcode: '' },
+    device: { brand: '', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
     complaint: '',
     intakeNotes: '',
     checks: {},
     peripherals: [],
     photos: {},
     lines: [],
+    downPayment: '',
     ready: '',
   };
 }
@@ -416,7 +483,7 @@ export function emptyIntakeDraft(): IntakeDraft {
 /** Whether the draft holds anything worth keeping or asking before discarding. */
 export function intakeDirty(draft: IntakeDraft): boolean {
   const empty = emptyIntakeDraft();
-  return JSON.stringify({ ...draft, step: 0 }) !== JSON.stringify(empty);
+  return JSON.stringify({ ...draft, step: 0, ticketId: undefined }) !== JSON.stringify(empty);
 }
 
 /**
@@ -446,11 +513,13 @@ export type IntakeProblem =
   | 'customerName'
   | 'deviceBrand'
   | 'deviceModel'
+  | 'screenLock'
   | 'complaint'
   | 'photos'
   | 'quoteLines'
   | 'incompleteLine'
-  | 'negativeTotal';
+  | 'negativeTotal'
+  | 'downPaymentAboveTotal';
 
 export function stepProblems(
   draft: IntakeDraft,
@@ -467,6 +536,11 @@ export function stepProblems(
     case 'device':
       if (draft.device.brand.trim() === '') problems.push('deviceBrand');
       if (draft.device.model.trim() === '') problems.push('deviceModel');
+      // A chosen lock with nothing entered (a pattern shorter than Android allows is kept as '')
+      // would save as no lock; the counter picks "Tidak ada" for that.
+      if (draft.device.lockKind !== 'none' && draft.device.passcode === '') {
+        problems.push('screenLock');
+      }
       break;
     case 'condition':
       if (draft.complaint.trim() === '') problems.push('complaint');
@@ -482,6 +556,14 @@ export function stepProblems(
       if (validLines(draft.lines).length === 0) problems.push('quoteLines');
       // Mirrors `openTicket`: discounts can bring the price to nothing, never below it.
       else if (intakeTotal(draft.lines) < 0) problems.push('negativeTotal');
+      // Mirrors `openTicket`: more than a known price up front is change, not a payment. With no
+      // price yet (to be checked first), any deposit stands.
+      else if (
+        intakeTotal(draft.lines) > 0 &&
+        intakeDownPayment(draft) > intakeTotal(draft.lines)
+      ) {
+        problems.push('downPaymentAboveTotal');
+      }
       break;
     case 'review':
       for (const earlier of INTAKE_STEPS.slice(0, -1)) {
@@ -545,6 +627,11 @@ export function intakeTotal(lines: readonly QuoteLineDraft[]): number {
  * check, accessory and photo carries its label as shown, so the ticket keeps it. Call only when
  * `review` has no problems.
  */
+/** The down payment typed at intake, 0 when none. */
+export function intakeDownPayment(draft: Pick<IntakeDraft, 'downPayment'>): number {
+  return parseRupiah(draft.downPayment) ?? 0;
+}
+
 export function toOpenTicketInput(
   draft: IntakeDraft,
   options: IntakeOptionLists,
@@ -555,6 +642,7 @@ export function toOpenTicketInput(
     return state === undefined ? [] : [{ item: id, label, state, note: '' }];
   });
   return {
+    ...(draft.ticketId === undefined ? {} : { ticketId: draft.ticketId }),
     customer:
       draft.customer.kind === 'existing'
         ? { customerId: draft.customer.customerId }
@@ -564,7 +652,10 @@ export function toOpenTicketInput(
       model: draft.device.model.trim(),
       color: draft.device.color.trim(),
       imei: draft.device.imei.trim() || null,
-      passcode: draft.device.passcode === '' ? null : draft.device.passcode,
+      passcode:
+        draft.device.lockKind === 'none' || draft.device.passcode === ''
+          ? null
+          : encodeScreenLock({ kind: draft.device.lockKind, value: draft.device.passcode }),
     },
     complaint: draft.complaint.trim(),
     intakeNotes: draft.intakeNotes.trim(),
@@ -584,5 +675,6 @@ export function toOpenTicketInput(
       label,
       ref: draft.photos[id]!,
     })),
+    downPayment: intakeDownPayment(draft),
   };
 }

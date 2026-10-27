@@ -2,7 +2,9 @@
  * Native services and sync state are supplied by the bootstrap composition root.
  */
 import {
+  Avatar,
   AvatarButton,
+  ConfirmSheet,
   Icon,
   ListRow,
   NAV_BAR_INSET,
@@ -14,7 +16,13 @@ import {
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
+import {
+  Platform,
+  StatusBar as RNStatusBar,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
@@ -37,8 +45,10 @@ import {
 } from './src/navigation/zone.js';
 import { EnrollmentScreen } from './src/screens/enrollment/EnrollmentScreen.js';
 import {
+  afterLogin,
   canSubmitConfirm,
   canSubmitCredentials,
+  chosenStoreId,
   classifyFailure,
   initialEnrollmentState,
   needsDiscardConfirm,
@@ -47,12 +57,15 @@ import {
 import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
-import { ClearLockoutScreen } from './src/screens/pin/ClearLockoutScreen.js';
-import { ResetPinScreen } from './src/screens/pin/ResetPinScreen.js';
+import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
+import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from './src/screens/pin/pin-target.js';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
+import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
+import { pinView } from './src/screens/pin/model.js';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen.js';
 import { SwitcherScreen } from './src/screens/switcher/SwitcherScreen.js';
+import { roleLabel } from './src/screens/switcher/UserRow.js';
 import {
   initialsOf,
   switcherState,
@@ -75,6 +88,7 @@ import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
+import type { StaffControls } from './src/bootstrap/staff.js';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
@@ -179,6 +193,11 @@ export interface AppProps {
    */
   readonly onChangePin: (currentPin: string, newPin: string) => Promise<void>;
   /**
+   * Make a first PIN for a user who has none (api/02-auth §6.6). Resolves once it is stored; REJECTS
+   * with the flow's DomainError. The shell then signs them in through `onSubmitPin`.
+   */
+  readonly onSetFirstPin?: ((userId: string, pin: string) => Promise<void>) | undefined;
+  /**
    * Does the signed-in user hold `auth.pin_unlock` (task 186b)? Drives whether the Settings "Unlock a
    * PIN" row is offered — the owner Unlock entry is absent for a non-owner. From the session snapshot,
    * so it re-derives on a user switch. Core still enforces the permission, so this is a UX gate.
@@ -194,7 +213,7 @@ export interface AppProps {
   /**
    * Clear a target user's PIN lockout (api/02-auth §6.5.1; task 186b), driven by the session
    * controller as the acting owner. Resolves on success; REJECTS with the flow's DomainError so
-   * `ClearLockoutScreen` maps it (`INVALID_TRANSITION → notLocked`). No verifier is computed — the
+   * `StaffPinScreen` maps it (`INVALID_TRANSITION → notLocked`). No verifier is computed — the
    * owner never learns the PIN — so unlike Change PIN there is nothing to drain afterward.
    */
   readonly onClearLockout: (targetUserId: string) => Promise<void>;
@@ -206,10 +225,15 @@ export interface AppProps {
   /**
    * Reset a target user's PIN to the owner-typed `newPin` (api/02-auth §6.6; task 186b-2), driven by the
    * session controller as the acting owner. Resolves on success; REJECTS with the flow's DomainError so
-   * `ResetPinScreen` maps it (the §6.6 privileged-target refusal). Enqueues a verifier carrying the OWNER
+   * `StaffPinScreen` maps it (the §6.6 privileged-target refusal). Enqueues a verifier carrying the OWNER
    * as its actor, so the drain POSTs the owner in `X-Acting-User` (never the target).
    */
   readonly onResetPin: (targetUserId: string, newPin: string) => Promise<void>;
+  /**
+   * The owner's staff management, Settings › Karyawan (owner decision 2026-10-27). Absent for anyone
+   * who may not add staff here, and on a build with no server wire; then the row is absent too.
+   */
+  readonly staff?: StaffControls | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -226,11 +250,26 @@ export interface AppProps {
    * fake. Both reject on failure, and the wizard buckets it (`classifyFailure`).
    */
   readonly enrollment: EnrollmentController;
+  /**
+   * Set while this device should be asked, once, to allow notifications (`push/permission.ts`):
+   * `true` is "Nyalakan" (the OS prompt follows), `false` is "Nanti saja". Null when not asking.
+   */
+  readonly onAnswerNotifications?: ((allow: boolean) => void) | null | undefined;
 }
 
 export default function App(props: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<ShellRoute>('home');
+  /** "PIN karyawan" opened from "Karyawan" for one person's first PIN; back returns to Karyawan. */
+  const [staffPinFor, setStaffPinFor] = useState<string | null>(null);
   const [pinFor, setPinFor] = useState<string | null>(null);
+  // Wrong PINs typed for one person since their pad opened. Each one remounts the pad in its error
+  // state, which clears the dots and shows "PIN salah" again, even on a second wrong PIN in a row.
+  const [wrongPins, setWrongPins] = useState<{ readonly userId: string; readonly count: number }>({
+    userId: '',
+    count: 0,
+  });
+  // A pad opened afresh starts clean, not with the last visit's "PIN salah".
+  useEffect(() => setWrongPins({ userId: '', count: 0 }), [pinFor]);
   /**
    * The user asked to open the switcher while a session is open — the voluntary quick-switch
    * (task 143; api/02-auth §6.2). `resolveZone` turns this into the switcher zone only when a session
@@ -240,12 +279,15 @@ export default function App(props: AppProps): React.JSX.Element {
   const [switching, setSwitching] = useState(false);
   // The avatar's menu (switch user, settings), open over the home surface.
   const [accountMenu, setAccountMenu] = useState(false);
+  const { fontScale } = useWindowDimensions();
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
    * `resolveZone`, which decides whether it is honoured — device status, an idle lock and a pending
    * PIN all beat it, so setting this can never render the wizard over a locked device.
    */
   const [reenrolling, setReenrolling] = useState(false);
+  /** True while a login or enroll request is in flight (see `runLogin`). */
+  const enrollRequestRef = useRef(false);
   const [enrollment, setEnrollment] = useState<EnrollmentState>(() =>
     initialEnrollmentState(props.device === 'revoked'),
   );
@@ -259,10 +301,10 @@ export default function App(props: AppProps): React.JSX.Element {
    */
   const [rejectedDetailFor, setRejectedDetailFor] = useState<string | null>(null);
   /**
-   * The owner-Unlock target list (task 186b), loaded ON DEMAND when the `unlockPin` route opens. The
-   * screen takes a caller-loaded list; loading it only while that screen shows keeps a directory +
-   * per-user lockout read off every other render. `loading` starts true so the screen shows its loading
-   * state until the first read resolves — never an empty "no one is locked out" flash before data.
+   * The owner's staff PIN list, loaded ON DEMAND when the `staffPins` route opens. The screen takes a
+   * caller-loaded list; loading it only while that screen shows keeps a directory + per-user lockout
+   * read off every other render. `loading` starts true so the screen shows its loading state until the
+   * first read resolves — never an empty list flash before data.
    */
   const [pinTargets, setPinTargets] = useState<{
     readonly loading: boolean;
@@ -445,16 +487,11 @@ export default function App(props: AppProps): React.JSX.Element {
     );
   }, [listPinTargets]);
 
-  // Load the target list when an owner picker (Unlock OR Reset) opens — both read the same directory —
-  // not before, and fresh on each ENTRY to a picker. `loadPinTargets` is stable and the effect keys on
-  // the derived `onOwnerPicker` flag, so it fires only when that flag TOGGLES (a non-picker↔picker
-  // transition), never on an unrelated Root bump that leaves the route put — keeping the read off those
-  // renders. The cleanup resets to loading when a picker closes, so a later re-entry starts clean, never
-  // a one-frame flash of the previous visit's (possibly stale) list. NOTE: a hypothetical direct
-  // picker→picker jump (unlockPin→resetPin) keeps the flag true and would NOT reload — harmless because
-  // the two share one directory, and in the real UI both pickers back to Settings between visits (so the
-  // flag always toggles false→true on entry); if a direct jump is ever added, key this on `route`.
-  const onOwnerPicker = route === 'unlockPin' || route === 'resetPin';
+  // Load the staff list when the owner's staff PIN screen opens, not before, and fresh on each ENTRY.
+  // `loadPinTargets` is stable and the effect keys on the derived `onOwnerPicker` flag, so it fires only
+  // when that flag TOGGLES, never on an unrelated Root bump that leaves the route put. The cleanup resets
+  // to loading when the screen closes, so a later re-entry never flashes the previous visit's list.
+  const onOwnerPicker = route === 'staffPins';
   useEffect(() => {
     if (!onOwnerPicker) return undefined;
     loadPinTargets();
@@ -591,24 +628,21 @@ export default function App(props: AppProps): React.JSX.Element {
   // Step 1 (§4.2): log in. On success, advance to the confirm step carrying the tenant/store choices;
   // auto-select the store when there is exactly one (nothing to disambiguate). On failure, bucket it
   // into one of the four human actions (`classifyFailure`) — never a raw server string.
+  // `enrollRequestRef` closes the gap between a tap and the re-render that sets `busy`: two quick
+  // taps both saw `busy: false` and fired two requests, and binding cannot be undone.
   const runLogin = (): void => {
-    if (enrollment.busy || !canSubmitCredentials(enrollment)) return;
+    if (enrollRequestRef.current || enrollment.busy || !canSubmitCredentials(enrollment)) return;
+    enrollRequestRef.current = true;
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
       .login({ loginIdentifier: enrollment.loginIdentifier.trim(), password: enrollment.password })
-      .then((login) =>
-        setEnrollment((s) => ({
-          ...s,
-          busy: false,
-          login,
-          step: 'confirm',
-          selectedStoreId:
-            login.stores.length === 1 ? (login.stores[0]?.id ?? null) : s.selectedStoreId,
-        })),
-      )
+      .then((login) => setEnrollment((s) => afterLogin(s, login)))
       .catch((error: unknown) =>
         setEnrollment((s) => ({ ...s, busy: false, failure: classifyFailure(error) })),
-      );
+      )
+      .finally(() => {
+        enrollRequestRef.current = false;
+      });
   };
 
   // Step 2 (§4.3 + §4.1 steps 4–6): register + genesis + persist. The state is captured BEFORE the
@@ -616,21 +650,29 @@ export default function App(props: AppProps): React.JSX.Element {
   // done step; the enrolled-zone handoff and sync loop wait for the owner's Continue tap (`finish`,
   // §8.5 step 3) so the done step is not unmounted before it renders (task 201).
   const runEnroll = (): void => {
-    if (enrollment.busy || !canSubmitConfirm(enrollment)) return;
-    const { login, selectedStoreId } = enrollment;
-    if (login === null || selectedStoreId === null) return;
+    if (enrollRequestRef.current || enrollment.busy || !canSubmitConfirm(enrollment)) return;
+    const { login } = enrollment;
+    const storeId = chosenStoreId(enrollment);
+    if (login === null || storeId === null) return;
     const deviceName = enrollment.deviceName.trim();
+    enrollRequestRef.current = true;
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
-      .enroll({ login, storeId: selectedStoreId, deviceName })
-      .then(() => setEnrollment((s) => ({ ...s, busy: false, step: 'done' })))
+      .enroll({ login, storeId, deviceName })
+      // The done step names the store from `selectedStoreId`, so it is set to what was bound.
+      .then(() =>
+        setEnrollment((s) => ({ ...s, busy: false, step: 'done', selectedStoreId: storeId })),
+      )
       .catch((error: unknown) =>
         setEnrollment((s) => ({
           ...s,
           busy: false,
           failure: classifyFailure(error),
         })),
-      );
+      )
+      .finally(() => {
+        enrollRequestRef.current = false;
+      });
   };
 
   const chip = useMemo(() => syncChipState(props.sync), [props.sync]);
@@ -640,13 +682,22 @@ export default function App(props: AppProps): React.JSX.Element {
       props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
   const canSetCancelFees =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
+  const canSetPrintSettings =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   const currentUser = useMemo(() => {
     if (props.session === null) return null;
     const found = (props.users ?? []).find((user) => user.id === props.session?.userId);
-    return found === undefined ? null : { id: found.id, initials: initialsOf(found.name) };
+    return found === undefined
+      ? null
+      : {
+          id: found.id,
+          initials: initialsOf(found.name),
+          name: found.name,
+          roleKeys: found.roleKeys,
+        };
   }, [props.session, props.users]);
 
   // The shell's edge-to-edge insets, resolved once per render and applied at BOTH `bolusi-app-shell`
@@ -745,6 +796,12 @@ export default function App(props: AppProps): React.JSX.Element {
     <View testID="bolusi-app-shell" style={shellStyle}>
       <StatusBar style="auto" />
       <View
+        // A new system font size remounts the screens. Re-measuring in place does not hold on
+        // Android: the next React commit brings back its own text nodes, measured at the old size,
+        // so text drew at the new size inside old boxes (QA runs on PR #45). Fresh nodes measure
+        // at the new size. MainActivity tells JS the new scale (withActivityConfigChanges.ts).
+        // Work in progress survives: drafts live in the workspace above.
+        key={`font-${fontScale}`}
         style={styles.zone}
         // Hidden from touch and screen readers while the overlay covers it, but still mounted.
         pointerEvents={modal === null ? 'auto' : 'none'}
@@ -810,39 +867,83 @@ export default function App(props: AppProps): React.JSX.Element {
               syncChip={chip}
               pendingCount={props.sync.pendingOperationCount}
               onOpenSync={openSyncStatus}
+              currentUserId={switcherZone.mode === 'lock' ? null : sessionUserId}
+              lockedUserIds={lockedUserIds(props.users, props.pinRow, props.now)}
             />
           ),
-          pin: (pinZone) => (
-            <PinScreen
-              userId={pinZone.userId}
-              userName={nameOf(props.users, pinZone.userId)}
-              row={props.pinRow(pinZone.userId)}
-              now={props.now}
-              lastAttempt="none"
-              onSubmit={(pin) => {
-                // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
-                // stays exactly where it is (its own `state` renders the failure), which is why this
-                // waits for the result rather than clearing optimistically — an optimistic clear
-                // would drop a failed attempt straight into the shell.
-                const submitted = props.onSubmitPin(pinZone.userId, pin);
-                if (submitted !== undefined) {
-                  void submitted.then((opened) => {
-                    if (opened) {
-                      // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
-                      // the pending target AND the switch intent, so the gate lands on the incoming
-                      // user's shell rather than re-rendering the roster over their session (task 143).
-                      setPinFor(null);
-                      setSwitching(false);
-                    }
-                  });
-                }
-              }}
-              onSwitchUser={() => setPinFor(null)}
-              syncChip={chip}
-              pendingCount={props.sync.pendingOperationCount}
-              onOpenSync={openSyncStatus}
-            />
-          ),
+          pin: (pinZone) => {
+            const signIn = (pin: string): void => {
+              // Clear the pending PIN target only on a CONFIRMED unlock. On a wrong PIN the pad
+              // stays exactly where it is (its own `state` renders the failure), which is why this
+              // waits for the result rather than clearing optimistically — an optimistic clear
+              // would drop a failed attempt straight into the shell.
+              const submitted = props.onSubmitPin(pinZone.userId, pin);
+              if (submitted !== undefined) {
+                void submitted.then((opened) => {
+                  if (!opened) {
+                    setWrongPins((prior) => ({
+                      userId: pinZone.userId,
+                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                    }));
+                  }
+                  if (!opened) {
+                    setWrongPins((prior) => ({
+                      userId: pinZone.userId,
+                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                    }));
+                  }
+                  if (opened) {
+                    // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
+                    // the pending target AND the switch intent, so the gate lands on the incoming
+                    // user's shell rather than re-rendering the roster over their session (task 143).
+                    setPinFor(null);
+                    setSwitching(false);
+                  }
+                });
+              }
+            };
+            const user = userOf(props.users, pinZone.userId);
+            const tap = user === undefined ? null : tapTarget(user);
+            // §6.6: the enrolling owner with no PIN yet makes one, then is signed in with it. Anyone
+            // else with no PIN is told to ask an owner (PinScreen's `needsFirstPin` state).
+            if (
+              tap?.kind === 'firstPinSetup' &&
+              user !== undefined &&
+              props.onSetFirstPin !== undefined
+            ) {
+              return (
+                <PinSetupScreen
+                  userId={pinZone.userId}
+                  userName={user.name}
+                  roleKeys={user.roleKeys}
+                  onSetFirstPin={props.onSetFirstPin}
+                  onSignIn={signIn}
+                  onBack={() => setPinFor(null)}
+                  syncChip={chip}
+                  pendingCount={props.sync.pendingOperationCount}
+                  onOpenSync={openSyncStatus}
+                />
+              );
+            }
+            const wrong = wrongPins.userId === pinZone.userId ? wrongPins.count : 0;
+            return (
+              <PinScreen
+                key={`${pinZone.userId}:${wrong}`}
+                userId={pinZone.userId}
+                userName={nameOf(props.users, pinZone.userId)}
+                roleKeys={user?.roleKeys}
+                needsFirstPin={tap?.kind === 'askOwnerForPin'}
+                row={props.pinRow(pinZone.userId)}
+                now={props.now}
+                lastAttempt={wrong > 0 ? 'wrong' : 'none'}
+                onSubmit={signIn}
+                onSwitchUser={() => setPinFor(null)}
+                syncChip={chip}
+                pendingCount={props.sync.pendingOperationCount}
+                onOpenSync={openSyncStatus}
+              />
+            );
+          },
           shell: (shellZone) => {
             if (shellZone.route === 'syncStatus') {
               return (
@@ -882,11 +983,17 @@ export default function App(props: AppProps): React.JSX.Element {
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
-                  // Owner-only (task 186b): the row is offered ONLY when the acting user holds
-                  // `auth.pin_unlock`. `undefined` for a non-owner ⇒ SettingsScreen omits the row.
-                  onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
-                  // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
-                  onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
+                  // Owner-only: offered ONLY when the acting user may unlock or reset a colleague's PIN
+                  // (`auth.pin_unlock` / `auth.user_reset_pin`); otherwise the row is absent.
+                  onOpenStaffPins={
+                    props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
+                  }
+                  onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
+                  lockedStaffCount={
+                    [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
+                      (id) => id !== currentUser.id,
+                    ).length
+                  }
                   // Owners and store owners only: each row for whoever may change it here.
                   repair={{
                     section: tn('repair.board.title'),
@@ -894,6 +1001,7 @@ export default function App(props: AppProps): React.JSX.Element {
                       ...(canSetIntakeOptions
                         ? [
                             {
+                              icon: 'list' as const,
                               title: tn('repair.options.title'),
                               summary: tn('repair.options.summary'),
                               onOpen: () => setRoute('intakeOptions'),
@@ -904,10 +1012,22 @@ export default function App(props: AppProps): React.JSX.Element {
                       ...(canSetCancelFees
                         ? [
                             {
+                              icon: 'money' as const,
                               title: tn('repair.fees.title'),
                               summary: tn('repair.fees.summary'),
                               onOpen: () => setRoute('cancelFees'),
                               testID: 'settings-cancel-fees',
+                            },
+                          ]
+                        : []),
+                      ...(canSetPrintSettings
+                        ? [
+                            {
+                              icon: 'print' as const,
+                              title: tn('repair.printSettings.title'),
+                              summary: tn('repair.printSettings.summary'),
+                              onOpen: () => setRoute('printSettings'),
+                              testID: 'settings-print-settings',
                             },
                           ]
                         : []),
@@ -920,7 +1040,9 @@ export default function App(props: AppProps): React.JSX.Element {
               );
             }
             if (
-              (shellZone.route === 'intakeOptions' || shellZone.route === 'cancelFees') &&
+              (shellZone.route === 'intakeOptions' ||
+                shellZone.route === 'cancelFees' ||
+                shellZone.route === 'printSettings') &&
               props.repair !== undefined
             ) {
               return (
@@ -948,43 +1070,57 @@ export default function App(props: AppProps): React.JSX.Element {
               // Back / done returns to Settings — the surface it was opened from (see `backTarget`).
               return (
                 <ChangePinScreen
+                  person={currentUser ?? undefined}
                   onChangePin={props.onChangePin}
                   onClose={() => setRoute('settings')}
                 />
               );
             }
-            if (shellZone.route === 'unlockPin') {
-              // Owner Unlock (api/02-auth §6.5.1; task 186b), reached from the Settings owner-only row.
-              // `canUnlock` drives the §5 Unauthorized state — a non-owner who somehow reaches here fails
-              // closed (core enforces `auth.pin_unlock` too). The target list was loaded on entry (the
-              // effect above); `onReload` re-reads after an error. Back / done returns to Settings.
+            if (shellZone.route === 'staffPins') {
+              // The owner's "PIN karyawan": unlock a locked PIN or have a colleague make a new one, each
+              // offered only with its permission (core enforces both, plus the §6.6 privileged-target
+              // rule). The list is loaded on entry (the effect above); back returns to Settings.
               return (
-                <ClearLockoutScreen
+                <StaffPinScreen
                   canUnlock={props.canUnlock}
-                  loading={pinTargets.loading}
-                  error={pinTargets.error}
-                  users={pinTargets.users}
-                  onClearLockout={clearLockout}
-                  onReload={loadPinTargets}
-                  onClose={() => setRoute('settings')}
-                />
-              );
-            }
-            if (shellZone.route === 'resetPin') {
-              // Owner Reset (api/02-auth §6.6; task 186b-2), reached from the Settings owner-only row.
-              // `canReset` drives the §5 Unauthorized state — a non-owner who reaches here fails closed
-              // (core enforces `auth.user_reset_pin` too). Shares the same loaded target list as Unlock;
-              // `actorUserId` excludes the owner from the picker (they change their own PIN via Change PIN).
-              return (
-                <ResetPinScreen
                   canReset={props.canReset}
                   loading={pinTargets.loading}
                   error={pinTargets.error}
                   users={pinTargets.users}
                   actorUserId={sessionUserId ?? ''}
+                  onClearLockout={clearLockout}
                   onResetPin={resetPin}
                   onReload={loadPinTargets}
+                  startWith={staffPinFor}
+                  onClose={() => {
+                    setRoute(staffPinFor === null ? 'settings' : 'staff');
+                    setStaffPinFor(null);
+                  }}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'staff' && props.staff !== undefined && currentUser !== null) {
+              // The owner's "Karyawan": add, change and deactivate staff, online. A new person's first
+              // PIN is made in "PIN karyawan", opened at their hand-over and returning here.
+              const staff = props.staff;
+              return (
+                <StaffScreen
+                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                  load={staff.load}
+                  onCreate={staff.onCreate}
+                  onUpdate={staff.onUpdate}
+                  onSetActive={staff.onSetActive}
+                  onMakePin={
+                    props.canReset
+                      ? (userId) => {
+                          setStaffPinFor(userId);
+                          setRoute('staffPins');
+                        }
+                      : undefined
+                  }
                   onClose={() => setRoute('settings')}
+                  onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
             }
@@ -1076,7 +1212,16 @@ export default function App(props: AppProps): React.JSX.Element {
       </View>
       {accountMenu && currentUser !== null && zone.kind === 'shell' ? (
         <Sheet
-          title={nameOf(props.users, currentUser.id)}
+          title={currentUser.name}
+          subtitle={roleLabel(currentUser.roleKeys) || undefined}
+          leading={
+            <Avatar
+              userId={currentUser.id}
+              initials={currentUser.initials}
+              size="row"
+              testID="account-menu-avatar"
+            />
+          }
           closeLabel={t('core.action.close')}
           onClose={() => setAccountMenu(false)}
           testID="account-menu"
@@ -1103,13 +1248,46 @@ export default function App(props: AppProps): React.JSX.Element {
           </View>
         </Sheet>
       ) : null}
+      {props.onAnswerNotifications != null &&
+      zone.kind === 'shell' &&
+      !accountMenu &&
+      modal === null ? (
+        // On the work screen, after unlock, with the reason before the OS asks (never at boot).
+        <ConfirmSheet
+          tone="primary"
+          title={t('push.permission.title')}
+          message={t('push.permission.message')}
+          confirmLabel={t('push.permission.allow')}
+          onConfirm={() => props.onAnswerNotifications?.(true)}
+          cancelLabel={t('push.permission.later')}
+          onCancel={() => props.onAnswerNotifications?.(false)}
+          testID="notification-ask"
+        />
+      ) : null}
       {modal === null ? null : <View style={[StyleSheet.absoluteFill, shellStyle]}>{modal}</View>}
     </View>
   );
 }
 
+/** Users whose PIN is locked on this device, read from the same lockout machine as the PIN pad. */
+function lockedUserIds(
+  users: readonly SwitcherUser[] | null,
+  pinRow: (userId: string) => PinAttemptRow | null,
+  now: number,
+): ReadonlySet<string> {
+  return new Set(
+    (users ?? [])
+      .filter((user) => pinView(pinRow(user.id), now, 'none').kind === 'lockedOut')
+      .map((user) => user.id),
+  );
+}
+
+function userOf(users: readonly SwitcherUser[] | null, userId: string): SwitcherUser | undefined {
+  return (users ?? []).find((user) => user.id === userId);
+}
+
 function nameOf(users: readonly SwitcherUser[] | null, userId: string): string {
-  return (users ?? []).find((user) => user.id === userId)?.name ?? '';
+  return userOf(users, userId)?.name ?? '';
 }
 
 /**
@@ -1147,6 +1325,9 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
   'intakeOptions',
   'cancelFees',
+  'staff',
+  'staffPins',
+  'printSettings',
 ]);
 
 /**

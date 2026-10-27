@@ -371,6 +371,12 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
         />
       ),
     },
+    {
+      id: 'selected',
+      render: (l) => (
+        <componentInventory.ListRow primaryText={l.primaryText} onPress={noop} selected />
+      ),
+    },
   ],
 
   Card: [
@@ -448,6 +454,24 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
       id: 'on',
       render: (l) => (
         <componentInventory.ToggleChip label={l.primaryText} selected onToggle={noop} />
+      ),
+    },
+  ],
+
+  ChipRow: [
+    {
+      id: 'many',
+      render: (l) => (
+        <componentInventory.ChipRow>
+          {Array.from({ length: 12 }, (_, i) => (
+            <componentInventory.ToggleChip
+              key={i}
+              label={`${l.primaryText} ${i + 1}`}
+              selected={i === 1}
+              onToggle={noop}
+            />
+          ))}
+        </componentInventory.ChipRow>
       ),
     },
   ],
@@ -536,6 +560,29 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           label={l.primaryText}
           image={<Text>{l.secondaryText}</Text>}
           actionLabel={l.action}
+        />
+      ),
+    },
+  ],
+
+  PatternLock: [
+    {
+      id: 'drawn',
+      render: (l) => (
+        <componentInventory.PatternLock
+          value="14753"
+          onChange={noop}
+          accessibilityLabel={l.primaryText}
+        />
+      ),
+    },
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.PatternLock
+          value=""
+          onChange={noop}
+          accessibilityLabel={l.primaryText}
         />
       ),
     },
@@ -630,6 +677,20 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
       id: 'open',
       render: (l) => (
         <componentInventory.Sheet title={l.title} closeLabel={l.cancel} onClose={noop}>
+          <Text>{l.message}</Text>
+        </componentInventory.Sheet>
+      ),
+    },
+    {
+      id: 'withPerson',
+      render: (l) => (
+        <componentInventory.Sheet
+          title={l.title}
+          subtitle={l.hint}
+          leading={<componentInventory.Avatar userId="u-gallery" initials="AP" size="row" />}
+          closeLabel={l.cancel}
+          onClose={noop}
+        >
           <Text>{l.message}</Text>
         </componentInventory.Sheet>
       ),
@@ -806,6 +867,48 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           hint={l.hint}
           createLabel={l.create}
           onCreate={noop}
+        />
+      ),
+    },
+  ],
+
+  Fact: [
+    { id: 'default', render: (l) => <componentInventory.Fact label={l.title} value={l.hint} /> },
+    { id: 'wide', render: (l) => <componentInventory.Fact label={l.title} value={l.hint} wide /> },
+  ],
+
+  FactGrid: [
+    {
+      id: 'twoUp',
+      render: (l) => (
+        <componentInventory.FactGrid>
+          <componentInventory.Fact label={l.title} value={l.hint} />
+          <componentInventory.Fact label={l.title} value={l.action} />
+        </componentInventory.FactGrid>
+      ),
+    },
+  ],
+
+  OutcomeState: [
+    {
+      id: 'success',
+      render: (l) => (
+        <componentInventory.OutcomeState
+          tone="success"
+          icon="success"
+          title={l.title}
+          message={l.hint}
+        />
+      ),
+    },
+    {
+      id: 'warning',
+      render: (l) => (
+        <componentInventory.OutcomeState
+          tone="warning"
+          icon="lock"
+          title={l.title}
+          message={l.hint}
         />
       ),
     },

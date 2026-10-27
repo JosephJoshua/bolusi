@@ -1,7 +1,6 @@
 // Boot entry (08 §5.1 `pnpm dev`). Reads config once (security-guide §10), builds the app with
 // the production per-IP key source (node-server's getConnInfo — a real socket address, not the
 // testable X-Forwarded-For fallback), and serves via @hono/node-server.
-import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
@@ -11,7 +10,7 @@ import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
 import { serverCryptoPort } from './oplog/index.js';
 import { pushPortFromConfig } from './push/expo-transport.js';
-import { makeRealtimeWebSocketServer } from './realtime/serve.js';
+import { serveWithRealtime } from './realtime/serve.js';
 import { systemKeyStoreFromConfig } from './sync/system-key-store.js';
 
 const config = loadConfig();
@@ -49,10 +48,7 @@ const app = createApp({
   ...(systemKeyStore === undefined ? {} : { systemKeyStore }),
 });
 
-// The `ws` server for the GET /v1/realtime upgrade (api/00 §12.1). @hono/node-server owns the HTTP
-// `upgrade` handshake and links this `{ noServer: true }` server to the route's `upgradeWebSocket`.
-const websocket = { server: makeRealtimeWebSocketServer() };
-
-serve({ fetch: app.fetch, port: config.port, websocket }, (info) => {
+// Attaches the `ws` server for the GET /v1/realtime upgrade (api/00 §12.1).
+serveWithRealtime({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`@bolusi/server listening on :${info.port}`);
 });

@@ -12,7 +12,8 @@
     "search": "Cari",
     "ok": "Oke",
     "yes": "Ya",
-    "no": "Tidak"
+    "no": "Tidak",
+    "clearSearch": "Hapus pencarian"
   },
   "status": {
     "loading": "Memuat…",
@@ -31,8 +32,20 @@
     "title": "Pengaturan",
     "security": "Keamanan",
     "notifications": "Notifikasi",
-    "device": "Perangkat Ini",
-    "language": "Bahasa"
+    "device": "HP ini",
+    "language": "Bahasa",
+    "changePinSummary": "PIN untuk masuk ke HP ini",
+    "staffPinsSummary": "Buka kunci atau buat PIN baru",
+    "staffPinsLocked": "{count} PIN terkunci",
+    "notificationsSummary": "Atur di pengaturan HP",
+    "notifyConflict": "Data yang perlu keputusan pemilik",
+    "notifyDevice": "Masalah perangkat toko",
+    "deviceName": "Nama HP",
+    "store": "Toko",
+    "business": "Usaha",
+    "appVersion": "Versi aplikasi",
+    "deviceId": "ID perangkat",
+    "team": "Tim toko"
   },
   "language": {
     "id": "Bahasa Indonesia",
@@ -56,6 +69,7 @@
     "PIN_LOCKED": "PIN terkunci. Minta pemilik toko membukanya atau membuatkan PIN baru.",
     "LAST_ADMIN_PROTECTED": "Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.",
     "ROLE_IN_USE": "Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.",
+    "CLOCK_AHEAD": "Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.",
     "IDEMPOTENCY_CONFLICT": "Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.",
     "RATE_LIMITED": "Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.",
     "UNEXPECTED": "Terjadi kesalahan. Coba lagi.",
@@ -78,15 +92,17 @@
     "AUTH_TOKEN_INVALID": "Sesi perangkat sudah berakhir. Masuk lagi untuk melanjutkan pengiriman foto."
   },
   "rejection": {
-    "BAD_SIGNATURE": "Perubahan ini gagal diverifikasi dan ditolak server. Laporkan ke pemilik toko.",
-    "CHAIN_BROKEN": "Riwayat perubahan di perangkat ini rusak. Pengiriman dihentikan. Segera hubungi pemilik toko.",
-    "CHAIN_GAP": "Ada perubahan yang tertinggal. Dikirim ulang otomatis.",
-    "CHAIN_HALTED": "Ditunda karena perubahan sebelumnya bermasalah.",
-    "DEVICE_REVOKED": "Perangkat ini sudah diblokir, jadi perubahan ditolak. Daftarkan ulang perangkat ini.",
-    "PERMISSION_DENIED": "Orang yang membuat perubahan ini tidak punya izin di toko ini, jadi perubahannya tidak disimpan. Minta orang yang berwenang untuk mengulanginya.",
-    "SCHEMA_INVALID": "Format perubahan ini tidak dikenali server. Ini masalah aplikasi — laporkan ke pemilik toko.",
-    "SCOPE_VIOLATION": "Perubahan ini bukan untuk toko atau akun ini, jadi ditolak. Laporkan ke pemilik toko.",
-    "UNKNOWN_TYPE": "Aplikasi di perangkat ini perlu diperbarui supaya perubahan ini bisa dikirim."
+    "BAD_SIGNATURE": "Gagal diverifikasi server. Kabari pemilik toko.",
+    "CHAIN_BROKEN": "Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.",
+    "CHAIN_GAP": "Ada yang tertinggal. Dikirim ulang otomatis.",
+    "CHAIN_HALTED": "Menunggu perubahan sebelumnya beres.",
+    "CLOCK_AHEAD": "Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.",
+    "DEVICE_REVOKED": "Perangkat ini sudah diblokir. Daftarkan ulang.",
+    "PERMISSION_DENIED": "Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.",
+    "RULE_VIOLATED": "Datanya sudah berubah di perangkat lain. Cek lagi, lalu ulangi kalau masih perlu.",
+    "SCHEMA_INVALID": "Server tidak mengenali perubahan ini. Kabari pemilik toko.",
+    "SCOPE_VIOLATION": "Bukan untuk toko ini. Kabari pemilik toko.",
+    "UNKNOWN_TYPE": "Perbarui aplikasi supaya bisa dikirim."
   },
   "account": {
     "menu": "Menu akun",

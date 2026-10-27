@@ -47,8 +47,11 @@ export type { ListProps, ListState } from './components/List.js';
 export type { ButtonProps, ButtonVariant } from './components/Button.js';
 export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
+export type { ChipRowProps } from './components/ChipRow.js';
 export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
+export type { FactProps } from './components/Fact.js';
+export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
 export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';
@@ -61,6 +64,7 @@ export type {
   PhotoViewerLabels,
   PhotoViewerProps,
 } from './components/PhotoViewer.js';
+export type { PatternLockProps } from './components/PatternLock.js';
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
 export type { SearchFieldProps } from './components/SearchField.js';
 export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';

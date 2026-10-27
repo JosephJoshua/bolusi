@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 
-import { tn } from './i18n.js';
+import { tn } from '../i18n.js';
 import { capturedThumbnailRef, repairAbilities, staleStep, ticketStatus } from '../flows.js';
 import {
   FlowScreen,
@@ -121,8 +121,13 @@ export function Handover({
                 // ticket cancelled before fees existed charged nothing.
                 <View style={styles.total}>
                   <View style={repairStyles.row}>
-                    <Text style={styles.totalLabel}>{tn('repair.cancel.fee')}</Text>
-                    <Text style={repairStyles.heading} testID={`${testID}.total`}>
+                    <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                      {tn('repair.cancel.fee')}
+                    </Text>
+                    <Text
+                      style={[repairStyles.heading, repairStyles.rowValue]}
+                      testID={`${testID}.total`}
+                    >
                       {formatMoney(ticket.cancelFee ?? 0)}
                     </Text>
                   </View>
@@ -132,8 +137,13 @@ export function Handover({
                 </View>
               ) : (
                 <View style={[repairStyles.row, styles.total]}>
-                  <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
-                  <Text style={repairStyles.heading} testID={`${testID}.total`}>
+                  <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                    {tn('repair.price.total')}
+                  </Text>
+                  <Text
+                    style={[repairStyles.heading, repairStyles.rowValue]}
+                    testID={`${testID}.total`}
+                  >
                     {formatMoney(ticket.quoteTotal)}
                   </Text>
                 </View>

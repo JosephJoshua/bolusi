@@ -360,7 +360,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(30);
+    expect(app.registry.permissions.size).toBe(32);
     expect(app.registry.permissions.ids()).toStrictEqual([
       'auth.audit_view',
       'auth.device_enroll',
@@ -383,6 +383,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'platform.set_locale',
       'repair.assign',
       'repair.cancel',
+      'repair.correct_down_payment',
       'repair.discount',
       'repair.handover',
       'repair.hide_intake_options',
@@ -391,6 +392,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'repair.quote_change',
       'repair.read',
       'repair.set_cancel_fees',
+      'repair.set_print_settings',
       'repair.work',
     ]);
     await app.close();

@@ -18,10 +18,11 @@ import { join } from 'node:path';
 
 import { runPullPhase } from '@bolusi/core';
 import { MAX_PULL_LIMIT } from '@bolusi/schemas';
+import { opensslPort } from '@bolusi/test-support';
 import { SILENT_SURFACE } from '@bolusi/test-support/chaos';
 
 import { customerSearchSource, repairModule, ticketSearchSource } from '../src/repair/index.js';
-import { openFreshDevice, opensslPort, ReplayTransport } from './replay-device.js';
+import { openFreshDevice, ReplayTransport } from './replay-device.js';
 import { writeStoreHistory } from './store-history.js';
 
 /**

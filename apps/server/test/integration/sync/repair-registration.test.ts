@@ -1,8 +1,10 @@
 // The repair module folds through the real push path on real PostgreSQL: a device pushes a
-// customer, a ticket with its six intake photos, a price change and the handover, and the server's
-// projections (uuid/bigint columns, RLS) end up with the same ticket the device shows.
+// customer, a ticket with its six intake photos, a claim, the work photos, a price change and the
+// handover, and the server's projections (uuid/bigint columns, RLS) end up with the same ticket the
+// device shows.
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
+import { formatTicketNumber } from '@bolusi/modules/repair';
 import { ChainBuilder, makeWorld, type ChainWorld } from '@bolusi/test-support';
 import type { MediaRef } from '@bolusi/schemas';
 import { sql, type Kysely } from 'kysely';
@@ -87,6 +89,7 @@ test('a pushed repair journey folds into the server projections', async () => {
   const ticketId = '01920000-0000-7000-8000-0000000c0002';
   const lineId = '01920000-0000-7000-8000-0000000c0003';
   const changeId = '01920000-0000-7000-8000-0000000c0004';
+  const ticketNumber = formatTicketNumber(world.deviceId, 1);
 
   const ops = [
     builder.append({
@@ -100,7 +103,7 @@ test('a pushed repair journey folds into the server projections', async () => {
       entityType: 'repair_ticket',
       entityId: ticketId,
       payload: {
-        ticketNumber: 'K7Q-0001',
+        ticketNumber,
         customerId,
         device: { brand: 'Samsung', model: 'A14', color: 'Hitam', imei: null, passcode: null },
         complaint: 'Layar retak',
@@ -118,6 +121,18 @@ test('a pushed repair journey folds into the server projections', async () => {
           bottom: photo(6),
         },
       },
+    }),
+    builder.append({
+      type: 'repair.ticket_claimed',
+      entityType: 'repair_ticket',
+      entityId: ticketId,
+      payload: {},
+    }),
+    builder.append({
+      type: 'repair.work_photos_added',
+      entityType: 'repair_ticket',
+      entityId: ticketId,
+      payload: { stage: 'before', photos: [photo(9)] },
     }),
     builder.append({
       type: 'repair.work_started',
@@ -138,6 +153,12 @@ test('a pushed repair journey folds into the server projections', async () => {
         customerAgreed: true,
         fromProposal: false,
       },
+    }),
+    builder.append({
+      type: 'repair.work_photos_added',
+      entityType: 'repair_ticket',
+      entityId: ticketId,
+      payload: { stage: 'after', photos: [photo(10)] },
     }),
     builder.append({
       type: 'repair.marked_repaired',
@@ -165,7 +186,7 @@ test('a pushed repair journey folds into the server projections', async () => {
     .select(['ticketNumber', 'outcome', 'location', 'quoteTotal', 'customerId', 'returnedBy'])
     .executeTakeFirstOrThrow();
   expect(ticket).toEqual({
-    ticketNumber: 'K7Q-0001',
+    ticketNumber,
     outcome: 'repaired',
     location: 'returned',
     quoteTotal: '600000', // bigint comes back as a string from pg
@@ -173,9 +194,9 @@ test('a pushed repair journey folds into the server projections', async () => {
     returnedBy: world.userId,
   });
   const photos = await db.selectFrom('repairTicketPhotos').select('slot').execute();
-  expect(photos).toHaveLength(8);
+  expect(photos).toHaveLength(10);
   const events = await db.selectFrom('repairTicketEvents').select('kind').execute();
-  expect(events).toHaveLength(5);
+  expect(events).toHaveLength(8);
 });
 
 test('a ticket payload missing a required photo is rejected and folds nothing', async () => {

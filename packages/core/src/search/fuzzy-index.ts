@@ -208,7 +208,7 @@ export class FuzzyIndex {
         for (const [term, slots] of this.#words) {
           const similarity = Math.max(
             wordSimilarity(plain, term),
-            folded === plain ? 0 : wordSimilarity(folded, term),
+            folded === plain ? 0 : wordSimilarity(folded, term, plain.length),
           );
           if (similarity === 0) continue;
           for (let j = 0; j < slots.length; j += 1) {
@@ -226,9 +226,9 @@ export class FuzzyIndex {
         if (misses[slot]! <= allowed) out[slot] = sums[slot]! / wordCount;
       }
     }
-    if (query.compact.length >= 4) {
+    if (query.compactTolerance >= 0) {
       for (const [term, slots] of this.#compact) {
-        const similarity = compactSimilarity(query.compact, term);
+        const similarity = compactSimilarity(query, term);
         if (similarity === 0) continue;
         for (let j = 0; j < slots.length; j += 1) {
           const slot = slots.data[j]!;

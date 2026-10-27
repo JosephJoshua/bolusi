@@ -64,13 +64,18 @@ const EXPECTED_BUNDLE_ID = 'com.bolusi.app';
  * added here in the same commit that adds the dep.
  */
 const REQUIRED_IOS_USAGE_DESCRIPTIONS: Record<string, Readonly<Record<string, string>>> = {
-  // Foreground only — `ports/location.ts` calls `requestForegroundPermissionsAsync`, never `Always`.
+  // Foreground only — `ports/location.ts` reads a foreground grant, never `Always`.
   'expo-location': {
     NSLocationWhenInUseUsageDescription:
       'Izinkan aplikasi memakai lokasi untuk mencatat tempat pekerjaan dilakukan.',
   },
   // Photos only (06-media-pipeline; `media.permission.camera` = "ambil foto"). Microphone disabled.
   'expo-camera': {
+    NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+  },
+  // The store logo, picked from the gallery (repair print settings).
+  'expo-image-picker': {
+    NSPhotoLibraryUsageDescription: 'Izinkan aplikasi membuka galeri untuk memilih logo toko.',
     NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
   },
 };
@@ -92,6 +97,7 @@ const MUST_BE_ABSENT: readonly string[] = [
 const ENGLISH_DEFAULTS: readonly string[] = [
   'Allow $(PRODUCT_NAME) to access your location',
   'Allow $(PRODUCT_NAME) to access your camera',
+  'Allow $(PRODUCT_NAME) to access your photos',
   'Allow $(PRODUCT_NAME) to access your microphone',
   'Allow $(PRODUCT_NAME) to detect your current motion activity',
 ];

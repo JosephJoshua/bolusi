@@ -44,6 +44,21 @@ export const REJECTED_LIST_LIMIT = 50;
  */
 export const MEDIA_LIST_LIMIT = 50;
 
+/**
+ * Per entity type, the words for what a refused change was about ("Servisan K7Q-0042"), read in
+ * one query for every refused op of that type. A module with screens supplies its own; an entity
+ * it cannot name (a record the refusal removed) is simply absent.
+ */
+export type RejectedSubjectReaders = Readonly<
+  Record<
+    string,
+    (
+      db: Kysely<ClientDatabase>,
+      entityIds: readonly string[],
+    ) => Promise<ReadonlyMap<string, string>>
+  >
+>;
+
 /** What the screen reads from the database, as one round trip's worth of answers. */
 export interface SyncStatusReads {
   readonly pendingOperationCount: number;
@@ -78,7 +93,10 @@ export const NO_SYNC_STATUS_READS: SyncStatusReads = {
  * (model.ts) stays where it is — it is the screen's guarantee against an input that forgot, not a
  * duplicate of this.
  */
-export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<SyncStatusReads> {
+export async function readSyncStatusRows(
+  db: Kysely<ClientDatabase>,
+  subjects: RejectedSubjectReaders = {},
+): Promise<SyncStatusReads> {
   const [operationCount, mediaCount, mediaRows, rejectedRows, quarantinedRows] = await Promise.all([
     // ── THE COUNTERS ARE CORE'S, NOT THIS FILE'S (CLAUDE.md §2.8) ────────────────────────────────
     // 06 §4 calls `pendingMediaCount`'s predicate CANONICAL and 01 §5.2 restates it verbatim, and
@@ -112,7 +130,15 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
       .execute(),
     db
       .selectFrom('operations')
-      .select(['id', 'type', 'timestampMs', 'rejectionCode', 'rejectionReason'])
+      .select([
+        'id',
+        'type',
+        'entityType',
+        'entityId',
+        'timestampMs',
+        'rejectionCode',
+        'rejectionReason',
+      ])
       .where('syncStatus', '=', 'rejected')
       .orderBy('timestampMs', 'desc')
       .limit(REJECTED_LIST_LIMIT)
@@ -157,6 +183,7 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
     });
   }
 
+  const subjectOf = await readRejectedSubjects(db, subjects, rejectedRows);
   const rejected: RejectedOpRow[] = [];
   for (const row of rejectedRows) {
     if (row.id === null) continue;
@@ -170,6 +197,7 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
       // the same path rather than a second, private fallback (§2.8).
       rejectionCode: row.rejectionCode ?? 'UNEXPECTED',
       rejectionReason: row.rejectionReason,
+      subject: subjectOf.get(`${row.entityType}:${row.entityId}`) ?? null,
     });
   }
 
@@ -191,6 +219,28 @@ export async function readSyncStatusRows(db: Kysely<ClientDatabase>): Promise<Sy
     media,
     quarantined,
   };
+}
+
+/** Each refused op's subject, keyed `entityType:entityId`, one read per entity type. */
+async function readRejectedSubjects(
+  db: Kysely<ClientDatabase>,
+  readers: RejectedSubjectReaders,
+  rows: readonly { readonly entityType: string; readonly entityId: string }[],
+): Promise<Map<string, string>> {
+  const idsByType = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (readers[row.entityType] === undefined) continue;
+    let ids = idsByType.get(row.entityType);
+    if (ids === undefined) idsByType.set(row.entityType, (ids = new Set()));
+    ids.add(row.entityId);
+  }
+  const out = new Map<string, string>();
+  for (const [entityType, ids] of idsByType) {
+    for (const [id, subject] of await readers[entityType]!(db, [...ids])) {
+      out.set(`${entityType}:${id}`, subject);
+    }
+  }
+  return out;
 }
 
 /** Device time of the oldest op held, for a new device's first-sync progress; `null` when empty. */

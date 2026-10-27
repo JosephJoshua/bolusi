@@ -14,7 +14,9 @@ import {
   setLocale,
   t,
   translateErrorCode,
+  translateFailure,
   translateOpType,
+  translateRejection,
   translateRejectionCode,
   translateRoleKey,
   type I18nLogger,
@@ -55,12 +57,12 @@ describe('locale round-trip (07-i18n §1)', () => {
 
   it('renders ICU plurals in en and plain interpolation in id (§3.2)', () => {
     initI18n({ locale: 'en' });
-    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('1 try left');
-    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('3 tries left');
+    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('1 try left.');
+    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('3 tries left.');
 
     setLocale('id');
-    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('Sisa 1 kesempatan');
-    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('Sisa 3 kesempatan');
+    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('Sisa 1 kali coba.');
+    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('Sisa 3 kali coba.');
   });
 
   it('falls back zh → id, since zh is scaffolded with no catalog (§1, §6)', () => {
@@ -71,7 +73,7 @@ describe('locale round-trip (07-i18n §1)', () => {
   it('passes pre-formatted values through as strings (§3.2)', () => {
     initI18n({ locale: 'id' });
     expect(t('auth.pin.wait', { duration: '2 menit' })).toBe(
-      'Terlalu banyak salah. Tunggu 2 menit.',
+      'Terlalu sering salah. Coba lagi dalam 2 menit.',
     );
   });
 });
@@ -113,7 +115,7 @@ describe('missing keys (07-i18n §6)', () => {
     const instance = initI18n({ locale: 'id', logger: { warn } });
 
     const rendered = instance.t('auth.pin.attemptsLeft' as never, { count: 1 });
-    expect(rendered).toBe('Sisa 1 kesempatan');
+    expect(rendered).toBe('Sisa 1 kali coba.');
 
     // A key in no catalog at all: the emergency degradation path.
     const absent = instance.t('auth.pin.neverDefined' as never);
@@ -128,6 +130,31 @@ describe('derived error and rejection copy (07-i18n §4.2, §4.3)', () => {
     initI18n({ locale: 'id' });
     expect(translateErrorCode('ROLE_IN_USE')).toBe(t('core.errors.ROLE_IN_USE'));
     expect(translateRejectionCode('CHAIN_BROKEN')).toBe(t('core.rejection.CHAIN_BROKEN'));
+  });
+
+  it('a rule refusal renders its own copy, on the phone and under sync problems', () => {
+    initI18n({ locale: 'id' });
+    const key = 'platform.refusal.notYourPreference';
+    expect(translateFailure(key)).toBe(t(key));
+    expect(translateRejection('RULE_VIOLATED', key)).toBe(t(key));
+    expect(t(key)).not.toBe(t('core.rejection.RULE_VIOLATED'));
+  });
+
+  it('falls back to the code copy for a plain code, another code, or a reason with no copy', () => {
+    initI18n({ locale: 'id' });
+    expect(translateFailure('ROLE_IN_USE')).toBe(t('core.errors.ROLE_IN_USE'));
+    // Only RULE_VIOLATED carries a refusal key; another code's reason is diagnostic text.
+    expect(translateRejection('PERMISSION_DENIED', 'platform.refusal.notYourPreference')).toBe(
+      t('core.rejection.PERMISSION_DENIED'),
+    );
+    // A newer server's reason this build has no copy for, or free text from an older one.
+    expect(translateRejection('RULE_VIOLATED', 'repair.refusal.fromTheFuture')).toBe(
+      t('core.rejection.RULE_VIOLATED'),
+    );
+    expect(translateRejection('RULE_VIOLATED', 'ticket is cancelled')).toBe(
+      t('core.rejection.RULE_VIOLATED'),
+    );
+    expect(translateRejection('RULE_VIOLATED', null)).toBe(t('core.rejection.RULE_VIOLATED'));
   });
 
   it('renders UNEXPECTED and logs for an unknown error code', () => {

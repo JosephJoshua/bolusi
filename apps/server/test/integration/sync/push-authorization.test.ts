@@ -19,7 +19,14 @@ import { DEFAULT_ROLES, type RoleKey } from '../../../src/identity/permissions.j
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { readAnomalies, readOps, seedUser, seedWorld, testId } from '../oplog/helpers.js';
+import {
+  readAnomalies,
+  readOps,
+  seedRepairTicket,
+  seedUser,
+  seedWorld,
+  testId,
+} from '../oplog/helpers.js';
 
 let db: Kysely<DB>;
 let appForTenant: ForTenant;
@@ -71,6 +78,7 @@ async function setupWorld(seed: number): Promise<{ world: ChainWorld; builder: C
   const builder = new ChainBuilder(world, serverCryptoPort);
   const genesis = builder.genesis();
   await seedWorld(db, world, { lastSeq: 1, lastHash: genesis.hash, grants: 'none' });
+  await seedRepairTicket(db, world, TICKET);
   return { world, builder };
 }
 
@@ -122,12 +130,23 @@ function cancel(builder: ChainBuilder, userId?: string) {
 }
 
 /** A cashier's op: declining a proposed price change. */
-function decline(builder: ChainBuilder) {
+/** A cashier's own price change (repair.quote_change), on a fresh line each time. */
+function changePrice(builder: ChainBuilder, n: number) {
   return builder.append({
-    type: 'repair.quote_proposal_declined',
+    type: 'repair.quote_changed',
     entityType: 'repair_ticket',
     entityId: TICKET,
-    payload: { lineId: '01920000-0000-7000-8000-0000000d0002', note: '' },
+    schemaVersion: 2,
+    payload: {
+      lineId: `01920000-0000-7000-8000-0000000d00${n.toString().padStart(2, '0')}`,
+      kind: 'part',
+      description: 'LCD',
+      amount: 100_000,
+      reason: 'Ganti LCD',
+      customerAgreed: true,
+      fromProposal: false,
+      waitsForCustomer: false,
+    },
   });
 }
 
@@ -207,6 +226,32 @@ describe('every pushed op is authorized against the server directory', () => {
     ]);
   });
 
+  test('only an owner may correct a down payment: a cashier’s lower figure is refused', async () => {
+    // Recording less than the customer paid is how a down payment would go missing.
+    const { world, builder } = await setupWorld(3208);
+    await grantDefaultRole(world, world.userId, 'cashier', world.storeId, 3208);
+    const owner = testId(32081);
+    await seedUser(db, world.tenantId, owner);
+    await grantDefaultRole(world, owner, 'store_owner', world.storeId, 32082);
+    const correct = (userId?: string) =>
+      builder.append({
+        type: 'repair.down_payment_corrected',
+        entityType: 'repair_ticket',
+        entityId: TICKET,
+        payload: { amount: 10_000, reason: 'Salah ketik' },
+        ...(userId === undefined ? {} : { userId }),
+      });
+
+    const result = await push(world, [correct(), correct(owner)]);
+
+    expect(result.results[0]).toMatchObject({
+      status: 'rejected',
+      code: 'PERMISSION_DENIED',
+      reason: expect.stringContaining('repair.correct_down_payment'),
+    });
+    expect(result.results[1]).toMatchObject({ status: 'accepted' });
+  });
+
   test('a store-owner grant in ANOTHER store does not authorize this store', async () => {
     const { world, builder } = await setupWorld(3203);
     const otherStore = testId(32031);
@@ -237,13 +282,13 @@ describe('every pushed op is authorized against the server directory', () => {
       status: 'rejected',
       code: 'PERMISSION_DENIED',
     });
-    expect((await push(world, [decline(builder)])).results[0]).toMatchObject({
+    expect((await push(world, [changePrice(builder, 1)])).results[0]).toMatchObject({
       status: 'accepted',
     });
 
     await db.deleteFrom('userRoles').where('roleId', '=', roleId).execute();
 
-    expect((await push(world, [decline(builder)])).results[0]).toMatchObject({
+    expect((await push(world, [changePrice(builder, 2)])).results[0]).toMatchObject({
       status: 'rejected',
       code: 'PERMISSION_DENIED',
     });

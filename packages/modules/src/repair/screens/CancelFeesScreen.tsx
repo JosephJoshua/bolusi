@@ -13,7 +13,7 @@ import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { acceptsRupiahText, parseRupiah } from '../flows.js';
 import type { CancelFees } from '../queries.js';
 
-import { tn, type RepairKey } from './i18n.js';
+import { tn, type RepairKey } from '../i18n.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useCancelFees, useRepairRuntime } from './runtime.js';
 
@@ -50,6 +50,12 @@ export function CancelFeesScreen({
       )}
     </QueryView>
   );
+}
+
+/** Typed digits as rupiah; an emptied field stays empty rather than snapping back to "Rp 0". */
+function moneyText(digits: string): string {
+  const amount = parseRupiah(digits);
+  return amount === null ? '' : formatMoney(amount);
 }
 
 const FIELDS: readonly { readonly key: keyof CancelFees; readonly label: RepairKey }[] = [
@@ -140,29 +146,22 @@ function FeesForm({
       testID={testID}
     >
       <Text style={repairStyles.muted}>{tn('repair.fees.intro')}</Text>
-      {FIELDS.map(({ key, label }) => {
-        const amount = parseRupiah(text[key]);
-        return (
-          <View key={key} style={repairStyles.gap}>
-            <TextInput
-              label={tn(label)}
-              value={text[key]}
-              onChangeText={(next) => {
-                if (!acceptsRupiahText(next)) return;
-                setNotice(null);
-                setText((current) => ({ ...current, [key]: next }));
-              }}
-              keyboardType="number-pad"
-              testID={`${testID}.${key}`}
-            />
-            {amount === null ? null : (
-              <Text style={repairStyles.caption} testID={`${testID}.${key}.preview`}>
-                {formatMoney(amount)}
-              </Text>
-            )}
-          </View>
-        );
-      })}
+      {FIELDS.map(({ key, label }) => (
+        <View key={key} style={repairStyles.gap}>
+          <TextInput
+            label={tn(label)}
+            // Shown as money while typing ("Rp 50.000"), so there is no second line to read back.
+            value={moneyText(text[key])}
+            onChangeText={(next) => {
+              if (!acceptsRupiahText(next)) return;
+              setNotice(null);
+              setText((current) => ({ ...current, [key]: next.replace(/\D/g, '') }));
+            }}
+            keyboardType="number-pad"
+            testID={`${testID}.${key}`}
+          />
+        </View>
+      ))}
     </FlowScreen>
   );
 }

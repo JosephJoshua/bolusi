@@ -3,8 +3,11 @@
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
-import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { __windowMetrics } from '../../../test/doubles/react-native.js';
 
 import {
   ensureRepairCatalog,
@@ -72,6 +75,65 @@ async function ticketRow(harness: RepairHarness, ticketId: string) {
 }
 
 describe('counter intake', () => {
+  // On the first Android run "Tidak dicek" showed as "Tidak": squeezed beside the check's name.
+  // Where the states fit they sit on the name's line; on a narrow phone or a large system font they
+  // go under the name. Either way each pill keeps its text's width.
+  test('condition checks stack under the name on a narrow phone or a large font', async () => {
+    h = await openRepairScreenHarness(5150);
+    const screen = await mount(h, h.cashierId);
+    await press(screen, 'repair.board.newIntake');
+    type(screen, 'repair.intake.customer.name', 'Yohanis Wenda');
+    await press(screen, 'repair.intake.primary');
+    type(screen, 'repair.intake.device.brand', 'Samsung');
+    type(screen, 'repair.intake.device.model', 'Galaxy A14');
+    await press(screen, 'repair.intake.primary');
+    const original = { ...__windowMetrics };
+    try {
+      for (const [width, fontScale, stacked] of [
+        [411, 1, false],
+        [360, 1, true],
+        [411, 1.3, true],
+      ] as const) {
+        Object.assign(__windowMetrics, { width, fontScale });
+        // Any edit re-renders the step, which reads the window again.
+        type(
+          screen,
+          'repair.intake.condition.complaint',
+          `Layar retak ${String(width * fontScale)}`,
+        );
+        await settle();
+        const row = StyleSheet.flatten(
+          screen.get('repair.intake.condition.checkRow.screen').props['style'],
+        );
+        expect(row['flexDirection']).toBe(stacked ? 'column' : 'row');
+        const pill = StyleSheet.flatten(
+          screen.get('repair.intake.condition.check.screen.not_checked').props['style'],
+        );
+        expect(pill['flexShrink']).toBe(0);
+      }
+    } finally {
+      Object.assign(__windowMetrics, original);
+    }
+  });
+
+  // The keyboard opened by itself on intake steps and covered "Lanjut" (Android QA): no step
+  // focuses a field on its own; the person taps the field they want to fill.
+  test('no intake step opens the keyboard by itself', async () => {
+    h = await openRepairScreenHarness(5151);
+    const screen = await mount(h, h.cashierId);
+    const focused = (): number =>
+      screen.container.queryAll((n) => n.props['autoFocus'] === true).length;
+    await press(screen, 'repair.board.newIntake');
+    expect(focused()).toBe(0);
+    type(screen, 'repair.intake.customer.name', 'Yohanis Wenda');
+    await press(screen, 'repair.intake.primary');
+    type(screen, 'repair.intake.device.brand', 'Samsung');
+    type(screen, 'repair.intake.device.model', 'Galaxy A14');
+    await press(screen, 'repair.intake.primary');
+    expect(screen.query('repair.intake.condition.complaint')).not.toBeNull();
+    expect(focused()).toBe(0);
+  });
+
   test('the cashier takes a repair in from the board and lands on the new ticket', async () => {
     h = await openRepairScreenHarness(5101);
     const screen = await mount(h, h.cashierId);
@@ -142,13 +204,14 @@ describe('counter intake', () => {
       kind: 'intake',
       step: 1,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: '', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: '',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const onDraftChange = vi.fn();
@@ -159,6 +222,61 @@ describe('counter intake', () => {
     expect(onDraftChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ device: expect.objectContaining({ brand: 'Oppo', model: 'A57' }) }),
     );
+  });
+});
+
+describe('an intake restored after the app died mid-submit', () => {
+  const restored = (ticketId: string): IntakeDraft => {
+    const base = emptyIntakeDraft();
+    return {
+      ...base,
+      step: 5,
+      customer: { kind: 'new', name: 'Yohanis Wenda', phone: '0812-4455-6677' },
+      device: { ...base.device, brand: 'Samsung', model: 'Galaxy A14' },
+      complaint: 'Layar retak',
+      ticketId,
+    };
+  };
+
+  test('whose ticket was already opened shows that ticket and clears the draft', async () => {
+    h = await openRepairScreenHarness(5104);
+    const ticketId = '01920000-0000-7000-8000-00000000a151';
+    await h.run('openTicket', { ...intake(h), ticketId }, h.cashierId);
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: restored(ticketId),
+      onDraftChange,
+    });
+    await settle();
+
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+    expect(screen.query('repair.intake.step.review')).toBeNull();
+    expect(onDraftChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test('whose ticket was never opened stays on the intake with its id kept', async () => {
+    h = await openRepairScreenHarness(5105);
+    const ticketId = '01920000-0000-7000-8000-00000000a152';
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: restored(ticketId),
+      onDraftChange,
+    });
+    await settle();
+
+    expect(screen.query('repair.intake.step.review')).not.toBeNull();
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({ ticketId }));
+  });
+
+  test('a new intake takes its ticket id up front, so the saved draft carries it', async () => {
+    h = await openRepairScreenHarness(5106);
+    const onDraftChange = vi.fn();
+    const screen = await mount(h, h.cashierId, { onDraftChange });
+    await press(screen, 'repair.board.newIntake');
+    type(screen, 'repair.intake.customer.name', 'Ester');
+    await settle();
+    const saved = onDraftChange.mock.lastCall?.[0] as IntakeDraft;
+    expect(saved.ticketId).toEqual(expect.any(String));
   });
 });
 
@@ -386,6 +504,21 @@ describe('cancelling (owners only)', () => {
     expect(text(screen, `repair.board.row.${kept}`)).toContain(USER_NAMES.storeOwner);
     expect(screen.query(`repair.board.row.${kept}.feeChanged`)).toBeNull();
     expect(screen.query(`repair.board.row.${changed}.feeChanged`)).not.toBeNull();
+
+    // The ticket leads with what is owed, not the repair total it no longer charges.
+    await press(screen, `repair.board.row.${changed}`);
+    expect(text(screen, 'repair.ticket.cancelFee')).toBe('Rp 0');
+    expect(
+      StyleSheet.flatten(screen.get('repair.ticket.total').props['style']).textDecorationLine,
+    ).toBe('line-through');
+    // At a large font the label wraps; the amount never splits into "Rp" and "0" on two lines.
+    const fee = screen.get('repair.ticket.cancelFee');
+    const label = fee.parent?.children[0];
+    expect(typeof label === 'object' && label.type).toBe('Text');
+    expect(
+      StyleSheet.flatten(typeof label === 'object' ? label.props['style'] : null).flexShrink,
+    ).toBe(1);
+    expect(StyleSheet.flatten(fee.props['style']).flexShrink).toBe(0);
   });
 });
 
@@ -774,13 +907,14 @@ describe('price and assignment details', () => {
       kind: 'intake',
       step: 4,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: 'Mati',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: {},
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const screen = await mount(h, h.cashierId, { restoredDraft: draft });
@@ -800,13 +934,14 @@ describe('price and assignment details', () => {
       kind: 'intake',
       step: 3,
       customer: { kind: 'new', name: 'Ester', phone: '' },
-      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', passcode: '' },
+      device: { brand: 'Oppo', model: 'A57', color: '', imei: '', lockKind: 'none', passcode: '' },
       complaint: 'Mati',
       intakeNotes: '',
       checks: {},
       peripherals: [],
       photos: { front: kept, back: gone },
       lines: [],
+      downPayment: '',
       ready: 'tomorrow',
     };
     const runtime = repairRuntimeFor(h, h.cashierId);

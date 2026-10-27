@@ -16,7 +16,11 @@
     "deviceReturned": "Device handed back",
     "intakeOptionsChanged": "Intake choices changed",
     "storeIntakeOptionsChanged": "Choices at this store changed",
-    "storeCancelFeesChanged": "Cancellation fees changed"
+    "storeCancelFeesChanged": "Cancellation fees changed",
+    "downPaymentReceived": "Down payment received",
+    "downPaymentCorrected": "Down payment changed",
+    "slipPrinted": "Slip printed",
+    "storePrintSettingsChanged": "Slip details changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -117,7 +121,12 @@
     "passcode": "Screen lock code (optional)",
     "colorField": "Colour (optional)",
     "imeiField": "IMEI (optional)",
-    "passcodeLabel": "Screen lock"
+    "passcodeLabel": "Screen lock",
+    "modelHint": "e.g. Galaxy A55, Redmi Note 13",
+    "released": "Released {year}",
+    "servicedBefore": "Serviced here before",
+    "tablet": "Tablet",
+    "watch": "Smartwatch"
   },
   "handover": {
     "note": "Note (optional)",
@@ -201,11 +210,15 @@
     "addRow": "Add a price line",
     "pendingTotal": "Not yet confirmed by the customer: {amount}",
     "customerAgrees": "Does the customer agree to this price?",
-    "notCharged": "Not charged because it was cancelled. The customer pays the cancellation fee of {amount}.",
+    "notCharged": "The repair price isn’t charged.",
     "alreadyAgreed": "Has the customer agreed?",
     "changeReason": "Reason for the change",
     "waitingEvent": "Price change waiting for the customer",
-    "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree."
+    "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree.",
+    "downPayment": "Down payment",
+    "downPaymentInput": "Down payment (if any)",
+    "balance": "Left to pay",
+    "refund": "Refunded"
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",
@@ -215,7 +228,9 @@
     "photos": "All six photos are required.",
     "quoteLines": "Add at least one price line.",
     "incompleteLine": "Describe every line that has an amount.",
-    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero."
+    "negativeTotal": "The discounts are larger than the price. The total cannot go below zero.",
+    "downPaymentAboveTotal": "The down payment is more than the total.",
+    "screenLock": "Enter the screen lock, or choose None."
   },
   "ready": {
     "today": "Today",
@@ -234,6 +249,7 @@
   "ticket": {
     "history": "History",
     "lastNote": "Last note",
+    "numbered": "Repair {number}",
     "price": "Price",
     "readyBy": "Ready by",
     "technician": "Technician",
@@ -253,7 +269,10 @@
   "done": {
     "claim": "This repair is now yours.",
     "start": "Repair started.",
-    "repaired": "Marked repaired. Ready to hand back."
+    "repaired": "Marked repaired. Ready to hand back.",
+    "printed": "Slip printed.",
+    "shared": "Slip PDF sent.",
+    "downPayment": "Down payment saved."
   },
   "passcode": {
     "show": "Show",
@@ -265,7 +284,10 @@
     "reason": "Write the reason first.",
     "priceLine": "Fill in the description, amount and reason.",
     "cancelFee": "Enter the cancellation fee first.",
-    "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide."
+    "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide.",
+    "downPayment": "Enter the amount first.",
+    "downPaymentCorrect": "Enter the correct down payment first.",
+    "downPaymentSame": "The amount has not changed."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -323,6 +345,30 @@
       "hidesAll": "At least one choice must show at this store."
     }
   },
+  "spec": {
+    "battery": "Battery",
+    "cardSlot": "Card slot",
+    "chipset": "Chipset",
+    "memory": "Memory",
+    "none": "None",
+    "os": "System",
+    "port": "Port",
+    "screen": "Screen",
+    "sim": "SIM",
+    "title": "Specs"
+  },
+  "lock": {
+    "none": "None",
+    "pin": "PIN",
+    "password": "Password",
+    "pattern": "Pattern",
+    "pinField": "PIN",
+    "passwordField": "Password",
+    "patternHint": "Draw the pattern the way the customer does.",
+    "patternShort": "Connect at least 4 dots, then draw it again.",
+    "patternRedo": "Draw again",
+    "patternLabel": "Screen lock pattern"
+  },
   "stale": {
     "cancelled": "This repair was just cancelled on another device.",
     "returned": "This phone was already recorded as handed back on another device.",
@@ -340,5 +386,140 @@
     "save": "Save",
     "saved": "Cancellation fees saved.",
     "hint": "Enter both fees first."
+  },
+  "slip": {
+    "intakeTitle": "REPAIR RECEIPT",
+    "handoverTitle": "REPAIR SLIP",
+    "job": {
+      "intake": "Repair receipt {number}",
+      "handover": "Repair slip {number}"
+    },
+    "received": "Received {date}",
+    "readyBy": "Ready by {date}",
+    "returned": "Collected {date}",
+    "reprint": "Reprint no. {count}",
+    "printed": "Printed {date}",
+    "printedBy": "Printed {date} by {name}",
+    "field": {
+      "customer": "Customer",
+      "phone": "Phone no.",
+      "device": "Phone",
+      "imei": "IMEI",
+      "accessories": "Accessories",
+      "technician": "Technician",
+      "status": "Status",
+      "cancelReason": "Cancel reason"
+    },
+    "section": {
+      "complaint": "Complaint",
+      "condition": "Condition when received",
+      "estimate": "Estimated cost",
+      "costs": "Costs",
+      "terms": "Terms"
+    },
+    "noAccessories": "None",
+    "estimateTotal": "Estimated total",
+    "total": "Total",
+    "downPayment": "Down payment",
+    "balance": "Balance due",
+    "sign": {
+      "customer": "Customer",
+      "customerPickup": "Customer, phone received",
+      "staff": "Store staff"
+    },
+    "copy": {
+      "store": "Store copy",
+      "customer": "Customer copy"
+    },
+    "plyNote": "Pink: store, yellow: customer.",
+    "terms": {
+      "intake": "Bring this receipt to collect the phone.\nThe price is an estimate. The store checks with you before it goes up.\nThe store is not responsible for lost data.\nThe store is not responsible for a phone left 30 days after you are told.",
+      "handover": "Check the phone before leaving the store.\nThe warranty covers the same fault and parts only. Bring this slip.\nThe warranty is void if the seal is broken, the phone gets wet or dropped, or it is opened elsewhere."
+    },
+    "refund": "Refund"
+  },
+  "print": {
+    "askTitle": "Did the slip print?",
+    "askMessage": "Check whether the paper came out.",
+    "askYes": "Printed",
+    "askNo": "Not yet",
+    "title": "Print slip",
+    "print": "Print",
+    "share": "Send PDF",
+    "slip": "Slip",
+    "intake": "Receipt",
+    "handover": "Repair bill",
+    "intakeAbout": "Proof the store received the phone.",
+    "handoverAbout": "The bill and proof of pickup.",
+    "reprint": "Printed {count} times already.",
+    "paper": "Paper",
+    "paperA4": "A4",
+    "paperA5": "A5"
+  },
+  "downPayment": {
+    "recordTitle": "Record down payment",
+    "correctTitle": "Change down payment",
+    "change": "Change",
+    "save": "Save down payment",
+    "amount": "Down payment (Rp)",
+    "newAmount": "Correct down payment (Rp)",
+    "current": "Recorded down payment",
+    "ofTotal": "Total {amount}",
+    "reason": "Reason for the change",
+    "removeHint": "Enter 0 if the down payment is void."
+  },
+  "printSettings": {
+    "title": "Slip details",
+    "summary": "Store name, logo and terms on slips",
+    "header": "Slip header",
+    "name": "Store name",
+    "nameHint": "Leave empty to use “{name}”.",
+    "address": "Address",
+    "phone": "Phone or WhatsApp",
+    "logo": "Logo",
+    "pickLogo": "Choose logo",
+    "changeLogo": "Change",
+    "removeLogo": "Remove",
+    "logoTitle": "Store logo",
+    "logoOnDotMatrix": "Print the logo on dot-matrix",
+    "logoOnDotMatrixHint": "Printing gets slower.",
+    "intakeTerms": "On the receipt",
+    "handoverTerms": "On the repair bill",
+    "terms": "Terms",
+    "termsHint": "One term per line.",
+    "save": "Save",
+    "saved": "Slip details saved."
+  },
+  "refusal": {
+    "alreadyRecorded": "This was already recorded.",
+    "customerNotFound": "This customer isn’t in this store.",
+    "ticketNotFound": "This repair isn’t in this store.",
+    "priceChangeNotFound": "This price proposal wasn’t found.",
+    "wrongSign": "A discount must lower the price; parts and labour must raise it.",
+    "belowZero": "The total price can’t go below zero.",
+    "numberNotThisDevice": "This repair number wasn’t issued by this device.",
+    "numberUsed": "This repair number is already used.",
+    "returned": "The phone was already picked up.",
+    "cancelled": "This repair was cancelled.",
+    "notStarted": "Work on this repair hasn’t started.",
+    "inRepair": "This repair is being worked on.",
+    "waitingForParts": "This repair is waiting for parts.",
+    "repaired": "This repair is already done.",
+    "notFinished": "This repair isn’t finished yet.",
+    "alreadyYours": "You already have this repair.",
+    "alreadyAssigned": "That technician already has this repair.",
+    "notTechnician": "This person can’t do repairs in this store.",
+    "noTechnician": "No technician has this repair yet.",
+    "needsBeforePhoto": "Take a photo of the phone before starting.",
+    "needsAfterPhoto": "Take a photo of the phone after the repair.",
+    "priceChangeDecided": "This price proposal was already accepted or declined.",
+    "priceChangeDifferent": "This price proposal changed. Check it again first.",
+    "priceChangesPending": "Some price proposals still need a decision.",
+    "invalidOptions": "This list of choices can’t be saved.",
+    "notThisStore": "This setting can only be changed for this device’s store.",
+    "discountOwnerOnly": "Only a store owner can give a discount.",
+    "customerAgreementMismatch": "The customer’s agreement doesn’t match this price change. Try changing it again.",
+    "downPaymentAboveTotal": "The down payment is more than the total.",
+    "downPaymentRecorded": "A down payment is already recorded. Only a store owner can change it."
   }
 }

@@ -11,7 +11,7 @@ import { readSyncState, type RealtimeController } from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import type { PullRequest, PullResponse, PushRequest, PushResponse } from '@bolusi/schemas';
 import { noblePort, nodeColumnAead } from '@bolusi/test-support';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { openBetterSqlite3Driver } from '../../test/better-sqlite3-driver.js';
 import {
@@ -165,6 +165,7 @@ async function build(options: { online?: boolean } = {}): Promise<Built> {
     transport,
     bundle: { refresh: () => Promise.resolve('unchanged') },
     applyPulledOp: () => Promise.resolve(),
+    refoldRefused: () => Promise.resolve(),
     crypto: noblePort,
     clock: clockT,
     timer,
@@ -321,6 +322,32 @@ describe('FR-1146 — realtime DOWN, the 60 s periodic trigger still converges (
     expect(controller.getStats().backfills).toBe(0);
     expect(controller.getStats().pokes).toBe(0);
     client.stop();
+  });
+});
+
+describe('a realtime fallback is logged, never silent', () => {
+  test('three WS connect failures log the fall back to SSE on the diagnostics channel', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { client, timer } = await build();
+      lastSocket().simulateError();
+      timer.fire(5_000);
+      await flush();
+      lastSocket().simulateError();
+      timer.fire(15_000);
+      await flush();
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('realtime'), expect.anything());
+      lastSocket().simulateError();
+
+      expect(warn).toHaveBeenCalledWith('[bolusi] realtime fell back to sse', {
+        rung: 'sse',
+        wsConnectFailures: 3,
+        sseConnectFailures: 0,
+      });
+      client.stop();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
