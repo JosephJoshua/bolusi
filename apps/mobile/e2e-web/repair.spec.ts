@@ -407,7 +407,7 @@ test('the counter records a down payment later, and an owner corrects it with a 
   await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('');
   await expect(page.getByText('Isi DP yang benar dulu.')).toBeVisible();
   await fill(page, 'repair.downPayment.amount', '50000');
-  await expect(page.getByText('Jumlahnya masih sama dengan DP tercatat.')).toBeVisible();
+  await expect(page.getByText('Jumlahnya masih sama.')).toBeVisible();
   await fill(page, 'repair.downPayment.amount', '30000');
   await expect(page.getByTestId('repair.downPayment.amount.field')).toHaveValue('30.000');
   await fill(page, 'repair.downPayment.reason', 'Salah ketik, pelanggan bayar 30 ribu.');
@@ -463,5 +463,5 @@ test('the owner sets what the slips print at the top', async ({ page }) => {
   await page.getByTestId('repair.printSettings.handoverTerms').scrollIntoViewIfNeeded();
   await shoot(page, 'print-settings-terms');
   await tap(page, 'repair.printSettings.primary');
-  await expect(page.getByText('Tampilan nota sudah disimpan.').first()).toBeVisible();
+  await expect(page.getByText('Tampilan nota disimpan.').first()).toBeVisible();
 });

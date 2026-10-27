@@ -196,7 +196,6 @@ function SettingsForm({
       }
       testID={testID}
     >
-      <Text style={repairStyles.muted}>{tn('repair.printSettings.intro')}</Text>
       <Section title={tn('repair.printSettings.header')} testID={`${testID}.header`}>
         {runtime.pickPhoto === undefined && form.logo === null ? null : (
           // The logo and whether dot-matrix prints it read as one setting.

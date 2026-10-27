@@ -20,7 +20,7 @@
     "downPaymentReceived": "Down payment received",
     "downPaymentCorrected": "Down payment changed",
     "slipPrinted": "Slip printed",
-    "storePrintSettingsChanged": "Print settings changed"
+    "storePrintSettingsChanged": "Slip details changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -211,9 +211,9 @@
     "waitingEvent": "Price change waiting for the customer",
     "waitsHint": "If not yet, the price is saved and waits for the customer. The total only changes once they agree.",
     "downPayment": "Down payment",
-    "downPaymentInput": "Down payment from the customer (if any)",
+    "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Back to the customer"
+    "refund": "Refunded"
   },
   "problem": {
     "complaint": "Write what the customer says is wrong.",
@@ -263,8 +263,8 @@
     "claim": "This repair is now yours.",
     "start": "Repair started.",
     "repaired": "Marked repaired. Ready to hand back.",
-    "printed": "The slip went to the printer.",
-    "shared": "The slip was shared as a PDF.",
+    "printed": "Slip printed.",
+    "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved."
   },
   "passcode": {
@@ -280,7 +280,7 @@
     "discountOwner": "Only an owner can give a discount. Decline it, or ask an owner to decide.",
     "downPayment": "Enter the amount first.",
     "downPaymentCorrect": "Enter the correct down payment first.",
-    "downPaymentSame": "It is the same as the recorded down payment."
+    "downPaymentSame": "The amount has not changed."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -411,7 +411,7 @@
   },
   "print": {
     "askTitle": "Did the slip print?",
-    "askMessage": "Check whether the paper came out of the printer.",
+    "askMessage": "Check whether the paper came out.",
     "askYes": "Printed",
     "askNo": "Not yet",
     "title": "Print slip",
@@ -419,9 +419,9 @@
     "share": "Send PDF",
     "intake": "Receipt",
     "handover": "Repair bill",
-    "intakeAbout": "For the customer when the phone is received.",
-    "handoverAbout": "The bill and proof of pickup, which is also the payment receipt.",
-    "reprint": "Printed {count} times already. This copy is marked “Reprint”.",
+    "intakeAbout": "Proof the store received the phone.",
+    "handoverAbout": "The bill and proof of pickup.",
+    "reprint": "Printed {count} times already.",
     "paper": "Paper",
     "paperA4": "A4",
     "paperA5": "A5"
@@ -441,7 +441,6 @@
   "printSettings": {
     "title": "Slip details",
     "summary": "Store name, logo and terms on slips",
-    "intro": "Shown on receipts and repair bills, printed or sent as a PDF.",
     "header": "Slip header",
     "name": "Store name",
     "nameHint": "Leave empty to use “{name}”.",
@@ -452,8 +451,8 @@
     "changeLogo": "Change",
     "removeLogo": "Remove",
     "logoTitle": "Store logo",
-    "logoOnDotMatrix": "Logo on dot-matrix printers",
-    "logoOnDotMatrixHint": "Printing is slower and the logo less sharp on carbon forms.",
+    "logoOnDotMatrix": "Print the logo on dot-matrix",
+    "logoOnDotMatrixHint": "Printing gets slower.",
     "intakeTerms": "On the receipt",
     "handoverTerms": "On the repair bill",
     "terms": "Terms",

@@ -363,7 +363,6 @@ export const REPAIR_KEYS = [
   'repair.downPayment.removeHint',
   'repair.printSettings.title',
   'repair.printSettings.summary',
-  'repair.printSettings.intro',
   'repair.printSettings.header',
   'repair.printSettings.name',
   'repair.printSettings.nameHint',

@@ -20,7 +20,7 @@
     "downPaymentReceived": "DP diterima",
     "downPaymentCorrected": "DP diubah",
     "slipPrinted": "Nota dicetak",
-    "storePrintSettingsChanged": "Pengaturan cetak diubah"
+    "storePrintSettingsChanged": "Tampilan nota diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -211,9 +211,9 @@
     "waitingEvent": "Perubahan harga menunggu pelanggan",
     "waitsHint": "Kalau belum, harga ini disimpan dan menunggu persetujuan pelanggan. Totalnya baru berubah setelah pelanggan setuju.",
     "downPayment": "DP",
-    "downPaymentInput": "DP dari pelanggan (kalau ada)",
+    "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan ke pelanggan"
+    "refund": "Dikembalikan"
   },
   "problem": {
     "complaint": "Keluhannya belum diisi.",
@@ -263,9 +263,9 @@
     "claim": "Servisan ini sekarang jadi tugasmu.",
     "start": "Servisan mulai dikerjakan.",
     "repaired": "Selesai! HP siap diambil pelanggan.",
-    "printed": "Nota sudah dikirim ke printer.",
-    "shared": "Nota sudah dibagikan sebagai PDF.",
-    "downPayment": "DP sudah disimpan."
+    "printed": "Nota dicetak.",
+    "shared": "PDF nota sudah dikirim.",
+    "downPayment": "DP tersimpan."
   },
   "passcode": {
     "show": "Lihat",
@@ -280,7 +280,7 @@
     "discountOwner": "Hanya pemilik yang bisa memberi diskon. Tolak, atau minta pemilik yang memutuskan.",
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
-    "downPaymentSame": "Jumlahnya masih sama dengan DP tercatat."
+    "downPaymentSame": "Jumlahnya masih sama."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -411,7 +411,7 @@
   },
   "print": {
     "askTitle": "Notanya sudah tercetak?",
-    "askMessage": "Cek dulu apakah kertasnya sudah keluar dari printer.",
+    "askMessage": "Cek apakah kertasnya sudah keluar.",
     "askYes": "Sudah tercetak",
     "askNo": "Belum",
     "title": "Cetak nota",
@@ -419,9 +419,9 @@
     "share": "Kirim PDF",
     "intake": "Tanda terima",
     "handover": "Nota servisan",
-    "intakeAbout": "Untuk pelanggan waktu HP diterima.",
-    "handoverAbout": "Tagihan dan bukti HP sudah diambil, sekaligus nota pembayaran.",
-    "reprint": "Sudah dicetak {count} kali. Cetakan ini bertanda “Cetak ulang”.",
+    "intakeAbout": "Bukti HP diterima toko.",
+    "handoverAbout": "Tagihan sekaligus bukti HP sudah diambil.",
+    "reprint": "Sudah dicetak {count} kali.",
     "paper": "Kertas",
     "paperA4": "A4",
     "paperA5": "A5"
@@ -441,7 +441,6 @@
   "printSettings": {
     "title": "Tampilan nota",
     "summary": "Nama toko, logo dan ketentuan di nota",
-    "intro": "Tampil di tanda terima dan nota servisan, dicetak atau dikirim sebagai PDF.",
     "header": "Kepala nota",
     "name": "Nama toko",
     "nameHint": "Kosongkan untuk pakai “{name}”.",
@@ -452,13 +451,13 @@
     "changeLogo": "Ganti",
     "removeLogo": "Hapus",
     "logoTitle": "Logo toko",
-    "logoOnDotMatrix": "Logo di printer dot-matrix",
-    "logoOnDotMatrixHint": "Cetakan jadi lebih lambat dan logo kurang tajam di kertas rangkap.",
+    "logoOnDotMatrix": "Cetak logo di dot-matrix",
+    "logoOnDotMatrixHint": "Cetak jadi lebih lambat.",
     "intakeTerms": "Di tanda terima",
     "handoverTerms": "Di nota servisan",
     "terms": "Ketentuan",
     "termsHint": "Satu ketentuan per baris.",
     "save": "Simpan",
-    "saved": "Tampilan nota sudah disimpan."
+    "saved": "Tampilan nota disimpan."
   }
 }
