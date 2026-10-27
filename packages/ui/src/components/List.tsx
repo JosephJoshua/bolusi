@@ -1,8 +1,8 @@
 /** Virtualized list with shared loading, empty, error and unauthorized states.
  * Rows may have different heights; let FlatList measure them instead of supplying guessed offsets.
  */
-import type { ReactElement } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, type ReactElement } from 'react';
+import { FlatList, StyleSheet, View, type ListRenderItem } from 'react-native';
 
 import { EmptyState, type EmptyStateProps } from './EmptyState.js';
 import { ErrorState, type ErrorStateProps } from './ErrorState.js';
@@ -22,6 +22,7 @@ export type ListState<TItem> =
 
 export interface ListProps<TItem> {
   readonly state: ListState<TItem>;
+  /** Keep it stable (`useCallback`) and the rows memoized, or every screen render redraws them all. */
   readonly renderRow: (item: TItem) => ReactElement;
   readonly keyExtractor: (item: TItem) => string;
   /** Cursor pagination (04 §6 `nextCursor`). Omit when there is no further page. */
@@ -44,6 +45,8 @@ export function List<TItem>({
   onEndReached,
   testID = 'ui.list',
 }: ListProps<TItem>): React.JSX.Element {
+  // Stable while `renderRow` is, so a screen re-render with the same items re-renders no rows.
+  const renderItem = useCallback<ListRenderItem<TItem>>(({ item }) => renderRow(item), [renderRow]);
   switch (state.kind) {
     case 'loading':
       return (
@@ -75,7 +78,7 @@ export function List<TItem>({
           testID={testID}
           style={styles.root}
           data={state.items as TItem[]}
-          renderItem={({ item }) => renderRow(item)}
+          renderItem={renderItem}
           keyExtractor={keyExtractor}
           windowSize={WINDOW_SIZE}
           initialNumToRender={INITIAL_NUM_TO_RENDER}

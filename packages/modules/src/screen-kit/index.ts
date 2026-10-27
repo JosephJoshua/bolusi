@@ -12,6 +12,7 @@ export {
 } from './i18n.js';
 export type { CaptureRequest, CapturedMedia, PhotoCapture, SignatureCapture } from './media.js';
 export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
+export { TYPING_PAUSE_MS, useSettledValue } from './settled.js';
 export { hasRejectedOp, statusesFor, type EntitySyncStatuses } from './sync-statuses.js';
 export {
   useThumbnailState,
