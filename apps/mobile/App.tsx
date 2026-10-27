@@ -45,6 +45,7 @@ import {
 } from './src/navigation/zone.js';
 import { EnrollmentScreen } from './src/screens/enrollment/EnrollmentScreen.js';
 import {
+  afterLogin,
   canSubmitConfirm,
   canSubmitCredentials,
   chosenStoreId,
@@ -261,6 +262,14 @@ export default function App(props: AppProps): React.JSX.Element {
   /** "PIN karyawan" opened from "Karyawan" for one person's first PIN; back returns to Karyawan. */
   const [staffPinFor, setStaffPinFor] = useState<string | null>(null);
   const [pinFor, setPinFor] = useState<string | null>(null);
+  // Wrong PINs typed for one person since their pad opened. Each one remounts the pad in its error
+  // state, which clears the dots and shows "PIN salah" again, even on a second wrong PIN in a row.
+  const [wrongPins, setWrongPins] = useState<{ readonly userId: string; readonly count: number }>({
+    userId: '',
+    count: 0,
+  });
+  // A pad opened afresh starts clean, not with the last visit's "PIN salah".
+  useEffect(() => setWrongPins({ userId: '', count: 0 }), [pinFor]);
   /**
    * The user asked to open the switcher while a session is open — the voluntary quick-switch
    * (task 143; api/02-auth §6.2). `resolveZone` turns this into the switcher zone only when a session
@@ -627,16 +636,7 @@ export default function App(props: AppProps): React.JSX.Element {
     setEnrollment((s) => ({ ...s, busy: true, failure: null }));
     props.enrollment
       .login({ loginIdentifier: enrollment.loginIdentifier.trim(), password: enrollment.password })
-      .then((login) =>
-        setEnrollment((s) => ({
-          ...s,
-          busy: false,
-          login,
-          step: 'confirm',
-          selectedStoreId:
-            login.stores.length === 1 ? (login.stores[0]?.id ?? null) : s.selectedStoreId,
-        })),
-      )
+      .then((login) => setEnrollment((s) => afterLogin(s, login)))
       .catch((error: unknown) =>
         setEnrollment((s) => ({ ...s, busy: false, failure: classifyFailure(error) })),
       )
@@ -682,6 +682,8 @@ export default function App(props: AppProps): React.JSX.Element {
       props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
   const canSetCancelFees =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
+  const canSetPrintSettings =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
@@ -876,6 +878,18 @@ export default function App(props: AppProps): React.JSX.Element {
               const submitted = props.onSubmitPin(pinZone.userId, pin);
               if (submitted !== undefined) {
                 void submitted.then((opened) => {
+                  if (!opened) {
+                    setWrongPins((prior) => ({
+                      userId: pinZone.userId,
+                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                    }));
+                  }
+                  if (!opened) {
+                    setWrongPins((prior) => ({
+                      userId: pinZone.userId,
+                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                    }));
+                  }
                   if (opened) {
                     // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
                     // the pending target AND the switch intent, so the gate lands on the incoming
@@ -909,15 +923,17 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            const wrong = wrongPins.userId === pinZone.userId ? wrongPins.count : 0;
             return (
               <PinScreen
+                key={`${pinZone.userId}:${wrong}`}
                 userId={pinZone.userId}
                 userName={nameOf(props.users, pinZone.userId)}
                 roleKeys={user?.roleKeys}
                 needsFirstPin={tap?.kind === 'askOwnerForPin'}
                 row={props.pinRow(pinZone.userId)}
                 now={props.now}
-                lastAttempt="none"
+                lastAttempt={wrong > 0 ? 'wrong' : 'none'}
                 onSubmit={signIn}
                 onSwitchUser={() => setPinFor(null)}
                 syncChip={chip}
@@ -1002,6 +1018,17 @@ export default function App(props: AppProps): React.JSX.Element {
                             },
                           ]
                         : []),
+                      ...(canSetPrintSettings
+                        ? [
+                            {
+                              icon: 'print' as const,
+                              title: tn('repair.printSettings.title'),
+                              summary: tn('repair.printSettings.summary'),
+                              onOpen: () => setRoute('printSettings'),
+                              testID: 'settings-print-settings',
+                            },
+                          ]
+                        : []),
                     ],
                   }}
                   syncChip={chip}
@@ -1011,7 +1038,9 @@ export default function App(props: AppProps): React.JSX.Element {
               );
             }
             if (
-              (shellZone.route === 'intakeOptions' || shellZone.route === 'cancelFees') &&
+              (shellZone.route === 'intakeOptions' ||
+                shellZone.route === 'cancelFees' ||
+                shellZone.route === 'printSettings') &&
               props.repair !== undefined
             ) {
               return (
@@ -1296,6 +1325,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'cancelFees',
   'staff',
   'staffPins',
+  'printSettings',
 ]);
 
 /**

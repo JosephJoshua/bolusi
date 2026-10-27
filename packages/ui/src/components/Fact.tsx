@@ -15,6 +15,8 @@ export interface FactProps {
   readonly value: string;
   readonly action?: ReactNode;
   readonly wide?: boolean | undefined;
+  /** Drawn under the value, e.g. a note that belongs to this fact. */
+  readonly children?: ReactNode;
   readonly testID?: string | undefined;
 }
 
@@ -27,7 +29,14 @@ const styles = StyleSheet.create({
   value: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },
 });
 
-export function Fact({ label, value, action, wide = false, testID }: FactProps): React.JSX.Element {
+export function Fact({
+  label,
+  value,
+  action,
+  wide = false,
+  children,
+  testID,
+}: FactProps): React.JSX.Element {
   return (
     <View style={[styles.fact, wide ? styles.wide : null]}>
       <Text style={styles.label}>{label}</Text>
@@ -37,6 +46,7 @@ export function Fact({ label, value, action, wide = false, testID }: FactProps):
         </Text>
         {action}
       </View>
+      {children}
     </View>
   );
 }

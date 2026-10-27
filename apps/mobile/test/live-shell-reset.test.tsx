@@ -104,7 +104,7 @@ function enterOnResetPad(screen: RenderResult, pin: string): void {
 describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (task 186b-2)', () => {
   test('Settings → Reset → pick target → new PIN → the verifier drains with X-Acting-User = the owner', async () => {
     const uploads: Array<{ userId: string; actingUserId: string }> = [];
-    let onBundleRefreshed: (() => void | Promise<void>) | undefined;
+    let onBundleChecked: (() => void | Promise<void>) | undefined;
 
     fixture = await bootFixture();
     await enrolledDevice(fixture);
@@ -117,8 +117,8 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
           return Promise.resolve({ userId, applied: true });
         },
       },
-      createSync: (_booted, refresh) => {
-        onBundleRefreshed = refresh;
+      createSync: (_booted, _refreshed, checked) => {
+        onBundleChecked = checked;
         return null;
       },
     });
@@ -153,8 +153,8 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
 
     // Nothing POSTs until the device is next online.
     expect(uploads).toHaveLength(0);
-    expect(onBundleRefreshed).toBeDefined();
-    await onBundleRefreshed?.();
+    expect(onBundleChecked).toBeDefined();
+    await onBundleChecked?.();
 
     // THE SECURITY WITNESS: the verifier POSTed to the TARGET's path, acting AS THE OWNER — never the
     // target. On the pre-fix core (PendingVerifier carrying only the target) the acting user would be

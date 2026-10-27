@@ -25,15 +25,18 @@ export type DeviceStatus = 'unenrolled' | 'active' | 'revoked';
 export type SwitcherMode = 'lock' | 'choose';
 
 /** The in-shell surfaces this task ships. Module screens (task 25) extend this union. */
-export type ShellRoute =
-  | 'home'
-  | 'syncStatus'
-  | 'settings'
-  | 'changePin'
-  | 'staff'
-  | 'staffPins'
-  | 'intakeOptions'
-  | 'cancelFees';
+export const SHELL_ROUTES = [
+  'home',
+  'syncStatus',
+  'settings',
+  'changePin',
+  'staff',
+  'staffPins',
+  'intakeOptions',
+  'cancelFees',
+  'printSettings',
+] as const;
+export type ShellRoute = (typeof SHELL_ROUTES)[number];
 
 /**
  * The one surface the app is showing. A discriminated union so a renderer must handle every case —
@@ -169,6 +172,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       if (zone.route === 'staffPins') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'printSettings') return { kind: 'shellRoute', route: 'settings' };
       return { kind: 'shellRoute', route: 'home' };
   }
 }

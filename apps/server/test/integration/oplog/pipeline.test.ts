@@ -748,13 +748,32 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
     expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
   });
 
-  test('platform.conflict_acknowledged from a member device is ACCEPTED', async () => {
+  test('platform.conflict_acknowledged of a conflict in the device store is ACCEPTED', async () => {
     const { world, builder } = await setupWorld(1071);
     const genesis = builder.genesis();
+    // The platform rule needs the conflict to exist in this store (platform/rules.ts).
+    const conflictId = testId(1072);
+    await testDb.db
+      .insertInto('conflicts')
+      .values({
+        id: conflictId,
+        tenantId: world.tenantId,
+        storeId: world.storeId,
+        entityType: 'note',
+        entityId: testId(1073),
+        conflictKey: 'k:1071',
+        severity: 'significant',
+        status: 'surfaced',
+        opAId: testId(1074),
+        opBId: testId(1075),
+        detectedAt: 1,
+      })
+      .execute();
     const op = builder.append({
       type: 'platform.conflict_acknowledged',
       entityType: 'conflict',
-      payload: { conflictId: world.userId },
+      entityId: conflictId,
+      payload: { conflictId },
     });
 
     const result = await processPushBatch(

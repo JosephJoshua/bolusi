@@ -21,6 +21,7 @@ import type { PushResult, SignedOperation } from '@bolusi/schemas';
 import { opRowOf } from '@bolusi/test-support';
 
 import {
+  BUNDLE_REFRESH_INTERVAL_MS,
   DomainError,
   SYNC_BACKOFF_SCHEDULE_MS,
   SYNC_LOOP_MACHINE,
@@ -323,6 +324,7 @@ describe('trigger guards (03 §10)', () => {
       timer: harness.timer,
       deviceId: device.id,
       applyPulledOp: async () => undefined,
+      refoldRefused: async () => undefined,
       bundle: { refresh: async () => 'unchanged' as const },
     });
     expect(() => loop.requestSync('manual')).toThrow(/hydrate/);
@@ -638,7 +640,57 @@ describe('the loop never throws to its caller (api/01 §6)', () => {
   });
 });
 
-describe('bundle refresh (api/01 §6, once per loop)', () => {
+describe('bundle refresh throttle (busy devices stay under the 120-per-hour server limit)', () => {
+  it('automatic cycles inside the interval skip the bundle; the next one after it refreshes', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.requestSync('periodic');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(1);
+
+    for (const reason of ['append', 'periodic', 'append'] as const) {
+      harness.timer.advance(10_000);
+      loop.requestSync(reason);
+      await loop.settle();
+      expect(loop.state).toBe('idle');
+    }
+    expect(harness.bundleRefreshes()).toBe(1);
+
+    harness.timer.advance(BUNDLE_REFRESH_INTERVAL_MS - 30_000);
+    loop.requestSync('append');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(2);
+  });
+
+  it('a manual trigger refreshes at once; connectivity (which realtime pokes also use) does not', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.requestSync('periodic');
+    await loop.settle();
+    loop.requestSync('connectivity');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(1);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(2);
+  });
+
+  it('a failed refresh is retried on the next cycle rather than waiting out the interval', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.requestSync('periodic');
+    await loop.settle();
+    harness.failBundle(1);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(loop.state).toBe('backoff');
+    expect(harness.bundleRefreshes()).toBe(2);
+
+    harness.timer.advance(SYNC_BACKOFF_SCHEDULE_MS[0]);
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(3);
+    expect(loop.state).toBe('idle');
+  });
+});
+
+describe('bundle refresh (api/01 §6)', () => {
   it('is invoked exactly once per cycle and 304 (unchanged) is success', async () => {
     const loop = await harness.makeLoop({ deviceId: device.id });
     loop.requestSync('manual');

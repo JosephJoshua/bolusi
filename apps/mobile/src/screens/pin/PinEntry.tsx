@@ -8,7 +8,7 @@
  */
 import { Avatar, PinPad, color, space, type, type PinPadState } from '@bolusi/ui';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { initialsOf } from '../switcher/model.js';
 import { roleLabel } from '../switcher/UserRow.js';
@@ -32,6 +32,11 @@ export interface PinEntryProps {
   readonly padKey?: string | undefined;
   readonly backspaceLabel: string;
   readonly footer?: ReactNode;
+  /**
+   * Already-localized: the PIN is being saved. Hashing a PIN takes a few seconds on a slow phone, so
+   * the pad gives way to a spinner and this line instead of sitting there full and frozen.
+   */
+  readonly busyLabel?: string | undefined;
   readonly testID: string;
 }
 
@@ -44,8 +49,22 @@ export function PinEntry({
   padKey,
   backspaceLabel,
   footer,
+  busyLabel,
   testID,
 }: PinEntryProps): React.JSX.Element {
+  if (busyLabel !== undefined) {
+    return (
+      <View style={styles.root} testID={testID}>
+        {person === undefined ? null : <PinPerson person={person} testID={`${testID}-person`} />}
+        <View style={styles.busy} testID={`${testID}-busy`}>
+          <ActivityIndicator color={color.primary} />
+          <Text style={styles.prompt} accessibilityLiveRegion="polite">
+            {busyLabel}
+          </Text>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.root} testID={testID}>
       {person === undefined ? null : <PinPerson person={person} testID={`${testID}-person`} />}
@@ -104,4 +123,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   footer: { marginTop: space.sm, alignItems: 'center' },
+  busy: { alignItems: 'center', gap: space.md, marginTop: space.xl },
 });

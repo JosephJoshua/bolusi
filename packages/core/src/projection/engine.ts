@@ -28,7 +28,12 @@ import type { Kysely } from 'kysely';
 import type { ProjectionApply } from '../oplog/append.js';
 import type { ModuleProjectionManifest, ProjectionOperation } from './manifest.js';
 import { moduleVersionSignature } from './manifest.js';
-import { hasNewerEntityOp, highestContiguousSeq, type OpSeqColumn } from './oplog-source.js';
+import {
+  hasNewerEntityOp,
+  highestContiguousSeq,
+  type FoldReadOptions,
+  type OpSeqColumn,
+} from './oplog-source.js';
 import type { ProjectionRegistry } from './registry.js';
 import {
   createSqlRebuildStore,
@@ -64,8 +69,19 @@ export interface ProjectionEngineOptions<DB> {
    * side and a silent decoy on the other. The two factories are the only places that answer it.
    */
   readonly seqColumn: OpSeqColumn;
+  /**
+   * Whether this log keeps ops the server refused: a device's does (they stay as chain links but
+   * never fold), the server's never holds one. REQUIRED for the same reason as `seqColumn`.
+   */
+  readonly logKeepsRefusedOps: boolean;
   /** Factory so rebuild can bind the store to a batch transaction (rebuild.ts). */
   readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
+  /**
+   * Leave the pull-path watermark to {@link ProjectionEngine.advancePulledWatermarks}, called once
+   * after a batch, instead of advancing it after every op. The server's push sets this: its whole
+   * batch is one transaction, so the watermark lands with the ops either way.
+   */
+  readonly batchPulledWatermarks?: boolean;
   readonly invalidation?: InvalidationBus;
   readonly stats?: ProjectionStats;
 }
@@ -81,7 +97,11 @@ export class ProjectionEngine<DB> {
   private readonly registry: ProjectionRegistry<DB>;
   private readonly watermarks: WatermarkStore;
   private readonly seqColumn: OpSeqColumn;
+  private readonly fold: FoldReadOptions;
   private readonly makeRebuildStore: (handle: Kysely<DB>) => RebuildStore;
+  private readonly batchPulledWatermarks: boolean;
+  /** Modules with pulled ops since the last {@link advancePulledWatermarks} (batch mode only). */
+  private readonly pulledModules = new Set<string>();
   readonly invalidation: InvalidationBus;
   readonly stats: ProjectionStats;
 
@@ -90,7 +110,9 @@ export class ProjectionEngine<DB> {
     this.registry = options.registry;
     this.watermarks = options.watermarks;
     this.seqColumn = options.seqColumn;
+    this.fold = { skipRefused: options.logKeepsRefusedOps };
     this.makeRebuildStore = options.makeRebuildStore;
+    this.batchPulledWatermarks = options.batchPulledWatermarks ?? false;
     this.invalidation = options.invalidation ?? new InvalidationBus();
     this.stats = options.stats ?? new ProjectionStats();
   }
@@ -145,24 +167,52 @@ export class ProjectionEngine<DB> {
       mode = 'head';
     } else {
       // OUT-OF-ORDER: delete the entity's rows, re-fold its full history in canonical order.
-      await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId]);
+      await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId], this.fold);
       this.stats.recordRefold();
       mode = 'refold';
     }
 
     if (source === 'append') {
       await this.watermarks.advanceLocalSeq(module.id, op.seq);
+    } else if (this.batchPulledWatermarks) {
+      this.pulledModules.add(module.id);
     } else {
-      const current = await this.watermarks.read(module.id);
-      const next = await highestContiguousSeq(this.db, current.appliedServerSeq, this.seqColumn);
-      if (next > current.appliedServerSeq) {
-        await this.watermarks.advanceServerSeq(module.id, next);
-      }
+      await this.advancePulledWatermark(module.id);
     }
 
     const written = new Set(entityTables.map((ref) => ref.table));
     this.invalidation.emit(written, { entityType: op.entityType, entityId: op.entityId });
     return { module: module.id, mode, writtenTables: [...written] };
+  }
+
+  /** Advance the watermark of every module a pulled op touched since the last call (batch mode). */
+  async advancePulledWatermarks(): Promise<void> {
+    for (const moduleId of this.pulledModules) await this.advancePulledWatermark(moduleId);
+    this.pulledModules.clear();
+  }
+
+  private async advancePulledWatermark(moduleId: string): Promise<void> {
+    const current = await this.watermarks.read(moduleId);
+    const next = await highestContiguousSeq(this.db, current.appliedServerSeq, this.seqColumn);
+    if (next > current.appliedServerSeq) {
+      await this.watermarks.advanceServerSeq(moduleId, next);
+    }
+  }
+
+  /**
+   * Take an op the server refused back out of its record: re-fold the record from the ops that
+   * still count (a refused op never folds, see `logKeepsRefusedOps`). Runs inside the caller's
+   * transaction, the one that marks the op refused, so the two land together.
+   */
+  async refoldRefused(op: ProjectionOperation): Promise<void> {
+    const module = this.registry.moduleForType(op.type);
+    if (module === undefined) return;
+    await refoldEntities(this.db, this.registry, module, op.entityType, [op.entityId], this.fold);
+    this.stats.recordRefold();
+    const written = new Set(
+      this.registry.tablesForEntityType(module, op.entityType).map((ref) => ref.table),
+    );
+    this.invalidation.emit(written, { entityType: op.entityType, entityId: op.entityId });
   }
 
   /** Apply one op via its module's registered applier (guards a foreign type defensively). */
@@ -184,6 +234,7 @@ export class ProjectionEngine<DB> {
         makeStore: this.makeRebuildStore,
         invalidation: this.invalidation,
         stats: this.stats,
+        fold: this.fold,
       },
       moduleId,
       options,
@@ -258,6 +309,7 @@ export function createProjectionEngine<DB>(
     // The CLIENT log numbers pulled ops with a local arrival counter (10-db §9.2, D20 §4) — the
     // server's `server_seq` column does not exist here, so a mis-wiring cannot be silent.
     seqColumn: 'arrival_seq',
+    logKeepsRefusedOps: true,
     makeRebuildStore: (handle) => createSqlRebuildStore(handle),
     ...(options?.invalidation !== undefined ? { invalidation: options.invalidation } : {}),
     ...(options?.stats !== undefined ? { stats: options.stats } : {}),

@@ -104,6 +104,7 @@ export function PinSetupScreen({
     >
       <PinEntry
         person={{ id: userId, name: userName, roleKeys }}
+        busyLabel={phase.kind === 'saving' ? t('auth.pin.saving') : undefined}
         prompt={t(entry === null ? 'auth.pin.setup.repeat' : newPinPromptKey(entry))}
         message={failed ? t('auth.pin.setup.failed') : feedback === null ? undefined : t(feedback)}
         state={entry === null ? 'locked' : failed ? 'error' : newPinPadState(entry)}

@@ -117,6 +117,32 @@ describe('reset', () => {
     expect(screen.query('staff-pin-reset-done')).not.toBeNull();
   });
 
+  test('a re-render with new callbacks mid-save runs the reset once and still reaches done', async () => {
+    let finish: () => void = () => undefined;
+    const onResetPin = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { screen, props } = renderStaff({ onResetPin });
+    press(screen, `staff-pin-target-${ACTIVE.id}`);
+    press(screen, 'staff-pin-reset');
+    press(screen, 'staff-pin-proceed');
+    enterPin(screen, '730215');
+    enterPin(screen, '730215');
+    await flush();
+    const fresh = vi.fn(() => Promise.resolve());
+    screen.rerender(<StaffPinScreen {...props} onResetPin={fresh} />);
+    await flush();
+    finish();
+    await flush();
+
+    expect(onResetPin).toHaveBeenCalledOnce();
+    expect(fresh).not.toHaveBeenCalled();
+    expect(screen.query('staff-pin-reset-done')).not.toBeNull();
+  });
+
   test('a refused reset shows the failure, never done', async () => {
     const { screen } = renderStaff({
       onResetPin: vi.fn(() => Promise.reject(new DomainError('PERMISSION_DENIED'))),

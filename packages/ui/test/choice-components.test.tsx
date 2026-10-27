@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import { describe, expect, test, vi } from 'vitest';
 
 import { ListRow } from '../src/components/ListRow.js';
+import { PatternLock } from '../src/components/PatternLock.js';
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
 import { StepHeader } from '../src/components/StepHeader.js';
@@ -192,5 +193,16 @@ describe('ListRow as a checkbox', () => {
     expect(r.get('off.box').children.length).toBe(0);
     fire(r.get('off'), 'onPress');
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PatternLock', () => {
+  test('shows a pattern read-only: drawn dots carry their order, and it is read out as steps', () => {
+    const r = render(<PatternLock value="1475" accessibilityLabel="Pola" testID="lock" />);
+    expect(r.get('lock').props['accessibilityLabel']).toBe('Pola: 1-4-7-5');
+    expect(textsIn(r.get('lock.dot.1'))).toEqual(['1']);
+    expect(textsIn(r.get('lock.dot.4'))).toEqual(['2']);
+    expect(textsIn(r.get('lock.dot.5'))).toEqual(['4']);
+    expect(textsIn(r.get('lock.dot.9'))).toEqual([]);
   });
 });

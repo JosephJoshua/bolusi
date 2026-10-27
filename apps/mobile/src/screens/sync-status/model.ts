@@ -59,6 +59,8 @@ export interface RejectedOpRow {
   readonly rejectionCode: string;
   /** The server's technical detail — collapsed, never the primary message (07-i18n §4.3; `sync.rejected.*`). */
   readonly rejectionReason: string | null;
+  /** What the change was about, in the owning module's words ("Servisan K7Q-0042"); null if unknown. */
+  readonly subject: string | null;
 }
 
 /**

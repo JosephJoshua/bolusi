@@ -32,8 +32,9 @@
   "rejected": {
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
     "title": "Ditolak server ({count})",
-    "explain": "Tidak dikirim lagi, tapi tetap tersimpan di HP ini.",
+    "explain": "Sudah dibatalkan juga di HP ini. Ulangi kalau masih perlu.",
     "opMeta": "{opType} · {time}",
+    "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Detail teknis",
     "noReason": "Server tidak mengirim keterangan.",
     "more": "Tampilkan {count} lainnya"

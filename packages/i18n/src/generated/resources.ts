@@ -65,6 +65,8 @@ const source = {
         LAST_ADMIN_PROTECTED: 'Tidak bisa. Harus selalu ada minimal satu pemilik utama yang aktif.',
         ROLE_IN_USE:
           'Peran ini masih dipakai pengguna lain, jadi belum bisa dihapus. Lepaskan dulu dari semua pengguna.',
+        CLOCK_AHEAD:
+          'Jam di perangkat ini lebih cepat dari seharusnya. Nyalakan tanggal & jam otomatis di pengaturan, lalu coba lagi.',
         IDEMPOTENCY_CONFLICT: 'Permintaan ini bentrok dengan permintaan sebelumnya. Coba lagi.',
         RATE_LIMITED: 'Terlalu banyak permintaan. Tunggu sebentar, lalu coba lagi.',
         UNEXPECTED: 'Terjadi kesalahan. Coba lagi.',
@@ -94,8 +96,12 @@ const source = {
           'Riwayat di perangkat ini rusak, pengiriman berhenti. Segera kabari pemilik toko.',
         CHAIN_GAP: 'Ada yang tertinggal. Dikirim ulang otomatis.',
         CHAIN_HALTED: 'Menunggu perubahan sebelumnya beres.',
+        CLOCK_AHEAD:
+          'Jam HP ini kecepatan waktu perubahan ini dibuat. Nyalakan tanggal & jam otomatis, lalu ulangi.',
         DEVICE_REVOKED: 'Perangkat ini sudah diblokir. Daftarkan ulang.',
         PERMISSION_DENIED: 'Pembuatnya tidak punya izin. Minta orang yang berwenang mengulanginya.',
+        RULE_VIOLATED:
+          'Datanya sudah berubah di perangkat lain. Cek lagi, lalu ulangi kalau masih perlu.',
         SCHEMA_INVALID: 'Server tidak mengenali perubahan ini. Kabari pemilik toko.',
         SCOPE_VIOLATION: 'Bukan untuk toko ini. Kabari pemilik toko.',
         UNKNOWN_TYPE: 'Perbarui aplikasi supaya bisa dikirim.',
@@ -171,6 +177,7 @@ const source = {
         },
         noPinTitle: 'Belum ada PIN',
         noPinBody: 'Minta pemilik toko membuatkan PIN untukmu.',
+        saving: 'Menyimpan PIN…',
       },
       enroll: {
         title: 'Daftarkan HP ini',
@@ -307,8 +314,9 @@ const source = {
       rejected: {
         banner: '{count} perubahan ditolak server. Ketuk untuk melihat.',
         title: 'Ditolak server ({count})',
-        explain: 'Tidak dikirim lagi, tapi tetap tersimpan di HP ini.',
+        explain: 'Sudah dibatalkan juga di HP ini. Ulangi kalau masih perlu.',
         opMeta: '{opType} · {time}',
+        opMetaSubject: '{opType} · {subject} · {time}',
         technicalDetails: 'Detail teknis',
         noReason: 'Server tidak mengirim keterangan.',
         more: 'Tampilkan {count} lainnya',
@@ -379,6 +387,10 @@ const source = {
         conflictDetected: 'Data bentrok terdeteksi',
         conflictAcknowledged: 'Data bentrok diputuskan',
         userLocaleChanged: 'Bahasa diubah',
+      },
+      refusal: {
+        conflictNotFound: 'Data bentrok ini tidak ditemukan.',
+        notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
       },
     },
     push: {
@@ -475,6 +487,8 @@ export const resources = {
           LAST_ADMIN_PROTECTED: 'Not allowed. There must always be at least one active main owner.',
           ROLE_IN_USE:
             'This role is still assigned to users, so it can’t be removed yet. Unassign it from everyone first.',
+          CLOCK_AHEAD:
+            'This device’s clock is ahead. Turn on automatic date and time in settings, then try again.',
           IDEMPOTENCY_CONFLICT: 'This request clashed with an earlier one. Try again.',
           RATE_LIMITED: 'Too many requests. Wait a moment, then try again.',
           UNEXPECTED: 'Something went wrong. Try again.',
@@ -509,8 +523,12 @@ export const resources = {
             'This device’s history is broken and sending stopped. Tell the store owner now.',
           CHAIN_GAP: 'Something was missing. Resending automatically.',
           CHAIN_HALTED: 'Waiting on an earlier change.',
+          CLOCK_AHEAD:
+            'This phone’s clock was ahead when this was made. Turn on automatic date and time, then redo it.',
           DEVICE_REVOKED: 'This device is blocked. Enroll it again.',
           PERMISSION_DENIED: 'Whoever made it wasn’t allowed to. Ask someone who is to redo it.',
+          RULE_VIOLATED:
+            'The record changed on another device. Check it and redo this if it’s still needed.',
           SCHEMA_INVALID: 'The server didn’t recognise this change. Tell the store owner.',
           SCOPE_VIOLATION: 'Not for this store. Tell the store owner.',
           UNKNOWN_TYPE: 'Update the app so this can be sent.',
@@ -586,6 +604,7 @@ export const resources = {
           },
           noPinTitle: 'No PIN yet',
           noPinBody: 'Ask the store owner to make you a PIN.',
+          saving: 'Saving the PIN…',
         },
         enroll: {
           title: 'Enroll this phone',
@@ -726,8 +745,9 @@ export const resources = {
           banner:
             '{count, plural, one {# change was rejected by the server. Tap to view.} other {# changes were rejected by the server. Tap to view.}}',
           title: 'Refused by the server ({count})',
-          explain: 'Not sent again, but still saved on this phone.',
+          explain: 'Also undone on this phone. Redo them if they’re still needed.',
           opMeta: '{opType} · {time}',
+          opMetaSubject: '{opType} · {subject} · {time}',
           technicalDetails: 'Technical details',
           noReason: 'The server sent no details.',
           more: 'Show {count} more',
@@ -809,6 +829,10 @@ export const resources = {
           conflictDetected: 'Conflict detected',
           conflictAcknowledged: 'Conflict decided',
           userLocaleChanged: 'Language changed',
+        },
+        refusal: {
+          conflictNotFound: 'This conflict wasn’t found.',
+          notYourPreference: 'Only the account’s owner can change its language.',
         },
       },
       push: {

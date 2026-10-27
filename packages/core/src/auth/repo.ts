@@ -5,7 +5,7 @@
 // and the loader works whether or not the caller installed `CamelCasePlugin`. These tables are
 // written ONLY from the enrollment bundle / bundle refreshes / local PIN writes — NEVER from ops
 // (01-domain-model §1); the permission evaluator and the switcher read them.
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type RawBuilder } from 'kysely';
 
 import { TENANT_ID_META_KEY } from '../authz/directory.js';
 import { encryptColumnValue } from '../crypto/column-cipher.js';
@@ -253,15 +253,7 @@ export async function readVerifier<DB>(
   // inverted the greatest-`asOf` merge (§5.3) — an AUTHENTICATION decision — silently past seq 9.
   // Each field is the UNION the drivers actually produce, so the compiler forces the normalisation
   // through the shared per-column-class seams below rather than take a hand-written word for it.
-  const rows = await sql<{
-    algo: string;
-    salt: string;
-    params: JsonColumnValue;
-    hash: string;
-    asOfTimestamp: Int8Value;
-    asOfDeviceId: string;
-    asOfSeq: Int8Value;
-  }>`
+  const rows = await sql<StoredVerifierRow>`
     SELECT algo, salt, params, hash,
            as_of_timestamp AS "asOfTimestamp",
            as_of_device_id AS "asOfDeviceId",
@@ -269,12 +261,30 @@ export async function readVerifier<DB>(
     FROM user_pin_verifiers WHERE user_id = ${userId}
   `.execute(db);
   const row = rows.rows[0];
-  if (row === undefined) return null;
+  return row === undefined ? null : verifierFromRow(row, 'user_pin_verifiers');
+}
+
+/**
+ * A stored verifier's columns as the drivers return them. Shared by `user_pin_verifiers` and
+ * `pending_pin_verifiers`, which hold the same material in the same column shapes.
+ */
+export interface StoredVerifierRow {
+  readonly algo: string;
+  readonly salt: string;
+  readonly params: JsonColumnValue;
+  readonly hash: string;
+  readonly asOfTimestamp: Int8Value;
+  readonly asOfDeviceId: string;
+  readonly asOfSeq: Int8Value;
+}
+
+/** Rebuild the self-describing `PinVerifier` (§5.3) from a stored row, verbatim. */
+export function verifierFromRow(row: StoredVerifierRow, table: string): PinVerifier {
   // `jsonColumnToObject` accepts the parsed jsonb object AND the client's TEXT JSON string, and
   // returns the stored object VERBATIM — so a tampered `p` stays visible to the caller's bounds
   // check (SEC-AUTH-01, T-13) rather than being narrowed away, and a params that is NOT an object
   // is REFUSED (fail-closed) rather than silently yielding undefined KDF params.
-  const params = jsonColumnToObject(row.params, 'user_pin_verifiers.params') as StoredParams;
+  const params = jsonColumnToObject(row.params, `${table}.params`) as StoredParams;
   // Reconstruct from the stored bytes VERBATIM — `algo` and `p` are read back as-is (not hardcoded to
   // `'argon2id'`/`1`), so a tampered local row is VISIBLE to the caller's bounds check rather than
   // normalized away before it can be seen (SEC-AUTH-01, T-13). readVerifier does not itself gate: the
@@ -292,9 +302,9 @@ export async function readVerifier<DB>(
       // rather than round (int8.ts) — a rounded `asOf` is a wrong canonical position returned with
       // no error, and a tampered out-of-range `as_of_seq` must fail closed, not silently win the
       // §5.3 merge. `compareCanonicalOrder` now sees real numbers, so ordering cannot invert.
-      timestamp: int8ToNumber(row.asOfTimestamp, 'user_pin_verifiers.as_of_timestamp'),
+      timestamp: int8ToNumber(row.asOfTimestamp, `${table}.as_of_timestamp`),
       deviceId: row.asOfDeviceId,
-      seq: int8ToNumber(row.asOfSeq, 'user_pin_verifiers.as_of_seq'),
+      seq: int8ToNumber(row.asOfSeq, `${table}.as_of_seq`),
     },
   };
 }
@@ -312,20 +322,36 @@ export async function writeVerifier<DB>(
   userId: string,
   verifier: PinVerifier,
 ): Promise<void> {
-  const params: StoredParams = { mKiB: verifier.mKiB, t: verifier.t, p: 1 };
   await sql`
     INSERT INTO user_pin_verifiers
       (user_id, algo, salt, params, hash, as_of_timestamp, as_of_device_id, as_of_seq)
-    VALUES (${userId}, ${verifier.algorithm}, ${encryptColumnValue(db, verifier.saltB64)},
-            ${encryptColumnValue(db, JSON.stringify(params))},
-            ${encryptColumnValue(db, verifier.hashB64)},
-            ${verifier.asOf.timestamp}, ${verifier.asOf.deviceId}, ${verifier.asOf.seq})
+    VALUES (${userId}, ${sealedVerifierValues(db, verifier)})
     ON CONFLICT (user_id) DO UPDATE SET
       algo = excluded.algo, salt = excluded.salt, params = excluded.params, hash = excluded.hash,
       as_of_timestamp = excluded.as_of_timestamp,
       as_of_device_id = excluded.as_of_device_id,
       as_of_seq = excluded.as_of_seq
   `.execute(db);
+}
+
+/**
+ * The `algo, salt, params, hash, as_of_timestamp, as_of_device_id, as_of_seq` values of a verifier row,
+ * with the secret material sealed for `db`. Shared by every table that stores a verifier.
+ */
+export function sealedVerifierValues<DB>(
+  db: Kysely<DB>,
+  verifier: PinVerifier,
+): RawBuilder<unknown> {
+  const params: StoredParams = { mKiB: verifier.mKiB, t: verifier.t, p: 1 };
+  return sql.join([
+    verifier.algorithm,
+    encryptColumnValue(db, verifier.saltB64),
+    encryptColumnValue(db, JSON.stringify(params)),
+    encryptColumnValue(db, verifier.hashB64),
+    verifier.asOf.timestamp,
+    verifier.asOf.deviceId,
+    verifier.asOf.seq,
+  ]);
 }
 
 /** Delete a user's verifier row — the bundle no longer carries one (deactivation / unassignment). */

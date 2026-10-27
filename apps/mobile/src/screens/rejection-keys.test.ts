@@ -82,7 +82,7 @@ describe('derived keys — the ones the compiler cannot check', () => {
       covered += 1;
     }
     expect(covered).toBe(REJECTION_CODES.length);
-    expect(covered).toBe(9);
+    expect(covered).toBe(11);
   });
 
   test('every error code these screens can render has a row in both catalogs', () => {

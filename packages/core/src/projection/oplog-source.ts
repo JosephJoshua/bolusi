@@ -79,13 +79,23 @@ export async function hasNewerEntityOp<DB>(
   return result.rows.length > 0;
 }
 
+/**
+ * Which ops of a log fold. A device keeps its own ops the server refused in its log, because they
+ * are links in its signed chain, but they never happened as far as anyone else is concerned, so
+ * they must never fold (`skipRefused`). The server's log never holds a refused op.
+ */
+export interface FoldReadOptions {
+  readonly skipRefused?: boolean;
+}
+
 /** Every op for `(entityType, entityId)` in canonical order — the re-fold input (§4.2). */
 export async function readEntityOps<DB>(
   db: Kysely<DB>,
   entityType: string,
   entityId: string,
+  options: FoldReadOptions = {},
 ): Promise<SignedOperation[]> {
-  return (await readEntitiesOps(db, entityType, [entityId])).get(entityId) ?? [];
+  return (await readEntitiesOps(db, entityType, [entityId], options)).get(entityId) ?? [];
 }
 
 /** An entity's position in the rebuild walk: `(entityType, entityId)` order (04 §4.3). */
@@ -128,12 +138,15 @@ export async function readEntitiesOps<DB>(
   db: Kysely<DB>,
   entityType: string,
   entityIds: readonly string[],
+  options: FoldReadOptions = {},
 ): Promise<Map<string, SignedOperation[]>> {
   const byEntity = new Map<string, SignedOperation[]>();
   if (entityIds.length === 0) return byEntity;
+  const refused = options.skipRefused === true ? sql`AND sync_status <> 'rejected'` : sql``;
   const result = await sql<RawOpRow>`
     SELECT ${OP_COLUMNS} FROM operations
     WHERE entity_type = ${entityType} AND entity_id IN (${sql.join(entityIds.map((id) => sql`${id}`))})
+      ${refused}
     ORDER BY entity_id, timestamp_ms, device_id, seq
   `.execute(db);
   for (const row of result.rows) {

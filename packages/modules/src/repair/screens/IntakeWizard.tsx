@@ -11,8 +11,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from './i18n.js';
-import { INTAKE_STEP_KEY, optionLabel } from './labels.js';
+import { tn, type RepairKey } from '../i18n.js';
+import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
 import {
   INTAKE_STEPS,
   capturedThumbnailRef,
@@ -46,12 +46,20 @@ const PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   customerName: 'repair.problem.customerName',
   deviceBrand: 'repair.problem.deviceBrand',
   deviceModel: 'repair.problem.deviceModel',
+  screenLock: 'repair.problem.screenLock',
   complaint: 'repair.problem.complaint',
   photos: 'repair.problem.photos',
   quoteLines: 'repair.problem.quoteLines',
   incompleteLine: 'repair.problem.incompleteLine',
   negativeTotal: 'repair.problem.negativeTotal',
+  downPaymentAboveTotal: 'repair.problem.downPaymentAboveTotal',
 };
+
+/** Problems said on their own field rather than in the step's list. */
+const FIELD_PROBLEMS: ReadonlySet<IntakeProblem> = new Set([
+  'incompleteLine',
+  'downPaymentAboveTotal',
+]);
 
 export interface IntakeWizardProps {
   readonly chrome: RepairChrome;
@@ -80,7 +88,10 @@ export function IntakeWizard({
 }: IntakeWizardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
+  const [draft, setDraft] = useState<IntakeDraft>(() => {
+    const start = restoredDraft ?? emptyIntakeDraft();
+    return start.ticketId === undefined ? { ...start, ticketId: runtime.newId() } : start;
+  });
   const [showProblems, setShowProblems] = useState(false);
   const [restoredOnce] = useState(restoredDraft ?? null);
   const [photosExpired, setPhotosExpired] = useState(false);
@@ -113,6 +124,24 @@ export function IntakeWizard({
       live = false;
     };
   }, [restoredOnce, runtime]);
+  // The app can die between opening the ticket and clearing the draft. A restored draft whose ticket
+  // exists is that case: show the ticket instead of offering to open it again.
+  useEffect(() => {
+    const ticketId = restoredOnce?.ticketId;
+    if (ticketId === undefined) return;
+    let live = true;
+    runtime.query('getTicket', { ticketId }).then(
+      () => {
+        if (!live) return;
+        onDraftChange?.(null);
+        onOpened(ticketId);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [restoredOnce, runtime, onDraftChange, onOpened]);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
   // The store's lists, live: an owner's change that syncs in mid-intake shows at once, and the draft
@@ -235,6 +264,7 @@ export function IntakeWizard({
       chrome={chrome}
       title={tn('repair.action.newIntake')}
       onBack={back}
+      scrollKey={step}
       primaryLabel={
         missingPhoto !== null
           ? tn('repair.photo.takeNext', { slot: optionLabel('photoAngles', missingPhoto) })
@@ -290,7 +320,7 @@ export function IntakeWizard({
         <View style={repairStyles.gap}>
           {/* A line's own problem shows on its field, so only step-wide ones are listed here. */}
           {problems
-            .filter((problem) => problem !== 'incompleteLine')
+            .filter((problem) => !FIELD_PROBLEMS.has(problem))
             .map((problem) => (
               <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
                 {tn(PROBLEM_KEY[problem])}
@@ -321,6 +351,7 @@ export function IntakeWizard({
             options={options}
             brandError={problemText('deviceBrand')}
             modelError={problemText('deviceModel')}
+            lockError={problemText('screenLock')}
             testID={`${testID}.device`}
           />
         );
@@ -350,6 +381,12 @@ export function IntakeWizard({
             update={update}
             options={options}
             lineError={problemText('incompleteLine')}
+            // Wrong as soon as it is typed, not merely unfinished, so it shows straight away.
+            downPaymentError={
+              problems.includes('downPaymentAboveTotal')
+                ? tn(PROBLEM_KEY.downPaymentAboveTotal)
+                : undefined
+            }
             testID={`${testID}.price`}
           />
         );

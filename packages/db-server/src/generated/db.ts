@@ -209,6 +209,38 @@ export interface Permissions {
   scope: string;
 }
 
+export interface PhoneCatalogBrands {
+  listedAt: Int8 | null;
+  name: string;
+  path: string;
+}
+
+export interface PhoneModelPhotos {
+  bytes: Buffer;
+  fetchedAt: Int8;
+  mime: string;
+  modelId: number;
+  sha256: string;
+}
+
+export interface PhoneModels {
+  announcedYear: number | null;
+  brand: string;
+  createdAt: Int8;
+  detailsAt: Int8 | null;
+  id: number;
+  kind: string;
+  modelCodes: Generated<string>;
+  name: string;
+  pagePath: string;
+  photoAt: Int8 | null;
+  photoSha256: string | null;
+  photoUrl: string | null;
+  revision: Int8;
+  specs: Generated<Json>;
+  updatedAt: Int8;
+}
+
 export interface PinLockoutEvents {
   at: Int8;
   deviceId: string;
@@ -307,6 +339,22 @@ export interface RepairStoreIntakeOptions {
   updatedBy: string;
 }
 
+export interface RepairStorePrintSettings {
+  address: string;
+  handoverTerms: string | null;
+  intakeTerms: string | null;
+  logoMediaId: string | null;
+  logoMime: string | null;
+  logoOnDotMatrix: number;
+  logoSha256: string | null;
+  name: string | null;
+  phone: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface RepairTicketEvents {
   actorId: string;
   at: Int8;
@@ -346,6 +394,9 @@ export interface RepairTickets {
   deviceImei: string | null;
   deviceModel: string;
   devicePasscode: string | null;
+  downPayment: Int8 | null;
+  downPaymentAt: Int8 | null;
+  downPaymentBy: string | null;
   estimatedReadyAt: Int8 | null;
   id: string;
   intakeNotes: string;
@@ -466,6 +517,9 @@ export interface DB {
   notes: Notes;
   operations: Operations;
   permissions: Permissions;
+  phoneCatalogBrands: PhoneCatalogBrands;
+  phoneModelPhotos: PhoneModelPhotos;
+  phoneModels: PhoneModels;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
@@ -475,6 +529,7 @@ export interface DB {
   repairQuoteLines: RepairQuoteLines;
   repairStoreCancelFees: RepairStoreCancelFees;
   repairStoreIntakeOptions: RepairStoreIntakeOptions;
+  repairStorePrintSettings: RepairStorePrintSettings;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

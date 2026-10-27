@@ -73,6 +73,11 @@ const REQUIRED_IOS_USAGE_DESCRIPTIONS: Record<string, Readonly<Record<string, st
   'expo-camera': {
     NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
   },
+  // The store logo, picked from the gallery (repair print settings).
+  'expo-image-picker': {
+    NSPhotoLibraryUsageDescription: 'Izinkan aplikasi membuka galeri untuk memilih logo toko.',
+    NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+  },
 };
 
 /**
@@ -92,6 +97,7 @@ const MUST_BE_ABSENT: readonly string[] = [
 const ENGLISH_DEFAULTS: readonly string[] = [
   'Allow $(PRODUCT_NAME) to access your location',
   'Allow $(PRODUCT_NAME) to access your camera',
+  'Allow $(PRODUCT_NAME) to access your photos',
   'Allow $(PRODUCT_NAME) to access your microphone',
   'Allow $(PRODUCT_NAME) to detect your current motion activity',
 ];

@@ -1,7 +1,8 @@
-// Clock-skew flagging (05 §6). Flags, NEVER rejects — the timestamp is the device's honest
+// Clock-skew flagging (05 §6). Flags, never rejects: a past timestamp is the device's honest
 // belief and business truth ("when the employee acted"), preserved through late sync; the server
-// assumes drift, not malice (PRD-009 §6). No code path in the pipeline reaches a rejection code
-// from a timestamp — this module returns only a boolean flag.
+// assumes drift, not malice (PRD-009 §6). The one timestamp the pipeline refuses is one too far in
+// the FUTURE (core sync/clock-guard.ts), because it would win last-writer-wins; that check is not
+// here.
 
 /** 48h base window (05 §6). */
 export const SKEW_BASE_MS = 48 * 60 * 60 * 1000;

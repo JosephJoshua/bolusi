@@ -19,5 +19,6 @@ export * from './bundle-apply.js';
 export * from './pin-verify.js';
 export * from './pin-flows.js';
 export * from './session.js';
+export * from './work-store.js';
 export * from './enrollment.js';
 export * from './staff.js';
