@@ -206,9 +206,13 @@ function DoneStep({ state }: EnrollmentScreenProps): React.JSX.Element {
         {t('auth.enroll.success')}
       </Text>
       {summary === null ? null : (
-        <Text style={styles.doneStore} testID="enroll-store-name">
-          {t('auth.enroll.successStore', { store: summary.storeName })}
-        </Text>
+        // The store name gets its own line, so a long one never breaks mid-sentence.
+        <>
+          <Text style={styles.doneStoreLabel}>{t('auth.enroll.successStore')}</Text>
+          <Text style={styles.doneStore} testID="enroll-store-name">
+            {summary.storeName}
+          </Text>
+        </>
       )}
       {/* §4.4: enrollment logs nobody in. Next is the switcher, where the enrolling owner sets
           their own PIN like everyone else (§6.6). */}
@@ -324,6 +328,12 @@ const styles = StyleSheet.create({
   hint: { ...type.bodySm, color: color.textMuted, marginBottom: space.sm, textAlign: 'center' },
   done: { alignItems: 'center', paddingTop: space['3xl'], paddingHorizontal: space.lg },
   doneTitle: { ...type.title, color: color.text, marginTop: space.lg, textAlign: 'center' },
-  doneStore: { ...type.body, color: color.text, marginTop: space.sm, textAlign: 'center' },
-  doneNext: { ...type.bodySm, color: color.textMuted, marginTop: space.xs, textAlign: 'center' },
+  doneStoreLabel: {
+    ...type.bodySm,
+    color: color.textMuted,
+    marginTop: space.sm,
+    textAlign: 'center',
+  },
+  doneStore: { ...type.bodyBold, color: color.text, textAlign: 'center' },
+  doneNext: { ...type.bodySm, color: color.textMuted, marginTop: space.lg, textAlign: 'center' },
 });

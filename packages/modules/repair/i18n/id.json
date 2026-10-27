@@ -201,7 +201,7 @@
     "addRow": "Tambah biaya",
     "pendingTotal": "Belum dikonfirmasi pelanggan: {amount}",
     "customerAgrees": "Pelanggan setuju dengan harga ini?",
-    "notCharged": "Biaya perbaikan tidak ditagih karena servisan dibatalkan.",
+    "notCharged": "Biaya perbaikan tidak ditagih.",
     "alreadyAgreed": "Pelanggan sudah setuju?",
     "changeReason": "Alasan perubahan",
     "waitingEvent": "Perubahan harga menunggu pelanggan",
