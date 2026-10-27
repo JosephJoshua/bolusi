@@ -46,7 +46,10 @@ const FONT_SCALE_SYNC_IMPORTS = [
   'com.facebook.react.uimanager.DisplayMetricsHolder',
 ] as const;
 
-// Posted so it runs after both the process and the activity have their new configuration.
+// The metrics are refreshed at once from the activity, which already has the new configuration,
+// because the next measure pass can run before anything posted: back from Settings, the screens
+// measured at the new scale with the old metrics, cached that, and drew new-size text in old boxes.
+// The rest is posted so it runs after both the process and the activity have their new configuration.
 // `DeviceInfo.onHostResume` is React Native's own "re-read the font scale and emit Dimensions if it
 // changed", reached through the public listener interface because the module class is internal.
 export const FONT_SCALE_SYNC_KOTLIN = `
@@ -56,6 +59,7 @@ export const FONT_SCALE_SYNC_KOTLIN = `
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
     if (newConfig.fontScale == syncedFontScale) return
+    DisplayMetricsHolder.initDisplayMetrics(this)
     window.decorView.post { syncFontScale() }
   }
 

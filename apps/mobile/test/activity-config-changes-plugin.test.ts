@@ -104,7 +104,13 @@ describe('MainActivity font scale sync', () => {
 
   test('re-measures React roots and re-emits the font scale when it changes', () => {
     expect(FONT_SCALE_SYNC_KOTLIN).toContain('override fun onConfigurationChanged');
-    expect(FONT_SCALE_SYNC_KOTLIN).toContain('DisplayMetricsHolder.initDisplayMetrics(reactContext)');
+    // Refreshed before the post, so no measure pass at the new scale uses the old metrics.
+    expect(FONT_SCALE_SYNC_KOTLIN).toMatch(
+      /DisplayMetricsHolder\.initDisplayMetrics\(this\)\n\s*window\.decorView\.post/,
+    );
+    expect(FONT_SCALE_SYNC_KOTLIN).toContain(
+      'DisplayMetricsHolder.initDisplayMetrics(reactContext)',
+    );
     expect(FONT_SCALE_SYNC_KOTLIN).toContain('view.requestLayout()');
     expect(FONT_SCALE_SYNC_KOTLIN).toContain('getNativeModule("DeviceInfo")');
   });
