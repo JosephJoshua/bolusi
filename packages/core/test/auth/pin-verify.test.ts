@@ -12,7 +12,6 @@ import {
   clearPinLockoutFlow,
   createLockedOutEmitter,
   DomainError,
-  PinVerifierQueue,
   attemptLockKey,
   readPinAttempt,
   resetPin,
@@ -70,7 +69,6 @@ async function setup(seed: number): Promise<Setup> {
       clock: h.clock,
       idSource: h.idSource,
       deviceId: h.deviceId,
-      queue: new PinVerifierQueue(),
       emitter,
     }),
   };
@@ -458,7 +456,6 @@ describe('SEC-AUTH-02 attempt-lock scope — the sibling pin_attempt_state write
       clock: h.clock,
       idSource: h.idSource,
       deviceId: h.deviceId,
-      queue: new PinVerifierQueue(),
       emitter,
     };
 

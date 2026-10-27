@@ -550,7 +550,7 @@ export interface MountOptions {
   readonly createSync?: RootProps['createSync'];
   /**
    * The pin-verifier POST transport (api/02-auth §5.4; task 186a-2). Omitted by default — the drain test
-   * passes a fake that records `upload` calls and captures `onBundleRefreshed` (via `createSync`) to fire
+   * passes a fake that records `upload` calls and captures `onBundleChecked` (via `createSync`) to fire
    * it, so the "a change POSTs on next online contact" wiring is observed rather than assumed.
    */
   readonly uploadPinVerifier?: RootProps['uploadPinVerifier'];

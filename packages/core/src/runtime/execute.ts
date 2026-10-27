@@ -135,6 +135,17 @@ export interface CommandDefinition<TInput = unknown, TResult = void> {
   ) => CommandHandlerResult<TResult> | Promise<CommandHandlerResult<TResult>>;
 }
 
+/** Per-call options for `execute`. */
+export interface ExecuteOptions {
+  /**
+   * A local write that must commit atomically with the command's ops, such as a secret that cannot
+   * ride in a payload. Runs inside the append transaction after the ops are inserted and projected;
+   * a throw rolls the command back. It runs after the permission check and the handler, so it can
+   * never let a refused command write anything.
+   */
+  readonly withinAppend?: (ops: readonly AppendedOp[]) => Promise<void>;
+}
+
 /** What `execute` returns: the appended ops and the handler's optional typed result. */
 export interface CommandOutcome<TResult = void> {
   readonly ops: readonly AppendedOp[];
@@ -447,6 +458,7 @@ export class CommandRuntime {
     command: CommandDefinition<TInput, TResult>,
     rawInput: unknown,
     ctx: CommandContext,
+    options: ExecuteOptions = {},
   ): Promise<CommandOutcome<TResult>> {
     // Step 0 — provenance. A ctx this runtime did not mint has an identity this runtime never
     // established, so there is nothing trustworthy to evaluate the permission against. Fail closed
@@ -582,6 +594,7 @@ export class CommandRuntime {
       location,
       applyProjection: this.#applyProjection,
       ...(this.#checkOp !== undefined ? { checkOp: this.#checkOp } : {}),
+      ...(options.withinAppend === undefined ? {} : { withinAppend: options.withinAppend }),
     });
 
     // Step 7 — schedule sync (debounced; task 15 owns the loop). AFTER the transaction committed,

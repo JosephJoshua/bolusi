@@ -393,6 +393,8 @@ export interface SyncClientForAppConfig {
    * the bundle producer's seam stays `undefined` by design.
    */
   readonly onBundleRefreshed?: () => void | Promise<void>;
+  /** Invoked after every successful bundle answer, a 304 included (bundle.ts `onBundleChecked`). */
+  readonly onBundleChecked?: () => void | Promise<void>;
   /** Trigger (d)'s native binding and the module-scope host (index.ts). */
   readonly background?: BackgroundSyncBinding;
 }
@@ -419,6 +421,7 @@ export function createSyncClientForApp(
     ...(config.onBundleRefreshed === undefined
       ? {}
       : { onBundleRefreshed: config.onBundleRefreshed }),
+    ...(config.onBundleChecked === undefined ? {} : { onBundleChecked: config.onBundleChecked }),
   });
   const phoneCatalog = createPhoneCatalogRefresher({
     baseUrl: config.baseUrl,

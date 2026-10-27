@@ -139,6 +139,19 @@ export interface Operations {
   userId: string;
 }
 
+export interface PendingPinVerifiers {
+  actorUserId: string;
+  algo: string;
+  asOfDeviceId: string;
+  asOfSeq: number;
+  asOfTimestamp: number;
+  hash: string;
+  params: string;
+  salt: string;
+  userId: string;
+  verifierRef: string | null;
+}
+
 export interface PhoneModels {
   announcedYear: number | null;
   brand: string;
@@ -384,6 +397,7 @@ export interface DB {
   migrations: Migrations;
   notes: Notes;
   operations: Operations;
+  pendingPinVerifiers: PendingPinVerifiers;
   phoneModels: PhoneModels;
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
