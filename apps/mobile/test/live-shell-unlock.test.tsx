@@ -39,9 +39,10 @@ vi.mock('expo-location', () => ({
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
 
+import { t } from '@bolusi/i18n';
 import * as SecureStore from 'expo-secure-store';
 
-import type { RenderResult } from '../../../packages/ui/test/render.js';
+import { textsIn, type RenderResult } from '../../../packages/ui/test/render.js';
 
 import { __resetHardwareBack } from './doubles/react-native.js';
 import {
@@ -168,5 +169,33 @@ describe('Owner Unlock reaches the screen and clears a real lockout (task 186b)'
     // specifically the owner row that is gated out, not the whole section missing.
     expect(screen.query('settings-change-pin')).not.toBeNull();
     expect(screen.query('settings-staff-pins')).toBeNull();
+  });
+});
+
+describe('a wrong PIN is answered on the pad, every time (Android QA on PR #44)', () => {
+  test('two wrong PINs in a row each clear the dots, say "PIN salah" and reach the real verify', async () => {
+    fixture = await bootFixture();
+    await enrolledDevice(fixture);
+    await seedDirectory(fixture);
+    const screen = await mountRoot(fixture);
+    fireOn(screen, `switcher-user-${fixture.userId}`);
+    await settle();
+
+    const typeWrong = async (expectedFailures: number): Promise<void> => {
+      for (const digit of '000000') fireOn(screen, `pin-pad.key.${digit}`);
+      await waitUntil(
+        async () =>
+          fixture !== null && (await pinFailuresFor(fixture, fixture.userId)) === expectedFailures,
+      );
+      await settle();
+      expect(await pinFailuresFor(fixture!, fixture!.userId)).toBe(expectedFailures);
+      expect(textsIn(screen.get('pin-pad.message')).join(' ')).toContain(t('auth.pin.wrong'));
+      // The dots are empty again, ready for the next try.
+      expect(screen.get('pin-pad.entry').props['accessibilityValue']).toMatchObject({ now: 0 });
+    };
+    await typeWrong(1);
+    // Before the fix the pad kept the six digits from the first try, so these keys did nothing and
+    // the second verify never ran: the counter would stay at 1.
+    await typeWrong(2);
   });
 });

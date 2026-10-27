@@ -252,6 +252,14 @@ export interface AppProps {
 export default function App(props: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<ShellRoute>('home');
   const [pinFor, setPinFor] = useState<string | null>(null);
+  // Wrong PINs typed for one person since their pad opened. Each one remounts the pad in its error
+  // state, which clears the dots and shows "PIN salah" again, even on a second wrong PIN in a row.
+  const [wrongPins, setWrongPins] = useState<{ readonly userId: string; readonly count: number }>({
+    userId: '',
+    count: 0,
+  });
+  // A pad opened afresh starts clean, not with the last visit's "PIN salah".
+  useEffect(() => setWrongPins({ userId: '', count: 0 }), [pinFor]);
   /**
    * The user asked to open the switcher while a session is open — the voluntary quick-switch
    * (task 143; api/02-auth §6.2). `resolveZone` turns this into the switcher zone only when a session
@@ -867,6 +875,18 @@ export default function App(props: AppProps): React.JSX.Element {
               const submitted = props.onSubmitPin(pinZone.userId, pin);
               if (submitted !== undefined) {
                 void submitted.then((opened) => {
+                  if (!opened) {
+                    setWrongPins((prior) => ({
+                      userId: pinZone.userId,
+                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                    }));
+                  }
+                  if (!opened) {
+                    setWrongPins((prior) => ({
+                      userId: pinZone.userId,
+                      count: prior.userId === pinZone.userId ? prior.count + 1 : 1,
+                    }));
+                  }
                   if (opened) {
                     // The switch completed (§6.3's ops are appended inside `onSubmitPin`). Retire both
                     // the pending target AND the switch intent, so the gate lands on the incoming
@@ -900,15 +920,17 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            const wrong = wrongPins.userId === pinZone.userId ? wrongPins.count : 0;
             return (
               <PinScreen
+                key={`${pinZone.userId}:${wrong}`}
                 userId={pinZone.userId}
                 userName={nameOf(props.users, pinZone.userId)}
                 roleKeys={user?.roleKeys}
                 needsFirstPin={tap?.kind === 'askOwnerForPin'}
                 row={props.pinRow(pinZone.userId)}
                 now={props.now}
-                lastAttempt="none"
+                lastAttempt={wrong > 0 ? 'wrong' : 'none'}
                 onSubmit={signIn}
                 onSwitchUser={() => setPinFor(null)}
                 syncChip={chip}
