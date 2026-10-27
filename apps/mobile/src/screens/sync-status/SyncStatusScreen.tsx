@@ -30,6 +30,7 @@ import {
   formatDate,
   translateErrorCode,
   translateOpType,
+  translateRejection,
   translateRejectionCode,
 } from '@bolusi/i18n';
 import {
@@ -279,15 +280,23 @@ export function SyncStatusScreen({
             renderRow={(row) => (
               <View>
                 <ListRow
-                  primaryText={translateRejectionCode(row.rejectionCode)}
+                  primaryText={translateRejection(row.rejectionCode, row.rejectionReason)}
                   // The op type answers "which change was rejected?" — the rejection code alone
                   // ("SCHEMA_VERSION_UNSUPPORTED") names the verdict, not the change. `translateOpType`
                   // resolves the module's own label (07-i18n §4.4); an unregistered/unknown type
                   // degrades to "Change" rather than leaking the raw `notes.note_created` id.
-                  secondaryText={t('sync.rejected.opMeta', {
-                    opType: translateOpType(row.type),
-                    time: formatRelative(input.now - row.at),
-                  })}
+                  secondaryText={
+                    row.subject === null
+                      ? t('sync.rejected.opMeta', {
+                          opType: translateOpType(row.type),
+                          time: formatRelative(input.now - row.at),
+                        })
+                      : t('sync.rejected.opMetaSubject', {
+                          opType: translateOpType(row.type),
+                          subject: row.subject,
+                          time: formatRelative(input.now - row.at),
+                        })
+                  }
                   onPress={() => onOpenRejected(row)}
                   showChevron
                   testID={`sync-rejected-${row.opId}`}

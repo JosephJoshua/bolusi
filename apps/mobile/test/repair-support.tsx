@@ -27,6 +27,7 @@ export const USER_NAMES = {
   technician: 'Budi Teknisi',
   technician2: 'Yosua Teknisi',
   zero: 'Tamu',
+  storeOwner: 'Yohana Pemilik',
 } as const;
 
 /**
@@ -44,7 +45,14 @@ export async function openRepairScreenHarness(
       : {
           tenantId: peerOf.tenantId,
           storeId: peerOf.storeId,
-          users: [peerOf.cashierId, peerOf.technicianId, peerOf.technician2Id, peerOf.zeroUserId],
+          users: [
+            peerOf.cashierId,
+            peerOf.technicianId,
+            peerOf.technician2Id,
+            peerOf.zeroUserId,
+            peerOf.ownerId,
+            peerOf.storeOwnerId,
+          ],
         },
   );
   await h.db
@@ -54,6 +62,7 @@ export async function openRepairScreenHarness(
       { id: h.technicianId, name: USER_NAMES.technician, photoMediaId: null, status: 'active' },
       { id: h.technician2Id, name: USER_NAMES.technician2, photoMediaId: null, status: 'active' },
       { id: h.zeroUserId, name: USER_NAMES.zero, photoMediaId: null, status: 'active' },
+      { id: h.storeOwnerId, name: USER_NAMES.storeOwner, photoMediaId: null, status: 'active' },
     ])
     .execute();
   return h;
@@ -82,6 +91,7 @@ export function repairRuntimeFor(h: RepairHarness, userId: string): RepairRuntim
       captureSignature: () =>
         Promise.resolve({ mediaRef: { ...h.photo((shot += 1)), mime: 'image/png' } }),
       loadThumbnail: () => Promise.resolve({ kind: 'unavailable' }),
+      loadModelPhoto: (photo) => Promise.resolve(`file:///phone-models/${photo.modelId}.jpg`),
     },
   });
 }

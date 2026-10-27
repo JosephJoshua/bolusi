@@ -13,8 +13,13 @@
 //     real op pushed via another device's token attributes to binding, not the crypto gate]
 //   signature verify (recompute JCS from received fields) → BAD_SIGNATURE
 //   chain continuity → CHAIN_GAP | CHAIN_BROKEN(+halt)
+//   clock (timestamp no further ahead of the server than the margin) → CLOCK_AHEAD
 //   scope (tenant/store/user membership + per-type rules) → SCOPE_VIOLATION
 //   registry + zod → UNKNOWN_TYPE | SCHEMA_INVALID
+//   authorization (declared permission, server directory) → PERMISSION_DENIED
+//   the type's rules (state change, targets, minted values; server records) → RULE_VIOLATED
+//   a refusal from scope onward still advances the chain head (refused_operations), so the
+//     device's later ops keep syncing; a re-push of a refused op gets the same refusal
 //   accepted → allocate serverSeq → INSERT (+ clock-skew flag) → APPLY PROJECTIONS → advance head
 //
 // The APPLY step is normative (10-db §3, 04 §5.1 step 6): the projection fold shares this
@@ -27,22 +32,22 @@
 // below, which is exactly why that throw must propagate (task 139), not be mislabeled `duplicate`.
 // A new module is added by appending to the ONE module list (deps.ts) — never by touching this
 // orchestrator.
-import { base64ToBytes } from '@bolusi/core';
+import { base64ToBytes, isAheadOfServer } from '@bolusi/core';
 import { createServerProjectionEngine, type DB, type TenantDb } from '@bolusi/db-server';
 import type { RejectionCode, SignedOperation } from '@bolusi/schemas';
-import { sql } from 'kysely';
 
 import type { SurfacedConflict } from '../sync/conflict-detection.js';
 
-import { isUniqueViolationOn } from '../db-errors.js';
 import { recordAnomaly, type AnomalyKind } from './anomalies.js';
-import { insertOperationRow, OPERATIONS_PK_CONSTRAINT } from './persist.js';
-import { allocateServerSeq, lockTenantCounter } from './server-seq.js';
+import { insertOperationRowUnlessIdTaken } from './persist.js';
+import { lockTenantCounter, storeTenantCounter } from './server-seq.js';
 import { isClockSkewed } from './skew.js';
 import { classifyChain, type ChainHead } from './steps/chain.js';
-import { isDuplicate } from './steps/dedupe.js';
+import { findRefusal, loadBatchVerdicts } from './steps/dedupe.js';
+import { checkPermission, createAuthorLookup } from './steps/permission.js';
+import { checkRules } from './steps/rules.js';
 import { classifySchema } from './steps/schema.js';
-import { checkScope } from './steps/scope.js';
+import { checkScope, createScopeLookup } from './steps/scope.js';
 import { verifyPushedSignature } from './steps/signature.js';
 import type {
   DeviceRecord,
@@ -89,6 +94,15 @@ async function loadDevice(db: TenantDb, deviceId: string): Promise<DeviceRecord 
  * Process a push batch for one tenant/device. `identity` is the token-authenticated device
  * (task 16 supplies it after bearer auth); `ops` ascend by per-device seq (api/01 §3).
  */
+/**
+ * Author-chosen text as a refusal row can hold it: Postgres `text` rejects NUL, and a refused op's
+ * type is unvalidated by definition, so an unstorable one must not turn the refusal into a 500 that
+ * wedges the device. Bounded too, since the row is kept forever.
+ */
+function storable(text: string): string {
+  return text.replaceAll('\u0000', '').slice(0, 500);
+}
+
 export async function processPushBatch(
   deps: OplogPipelineDeps,
   identity: PushIdentity,
@@ -109,7 +123,11 @@ export async function processPushBatch(
     // committed head and rejects cleanly. This is what makes "locked at transaction start" in
     // server-seq.ts and 10-db §3 literally true (task 41). The UNIQUE constraint stays as defence
     // in depth — the reorder changes which mechanism catches the race, never whether it is caught.
-    await lockTenantCounter(db, identity.tenantId);
+    //
+    // The lock also reads the next serverSeq: accepted ops are numbered in memory from it and the
+    // counter is written once after the loop (server-seq.ts `storeTenantCounter`).
+    const firstServerSeq = await lockTenantCounter(db, identity.tenantId);
+    let nextServerSeq = firstServerSeq;
 
     const device = await loadDevice(db, identity.deviceId);
     if (device === undefined) {
@@ -133,12 +151,20 @@ export async function processPushBatch(
 
     // The projection engine for this transaction (04 §4). It folds each accepted op into the
     // server read models through `db`, so the fold commits or rolls back WITH the op insert
-    // (10-db §3 step 6). Constructed once and reused: it holds no per-op state, and the watermark
-    // it advances is computed from log presence per apply, never carried between calls.
+    // (10-db §3 step 6). Constructed once and reused. Its watermarks are advanced once after the
+    // batch (`advancePulledWatermarks`), not per op: they land in the same commit either way, and
+    // nothing in this transaction reads them.
     const projectionEngine = createServerProjectionEngine<DB>(
       db,
       identity.tenantId,
       deps.projections,
+      { batchWatermarks: true },
+    );
+    // What the server already decided about this batch's op ids, read once (05 §5).
+    const verdicts = await loadBatchVerdicts(
+      db,
+      identity.deviceId,
+      ops.map((op) => op.id),
     );
 
     const results: PushOpResult[] = [];
@@ -154,6 +180,37 @@ export async function processPushBatch(
     const reject = (op: SignedOperation, code: RejectionCode, reason: string): void => {
       results.push({ id: op.id, status: 'rejected', code, reason });
     };
+    // Refuse an op that is proven to be this device's (signature) at the next chain position
+    // (chain): record the refusal and advance the head past it, so the device's later ops, which
+    // link to this one, are not stranded behind a gap forever. The op itself never enters the log.
+    const refuse = async (op: SignedOperation, code: RejectionCode, reason: string) => {
+      await db
+        .insertInto('refusedOperations')
+        .values({
+          tenantId: identity.tenantId,
+          id: op.id,
+          deviceId: device.id,
+          seq: BigInt(op.seq),
+          hash: op.hash,
+          userId: op.userId,
+          type: storable(op.type),
+          entityType: storable(op.entityType),
+          entityId: op.entityId,
+          code,
+          reason: storable(reason),
+          receivedAt: BigInt(deps.now()),
+        })
+        // An id some earlier refusal already holds (only a tampered client reuses one) must not
+        // turn this verdict into a 500 that rolls back the batch; the answer stands either way.
+        .onConflict((oc) => oc.doNothing())
+        .execute();
+      if (!verdicts.refused.has(op.id))
+        verdicts.refused.set(op.id, { hash: op.hash, code, reason });
+      head = { seq: op.seq, hash: op.hash };
+      reject(op, code, reason);
+    };
+    const authors = createAuthorLookup(db, identity.tenantId);
+    const scopeLookup = createScopeLookup(db);
     const anomaly = async (
       op: SignedOperation,
       kind: AnomalyKind,
@@ -180,9 +237,19 @@ export async function processPushBatch(
         continue;
       }
 
-      // 1. dedupe (05 §5): a replay consumes nothing.
-      if (await isDuplicate(db, op.id)) {
+      // 1. dedupe (05 §5): a replay consumes nothing, and a refused op is answered as before.
+      if (verdicts.accepted.has(op.id)) {
         results.push({ id: op.id, status: 'duplicate' });
+        continue;
+      }
+      // Only for the token's own device (another device's op id must reach the binding step), and
+      // only behind the head: a refused op already spent its position, so a new op never pays the read.
+      const refusal =
+        op.deviceId === identity.deviceId && op.seq <= head.seq
+          ? findRefusal(verdicts, op)
+          : undefined;
+      if (refusal !== undefined) {
+        reject(op, refusal.code, refusal.reason);
         continue;
       }
 
@@ -217,82 +284,87 @@ export async function processPushBatch(
         continue;
       }
 
+      // From here on the op is proven to be this device's, at its next chain position, so every
+      // refusal below spends that position (`refuse`) instead of stranding the device's later ops.
+
+      // 4a. clock: last-writer-wins orders by device timestamp, so an op stamped in the future would
+      // beat every honest change until then. A clock that far ahead is worth an owner's attention.
+      if (isAheadOfServer(op.timestamp, deps.now())) {
+        const reason = 'timestamp is ahead of the server clock';
+        await anomaly(op, 'CLOCK_SKEW', reason);
+        await refuse(op, 'CLOCK_AHEAD', reason);
+        continue;
+      }
+
       // 5. scope (05 §9): tenant/store/user membership + per-type rules.
-      const scope = await checkScope(db, op, device, deps.registry);
+      const scope = await checkScope(scopeLookup, op, device, deps.registry);
       if (scope !== null) {
         await anomaly(op, 'SCOPE_VIOLATION', scope.reason);
-        reject(op, 'SCOPE_VIOLATION', scope.reason);
+        await refuse(op, 'SCOPE_VIOLATION', scope.reason);
         continue;
       }
 
       // 6. registry + zod (05 §8): distinct codes.
       const schema = classifySchema(deps.registry, op);
-      if (schema === 'UNKNOWN_TYPE') {
-        reject(op, 'UNKNOWN_TYPE', `type ${op.type} is not in the server registry`);
-        continue;
-      }
-      if (schema === 'SCHEMA_INVALID') {
-        reject(op, 'SCHEMA_INVALID', `payload fails the registry schema for ${op.type}`);
+      if (schema !== null) {
+        await refuse(op, schema.code, schema.reason);
         continue;
       }
 
-      // Accepted: allocate a gapless serverSeq, flag skew (never reject), insert with verbatim JCS.
+      // 7. authorization: the author must hold the op type's declared permission, judged by the
+      // server's directory. No anomaly: an author whose role changed while offline is not tamper.
+      const permission = await checkPermission(op, device, deps.registry, authors);
+      if (permission !== null) {
+        await refuse(op, 'PERMISSION_DENIED', permission.reason);
+        continue;
+      }
+
+      // 8. the op type's rules, against the server's records as of this op (earlier ops of the
+      // batch are already folded). No anomaly: two people changing one ticket offline is not tamper.
+      const rules = await checkRules(db, op, device, deps.registry, authors);
+      if (rules !== null) {
+        await refuse(op, 'RULE_VIOLATED', rules.reason);
+        continue;
+      }
+
+      // Accepted: take the next gapless serverSeq, flag skew, insert with verbatim JCS.
       const receivedAt = deps.now();
       const clockSkewFlagged = isClockSkewed(op.timestamp, receivedAt, device.lastSyncAt);
+      const serverSeq = nextServerSeq;
 
-      // `operations.id` is a GLOBAL uuid PK (10-db §5). The dedupe step above is RLS-scoped, so an
-      // op id an RLS-hidden row in ANOTHER tenant already holds passed dedupe as new — and the
-      // INSERT then trips the global PK `operations_pkey` (RLS filters SELECTs, not unique-index
-      // conflicts, 10-db §6). A per-op SAVEPOINT scopes the allocate+insert so that collision rolls
-      // back THIS op alone — the serverSeq increment is undone with it, keeping the stream gapless
-      // (10-db §3) — and is reported as an indistinguishable `duplicate`, exactly like a same-tenant
-      // replay (step 1), never a 500 that would confirm the foreign op id exists (security-guide
-      // §2.2; task 114).
-      //
-      // The catch is keyed on the constraint NAME (`operations_pkey`), not SQLSTATE 23505 alone. That
-      // global-PK collision is the ONLY unique violation these two statements can raise: a within-
-      // tenant (device_id, seq) break is caught earlier by the chain step and (tenant_id, server_seq)
-      // by the counter lock, so any 23505 that is NOT `operations_pkey` is an unexpected fault and
-      // MUST re-throw and fail loudly. Naming the constraint stops the map silently widening if a
-      // statement able to raise a DIFFERENT 23505 is ever added to this try — which is exactly what
-      // the projection fold below used to be (task 139): it ran INSIDE this catch, so a second,
-      // correctly-chained op sharing an entityId tripped the notes-projection PK and was misread as a
-      // `duplicate`, silently dropping a distinct op from the append-only log.
-      let serverSeq: number;
-      await sql`SAVEPOINT op_write`.execute(db);
-      try {
-        serverSeq = await allocateServerSeq(db, identity.tenantId);
-        await insertOperationRow(db, {
-          op,
-          serverSeq,
-          receivedAt,
-          jcs: signature.jcs,
-          clockSkewFlagged,
-        });
-      } catch (err) {
-        if (!isUniqueViolationOn(err, OPERATIONS_PK_CONSTRAINT)) throw err;
-        // Undo THIS op's allocation + insert; the batch (and its counter lock) continue.
-        await sql`ROLLBACK TO SAVEPOINT op_write`.execute(db);
-        await sql`RELEASE SAVEPOINT op_write`.execute(db);
+      // `operations.id` is a GLOBAL uuid PK (10-db §5). The dedupe read above is RLS-scoped, so an
+      // op id an RLS-hidden row in ANOTHER tenant already holds passed it as new, and the INSERT then
+      // meets the global PK `operations_pkey` (RLS filters SELECTs, not unique-index conflicts, 10-db
+      // §6). The insert absorbs a conflict on THAT constraint only: nothing is written, the serverSeq
+      // is not consumed (the stream stays gapless, 10-db §3), and the op reads as an indistinguishable
+      // `duplicate`, exactly like a same-tenant replay (step 1), never a 500 that would confirm the
+      // foreign op id exists (security-guide §2.2; task 114). Any other unique violation still throws.
+      const inserted = await insertOperationRowUnlessIdTaken(db, {
+        op,
+        serverSeq,
+        receivedAt,
+        jcs: signature.jcs,
+        clockSkewFlagged,
+      });
+      if (!inserted) {
         results.push({ id: op.id, status: 'duplicate' });
         continue;
       }
+      nextServerSeq += 1;
+      verdicts.accepted.add(op.id);
 
-      // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models — AFTER, and
-      // OUTSIDE, the dedupe catch above (task 139). The applier runs arbitrary module SQL, so a
-      // unique/FK/check violation it raises is NOT a dedupe collision and must NEVER be reclassified
-      // as `duplicate`: that would silently drop a distinct, correctly-chained op from the append-only
-      // log (05 §1) while telling the client `synced` (api/01 §3), desyncing the chain head into a
-      // permanent CHAIN_BROKEN brick (05 §8). So an applier throw propagates out of `forTenant`,
-      // rolling back this op AND the whole batch atomically (10-db §3) and surfacing loudly (500 —
-      // there is NO 05 §8 rejection code for a schema-valid-but-unfoldable op, and minting one is out
-      // of scope, CLAUDE.md §6). Still inside the savepoint, so the whole-tx rollback subsumes it. The
-      // op is already in the log with its serverSeq, so the engine reads it as PRESENT and advances
-      // `applied_server_seq` to the highest contiguous serverSeq (04 §4.3) — the PULL-shaped path,
-      // because server projections track server-seq, not an own-device local seq (10-db §8). An
-      // unregistered type folds as a no-op (engine.ts).
+      // Step 6 (10-db §3, 04 §5.1): fold the just-inserted op into the server read models (task 139).
+      // The applier runs arbitrary module SQL, so a unique/FK/check violation it raises is NOT a dedupe
+      // collision and must NEVER be reclassified as `duplicate`: that would silently drop a distinct,
+      // correctly-chained op from the append-only log (05 §1) while telling the client `synced`
+      // (api/01 §3), desyncing the chain head into a permanent CHAIN_BROKEN brick (05 §8). So an
+      // applier throw propagates out of `forTenant`, rolling back the whole batch atomically (10-db
+      // §3) and surfacing loudly (500 — there is NO 05 §8 rejection code for a schema-valid-but-
+      // unfoldable op, and minting one is out of scope, CLAUDE.md §6). The op is already in the log
+      // with its serverSeq, so the engine reads it as PRESENT: the PULL-shaped path, because server
+      // projections track server-seq, not an own-device local seq (10-db §8). An unregistered type
+      // folds as a no-op (engine.ts).
       await projectionEngine.applyPulledOp(op);
-      await sql`RELEASE SAVEPOINT op_write`.execute(db);
 
       if (clockSkewFlagged) {
         await anomaly(
@@ -311,12 +383,18 @@ export async function processPushBatch(
     // the ops just accepted. It reads the log (including this batch's inserts) and the projections
     // (including this batch's folds), then emits `platform.conflict_detected` through the system
     // device: chained via `system_device_chain_state`, signed with the tenant system key, and
-    // allocated a serverSeq from the SAME in-loop `UPDATE … RETURNING` under the counter lock this
+    // allocated a serverSeq from the counter row (`allocateServerSeq`) under the counter lock this
     // transaction already holds — so system ops ride the same per-tenant gapless stream.
     //
     // Injected, and absent by default: a deployment with no conflict detector must push normally.
     // An all-duplicate or all-rejected batch accepts nothing, so `accepted` is empty and no
     // detection runs — which is also why a re-push mints no second conflict (05 §5).
+    //
+    // The in-memory numbering is written back before detection, whose system ops allocate from the
+    // counter row itself (system-op.ts).
+    if (nextServerSeq !== firstServerSeq) {
+      await storeTenantCounter(db, identity.tenantId, nextServerSeq);
+    }
     if (deps.detectConflicts !== undefined && accepted.length > 0) {
       const detection = await deps.detectConflicts(db, identity.tenantId, accepted);
       for (const op of detection.ops) {
@@ -327,6 +405,7 @@ export async function processPushBatch(
       }
       surfaced.push(...detection.surfaced);
     }
+    await projectionEngine.advancePulledWatermarks();
 
     // Advance the device chain-head cache + record contact once (10-db §3 tail).
     await db

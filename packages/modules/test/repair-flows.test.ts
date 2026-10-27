@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import {
   boardFilter,
+  boardSort,
+  boardViews,
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
@@ -24,6 +26,7 @@ import {
 } from '../src/repair/flows.js';
 import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
+import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
 const OPTIONS = DEFAULT_INTAKE_OPTIONS;
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
@@ -87,8 +90,8 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   if (state === 'cancelled') {
     await harness.run(
       'cancelTicket',
-      { ticketId, reason: 'customer changed mind' },
-      harness.cashierId,
+      { ticketId, reason: 'customer changed mind', fee: 0 },
+      harness.storeOwnerId,
     );
   }
   if (state === 'returned') {
@@ -146,12 +149,12 @@ async function perform(
         userId,
       );
     case 'cancel':
-      return harness.run('cancelTicket', { ticketId, reason: 'no parts' }, userId);
+      return harness.run('cancelTicket', { ticketId, reason: 'no parts', fee: 10_000 }, userId);
   }
 }
 
 describe('ticket actions', () => {
-  test('every action offered to the cashier or a technician is accepted by its command', async () => {
+  test('every action offered to the cashier, a technician or a store owner is accepted by its command', async () => {
     h = await openRepairHarness(4101);
     const states: State[] = [
       'received',
@@ -164,7 +167,7 @@ describe('ticket actions', () => {
     ];
     let checked = 0;
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         for (const action of ticketActions(row, abilitiesOf(h, userId), userId)) {
@@ -212,7 +215,7 @@ describe('ticket actions', () => {
       (['start', 'resume', 'reopen'].includes(a) && ['start', 'resume', 'reopen'].includes(b));
     const gaps: string[] = [];
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         const offered = ticketActions(row, abilitiesOf(h, userId), userId);
@@ -224,7 +227,12 @@ describe('ticket actions', () => {
             () => false,
           );
           if (accepted) {
-            gaps.push(`${state}/${userId === h.cashierId ? 'cashier' : 'technician'}/${action}`);
+            const who = new Map([
+              [h.cashierId, 'cashier'],
+              [h.technicianId, 'technician'],
+              [h.storeOwnerId, 'store owner'],
+            ]);
+            gaps.push(`${state}/${who.get(userId) ?? userId}/${action}`);
           }
         }
       }
@@ -251,12 +259,21 @@ describe('ticket actions', () => {
       'proposePrice',
     ]);
     // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice', 'cancel']);
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice']);
     expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
       'changePrice',
       'assign',
-      'cancel',
     ]);
+    // Only owners cancel: counter staff kept customers' cash by cancelling. A repaired phone the
+    // customer won't pay for or collect can still be cancelled until it is handed back.
+    const storeOwner = abilitiesOf(h, h.storeOwnerId);
+    for (const outcome of ['received', 'in_repair', 'waiting_for_parts', 'repaired'] as const) {
+      expect(ticketActions(row({ outcome }), cashier, h.cashierId)).not.toContain('cancel');
+      expect(ticketActions(row({ outcome }), storeOwner, h.storeOwnerId)).toContain('cancel');
+    }
+    expect(
+      ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
+    ).not.toContain('cancel');
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(
@@ -298,7 +315,9 @@ describe('an open step after the ticket changed elsewhere', () => {
     const cashier = abilitiesOf(h, h.cashierId);
     const tech = abilitiesOf(h, h.technicianId);
     expect(staleStep({ kind: 'before' }, row(), tech, h.technicianId)).toBeNull();
-    expect(staleStep({ kind: 'cancel' }, row(), cashier, h.cashierId)).toBeNull();
+    // Only owners cancel.
+    const owner = abilitiesOf(h, h.storeOwnerId);
+    expect(staleStep({ kind: 'cancel' }, row(), owner, h.storeOwnerId)).toBeNull();
     // Reassigned meanwhile, a technician can still start: the start claims it.
     expect(
       staleStep({ kind: 'before' }, row({ technicianId: h.technician2Id }), tech, h.technicianId),
@@ -393,6 +412,17 @@ describe('board views', () => {
     });
     expect(boardFilter('returned', 'u1')).toEqual({ location: 'returned' });
   });
+
+  test('the cancelled view is for owners only and lists the latest cancel first', async () => {
+    h = await openRepairHarness(4104);
+    expect(boardViews(abilitiesOf(h, h.cashierId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.ownerId))).toContain('cancelled');
+    expect(boardFilter('cancelled', 'u1')).toEqual({ outcomes: ['cancelled'] });
+    expect(boardSort('cancelled')).toBe('cancelledAt.desc');
+    expect(boardSort('active')).toBe('createdAt.desc');
+  });
 });
 
 describe('money and dates', () => {
@@ -428,7 +458,14 @@ describe('intake draft', () => {
       ...emptyIntakeDraft(),
       step: 5,
       customer: { kind: 'new', name: ' Yohanis Wenda ', phone: '0812 4455 6677' },
-      device: { brand: 'Samsung', model: 'Galaxy A14', color: '', imei: '', passcode: '' },
+      device: {
+        brand: 'Samsung',
+        model: 'Galaxy A14',
+        color: '',
+        imei: '',
+        lockKind: 'none',
+        passcode: '',
+      },
       complaint: 'Layar retak',
       checks: { screen: 'issue', speaker: 'ok' },
       peripherals: ['charger'],
@@ -455,6 +492,16 @@ describe('intake draft', () => {
       'quoteLines',
     ]);
     expect(stepProblems(complete(h), 'review', OPTIONS)).toEqual([]);
+    // A lock kind chosen with nothing entered (or a too-short pattern, kept as '') blocks the step,
+    // where saving would have quietly recorded no lock.
+    const done = complete(h);
+    const lock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      stepProblems({ ...done, device: { ...done.device, lockKind, passcode } }, 'device', OPTIONS);
+    expect(lock('pattern', '')).toEqual(['screenLock']);
+    expect(lock('pin', '')).toEqual(['screenLock']);
+    expect(lock('password', '')).toEqual(['screenLock']);
+    expect(lock('pattern', '1478')).toEqual([]);
+    expect(lock('none', '')).toEqual([]);
     // A store that asks for fewer photo angles has no problem with the ones it does not ask for.
     const twoAngles = { ...OPTIONS, photoAngles: OPTIONS.photoAngles.slice(0, 2) };
     expect(
@@ -512,10 +559,11 @@ describe('intake draft', () => {
     h = await openRepairHarness(4104);
     const draft = complete(h);
     expect(intakeTotal(draft.lines)).toBe(600_000);
+    // A discount at intake is an owner's to give.
     const { ticketId } = (await h.run(
       'openTicket',
       toOpenTicketInput(draft, OPTIONS, Date.now()),
-      h.cashierId,
+      h.storeOwnerId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
     expect(ticket.customerName).toBe('Yohanis Wenda');
@@ -578,5 +626,39 @@ describe('intake draft', () => {
     expect(parseIntakeDraft({ ...draft, ready: 'threeDays' })?.ready).toBe('3');
     expect(parseIntakeDraft({ ...draft, ready: 'unknown' })?.ready).toBe('unknown');
     expect(parseIntakeDraft(null)).toBeNull();
+    // A draft from before lock kinds: a typed passcode is kept as a password.
+    const { brand, model, color, imei } = draft.device;
+    const oldDevice = { brand, model, color, imei, passcode: '1234' };
+    expect(parseIntakeDraft({ ...draft, device: oldDevice })?.device.lockKind).toBe('password');
+    expect(
+      parseIntakeDraft({ ...draft, device: { ...oldDevice, passcode: '' } })?.device.lockKind,
+    ).toBe('none');
+  });
+
+  test('the screen lock reaches the ticket with its kind, and none means no passcode', async () => {
+    h = await openRepairHarness(4107);
+    const draft = complete(h);
+    const withLock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      toOpenTicketInput({ ...draft, device: { ...draft.device, lockKind, passcode } }, OPTIONS, 0)
+        .device.passcode;
+    expect(withLock('pattern', '14753')).toBe('pattern:14753');
+    expect(withLock('pin', '0000')).toBe('pin:0000');
+    expect(withLock('password', 'a:b')).toBe('password:a:b');
+    expect(withLock('pin', '')).toBeNull();
+    // A value left over from another kind is dropped with "no lock".
+    expect(withLock('none', '1234')).toBeNull();
+
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(
+        { ...draft, device: { ...draft.device, lockKind: 'pattern', passcode: '14753' } },
+        OPTIONS,
+        Date.now(),
+      ),
+      // The draft carries a discount, which only an owner may give.
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+    expect(decodeScreenLock(ticket.devicePasscode)).toEqual({ kind: 'pattern', value: '14753' });
   });
 });

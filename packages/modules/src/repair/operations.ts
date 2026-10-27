@@ -11,6 +11,7 @@ import { zMediaRef, zMoneyIdr, zMsEpoch, zUuid, zUuidV7 } from '@bolusi/schemas'
 import {
   intakeOptionsChangedApplier,
   storeIntakeOptionsChangedApplier,
+  storeCancelFeesChangedApplier,
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
@@ -29,13 +30,38 @@ import {
 import {
   CHECKLIST_STATES,
   HANDOVER_PHOTO_SLOTS,
+  MAX_LINE_AMOUNT,
   QUOTE_LINE_KINDS,
   REPAIR_CONFLICT_KEY,
+  REPAIR_CUSTOMER_ENTITY,
+  REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
+  REPAIR_PERMISSION,
+  REPAIR_STORE_CANCEL_FEES_ENTITY,
+  REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_TICKET_ENTITY,
   WORK_PHOTO_STAGES,
   WORK_PHOTOS_MAX,
 } from './constants.js';
 import { INTAKE_OPTION_LISTS, MAX_LABEL, MAX_OPTIONS } from './intake-options.js';
+import {
+  customerDetailsCorrectedRule,
+  customerRegisteredRule,
+  deviceReturnedRule,
+  intakeOptionsChangedRule,
+  markedRepairedRule,
+  ownStoreSettingRule,
+  quoteChangedRule,
+  quoteChangeProposedRule,
+  quoteProposalDeclinedRule,
+  technicianAssignedRule,
+  ticketCancelledRule,
+  ticketClaimedRule,
+  ticketOpenedRule,
+  workPausedRule,
+  workPhotosAddedRule,
+  workStartedRule,
+} from './rules.js';
 import type { RepairDatabase } from './schema.js';
 
 const MAX_TEXT = 2000;
@@ -174,22 +200,44 @@ export const storeIntakeOptionsChangedPayload = z
 const emptyPayload = z.object({}).strict();
 export const technicianAssignedPayload = z.object({ technicianId: zUuid }).strict();
 export const notePayload = z.object({ note: zLongText }).strict();
-export const ticketCancelledPayload = z
+/** A fee a customer can owe: integer IDR, never negative. */
+const zFee = zMoneyIdr.min(0).max(MAX_LINE_AMOUNT);
+
+/** `repair.ticket_cancelled` v1, before cancellation fees: nothing was charged. */
+export const ticketCancelledPayloadV1 = z
   .object({ reason: z.string().trim().min(1).max(MAX_TEXT) })
+  .strict();
+
+/**
+ * `repair.ticket_cancelled` v2: what the customer pays, and the store's fee in force then, so an
+ * owner can see where the person cancelling charged something else.
+ */
+export const ticketCancelledPayload = ticketCancelledPayloadV1
+  .extend({ fee: zFee, standardFee: zFee })
+  .strict();
+
+/** Both of a store's cancellation fees, replacing the previous ones. */
+export const storeCancelFeesChangedPayload = z
+  .object({ beforeWork: zFee, afterWork: zFee })
   .strict();
 
 export const quoteChangeProposedPayload = zQuoteLineDraft
   .extend({ reason: z.string().trim().min(1).max(MAX_TEXT) })
   .strict();
 
-export const quoteChangedPayload = zQuoteLineDraft
+export const quoteChangedPayloadV1 = zQuoteLineDraft
   .extend({
     reason: z.string().trim().min(1).max(MAX_TEXT),
     customerAgreed: z.boolean(),
-    /** True when this applies a technician's proposal (lineId is then the proposal's line). */
+    /** True when this applies a proposal (lineId is then the proposal's line). */
     fromProposal: z.boolean(),
   })
   .strict();
+/**
+ * v2: a price change the customer has not agreed to yet waits, like a proposal, and only counts
+ * once agreed. In v1 it counted at once, marked unconfirmed.
+ */
+export const quoteChangedPayload = quoteChangedPayloadV1.extend({ waitsForCustomer: z.boolean() });
 
 export const quoteProposalDeclinedPayload = z.object({ lineId: zUuidV7, note: zLongText }).strict();
 
@@ -212,12 +260,18 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: customerRegisteredPayload,
     reversal: 'Corrected by repair.customer_details_corrected; customers are never deleted.',
     apply: customerRegisteredApplier,
+    rule: customerRegisteredRule,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_CUSTOMER_ENTITY,
   },
   [REPAIR_OP.customerDetailsCorrected]: {
     schemaVersion: 1,
     payload: customerDetailsCorrectedPayload,
     reversal: 'Reversed by another repair.customer_details_corrected with the previous details.',
     apply: customerDetailsCorrectedApplier,
+    rule: customerDetailsCorrectedRule,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_CUSTOMER_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
   [REPAIR_OP.ticketOpened]: {
@@ -227,12 +281,18 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
+    rule: ticketOpenedRule,
+    permission: REPAIR_PERMISSION.intake,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketClaimed]: {
     schemaVersion: 1,
     payload: emptyPayload,
     reversal: 'Reversed by repair.technician_assigned to someone else.',
     apply: ticketClaimedApplier,
+    rule: ticketClaimedRule,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
   [REPAIR_OP.technicianAssigned]: {
@@ -240,6 +300,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: technicianAssignedPayload,
     reversal: 'Reversed by another repair.technician_assigned.',
     apply: technicianAssignedApplier,
+    rule: technicianAssignedRule,
+    permission: REPAIR_PERMISSION.assign,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.technician, severity: 'minor' },
   },
   [REPAIR_OP.workPhotosAdded]: {
@@ -247,12 +310,18 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: workPhotosAddedPayload,
     reversal: 'Not reversible: photos are evidence and are never removed.',
     apply: workPhotosAddedApplier,
+    rule: workPhotosAddedRule,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.workStarted]: {
     schemaVersion: 1,
     payload: emptyPayload,
     reversal: NO_UNDO,
     apply: workStartedApplier,
+    rule: workStartedRule,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.workPaused]: {
@@ -260,6 +329,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: notePayload,
     reversal: 'Reversed by repair.work_started when the parts arrive.',
     apply: workPausedApplier,
+    rule: workPausedRule,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.markedRepaired]: {
@@ -267,13 +339,20 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: notePayload,
     reversal: 'Reversed by repair.work_started (reopening) while the device is still in store.',
     apply: markedRepairedApplier,
+    rule: markedRepairedRule,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.ticketCancelled]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: ticketCancelledPayload,
+    payloadByVersion: { 1: ticketCancelledPayloadV1 },
     reversal: 'Not reversible in slice 1: open a new ticket if the customer changes their mind.',
     apply: ticketCancelledApplier,
+    rule: ticketCancelledRule,
+    permission: REPAIR_PERMISSION.cancel,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.quoteChangeProposed]: {
@@ -281,24 +360,37 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: quoteChangeProposedPayload,
     reversal: 'Reversed by repair.quote_proposal_declined.',
     apply: quoteChangeProposedApplier,
+    rule: quoteChangeProposedRule,
+    permission: REPAIR_PERMISSION.work,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteChanged]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: quoteChangedPayload,
+    payloadByVersion: { 1: quoteChangedPayloadV1 },
     reversal: 'Reversed by a further repair.quote_changed line with the opposite amount.',
     apply: quoteChangedApplier,
+    rule: quoteChangedRule,
+    permission: REPAIR_PERMISSION.quoteChange,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.quoteProposalDeclined]: {
     schemaVersion: 1,
     payload: quoteProposalDeclinedPayload,
     reversal: 'A declined proposal can be proposed again as a new line.',
     apply: quoteProposalDeclinedApplier,
+    rule: quoteProposalDeclinedRule,
+    permission: REPAIR_PERMISSION.quoteChange,
+    entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.deviceReturned]: {
     schemaVersion: 1,
     payload: deviceReturnedPayload,
     reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
+    rule: deviceReturnedRule,
+    permission: REPAIR_PERMISSION.handover,
+    entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
@@ -306,6 +398,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: intakeOptionsChangedPayload,
     reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
     apply: intakeOptionsChangedApplier,
+    rule: intakeOptionsChangedRule,
+    permission: REPAIR_PERMISSION.manageIntakeOptions,
+    entityType: REPAIR_INTAKE_OPTIONS_ENTITY,
     // One list for the whole franchise, on every device, whichever store edited it. No conflict
     // key: the entity holds all five lists, so saving two different lists would read as a clash,
     // and two owners saving the same list is settled by the later save, as for a locale.
@@ -316,5 +411,17 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     payload: storeIntakeOptionsChangedPayload,
     reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
     apply: storeIntakeOptionsChangedApplier,
+    rule: ownStoreSettingRule,
+    permission: REPAIR_PERMISSION.hideIntakeOptions,
+    entityType: REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  },
+  [REPAIR_OP.storeCancelFeesChanged]: {
+    schemaVersion: 1,
+    payload: storeCancelFeesChangedPayload,
+    reversal: 'Reversed by saving the previous fees again; cancelled tickets keep the fee charged.',
+    apply: storeCancelFeesChangedApplier,
+    rule: ownStoreSettingRule,
+    permission: REPAIR_PERMISSION.setCancelFees,
+    entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
   },
 };

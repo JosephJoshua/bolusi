@@ -32,7 +32,14 @@ import { sql, type Kysely } from 'kysely';
 import { afterEach, beforeEach, describe, expect, inject, test } from 'vitest';
 
 import { InProcessPokeHub } from '../../../src/realtime/poke-hub.js';
-import { seedDevice, seedWorld, testScopeOf } from '../oplog/helpers.js';
+import {
+  seedDevice,
+  seedWorld,
+  testEntityTypeOf,
+  testCheckRule,
+  testPermissionOf,
+  testScopeOf,
+} from '../oplog/helpers.js';
 
 const APP_ROLE = 'bolusi_app';
 const NOTE_CREATED = 'notes.note_created';
@@ -194,6 +201,10 @@ function threadTestDeps(
   ]);
   const registry: OpRegistry = {
     scopeOf: testScopeOf((type) => knownTypes.has(type)),
+    // The production rule per type (a test-only type declares none).
+    checkRule: testCheckRule,
+    permissionOf: testPermissionOf((type) => knownTypes.has(type)),
+    entityTypeOf: testEntityTypeOf((type) => knownTypes.has(type)),
     resolve: (type) =>
       knownTypes.has(type) ? { kind: 'known', validate: () => true } : { kind: 'unknown' },
   };

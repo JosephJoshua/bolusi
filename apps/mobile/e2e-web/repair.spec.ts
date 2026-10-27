@@ -49,6 +49,19 @@ async function drag(
   await page.mouse.up();
 }
 
+/** Draw a lock pattern through the given dots with the mouse, like a finger on the pad. */
+async function drawPattern(page: Page, testID: string, dots: readonly number[]): Promise<void> {
+  const centres = [];
+  for (const dot of dots) {
+    const box = (await page.getByTestId(`${testID}.dot.${dot}`).boundingBox())!;
+    centres.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  }
+  await page.mouse.move(centres[0]!.x, centres[0]!.y);
+  await page.mouse.down();
+  for (const point of centres.slice(1)) await page.mouse.move(point.x, point.y, { steps: 8 });
+  await page.mouse.up();
+}
+
 /** The keys of a ReorderableList's rows, top to bottom. */
 async function order(page: Page, listTestID: string): Promise<string[]> {
   const prefix = `${listTestID}.item.`;
@@ -71,8 +84,26 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   await tap(page, 'repair.board.newIntake');
   await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
   await tap(page, 'repair.intake.primary');
-  await tap(page, 'repair.intake.device.brandChoice.Oppo');
-  await fill(page, 'repair.intake.device.model', 'A57');
+  // The catalog knows the A58: its brand fills in and its colours are offered.
+  await fill(page, 'repair.intake.device.model', 'A58');
+  await expect(page.getByTestId('repair.intake.device.brand.field')).toHaveValue('Oppo');
+  await tap(page, 'repair.intake.device.colour.Glowing Black');
+  await expect(page.getByTestId('repair.intake.device.color.field')).toHaveValue('Glowing Black');
+  await shoot(page, 'device-autofill');
+  // The screen lock is drawn the way the customer draws it; 1 to 7 passes over 4 and takes it in.
+  await tap(page, 'repair.intake.device.lock.kind.pattern');
+  const pad = page.getByTestId('repair.intake.device.lock.pattern');
+  await pad.scrollIntoViewIfNeeded();
+  // "Pola" chosen with nothing drawn does not move on as if there were no lock.
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.device.lock.pattern.hint')).toHaveText(
+    'Isi kunci layarnya, atau pilih Tidak ada.',
+  );
+  await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 2]);
+  await expect(page.getByTestId('repair.intake.device.lock')).toContainText('minimal 4 titik');
+  await drawPattern(page, 'repair.intake.device.lock.pattern', [1, 7, 8, 9]);
+  await expect(pad).toHaveAttribute('aria-label', 'Pola kunci layar: 1-4-7-8-9');
+  await shoot(page, 'device-pattern');
   await tap(page, 'repair.intake.primary');
   await fill(page, 'repair.intake.condition.complaint', 'Mati total');
   await tap(page, 'repair.intake.condition.restOk');
@@ -81,21 +112,122 @@ test('the counter takes a repair in and lands on the new ticket', async ({ page 
   for (let shot = 0; shot < 6; shot += 1) await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.primary')).toHaveText('Lanjut');
   await tap(page, 'repair.intake.primary');
-  await fill(page, 'repair.intake.price.description.0', 'LCD A57');
+  await fill(page, 'repair.intake.price.description.0', 'LCD A58');
   await fill(page, 'repair.intake.price.amount.0', '650000');
   await expect(page.getByTestId('repair.intake.price.amount.0.field')).toHaveValue('650.000');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.total')).toHaveText('Rp 650.000');
+  await expect(page.getByTestId('repair.intake.review.devicePhoto.image')).toBeVisible();
   await shoot(page, 'intake-review');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.ticket.customer')).toHaveText('Ester Mandowen');
+  await expect(page.getByTestId('repair.ticket.devicePhoto.image')).toBeVisible();
   // Unassigned, picking a technician is the counter's next step.
   await expect(page.getByTestId('repair.ticket.action.assign')).toBeVisible();
   await shoot(page, 'intake-ticket');
+  // The pattern stays hidden until asked for, then reads in order and is drawn out.
+  await expect(page.getByTestId('repair.ticket.passcode')).toHaveText('••••');
+  await tap(page, 'repair.ticket.passcode.toggle');
+  await expect(page.getByTestId('repair.ticket.passcode')).toHaveText('1-4-7-8-9');
+  await page.getByTestId('repair.ticket.passcode.pattern').scrollIntoViewIfNeeded();
+  await shoot(page, 'ticket-pattern');
   // The picker lists the store's technicians with their loads, not an error.
   await tap(page, 'repair.ticket.action.assign');
   await expect(page.locator('[data-testid^="repair.assign.row."]').first()).toBeVisible();
   await expect(page.getByTestId('repair.assign.items.error')).toHaveCount(0);
+});
+
+/** About what a phone shows above its on-screen keyboard; the browser has no keyboard to open. */
+const KEYBOARD_UP = { width: 390, height: 520 };
+
+test('typing a model suggests catalog phones with their picture', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  // Tapping the model field opens the keyboard, and the field moves to the top so the suggestions
+  // fit under it. The field (label included) settles just under the header. Wait for the scroll to
+  // end first: a scripted focus, as `fill` does, cuts a browser's smooth scroll short (typing on a
+  // phone does not).
+  await expect(page.getByTestId('repair.intake.device.model.field')).not.toBeFocused();
+  await page.setViewportSize(KEYBOARD_UP);
+  await page.getByTestId('repair.intake.device.model.field').click();
+  const header = (await page.getByTestId('repair.intake.header').first().boundingBox())!;
+  await expect
+    .poll(async () => (await page.getByTestId('repair.intake.device.model').boundingBox())!.y)
+    .toBeLessThan(header.y + header.height + 24);
+  // A typo still finds the model, newest phones first among equal matches.
+  await fill(page, 'repair.intake.device.model', 'galaxy a5');
+  await expect(page.getByTestId('repair.intake.device.model.c:12824')).toBeVisible();
+  await expect(page.getByTestId('repair.intake.device.model.c:12824.photo.image')).toBeVisible();
+  await expect(page.getByTestId('repair.intake.device.model.c:12824')).toBeInViewport();
+  await shoot(page, 'device-suggestions-keyboard');
+
+  await tap(page, 'repair.intake.device.model.c:12824');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Galaxy A55');
+  await expect(page.getByTestId('repair.intake.device.brand.field')).toHaveValue('Samsung');
+  await expect(page.getByTestId('repair.intake.device.modelMatch')).toContainText('Rilis 2024');
+  await expect(page.getByTestId('repair.intake.device.modelMatch.memory')).toHaveText(
+    '8/128GB · 8/256GB · 12/256GB',
+  );
+  await expect(page.getByTestId('repair.intake.device.models')).toHaveCount(0);
+  await shoot(page, 'device-picked');
+
+  // Typed with the brand in front, the model is written the catalog's way on leaving the field.
+  await fill(page, 'repair.intake.device.brand', '');
+  await fill(page, 'repair.intake.device.model', 'samsung a55');
+  await page.getByTestId('repair.intake.device.color.field').focus();
+  await expect(page.getByTestId('repair.intake.device.model.field')).toHaveValue('Galaxy A55');
+  await expect(page.getByTestId('repair.intake.device.brand.field')).toHaveValue('Samsung');
+
+  // A phone the catalog lacks, taken in before, is suggested from the store's own intakes.
+  await fill(page, 'repair.intake.device.brand', '');
+  await fill(page, 'repair.intake.device.model', 'evercos xtream');
+  await expect(page.getByTestId('repair.intake.device.models')).toContainText(
+    'Pernah diservis di sini',
+  );
+  await shoot(page, 'device-learned');
+});
+
+test('the technician sees the phone inside out; the counter sees its memory variants', async ({
+  page,
+}) => {
+  await open(page, 'technician');
+  await tap(page, 'repair.board.views.active');
+  await tap(page, 'repair.board.row.t-1');
+  const specs = page.getByTestId('repair.ticket.specs');
+  await specs.scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('repair.ticket.specs.chipset')).toHaveText(
+    'Mediatek Helio G80 (12 nm)',
+  );
+  await expect(page.getByTestId('repair.ticket.specs.screen')).toHaveText('6.6 inci, PLS LCD');
+  await expect(page.getByTestId('repair.ticket.specs.memory')).toHaveText(
+    '4/64GB · 4/128GB · 6/128GB',
+  );
+  await specs.screenshot({ path: path.join(ARTIFACTS, 'ticket-specs-technician.png') });
+
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-1');
+  await expect(page.getByTestId('repair.ticket.specs.memory')).toBeVisible();
+  await expect(page.getByTestId('repair.ticket.specs.chipset')).toHaveCount(0);
+  await page.getByTestId('repair.ticket.specs').screenshot({
+    path: path.join(ARTIFACTS, 'ticket-specs-counter.png'),
+  });
+});
+
+test('a focused field on a long form is scrolled above the keyboard', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.newIntake');
+  await fill(page, 'repair.intake.customer.name', 'Ester Mandowen');
+  await tap(page, 'repair.intake.primary');
+  await page.setViewportSize(KEYBOARD_UP);
+  // The PIN is the last field: below the fold, and focused as soon as PIN is chosen.
+  await tap(page, 'repair.intake.device.lock.kind.pin');
+  await expect(page.getByTestId('repair.intake.device.lock.pin.field')).toBeFocused();
+  await expect(page.getByTestId('repair.intake.device.lock.pin.field')).toBeInViewport();
+  await expect(page.getByTestId('repair.intake.primary')).toBeInViewport();
+  await shoot(page, 'keyboard-last-field');
 });
 
 test('the price-kind choices stay one row high on the price-change step', async ({ page }) => {
@@ -284,6 +416,31 @@ test('intake offers the owner’s lists and the ticket keeps their names', async
   await shoot(page, 'options-ticket');
 });
 
+test('the preview start page signs in, and switching user keeps the same tickets', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await tap(page, 'preview.role.counter');
+  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await tap(page, 'repair.board.row.t-1');
+  await tap(page, 'repair.ticket.action.assign');
+  await tap(page, 'repair.assign.row.u-budi');
+  await tap(page, 'repair.ticket.back');
+
+  await tap(page, 'ui.avatarButton');
+  await tap(page, 'account-menu-switch-user');
+  await page.getByText('Budi Santoso').first().click();
+  // The preview opens on any PIN.
+  for (const digit of '123456') {
+    await page.getByRole('button', { name: digit, exact: true }).click();
+  }
+  await expect(page.getByTestId('ui.avatarButton.avatar')).toHaveText('BS');
+  // The ticket the counter just gave Budi is in his own list.
+  await tap(page, 'repair.board.views.mine');
+  await expect(page.getByTestId('repair.board.row.t-1')).toBeVisible();
+  await shoot(page, 'preview-switched');
+});
+
 /** A colleague's change on another device, applied the way a pull would land it. */
 async function colleague(page: Page, command: string, input: Record<string, unknown>) {
   await page.evaluate(
@@ -317,6 +474,25 @@ test('a repair cancelled on another device stops the open step', async ({ page }
   await shoot(page, 'stale-cancelled');
   await tap(page, 'repair.price.change.staleBack');
   await expect(page.getByTestId('repair.ticket.status')).toContainText('Dibatalkan');
+});
+
+test('a step that raced a cancel on another device is refused with its reason', async ({
+  page,
+}) => {
+  await open(page, 'owner');
+  await tap(page, 'repair.board.row.t-1');
+  // The cancel lands just as the owner taps: the tap runs on the screen they saw.
+  await page.evaluate(() => {
+    const hook = (window as unknown as Record<string, { run(n: string, i: unknown): unknown }>)[
+      '__repairDemoColleague'
+    ];
+    hook!.run('cancelTicket', { ticketId: 't-1', reason: 'Pelanggan batal', fee: 0 });
+    document.querySelector<HTMLElement>('[data-testid="repair.ticket.action.claim"]')!.click();
+  });
+  await expect(page.getByTestId('repair.ticket.actionError').first()).toContainText(
+    'Servisan ini sudah dibatalkan.',
+  );
+  await shoot(page, 'refused-cancelled');
 });
 
 test('a proposal answered on another device cannot be answered twice', async ({ page }) => {

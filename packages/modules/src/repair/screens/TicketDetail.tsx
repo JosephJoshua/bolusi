@@ -12,6 +12,7 @@ import {
   Card,
   Chip,
   Icon,
+  PatternLock,
   TextButton,
   Timeline,
   border,
@@ -26,7 +27,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -37,7 +39,7 @@ import {
 } from '../../screen-kit/index.js';
 
 import { tn, type RepairKey } from './i18n.js';
-import { PRICE_KIND_KEY, optionLabel } from './labels.js';
+import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from './labels.js';
 import {
   photoInSlot,
   photoThumbnailRef,
@@ -51,6 +53,8 @@ import {
 } from '../flows.js';
 import {
   ActionErrorBanner,
+  CatalogPhoto,
+  DeviceSpecs,
   Fact,
   FactGrid,
   QueryView,
@@ -63,7 +67,8 @@ import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
 import {
   AssignStep,
-  NoteStep,
+  CancelStep,
+  WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
   WorkPhotosStep,
@@ -213,8 +218,9 @@ export function TicketDetail({
         />
       );
     case 'waitForParts':
+      return <WaitForPartsStep {...stepProps} />;
     case 'cancel':
-      return <NoteStep {...stepProps} kind={step.kind} />;
+      return <CancelStep {...stepProps} workStarted={ticket?.workStarted ?? false} />;
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
@@ -345,6 +351,7 @@ export function TicketDetail({
   );
 
   function renderTicket(row: TicketDetailRow): React.JSX.Element {
+    const lock = row.devicePasscode === null ? null : decodeScreenLock(row.devicePasscode);
     const device = [row.deviceBrand, row.deviceModel, row.deviceColor]
       .filter((s) => s !== '')
       .join(' · ');
@@ -383,13 +390,21 @@ export function TicketDetail({
             </Pressable>
           )}
           <View style={styles.deviceBox}>
-            <Text style={styles.device} testID={`${testID}.device`}>
-              {device}
-            </Text>
-            <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
-            <Text style={styles.complaint} testID={`${testID}.complaint`}>
-              {row.complaint}
-            </Text>
+            <CatalogPhoto
+              brand={row.deviceBrand}
+              model={row.deviceModel}
+              large
+              testID={`${testID}.devicePhoto`}
+            />
+            <View style={styles.deviceText}>
+              <Text style={styles.device} testID={`${testID}.device`}>
+                {device}
+              </Text>
+              <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
+              <Text style={styles.complaint} testID={`${testID}.complaint`}>
+                {row.complaint}
+              </Text>
+            </View>
           </View>
         </Card>
 
@@ -407,16 +422,34 @@ export function TicketDetail({
                 value={formatDateTime(row.estimatedReadyAt)}
               />
             )}
+            {row.outcome === 'cancelled' && row.cancelFee !== null ? (
+              <Fact
+                label={tn('repair.cancel.fee')}
+                value={formatMoney(row.cancelFee)}
+                testID={`${testID}.cancelFee`}
+              />
+            ) : null}
             {row.deviceImei === null ? null : (
               <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
             )}
-            {row.devicePasscode === null ? null : (
+            {lock === null ? null : (
               // The technician needs it to test the phone; hidden until asked so it is not read
               // over a shoulder at the counter.
               <Fact
-                label={tn('repair.device.passcodeLabel')}
-                value={passcodeShown ? row.devicePasscode : '••••'}
+                label={
+                  lock.kind === 'unknown'
+                    ? tn('repair.device.passcodeLabel')
+                    : `${tn('repair.device.passcodeLabel')} · ${tn(LOCK_KIND_KEY[lock.kind])}`
+                }
+                value={
+                  !passcodeShown
+                    ? '••••'
+                    : lock.kind === 'pattern'
+                      ? patternSteps(lock.value)
+                      : lock.value
+                }
                 testID={`${testID}.passcode`}
+                wide
                 action={
                   <TextButton
                     label={tn(passcodeShown ? 'repair.passcode.hide' : 'repair.passcode.show')}
@@ -424,7 +457,16 @@ export function TicketDetail({
                     testID={`${testID}.passcode.toggle`}
                   />
                 }
-              />
+              >
+                {passcodeShown && lock.kind === 'pattern' ? (
+                  <PatternLock
+                    value={lock.value}
+                    size={168}
+                    accessibilityLabel={tn('repair.lock.patternLabel')}
+                    testID={`${testID}.passcode.pattern`}
+                  />
+                ) : null}
+              </Fact>
             )}
           </FactGrid>
           {row.outcomeNote === null || row.outcomeNote === '' ? null : (
@@ -454,6 +496,12 @@ export function TicketDetail({
         {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
         {photos.section}
         {renderCondition(row)}
+        <DeviceSpecs
+          brand={row.deviceBrand}
+          model={row.deviceModel}
+          repairs={can.work}
+          testID={`${testID}.specs`}
+        />
 
         <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
           <Timeline
@@ -461,7 +509,11 @@ export function TicketDetail({
               const note = eventNote(event.detail);
               return {
                 key: event.id,
-                title: translateOpType(event.kind),
+                // A change saved before the customer agreed reads as waiting, not as changed.
+                title:
+                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+                    ? tn('repair.price.waitingEvent')
+                    : translateOpType(event.kind),
                 meta: [formatDateTime(event.at), event.actorName]
                   .filter((part) => part !== null)
                   .join(' · '),
@@ -495,6 +547,7 @@ export function TicketDetail({
     const deciding = actions.includes('decidePrice');
     // The bottom action already opens the first proposal; per-line buttons only when there are more.
     const perLine = deciding && pending.length > 1;
+    const cancelled = row.outcome === 'cancelled';
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -534,11 +587,22 @@ export function TicketDetail({
           );
         })}
         <View style={[repairStyles.row, styles.total]}>
-          <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
-          <Text style={[styles.totalValue, styles.amount]} testID={`${testID}.total`}>
+          <Text style={[styles.totalLabel, cancelled && styles.notCharged]}>
+            {tn('repair.price.total')}
+          </Text>
+          <Text
+            style={[styles.totalValue, styles.amount, cancelled && styles.notCharged]}
+            testID={`${testID}.total`}
+          >
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
+        {cancelled ? (
+          // The repair price stays as history, struck through: the customer owes only the fee.
+          <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
+            {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
+          </Text>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           // The total is what the customer agreed to; what a decision would add is said, not summed.
           <Text style={styles.lineWarning} testID={`${testID}.pendingTotal`}>
@@ -683,11 +747,15 @@ const styles = StyleSheet.create({
   },
   link: { ...type.bodySm, fontWeight: '600', color: color.primary },
   deviceBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: space.md,
     marginTop: space.sm,
     padding: space.md,
     borderRadius: radius.sm,
     backgroundColor: color.surfaceAlt,
   },
+  deviceText: { flex: 1 },
   device: { ...type.bodyBold, color: color.text },
   complaintLabel: { ...type.caption, color: color.textMuted, marginTop: space.sm },
   complaint: { ...type.bodySm, color: color.text },
@@ -711,6 +779,7 @@ const styles = StyleSheet.create({
   totalLabel: { ...type.bodyBold, color: color.text },
   totalValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },
+  notCharged: { color: color.textMuted, textDecorationLine: 'line-through' },
   chipGroup: { marginBottom: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
 });

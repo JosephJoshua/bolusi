@@ -7,8 +7,8 @@
 // as `500 INTERNAL`, while a SAME-tenant replay of an accepted op answered a clean per-op
 // `duplicate` inside a 200 envelope: the status distinguished "this op id exists in another tenant"
 // from "does not exist". The fix maps the collision to the SAME `duplicate`, indistinguishable from
-// a replay (security-guide §2.2; task 114) — and preserves the gapless serverSeq invariant via a
-// per-op SAVEPOINT (10-db §3).
+// a replay (security-guide §2.2; task 114) — and preserves the gapless serverSeq invariant: the
+// insert absorbs only an `operations_pkey` conflict and the op consumes no serverSeq (10-db §3).
 import { describe, expect, test } from 'vitest';
 
 import { resign } from '@bolusi/test-support';

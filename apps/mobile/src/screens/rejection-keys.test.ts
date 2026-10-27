@@ -12,6 +12,7 @@
 // deliberately covers the derived ones plus the handful of screen keys that arrive through a
 // `satisfies Record<…>` map, where the value type is `string` rather than `TranslationKey`.
 import { hasKey, LOCALES, SELECTABLE_LOCALES, type Locale } from '@bolusi/i18n';
+import { REJECTION_CODES } from '@bolusi/schemas';
 import { describe, expect, test } from 'vitest';
 
 import { failureKey } from './enrollment/model.js';
@@ -27,18 +28,6 @@ import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status
  * joins this gate automatically instead of silently escaping it.
  */
 const CATALOGS: readonly Locale[] = SELECTABLE_LOCALES;
-
-/** 05-operation-log §8's closed rejection-code set, as the `core` catalog carries it (07-i18n §10.2). */
-const REJECTION_CODES = [
-  'BAD_SIGNATURE',
-  'CHAIN_BROKEN',
-  'CHAIN_GAP',
-  'CHAIN_HALTED',
-  'DEVICE_REVOKED',
-  'SCHEMA_INVALID',
-  'SCOPE_VIOLATION',
-  'UNKNOWN_TYPE',
-] as const;
 
 /** The DomainError codes these screens can actually render (04 §5.3 subset + transport codes). */
 const ERROR_CODES = [
@@ -93,7 +82,7 @@ describe('derived keys — the ones the compiler cannot check', () => {
       covered += 1;
     }
     expect(covered).toBe(REJECTION_CODES.length);
-    expect(covered).toBe(8);
+    expect(covered).toBe(11);
   });
 
   test('every error code these screens can render has a row in both catalogs', () => {

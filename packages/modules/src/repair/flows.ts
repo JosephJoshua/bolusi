@@ -19,6 +19,7 @@ import {
   type WorkPhotoStage,
 } from './constants.js';
 import { readyDays, type IntakeOption, type IntakeOptionLists } from './intake-options.js';
+import { SCREEN_LOCK_KINDS, encodeScreenLock } from './screen-lock.js';
 import type {
   ListTicketsInput,
   TicketDetailRow,
@@ -28,8 +29,25 @@ import type {
 
 // ── board ─────────────────────────────────────────────────────────────────────────────────────
 
-export const BOARD_VIEWS = ['active', 'mine', 'unassigned', 'pickup', 'returned'] as const;
+export const BOARD_VIEWS = [
+  'active',
+  'mine',
+  'unassigned',
+  'pickup',
+  'returned',
+  'cancelled',
+] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
+
+/** The views this user gets: every cancel, with who and what it charged, is for owners only. */
+export function boardViews(can: RepairAbilities): readonly BoardView[] {
+  return BOARD_VIEWS.filter((view) => view !== 'cancelled' || can.cancel);
+}
+
+/** The cancelled view lists the latest cancel first; every queue lists the newest ticket first. */
+export function boardSort(view: BoardView): ListTicketsInput['sort'] {
+  return view === 'cancelled' ? 'cancelledAt.desc' : 'createdAt.desc';
+}
 
 const IN_PROGRESS = IN_PROGRESS_OUTCOMES;
 
@@ -46,6 +64,8 @@ export function boardFilter(view: BoardView, userId: string): ListTicketsInput['
       return { outcomes: ['repaired', 'cancelled'], location: 'in_store' };
     case 'returned':
       return { location: 'returned' };
+    case 'cancelled':
+      return { outcomes: ['cancelled'] };
   }
 }
 
@@ -88,11 +108,15 @@ export interface RepairAbilities {
   readonly assign: boolean;
   readonly quoteChange: boolean;
   readonly cancel: boolean;
+  /** Lower a price (owners). */
+  readonly discount: boolean;
   readonly handover: boolean;
   /** Edit the franchise's intake lists (tenant-wide). */
   readonly manageIntakeOptions: boolean;
   /** Hide intake list items at this store. */
   readonly hideIntakeOptions: boolean;
+  /** Set this store's cancellation fees. */
+  readonly setCancelFees: boolean;
 }
 
 export function repairAbilities(hasPermission: (id: string) => boolean): RepairAbilities {
@@ -104,9 +128,11 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     assign: hasPermission(P.assign),
     quoteChange: hasPermission(P.quoteChange),
     cancel: hasPermission(P.cancel),
+    discount: hasPermission(P.discount),
     handover: hasPermission(P.handover),
     manageIntakeOptions: hasPermission(P.manageIntakeOptions),
     hideIntakeOptions: hasPermission(P.hideIntakeOptions),
+    setCancelFees: hasPermission(P.setCancelFees),
   };
 }
 
@@ -346,13 +372,21 @@ const zIntakeDraft = z.strictObject({
     }),
     z.strictObject({ kind: z.literal('new'), name: z.string(), phone: z.string() }),
   ]),
-  device: z.strictObject({
-    brand: z.string(),
-    model: z.string(),
-    color: z.string(),
-    imei: z.string(),
-    passcode: z.string(),
-  }),
+  device: z
+    .strictObject({
+      brand: z.string(),
+      model: z.string(),
+      color: z.string(),
+      imei: z.string(),
+      /** How the phone is locked; `passcode` holds the PIN, password or pattern (screen-lock.ts). */
+      lockKind: z.enum(['none', ...SCREEN_LOCK_KINDS]).optional(),
+      passcode: z.string(),
+    })
+    // A draft saved before lock kinds kept a typed passcode only.
+    .transform(({ lockKind, ...device }) => ({
+      ...device,
+      lockKind: lockKind ?? (device.passcode === '' ? ('none' as const) : ('password' as const)),
+    })),
   complaint: z.string(),
   intakeNotes: z.string(),
   checks: z.record(z.string(), z.enum(CHECKLIST_STATES)),
@@ -377,7 +411,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     kind: 'intake',
     step: 0,
     customer: { kind: 'new', name: '', phone: '' },
-    device: { brand: '', model: '', color: '', imei: '', passcode: '' },
+    device: { brand: '', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
     complaint: '',
     intakeNotes: '',
     checks: {},
@@ -421,6 +455,7 @@ export type IntakeProblem =
   | 'customerName'
   | 'deviceBrand'
   | 'deviceModel'
+  | 'screenLock'
   | 'complaint'
   | 'photos'
   | 'quoteLines'
@@ -442,6 +477,11 @@ export function stepProblems(
     case 'device':
       if (draft.device.brand.trim() === '') problems.push('deviceBrand');
       if (draft.device.model.trim() === '') problems.push('deviceModel');
+      // A chosen lock with nothing entered (a pattern shorter than Android allows is kept as '')
+      // would save as no lock; the counter picks "Tidak ada" for that.
+      if (draft.device.lockKind !== 'none' && draft.device.passcode === '') {
+        problems.push('screenLock');
+      }
       break;
     case 'condition':
       if (draft.complaint.trim() === '') problems.push('complaint');
@@ -539,7 +579,10 @@ export function toOpenTicketInput(
       model: draft.device.model.trim(),
       color: draft.device.color.trim(),
       imei: draft.device.imei.trim() || null,
-      passcode: draft.device.passcode === '' ? null : draft.device.passcode,
+      passcode:
+        draft.device.lockKind === 'none' || draft.device.passcode === ''
+          ? null
+          : encodeScreenLock({ kind: draft.device.lockKind, value: draft.device.passcode }),
     },
     complaint: draft.complaint.trim(),
     intakeNotes: draft.intakeNotes.trim(),

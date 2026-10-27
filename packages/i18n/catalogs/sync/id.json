@@ -9,7 +9,7 @@
     "pending": "{count} perubahan belum terkirim",
     "pendingMedia": "{count} foto belum terkirim",
     "photosPending": "Perubahan terkirim. Foto belum terkirim.",
-    "attentionReassurance": "Perubahan yang ditolak tetap tersimpan di sini.",
+    "attentionReassurance": "Ada perubahan yang ditolak server dan sudah dibatalkan di sini.",
     "offline": "Tidak ada koneksi. Perubahan tersimpan di perangkat ini.",
     "reconnected": "Terhubung kembali",
     "lastSynced": "Terakhir terhubung {relative}",
@@ -27,8 +27,9 @@
   "rejected": {
     "banner": "{count} perubahan ditolak server. Ketuk untuk melihat.",
     "title": "Perubahan Ditolak",
-    "explain": "Perubahan di bawah ini ditolak server dan tidak akan terkirim. Datanya tetap tersimpan di perangkat ini sebagai catatan.",
+    "explain": "Server menolak perubahan di bawah ini, jadi perubahannya juga dibatalkan di perangkat ini. Ulangi kalau masih perlu.",
     "opMeta": "{opType} · {time}",
+    "opMetaSubject": "{opType} · {subject} · {time}",
     "technicalDetails": "Detail teknis"
   },
   "quarantine": {

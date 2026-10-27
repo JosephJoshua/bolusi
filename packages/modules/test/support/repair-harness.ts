@@ -1,6 +1,6 @@
 // A full `repair` runtime over in-memory SQLite: the real command and query runtimes, the real
 // projection engine and the real client migrations, with the agreed role split — a cashier, two
-// technicians and a user with no grants. Built the same way as the notes harness.
+// technicians, the owners (only they cancel) and a user with no grants. Built the same way as the notes harness.
 import { CamelCasePlugin, Kysely } from 'kysely';
 
 import { createClientDialect, runClientMigrations, type ClientDatabase } from '@bolusi/db-client';
@@ -60,7 +60,10 @@ export interface RepairHarness {
   readonly zeroUserId: string;
   /** Holds every repair permission tenant-wide, as the franchise owner does. */
   readonly ownerId: string;
-  /** May hide intake options at this store, not change the franchise's lists. */
+  /**
+   * May hide intake options at this store (not change the franchise's lists), cancel repairs and
+   * set the store's cancellation fees.
+   */
   readonly storeOwnerId: string;
   /** Run a repair command as `userId`. */
   run<K extends keyof typeof repairModule.commands>(
@@ -126,10 +129,21 @@ export async function openRepairHarness(
             ),
           ),
           roles: new Map<string, DirectoryRole>([
-            [CASHIER_ROLE, role([P.read, P.intake, P.assign, P.quoteChange, P.cancel, P.handover])],
+            [CASHIER_ROLE, role([P.read, P.intake, P.assign, P.quoteChange, P.handover])],
             [TECHNICIAN_ROLE, role([P.read, P.work])],
             [OWNER_ROLE, role(Object.values(P), 'tenant')],
-            [STORE_OWNER_ROLE, role([P.read, P.intake, P.hideIntakeOptions])],
+            [
+              STORE_OWNER_ROLE,
+              role([
+                P.read,
+                P.intake,
+                P.quoteChange,
+                P.hideIntakeOptions,
+                P.cancel,
+                P.discount,
+                P.setCancelFees,
+              ]),
+            ],
           ]),
           grantsByUser: new Map<string, readonly DirectoryGrant[]>([
             [cashierId!, [{ roleId: CASHIER_ROLE, storeId }]],

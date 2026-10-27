@@ -3,12 +3,15 @@
 // on failure instead of navigating away from a change that never happened.
 import { useCallback, useRef, useState } from 'react';
 
-import { errorCodeOrUnexpected } from '@bolusi/core';
+import { errorCodeOrUnexpected, refusalKeyOf } from '@bolusi/core';
 
 export interface ActionRunner {
   /** True while an action runs; a second `run` meanwhile is ignored (a double tap). */
   readonly busy: boolean;
-  /** The last failure's error code, until the next run or `clearError`. */
+  /**
+   * The last failure, until the next run or `clearError`: the rule's refusal key when a change
+   * type's rule refused it, else the error code. Render it with `translateFailure`.
+   */
   readonly errorCode: string | null;
   /** Run `action`; resolves its result, or `undefined` when it failed or another was running. */
   run<T>(action: () => Promise<T>): Promise<T | undefined>;
@@ -28,7 +31,7 @@ export function useActionRunner(): ActionRunner {
     try {
       return await action();
     } catch (error) {
-      setErrorCode(errorCodeOrUnexpected(error));
+      setErrorCode(refusalKeyOf(error) ?? errorCodeOrUnexpected(error));
       return undefined;
     } finally {
       running.current = false;

@@ -42,6 +42,18 @@ other screens in the store within a couple of seconds online. A step a user has
 open re-checks its ticket against the same rule that offered it and says so when
 a synced change has made it impossible to finish.
 
+The phone catalog is global reference data, not ops: Postgres `phone_models`
+(no RLS; the app role can only read it), crawled by `apps/server/src/catalog`.
+Devices pull rows by `revision` from `GET /v1/catalog/phones` into SQLite
+`phone_models` and fetch a photo from `/v1/catalog/phones/:id/photo` only when
+shown, keeping it in the evictable cache after checking its sha256. Each row
+carries the model's spec sheet (`PhoneSpecs`). Intake model search
+(`repair/device-models.ts`) joins it with models this store took in before.
+
+Every `AppShell` lifts its content and bottom action above the on-screen keyboard
+and scrolls a focused `TextInput`/`SearchField` into sight (`ui/src/shell/keyboard.tsx`);
+Android is edge to edge, so the window no longer resizes for the keyboard.
+
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
 
@@ -58,6 +70,15 @@ behind adapters. Node tests do not establish native performance or correctness.
   tenant, store scope still matters; a store owner is not a tenant administrator.
 - Signatures establish device attribution/integrity, not user authorization or
   payment settlement.
+- The server is the authority. Devices sync signed events, and every change type
+  declares a permission and a `rule` (a legal state change, a target in this
+  store, values only this device may mint, or `null` with a reason). The device
+  runs both before saving; the server runs both again against its own records and
+  refuses what fails. The device then re-folds the record without the refused
+  change and lists it under sync problems.
+- A change stamped more than 10 minutes ahead of the server clock is refused, so
+  a wrong clock cannot win last-writer-wins. A device whose last sync found its
+  clock that far ahead saves nothing until the clock is fixed.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
 - Money uses integer IDR. Stock receipt, consumption, shipment, and payment are
   distinct events; business modules need direct tests for their effects.
@@ -91,9 +112,17 @@ fails a build, a boot or a test rather than waiting for review:
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
   yet; inventory and accounting do not exist.
-- General pushed business operations are not reauthorized server-side in v0.
-  Privileged PIN operations are an exception. High-risk v1 approvals still need
-  a server validation/revocation policy covering legitimate offline work.
+- Every op type declares the permission its author needs and the record kind it
+  writes. The server checks each pushed op with the same `evaluatePermission`
+  the device runs, against the server's roles in the device's store. A refused
+  op is stored in `refused_operations`, still uses up its place in the device
+  chain (so later ops keep syncing), and gets the same answer when pushed again.
+  A deactivated user's unsynced ops are all refused, and an op is only credited
+  to an employee of the device's store (PINs are verified on the device, so
+  within a store the device's claim of who is signed in is trusted). Refused
+  positions leave gaps in a device's logged chain that `refused_operations`
+  (seq and hash) accounts for. Each refusal carries a reason the module
+  declares (`defineRefusals`), with its own copy in every language.
 - Pull scope is tied to the enrolled store. Cross-store workflows require sync
   and authorization work, not just screens.
 - Physical 2 GB Android performance was deferred, not measured. Emulator/Simulator
