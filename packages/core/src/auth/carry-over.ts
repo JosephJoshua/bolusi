@@ -11,7 +11,7 @@
 //
 // One transaction, with the audit op: either everything moved or nothing did.
 import type { SignedOperation } from '@bolusi/schemas';
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type RawBuilder } from 'kysely';
 
 import type { CryptoPort } from '../crypto/port.js';
 import { operationFromSignedCoreJcs } from '../crypto/signed-core.js';
@@ -30,6 +30,12 @@ import { DEVICE_ID_META_KEY, readMeta, STORE_ID_META_KEY, STORE_NAME_META_KEY } 
  * carried: the new registration's own records replace it.
  */
 const REGISTRATION_OP_TYPES = [AUTH_OP.deviceEnrolled, AUTH_OP.deviceChangesTransferred];
+
+/**
+ * Sign-in records are carried over like any change (they are the audit trail of who used the phone)
+ * but are not work for the owner to review, so the review list leaves them out.
+ */
+const SIGN_IN_OP_TYPES = [AUTH_OP.userSwitched, AUTH_OP.sessionEnded];
 
 /** Whose unsynced changes a re-enrolment will carry over, as the owner reviews them. */
 export interface UnsyncedAuthor {
@@ -71,7 +77,8 @@ export async function readHeldPhone<DB>(db: Kysely<DB>): Promise<HeldPhone | nul
   const result = await sql<{ userId: string; name: string | null; type: string }>`
     SELECT o.user_id AS "userId", u.name, o.type
     FROM operations o LEFT JOIN users_directory u ON u.id = o.user_id
-    WHERE o.sync_status = 'local' AND o.type NOT IN (${sql.join(REGISTRATION_OP_TYPES)})
+    WHERE o.sync_status = 'local'
+      AND o.type NOT IN (${sql.join([...REGISTRATION_OP_TYPES, ...SIGN_IN_OP_TYPES])})
     ORDER BY o.timestamp_ms, o.device_id, o.seq
   `.execute(db);
   const byUser = new Map<string, { name: string | null; count: number; types: string[] }>();
@@ -119,7 +126,14 @@ export async function carryOverUnsyncedChanges<DB>(
     await dropRegistrationRecords(deps.db, params.deviceId);
     return { audit: [], carried: 0 };
   }
-  const fromDeviceIds = [...new Set(pending.map((row) => row.op.deviceId))];
+  // An earlier carry-over that never reached the server is dropped below, so the registrations it
+  // named are named again here: the new one may still hold values they minted.
+  const fromDeviceIds = [
+    ...new Set([
+      ...pending.map((row) => row.op.deviceId),
+      ...(await unsentTransferSources(deps.db, params.deviceId)),
+    ]),
+  ].filter((id) => id !== params.deviceId);
 
   const audit = await runtime.emitRuntimeOp(
     {
@@ -198,6 +212,49 @@ export async function carryOverUnsyncedChanges<DB>(
     },
   );
   return { audit, carried: pending.length };
+}
+
+/**
+ * The registrations whose offline-minted values (a ticket number, say) `deviceId` may use: itself,
+ * then every earlier registration of the same phone it carried changes over from, followed back
+ * through each transfer record. Read from the op log, so a rule asks the same on the device and the
+ * server. The server cannot vouch for the earlier ids (it may never have known them), so this only
+ * widens whose numbers a device may reuse, never whose records it may touch.
+ */
+export async function carriedRegistrations<DB>(
+  db: Kysely<DB>,
+  deviceId: string,
+): Promise<readonly string[]> {
+  const found = [deviceId];
+  for (let i = 0; i < found.length; i += 1) {
+    for (const from of await transferSources(db, sql`device_id = ${found[i]}`)) {
+      if (!found.includes(from)) found.push(from);
+    }
+  }
+  return found;
+}
+
+/** Who the transfer records an earlier registration never sent named. */
+function unsentTransferSources<DB>(db: Kysely<DB>, deviceId: string): Promise<string[]> {
+  return transferSources(db, sql`sync_status = 'local' AND device_id <> ${deviceId}`);
+}
+
+async function transferSources<DB>(db: Kysely<DB>, where: RawBuilder<unknown>): Promise<string[]> {
+  const result = await sql<{
+    id: string;
+    seq: number;
+    signedCoreJcs: string;
+    hash: string;
+    signature: string;
+  }>`
+    SELECT id, seq, signed_core_jcs AS "signedCoreJcs", hash, signature FROM operations
+    WHERE type = ${AUTH_OP.deviceChangesTransferred} AND ${where}
+  `.execute(db);
+  return result.rows.flatMap(
+    (row) =>
+      (operationFromSignedCoreJcs(row.signedCoreJcs, row).payload as { fromDeviceIds: string[] })
+        .fromDeviceIds,
+  );
 }
 
 /** The old registrations' own unsent records (see `REGISTRATION_OP_TYPES`). */

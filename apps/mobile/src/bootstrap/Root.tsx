@@ -89,6 +89,7 @@ import { createIdleTicker } from '../session/idle-ticker.js';
 import { consoleDiagnostics } from '../ports/diagnostics.js';
 import type { MediaClient } from '../media/client.js';
 import {
+  readDeviceId,
   readSyncState,
   type CommandIdentity,
   type PinVerifierUploadPort,
@@ -648,46 +649,58 @@ export function Root({
       let enroll: AppEnrollment | null = null;
       // The identity the services run under; a re-enrolment replaces it.
       let current: Bootstrapped = booting;
+      /**
+       * Run the services under `deviceId`, the registration enrolment just made: session FIRST, so
+       * the switcher can list users and a PIN can open a session live, without a reboot; then the
+       * Settings device-info (enrollment.ts persisted the names to meta_kv first, task 94) and the
+       * loops. Fire-and-forget so a stall in a loop cannot starve the switcher (task 201). A no-op
+       * when the services already run under it.
+       */
+      const adopt = async (deviceId: string): Promise<void> => {
+        if (current.deviceId === deviceId) return;
+        const reenrolled = current.deviceId !== null;
+        if (reenrolled) {
+          // RE-ENROLMENT: the loops, the session and every module surface were bound to the old
+          // registration's device id, and each start below is a no-op while one is running. Stop
+          // them all so they start again under the new id, from the sync state enrolment reset.
+          stopServices();
+          setSession(null);
+        }
+        const enrolled: Bootstrapped = {
+          ...current,
+          deviceId,
+          syncState: reenrolled ? await readSyncState(current.db.db) : current.syncState,
+        };
+        current = enrolled;
+        if (disposed) return;
+        setApp(enrolled);
+        void startServicesForEnrolled(enrolled, enroll, 'enroll');
+      };
       enroll =
         createEnrollment?.(booting, (deviceId, ownerUserId) => {
           void (async () => {
-            const reenrolled = current.deviceId !== null;
-            if (reenrolled) {
-              // RE-ENROLMENT: the loops, the session and every module surface were bound to the old
-              // registration's device id, and each start below is a no-op while one is running. Stop
-              // them all so they start again under the new id, from the sync state enrolment reset.
-              stopServices();
-              setSession(null);
-            }
-            const enrolled: Bootstrapped = {
-              ...current,
-              deviceId,
-              syncState: reenrolled ? await readSyncState(current.db.db) : current.syncState,
-            };
-            current = enrolled;
+            // A first enrolment starts its services here, once the owner has seen the success step
+            // (starting them sooner recomputes the zone and unmounts the wizard, task 201). A
+            // re-enrolment already started them when the bind succeeded.
+            await adopt(deviceId);
             if (disposed) return;
-            setApp(enrolled);
-            // The device just became enrolled — start its services in the shared order: session FIRST,
-            // so the switcher can list users and a PIN can open a session live, without a reboot; then
-            // re-derive the Settings device-info (enrollment.ts persisted the device/store/tenant names
-            // to meta_kv before firing this, so the read surfaces the real identity, no reboot — task
-            // 94) and start the loops. Fire-and-forget so the enroll-success path is never delayed, and
-            // a stall in a loop cannot starve the switcher — session has already settled (task 201).
-            void startServicesForEnrolled(enrolled, enroll, 'enroll');
             // Register the push token immediately post-enrollment (api/04-push §2 (b)) — ALWAYS, so the
             // server stamps `user_id` for the just-enrolled device even if the token has not changed.
             // The acting user is the OWNER who enrolled (the only user known at this instant; no PIN
             // session is open yet — the gate shows the switcher next). Fire-and-forget: push is
             // best-effort and this must not delay or fail the enroll-success path (§1).
             if (createPushRegistration !== undefined) {
-              const ports = createPushRegistration(enrolled, ownerUserId);
+              const ports = createPushRegistration(current, ownerUserId);
               if (ports !== undefined) void registerPushTokenOnEnrollment(ports);
             }
           })();
         }) ?? null;
       if (enroll !== null) {
-        // A phone enrolled before stops sending while it is enrolled again, and picks up where it
-        // was if that fails (the services start only what is not running).
+        // Enrolling a phone that is already enrolled replaces its registration. Everything bound to
+        // the old one stops first: the loops would send under a token being replaced, and an open
+        // session would keep signing (a lock, a switch) under the old device id, which the server
+        // refuses once the phone pushes as the new one. The open session ends without a record; the
+        // wizard holds the screen while `reenrolling` is set, and the switcher follows.
         const composed = enroll;
         enroll = {
           ...composed,
@@ -695,13 +708,19 @@ export function Root({
             ...composed.controller,
             enroll: async (req) => {
               if (current.deviceId === null) return composed.controller.enroll(req);
-              stopLoops();
+              stopServices();
+              setSession(null);
               try {
                 await composed.controller.enroll(req);
               } catch (error) {
+                // Nothing was replaced: pick up where the phone was.
                 if (!disposed) void startServicesForEnrolled(current, enroll, 'enroll');
                 throw error;
               }
+              // The new registration runs at once, not when the owner leaves the success step: the
+              // phone has work to send, and leaving that step some other way must not strand it.
+              const deviceId = await readDeviceId(current.db.db);
+              if (deviceId !== null) await adopt(deviceId);
             },
           },
         };

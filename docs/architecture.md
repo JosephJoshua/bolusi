@@ -95,8 +95,11 @@ behind adapters. Node tests do not establish native performance or correctness.
   device after one `auth.device_changes_transferred` record
   (`packages/core/src/auth/carry-over.ts`), keeping their ids, authors and times.
   The server checks each one like any other push; one it already holds comes back
-  `duplicate` and still uses up its chain position. Synced changes a restored
-  server lost are not re-sent.
+  `duplicate` and still uses up its chain position. A value an earlier registration
+  minted offline (a ticket number) stays valid: rules ask `carriedRegistrations`,
+  which follows the transfer records. The open session ends before the bind, and
+  sync restarts under the new device as soon as the bind succeeds. Synced changes a
+  restored server lost are not re-sent.
 - Money uses integer IDR. Stock receipt, consumption, shipment, and payment are
   distinct events; business modules need direct tests for their effects.
 - Preserve evidence integrity and keep credential/PIN material out of projections,

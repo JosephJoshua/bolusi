@@ -26,6 +26,7 @@ import {
   insertOpLogRow,
   operationFromSignedCoreJcs,
   readHeldPhone,
+  carriedRegistrations,
   readSyncState,
   verifyOp,
   PermissionEvaluator,
@@ -750,6 +751,31 @@ describe('re-enrolling a phone that still holds unsynced changes', () => {
     ]);
   });
 
+  it('remembers every earlier registration whose values the phone may still hold', async () => {
+    const { f, oldDeviceId } = await enrolledWithBacklog(48);
+    fx = f;
+    const second = await runEnrollment(f.deps, f.params);
+    expect(await carriedRegistrations(f.db, second.deviceId)).toEqual([
+      second.deviceId,
+      oldDeviceId,
+    ]);
+    // The server forgets the phone again before it sent anything, transfer record included. That
+    // record is dropped, so the next one names the first registration too.
+    await sql`UPDATE sync_state SET sync_disabled = 1, sync_disabled_reason = 'device_unrecognised'`.execute(
+      f.db,
+    );
+    const third = await runEnrollment(f.deps, f.params);
+    const transfers = (await allOps(f.db)).filter(
+      (op) => op.type === 'auth.device_changes_transferred',
+    );
+    expect(transfers.map((op) => op.deviceId)).toEqual([third.deviceId]);
+    expect(await carriedRegistrations(f.db, third.deviceId)).toEqual([
+      third.deviceId,
+      second.deviceId,
+      oldDeviceId,
+    ]);
+  });
+
   it('tells the owner which store the phone belongs to and whose changes are waiting', async () => {
     const empty = await fixture(46);
     fx = empty;
@@ -758,12 +784,21 @@ describe('re-enrolling a phone that still holds unsynced changes', () => {
 
     const { f, oldDeviceId } = await enrolledWithBacklog(47);
     fx = f;
+    // The backlog's sign-ins are carried but are not work to review.
+    expect((await readHeldPhone(f.db))?.unsynced).toEqual([]);
+    await f.runtime()!.emitRuntimeOp({
+      type: 'auth.pin_locked_out',
+      entityType: 'user_credential',
+      entityId: f.ownerId,
+      payload: { consecutiveFailures: 5, windowStartedAt: f.clock.now() },
+      userId: f.ownerId,
+    });
     expect(await readHeldPhone(f.db)).toEqual({
       storeId: f.params.storeId,
       storeName: 'Toko Jayapura',
       // Sync is off (the server forgot the phone), so there is no registration to replace.
       replacesDeviceId: null,
-      unsynced: [{ userId: f.ownerId, name: 'Ocep', count: 2, types: ['auth.session_ended'] }],
+      unsynced: [{ userId: f.ownerId, name: 'Ocep', count: 1, types: ['auth.pin_locked_out'] }],
     });
     await sql`UPDATE sync_state SET sync_disabled = 0, sync_disabled_reason = NULL`.execute(f.db);
     expect((await readHeldPhone(f.db))?.replacesDeviceId).toBe(oldDeviceId);

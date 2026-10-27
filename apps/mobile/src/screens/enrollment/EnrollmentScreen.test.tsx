@@ -3,7 +3,7 @@
 // round trip. The control is now the step's one button NAMING the picked store, with the picked row
 // checked; a separate "Ya, lanjutkan" toggle above a "Masuk" button used to do this job, and the
 // first Android QA run found the pair confusing. These tests pin the replacement.
-import { initI18n, t } from '@bolusi/i18n';
+import { initI18n, t, translateOpType } from '@bolusi/i18n';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 
 import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
@@ -212,7 +212,7 @@ describe('re-enrolling a phone that still holds unsent changes', () => {
     storeName: STORE_A.name,
     replacesDeviceId: null,
     unsynced: [
-      { userId: 'user-ana', name: 'Ana', count: 3, types: ['auth.session_ended'] },
+      { userId: 'user-ana', name: 'Ana', count: 3, types: ['repair.ticket_opened'] },
       { userId: 'user-gone', name: null, count: 1, types: ['auth.pin_changed'] },
     ],
   };
@@ -223,7 +223,7 @@ describe('re-enrolling a phone that still holds unsent changes', () => {
     expect(list).toContain(t('auth.enroll.unsyncedTitle'));
     expect(list).toContain('Ana');
     expect(list).toContain(t('auth.enroll.unsyncedCount', { count: 3 }));
-    expect(list).toContain(t('auth.opType.sessionEnded'));
+    expect(list).toContain(translateOpType('repair.ticket_opened'));
     // Someone no longer on the staff list is still shown, not dropped.
     expect(textsIn(screen.get('enroll-unsynced-user-gone'))).toContain(
       t('auth.enroll.formerStaff'),

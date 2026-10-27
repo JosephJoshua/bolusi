@@ -35,6 +35,13 @@ vi.mock('expo-location', () => ({
 }));
 
 import * as SecureStore from 'expo-secure-store';
+import type {
+  PullRequest,
+  PullResponse,
+  PushRequest,
+  PushResponse,
+  SignedOperation,
+} from '@bolusi/schemas';
 import {
   createUuidV7Generator,
   readDeviceId,
@@ -47,6 +54,8 @@ import { sql } from 'kysely';
 
 import type { RootProps } from '../src/bootstrap/Root.js';
 import { createAppEnrollment, type EnrollmentPlatform } from '../src/bootstrap/enrollment.js';
+import { createSyncClient } from '../src/bootstrap/sync-client.js';
+import type { NetInfoPort } from '../src/bootstrap/triggers.js';
 import { SecureStoreKeyStore } from '../src/ports/keystore.js';
 import type { LoginResult } from '../src/screens/enrollment/model.js';
 import { fire, textsIn } from '../../../packages/ui/test/render.js';
@@ -55,12 +64,15 @@ import {
   bootFixture,
   closeClientDb,
   enrolledDevice,
+  fakeAppState,
+  fireCreateNote,
   fireOn,
   mountRoot,
   seedDirectory,
   settle,
   submitPin,
   TEST_PIN,
+  virtualTimer,
   waitUntil,
   type Fixture,
 } from './live-shell-support.js';
@@ -92,6 +104,62 @@ afterEach(async () => {
   await closeClientDb();
   __resetHardwareBack();
 });
+
+/** The server, as far as sync sees it: it takes every pushed op and has nothing new to send. */
+class FakeSyncServer {
+  readonly pushed: SignedOperation[] = [];
+  private serverSeq = 0;
+
+  push(request: PushRequest): Promise<PushResponse> {
+    this.pushed.push(...request.ops);
+    return Promise.resolve({
+      results: request.ops.map((op) => ({
+        id: op.id,
+        status: 'accepted' as const,
+        serverSeq: (this.serverSeq += 1),
+      })),
+      serverTime: NOW,
+    });
+  }
+
+  pull(request: PullRequest): Promise<PullResponse> {
+    return Promise.resolve({
+      ops: [],
+      nextCursor: request.cursor,
+      hasMore: false,
+      serverTime: NOW,
+    });
+  }
+}
+
+const online: NetInfoPort = {
+  subscribe(listener) {
+    listener(true);
+    return () => undefined;
+  },
+};
+
+/** A real sync client over the fake server, one per registration Root starts it for. */
+function syncFor(server: FakeSyncServer, built: string[]): RootProps['createSync'] {
+  return (booted) => {
+    if (booted.deviceId === null) return null;
+    built.push(booted.deviceId);
+    return createSyncClient({
+      db: booted.db,
+      deviceId: booted.deviceId,
+      transport: server,
+      bundle: { refresh: () => Promise.resolve('unchanged') },
+      applyPulledOp: (op) => booted.engine.applyPulledOp(op),
+      refoldRefused: (op) => booted.engine.refoldRefused(op),
+      crypto: noblePort,
+      clock: { now: () => NOW },
+      timer: virtualTimer(),
+      appState: fakeAppState(),
+      netInfo: online,
+      initialSyncState: booted.syncState,
+    });
+  };
+}
 
 /** The login and enrol answers for the fixture's own tenant and store, with its user as owner. */
 function platformFor(target: Fixture, sent: EnrollRequest[]): EnrollmentPlatform {
@@ -171,15 +239,35 @@ test('a phone the server forgot is registered again from the sync screen, and it
   );
 
   const sent: EnrollRequest[] = [];
+  const server = new FakeSyncServer();
+  const built: string[] = [];
   const createEnrollment: RootProps['createEnrollment'] = (app, onEnrolled) =>
     createAppEnrollment(app, platformFor(target, sent), onEnrolled);
-  const screen = await mountRoot(target, { createEnrollment });
+  const screen = await mountRoot(target, {
+    createEnrollment,
+    createSync: syncFor(server, built),
+  });
 
-  // Work goes on: the switcher and a PIN still open the shell. The unlock itself is a change the
-  // server has not seen yet.
+  // Work goes on: the switcher and a PIN still open the shell, and a note can be saved. None of it
+  // reaches the server, which refuses this phone.
   fireOn(screen, `switcher-user-${target.userId}`);
   await settle();
   expect(await submitPin(screen, TEST_PIN)).toBe(true);
+  fireCreateNote(screen);
+  await settle();
+  fire(screen.get('notes.editor.title.field'), 'onChangeText', 'Ganti LCD');
+  fire(screen.get('notes.editor.save'), 'onPress');
+  const db = target.app.db.db;
+  const noteSaved = async () =>
+    (
+      await db
+        .selectFrom('operations')
+        .select('id')
+        .where('type', '=', 'notes.note_created')
+        .execute()
+    ).length > 0;
+  expect(await waitUntil(noteSaved)).toBe(true);
+  await settle();
 
   fire(screen.get('ui.syncChip'), 'onPress');
   await waitUntil(() => screen.query('sync-status-screen') !== null);
@@ -205,10 +293,7 @@ test('a phone the server forgot is registered again from the sync screen, and it
   await settle();
   fireOn(screen, 'enroll-bind');
   await waitUntil(() => screen.query('enroll-step-done') !== null);
-  fireOn(screen, 'enroll-finish');
-  await waitUntil(() => screen.query('switcher-screen') !== null);
 
-  const db = target.app.db.db;
   const newDeviceId = await readDeviceId(db);
   expect(newDeviceId).not.toBe(target.deviceId);
   // A forgotten registration has nothing on the server to replace.
@@ -216,21 +301,37 @@ test('a phone the server forgot is registered again from the sync screen, and it
   expect(sent[0]?.storeId).toBe(target.storeId);
   expect(sent[0]).not.toHaveProperty('replacesDeviceId');
 
-  const ops = await sql<{ deviceId: string; type: string; userId: string }>`
-    SELECT device_id AS "deviceId", type, user_id AS "userId" FROM operations
-    WHERE sync_status = 'local' ORDER BY seq
-  `.execute(db);
-  // Everything waiting to be sent now belongs to the new registration: its genesis, the transfer
-  // record, then the carried changes, still credited to the employee who made them.
-  expect(ops.rows.every((op) => op.deviceId === newDeviceId)).toBe(true);
-  expect(ops.rows.slice(0, 2).map((op) => op.type)).toEqual([
+  // The phone sends under its new registration at once, while the owner still reads the success
+  // step: its genesis, the transfer record, then the carried note, still credited to its author.
+  expect(await waitUntil(() => server.pushed.some((op) => op.type === 'notes.note_created'))).toBe(
+    true,
+  );
+  expect(built).toEqual([target.deviceId, newDeviceId]);
+  expect(server.pushed.every((op) => op.deviceId === newDeviceId)).toBe(true);
+  expect(server.pushed.slice(0, 2).map((op) => op.type)).toEqual([
     'auth.device_enrolled',
     'auth.device_changes_transferred',
   ]);
-  expect(ops.rows.slice(2).length).toBeGreaterThan(0);
-  expect(ops.rows.slice(2).every((op) => op.userId === target.userId)).toBe(true);
-
+  expect(server.pushed.find((op) => op.type === 'notes.note_created')?.userId).toBe(target.userId);
+  expect(screen.query('enroll-step-done')).not.toBeNull();
   expect(await readSyncState(db)).toMatchObject({ syncDisabled: false, syncDisabledReason: null });
+
+  // The session open before the bind ended with the old registration; the switcher follows.
+  fireOn(screen, 'enroll-finish');
+  await waitUntil(() => screen.query('switcher-screen') !== null);
+  fireOn(screen, `switcher-user-${target.userId}`);
+  await settle();
+  expect(await submitPin(screen, TEST_PIN)).toBe(true);
+  const unlock = await waitUntil(() =>
+    server.pushed.some((op) => op.type === 'auth.user_switched' && op.deviceId === newDeviceId),
+  );
+  expect(unlock).toBe(true);
+  // Nothing was ever signed under the old registration after it was replaced.
+  const stranded = await sql<{ n: number }>`
+    SELECT COUNT(*) AS n FROM operations WHERE sync_status = 'local' AND device_id <> ${newDeviceId}
+  `.execute(db);
+  expect(Number(stranded.rows[0]?.n)).toBe(0);
+  expect(server.pushed.every((op) => op.deviceId === newDeviceId)).toBe(true);
 
   await act(async () => {
     for (let i = 0; i < 12; i += 1) await Promise.resolve();
