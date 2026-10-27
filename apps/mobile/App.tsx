@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StatusBar as RNStatusBar, StyleSheet, View } from 'react-native';
 
 import { NotesHome } from './src/screens/notes/NotesHome.js';
-import { IntakeOptionsRoute } from './src/screens/repair/IntakeOptionsRoute.js';
+import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
 import { systemClock } from './src/ports/clock.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
@@ -638,7 +638,11 @@ export default function App(props: AppProps): React.JSX.Element {
     props.repair !== undefined &&
     (props.repair.hasPermission(REPAIR_PERMISSION.manageIntakeOptions) ||
       props.repair.hasPermission(REPAIR_PERMISSION.hideIntakeOptions));
-  const closeIntakeOptions = useCallback(() => setRoute('settings'), []);
+  const canSetCancelFees =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setCancelFees);
+  const canSetPrintSettings =
+    props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
+  const closeRepairSettings = useCallback(() => setRoute('settings'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   const currentUser = useMemo(() => {
@@ -885,26 +889,57 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenUnlockPin={props.canUnlock ? () => setRoute('unlockPin') : undefined}
                   // Owner-only (task 186b-2): offered ONLY when the acting user holds `auth.user_reset_pin`.
                   onOpenResetPin={props.canReset ? () => setRoute('resetPin') : undefined}
-                  // Owners and store owners only: whoever may edit the lists or hide items here.
-                  intakeOptions={
-                    canSetIntakeOptions
-                      ? {
-                          section: tn('repair.board.title'),
-                          title: tn('repair.options.title'),
-                          summary: tn('repair.options.summary'),
-                          onOpen: () => setRoute('intakeOptions'),
-                        }
-                      : undefined
-                  }
+                  // Owners and store owners only: each row for whoever may change it here.
+                  repair={{
+                    section: tn('repair.board.title'),
+                    rows: [
+                      ...(canSetIntakeOptions
+                        ? [
+                            {
+                              title: tn('repair.options.title'),
+                              summary: tn('repair.options.summary'),
+                              onOpen: () => setRoute('intakeOptions'),
+                              testID: 'settings-intake-options',
+                            },
+                          ]
+                        : []),
+                      ...(canSetCancelFees
+                        ? [
+                            {
+                              title: tn('repair.fees.title'),
+                              summary: tn('repair.fees.summary'),
+                              onOpen: () => setRoute('cancelFees'),
+                              testID: 'settings-cancel-fees',
+                            },
+                          ]
+                        : []),
+                      ...(canSetPrintSettings
+                        ? [
+                            {
+                              title: tn('repair.printSettings.title'),
+                              summary: tn('repair.printSettings.summary'),
+                              onOpen: () => setRoute('printSettings'),
+                              testID: 'settings-print-settings',
+                            },
+                          ]
+                        : []),
+                    ],
+                  }}
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
                   onOpenSync={() => setRoute('syncStatus')}
                 />
               );
             }
-            if (shellZone.route === 'intakeOptions' && props.repair !== undefined) {
+            if (
+              (shellZone.route === 'intakeOptions' ||
+                shellZone.route === 'cancelFees' ||
+                shellZone.route === 'printSettings') &&
+              props.repair !== undefined
+            ) {
               return (
-                <IntakeOptionsRoute
+                <RepairSettingsRoute
+                  page={shellZone.route}
                   runtime={props.repair}
                   syncChip={
                     <SyncChip
@@ -916,7 +951,7 @@ export default function App(props: AppProps): React.JSX.Element {
                       onPress={() => leaveHome(() => setRoute('syncStatus'))}
                     />
                   }
-                  onClose={closeIntakeOptions}
+                  onClose={closeRepairSettings}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
@@ -1120,9 +1155,14 @@ const FILL = { flex: 1 } as const;
 
 /**
  * Shell routes whose module surface keeps its own stack and publishes a `SurfaceNav` (task 145), so
- * hardware back asks the surface first: the repair/notes home, and the owner's intake lists.
+ * hardware back asks the surface first: the repair/notes home, and the owner's repair settings.
  */
-const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set(['home', 'intakeOptions']);
+const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
+  'home',
+  'intakeOptions',
+  'cancelFees',
+  'printSettings',
+]);
 
 /**
  * Fallback status-bar inset (dp) for the rare render where `RNStatusBar.currentHeight` is not yet

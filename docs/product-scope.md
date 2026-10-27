@@ -89,6 +89,94 @@ Agreed with the owner after slice 1's phone screens.
   photos, knowingly accepting its terms-of-use and image-copyright risk. Models
   learned from intakes supplement it. The catalog syncs to devices for offline
   typo-tolerant model search; photos download only when shown.
+  Built with these defaults: one request a second, slowing down by itself when
+  refused, robots.txt obeyed; phones, tablets and watches all kept; learned
+  models come from the store's own intakes. The model is typed first and a
+  catalog match fills the brand. Specs are kept per model: the counter sees
+  memory variants and colour choices, someone who repairs also sees screen,
+  chipset, battery and charging, port, SIM, card slot and system.
+- **Screen lock at intake:** none, PIN, password or pattern (drawn on a 3 x 3
+  pad the way the customer draws it). It stays in the ticket's one passcode
+  text as `kind:value` (`pattern:14789`), so no operation changed; older
+  passcodes show as typed. Hidden on the ticket until someone taps to show it.
+  Choice chips from lists that grow (colours, quick brands, accessories) scroll
+  sideways in one row instead of wrapping.
+
+## Cancelling a servisan (2026-10-26)
+
+Agreed with the owner. Counter staff have kept a customer's cash by marking the
+repair cancelled, so cancelling is an owner decision, as in the old system.
+
+- **Owners only:** the store owner or main owner cancels, always with a reason.
+  Cashiers no longer can; a cashier who needs a cancel asks the owner, who does
+  it on their phone or with their PIN on the counter device.
+- **Any time before handover:** a repaired phone can still be cancelled (the
+  customer won't pay or collect), since only owners can do it.
+- **Cancellation fee:** each store has two fees set by its owner in Settings →
+  Servisan: before work starts and after work has started (a technician has
+  started work on it at least once). Both start at Rp 0. The fee in force is
+  filled in when cancelling and the owner may change it; the record keeps both.
+- **Customer sees it:** the handover of a cancelled phone shows the fee owed
+  ("Biaya pembatalan"), and the customer signs under it. The printed slip will
+  show it too once printing lands.
+- **Owners see every cancel:** a "Dibatalkan" view on the board, for owners
+  only, lists each cancel with who, when, reason and fee, and flags a fee that
+  differs from the store's.
+- **Discounts are owners' too:** any line that lowers a price (a discount, or a
+  negative adjustment) needs an owner, at intake or later. Counter staff and
+  technicians can still raise a price or propose a part or labour; the counter
+  can decline an owner's proposed discount but not apply it.
+- **A price change counts only once the customer agrees:** whether a technician
+  proposes it or the counter enters it, a change waits ("Menunggu persetujuan
+  pelanggan") and is left out of the total until the counter records the
+  customer's yes; a no drops it. There is no applying without asking, and the
+  phone cannot be handed back while a change waits. Technicians keep proposing,
+  since they find the extra fault once the phone is open.
+
+## Printing repair slips (2026-10-26)
+
+Agreed with the owner before building printing.
+
+- **Paper:** two-ply carbonless continuous paper (pink kept by the store, yellow
+  for the customer) on whatever Epson-compatible dot-matrix the store has, or
+  plain paper. No printer model is assumed: text mode uses the basic ESC/P set,
+  and the store picks a paper preset (9.5" continuous half form, the landscape
+  default, or full form; A4 or A5 either way round) or types a size, then checks
+  it with a test page. Windows printing cannot report the paper, so it is never
+  auto-detected.
+- **Layout:** on landscape paper the money and terms sit beside the customer and
+  phone details. Every field is printed whole at its longest allowed length,
+  wrapping rather than cutting. An ordinary slip fits one half form at the
+  printer's default 6 lines per inch, a line down from the perforation; only a
+  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
+  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
+  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  slip has no warranty terms.
+- **Two documents:** the intake receipt ("Tanda terima servisan") and the
+  handover slip ("Nota servisan") for a pickup or a cancel, which is also the
+  customer's receipt. No technician job sheet. Repair counters have no separate
+  thermal printer, so receipts use the same paper; thermal stays for POS.
+- **Money on the slips:** the intake receipt shows the quoted lines and total;
+  the handover slip shows the lines that count (or the cancellation fee) and the
+  total. A down payment ("DP") taken at intake is recorded on the servisan now,
+  ahead of the payments slice, printed on both slips with what is left to pay,
+  and only an owner can change it.
+- **Signatures:** a signature line for the customer and the staff member on both
+  slips; the handover also keeps the on-screen signature, shown on plain paper.
+- **Header and terms:** owners edit the store name, address, phone, an optional
+  logo and the terms of each slip. The logo prints on plain paper and PDF, and
+  on dot-matrix only when switched on. The unlock code is never printed.
+- **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
+- **Phone-only counters** make a PDF to print through the phone's print dialog
+  or share (for example on WhatsApp), on A4 or A5 (remembered per phone).
+  Dot-matrix printing is the desktop app's. Android's print dialog does not
+  report a cancel, so the phone asks whether the slip printed before logging it;
+  a cancelled first print never makes the real one read "Cetak ulang".
+- **Logo from the gallery:** the store logo is the one picture that may come from
+  the phone's gallery. Evidence photos stay camera-only; the lint rule allows the
+  photo picker in exactly one file, which feeds only the slip settings screen.
+- **Code:** one shared printing layer (core `print`: document model, HTML and
+  ESC/P renderers) that POS receipts will reuse; slips are module templates.
 
 ## Decision
 
@@ -114,7 +202,7 @@ The first shippable v1 workflow is the **complete repair journey**, not an intak
 
 **Supplier payment boundary (owner follow-ups, 2026-10-14):** v1 records payments made outside Bolusi (for example by bank transfer or cash); it does **not** initiate transfers or disburse money to suppliers. A store owner or a manager **explicitly granted supplier-payment-recording permission for that store** may record a payment; this does not grant permission to initiate a bank transfer or confer authority at another store. Record the amount, method, external reference/evidence where available, actor and time against the supplier invoice, including partial payments and the remaining balance. A manager's record stays **pending approval**: the store owner or a **different manager explicitly granted supplier-payment-approval permission at that store** must approve it before it reduces the invoice's outstanding balance or posts to the payment ledger. Recording and approval are distinct permissions; the recording manager cannot approve their own record, including via a second role or device. A store owner's own record posts without a second approver, but is still audited. Approval must be replay-safe and must not double-post if retried offline or after sync. Every manually recorded/approved payment remains a staff assertion, not bank/provider-verified settlement; display and audit that distinction. Specify correction/reversal and duplicate-reference handling before authoring the finance contracts.
 
-**User-facing atomic permissions (owner follow-up, 2026-10-16):** the first v1 release must expose a usable role/permission administration flow for all shipped v0 and repair-first v1 modules, not just hard-code manager checks. Keep the existing registered, versioned `<module>.<action>` capability model and per-store/tenant grants (02-permissions); define distinct permissions for meaningful actions and sensitive reads across customer/intake/evidence/printing, repair/QC/warranty, parts orders/receipts/transfers/returns/replacements, supplier invoices/payments/credits, and repair payments/refunds/overrides. In particular, supplier-return approval is separate from creating a return, dispatching it and approving supplier payments. Offer sensible editable role presets and grouped, plain-language Bahasa Indonesia/English permission descriptions, highlighting dangerous grants; show effective access and store scope to the person configuring staff. Permission checks must be enforced by command/query handlers, not merely hidden UI controls, and role/grant changes must be audited and respect anti-escalation, last-admin, data visibility and offline propagation rules. V0 has only three seeded roles and generally does **not** reject unauthorized pushed business ops from a tampered client (02-permissions §4): before calling v1 approvals secure, specify and test server-side enforcement for high-risk v1 ops, including the legitimate-offline-work versus revocation policy, rather than claiming the current client guard is sufficient. Do not invent runtime-defined permission IDs.
+**User-facing atomic permissions (owner follow-up, 2026-10-16):** the first v1 release must expose a usable role/permission administration flow for all shipped v0 and repair-first v1 modules, not just hard-code manager checks. Keep the existing registered, versioned `<module>.<action>` capability model and per-store/tenant grants (02-permissions); define distinct permissions for meaningful actions and sensitive reads across customer/intake/evidence/printing, repair/QC/warranty, parts orders/receipts/transfers/returns/replacements, supplier invoices/payments/credits, and repair payments/refunds/overrides. In particular, supplier-return approval is separate from creating a return, dispatching it and approving supplier payments. Offer sensible editable role presets and grouped, plain-language Bahasa Indonesia/English permission descriptions, highlighting dangerous grants; show effective access and store scope to the person configuring staff. Permission checks must be enforced by command/query handlers, not merely hidden UI controls, and role/grant changes must be audited and respect anti-escalation, last-admin, data visibility and offline propagation rules. Since 2026-10-26 (owner decision) the server refuses every pushed op whose author lacks the op type's declared permission in the device's store, using the same evaluator as the device; the refused op keeps its chain place so the device keeps syncing, and a deactivated user's unsynced ops are all refused. Per-type business rules and v1 approval policies (separation of duties, limits) still need their own server-side checks before v1 approvals are called secure. Do not invent runtime-defined permission IDs.
 
 **Role governance (owner follow-up, 2026-10-16):** only the main owner can create or edit role definitions (the sets of capabilities and role presets) for the tenant. Store owners may assign/revoke available roles for staff **only within their own stores** and set the already-decided manager approval limits within the main-owner caps; they cannot alter role definitions, grant tenant-wide authority, grant a role exceeding their own effective authority, assign access to another store, or edit main-owner grants. Managers have no role-management or grant-assignment power by default. Show each role's effective permissions and store scope before confirmation; audit who changed each definition and assignment. V0's `auth.role_manage` is tenant-scoped and mixes editing with grants: preserve its shipped ID/semantics, and specify an additional store-scoped assignment capability plus server-enforced scope/subset and last-admin rules for v1 rather than reusing `auth.role_manage` as a store-owner editor. Directory mutations stay online-only; offline devices receive updated roles through bundle refresh.
 

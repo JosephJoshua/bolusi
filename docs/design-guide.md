@@ -91,7 +91,7 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 
 Prefer a proper component over a hand-made approximation. Already built:
 `SearchField`, `SegmentedControl` (compact, bleed), `TextButton`, `Timeline`
-(history, "Riwayat"), `PhotoStrip`, `Sheet` (bottom sheet to show more, never a
+(history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways), `Sheet` (bottom sheet to show more, never a
 form), `PhotoViewer` (pinch and double-tap zoom, pager, share), `ConfirmSheet`,
 `Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`,
 `ReorderableList` (drag a handle to reorder, iOS style), `SwitchRow` (an on/off
@@ -101,6 +101,17 @@ setting).
   component in `packages/ui` (with a gallery entry), not a screen-local hack.
 - Flows, not modals or CRUD: each task is a full-screen step with a back arrow
   and one bottom action. Capture is guided (photo walk with angle labels).
+- Design every input for the on-screen keyboard, which covers about half a phone
+  screen. Put fields inside `AppShell` (it lifts the content and bottom action
+  above the keyboard and scrolls the focused field into sight); a field whose
+  suggestions open below it uses `revealOnFocus="to-top"` and comes first on its
+  step; picking a suggestion closes the keyboard. Check a screenshot at a
+  keyboard-up height (about 390 x 520).
+- Design for the realistic amount, not the demo's three items: owner-edited
+  lists, catalog data and records grow. Choice chips from such a list sit in one
+  `ChipRow` that scrolls sideways instead of wrapping down the screen; long lists
+  get search or paging; tables keep their header and scroll. Try each screen
+  with 20+ options, long names and an empty list.
 - Desktop and admin screens: enterprise-grade tables with sorting, filtering,
   column control, drag where it helps, and Excel-like inline bulk editing.
 - No paid component libraries.

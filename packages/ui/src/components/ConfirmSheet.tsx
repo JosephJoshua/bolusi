@@ -24,8 +24,10 @@ export interface ConfirmSheetProps {
   readonly title: string;
   /** Already-localized consequence text, ≤ 2 lines (§3.10). */
   readonly message?: string | undefined;
-  /** Already-localized label for the destructive action. */
+  /** Already-localized label for the confirming action, destructive unless `tone` says not. */
   readonly confirmLabel: string;
+  /** `primary` for a confirmation that loses nothing, such as "yes, it printed". */
+  readonly tone?: 'destructive' | 'primary' | undefined;
   readonly onConfirm: () => void;
   /** Already-localized label for the safe action. */
   readonly cancelLabel: string;
@@ -72,6 +74,7 @@ export function ConfirmSheet({
   onConfirm,
   cancelLabel,
   onCancel,
+  tone = 'destructive',
   testID = 'ui.confirmSheet',
 }: ConfirmSheetProps): React.JSX.Element {
   return (
@@ -91,7 +94,7 @@ export function ConfirmSheet({
             testID={`${testID}.confirm`}
             label={confirmLabel}
             onPress={onConfirm}
-            variant="destructive"
+            variant={tone}
           />
         </View>
         {/* Cancel last — see the header note on thumb-misfire safety (§3.10). */}

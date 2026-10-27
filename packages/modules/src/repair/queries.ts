@@ -18,6 +18,7 @@ import {
   DEVICE_LOCATIONS,
   IN_PROGRESS_OUTCOMES,
   REPAIR_CUSTOMER_ENTITY,
+  REPAIR_OP,
   REPAIR_OUTCOMES,
   REPAIR_PERMISSION,
   REPAIR_TICKET_ENTITY,
@@ -26,6 +27,7 @@ import {
   type QuoteLineKind,
   type QuoteLineStatus,
   type RepairOutcome,
+  type SlipKind,
 } from './constants.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -62,6 +64,8 @@ export interface TicketSummaryRow {
   readonly deviceImei: string | null;
   readonly complaint: string;
   readonly outcome: RepairOutcome;
+  /** Why the outcome is what it is: waiting-for-parts note, cancel reason, repair note. */
+  readonly outcomeNote: string | null;
   readonly location: DeviceLocation;
   readonly technicianId: string | null;
   /** Display name from the device's user directory; null when unknown. */
@@ -72,6 +76,15 @@ export interface TicketSummaryRow {
   readonly pendingProposals: number;
   readonly createdAt: number;
   readonly updatedAt: number;
+  /** What the customer pays for a cancelled servisan; null when not cancelled or cancelled before fees. */
+  readonly cancelFee: number | null;
+  /** The store's fee in force at that cancel, so a changed fee stands out. */
+  readonly cancelStandardFee: number | null;
+  readonly cancelledBy: string | null;
+  readonly cancelledByName: string | null;
+  readonly cancelledAt: number | null;
+  /** Integer IDR the customer paid up front; null when nothing was. */
+  readonly downPayment: number | null;
 }
 
 export interface QuoteLineRow {
@@ -127,11 +140,18 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly checklist: readonly (RecordedOption & { state: ChecklistState; note: string })[];
   readonly peripherals: readonly RecordedOption[];
   readonly intakePhotos: readonly IntakePhotoAngle[];
-  readonly outcomeNote: string | null;
   readonly createdBy: string;
   readonly createdByName: string | null;
   readonly returnedBy: string | null;
+  readonly returnedByName: string | null;
   readonly returnedAt: number | null;
+  /** A technician has started work on it at least once, so the after-work cancellation fee applies. */
+  readonly workStarted: boolean;
+  readonly downPaymentBy: string | null;
+  readonly downPaymentByName: string | null;
+  readonly downPaymentAt: number | null;
+  /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
+  readonly slipPrints: Readonly<Record<SlipKind, number>>;
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -174,12 +194,18 @@ function summaryQuery(qctx: Qctx) {
       't.deviceImei',
       't.complaint',
       't.outcome',
+      't.outcomeNote',
       't.location',
       't.technicianId',
       't.quoteTotal',
       't.estimatedReadyAt',
       't.createdAt',
       't.updatedAt',
+      't.cancelFee',
+      't.cancelStandardFee',
+      't.cancelledBy',
+      't.cancelledAt',
+      't.downPayment',
       eb
         .selectFrom('repairQuoteLines as l')
         .select(eb.fn.countAll<number>().as('n'))
@@ -206,6 +232,7 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     deviceImei: row.deviceImei,
     complaint: row.complaint,
     outcome: row.outcome as RepairOutcome,
+    outcomeNote: row.outcomeNote,
     location: row.location as DeviceLocation,
     technicianId: row.technicianId,
     technicianName: row.technicianId === null ? null : (names.get(row.technicianId) ?? null),
@@ -214,13 +241,19 @@ function toSummary(row: RawSummary, names: Map<string, string>): TicketSummaryRo
     pendingProposals: Number(row.pendingProposals ?? 0),
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
+    cancelFee: row.cancelFee === null ? null : Number(row.cancelFee),
+    cancelStandardFee: row.cancelStandardFee === null ? null : Number(row.cancelStandardFee),
+    cancelledBy: row.cancelledBy,
+    cancelledByName: row.cancelledBy === null ? null : (names.get(row.cancelledBy) ?? null),
+    cancelledAt: row.cancelledAt === null ? null : Number(row.cancelledAt),
+    downPayment: row.downPayment === null ? null : Number(row.downPayment),
   };
 }
 
 async function toSummaries(qctx: Qctx, rows: readonly RawSummary[]): Promise<TicketSummaryRow[]> {
   const names = await userNames(
     qctx,
-    rows.map((row) => row.technicianId),
+    rows.flatMap((row) => [row.technicianId, row.cancelledBy]),
   );
   return rows.map((row) => toSummary(row, names));
 }
@@ -240,7 +273,8 @@ export const listTicketsInput = z
       })
       .strict()
       .optional(),
-    sort: z.enum(['createdAt.desc', 'createdAt.asc']).default('createdAt.desc'),
+    /** `cancelledAt.desc` lists only cancelled tickets, latest cancel first (the owner's view). */
+    sort: z.enum(['createdAt.desc', 'createdAt.asc', 'cancelledAt.desc']).default('createdAt.desc'),
     cursor: z.string().optional(),
     limit: z.number().int().min(1).max(100).default(50),
   })
@@ -252,11 +286,14 @@ export async function listTicketsHandler(
   input: ListTicketsInput,
   qctx: Qctx,
 ): Promise<QueryPage<TicketSummaryRow>> {
-  const descending = input.sort === 'createdAt.desc';
+  const descending = input.sort !== 'createdAt.asc';
+  const byCancel = input.sort === 'cancelledAt.desc';
+  const column = byCancel ? 't.cancelledAt' : 't.createdAt';
   const filter = input.filter ?? {};
   let query = summaryQuery(qctx)
-    .orderBy('t.createdAt', descending ? 'desc' : 'asc')
+    .orderBy(column, descending ? 'desc' : 'asc')
     .orderBy('t.id', descending ? 'desc' : 'asc');
+  if (byCancel) query = query.where('t.cancelledAt', 'is not', null);
 
   if (filter.outcomes !== undefined) query = query.where('t.outcome', 'in', filter.outcomes);
   if (filter.location !== undefined) query = query.where('t.location', '=', filter.location);
@@ -280,7 +317,7 @@ export async function listTicketsHandler(
   if (input.cursor !== undefined) {
     const position = decodeCursor(input.cursor, input.sort);
     query = query.where((eb) =>
-      keysetPredicate(eb, { column: 't.createdAt', idColumn: 't.id', position, descending }),
+      keysetPredicate(eb, { column, idColumn: 't.id', position, descending }),
     );
   }
 
@@ -288,7 +325,7 @@ export async function listTicketsHandler(
     fetch: (limitPlusOne) => query.limit(limitPlusOne).execute(),
     limit: input.limit,
     sort: input.sort,
-    cursorValues: (last) => [Number(last.createdAt), last.id],
+    cursorValues: (last) => [Number(byCancel ? last.cancelledAt : last.createdAt), last.id],
   });
   return { rows: await toSummaries(qctx, rows), nextCursor };
 }
@@ -446,10 +483,11 @@ export async function getTicketHandler(
       'checklistJson',
       'peripheralsJson',
       'intakePhotosJson',
-      'outcomeNote',
       'createdBy',
       'returnedBy',
       'returnedAt',
+      'downPaymentBy',
+      'downPaymentAt',
     ])
     .where('id', '=', input.ticketId)
     .executeTakeFirstOrThrow();
@@ -482,8 +520,15 @@ export async function getTicketHandler(
   const names = await userNames(qctx, [
     summary.technicianId,
     detail.createdBy,
+    detail.downPaymentBy,
     ...events.map((event) => event.actorId),
   ]);
+  const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
+  for (const event of events) {
+    if (event.kind !== REPAIR_OP.slipPrinted) continue;
+    const { slip } = parseJson<{ slip?: string }>(event.detailJson, {});
+    if (slip === 'intake' || slip === 'handover') slipPrints[slip] += 1;
+  }
 
   return {
     rows: [
@@ -497,11 +542,17 @@ export async function getTicketHandler(
         ).map((check) => ({ ...recordedOption(check), state: check.state, note: check.note })),
         peripherals: parseJson<unknown[]>(detail.peripheralsJson, []).map(recordedOption),
         intakePhotos: intakePhotoAngles(detail.intakePhotosJson),
-        outcomeNote: detail.outcomeNote,
         createdBy: detail.createdBy,
         createdByName: names.get(detail.createdBy) ?? null,
         returnedBy: detail.returnedBy,
+        returnedByName: detail.returnedBy === null ? null : (names.get(detail.returnedBy) ?? null),
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
+        workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
+        downPaymentBy: detail.downPaymentBy,
+        downPaymentByName:
+          detail.downPaymentBy === null ? null : (names.get(detail.downPaymentBy) ?? null),
+        downPaymentAt: detail.downPaymentAt === null ? null : Number(detail.downPaymentAt),
+        slipPrints,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,
@@ -647,4 +698,117 @@ export const intakeOptionSettingsQuery = {
   permission: REPAIR_PERMISSION.read,
   input: intakeOptionSettingsInput,
   handler: intakeOptionSettingsHandler,
+} as const;
+
+// ── cancelFees (what a cancelled servisan costs at this store) ───────────────────────────────
+
+export interface CancelFees {
+  /** Before any work started on the phone. */
+  readonly beforeWork: number;
+  /** Once a technician has started work on it. */
+  readonly afterWork: number;
+}
+
+/** The store's fee for cancelling this ticket now: after-work once work has ever started. */
+export function standardCancelFee(
+  ticket: Pick<TicketDetailRow, 'workStarted'>,
+  fees: CancelFees,
+): number {
+  return ticket.workStarted ? fees.afterWork : fees.beforeWork;
+}
+
+/** A store that never set its fees charges nothing, as before fees existed. */
+export const NO_CANCEL_FEES: CancelFees = { beforeWork: 0, afterWork: 0 };
+
+export const cancelFeesInput = z.object({}).strict();
+
+export async function cancelFeesHandler(
+  _input: z.infer<typeof cancelFeesInput>,
+  qctx: Qctx,
+): Promise<QueryPage<CancelFees>> {
+  const row = await qctx.db
+    .selectFrom('repairStoreCancelFees')
+    .select(['beforeWork', 'afterWork'])
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .executeTakeFirst();
+  const fees =
+    row === undefined
+      ? NO_CANCEL_FEES
+      : { beforeWork: Number(row.beforeWork), afterWork: Number(row.afterWork) };
+  return { rows: [fees], nextCursor: null };
+}
+
+export const cancelFeesQuery = {
+  name: 'cancelFees',
+  permission: REPAIR_PERMISSION.read,
+  input: cancelFeesInput,
+  handler: cancelFeesHandler,
+} as const;
+
+// ── printSettings (what this store's slips print besides the servisan) ──────────────────────
+
+export interface PrintSettings {
+  /** The business name in large type; null prints the store's own name. */
+  readonly name: string | null;
+  readonly address: string;
+  readonly phone: string;
+  /** The logo picture, to fetch like any synced photo; null when there is none. */
+  readonly logo: {
+    readonly mediaId: string;
+    readonly sha256: string;
+    readonly mime: string;
+  } | null;
+  readonly logoOnDotMatrix: boolean;
+  /** One term per line; null prints the app's default terms. */
+  readonly intakeTerms: string | null;
+  readonly handoverTerms: string | null;
+}
+
+/** A store that never set anything prints its name and the default terms. */
+export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
+  name: null,
+  address: '',
+  phone: '',
+  logo: null,
+  logoOnDotMatrix: false,
+  intakeTerms: null,
+  handoverTerms: null,
+};
+
+export const printSettingsInput = z.object({}).strict();
+
+export async function printSettingsHandler(
+  _input: z.infer<typeof printSettingsInput>,
+  qctx: Qctx,
+): Promise<QueryPage<PrintSettings>> {
+  const row = await qctx.db
+    .selectFrom('repairStorePrintSettings')
+    .selectAll()
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', qctx.storeId)
+    .executeTakeFirst();
+  const settings: PrintSettings =
+    row === undefined
+      ? DEFAULT_PRINT_SETTINGS
+      : {
+          name: row.name,
+          address: row.address,
+          phone: row.phone,
+          logo:
+            row.logoMediaId === null || row.logoSha256 === null || row.logoMime === null
+              ? null
+              : { mediaId: row.logoMediaId, sha256: row.logoSha256, mime: row.logoMime },
+          logoOnDotMatrix: Number(row.logoOnDotMatrix) === 1,
+          intakeTerms: row.intakeTerms,
+          handoverTerms: row.handoverTerms,
+        };
+  return { rows: [settings], nextCursor: null };
+}
+
+export const printSettingsQuery = {
+  name: 'printSettings',
+  permission: REPAIR_PERMISSION.read,
+  input: printSettingsInput,
+  handler: printSettingsHandler,
 } as const;

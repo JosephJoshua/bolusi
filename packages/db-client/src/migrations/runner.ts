@@ -6,7 +6,10 @@ import { columnEncryptionMigration } from './003-column-encryption.js';
 import { repairMigration } from './004-repair.js';
 import { operationsArrivalIndexMigration } from './005-operations-arrival-index.js';
 import { operationsSingleCopyMigration } from './006-operations-single-copy.js';
+import { phoneModelsMigration } from './008-phone-models.js';
 import { repairIntakeOptionsMigration } from './009-repair-intake-options.js';
+import { repairCancelFeesMigration } from './011-repair-cancel-fees.js';
+import { repairPrintingMigration } from './013-repair-printing.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -17,7 +20,10 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   repairMigration,
   operationsArrivalIndexMigration,
   operationsSingleCopyMigration,
+  phoneModelsMigration,
   repairIntakeOptionsMigration,
+  repairCancelFeesMigration,
+  repairPrintingMigration,
 ];
 
 export interface RunMigrationsOptions {

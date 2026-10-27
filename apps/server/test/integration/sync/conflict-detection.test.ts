@@ -61,6 +61,9 @@ import {
   seedDevice,
   seedWorld,
   testScopeOf,
+  testEntityTypeOf,
+  testCheckRule,
+  testPermissionOf,
   type OplogTestDb,
 } from '../oplog/helpers.js';
 
@@ -143,6 +146,26 @@ const suiteRegistry: OpRegistry = {
   // same way production's `deriveOpRegistry` does (only `platform.user_locale_changed` is tenant-
   // scoped, and this suite really does push it with a null store).
   scopeOf: testScopeOf((type) =>
+    [
+      NOTE_CREATED,
+      NOTE_EDITED,
+      NOTE_ARCHIVED,
+      PLATFORM_OP.conflictDetected,
+      PLATFORM_OP.userLocaleChanged,
+    ].includes(type),
+  ),
+  // The production rule per type (a test-only type declares none).
+  checkRule: testCheckRule,
+  permissionOf: testPermissionOf((type) =>
+    [
+      NOTE_CREATED,
+      NOTE_EDITED,
+      NOTE_ARCHIVED,
+      PLATFORM_OP.conflictDetected,
+      PLATFORM_OP.userLocaleChanged,
+    ].includes(type),
+  ),
+  entityTypeOf: testEntityTypeOf((type) =>
     [
       NOTE_CREATED,
       NOTE_EDITED,

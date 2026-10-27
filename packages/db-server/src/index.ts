@@ -63,6 +63,27 @@ export { createServerWatermarkStore } from './watermarks.js';
 export { buildPinVerifierRow } from './pin-verifier-row.js';
 export type { PinVerifierRowInput, PinVerifierRowOwner } from './pin-verifier-row.js';
 
+// The phone catalog (migration 0016): global reference data with no tenant rows, so these are
+// fixed functions on the plain pool. Reads return plain records; the writer's methods are fixed
+// statements over the three catalog tables only, refused by Postgres unless run as their owner.
+// Nothing here hands back a handle, so the `queryish` assertion still holds.
+export {
+  createPhoneCatalogWriter,
+  createPhoneCatalogWriterOn,
+  readPhoneModelPhoto,
+  readPhoneModelPhotoFrom,
+  readPhoneModels,
+  readPhoneModelsFrom,
+  type CatalogBrand,
+  type ListedPhoneModel,
+  type PendingModel,
+  type PhoneCatalogWriter,
+  type PhoneModelDetails,
+  type PhoneModelKind,
+  type PhoneModelPhoto,
+  type PhoneModelRecord,
+} from './phone-catalog.js';
+
 // Task 49 — the SERVER projection engine factory (10-db §3 step 6, 04 §4). Same D7 weighing as
 // the watermark store: it CONSUMES a `forTenant` handle rather than producing one, and returns a
 // `ProjectionEngine` (apply/rebuild methods, no `selectFrom`), so the export-surface `queryish`

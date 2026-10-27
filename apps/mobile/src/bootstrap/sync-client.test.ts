@@ -11,7 +11,14 @@
 // this file is still the sync-loop lane, so it starts from the persisted state rather than producing
 // it. The falsifications below break each wiring (bundle, transport, the connectivity trigger) and
 // watch the cycle fail LOUDLY (§2.11).
-import { insertOpLogRow, readSyncState, stalenessLevel, SyncTransportError } from '@bolusi/core';
+import {
+  insertOpLogRow,
+  InvalidationBus,
+  OP_SYNC_STATUS_TABLE,
+  readSyncState,
+  stalenessLevel,
+  SyncTransportError,
+} from '@bolusi/core';
 import { closeClientDb, openClientDb, runClientMigrations, type ClientDb } from '@bolusi/db-client';
 import type {
   PullRequest,
@@ -193,6 +200,7 @@ async function build(options: BuildOptions = {}) {
       applied.push(op);
       return Promise.resolve();
     },
+    refoldRefused: () => Promise.resolve(),
     crypto: noblePort,
     clock: { now: () => T },
     timer,
@@ -362,7 +370,7 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
    * arms, against the EXPORTED constant rather than a literal (T-6).
    *
    * A timer that records DELAYS (the rest of this file uses one that records only counts): the whole
-   * claim is "3 s, and re-armed, not queued", and a count cannot express either half.
+   * claim is "1 s, and re-armed, not queued", and a count cannot express either half.
    */
   function delayRecordingTimer() {
     const armed = new Map<number, number>();
@@ -384,7 +392,7 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
   async function clientForApp(timer: ReturnType<typeof delayRecordingTimer>) {
     const app = {
       db,
-      engine: { applyPulledOp: () => Promise.resolve() },
+      engine: { applyPulledOp: () => Promise.resolve(), refoldRefused: () => Promise.resolve() },
       syncState: await readSyncState(db.db),
     } as unknown as Bootstrapped;
     return createSyncClientForApp(app, {
@@ -426,6 +434,51 @@ describe('the exposed `scheduler` IS §5 (b), on the client index.ts builds (tas
     // Still ONE armed timer: `schedule()` cancels the pending one before arming the next. Three
     // entries here would be a queue — 40 appends would then mean 40 cycles.
     expect(timer.delays()).toStrictEqual([APPEND_DEBOUNCE_MS]);
+    client.stop();
+  });
+});
+
+describe('a push that settles ops tells the open screens', () => {
+  test("the app's client says the op log changed once the server takes the op", async () => {
+    const opId = '01920000-0000-7000-8000-0000000000ac';
+    await seedLocalOp(opId);
+    const invalidation = new InvalidationBus();
+    const written: string[][] = [];
+    invalidation.subscribe((tables) => written.push([...tables]));
+    const app = {
+      db,
+      engine: { applyPulledOp: () => Promise.resolve() },
+      syncState: await readSyncState(db.db),
+      invalidation,
+    } as unknown as Bootstrapped;
+    const reply = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    const client = createSyncClientForApp(app, {
+      baseUrl: 'https://example.invalid',
+      deviceId: DEVICE_ID,
+      loadDeviceToken: () => Promise.resolve('bdt_test'),
+      crypto: noblePort,
+      clock: clockT,
+      appState: activeAppState,
+      netInfo: fakeNetInfo(true).port,
+      timer: new RecordingTimer(),
+      fetchImpl: (input) => {
+        const url = String(input);
+        if (url.endsWith('/v1/sync/push')) {
+          return Promise.resolve(
+            reply({ results: [{ id: opId, status: 'accepted' }], serverTime: T }),
+          );
+        }
+        if (url.endsWith('/v1/sync/pull')) {
+          return Promise.resolve(reply({ ops: [], nextCursor: 0, hasMore: false, serverTime: T }));
+        }
+        return Promise.resolve(new Response(null, { status: 304 }));
+      },
+    });
+    await client.start();
+    await client.settle();
+
+    expect(written).toContainEqual([OP_SYNC_STATUS_TABLE]);
     client.stop();
   });
 });

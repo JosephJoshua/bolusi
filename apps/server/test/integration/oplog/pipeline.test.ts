@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import {
+  grantAllPermissions,
   grantRole,
   makeCryptoSpy,
   makeDeps,
@@ -27,6 +28,7 @@ import {
   seedWorld,
   testId,
   type OplogTestDb,
+  type SeedWorldOptions,
 } from './helpers.js';
 
 let testDb: OplogTestDb;
@@ -44,7 +46,7 @@ function identityOf(world: ChainWorld) {
 }
 
 /** A world + a genesis-rooted chain, seeded and ready to push. */
-async function setupWorld(seed: number, options = {}) {
+async function setupWorld(seed: number, options: SeedWorldOptions = {}) {
   const world = makeWorld(seed, serverCryptoPort);
   await seedWorld(testDb.db, world, options);
   const builder = new ChainBuilder(world, serverCryptoPort);
@@ -464,19 +466,26 @@ describe('scope validation (05 §9)', () => {
     expect(result.results[0]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
   });
 
-  test('MEMBERSHIP-NOT-STATUS: an op from a deactivated-but-member user is ACCEPTED (05 §9.3) (I-2: deactivation preserves every operation, with no history gap)', async () => {
+  test('an op from a deactivated user is refused PERMISSION_DENIED and spends its chain position (owner decision 2026-10-26)', async () => {
     const { world, builder } = await setupWorld(1055);
     const genesis = builder.genesis();
     const deactivatedId = testId(99);
     await seedUser(testDb.db, world.tenantId, deactivatedId, 'deactivated');
+    await grantAllPermissions(testDb.db, world.tenantId, deactivatedId);
     const op2 = builder.append({ ...note('a', 'b'), userId: deactivatedId });
+    const op3 = builder.append(note('c', 'd'));
     const deps = makeDeps({ forTenant: testDb.appForTenant });
 
-    const result = await processPushBatch(deps, identityOf(world), [genesis, op2]);
+    const result = await processPushBatch(deps, identityOf(world), [genesis, op2, op3]);
 
-    // Deactivation gates authentication and command execution — never op acceptance. The audit
-    // trail wants the record (03 §6; api/02-auth §1).
-    expect(result.results[1]).toMatchObject({ status: 'accepted' });
+    // Still a member (scope passes), but the shared evaluator denies an inactive user, so their
+    // unsynced work is refused even though their role would allow it. The next op still lands.
+    expect(result.results[1]).toMatchObject({
+      status: 'rejected',
+      code: 'PERMISSION_DENIED',
+      reason: expect.stringContaining('user_inactive'),
+    });
+    expect(result.results[2]).toMatchObject({ status: 'accepted' });
   });
 });
 
@@ -547,8 +556,8 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
     expect(result.results[1]).toMatchObject({ status: 'accepted' });
   });
 
-  test('auth.pin_reset by an actor without auth.user_reset_pin is SCOPE_VIOLATION', async () => {
-    const { world, builder } = await setupWorld(1064);
+  test('auth.pin_reset by an actor without auth.user_reset_pin is PERMISSION_DENIED, with no tamper alarm', async () => {
+    const { world, builder } = await setupWorld(1064, { grants: 'none' });
     const genesis = builder.genesis();
     const targetId = testId(125);
     await seedUser(testDb.db, world.tenantId, targetId);
@@ -565,7 +574,8 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
       [genesis, op],
     );
 
-    expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'PERMISSION_DENIED' });
+    expect(await readAnomalies(testDb.db, world.deviceId)).toEqual([]);
   });
 
   test('auth.pin_reset by an actor holding auth.user_reset_pin is ACCEPTED (permission control)', async () => {
@@ -669,8 +679,8 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
     expect(result.results[1]).toMatchObject({ status: 'accepted' });
   });
 
-  test('auth.pin_lockout_cleared without auth.pin_unlock is SCOPE_VIOLATION', async () => {
-    const { world, builder } = await setupWorld(1068);
+  test('auth.pin_lockout_cleared without auth.pin_unlock is PERMISSION_DENIED, with no tamper alarm', async () => {
+    const { world, builder } = await setupWorld(1068, { grants: 'none' });
     const genesis = builder.genesis();
     const targetId = testId(133);
     await seedUser(testDb.db, world.tenantId, targetId);
@@ -687,7 +697,8 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
       [genesis, op],
     );
 
-    expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'PERMISSION_DENIED' });
+    expect(await readAnomalies(testDb.db, world.deviceId)).toEqual([]);
   });
 
   test('auth.pin_lockout_cleared with auth.pin_unlock is ACCEPTED (permission control)', async () => {
@@ -737,13 +748,32 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
     expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
   });
 
-  test('platform.conflict_acknowledged from a member device is ACCEPTED', async () => {
+  test('platform.conflict_acknowledged of a conflict in the device store is ACCEPTED', async () => {
     const { world, builder } = await setupWorld(1071);
     const genesis = builder.genesis();
+    // The platform rule needs the conflict to exist in this store (platform/rules.ts).
+    const conflictId = testId(1072);
+    await testDb.db
+      .insertInto('conflicts')
+      .values({
+        id: conflictId,
+        tenantId: world.tenantId,
+        storeId: world.storeId,
+        entityType: 'note',
+        entityId: testId(1073),
+        conflictKey: 'k:1071',
+        severity: 'significant',
+        status: 'surfaced',
+        opAId: testId(1074),
+        opBId: testId(1075),
+        detectedAt: 1,
+      })
+      .execute();
     const op = builder.append({
       type: 'platform.conflict_acknowledged',
       entityType: 'conflict',
-      payload: { conflictId: world.userId },
+      entityId: conflictId,
+      payload: { conflictId },
     });
 
     const result = await processPushBatch(

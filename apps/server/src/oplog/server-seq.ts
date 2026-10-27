@@ -1,7 +1,7 @@
 // Per-tenant gapless serverSeq allocation via the `tenant_op_counters` row lock (10-db §3).
 //
 // The row is locked FOR UPDATE at transaction start (serialising pushes per tenant, allocating
-// nothing), then incremented once per ACCEPTED op. Duplicates and rejected ops never reach the
+// nothing), then advanced by one per ACCEPTED op. Duplicates and rejected ops never reach the
 // increment, so per-tenant serverSeq is gapless BY CONSTRUCTION — there is no up-front block
 // allocation. Cross-tenant pushes touch different rows and never contend (§3).
 //
@@ -17,26 +17,51 @@ import { sql } from 'kysely';
 import type { TenantDb } from '@bolusi/db-server';
 
 /**
- * Take the per-tenant counter lock at transaction start (§3). Allocates nothing.
+ * Take the per-tenant counter lock at transaction start (§3) and return the next serverSeq to
+ * assign. Allocates nothing.
  *
- * Ensures the counter row exists first: provisioning (task 13) creates it with the tenant, but a
- * lazy idempotent insert means a tenant that somehow lacks a counter cannot wedge the pipeline.
- * `ON CONFLICT DO NOTHING` is safe under concurrency; the FOR UPDATE that follows is the
- * serialisation point.
+ * Provisioning (task 13) creates the counter row with the tenant; a lazy idempotent insert covers a
+ * tenant that somehow lacks one, so it cannot wedge the pipeline. The insert runs only when the row
+ * is missing: an `INSERT … ON CONFLICT` on every push is a write that waits on the same row lock.
  */
-export async function lockTenantCounter(db: TenantDb, tenantId: string): Promise<void> {
-  await db
-    .insertInto('tenantOpCounters')
-    .values({ tenantId })
-    .onConflict((oc) => oc.doNothing())
-    .execute();
+export async function lockTenantCounter(db: TenantDb, tenantId: string): Promise<number> {
+  const lock = () =>
+    db
+      .selectFrom('tenantOpCounters')
+      .select('nextServerSeq')
+      .where('tenantId', '=', tenantId)
+      .forUpdate()
+      .executeTakeFirst();
 
+  let row = await lock();
+  if (row === undefined) {
+    await db
+      .insertInto('tenantOpCounters')
+      .values({ tenantId })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+    row = await lock();
+  }
+  if (row === undefined) throw new Error(`no op counter for tenant ${tenantId}`);
+  return Number(row.nextServerSeq);
+}
+
+/**
+ * Store the next serverSeq after a push assigned a run of them in memory under the lock. The push
+ * numbers its accepted ops itself (next, next+1, …) and writes the counter once, rather than one
+ * `UPDATE … RETURNING` per op; the row lock it holds makes that the same gapless, commit-ordered
+ * stream. Write it before anything else allocates in this transaction (system ops below).
+ */
+export async function storeTenantCounter(
+  db: TenantDb,
+  tenantId: string,
+  nextServerSeq: number,
+): Promise<void> {
   await db
-    .selectFrom('tenantOpCounters')
-    .select('nextServerSeq')
+    .updateTable('tenantOpCounters')
+    .set({ nextServerSeq: String(nextServerSeq) })
     .where('tenantId', '=', tenantId)
-    .forUpdate()
-    .executeTakeFirstOrThrow();
+    .execute();
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   Card,
   Chip,
   Icon,
+  PatternLock,
   TextButton,
   Timeline,
   border,
@@ -26,7 +27,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { HANDOVER_PHOTO_SLOTS } from '../constants.js';
+import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
   hasRejectedOp,
@@ -36,19 +38,26 @@ import {
   type StepBack,
 } from '../../screen-kit/index.js';
 
-import { tn, type RepairKey } from './i18n.js';
-import { PRICE_KIND_KEY, optionLabel } from './labels.js';
+import { tn, type RepairKey } from '../i18n.js';
+import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
+  downPaymentAction,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
+  staleStep,
   ticketActions,
   ticketStatus,
   workPhotos,
+  type StaleStep,
   type TicketAction,
+  type TicketStep,
 } from '../flows.js';
 import {
   ActionErrorBanner,
+  DownPaymentRows,
+  CatalogPhoto,
+  DeviceSpecs,
   Fact,
   FactGrid,
   QueryView,
@@ -59,9 +68,12 @@ import {
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { useRepairQuery, useRepairRuntime } from './runtime.js';
+import { PrintStep } from './PrintStep.js';
 import {
   AssignStep,
-  NoteStep,
+  CancelStep,
+  DownPaymentStep,
+  WaitForPartsStep,
   PriceChangeStep,
   ProposalStep,
   WorkPhotosStep,
@@ -90,16 +102,13 @@ const ACTION_KEY: Readonly<Record<TicketAction, RepairKey>> = {
   cancel: 'repair.action.cancel',
 };
 
+/** The open step, if any. A proposal keeps the line as it was opened, for when no fresher read is at hand. */
 type Step =
   | { readonly kind: 'none' }
-  | { readonly kind: 'before' }
-  | { readonly kind: 'after' }
-  | { readonly kind: 'waitForParts' }
-  | { readonly kind: 'cancel' }
-  | { readonly kind: 'assign' }
-  | { readonly kind: 'changePrice' }
-  | { readonly kind: 'proposePrice' }
-  | { readonly kind: 'proposal'; readonly line: QuoteLineRow };
+  | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
+  | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
+  | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
+  | { readonly kind: 'print' };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -187,9 +196,20 @@ export function TicketDetail({
     return () => onRegisterDiscardGuard?.(null);
   }, [onRegisterDiscardGuard]);
 
+  // The ticket keeps reading live under an open step, so a change synced from another device while
+  // the user fills the step in is caught here rather than as a refusal once they submit.
+  const stale: StaleStep | null =
+    step.kind === 'none' || step.kind === 'print' || ticket === undefined
+      ? null
+      : step.kind === 'downPayment'
+        ? downPaymentAction(ticket, can) === step.mode
+          ? null
+          : { kind: ticket.location === 'returned' ? 'returned' : 'changed' }
+        : staleStep(step, ticket, can, runtime.userId);
   const stepProps = {
     chrome,
     ticketId,
+    stale,
     onDone: closeStep,
     onCancel: leaveStep,
     onRegisterDiscardGuard: registerStepGuard,
@@ -209,8 +229,9 @@ export function TicketDetail({
         />
       );
     case 'waitForParts':
+      return <WaitForPartsStep {...stepProps} />;
     case 'cancel':
-      return <NoteStep {...stepProps} kind={step.kind} />;
+      return <CancelStep {...stepProps} workStarted={ticket?.workStarted ?? false} />;
     case 'assign':
       return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
     case 'changePrice':
@@ -218,7 +239,39 @@ export function TicketDetail({
     case 'proposePrice':
       return <PriceChangeStep {...stepProps} mode="propose" />;
     case 'proposal':
-      return <ProposalStep {...stepProps} line={step.line} />;
+      return (
+        <ProposalStep
+          {...stepProps}
+          line={ticket?.quoteLines.find((line) => line.id === step.lineId) ?? step.line}
+        />
+      );
+    case 'downPayment':
+      return (
+        <DownPaymentStep
+          {...stepProps}
+          mode={step.mode}
+          current={ticket?.downPayment ?? null}
+          total={ticket === undefined ? 0 : amountOwed(ticket)}
+          onDone={() => {
+            closeStep();
+            setDone('repair.done.downPayment');
+          }}
+        />
+      );
+    case 'print':
+      if (ticket === undefined || runtime.printing === undefined) break;
+      return (
+        <PrintStep
+          chrome={chrome}
+          ticket={ticket}
+          printing={runtime.printing}
+          onCancel={closeStep}
+          onDone={(notice) => {
+            closeStep();
+            setDone(notice);
+          }}
+        />
+      );
     case 'none':
       break;
   }
@@ -234,7 +287,7 @@ export function TicketDetail({
     switch (action) {
       case 'decidePrice': {
         const line = row.quoteLines.find((candidate) => candidate.status === 'proposed');
-        if (line !== undefined) setStep({ kind: 'proposal', line });
+        if (line !== undefined) setStep({ kind: 'proposal', lineId: line.id, line });
         return;
       }
       case 'start':
@@ -336,6 +389,7 @@ export function TicketDetail({
   );
 
   function renderTicket(row: TicketDetailRow): React.JSX.Element {
+    const lock = row.devicePasscode === null ? null : decodeScreenLock(row.devicePasscode);
     const device = [row.deviceBrand, row.deviceModel, row.deviceColor]
       .filter((s) => s !== '')
       .join(' · ');
@@ -374,13 +428,21 @@ export function TicketDetail({
             </Pressable>
           )}
           <View style={styles.deviceBox}>
-            <Text style={styles.device} testID={`${testID}.device`}>
-              {device}
-            </Text>
-            <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
-            <Text style={styles.complaint} testID={`${testID}.complaint`}>
-              {row.complaint}
-            </Text>
+            <CatalogPhoto
+              brand={row.deviceBrand}
+              model={row.deviceModel}
+              large
+              testID={`${testID}.devicePhoto`}
+            />
+            <View style={styles.deviceText}>
+              <Text style={styles.device} testID={`${testID}.device`}>
+                {device}
+              </Text>
+              <Text style={styles.complaintLabel}>{tn('repair.condition.complaint')}</Text>
+              <Text style={styles.complaint} testID={`${testID}.complaint`}>
+                {row.complaint}
+              </Text>
+            </View>
           </View>
         </Card>
 
@@ -398,16 +460,34 @@ export function TicketDetail({
                 value={formatDateTime(row.estimatedReadyAt)}
               />
             )}
+            {row.outcome === 'cancelled' && row.cancelFee !== null ? (
+              <Fact
+                label={tn('repair.cancel.fee')}
+                value={formatMoney(row.cancelFee)}
+                testID={`${testID}.cancelFee`}
+              />
+            ) : null}
             {row.deviceImei === null ? null : (
               <Fact label={tn('repair.device.imei')} value={row.deviceImei} />
             )}
-            {row.devicePasscode === null ? null : (
+            {lock === null ? null : (
               // The technician needs it to test the phone; hidden until asked so it is not read
               // over a shoulder at the counter.
               <Fact
-                label={tn('repair.device.passcodeLabel')}
-                value={passcodeShown ? row.devicePasscode : '••••'}
+                label={
+                  lock.kind === 'unknown'
+                    ? tn('repair.device.passcodeLabel')
+                    : `${tn('repair.device.passcodeLabel')} · ${tn(LOCK_KIND_KEY[lock.kind])}`
+                }
+                value={
+                  !passcodeShown
+                    ? '••••'
+                    : lock.kind === 'pattern'
+                      ? patternSteps(lock.value)
+                      : lock.value
+                }
                 testID={`${testID}.passcode`}
+                wide
                 action={
                   <TextButton
                     label={tn(passcodeShown ? 'repair.passcode.hide' : 'repair.passcode.show')}
@@ -415,7 +495,16 @@ export function TicketDetail({
                     testID={`${testID}.passcode.toggle`}
                   />
                 }
-              />
+              >
+                {passcodeShown && lock.kind === 'pattern' ? (
+                  <PatternLock
+                    value={lock.value}
+                    size={168}
+                    accessibilityLabel={tn('repair.lock.patternLabel')}
+                    testID={`${testID}.passcode.pattern`}
+                  />
+                ) : null}
+              </Fact>
             )}
           </FactGrid>
           {row.outcomeNote === null || row.outcomeNote === '' ? null : (
@@ -426,8 +515,18 @@ export function TicketDetail({
           )}
         </View>
 
-        {statusActions.length === 0 ? null : (
+        {statusActions.length === 0 && runtime.printing === undefined ? null : (
           <View style={styles.actions}>
+            {runtime.printing === undefined ? null : (
+              <Button
+                label={tn('repair.print.title')}
+                variant="secondary"
+                size="compact"
+                onPress={() => setStep({ kind: 'print' })}
+                disabled={runner.busy}
+                testID={`${testID}.action.print`}
+              />
+            )}
             {statusActions.map((action) => (
               <Button
                 key={action}
@@ -445,6 +544,12 @@ export function TicketDetail({
         {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
         {photos.section}
         {renderCondition(row)}
+        <DeviceSpecs
+          brand={row.deviceBrand}
+          model={row.deviceModel}
+          repairs={can.work}
+          testID={`${testID}.specs`}
+        />
 
         <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
           <Timeline
@@ -452,7 +557,11 @@ export function TicketDetail({
               const note = eventNote(event.detail);
               return {
                 key: event.id,
-                title: translateOpType(event.kind),
+                // A change saved before the customer agreed reads as waiting, not as changed.
+                title:
+                  event.kind === REPAIR_OP.quoteChanged && event.detail['waitsForCustomer'] === true
+                    ? tn('repair.price.waitingEvent')
+                    : translateOpType(event.kind),
                 meta: [formatDateTime(event.at), event.actorName]
                   .filter((part) => part !== null)
                   .join(' · '),
@@ -486,6 +595,8 @@ export function TicketDetail({
     const deciding = actions.includes('decidePrice');
     // The bottom action already opens the first proposal; per-line buttons only when there are more.
     const perLine = deciding && pending.length > 1;
+    const cancelled = row.outcome === 'cancelled';
+    const paymentAction = downPaymentAction(row, can);
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -515,7 +626,7 @@ export function TicketDetail({
                 <View style={styles.lineAction}>
                   <TextButton
                     label={tn('repair.action.decidePrice')}
-                    onPress={() => setStep({ kind: 'proposal', line })}
+                    onPress={() => setStep({ kind: 'proposal', lineId: line.id, line })}
                     disabled={runner.busy}
                     testID={`${testID}.decide.${line.id}`}
                   />
@@ -525,11 +636,22 @@ export function TicketDetail({
           );
         })}
         <View style={[repairStyles.row, styles.total]}>
-          <Text style={styles.totalLabel}>{tn('repair.price.total')}</Text>
-          <Text style={[styles.totalValue, styles.amount]} testID={`${testID}.total`}>
+          <Text style={[styles.totalLabel, cancelled && styles.notCharged]}>
+            {tn('repair.price.total')}
+          </Text>
+          <Text
+            style={[styles.totalValue, styles.amount, cancelled && styles.notCharged]}
+            testID={`${testID}.total`}
+          >
             {formatMoney(row.quoteTotal)}
           </Text>
         </View>
+        {cancelled ? (
+          // The repair price stays as history, struck through: the customer owes only the fee.
+          <Text style={repairStyles.caption} testID={`${testID}.notCharged`}>
+            {tn('repair.price.notCharged', { amount: formatMoney(row.cancelFee ?? 0) })}
+          </Text>
+        ) : null}
         {!deciding || pending.length === 0 ? null : (
           // The total is what the customer agreed to; what a decision would add is said, not summed.
           <Text style={styles.lineWarning} testID={`${testID}.pendingTotal`}>
@@ -538,6 +660,33 @@ export function TicketDetail({
             })}
           </Text>
         )}
+        <DownPaymentRows
+          total={amountOwed(row)}
+          downPayment={row.downPayment}
+          action={
+            paymentAction === 'correct' ? (
+              <TextButton
+                label={tn('repair.downPayment.change')}
+                accessibilityLabel={tn('repair.downPayment.correctTitle')}
+                onPress={() => setStep({ kind: 'downPayment', mode: 'correct' })}
+                disabled={runner.busy}
+                testID={`${testID}.downPayment.correct`}
+              />
+            ) : undefined
+          }
+          testID={testID}
+        />
+        {paymentAction === 'record' ? (
+          <View style={styles.lineAction}>
+            <TextButton
+              label={tn('repair.downPayment.recordTitle')}
+              icon="add"
+              onPress={() => setStep({ kind: 'downPayment', mode: 'record' })}
+              disabled={runner.busy}
+              testID={`${testID}.downPayment.record`}
+            />
+          </View>
+        ) : null}
       </Section>
     );
   }
@@ -585,6 +734,11 @@ export function TicketDetail({
       </Section>
     );
   }
+}
+
+/** What the customer owes: the cancellation fee on a cancelled servisan, else the agreed total. */
+function amountOwed(row: TicketDetailRow): number {
+  return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
 }
 
 function lineCaption(line: QuoteLineRow): string {
@@ -674,11 +828,15 @@ const styles = StyleSheet.create({
   },
   link: { ...type.bodySm, fontWeight: '600', color: color.primary },
   deviceBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    columnGap: space.md,
     marginTop: space.sm,
     padding: space.md,
     borderRadius: radius.sm,
     backgroundColor: color.surfaceAlt,
   },
+  deviceText: { flex: 1 },
   device: { ...type.bodyBold, color: color.text },
   complaintLabel: { ...type.caption, color: color.textMuted, marginTop: space.sm },
   complaint: { ...type.bodySm, color: color.text },
@@ -702,6 +860,7 @@ const styles = StyleSheet.create({
   totalLabel: { ...type.bodyBold, color: color.text },
   totalValue: { ...type.heading, color: color.text },
   amount: { fontVariant: ['tabular-nums'] },
+  notCharged: { color: color.textMuted, textDecorationLine: 'line-through' },
   chipGroup: { marginBottom: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
 });

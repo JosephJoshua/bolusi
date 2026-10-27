@@ -139,6 +139,18 @@ export interface Operations {
   userId: string;
 }
 
+export interface PhoneModels {
+  announcedYear: number | null;
+  brand: string;
+  id: Generated<number | null>;
+  kind: string;
+  modelCodes: string;
+  name: string;
+  photoSha256: string | null;
+  revision: number;
+  specs: Generated<string>;
+}
+
 export interface PinAttemptState {
   consecutiveFailures: Generated<number>;
   deviceId: string;
@@ -213,10 +225,35 @@ export interface RepairQuoteLines {
   ticketId: string;
 }
 
+export interface RepairStoreCancelFees {
+  afterWork: number;
+  beforeWork: number;
+  storeId: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface RepairStoreIntakeOptions {
   hiddenJson: string;
   list: string;
   storeId: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface RepairStorePrintSettings {
+  address: string;
+  handoverTerms: string | null;
+  intakeTerms: string | null;
+  logoMediaId: string | null;
+  logoMime: string | null;
+  logoOnDotMatrix: number;
+  logoSha256: string | null;
+  name: string | null;
+  phone: string;
+  storeId: string | null;
   tenantId: string;
   updatedAt: number;
   updatedBy: string;
@@ -247,6 +284,10 @@ export interface RepairTicketPhotos {
 }
 
 export interface RepairTickets {
+  cancelFee: number | null;
+  cancelledAt: number | null;
+  cancelledBy: string | null;
+  cancelStandardFee: number | null;
   checklistJson: string;
   complaint: string;
   createdAt: number;
@@ -257,6 +298,9 @@ export interface RepairTickets {
   deviceImei: string | null;
   deviceModel: string;
   devicePasscode: string | null;
+  downPayment: number | null;
+  downPaymentAt: number | null;
+  downPaymentBy: string | null;
   estimatedReadyAt: number | null;
   id: string | null;
   intakeNotes: string;
@@ -340,6 +384,7 @@ export interface DB {
   migrations: Migrations;
   notes: Notes;
   operations: Operations;
+  phoneModels: PhoneModels;
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
@@ -347,7 +392,9 @@ export interface DB {
   repairCustomers: RepairCustomers;
   repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreCancelFees: RepairStoreCancelFees;
   repairStoreIntakeOptions: RepairStoreIntakeOptions;
+  repairStorePrintSettings: RepairStorePrintSettings;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

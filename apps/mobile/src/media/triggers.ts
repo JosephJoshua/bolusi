@@ -10,7 +10,7 @@
 // anything in `bootstrap/triggers.ts`.
 //
 // THE INTERVALS ARE THE SPEC'S, and they are the sync loop's numbers because §5.2 says "mirrors":
-// 3 s debounce after a capture, 60 s periodic while online and foregrounded. They are imported from
+// 1 s debounce after a capture, 60 s periodic while online and foregrounded. They are imported from
 // the sync trigger module rather than retyped, so a change to one cannot silently desynchronise the
 // other pair — the mirror is by construction.
 import type { MediaDrainTrigger, TimerPort } from '@bolusi/core';
@@ -49,7 +49,7 @@ export interface MediaTriggerDeps {
 }
 
 export interface MediaTriggers {
-  /** §5.2 (b): call after a capture commits. Debounced 3 s, coalescing. */
+  /** §5.2 (b): call after a capture commits. Debounced 1 s, coalescing. */
   notifyCapture(): void;
   /** Begin (a) + (c). Idempotent. */
   start(): void;

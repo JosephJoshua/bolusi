@@ -10,6 +10,10 @@ export const REPAIR_TICKET_ENTITY = 'repair_ticket' as const;
 export const REPAIR_INTAKE_OPTIONS_ENTITY = 'repair_intake_options' as const;
 /** One store's hidden intake options: one entity per store, keyed by the store id. */
 export const REPAIR_STORE_INTAKE_OPTIONS_ENTITY = 'repair_store_intake_options' as const;
+/** One store's cancellation fees: one entity per store, keyed by the store id. */
+export const REPAIR_STORE_CANCEL_FEES_ENTITY = 'repair_store_cancel_fees' as const;
+/** One store's slip header and terms: one entity per store, keyed by the store id. */
+export const REPAIR_STORE_PRINT_SETTINGS_ENTITY = 'repair_store_print_settings' as const;
 
 export const REPAIR_TABLE = {
   customers: 'repair_customers',
@@ -19,6 +23,8 @@ export const REPAIR_TABLE = {
   events: 'repair_ticket_events',
   intakeOptions: 'repair_intake_options',
   storeIntakeOptions: 'repair_store_intake_options',
+  storeCancelFees: 'repair_store_cancel_fees',
+  storePrintSettings: 'repair_store_print_settings',
 } as const;
 
 export const REPAIR_OP = {
@@ -38,12 +44,17 @@ export const REPAIR_OP = {
   deviceReturned: 'repair.device_returned',
   intakeOptionsChanged: 'repair.intake_options_changed',
   storeIntakeOptionsChanged: 'repair.store_intake_options_changed',
+  storeCancelFeesChanged: 'repair.store_cancel_fees_changed',
+  downPaymentReceived: 'repair.down_payment_received',
+  downPaymentCorrected: 'repair.down_payment_corrected',
+  slipPrinted: 'repair.slip_printed',
+  storePrintSettingsChanged: 'repair.store_print_settings_changed',
 } as const;
 
 /**
  * Store-scoped permissions. The split follows the agreed roles: the cashier does intake, quotes,
- * assignment, cancellation and handover; the technician claims and works tickets and may only
- * PROPOSE quote changes.
+ * assignment and handover; the technician claims and works tickets and may only PROPOSE quote
+ * changes; only owners cancel or lower a price (both were how counter staff kept a customer's cash).
  */
 export const REPAIR_PERMISSION = {
   read: 'repair.read',
@@ -52,12 +63,24 @@ export const REPAIR_PERMISSION = {
   assign: 'repair.assign',
   quoteChange: 'repair.quote_change',
   cancel: 'repair.cancel',
+  /** Lower a price: a discount or a negative adjustment, at intake or later. */
+  discount: 'repair.discount',
   handover: 'repair.handover',
   /** Tenant-scoped: edit the intake option lists every store uses. */
   manageIntakeOptions: 'repair.manage_intake_options',
   /** Store-scoped: hide intake options this store does not use. */
   hideIntakeOptions: 'repair.hide_intake_options',
+  /** Store-scoped: set what a cancelled servisan costs the customer. */
+  setCancelFees: 'repair.set_cancel_fees',
+  /** Store-scoped: change or remove a down payment already recorded (owners). */
+  correctDownPayment: 'repair.correct_down_payment',
+  /** Store-scoped: edit what the store's slips print at the top and in their terms. */
+  setPrintSettings: 'repair.set_print_settings',
 } as const;
+
+/** The slips a servisan prints: the intake receipt, and the handover slip (pickup or cancel). */
+export const SLIP_KINDS = ['intake', 'handover'] as const;
+export type SlipKind = (typeof SLIP_KINDS)[number];
 
 /** What happened to the repair. Tracked separately from where the device is. */
 export const REPAIR_OUTCOMES = [
@@ -136,4 +159,5 @@ export const REPAIR_CONFLICT_KEY = {
   location: 'repair_ticket.location',
   technician: 'repair_ticket.technician',
   customer: 'repair_customer.details',
+  downPayment: 'repair_ticket.down_payment',
 } as const;

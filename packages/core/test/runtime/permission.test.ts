@@ -18,6 +18,7 @@ import {
   ArmableHangStore,
   ControllableTimer,
   expectDomainError,
+  fixtureOperations,
   makeCommandSpy,
   makeRuntimeFixture,
   RecordingAuditDiagnostics,
@@ -99,8 +100,11 @@ describe('the permission check is unconditional and precedes the handler (04 §5
       fixture.runtime.createContext(fixture.staffId),
     );
 
+    // The command's own permission first; then `notes.create`, which the `notes.note_created` op
+    // it writes declares and which the server will check again on push.
     expect(fixture.evaluator.checks).toEqual([
       { userId: fixture.staffId, permissionId: 'notes.archive' },
+      { userId: fixture.staffId, permissionId: 'notes.create' },
     ]);
   });
 
@@ -1045,6 +1049,85 @@ describe('a LOST denial audit is SURFACED, not swallowed silently (task 99 — F
 
     expectDomainError(error, 'PERMISSION_DENIED');
     expect(denials(fixture)).toEqual([]);
+    expect(businessOps(fixture)).toEqual([]);
+  });
+});
+
+describe('every op a command writes is authorized for its own declared permission', () => {
+  /** The fixture registry, but `notes.note_created` declares `permission` instead of notes.create. */
+  function operationsDeclaring(permission: string | null) {
+    return {
+      ...fixtureOperations,
+      permissionFor: (type: string) =>
+        type === 'notes.note_created' ? permission : fixtureOperations.permissionFor(type),
+    };
+  }
+
+  it('denies, audits and writes nothing when the actor lacks an emitted op type`s permission', async () => {
+    // Staff holds notes.create (the command) but not auth.role_manage (the op it writes). The server
+    // would refuse that op on push, so the device must not write it either.
+    const fixture = await ready(80, { operations: operationsDeclaring('auth.role_manage') });
+    const command = makeCommandSpy(fixture.log);
+
+    await expect(
+      fixture.runtime.execute(
+        command,
+        { title: 't', body: 'b' },
+        fixture.runtime.createContext(fixture.staffId),
+      ),
+    ).rejects.toSatisfy((error) => expectDomainError(error, 'PERMISSION_DENIED') !== undefined);
+
+    expect(businessOps(fixture)).toEqual([]);
+    expect(denials(fixture).map((op) => op.payload)).toMatchObject([
+      { permissionId: 'auth.role_manage' },
+    ]);
+  });
+
+  it('positive control: the same command writes the op when the actor holds both permissions', async () => {
+    const fixture = await ready(81, { operations: operationsDeclaring('auth.role_manage') });
+    const command = makeCommandSpy(fixture.log);
+
+    await fixture.runtime.execute(
+      command,
+      { title: 't', body: 'b' },
+      fixture.runtime.createContext(fixture.ownerId),
+    );
+
+    expect(opsOfType(fixture, 'notes.note_created')).toHaveLength(1);
+  });
+
+  it('refuses a command that writes an op type declaring no permission', async () => {
+    const fixture = await ready(82, { operations: operationsDeclaring(null) });
+    const command = makeCommandSpy(fixture.log);
+
+    await expect(
+      fixture.runtime.execute(
+        command,
+        { title: 't', body: 'b' },
+        fixture.runtime.createContext(fixture.ownerId),
+      ),
+    ).rejects.toThrow(/declares no permission/);
+    expect(businessOps(fixture)).toEqual([]);
+  });
+
+  it('refuses a command that writes an op on a record kind its type does not declare', async () => {
+    // The server refuses the mismatch on push; the device must not write an op it will lose.
+    const fixture = await ready(83, {
+      operations: {
+        ...fixtureOperations,
+        entityTypeFor: (type: string) =>
+          type === 'notes.note_created' ? 'repair_ticket' : fixtureOperations.entityTypeFor(type),
+      },
+    });
+    const command = makeCommandSpy(fixture.log);
+
+    await expect(
+      fixture.runtime.execute(
+        command,
+        { title: 't', body: 'b' },
+        fixture.runtime.createContext(fixture.ownerId),
+      ),
+    ).rejects.toThrow(/declares repair_ticket/);
     expect(businessOps(fixture)).toEqual([]);
   });
 });

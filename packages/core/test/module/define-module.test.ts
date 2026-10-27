@@ -8,6 +8,7 @@ import { describe, expect, test } from 'vitest';
 import {
   defineModule,
   ModuleDefinitionError,
+  type ModuleManifest,
   payloadSchemaFor,
   type InputParser,
 } from '../../src/index.js';
@@ -208,6 +209,84 @@ describe('reversal (04 §3: MANDATORY)', () => {
         }),
       'reversal',
     );
+  });
+});
+
+describe('authorization contract: permission + entityType (server-enforced on push)', () => {
+  test.each([
+    ['a missing permission', { permission: undefined }, 'permission'],
+    ['an empty permission', { permission: '' }, 'permission'],
+    ['a missing entityType', { entityType: undefined }, 'entityType'],
+    ['an empty entityType', { entityType: '' }, 'entityType'],
+  ])('rejects %s', (_label, override, field) => {
+    const seed = 113;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+
+    const error = expectRejected(
+      () =>
+        defineModule<FixtureSuiteDatabase, typeof manifest>({
+          ...manifest,
+          operations: {
+            [`${id}.widget_created`]: {
+              ...manifest.operations[`${id}.widget_created`]!,
+              ...override,
+            } as never,
+          },
+        }),
+      `${id}.widget_created`,
+    );
+    expect(error.message).toContain(field);
+  });
+
+  test('accepts permission null for a type only the runtime writes', () => {
+    const seed = 114;
+    const manifest = validManifest(seed);
+    const id = moduleIdFor(seed);
+
+    expect(() =>
+      defineModule<FixtureSuiteDatabase, typeof manifest>({
+        ...manifest,
+        operations: {
+          [`${id}.widget_created`]: {
+            ...manifest.operations[`${id}.widget_created`]!,
+            permission: null,
+          },
+        },
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('rule: required, and a module with rules declares its refusal reasons', () => {
+  const opOf = (seed: number) => `${moduleIdFor(seed)}.widget_created`;
+  type Manifest = ModuleManifest<FixtureSuiteDatabase>;
+  const define = (manifest: Manifest) => defineModule<FixtureSuiteDatabase, Manifest>(manifest);
+  const withRule = (seed: number, refusals?: readonly string[]): Manifest => {
+    const manifest = validManifest(seed);
+    const declaration = manifest.operations[opOf(seed)]!;
+    return {
+      ...manifest,
+      operations: { [opOf(seed)]: { ...declaration, rule: () => Promise.resolve() } },
+      ...(refusals === undefined ? {} : { refusals }),
+    };
+  };
+
+  test('rejects a rule from a module that declares no refusals', () => {
+    expect(() => define(withRule(140))).toThrow(ModuleDefinitionError);
+    expect(() => define(withRule(141, []))).toThrow(/declares no refusals/);
+  });
+
+  test('accepts it once the refusals are declared', () => {
+    expect(() => define(withRule(142, ['widgetGone']))).not.toThrow();
+  });
+
+  test('rejects a declaration that leaves the rule out', () => {
+    const manifest = validManifest(143);
+    const withoutRule: Record<string, unknown> = { ...manifest.operations[opOf(143)]! };
+    delete withoutRule['rule'];
+    const broken = { ...manifest, operations: { [opOf(143)]: withoutRule } };
+    expect(() => define(broken as unknown as Manifest)).toThrow(/declares no rule/);
   });
 });
 
@@ -439,6 +518,9 @@ describe('payloadSchemaFor — (type, schemaVersion) → the schema that validat
     payloadByVersion: { 1: retainedV1, 2: retainedV2 },
     reversal: 'n/a',
     apply: () => Promise.resolve(),
+    rule: null,
+    permission: null,
+    entityType: 'widget',
   };
 
   test('resolves each foldable version to ITS OWN schema, never to the current one', () => {

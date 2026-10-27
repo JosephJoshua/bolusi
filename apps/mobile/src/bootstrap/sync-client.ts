@@ -24,6 +24,7 @@
 // every connectivity change. `syncState()` is RE-READ from `sync_state` after each cycle, so the
 // banner clears from the real column (T-19), never a `?? Date.now()`.
 import {
+  OP_SYNC_STATUS_TABLE,
   readSyncState,
   SyncLoop,
   type PulledBatch,
@@ -45,6 +46,7 @@ import type { FirstSyncProgress } from '../screens/sync-status/model.js';
 
 import type { Bootstrapped } from './bootstrap.js';
 import { createFetchBundleRefresh } from './bundle.js';
+import { createPhoneCatalogRefresher } from './phone-catalog.js';
 import {
   createRealtimeController,
   type RealtimeHandle,
@@ -75,6 +77,8 @@ export interface SyncClientDeps {
   readonly bundle: BundleRefreshPort;
   /** `ProjectionEngine.applyPulledOp` — the pull phase folds through it inside the batch txn. */
   readonly applyPulledOp: (op: SignedOperation) => Promise<unknown>;
+  /** `ProjectionEngine.refoldRefused` — the push phase takes a refused op out of its record. */
+  readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly crypto: CryptoPort;
   readonly clock: ClockPort;
   readonly timer: TimerPort;
@@ -86,6 +90,8 @@ export interface SyncClientDeps {
   readonly surface?: SyncSurfacePort;
   readonly pushBatchSize?: number;
   readonly pullLimit?: number;
+  /** After a push changed ops' sync status (see `SyncLoopOptions.onPushed`). */
+  readonly onPushed?: () => void;
   /**
    * Task 105: given the loop's trigger, build the realtime controller (task 20). Its `start`/`stop`
    * RIDE the loop's — started after `hydrate()` (a trigger before hydrate throws), stopped on teardown —
@@ -187,9 +193,11 @@ class SyncClientImpl implements SyncClient {
       timer: deps.timer,
       deviceId: deps.deviceId,
       applyPulledOp: deps.applyPulledOp,
+      refoldRefused: deps.refoldRefused,
       ...(deps.pushBatchSize === undefined ? {} : { pushBatchSize: deps.pushBatchSize }),
       ...(deps.pullLimit === undefined ? {} : { pullLimit: deps.pullLimit }),
       onPullBatch: (batch) => void this.noteFirstSyncBatch(batch),
+      ...(deps.onPushed === undefined ? {} : { onPushed: deps.onPushed }),
     });
 
     this.triggers = createSyncTriggers({
@@ -412,18 +420,40 @@ export function createSyncClientForApp(
       ? {}
       : { onBundleRefreshed: config.onBundleRefreshed }),
   });
+  const phoneCatalog = createPhoneCatalogRefresher({
+    baseUrl: config.baseUrl,
+    deviceToken: config.loadDeviceToken,
+    db: app.db,
+    invalidation: app.invalidation,
+    clock: config.clock,
+    ...(config.fetchImpl === undefined ? {} : { fetchImpl: config.fetchImpl }),
+  });
+  // The bundle refresh is the last step of a drained cycle, so the catalog check starts there. It
+  // runs beside the loop, not inside it: a catalog failure must not put sync into backoff
+  // (phone-catalog.ts), and the next due check simply tries again.
+  const bundleThenCatalog: BundleRefreshPort = {
+    async refresh() {
+      const outcome = await bundle.refresh();
+      void phoneCatalog.refreshIfDue().catch(() => undefined);
+      return outcome;
+    },
+  };
   return createSyncClient({
     db: app.db,
     deviceId: config.deviceId,
     transport,
-    bundle,
+    bundle: bundleThenCatalog,
     applyPulledOp: (op) => app.engine.applyPulledOp(op),
+    refoldRefused: (op) => app.engine.refoldRefused(op),
     crypto: config.crypto,
     clock: config.clock,
     timer: config.timer ?? systemTimer,
     appState: config.appState,
     netInfo: config.netInfo,
     initialSyncState: app.syncState,
+    // Pushed ops changed status without a projection write: say so on the bus the screens read, so
+    // a ticket's "waiting to sync" chip or rejected banner updates as the push lands.
+    onPushed: () => app.invalidation.emit(new Set([OP_SYNC_STATUS_TABLE])),
     ...(config.background === undefined ? {} : { background: config.background }),
     // Task 105: the REAL realtime controller (task 20), wired here so an enrolled device's loop gets
     // pokes. The bearer travels AT CONNECT in a header (SEC-RT-01) and the token is read PER CONNECT

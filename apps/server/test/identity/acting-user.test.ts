@@ -100,8 +100,8 @@ test('permission ids used in the §4.5 checks are exactly 02-permissions §11 re
     expect(PERMISSION_BY_ID.has(id), `${id} not in the registry`).toBe(true);
   }
   // Non-vacuity (T-14): the registry is the full v0 set, not silently empty.
-  expect(PERMISSIONS).toHaveLength(28);
-  expect(PERMISSION_BY_ID.size).toBe(28);
+  expect(PERMISSIONS).toHaveLength(32);
+  expect(PERMISSION_BY_ID.size).toBe(32);
 });
 
 test('drift guard: the canonical @bolusi/core permission registry matches the seeded DB permissions table exactly', async () => {
@@ -117,7 +117,7 @@ test('drift guard: the canonical @bolusi/core permission registry matches the se
     .selectFrom('permissions')
     .select(['id', 'scope', 'isDangerous', 'description'])
     .execute();
-  expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(28);
+  expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(32);
   const dbById = new Map(
     rows.map((r) => [
       r.id,
@@ -134,4 +134,20 @@ test('drift guard: the canonical @bolusi/core permission registry matches the se
     expect(db?.isDangerous, `${p.id} isDangerous`).toBe(p.isDangerous);
     expect(db?.description, `${p.id} description`).toBe(p.description);
   }
+});
+
+test('a deactivated user with the device-read grant still reads nothing: the list asks the shared evaluator', async () => {
+  // Falsification: the old hand-rolled grant join ignored user status and returned 200 here.
+  const { p, storeId, device } = await setup();
+  const former = await seedUser(h, {
+    tenantId: p.tenantId,
+    name: 'Former manager',
+    status: 'deactivated',
+    storeIds: [storeId],
+    roleKeys: ['main_owner'],
+  });
+
+  expect(await getDevices(device.token, former)).toBe(403);
+  // Positive control: the same grant on an active user reads the list.
+  expect(await getDevices(device.token, p.ownerUserId)).toBe(200);
 });

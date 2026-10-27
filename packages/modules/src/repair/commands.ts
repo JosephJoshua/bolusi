@@ -1,7 +1,7 @@
 // The `repair` commands: the only write path. Handlers are pure; they read through `ctx.query`
-// and return op drafts. Business rules a device can check locally (who may do what, which
-// transitions are allowed) are refused here with `INVALID_TRANSITION`/`VALIDATION_FAILED`; the
-// appliers stay total so concurrent offline work still folds.
+// and compose op drafts. Whether each op may be recorded is its type's rule (rules.ts), which the
+// runtime runs on every op before saving and the server runs again on push, so the handlers do not
+// repeat those checks. The appliers stay total so concurrent offline work still folds.
 import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
@@ -13,13 +13,12 @@ import {
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
+  REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
-  REPAIR_PERMISSION,
+  REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_TICKET_ENTITY,
+  SLIP_KINDS,
   WORK_PHOTOS_MAX,
-  workPhotoStage,
-  type QuoteLineKind,
-  type RepairOutcome,
   type WorkPhotoStage,
 } from './constants.js';
 import {
@@ -34,6 +33,7 @@ import {
   type IntakeOptionSettings,
 } from './intake-options.js';
 import {
+  MAX_TERMS,
   zChecklistItemV2,
   zDevice,
   zIntakePhotosV2,
@@ -41,12 +41,18 @@ import {
   zRecordedOption,
 } from './operations.js';
 import {
+  cancelFeesQuery,
   getCustomerQuery,
   getTicketQuery,
   intakeOptionSettingsQuery,
   nextTicketCounterQuery,
+  printSettingsQuery,
+  standardCancelFee,
+  type CancelFees,
+  type PrintSettings,
   type TicketDetailRow,
 } from './queries.js';
+import { requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
@@ -69,47 +75,6 @@ const zLineInput = z
   })
   .strict();
 
-/** Parts and labour add to the price, discounts subtract; adjustments may go either way. */
-function checkLineSign(kind: QuoteLineKind, amount: number): void {
-  const ok = kind === 'discount' ? amount <= 0 : kind === 'adjustment' ? true : amount >= 0;
-  if (!ok) {
-    throw new DomainError(
-      'VALIDATION_FAILED',
-      { field: 'amount', issue: `${kind} amount has the wrong sign` },
-      `a ${kind} line cannot have amount ${amount}`,
-    );
-  }
-}
-
-/**
- * The agreed price can come down to nothing, but never below: the store would owe the customer.
- * Only a line that lowers the total is refused, so a total that offline merges already pushed
- * below zero can still be corrected upwards.
- */
-function checkTotal(current: number, change: number): void {
-  const total = current + change;
-  if (change < 0 && total < 0) {
-    throw new DomainError(
-      'VALIDATION_FAILED',
-      { field: 'amount', issue: 'the total price would be negative' },
-      `the total price cannot be ${total}`,
-    );
-  }
-}
-
-function invalidTransition(ticket: TicketDetailRow, event: string, why: string): DomainError {
-  return new DomainError(
-    'INVALID_TRANSITION',
-    {
-      machine: REPAIR_TICKET_ENTITY,
-      from: `${ticket.outcome}/${ticket.location}`,
-      event,
-      entityId: ticket.id,
-    },
-    `ticket ${ticket.ticketNumber}: ${why}`,
-  );
-}
-
 async function loadTicket(ctx: CommandContext, ticketId: string): Promise<TicketDetailRow> {
   const page = await ctx.query(getTicketQuery, { ticketId });
   const ticket = page.rows[0];
@@ -120,27 +85,6 @@ async function loadTicket(ctx: CommandContext, ticketId: string): Promise<Ticket
     });
   }
   return ticket;
-}
-
-/** A ticket that is still being worked on: in the store and not cancelled. */
-function requireOpen(ticket: TicketDetailRow, event: string): void {
-  if (ticket.location === 'returned') {
-    throw invalidTransition(ticket, event, 'the device has already been returned');
-  }
-  if (ticket.outcome === 'cancelled') {
-    throw invalidTransition(ticket, event, 'the ticket is cancelled');
-  }
-}
-
-function requireOutcome(
-  ticket: TicketDetailRow,
-  event: string,
-  allowed: readonly RepairOutcome[],
-): void {
-  requireOpen(ticket, event);
-  if (!allowed.includes(ticket.outcome)) {
-    throw invalidTransition(ticket, event, `not allowed while ${ticket.outcome}`);
-  }
 }
 
 function ticketOp(ctx: CommandContext, ticketId: string, type: string, payload: object) {
@@ -236,6 +180,8 @@ export const openTicketInput = z
     quoteLines: z.array(zLineInput).min(1).max(100),
     /** One photo per angle the store asks for, labelled as the counter saw it. */
     photos: zIntakePhotosV2,
+    /** Integer IDR the customer paid up front; 0 when nothing was. */
+    downPayment: z.number().int().min(0).max(MAX_LINE_AMOUNT).default(0),
   })
   .strict();
 export type OpenTicketInput = z.input<typeof openTicketInput>;
@@ -250,11 +196,6 @@ export async function openTicketHandler(
   input: z.output<typeof openTicketInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<OpenTicketResult>> {
-  for (const line of input.quoteLines) checkLineSign(line.kind, line.amount);
-  checkTotal(
-    0,
-    input.quoteLines.reduce((sum, line) => sum + line.amount, 0),
-  );
   // Every angle this store asks for right now, so a list that changed under an open intake is
   // caught here rather than producing a ticket short of the evidence the owner wants.
   const angles = storeIntakeOptions(await loadIntakeOptions(ctx)).photoAngles;
@@ -305,6 +246,9 @@ export async function openTicketHandler(
       photos: input.photos,
     }),
   );
+  if (input.downPayment > 0) {
+    ops.push(ticketOp(ctx, ticketId, REPAIR_OP.downPaymentReceived, { amount: input.downPayment }));
+  }
 
   return { ops, result: { ticketId, ticketNumber, customerId } };
 }
@@ -324,10 +268,6 @@ export async function claimTicketHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.ticketClaimed);
-  if (ticket.technicianId === ctx.userId) {
-    throw invalidTransition(ticket, REPAIR_OP.ticketClaimed, 'already yours');
-  }
   return {
     ops: [ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {})],
     result: { ticketId: ticket.id },
@@ -344,19 +284,6 @@ export async function assignTechnicianHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.technicianAssigned);
-  if (ticket.technicianId === input.technicianId) {
-    throw invalidTransition(ticket, REPAIR_OP.technicianAssigned, 'already assigned to them');
-  }
-  // The picker only lists people who can do repair work; a crafted or stale input must not park a
-  // customer's phone with someone who can never start it.
-  if (!ctx.colleagueHasPermission(input.technicianId, REPAIR_PERMISSION.work)) {
-    throw new DomainError(
-      'VALIDATION_FAILED',
-      { field: 'technicianId', issue: 'cannot do repair work in this store' },
-      `user ${input.technicianId} cannot do repair work`,
-    );
-  }
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.technicianAssigned, {
@@ -386,14 +313,6 @@ function workPhotosOp(
     : [ticketOp(ctx, ticketId, REPAIR_OP.workPhotosAdded, { stage, photos })];
 }
 
-function missingPhotos(stage: WorkPhotoStage, why: string): DomainError {
-  return new DomainError(
-    'VALIDATION_FAILED',
-    { field: `${stage}Photos`, issue: 'at least one photo is required' },
-    why,
-  );
-}
-
 /**
  * Start (or resume, or reopen) work. Starting an unassigned ticket claims it in the same command,
  * so a technician picking a device off the shelf needs one tap. The first start needs at least one
@@ -404,11 +323,6 @@ export async function startWorkHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOutcome(ticket, REPAIR_OP.workStarted, ['received', 'waiting_for_parts', 'repaired']);
-  const hasBefore = ticket.photos.some((photo) => workPhotoStage(photo.slot) === 'before');
-  if (!hasBefore && input.beforePhotos.length === 0) {
-    throw missingPhotos('before', `ticket ${ticket.ticketNumber} has no before photo yet`);
-  }
   const ops: OpDraft[] = [];
   if (ticket.technicianId === null) ops.push(ticketOp(ctx, ticket.id, REPAIR_OP.ticketClaimed, {}));
   ops.push(...workPhotosOp(ctx, ticket.id, 'before', input.beforePhotos));
@@ -424,7 +338,6 @@ export async function markWaitingForPartsHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOutcome(ticket, REPAIR_OP.workPaused, ['received', 'in_repair']);
   return {
     ops: [ticketOp(ctx, ticket.id, REPAIR_OP.workPaused, { note: input.note })],
     result: { ticketId: ticket.id },
@@ -446,7 +359,6 @@ export async function markRepairedHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOutcome(ticket, REPAIR_OP.markedRepaired, ['in_repair']);
   return {
     ops: [
       ...workPhotosOp(ctx, ticket.id, 'after', input.afterPhotos),
@@ -456,23 +368,79 @@ export async function markRepairedHandler(
   };
 }
 
-// ── cashier ──────────────────────────────────────────────────────────────────────────────────
+// ── owner ────────────────────────────────────────────────────────────────────────────────────
+
+const zFeeInput = z.number().int().min(0).max(MAX_LINE_AMOUNT);
 
 export const cancelTicketInput = z
-  .object({ ticketId: z.string().min(1), reason: zRequiredText(2000) })
+  .object({
+    ticketId: z.string().min(1),
+    reason: zRequiredText(2000),
+    /**
+     * What the customer pays when the owner changed it; left out, the store's fee for the ticket's
+     * stage as this device knows it now, so a fee that syncs in meanwhile is never undercut.
+     */
+    fee: zFeeInput.optional(),
+  })
   .strict();
 export type CancelTicketInput = z.input<typeof cancelTicketInput>;
 
-/** Cancelling never moves the device: it stays "cancelled, still in store" until handed back. */
+/**
+ * Cancel an open ticket, owners only (the permission). A repaired phone can still be cancelled
+ * when the customer won't pay or collect. Cancelling never moves the device: it stays "cancelled,
+ * still in store" until handed back, and the handover shows the fee the customer signs for.
+ */
 export async function cancelTicketHandler(
   input: z.output<typeof cancelTicketInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.ticketCancelled);
+  const fees = (await ctx.query(cancelFeesQuery, {})).rows[0]!;
+  const standardFee = standardCancelFee(ticket, fees);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.ticketCancelled, { reason: input.reason })],
+    ops: [
+      ticketOp(ctx, ticket.id, REPAIR_OP.ticketCancelled, {
+        reason: input.reason,
+        fee: input.fee ?? standardFee,
+        standardFee,
+      }),
+    ],
     result: { ticketId: ticket.id },
+  };
+}
+
+export const setCancelFeesInput = z
+  .object({ beforeWork: zFeeInput, afterWork: zFeeInput })
+  .strict();
+export type SetCancelFeesInput = z.input<typeof setCancelFeesInput>;
+
+/** Set this store's two cancellation fees. Tickets already cancelled keep what they charged. */
+export async function setCancelFeesHandler(
+  input: z.output<typeof setCancelFeesInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<CancelFees>> {
+  if (ctx.storeId === null) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'beforeWork', issue: 'this device has no store' },
+      'a store-less device cannot set cancellation fees',
+    );
+  }
+  const current = (await ctx.query(cancelFeesQuery, {})).rows[0]!;
+  if (current.beforeWork === input.beforeWork && current.afterWork === input.afterWork) {
+    throw nothingChanged('beforeWork');
+  }
+  const fees = { beforeWork: input.beforeWork, afterWork: input.afterWork };
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.storeCancelFeesChanged,
+        entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
+        entityId: ctx.storeId,
+        payload: fees,
+      }),
+    ],
+    result: fees,
   };
 }
 
@@ -492,11 +460,7 @@ export async function proposeQuoteChangeHandler(
   input: z.output<typeof proposeQuoteChangeInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
-  checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.quoteChangeProposed);
-  // A proposal the cashier could never apply would only block handover until declined.
-  checkTotal(ticket.quoteTotal, input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -521,10 +485,7 @@ export async function changeQuoteHandler(
   input: z.output<typeof changeQuoteInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
-  checkLineSign(input.kind, input.amount);
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.quoteChanged);
-  checkTotal(ticket.quoteTotal, input.amount);
   const lineId = ctx.newId();
   return {
     ops: [
@@ -536,31 +497,27 @@ export async function changeQuoteHandler(
         reason: input.reason,
         customerAgreed: input.customerAgreed,
         fromProposal: false,
+        // Not agreed yet: it waits for the customer's answer and does not count until then.
+        waitsForCustomer: !input.customerAgreed,
       }),
     ],
     result: { ticketId: ticket.id, lineId },
   };
 }
 
+/** The open proposal `lineId`: the command needs its kind and wording to apply it. */
 function findProposal(ticket: TicketDetailRow, lineId: string, event: string) {
   const line = ticket.quoteLines.find((candidate) => candidate.id === lineId);
-  if (line === undefined) {
-    throw new DomainError('ENTITY_NOT_FOUND', {
-      entityType: 'repair_quote_line',
-      entityId: lineId,
-    });
-  }
-  if (line.status !== 'proposed') {
-    throw invalidTransition(ticket, event, `quote line ${lineId} is ${line.status}`);
-  }
-  return line;
+  requireProposal(ticket, line, lineId, event);
+  return line!;
 }
 
 export const applyProposalInput = z
   .object({
     ticketId: z.string().min(1),
     lineId: z.string().min(1),
-    customerAgreed: z.boolean(),
+    /** A price change counts only once the customer agreed (product-scope.md, price changes). */
+    customerAgreed: z.literal(true),
     /** The cashier may settle on a different description or amount than proposed. */
     description: zRequiredText(200).optional(),
     amount: zAmountInput.optional(),
@@ -574,11 +531,8 @@ export async function applyProposalHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  requireOpen(ticket, REPAIR_OP.quoteChanged);
   const proposal = findProposal(ticket, input.lineId, REPAIR_OP.quoteChanged);
   const amount = input.amount ?? proposal.amount;
-  checkLineSign(proposal.kind, amount);
-  checkTotal(ticket.quoteTotal, amount);
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.quoteChanged, {
@@ -589,6 +543,7 @@ export async function applyProposalHandler(
         reason: input.note === '' ? (proposal.reason ?? proposal.description) : input.note,
         customerAgreed: input.customerAgreed,
         fromProposal: true,
+        waitsForCustomer: false,
       }),
     ],
     result: { ticketId: ticket.id, lineId: proposal.id },
@@ -605,7 +560,6 @@ export async function declineProposalHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string; lineId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  findProposal(ticket, input.lineId, REPAIR_OP.quoteProposalDeclined);
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.quoteProposalDeclined, {
@@ -627,25 +581,12 @@ export const returnDeviceInput = z
   .strict();
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
-/**
- * Hand the device back. Allowed once it is repaired or cancelled. On a repaired ticket open
- * technician proposals must be decided first, because they could change what the customer owes; on
- * a cancelled one they can no longer be decided, so they must not keep the phone in the store.
- */
+/** Hand the device back, with a photo and the customer's signature (when: `deviceReturnedRule`). */
 export async function returnDeviceHandler(
   input: z.output<typeof returnDeviceInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  if (ticket.location === 'returned') {
-    throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'already returned');
-  }
-  if (ticket.outcome !== 'repaired' && ticket.outcome !== 'cancelled') {
-    throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'repair is not finished');
-  }
-  if (ticket.outcome === 'repaired' && ticket.pendingProposals > 0) {
-    throw invalidTransition(ticket, REPAIR_OP.deviceReturned, 'price proposals are undecided');
-  }
   return {
     ops: [
       ticketOp(ctx, ticket.id, REPAIR_OP.deviceReturned, {
@@ -655,6 +596,144 @@ export async function returnDeviceHandler(
       }),
     ],
     result: { ticketId: ticket.id },
+  };
+}
+
+// ── down payment, printing and the store's slip settings ──────────────────────────────────────
+
+export const recordDownPaymentInput = z
+  .object({ ticketId: z.string().min(1), amount: z.number().int().min(1).max(MAX_LINE_AMOUNT) })
+  .strict();
+export type RecordDownPaymentInput = z.input<typeof recordDownPaymentInput>;
+
+/**
+ * Record a down payment taken after intake. Only while the phone is still in the store and only
+ * once: changing an amount already recorded is an owner's correction, since a lower figure is how
+ * cash would go missing.
+ */
+export async function recordDownPaymentHandler(
+  input: z.output<typeof recordDownPaymentInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.downPaymentReceived, { amount: input.amount })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const correctDownPaymentInput = z
+  .object({
+    ticketId: z.string().min(1),
+    /** What the down payment should be; 0 removes it. */
+    amount: z.number().int().min(0).max(MAX_LINE_AMOUNT),
+    reason: zRequiredText(2000),
+  })
+  .strict();
+export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
+
+/** An owner corrects a recorded down payment, with a reason, at any time. */
+export async function correctDownPaymentHandler(
+  input: z.output<typeof correctDownPaymentInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  if ((ticket.downPayment ?? 0) === input.amount) throw nothingChanged('amount');
+  return {
+    ops: [
+      ticketOp(ctx, ticket.id, REPAIR_OP.downPaymentCorrected, {
+        amount: input.amount,
+        reason: input.reason,
+      }),
+    ],
+    result: { ticketId: ticket.id },
+  };
+}
+
+export const recordSlipPrintedInput = z
+  .object({ ticketId: z.string().min(1), slip: z.enum(SLIP_KINDS) })
+  .strict();
+export type RecordSlipPrintedInput = z.input<typeof recordSlipPrintedInput>;
+
+/**
+ * Log that a slip was printed or shared, so the next one says "Cetak ulang". The handover slip is
+ * the customer's bill and receipt, so it exists only once the phone is ready to collect or gone.
+ */
+export async function recordSlipPrintedHandler(
+  input: z.output<typeof recordSlipPrintedInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  return {
+    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.slipPrinted, { slip: input.slip })],
+    result: { ticketId: ticket.id },
+  };
+}
+
+const zOptionalTerms = z
+  .string()
+  .max(MAX_TERMS)
+  .nullable()
+  .transform((terms) => (terms === null || terms.trim() === '' ? null : terms.trim()));
+
+export const setPrintSettingsInput = z
+  .object({
+    /** Empty prints the store's own name. */
+    name: z
+      .string()
+      .max(100)
+      .transform((name) => (name.trim() === '' ? null : name.trim())),
+    address: zText(300),
+    phone: zText(100),
+    /** Left out keeps the logo as it is; null removes it. */
+    logo: zMediaRef.nullable().optional(),
+    logoOnDotMatrix: z.boolean(),
+    /** Empty or null prints the app's default terms. */
+    intakeTerms: zOptionalTerms,
+    handoverTerms: zOptionalTerms,
+  })
+  .strict();
+export type SetPrintSettingsInput = z.input<typeof setPrintSettingsInput>;
+
+function samePrintSettings(
+  current: PrintSettings,
+  next: z.output<typeof setPrintSettingsInput>,
+): boolean {
+  return (
+    current.name === next.name &&
+    current.address === next.address &&
+    current.phone === next.phone &&
+    (next.logo === undefined || (current.logo?.mediaId ?? null) === (next.logo?.mediaId ?? null)) &&
+    current.logoOnDotMatrix === next.logoOnDotMatrix &&
+    current.intakeTerms === next.intakeTerms &&
+    current.handoverTerms === next.handoverTerms
+  );
+}
+
+/** Set what this store's slips print at the top and in their terms. Printed paper is unchanged. */
+export async function setPrintSettingsHandler(
+  input: z.output<typeof setPrintSettingsInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ storeId: string }>> {
+  if (ctx.storeId === null) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'name', issue: 'this device has no store' },
+      'a store-less device cannot set print settings',
+    );
+  }
+  const current = (await ctx.query(printSettingsQuery, {})).rows[0]!;
+  if (samePrintSettings(current, input)) throw nothingChanged('name');
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.storePrintSettingsChanged,
+        entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+        entityId: ctx.storeId,
+        payload: input as unknown as Record<string, unknown>,
+      }),
+    ],
+    result: { storeId: ctx.storeId },
   };
 }
 

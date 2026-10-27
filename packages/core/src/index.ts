@@ -17,3 +17,4 @@ export * from './media/index.js';
 export * from './sync/index.js';
 export * from './realtime/index.js';
 export * from './search/index.js';
+export * from './print/index.js';

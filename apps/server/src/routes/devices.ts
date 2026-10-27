@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 
 import { resolveActingUser } from '../auth/acting-user.js';
-import { requirePermission } from '../auth/permissions.js';
+import { requirePermission, storesGranting } from '../auth/permissions.js';
 import { mintToken, sha256Hex } from '../crypto/index.js';
 import { isUniqueViolation } from '../db-errors.js';
 import type { ServerDeps } from '../deps.js';
@@ -66,18 +66,13 @@ export function createDevicesRouter(deps: ServerDeps) {
             const device = c.get('device');
             if (device !== undefined) await touchLastSeen(db, device.deviceId, t);
 
-            // Stores where the acting user holds auth.device_read (tenant-wide grant ⇒ every store).
-            const grants = await db
-              .selectFrom('userRoles')
-              .innerJoin('rolePermissions', 'rolePermissions.roleId', 'userRoles.roleId')
-              .select('userRoles.storeId as storeId')
-              .where('userRoles.userId', '=', acting.userId)
-              .where('rolePermissions.permissionId', '=', PERM.deviceRead)
-              .execute();
-            const tenantWide = grants.some((g) => g.storeId === null);
-            const readableStores = grants
-              .map((g) => g.storeId)
-              .filter((s): s is string => s !== null);
+            // Stores where the acting user holds auth.device_read, decided by the shared evaluator
+            // (so a deactivated user reads nothing). A tenant-wide grant also shows store-less devices.
+            const { tenantWide, storeIds: readableStores } = await storesGranting(db, {
+              userId: acting.userId,
+              tenantId: acting.tenantId,
+              permissionId: PERM.deviceRead,
+            });
             // No auth.device_read grant in any store — a list-scope denial (security-guide §2.2).
             // Declared for the FR-1045 trail (§7); scope is null (the list spans the tenant).
             if (!tenantWide && readableStores.length === 0)

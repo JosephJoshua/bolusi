@@ -34,9 +34,9 @@ describe('ALL_MODULES — the single registration source (T-14 denominator)', ()
       ]),
     );
     // permission vocabulary size (02 §3) — an empty registry denies `unknown_permission` on every
-    // call forever (02 §5.2). 28 = platform(3) + notes(4) + repair(9) + auth(12); the client bootstrap suite
+    // call forever (02 §5.2). 32 = platform(3) + notes(4) + repair(13) + auth(12); the client bootstrap suite
     // asserts the identical total from the identical list.
-    expect(registry.permissions.size).toBe(28);
+    expect(registry.permissions.size).toBe(32);
     // module count — the modules that assembled, in list order.
     expect(registry.modules.map((m) => m.id)).toStrictEqual([
       'platform',

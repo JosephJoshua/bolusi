@@ -1,10 +1,13 @@
 /**
- * The owner's intake lists at the shell's `intakeOptions` route, reached from Settings. Like
- * `RepairHome` it binds the runtime provider and publishes the surface's back/leave to the shell, so
- * hardware back and a header tap go through an open list's discard confirm instead of dropping edits.
+ * The owner's repair settings reached from Settings: the intake lists (`intakeOptions` route), the
+ * cancellation fees (`cancelFees`) and what the slips print (`printSettings`). Like `RepairHome` it binds the runtime provider and publishes the
+ * surface's back/leave to the shell, so hardware back and a header tap go through the screen's
+ * discard confirm instead of dropping edits.
  */
 import {
+  CancelFeesScreen,
   IntakeOptionsScreen,
+  PrintSettingsScreen,
   RepairRuntimeProvider,
   type DiscardGuard,
   type RepairRuntime,
@@ -15,19 +18,23 @@ import type { ReactNode } from 'react';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
-export interface IntakeOptionsRouteProps {
+export type RepairSettingsPage = 'intakeOptions' | 'cancelFees' | 'printSettings';
+
+export interface RepairSettingsRouteProps {
+  readonly page: RepairSettingsPage;
   readonly runtime: RepairRuntime;
   readonly syncChip: ReactNode;
   readonly onClose: () => void;
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
 }
 
-export function IntakeOptionsRoute({
+export function RepairSettingsRoute({
+  page,
   runtime,
   syncChip,
   onClose,
   onRegisterSurfaceNav,
-}: IntakeOptionsRouteProps): React.JSX.Element {
+}: RepairSettingsRouteProps): React.JSX.Element {
   const discardGuardRef = useRef<DiscardGuard | null>(null);
   const registerDiscardGuard = useCallback((guard: DiscardGuard | null): void => {
     discardGuardRef.current = guard;
@@ -56,12 +63,26 @@ export function IntakeOptionsRoute({
 
   return (
     <RepairRuntimeProvider runtime={runtime}>
-      <IntakeOptionsScreen
-        chrome={{ syncChip, avatar: null }}
-        onClose={onClose}
-        onRegisterDiscardGuard={registerDiscardGuard}
-        onRegisterStepBack={registerStepBack}
-      />
+      {page === 'intakeOptions' ? (
+        <IntakeOptionsScreen
+          chrome={{ syncChip, avatar: null }}
+          onClose={onClose}
+          onRegisterDiscardGuard={registerDiscardGuard}
+          onRegisterStepBack={registerStepBack}
+        />
+      ) : page === 'cancelFees' ? (
+        <CancelFeesScreen
+          chrome={{ syncChip, avatar: null }}
+          onClose={onClose}
+          onRegisterDiscardGuard={registerDiscardGuard}
+        />
+      ) : (
+        <PrintSettingsScreen
+          chrome={{ syncChip, avatar: null }}
+          onClose={onClose}
+          onRegisterDiscardGuard={registerDiscardGuard}
+        />
+      )}
     </RepairRuntimeProvider>
   );
 }

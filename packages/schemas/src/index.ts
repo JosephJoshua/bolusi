@@ -11,3 +11,4 @@ export * from './errors.js';
 export * from './media.js';
 export * from './ws.js';
 export * from './push.js';
+export * from './catalog.js';

@@ -4,7 +4,12 @@
 import { afterEach, describe, expect, test } from 'vitest';
 
 import {
+  balanceAfterDownPayment,
+  downPaymentAction,
+  printableSlips,
   boardFilter,
+  boardSort,
+  boardViews,
   emptyIntakeDraft,
   intakeDirty,
   intakeTotal,
@@ -15,6 +20,7 @@ import {
   readyAtFor,
   repairAbilities,
   restOfChecksOk,
+  staleStep,
   stepProblems,
   ticketActions,
   toOpenTicketInput,
@@ -23,6 +29,7 @@ import {
 } from '../src/repair/flows.js';
 import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
+import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
 const OPTIONS = DEFAULT_INTAKE_OPTIONS;
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
@@ -86,8 +93,8 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   if (state === 'cancelled') {
     await harness.run(
       'cancelTicket',
-      { ticketId, reason: 'customer changed mind' },
-      harness.cashierId,
+      { ticketId, reason: 'customer changed mind', fee: 0 },
+      harness.storeOwnerId,
     );
   }
   if (state === 'returned') {
@@ -145,12 +152,12 @@ async function perform(
         userId,
       );
     case 'cancel':
-      return harness.run('cancelTicket', { ticketId, reason: 'no parts' }, userId);
+      return harness.run('cancelTicket', { ticketId, reason: 'no parts', fee: 10_000 }, userId);
   }
 }
 
 describe('ticket actions', () => {
-  test('every action offered to the cashier or a technician is accepted by its command', async () => {
+  test('every action offered to the cashier, a technician or a store owner is accepted by its command', async () => {
     h = await openRepairHarness(4101);
     const states: State[] = [
       'received',
@@ -163,7 +170,7 @@ describe('ticket actions', () => {
     ];
     let checked = 0;
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         for (const action of ticketActions(row, abilitiesOf(h, userId), userId)) {
@@ -211,7 +218,7 @@ describe('ticket actions', () => {
       (['start', 'resume', 'reopen'].includes(a) && ['start', 'resume', 'reopen'].includes(b));
     const gaps: string[] = [];
     for (const state of states) {
-      for (const userId of [h.cashierId, h.technicianId]) {
+      for (const userId of [h.cashierId, h.technicianId, h.storeOwnerId]) {
         const probe = await ticketIn(h, state);
         const row = (await h.query('getTicket', { ticketId: probe }, userId)).rows[0];
         const offered = ticketActions(row, abilitiesOf(h, userId), userId);
@@ -223,7 +230,12 @@ describe('ticket actions', () => {
             () => false,
           );
           if (accepted) {
-            gaps.push(`${state}/${userId === h.cashierId ? 'cashier' : 'technician'}/${action}`);
+            const who = new Map([
+              [h.cashierId, 'cashier'],
+              [h.technicianId, 'technician'],
+              [h.storeOwnerId, 'store owner'],
+            ]);
+            gaps.push(`${state}/${who.get(userId) ?? userId}/${action}`);
           }
         }
       }
@@ -250,12 +262,21 @@ describe('ticket actions', () => {
       'proposePrice',
     ]);
     // Unassigned, the counter's next step is picking a technician; once assigned, pricing leads.
-    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice', 'cancel']);
+    expect(ticketActions(row(), cashier, h.cashierId)).toEqual(['assign', 'changePrice']);
     expect(ticketActions(row({ technicianId: h.technicianId }), cashier, h.cashierId)).toEqual([
       'changePrice',
       'assign',
-      'cancel',
     ]);
+    // Only owners cancel: counter staff kept customers' cash by cancelling. A repaired phone the
+    // customer won't pay for or collect can still be cancelled until it is handed back.
+    const storeOwner = abilitiesOf(h, h.storeOwnerId);
+    for (const outcome of ['received', 'in_repair', 'waiting_for_parts', 'repaired'] as const) {
+      expect(ticketActions(row({ outcome }), cashier, h.cashierId)).not.toContain('cancel');
+      expect(ticketActions(row({ outcome }), storeOwner, h.storeOwnerId)).toContain('cancel');
+    }
+    expect(
+      ticketActions(row({ outcome: 'repaired', location: 'returned' }), storeOwner, h.storeOwnerId),
+    ).not.toContain('cancel');
     expect(ticketActions(row({ outcome: 'repaired' }), cashier, h.cashierId)[0]).toBe('handover');
     // An undecided price change blocks handover until the cashier decides it.
     expect(
@@ -267,6 +288,153 @@ describe('ticket actions', () => {
   });
 });
 
+describe('down payment and slips', () => {
+  test('recording a down payment is offered exactly where the command accepts it', async () => {
+    h = await openRepairHarness(4109);
+    for (const state of ['received', 'repaired', 'returned'] as const) {
+      const ticketId = await ticketIn(h, state);
+      const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+      const offered = downPaymentAction(ticket, abilitiesOf(h, h.cashierId)) === 'record';
+      const run = h.run('recordDownPayment', { ticketId, amount: 20_000 }, h.cashierId);
+      if (offered) await expect(run).resolves.toBeDefined();
+      else await expect(run).rejects.toThrow();
+      expect(offered).toBe(state !== 'returned');
+    }
+  });
+
+  test('the handover slip prints once the phone is ready or gone, and a large deposit is a refund', () => {
+    expect(printableSlips({ outcome: 'in_repair', location: 'in_store' })).toEqual(['intake']);
+    expect(printableSlips({ outcome: 'repaired', location: 'in_store' })).toEqual([
+      'intake',
+      'handover',
+    ]);
+    expect(printableSlips({ outcome: 'cancelled', location: 'in_store' })).toEqual([
+      'intake',
+      'handover',
+    ]);
+    expect(balanceAfterDownPayment(50_000, 100_000)).toEqual({ kind: 'refund', amount: 50_000 });
+    expect(balanceAfterDownPayment(50_000, 50_000)).toEqual({ kind: 'due', amount: 0 });
+  });
+});
+
+describe('an open step after the ticket changed elsewhere', () => {
+  type StepTicket = Parameters<typeof staleStep>[1];
+  const line = (status: 'proposed' | 'applied' | 'declined') => ({
+    id: 'line-1',
+    status,
+    kind: 'part' as const,
+    description: 'Baterai',
+    amount: 150_000,
+    reason: 'Kembung',
+    customerAgreed: status === 'applied' ? true : null,
+    createdBy: 'tech',
+    createdAt: 1,
+    decidedBy: status === 'proposed' ? null : 'cashier',
+    decidedAt: status === 'proposed' ? null : 2,
+    decisionNote: null,
+  });
+  const row = (ticket: Partial<StepTicket> = {}): StepTicket => ({
+    outcome: 'received',
+    location: 'in_store',
+    technicianId: null,
+    pendingProposals: 0,
+    quoteLines: [],
+    ...ticket,
+  });
+
+  test('a step the ticket still allows stays open', async () => {
+    h = await openRepairHarness(4201);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const tech = abilitiesOf(h, h.technicianId);
+    expect(staleStep({ kind: 'before' }, row(), tech, h.technicianId)).toBeNull();
+    // Only owners cancel.
+    const owner = abilitiesOf(h, h.storeOwnerId);
+    expect(staleStep({ kind: 'cancel' }, row(), owner, h.storeOwnerId)).toBeNull();
+    // Reassigned meanwhile, a technician can still start: the start claims it.
+    expect(
+      staleStep({ kind: 'before' }, row({ technicianId: h.technician2Id }), tech, h.technicianId),
+    ).toBeNull();
+    expect(
+      staleStep(
+        { kind: 'proposal', lineId: 'line-1' },
+        row({ outcome: 'in_repair', pendingProposals: 1, quoteLines: [line('proposed')] }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toBeNull();
+    expect(
+      staleStep({ kind: 'handover' }, row({ outcome: 'repaired' }), cashier, h.cashierId),
+    ).toBeNull();
+  });
+
+  test('each change says what happened, most specific first', async () => {
+    h = await openRepairHarness(4202);
+    const cashier = abilitiesOf(h, h.cashierId);
+    const tech = abilitiesOf(h, h.technicianId);
+    expect(
+      staleStep({ kind: 'after' }, row({ outcome: 'cancelled' }), tech, h.technicianId),
+    ).toEqual({ kind: 'cancelled' });
+    // A cancelled phone already handed back reads as handed back, the later and final fact.
+    expect(
+      staleStep(
+        { kind: 'cancel' },
+        row({ outcome: 'cancelled', location: 'returned' }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'returned' });
+    expect(
+      staleStep(
+        { kind: 'handover' },
+        row({ outcome: 'repaired', location: 'returned' }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'returned' });
+    // Another technician started first.
+    expect(
+      staleStep(
+        { kind: 'before' },
+        row({ outcome: 'in_repair', technicianId: h.technician2Id }),
+        tech,
+        h.technicianId,
+      ),
+    ).toEqual({ kind: 'changed' });
+    for (const decided of ['applied', 'declined'] as const) {
+      expect(
+        staleStep(
+          { kind: 'proposal', lineId: 'line-1' },
+          row({ outcome: 'in_repair', quoteLines: [line(decided)] }),
+          cashier,
+          h.cashierId,
+        ),
+      ).toEqual({ kind: 'proposalDecided', decision: decided });
+    }
+    // An undecided proposal on a ticket cancelled meanwhile can no longer be decided.
+    expect(
+      staleStep(
+        { kind: 'proposal', lineId: 'line-1' },
+        row({ outcome: 'cancelled', pendingProposals: 1, quoteLines: [line('proposed')] }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'cancelled' });
+    // A technician's new proposal holds the handover until the counter checks it.
+    expect(
+      staleStep(
+        { kind: 'handover' },
+        row({ outcome: 'repaired', pendingProposals: 1 }),
+        cashier,
+        h.cashierId,
+      ),
+    ).toEqual({ kind: 'proposalPending' });
+    // Reopened on another device: the phone is back on the bench.
+    expect(
+      staleStep({ kind: 'handover' }, row({ outcome: 'in_repair' }), cashier, h.cashierId),
+    ).toEqual({ kind: 'changed' });
+  });
+});
+
 describe('board views', () => {
   test('mine filters to the user; pickup is finished work still in the store', () => {
     expect(boardFilter('mine', 'u1')).toMatchObject({ technicianId: 'u1', location: 'in_store' });
@@ -275,6 +443,17 @@ describe('board views', () => {
       location: 'in_store',
     });
     expect(boardFilter('returned', 'u1')).toEqual({ location: 'returned' });
+  });
+
+  test('the cancelled view is for owners only and lists the latest cancel first', async () => {
+    h = await openRepairHarness(4104);
+    expect(boardViews(abilitiesOf(h, h.cashierId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.technicianId))).not.toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.storeOwnerId))).toContain('cancelled');
+    expect(boardViews(abilitiesOf(h, h.ownerId))).toContain('cancelled');
+    expect(boardFilter('cancelled', 'u1')).toEqual({ outcomes: ['cancelled'] });
+    expect(boardSort('cancelled')).toBe('cancelledAt.desc');
+    expect(boardSort('active')).toBe('createdAt.desc');
   });
 });
 
@@ -311,7 +490,14 @@ describe('intake draft', () => {
       ...emptyIntakeDraft(),
       step: 5,
       customer: { kind: 'new', name: ' Yohanis Wenda ', phone: '0812 4455 6677' },
-      device: { brand: 'Samsung', model: 'Galaxy A14', color: '', imei: '', passcode: '' },
+      device: {
+        brand: 'Samsung',
+        model: 'Galaxy A14',
+        color: '',
+        imei: '',
+        lockKind: 'none',
+        passcode: '',
+      },
       complaint: 'Layar retak',
       checks: { screen: 'issue', speaker: 'ok' },
       peripherals: ['charger'],
@@ -338,6 +524,16 @@ describe('intake draft', () => {
       'quoteLines',
     ]);
     expect(stepProblems(complete(h), 'review', OPTIONS)).toEqual([]);
+    // A lock kind chosen with nothing entered (or a too-short pattern, kept as '') blocks the step,
+    // where saving would have quietly recorded no lock.
+    const done = complete(h);
+    const lock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      stepProblems({ ...done, device: { ...done.device, lockKind, passcode } }, 'device', OPTIONS);
+    expect(lock('pattern', '')).toEqual(['screenLock']);
+    expect(lock('pin', '')).toEqual(['screenLock']);
+    expect(lock('password', '')).toEqual(['screenLock']);
+    expect(lock('pattern', '1478')).toEqual([]);
+    expect(lock('none', '')).toEqual([]);
     // A store that asks for fewer photo angles has no problem with the ones it does not ask for.
     const twoAngles = { ...OPTIONS, photoAngles: OPTIONS.photoAngles.slice(0, 2) };
     expect(
@@ -395,10 +591,11 @@ describe('intake draft', () => {
     h = await openRepairHarness(4104);
     const draft = complete(h);
     expect(intakeTotal(draft.lines)).toBe(600_000);
+    // A discount at intake is an owner's to give.
     const { ticketId } = (await h.run(
       'openTicket',
       toOpenTicketInput(draft, OPTIONS, Date.now()),
-      h.cashierId,
+      h.storeOwnerId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
     expect(ticket.customerName).toBe('Yohanis Wenda');
@@ -411,6 +608,35 @@ describe('intake draft', () => {
     expect(ticket.intakePhotos.map((p: { slot: string }) => p.slot)).toEqual([
       ...INTAKE_PHOTO_SLOTS,
     ]);
+  });
+
+  test('a down payment at intake is checked like the command checks it, and opens with the ticket', async () => {
+    h = await openRepairHarness(4108);
+    const draft = { ...complete(h), downPayment: '700.000' };
+    // More than a known price is change, not a payment.
+    expect(stepProblems(draft, 'price', OPTIONS)).toEqual(['downPaymentAboveTotal']);
+    // With no price yet, any deposit stands.
+    const unpriced = {
+      ...draft,
+      lines: [{ kind: 'labour' as const, description: 'Cek dulu', amount: 0 }],
+    };
+    expect(stepProblems(unpriced, 'price', OPTIONS)).toEqual([]);
+    const paid = { ...draft, downPayment: '100.000' };
+    expect(stepProblems(paid, 'review', OPTIONS)).toEqual([]);
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(paid, OPTIONS, Date.now()),
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+    expect(ticket.downPayment).toBe(100_000);
+    expect(balanceAfterDownPayment(ticket.quoteTotal, ticket.downPayment!)).toEqual({
+      kind: 'due',
+      amount: 500_000,
+    });
+    // Recorded once: after that only an owner may change it, and the counter sees no action.
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.cashierId))).toBeNull();
+    expect(downPaymentAction(ticket, abilitiesOf(h, h.ownerId))).toBe('correct');
   });
 
   test('a draft opens against the lists the store offers, and records their names', async () => {
@@ -461,5 +687,39 @@ describe('intake draft', () => {
     expect(parseIntakeDraft({ ...draft, ready: 'threeDays' })?.ready).toBe('3');
     expect(parseIntakeDraft({ ...draft, ready: 'unknown' })?.ready).toBe('unknown');
     expect(parseIntakeDraft(null)).toBeNull();
+    // A draft from before lock kinds: a typed passcode is kept as a password.
+    const { brand, model, color, imei } = draft.device;
+    const oldDevice = { brand, model, color, imei, passcode: '1234' };
+    expect(parseIntakeDraft({ ...draft, device: oldDevice })?.device.lockKind).toBe('password');
+    expect(
+      parseIntakeDraft({ ...draft, device: { ...oldDevice, passcode: '' } })?.device.lockKind,
+    ).toBe('none');
+  });
+
+  test('the screen lock reaches the ticket with its kind, and none means no passcode', async () => {
+    h = await openRepairHarness(4107);
+    const draft = complete(h);
+    const withLock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
+      toOpenTicketInput({ ...draft, device: { ...draft.device, lockKind, passcode } }, OPTIONS, 0)
+        .device.passcode;
+    expect(withLock('pattern', '14753')).toBe('pattern:14753');
+    expect(withLock('pin', '0000')).toBe('pin:0000');
+    expect(withLock('password', 'a:b')).toBe('password:a:b');
+    expect(withLock('pin', '')).toBeNull();
+    // A value left over from another kind is dropped with "no lock".
+    expect(withLock('none', '1234')).toBeNull();
+
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(
+        { ...draft, device: { ...draft.device, lockKind: 'pattern', passcode: '14753' } },
+        OPTIONS,
+        Date.now(),
+      ),
+      // The draft carries a discount, which only an owner may give.
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
+    expect(decodeScreenLock(ticket.devicePasscode)).toEqual({ kind: 'pattern', value: '14753' });
   });
 });

@@ -6,7 +6,7 @@
  * `createAppEnrollment`. That object became the app's ONE `AppRuntime` — reused by the session
  * controller and by every notes command, not just by enrollment — so `execute.ts`'s step-7
  * `this.#syncScheduler.schedule()` (04 §5.1) called a no-op after EVERY local append, forever, and
- * api/01-sync §5 (b)'s "debounced 3 s after any local append" did not exist in production. The real
+ * api/01-sync §5 (b)'s "debounced 1 s after any local append" did not exist in production. The real
  * implementation was already built and had ZERO production consumers: `createSyncTriggers(...)
  * .scheduler`, in a file whose own header says "**WIRED**".
  *
@@ -22,7 +22,7 @@
  * was never in the picture, which is exactly how the no-op survived. Here the composition root gets
  * a REAL `createSyncClient` (real `SyncLoop`, real `createSyncTriggers`, real push/pull phases over
  * the real database) and the note is created by TAPPING THE REAL EDITOR. The only fakes are the wire
- * (a scripted transport, zero sockets) and time (a virtual `TimerPort`, so the 3 s window is measured
+ * (a scripted transport, zero sockets) and time (a virtual `TimerPort`, so the 1 s window is measured
  * rather than slept through — T-6).
  *
  * ── WHAT MAKES THIS MORE THAN "SOMETHING HAPPENED" ──────────────────────────────────────────────
@@ -177,6 +177,7 @@ function syncHarness(): Harness {
         // 304 — the steady state; the bundle is not what this file measures.
         bundle: { refresh: () => Promise.resolve('unchanged') },
         applyPulledOp: (op) => booted.engine.applyPulledOp(op),
+        refoldRefused: (op) => booted.engine.refoldRefused(op),
         crypto: noblePort,
         clock: { now: () => SERVER_TIME },
         timer,
@@ -290,7 +291,7 @@ describe('the LIVE app schedules a debounced sync after a local append (task 136
     //     no debounce — would already have run a cycle here, which is the api/01-sync §5 (b) breach
     //     this arm exists to catch.
     await advance(harness, APPEND_DEBOUNCE_MS - 1);
-    expect(harness.transport.pulls.length, 'a sync ran BEFORE the 3 s debounce elapsed').toBe(
+    expect(harness.transport.pulls.length, 'a sync ran BEFORE the 1 s debounce elapsed').toBe(
       cyclesBefore,
     );
 
@@ -319,7 +320,7 @@ describe('the LIVE app schedules a debounced sync after a local append (task 136
     // for the re-arm assertion below.
     const armedBefore = harness.timer.pending();
 
-    // Two notes, no virtual time in between ⇒ both land inside the SAME 3 s window.
+    // Two notes, no virtual time in between ⇒ both land inside the SAME 1 s window.
     await createNoteThroughTheUI(screen, fixture, 'Ganti baterai');
     await createNoteThroughTheUI(screen, fixture, 'Ganti konektor');
     expect(await localOpCount(fixture)).toBe(2); // both really were appended
@@ -350,7 +351,7 @@ describe('the LIVE app schedules a debounced sync after a local append (task 136
   });
 
   test('POSITIVE CONTROL: no append, no sync — the debounce is the only driver in this window', async () => {
-    // The arm that keeps the two above honest. If ANY cycle ran on its own inside a 3 s window (a
+    // The arm that keeps the two above honest. If ANY cycle ran on its own inside a 1 s window (a
     // stray interval, a connectivity trigger, a client that syncs on every render), the counts above
     // would be satisfied by something other than the append and this file would prove nothing.
     fixture = await bootFixture();

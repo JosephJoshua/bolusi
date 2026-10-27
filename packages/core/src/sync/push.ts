@@ -82,7 +82,26 @@ export interface PushPhaseDeps<DB> {
   readonly deviceId: string;
   /** Emits the `pushHalted` write; the loop owns `SyncState` (03 §10 — bookkeeping.ts defers here). */
   readonly onChainBroken: () => Promise<void>;
+  /** One transaction on the connection `db` and the projection engine share (as the pull's). */
+  readonly transaction: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * `ProjectionEngine.refoldRefused`: takes a refused op back out of its record, inside the
+   * transaction that marks it refused, so this device shows what the server and every other
+   * device show.
+   */
+  readonly refoldRefused: (op: SignedOperation) => Promise<unknown>;
   readonly batchSize?: number;
+  /**
+   * Called after each batch that changed ops' sync status, with that batch's counts. Per batch, not
+   * per phase: when a later batch fails on the wire, the ops already marked still get reported.
+   */
+  readonly onBatchSettled?: (settled: PushSettled) => void;
+}
+
+/** Ops one pushed batch moved out of `local`. */
+export interface PushSettled {
+  readonly synced: number;
+  readonly rejected: number;
 }
 
 export interface PushPhaseResult {
@@ -122,10 +141,14 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
     let halted = false;
     let gapped = false;
     let chainBrokenSeen = false;
+    const syncedBefore = synced;
+    const rejectedBefore = rejected;
 
     for (const result of response.results) {
       if (!byId.has(result.id)) continue; // A result for an op we did not send: not ours to mark.
-      const outcome = await applyPushResult(deps, result, { chainBrokenSeen });
+      const outcome = await applyPushResult(deps, result, byId.get(result.id)!, {
+        chainBrokenSeen,
+      });
       if (outcome === 'synced') synced += 1;
       if (outcome === 'rejected') rejected += 1;
       if (outcome === 'chain_broken') {
@@ -134,6 +157,9 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
         halted = true;
       }
       if (outcome === 'gap') gapped = true;
+    }
+    if (synced > syncedBefore || rejected > rejectedBefore) {
+      deps.onBatchSettled?.({ synced: synced - syncedBefore, rejected: rejected - rejectedBefore });
     }
 
     // `CHAIN_BROKEN` halts THIS device's push (03 §10) — nothing after a broken link can be
@@ -170,6 +196,7 @@ type PushOutcome = 'synced' | 'rejected' | 'chain_broken' | 'gap' | 'ignored';
 async function applyPushResult<DB>(
   deps: PushPhaseDeps<DB>,
   result: PushResult,
+  op: SignedOperation,
   state: { chainBrokenSeen: boolean },
 ): Promise<PushOutcome> {
   const current = await readSyncStatus(deps.db, result.id);
@@ -201,10 +228,15 @@ async function applyPushResult<DB>(
     return 'gap';
   }
 
-  await markSyncResult(bookkeepingHandle(deps.db), {
-    id: result.id,
-    currentStatus: current,
-    event: { kind: 'rejected', rejectionCode: code, rejectionReason: reason },
+  // A rejected op is not in the server's log and never will be, so it comes out of this device's
+  // records too, atomically with the verdict: the op stays in the log as a chain link only.
+  await deps.transaction(async () => {
+    await markSyncResult(bookkeepingHandle(deps.db), {
+      id: result.id,
+      currentStatus: current,
+      event: { kind: 'rejected', rejectionCode: code, rejectionReason: reason },
+    });
+    await deps.refoldRefused(op);
   });
 
   if (code === 'CHAIN_BROKEN') {

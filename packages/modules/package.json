@@ -25,6 +25,10 @@
       "types": "./dist/repair/screens/index.d.ts",
       "default": "./dist/repair/screens/index.js"
     },
+    "./repair/print": {
+      "types": "./dist/repair/print.d.ts",
+      "default": "./dist/repair/print.js"
+    },
     "./screen-kit": {
       "types": "./dist/screen-kit/index.d.ts",
       "default": "./dist/screen-kit/index.js"

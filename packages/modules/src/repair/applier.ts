@@ -26,7 +26,9 @@ import {
   INTAKE_PHOTO_SLOTS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_TICKET_ENTITY,
   workPhotoSlot,
   type DeviceLocation,
@@ -85,12 +87,19 @@ export const repairTicketsTable: ProjectionTableManifest = {
     returned_by: 'text',
     returned_at: 'integer',
     intake_photos_json: 'text',
+    cancel_fee: 'integer',
+    cancel_standard_fee: 'integer',
+    cancelled_by: 'text',
+    cancelled_at: 'integer',
+    down_payment: 'integer',
+    down_payment_by: 'text',
+    down_payment_at: 'integer',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
   entityIdColumn: 'id',
-  // Still 1: the added column is null for every v1 ticket, which is what a re-fold would write.
-  projectionVersion: 1,
+  // 2: a re-fold fills who cancelled and when for tickets cancelled before the columns existed.
+  projectionVersion: 2,
 };
 
 export const repairQuoteLinesTable: ProjectionTableManifest = {
@@ -182,6 +191,43 @@ export const repairStoreIntakeOptionsTable: ProjectionTableManifest = {
   projectionVersion: 1,
 };
 
+export const repairStoreCancelFeesTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    tenant_id: 'text',
+    before_work: 'integer',
+    after_work: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id'],
+  entityType: REPAIR_STORE_CANCEL_FEES_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
+export const repairStorePrintSettingsTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    tenant_id: 'text',
+    name: 'text',
+    address: 'text',
+    phone: 'text',
+    logo_media_id: 'text',
+    logo_sha256: 'text',
+    logo_mime: 'text',
+    logo_on_dot_matrix: 'integer',
+    intake_terms: 'text',
+    handover_terms: 'text',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id'],
+  entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
 // ── payload shapes the appliers read (validated by operations.ts before any fold) ───────────────
 
 interface QuoteLineDraft {
@@ -230,6 +276,8 @@ interface QuoteChangedPayload extends QuoteLineDraft {
   readonly reason: string;
   readonly customerAgreed: boolean;
   readonly fromProposal: boolean;
+  /** v2 only; a v1 change counted at once. */
+  readonly waitsForCustomer?: boolean;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────────────────────
@@ -281,6 +329,13 @@ async function updateTicket(
     technicianId: string;
     returnedBy: string;
     returnedAt: number;
+    cancelFee: number | null;
+    cancelStandardFee: number | null;
+    cancelledBy: string;
+    cancelledAt: number;
+    downPayment: number | null;
+    downPaymentBy: string;
+    downPaymentAt: number;
   }>,
 ): Promise<void> {
   await db
@@ -447,6 +502,13 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       returnedBy: null,
       returnedAt: null,
       intakePhotosJson: intakePhotos === null ? null : canonicalJson(intakePhotos),
+      cancelFee: null,
+      cancelStandardFee: null,
+      cancelledBy: null,
+      cancelledAt: null,
+      downPayment: null,
+      downPaymentBy: null,
+      downPaymentAt: null,
     })
     .execute();
 
@@ -523,10 +585,26 @@ export const markedRepairedApplier: ProjectionApplier<RepairDatabase> = async (d
   await recordEvent(db, op, { note });
 };
 
+/** v1 cancels predate fees (nothing was charged), so they record no fee. */
 export const ticketCancelledApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { reason } = payloadOf<{ reason: string }>(op);
-  await updateTicket(db, op, { outcome: 'cancelled', outcomeNote: reason });
-  await recordEvent(db, op, { reason });
+  const {
+    reason,
+    fee = null,
+    standardFee = null,
+  } = payloadOf<{
+    reason: string;
+    fee?: number;
+    standardFee?: number;
+  }>(op);
+  await updateTicket(db, op, {
+    outcome: 'cancelled',
+    outcomeNote: reason,
+    cancelFee: fee,
+    cancelStandardFee: standardFee,
+    cancelledBy: op.userId,
+    cancelledAt: op.timestamp,
+  });
+  await recordEvent(db, op, fee === null ? { reason } : { reason, fee, standardFee });
 };
 
 export const quoteChangeProposedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
@@ -583,6 +661,8 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
       .where('status', 'in', ['proposed', 'declined'])
       .execute();
   } else {
+    // A change still waiting on the customer is decided later, exactly like a proposal.
+    const waits = payload.waitsForCustomer === true;
     await db
       .insertInto('repairQuoteLines')
       .values({
@@ -593,13 +673,13 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
         kind: payload.kind,
         description: payload.description,
         amount: payload.amount,
-        status: 'applied',
+        status: waits ? 'proposed' : 'applied',
         reason: payload.reason,
-        customerAgreed,
+        customerAgreed: waits ? null : customerAgreed,
         createdBy: op.userId,
         createdAt: op.timestamp,
-        decidedBy: op.userId,
-        decidedAt: op.timestamp,
+        decidedBy: waits ? null : op.userId,
+        decidedAt: waits ? null : op.timestamp,
         decisionNote: null,
       })
       .execute();
@@ -612,6 +692,9 @@ export const quoteChangedApplier: ProjectionApplier<RepairDatabase> = async (db,
     reason: payload.reason,
     customerAgreed: payload.customerAgreed,
     fromProposal: payload.fromProposal,
+    ...(payload.waitsForCustomer === undefined
+      ? {}
+      : { waitsForCustomer: payload.waitsForCustomer }),
   });
 };
 
@@ -640,6 +723,29 @@ export const deviceReturnedApplier: ProjectionApplier<RepairDatabase> = async (d
     ['signature', payload.signature],
   ]);
   await recordEvent(db, op, { note: payload.note });
+};
+
+// ── down payment and printing ─────────────────────────────────────────────────────────────────
+
+/**
+ * A down payment received or corrected: either way the ticket now records this amount (0 removes
+ * it). Two devices writing one concurrently both stand in the history; the later canonical op wins
+ * here, and the shared conflict key puts the clash in front of an owner.
+ */
+export const downPaymentChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { amount, reason } = payloadOf<{ amount: number; reason?: string }>(op);
+  await updateTicket(db, op, {
+    downPayment: amount === 0 ? null : amount,
+    downPaymentBy: op.userId,
+    downPaymentAt: op.timestamp,
+  });
+  await recordEvent(db, op, reason === undefined ? { amount } : { amount, reason });
+};
+
+/** A slip printed or shared: only the ticket's history records it, which is what counts reprints. */
+export const slipPrintedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { slip } = payloadOf<{ slip: string }>(op);
+  await recordEvent(db, op, { slip });
 };
 
 // ── intake options ─────────────────────────────────────────────────────────────────────────────
@@ -681,5 +787,59 @@ export const storeIntakeOptionsChangedApplier: ProjectionApplier<RepairDatabase>
     .insertInto('repairStoreIntakeOptions')
     .values({ storeId, list, tenantId: op.tenantId, ...values })
     .onConflict((oc) => oc.columns(['storeId', 'list']).doUpdateSet(values))
+    .execute();
+};
+
+export const storeCancelFeesChangedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const { beforeWork, afterWork } = payloadOf<{ beforeWork: number; afterWork: number }>(op);
+  const values = { beforeWork, afterWork, updatedBy: op.userId, updatedAt: op.timestamp };
+  await db
+    .insertInto('repairStoreCancelFees')
+    .values({ storeId, tenantId: op.tenantId, ...values })
+    .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
+    .execute();
+};
+
+export const storePrintSettingsChangedApplier: ProjectionApplier<RepairDatabase> = async (
+  db,
+  op,
+) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const payload = payloadOf<{
+    name: string | null;
+    address: string;
+    phone: string;
+    logo?: MediaRef | null;
+    logoOnDotMatrix: boolean;
+    intakeTerms: string | null;
+    handoverTerms: string | null;
+  }>(op);
+  const logo =
+    payload.logo === undefined
+      ? {}
+      : {
+          logoMediaId: payload.logo?.mediaId ?? null,
+          logoSha256: payload.logo?.sha256 ?? null,
+          logoMime: payload.logo?.mime ?? null,
+        };
+  const values = {
+    name: payload.name,
+    address: payload.address,
+    phone: payload.phone,
+    ...logo,
+    logoOnDotMatrix: payload.logoOnDotMatrix ? 1 : 0,
+    intakeTerms: payload.intakeTerms,
+    handoverTerms: payload.handoverTerms,
+    updatedBy: op.userId,
+    updatedAt: op.timestamp,
+  };
+  // A logo left out keeps the one already set (none on a store's first settings).
+  await db
+    .insertInto('repairStorePrintSettings')
+    .values({ storeId, tenantId: op.tenantId, ...values })
+    .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
     .execute();
 };
