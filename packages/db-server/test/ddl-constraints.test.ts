@@ -299,7 +299,7 @@ async function insertMedia(overrides: Record<string, unknown> = {}): Promise<unk
 }
 
 test('devices rejects a second device with the same token hash, and allows many without one', async () => {
-  // UNIQUE (token_hash), 0018: one bearer token resolves to exactly one device.
+  // UNIQUE (token_hash), 0020: one bearer token resolves to exactly one device.
   const device = (tokenHash: string | null) => {
     const id = uuid();
     return {
