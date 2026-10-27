@@ -52,4 +52,17 @@ describe('AppShell on a tablet', () => {
       expect(maxWidthAbove(screen.get('ui.appShell.title') as never)).toBeUndefined();
     },
   );
+
+  // A list windows its rows against the slot's height. A slot that grew with its content let the
+  // list lay out every row and pushed the bottom action off a short screen.
+  test('a list screen gets exactly the room between the header and the action bar', () => {
+    const screen = render(
+      <AppShell title="t" syncChip={null} avatar={null} bottomAction={<Text>a</Text>}>
+        <Text>b</Text>
+      </AppShell>,
+    );
+    const slot = StyleSheet.flatten(screen.get('ui.appShell.content').props['style']);
+    expect(slot['flex']).toBe(1);
+    expect(slot['flexGrow']).toBeUndefined();
+  });
 });

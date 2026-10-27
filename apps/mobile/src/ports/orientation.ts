@@ -6,21 +6,40 @@
  * sits beside the open ticket (RepairHome). So the app allows every orientation in its config and
  * locks a phone to portrait once it starts. Android 16 ignores an orientation lock on a large screen
  * anyway, which is one more reason the tablet layouts must work both ways.
+ *
+ * Decided again whenever the screen changes size, so a foldable is a phone folded and a tablet open.
  */
-import { breakpoint } from '@bolusi/ui';
+import { widthClassOf } from '@bolusi/ui';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Dimensions } from 'react-native';
 
 /** A phone, by its short side: anything narrower than a small tablet held upright. */
 export function isPhoneSized(screen: { readonly width: number; readonly height: number }): boolean {
-  return Math.min(screen.width, screen.height) < breakpoint.medium;
+  return widthClassOf(Math.min(screen.width, screen.height)) === 'compact';
 }
 
-export async function lockPhonesToPortrait(): Promise<void> {
-  if (!isPhoneSized(Dimensions.get('screen'))) return;
+async function applyFor(screen: {
+  readonly width: number;
+  readonly height: number;
+}): Promise<void> {
   try {
-    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    if (isPhoneSized(screen)) {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    } else {
+      await ScreenOrientation.unlockAsync();
+    }
   } catch {
     // The phone keeps turning; every screen still lays out at its width, just less comfortably.
   }
+}
+
+/** Lock a phone upright now and follow the screen if it changes (a foldable opened or closed). */
+export function lockPhonesToPortrait(): void {
+  let phone = isPhoneSized(Dimensions.get('screen'));
+  void applyFor(Dimensions.get('screen'));
+  Dimensions.addEventListener('change', ({ screen }) => {
+    if (isPhoneSized(screen) === phone) return;
+    phone = isPhoneSized(screen);
+    void applyFor(screen);
+  });
 }

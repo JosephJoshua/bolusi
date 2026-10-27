@@ -548,5 +548,5 @@ function Bootstrapped(): React.JSX.Element | null {
 }
 
 // Before the first screen, so a phone held sideways at launch turns upright straight away.
-void lockPhonesToPortrait();
+lockPhonesToPortrait();
 registerRootComponent(Bootstrapped);

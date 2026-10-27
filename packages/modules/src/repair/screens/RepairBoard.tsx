@@ -311,7 +311,7 @@ function TicketRow({
       style={({ pressed }) => [
         styles.row,
         {
-          backgroundColor: selected ? color.infoBg : pressed ? color.surfaceAlt : color.surface,
+          backgroundColor: pressed ? color.surfaceAlt : selected ? color.infoBg : color.surface,
         },
       ]}
     >

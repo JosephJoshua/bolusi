@@ -96,21 +96,19 @@ export function PinEntry({
     />
   );
   const link = footer === undefined ? null : <View style={styles.footer}>{footer}</View>;
-  return sideBySide ? (
-    <View style={[styles.root, styles.rootSide]} testID={testID}>
-      <View style={styles.side}>
+  // The same two boxes in both layouts, so turning the tablet mid-entry keeps the digits typed:
+  // only the link moves, and the pad never changes place in the tree.
+  return (
+    <View style={[styles.root, sideBySide ? styles.rootSide : null]} testID={testID}>
+      <View style={sideBySide ? styles.side : styles.stack}>
         {who}
         {question}
-        {link}
+        {sideBySide ? link : null}
       </View>
-      <View style={styles.side}>{pad}</View>
-    </View>
-  ) : (
-    <View style={styles.root} testID={testID}>
-      {who}
-      {question}
-      {pad}
-      {link}
+      <View style={sideBySide ? styles.side : styles.stack}>
+        {pad}
+        {sideBySide ? null : link}
+      </View>
     </View>
   );
 }
@@ -138,6 +136,7 @@ export function PinPerson({
 const styles = StyleSheet.create({
   root: { alignItems: 'center', paddingTop: space.md },
   rootSide: { flexDirection: 'row', justifyContent: 'center', gap: space['3xl'] },
+  stack: { alignItems: 'center' },
   side: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   person: { alignItems: 'center', marginBottom: space.lg },
   name: { ...type.title, color: color.text, marginTop: space.md, textAlign: 'center' },

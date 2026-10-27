@@ -21,7 +21,7 @@ import {
   type RepairRuntime,
   type StepBack,
 } from '@bolusi/modules/repair/screens';
-import { border, color, useViewport } from '@bolusi/ui';
+import { ViewportProvider, border, color, useViewport } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -121,7 +121,11 @@ export function RepairHome({
         split && (view.kind === 'ticket' || view.kind === 'handover') ? view.ticketId : null
       }
       // Beside an open ticket, a half-done step or handover asks before another ticket replaces it.
-      onOpenTicket={(ticketId) => runLeave(() => setView({ kind: 'ticket', ticketId }))}
+      // Its own row again changes nothing, so there is nothing to ask about.
+      onOpenTicket={(ticketId) => {
+        if (view.kind === 'ticket' && view.ticketId === ticketId) return;
+        runLeave(() => setView({ kind: 'ticket', ticketId }));
+      }}
       onNewIntake={() => runLeave(() => setView({ kind: 'intake' }))}
       onOpenSyncStatus={onOpenSyncStatus}
     />
@@ -172,9 +176,14 @@ export function RepairHome({
           </View>
         ) : null}
         {showDetail ? (
-          <View style={styles.single} testID={split ? 'repair.split.detail' : undefined}>
+          // The ticket sizes itself to its pane, not the window: beside the board on a small tablet
+          // it has a phone's width, and lays its photos out like one.
+          <ViewportProvider
+            style={styles.single}
+            testID={split ? 'repair.split.detail' : undefined}
+          >
             {detail ?? <NoTicketOpen />}
-          </View>
+          </ViewportProvider>
         ) : null}
         {view.kind === 'intake' ? (
           <IntakeWizard

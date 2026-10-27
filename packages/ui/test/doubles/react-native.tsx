@@ -205,7 +205,8 @@ export function useWindowDimensions(): typeof __windowMetrics {
 }
 /** The same recorded metrics for a non-hook read; the screen and the window are the same here. */
 export const Dimensions = {
-  get: (_dimension: 'window' | 'screen'): typeof __windowMetrics => ({ ...__windowMetrics }),
+  get: (): typeof __windowMetrics => ({ ...__windowMetrics }),
+  addEventListener: (): { remove: () => void } => ({ remove: () => {} }),
 };
 
 export const Platform = { OS: 'android', select: (spec: AnyProps): unknown => spec['android'] };

@@ -1041,6 +1041,10 @@ describe('on a tablet', () => {
       await press(screen, `repair.board.row.${first}`);
       await press(screen, 'repair.ticket.action.start');
       await press(screen, 'repair.work.before.take.press');
+      // Its own row again is no change, so nothing is asked and the step stays.
+      await press(screen, `repair.board.row.${first}`);
+      expect(screen.query('repair.work.before.discard')).toBeNull();
+      expect(screen.query('repair.work.before')).not.toBeNull();
       await press(screen, `repair.board.row.${second}`);
       expect(screen.query('repair.work.before.discard')).not.toBeNull();
       expect(screen.query('repair.work.before')).not.toBeNull();

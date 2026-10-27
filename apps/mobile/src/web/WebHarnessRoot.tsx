@@ -117,7 +117,7 @@ function PhoneColumn({
   return (
     <View style={styles.backdrop}>
       {/* The screens size themselves to this column, not to the browser window around it. */}
-      <ViewportProvider style={[styles.column, tablet ? styles.tablet : null]}>
+      <ViewportProvider deferUntilMeasured style={[styles.column, tablet ? styles.tablet : null]}>
         {children}
       </ViewportProvider>
     </View>
