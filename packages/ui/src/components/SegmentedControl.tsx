@@ -69,8 +69,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { ...type.bodySm },
-  compactLabel: { ...type.caption, fontWeight: '600' },
+  // No lineHeight on a pill's one line of text: with it, Android 15+ dropped the last word of
+  // "Tidak dicek" while the measured box still held it (RN issue #57110; QA runs 1 to 5). The pill's
+  // own height centres the text, so the line height adds nothing here.
+  label: { fontSize: type.bodySm.fontSize, fontWeight: type.bodySm.fontWeight },
+  compactLabel: { fontSize: type.caption.fontSize, fontWeight: '600' },
   inlineRow: { flexDirection: 'row', gap: touch.gap, flexShrink: 0 },
   inlineOption: { flexShrink: 0 },
 });
@@ -108,11 +111,8 @@ export function SegmentedControl<V extends string>({
         ]}
       >
         <Text
-          // A pill is one line by design, and the layout gives it its text's full width (pills never
-          // shrink). On Android the drawn text can still need a pixel or two more than Yoga measured,
-          // and a multi-line TextView then wrapped "Tidak dicek" and hid "dicek" below the pill's
-          // height (second Android QA run: bounds fit one line, the drawing did not). One line with
-          // `clip` makes that rounding cost a sliver of the last glyph instead of a whole word.
+          // A pill is one line by design and the layout gives it its text's full width (pills never
+          // shrink). One line with `clip` keeps any draw-time rounding to a sliver, never a word.
           numberOfLines={1}
           ellipsizeMode="clip"
           style={[
