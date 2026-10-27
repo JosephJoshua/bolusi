@@ -59,7 +59,9 @@ export const FONT_SCALE_SYNC_KOTLIN = `
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
     if (newConfig.fontScale == syncedFontScale) return
-    DisplayMetricsHolder.initDisplayMetrics(this)
+    val qaMode = intent?.getStringExtra("bolusiFontSync") ?: "early"
+    android.util.Log.i("BolusiFontScale", "config mode=$qaMode fontScale=\${newConfig.fontScale} holderScaledDensity=\${DisplayMetricsHolder.getScreenDisplayMetrics().scaledDensity}")
+    if (qaMode == "early") DisplayMetricsHolder.initDisplayMetrics(this)
     window.decorView.post { syncFontScale() }
   }
 
