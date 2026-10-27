@@ -31,6 +31,8 @@ const LOCK = path.join(homedir(), '.bolusi-qa.lock');
 const EMULATOR_CORES = '4';
 const EMULATOR_MEMORY_MB = '4096';
 const GRADLE_WORKERS = '8';
+// Prebuild's default 2 GB heap runs out in :app:compileReleaseArtProfile on a clean build.
+const GRADLE_JVMARGS = '-Xmx4096m -XX:MaxMetaspaceSize=768m';
 
 const ANDROID_HOME =
   process.env.ANDROID_HOME ??
@@ -156,10 +158,18 @@ async function androidUp(build) {
       cwd: MOBILE,
       env: buildEnv,
     });
-    run('./gradlew', ['assembleRelease', `--max-workers=${GRADLE_WORKERS}`], {
-      cwd: path.join(MOBILE, 'android'),
-      env: buildEnv,
-    });
+    run(
+      './gradlew',
+      [
+        'assembleRelease',
+        `--max-workers=${GRADLE_WORKERS}`,
+        `-Dorg.gradle.jvmargs=${GRADLE_JVMARGS}`,
+      ],
+      {
+        cwd: path.join(MOBILE, 'android'),
+        env: buildEnv,
+      },
+    );
   }
   // The lane server starts empty each time, so start the app from a clean install too.
   try {
