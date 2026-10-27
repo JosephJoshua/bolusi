@@ -56,7 +56,9 @@ async function main() {
   // That guard is load-bearing, watched go red: disabling it makes this server bind `0.0.0.0` and
   // `production-auth-boot.test.ts` fails with `promise resolved "{ url: 'http://0.0.0.0:…' }" instead
   // of rejecting`. Restore before trusting any of this.
-  running = await startHarnessServer({ productionAuth: true, port });
+  // Real time: the app stamps its changes with the phone's clock, and the server refuses a change
+  // dated more than 10 minutes ahead of its own.
+  running = await startHarnessServer({ productionAuth: true, wallClock: true, port });
 
   const credentials = await provisionLaneOwner(running.server);
   // A few catalog phones, so model search, the brand fill and the photo preview have something to show.
