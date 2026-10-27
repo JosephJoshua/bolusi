@@ -20,3 +20,4 @@ export * from './pin-verify.js';
 export * from './pin-flows.js';
 export * from './session.js';
 export * from './enrollment.js';
+export * from './staff.js';

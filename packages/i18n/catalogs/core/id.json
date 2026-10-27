@@ -44,7 +44,8 @@
     "store": "Toko",
     "business": "Usaha",
     "appVersion": "Versi aplikasi",
-    "deviceId": "ID perangkat"
+    "deviceId": "ID perangkat",
+    "team": "Tim toko"
   },
   "language": {
     "id": "Bahasa Indonesia",

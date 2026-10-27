@@ -331,3 +331,217 @@ test('a user with no store can only be edited or deactivated by a tenant-wide ho
   expect((await rename(asMainOwner)).status).toBe(200);
   expect((await deactivate(asMainOwner)).status).toBe(200);
 });
+
+// ── Owner powers (owner decision 2026-10-27, thread "Let owners add employees in the app") ────────
+// A store owner adds and manages cashiers and technicians of their own store, from a store device;
+// only the main owner may make, change or remove an owner.
+
+async function storeWithOwners() {
+  const { tenantId, s1, ownerId } = await tenant();
+  const storeOwner = await seedUser(h, {
+    tenantId,
+    name: 'Store Owner',
+    storeIds: [s1],
+    roleKeys: ['store_owner'],
+  });
+  const device = await seedDevice(h, { tenantId, storeId: s1, enrolledBy: ownerId });
+  const as = (userId: string) => ({ ...bearer(device.token), 'X-Acting-User': userId });
+  return {
+    tenantId,
+    s1,
+    ownerId,
+    storeOwner,
+    as,
+    cashier: await roleIdOf(h, tenantId, 'cashier'),
+    technician: await roleIdOf(h, tenantId, 'technician'),
+    storeOwnerRole: await roleIdOf(h, tenantId, 'store_owner'),
+    mainOwnerRole: await roleIdOf(h, tenantId, 'main_owner'),
+  };
+}
+
+async function grantsOf(userId: string) {
+  const rows = await h.idb.db
+    .selectFrom('userRoles')
+    .innerJoin('roles', 'roles.id', 'userRoles.roleId')
+    .select(['roles.name', 'userRoles.storeId'])
+    .where('userRoles.userId', '=', userId)
+    .execute();
+  return rows.map((r) => `${r.name}@${r.storeId ?? 'tenant'}`).sort();
+}
+
+function newStaff(storeId: string, roleIds: string[]) {
+  return JSON.stringify({
+    name: 'Rina',
+    loginIdentifier: null,
+    password: null,
+    storeIds: [storeId],
+    roleIds,
+    pinVerifier: null,
+  });
+}
+
+test('a store owner adds a cashier-technician from a store device, but never another owner', async () => {
+  const s = await storeWithOwners();
+
+  const created = await h.app.request('http://srv.test/v1/users', {
+    method: 'POST',
+    headers: s.as(s.storeOwner),
+    body: newStaff(s.s1, [s.cashier, s.technician]),
+  });
+  expect(created.status).toBe(201);
+  const { userId } = (await created.json()) as { userId: string };
+  expect(await grantsOf(userId)).toEqual([`cashier@${s.s1}`, `technician@${s.s1}`]);
+
+  for (const roleIds of [[s.storeOwnerRole], [s.cashier, s.storeOwnerRole], [s.mainOwnerRole]]) {
+    const refused = await h.app.request('http://srv.test/v1/users', {
+      method: 'POST',
+      headers: s.as(s.storeOwner),
+      body: newStaff(s.s1, roleIds),
+    });
+    expect(refused.status).toBe(403);
+  }
+
+  // The main owner may add a store owner.
+  const owner = await h.app.request('http://srv.test/v1/users', {
+    method: 'POST',
+    headers: s.as(s.ownerId),
+    body: newStaff(s.s1, [s.storeOwnerRole]),
+  });
+  expect(owner.status).toBe(201);
+});
+
+test('changing roles replaces every grant, and a store owner cannot promote anyone to owner', async () => {
+  const s = await storeWithOwners();
+  const rina = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Rina',
+    storeIds: [s.s1],
+    roleKeys: ['cashier'],
+  });
+
+  const changed = await h.app.request(`http://srv.test/v1/users/${rina}`, {
+    method: 'PATCH',
+    headers: s.as(s.storeOwner),
+    body: JSON.stringify({ name: 'Rina Wati', roleIds: [s.technician] }),
+  });
+  expect(changed.status).toBe(200);
+  expect(await grantsOf(rina)).toEqual([`technician@${s.s1}`]);
+  const row = await h.idb.db
+    .selectFrom('users')
+    .select('name')
+    .where('id', '=', rina)
+    .executeTakeFirstOrThrow();
+  expect(row.name).toBe('Rina Wati');
+
+  const promote = await h.app.request(`http://srv.test/v1/users/${rina}`, {
+    method: 'PATCH',
+    headers: s.as(s.storeOwner),
+    body: JSON.stringify({ roleIds: [s.storeOwnerRole] }),
+  });
+  expect(promote.status).toBe(403);
+  expect(await grantsOf(rina)).toEqual([`technician@${s.s1}`]);
+
+  // A role id from nowhere is a denial, not a silent drop.
+  const unknown = await h.app.request(`http://srv.test/v1/users/${rina}`, {
+    method: 'PATCH',
+    headers: s.as(s.storeOwner),
+    body: JSON.stringify({ roleIds: [uuidv7(h.clock.now())] }),
+  });
+  expect(unknown.status).toBe(403);
+});
+
+test('a store owner cannot rename, re-role, deactivate or reactivate a peer owner; the main owner can', async () => {
+  const s = await storeWithOwners();
+  const peer = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Peer Owner',
+    storeIds: [s.s1],
+    roleKeys: ['store_owner'],
+  });
+
+  const attempts: [string, string, string | undefined][] = [
+    ['PATCH', `/v1/users/${peer}`, JSON.stringify({ name: 'X' })],
+    ['PATCH', `/v1/users/${peer}`, JSON.stringify({ roleIds: [s.cashier] })],
+    ['POST', `/v1/users/${peer}/deactivate`, undefined],
+    ['POST', `/v1/users/${peer}/reactivate`, undefined],
+    ['POST', `/v1/users/${s.ownerId}/deactivate`, undefined],
+  ];
+  for (const [method, path, body] of attempts) {
+    const res = await h.app.request(`http://srv.test${path}`, {
+      method,
+      headers: s.as(s.storeOwner),
+      ...(body === undefined ? {} : { body }),
+    });
+    expect(res.status, `${method} ${path}`).toBe(403);
+  }
+
+  const byMain = await h.app.request(`http://srv.test/v1/users/${peer}/deactivate`, {
+    method: 'POST',
+    headers: s.as(s.ownerId),
+  });
+  expect(byMain.status).toBe(200);
+});
+
+test('a store owner deactivates and reactivates a cashier of their store', async () => {
+  const s = await storeWithOwners();
+  const rina = await seedUser(h, {
+    tenantId: s.tenantId,
+    name: 'Rina',
+    storeIds: [s.s1],
+    roleKeys: ['cashier'],
+  });
+  for (const [path, status] of [
+    ['deactivate', 'deactivated'],
+    ['reactivate', 'active'],
+  ] as const) {
+    const res = await h.app.request(`http://srv.test/v1/users/${rina}/${path}`, {
+      method: 'POST',
+      headers: s.as(s.storeOwner),
+    });
+    expect(res.status).toBe(200);
+    const row = await h.idb.db
+      .selectFrom('users')
+      .select('status')
+      .where('id', '=', rina)
+      .executeTakeFirstOrThrow();
+    expect(row.status).toBe(status);
+  }
+});
+
+test('LAST_ADMIN_PROTECTED: taking the last main owner role away is refused', async () => {
+  const s = await storeWithOwners();
+  const res = await h.app.request(`http://srv.test/v1/users/${s.ownerId}`, {
+    method: 'PATCH',
+    headers: s.as(s.ownerId),
+    body: JSON.stringify({ roleIds: [s.storeOwnerRole] }),
+  });
+  expect(res.status).toBe(409);
+  expect(await grantsOf(s.ownerId)).toEqual(['main_owner@tenant']);
+});
+
+test('a custom role with any power over accounts counts as an owner role, not just user_create', async () => {
+  const s = await storeWithOwners();
+  const roleId = uuidv7(h.clock.now());
+  await h.idb.db
+    .insertInto('roles')
+    .values({
+      id: roleId,
+      tenantId: s.tenantId,
+      name: 'supervisor',
+      scopeType: 'store',
+      isSystemDefault: false,
+      createdAt: 1n,
+    })
+    .execute();
+  await h.idb.db
+    .insertInto('rolePermissions')
+    .values({ roleId, permissionId: 'auth.user_deactivate', tenantId: s.tenantId })
+    .execute();
+
+  const refused = await h.app.request('http://srv.test/v1/users', {
+    method: 'POST',
+    headers: s.as(s.storeOwner),
+    body: newStaff(s.s1, [s.cashier, roleId]),
+  });
+  expect(refused.status).toBe(403);
+});

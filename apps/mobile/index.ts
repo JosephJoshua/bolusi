@@ -28,6 +28,7 @@ import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
+import { createFetchStaffAdmin } from './src/bootstrap/staff-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
 import { Root } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
@@ -471,6 +472,12 @@ function Bootstrapped(): React.JSX.Element | null {
     // it on `onBundleRefreshed` (online-only), so a locally-applied PIN change reaches the server and
     // every other device (§5.2). A fresh keystore per call reads the bearer at call time (§7.3).
     uploadPinVerifier: createFetchPinVerifierUpload({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+    }),
+    // THE OWNER'S STAFF CALLS (owner decision 2026-10-27): online-only `POST/PATCH /v1/users…` as the
+    // signed-in owner, on the same per-call device bearer.
+    staffAdmin: createFetchStaffAdmin({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
     }),

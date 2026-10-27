@@ -116,5 +116,61 @@
     "pinLockedOut": "PIN terkunci",
     "pinLockoutCleared": "Kunci PIN dibuka",
     "permissionDenied": "Akses ditolak"
+  },
+  "staff": {
+    "title": "Karyawan",
+    "add": "Tambah karyawan",
+    "addTitle": "Karyawan baru",
+    "editTitle": "Ubah karyawan",
+    "name": "Nama",
+    "nameHint": "Nama ini tampil saat memilih akun di HP toko.",
+    "roles": "Tugas",
+    "rolesHint": "Boleh pilih lebih dari satu.",
+    "roleHint": {
+      "cashier": "Terima HP, atur harga, dan serahkan HP ke pelanggan",
+      "technician": "Kerjakan servisan, termasuk foto sebelum dan sesudah",
+      "storeOwner": "Semua tugas toko, termasuk atur karyawan, diskon, dan batalkan servisan"
+    },
+    "save": "Simpan",
+    "problem": {
+      "nameMissing": "Tulis namanya dulu.",
+      "nameTooLong": "Namanya kepanjangan. Maksimal 64 huruf.",
+      "nameTaken": "Nama ini sudah dipakai karyawan lain. Tambahkan nama belakang biar beda.",
+      "roleMissing": "Pilih tugasnya dulu."
+    },
+    "failure": {
+      "offline": "Butuh internet untuk mengubah karyawan. Sambungkan HP, lalu coba lagi.",
+      "denied": "Kamu tidak bisa mengubah karyawan ini. Minta pemilik utama.",
+      "lastOwner": "Harus tetap ada satu pemilik utama.",
+      "rateLimited": "Sudah terlalu banyak perubahan karyawan hari ini. Coba lagi besok.",
+      "unexpected": "Perubahannya belum tersimpan. Coba lagi sebentar lagi."
+    },
+    "you": "Kamu",
+    "noPin": "Belum ada PIN",
+    "inactive": "Nonaktif",
+    "inactiveSection": "Nonaktif",
+    "empty": "Belum ada karyawan lain",
+    "emptyBody": "Tambahkan karyawan supaya mereka bisa masuk dengan PIN sendiri.",
+    "addedTitle": "{name} sudah ditambahkan",
+    "addedBody": "{name} perlu PIN untuk masuk. Kalau dia ada di sini, berikan HP supaya dia buat PIN-nya sendiri.",
+    "makePinNow": "Buat PIN",
+    "later": "Nanti saja",
+    "notYetHere": "{name} akan muncul di HP ini setelah tersinkron. Buat PIN-nya nanti lewat PIN karyawan.",
+    "makePin": "Buat PIN",
+    "deactivate": "Nonaktifkan karyawan",
+    "deactivateTitle": "Nonaktifkan {name}?",
+    "deactivateBody": "{name} tidak bisa masuk lagi di semua HP toko, dan perubahan dari HP-nya yang belum terkirim akan ditolak. Riwayat kerjanya tetap tersimpan.",
+    "deactivateConfirm": "Nonaktifkan",
+    "inactiveBody": "{name} sudah nonaktif dan tidak bisa masuk. Aktifkan lagi kalau dia kembali bekerja.",
+    "reactivate": "Aktifkan lagi",
+    "saved": "Perubahan tersimpan.",
+    "deactivated": "{name} sudah dinonaktifkan.",
+    "reactivated": "{name} aktif lagi. Kalau lupa PIN-nya, buat PIN baru lewat PIN karyawan.",
+    "settingsSummary": "Tambah, ubah tugas, atau nonaktifkan",
+    "discardTitle": "Buang perubahan?",
+    "discardMessage": "Perubahan yang belum disimpan akan hilang.",
+    "discard": "Buang",
+    "keepEditing": "Lanjut ubah",
+    "makePinHint": "{name} belum punya PIN, jadi belum bisa masuk."
   }
 }

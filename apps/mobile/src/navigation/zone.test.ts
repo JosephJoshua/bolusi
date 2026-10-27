@@ -265,6 +265,13 @@ describe('backTarget — hardware back IS the header back (§8.1)', () => {
     });
   });
 
+  test('Karyawan backs to Settings, where it is opened from', () => {
+    expect(backTarget({ kind: 'shell', route: 'staff' })).toEqual({
+      kind: 'shellRoute',
+      route: 'settings',
+    });
+  });
+
   test('Staff PINs back to Settings — reached from the Settings owner row, not Home', () => {
     expect(backTarget({ kind: 'shell', route: 'staffPins' })).toEqual({
       kind: 'shellRoute',

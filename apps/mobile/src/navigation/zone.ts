@@ -26,7 +26,14 @@ export type SwitcherMode = 'lock' | 'choose';
 
 /** The in-shell surfaces this task ships. Module screens (task 25) extend this union. */
 export type ShellRoute =
-  'home' | 'syncStatus' | 'settings' | 'changePin' | 'staffPins' | 'intakeOptions' | 'cancelFees';
+  | 'home'
+  | 'syncStatus'
+  | 'settings'
+  | 'changePin'
+  | 'staff'
+  | 'staffPins'
+  | 'intakeOptions'
+  | 'cancelFees';
 
 /**
  * The one surface the app is showing. A discriminated union so a renderer must handle every case —
@@ -158,6 +165,7 @@ export function backTarget(zone: Zone): BackTarget | null {
       // (task 186a); every other one-level-deep surface (Sync Status, Settings) backs to Home.
       if (zone.route === 'home') return { kind: 'exitApp' };
       if (zone.route === 'changePin') return { kind: 'shellRoute', route: 'settings' };
+      if (zone.route === 'staff') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'staffPins') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'intakeOptions') return { kind: 'shellRoute', route: 'settings' };
       if (zone.route === 'cancelFees') return { kind: 'shellRoute', route: 'settings' };

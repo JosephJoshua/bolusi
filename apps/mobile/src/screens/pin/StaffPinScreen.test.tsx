@@ -154,3 +154,47 @@ describe('back steps back inside the flow', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('opened for one person from Karyawan', () => {
+  function enterPin(screen: ReturnType<typeof render>, pin: string): void {
+    for (const digit of pin) press(screen, `staff-pin-entry-pad.key.${digit}`);
+  }
+
+  const NEW: PinTargetUser = {
+    id: 'user-new',
+    name: 'Rina Wenda',
+    lockedOut: false,
+    needsFirstPin: true,
+  };
+
+  test('goes straight to their hand-over, and finishing closes the screen', async () => {
+    const { screen, props } = renderStaff({ startWith: NEW.id, users: [ACTIVE, NEW] });
+    await flush();
+    expect(screen.query('staff-pin-list')).toBeNull();
+    expect(textsIn(screen.get('staff-pin-handover')).join(' ')).toContain(NEW.name);
+
+    press(screen, 'staff-pin-proceed');
+    enterPin(screen, '481516');
+    enterPin(screen, '481516');
+    await flush();
+    expect(props.onResetPin).toHaveBeenCalledExactlyOnceWith(NEW.id, '481516');
+
+    press(screen, 'staff-pin-reset-finish');
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('backing out of the hand-over returns to Karyawan, not the PIN list', async () => {
+    const { screen, props } = renderStaff({ startWith: NEW.id, users: [ACTIVE, NEW] });
+    await flush();
+    press(screen, 'staff-pin-screen.back');
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(props.onResetPin).not.toHaveBeenCalled();
+  });
+
+  test('waits while the list loads instead of flashing it', async () => {
+    const { screen } = renderStaff({ startWith: NEW.id, loading: true, users: [] });
+    await flush();
+    expect(screen.query('staff-pin-handover')).toBeNull();
+    expect(screen.query(`staff-pin-target-${ACTIVE.id}`)).toBeNull();
+  });
+});

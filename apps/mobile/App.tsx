@@ -57,6 +57,7 @@ import type { EnrollmentController } from './src/bootstrap/enrollment.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
+import { StaffScreen } from './src/screens/staff/StaffScreen.js';
 import type { PinTargetUser } from './src/screens/pin/pin-target.js';
 import { PinScreen } from './src/screens/pin/PinScreen.js';
 import { PinSetupScreen } from './src/screens/pin/PinSetupScreen.js';
@@ -86,6 +87,7 @@ import { channelId } from './src/bootstrap/notifications.js';
 import { openNotificationSettings } from './src/push/notification-settings.js';
 import type { PushRouteRequest } from './src/push/router.js';
 import { errorCodeOrUnexpected, type PinAttemptRow } from '@bolusi/core';
+import type { StaffControls } from './src/bootstrap/staff.js';
 import { NOTES_MODULE_ID } from '@bolusi/modules/notes';
 import {
   REPAIR_MODULE_ID,
@@ -226,6 +228,11 @@ export interface AppProps {
    * as its actor, so the drain POSTs the owner in `X-Acting-User` (never the target).
    */
   readonly onResetPin: (targetUserId: string, newPin: string) => Promise<void>;
+  /**
+   * The owner's staff management, Settings › Karyawan (owner decision 2026-10-27). Absent for anyone
+   * who may not add staff here, and on a build with no server wire; then the row is absent too.
+   */
+  readonly staff?: StaffControls | undefined;
   readonly locale: Locale;
   readonly deviceInfo: DeviceInfo;
   /**
@@ -251,6 +258,8 @@ export interface AppProps {
 
 export default function App(props: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<ShellRoute>('home');
+  /** "PIN karyawan" opened from "Karyawan" for one person's first PIN; back returns to Karyawan. */
+  const [staffPinFor, setStaffPinFor] = useState<string | null>(null);
   const [pinFor, setPinFor] = useState<string | null>(null);
   /**
    * The user asked to open the switcher while a session is open — the voluntary quick-switch
@@ -961,6 +970,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   onOpenStaffPins={
                     props.canUnlock || props.canReset ? () => setRoute('staffPins') : undefined
                   }
+                  onOpenStaff={props.staff === undefined ? undefined : () => setRoute('staff')}
                   lockedStaffCount={
                     [...lockedUserIds(props.users, props.pinRow, props.now)].filter(
                       (id) => id !== currentUser.id,
@@ -1050,6 +1060,34 @@ export default function App(props: AppProps): React.JSX.Element {
                   onClearLockout={clearLockout}
                   onResetPin={resetPin}
                   onReload={loadPinTargets}
+                  startWith={staffPinFor}
+                  onClose={() => {
+                    setRoute(staffPinFor === null ? 'settings' : 'staff');
+                    setStaffPinFor(null);
+                  }}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'staff' && props.staff !== undefined && currentUser !== null) {
+              // The owner's "Karyawan": add, change and deactivate staff, online. A new person's first
+              // PIN is made in "PIN karyawan", opened at their hand-over and returning here.
+              const staff = props.staff;
+              return (
+                <StaffScreen
+                  actor={{ userId: currentUser.id, tenantAdmin: staff.tenantAdmin }}
+                  load={staff.load}
+                  onCreate={staff.onCreate}
+                  onUpdate={staff.onUpdate}
+                  onSetActive={staff.onSetActive}
+                  onMakePin={
+                    props.canReset
+                      ? (userId) => {
+                          setStaffPinFor(userId);
+                          setRoute('staffPins');
+                        }
+                      : undefined
+                  }
                   onClose={() => setRoute('settings')}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1256,6 +1294,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'home',
   'intakeOptions',
   'cancelFees',
+  'staff',
   'staffPins',
 ]);
 

@@ -81,6 +81,11 @@ export interface SettingsScreenProps {
   /** How many colleagues' PINs are locked right now, so the owner sees it without opening the row. */
   readonly lockedStaffCount?: number | undefined;
   /**
+   * Open "Karyawan" (add, change, deactivate staff) — present ONLY for someone who may add staff
+   * here (`auth.user_create`), so the row is absent for everyone else. The server still decides.
+   */
+  readonly onOpenStaff?: (() => void) | undefined;
+  /**
    * The owner's repair settings (intake lists, cancellation fees) — each row present ONLY for someone
    * who may change it at this store, and the section absent when none is; core still enforces them.
    * The caller supplies the repair module's copy, so this screen never imports the module's screens
@@ -104,6 +109,7 @@ export function SettingsScreen({
   onOpenChangePin,
   onOpenStaffPins,
   lockedStaffCount = 0,
+  onOpenStaff,
   repair,
   syncChip,
   pendingCount,
@@ -150,21 +156,36 @@ export function SettingsScreen({
           onPress={onOpenChangePin}
           testID="settings-change-pin"
         />
-        {onOpenStaffPins === undefined ? null : (
-          // Owner-only: shown only when the acting user may unlock or reset a colleague's PIN.
-          <ListRow
-            leading={<RowIcon name="staff" />}
-            primaryText={t('auth.pin.staff.title')}
-            secondaryText={
-              lockedStaffCount > 0
-                ? t('core.settings.staffPinsLocked', { count: lockedStaffCount })
-                : t('core.settings.staffPinsSummary')
-            }
-            onPress={onOpenStaffPins}
-            testID="settings-staff-pins"
-          />
-        )}
       </Section>
+
+      {onOpenStaff === undefined && onOpenStaffPins === undefined ? null : (
+        // The owner's people: who works here, and their PINs.
+        <Section title={t('core.settings.team')} testID="settings-section-team">
+          {onOpenStaff === undefined ? null : (
+            <ListRow
+              leading={<RowIcon name="staff" />}
+              primaryText={t('auth.staff.title')}
+              secondaryText={t('auth.staff.settingsSummary')}
+              onPress={onOpenStaff}
+              testID="settings-staff"
+            />
+          )}
+          {onOpenStaffPins === undefined ? null : (
+            // Owner-only: shown only when the acting user may unlock or reset a colleague's PIN.
+            <ListRow
+              leading={<RowIcon name="pin" />}
+              primaryText={t('auth.pin.staff.title')}
+              secondaryText={
+                lockedStaffCount > 0
+                  ? t('core.settings.staffPinsLocked', { count: lockedStaffCount })
+                  : t('core.settings.staffPinsSummary')
+              }
+              onPress={onOpenStaffPins}
+              testID="settings-staff-pins"
+            />
+          )}
+        </Section>
+      )}
 
       {repair !== undefined && repair.rows.length > 0 ? (
         <Section title={repair.section} testID="settings-section-repair">

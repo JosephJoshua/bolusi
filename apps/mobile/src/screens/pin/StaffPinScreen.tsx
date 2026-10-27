@@ -59,6 +59,12 @@ export interface StaffPinScreenProps {
   /** Re-read the directory (after an error, and after a change so the marks are current). */
   readonly onReload: () => void;
   readonly onClose: () => void;
+  /**
+   * Open straight at this person's hand-over for a new PIN, as "Karyawan" does right after adding
+   * someone. Leaving that hand-over, or finishing it, then closes the screen (back to whoever opened
+   * it) instead of showing the list.
+   */
+  readonly startWith?: string | null | undefined;
   /** Publishes this screen's own back, so Android's back button steps back inside the flow. */
   readonly onRegisterSurfaceNav?: ((nav: SurfaceNav | null) => void) | undefined;
 }
@@ -74,12 +80,24 @@ export function StaffPinScreen({
   onResetPin,
   onReload,
   onClose,
+  startWith = null,
   onRegisterSurfaceNav,
 }: StaffPinScreenProps): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [unlock, dispatchUnlock] = useReducer(clearActionReducer, CLEAR_IDLE);
   const [reset, dispatchReset] = useReducer(resetPinReducer, RESET_LIST);
+
+  // Opened for one person: go to their hand-over as soon as the list has them, once.
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    if (startWith === null || started || loading) return;
+    setStarted(true);
+    const target = users.find((user) => user.id === startWith);
+    if (target === undefined || !canReset) return;
+    setSelectedId(target.id);
+    dispatchReset({ kind: 'pick', target });
+  }, [startWith, started, loading, users, canReset]);
 
   useEffect(() => {
     if (unlock.kind !== 'submitting') return undefined;
@@ -130,6 +148,10 @@ export function StaffPinScreen({
 
   /** Back to the list after a change, with the marks re-read. */
   const finish = (): void => {
+    if (startWith !== null) {
+      onClose();
+      return;
+    }
     dispatchUnlock({ kind: 'dismiss' });
     dispatchReset({ kind: 'dismiss' });
     setSelectedId(null);
@@ -139,7 +161,9 @@ export function StaffPinScreen({
   /** One step back, wherever the owner is; the header arrow and Android's back both run it. */
   const back = (): void => {
     if (reset.kind === 'submitting' || unlock.kind === 'submitting') return;
-    if (reset.kind === 'handOver' || reset.kind === 'entering') dispatchReset({ kind: 'cancel' });
+    if (startWith !== null && (reset.kind === 'handOver' || reset.kind === 'entering')) onClose();
+    else if (reset.kind === 'handOver' || reset.kind === 'entering')
+      dispatchReset({ kind: 'cancel' });
     else if (reset.kind !== 'list' || unlock.kind === 'done' || unlock.kind === 'failed') finish();
     else if (unlock.kind === 'confirming') dispatchUnlock({ kind: 'cancel' });
     else if (selectedId !== null) setSelectedId(null);
@@ -339,7 +363,9 @@ export function StaffPinScreen({
   }
 
   // ── The list ────────────────────────────────────────────────────────────────────────────────
-  const listState = ownerListToListState(shown, {
+  // Opened for one person: the list waits rather than flashing before their hand-over opens.
+  const opening = startWith !== null && !started;
+  const listState = ownerListToListState(opening ? { kind: 'loading' } : shown, {
     emptyTitle:
       list.kind === 'ready' && list.targets.length > 0
         ? t('auth.switcher.noMatches')
