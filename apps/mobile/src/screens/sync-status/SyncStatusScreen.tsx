@@ -123,7 +123,12 @@ export function SyncStatusScreen({
   const chip = syncChipState(input);
   const titleState = syncTitleState(input);
   const setupPercent = input.firstSync === null ? null : firstSyncPercent(input.firstSync);
-  const failedPhotos = queue.filter((row) => row.uploadStatus === 'failed');
+  // A phone the server refuses cannot upload either, and "Kirim ulang foto" cannot fix that: the
+  // photos go up once it is enrolled again, so the device problem is the one thing said.
+  const deviceRefused = problems.some(
+    (problem) => problem.kind === 'deviceUnrecognised' || problem.kind === 'deviceRevoked',
+  );
+  const failedPhotos = deviceRefused ? [] : queue.filter((row) => row.uploadStatus === 'failed');
   // The canonical count (06 §4: orphans never count), the same one the headline reads; failed photos
   // are still waiting, and their own section below says why.
   const waitingPhotos = input.pendingMediaCount;

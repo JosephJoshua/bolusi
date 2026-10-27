@@ -72,6 +72,18 @@ async function main() {
     }),
   );
 
+  // QA: `kill -USR2 <pid>` makes the server forget every enrolled phone's token (tenant and data
+  // kept), so a phone sees what it would after a server restore that lost it.
+  process.on('SIGUSR2', () => {
+    running.server.forgetDeviceTokens().then(
+      (ids) =>
+        console.log(
+          `harness-serve-lane: forgot ${String(ids.length)} device token(s): ${ids.join(', ')}`,
+        ),
+      (error) => console.error('harness-serve-lane: forgetting device tokens failed', error),
+    );
+  });
+
   // Do NOT exit here: the open socket keeps the event loop alive so the emulator can reach the host for
   // the whole Maestro run. The process ends ONLY via `shutdown()` above.
 }

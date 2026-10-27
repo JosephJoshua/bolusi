@@ -482,6 +482,17 @@ describe('a phone the server no longer recognises', () => {
     expect(onReenroll).toHaveBeenCalledTimes(1);
   });
 
+  test('does not offer to resend photos, which only re-enrolment can unblock', () => {
+    const failed = [{ mediaId: 'm-1', uploadStatus: 'failed' as const, progressPercent: null }];
+    const forgotten = renderSync({
+      media: failed,
+      state: { ...input().state, syncDisabled: true, syncDisabledReason: 'device_unrecognised' },
+    });
+    expect(forgotten.query('sync-media-section')).toBeNull();
+    // Control: on a phone the server knows, the same failed photo offers a resend.
+    expect(renderSync({ media: failed }).query('sync-media-section')).not.toBeNull();
+  });
+
   test('is absent on a healthy phone', () => {
     const screen = renderSync();
     expect(screen.query('sync-unrecognised')).toBeNull();

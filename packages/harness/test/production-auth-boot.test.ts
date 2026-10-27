@@ -99,6 +99,32 @@ describe('task 201-B: HarnessServer.boot({ productionAuth }) serves real auth ov
     expect(typeof enrollBody.deviceToken).toBe('string');
   });
 
+  test('forgetting device tokens makes a phone unknown while its tenant still signs in', async () => {
+    const server = await HarnessServer.boot({ productionAuth: true });
+    running = await server.listen();
+    const provisioned = await provisionOwner(server);
+    const login = async () =>
+      ((await (await httpLogin(running!.url, LANE_OTP)).json()) as { controlSession: string })
+        .controlSession;
+    const enrolled = (await (
+      await httpEnroll(running, await login(), provisioned.storeIds[0])
+    ).json()) as { deviceId: string; deviceToken: string };
+    const pull = () =>
+      fetch(`${running!.url}/v1/devices/me`, {
+        headers: { Authorization: `Bearer ${enrolled.deviceToken}` },
+      });
+    expect((await pull()).status).toBe(200);
+
+    expect(await server.forgetDeviceTokens()).toEqual([enrolled.deviceId]);
+    const refused = await pull();
+    expect(refused.status).toBe(401);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+      'AUTH_TOKEN_INVALID',
+    );
+    // The tenant survives: the owner still signs in, so the phone can be enrolled again.
+    expect((await httpLogin(running.url, LANE_OTP)).status).toBe(200);
+  });
+
   test('a wrong password is rejected by the real argon2id verify (login 401)', async () => {
     const server = await HarnessServer.boot({ productionAuth: true });
     running = await server.listen();
