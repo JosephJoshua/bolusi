@@ -319,6 +319,25 @@ test('a repair cancelled on another device stops the open step', async ({ page }
   await expect(page.getByTestId('repair.ticket.status')).toContainText('Dibatalkan');
 });
 
+test('a step that raced a cancel on another device is refused with its reason', async ({
+  page,
+}) => {
+  await open(page, 'owner');
+  await tap(page, 'repair.board.row.t-1');
+  // The cancel lands just as the owner taps: the tap runs on the screen they saw.
+  await page.evaluate(() => {
+    const hook = (window as unknown as Record<string, { run(n: string, i: unknown): unknown }>)[
+      '__repairDemoColleague'
+    ];
+    hook!.run('cancelTicket', { ticketId: 't-1', reason: 'Pelanggan batal', fee: 0 });
+    document.querySelector<HTMLElement>('[data-testid="repair.ticket.action.claim"]')!.click();
+  });
+  await expect(page.getByTestId('repair.ticket.actionError').first()).toContainText(
+    'Servisan ini sudah dibatalkan.',
+  );
+  await shoot(page, 'refused-cancelled');
+});
+
 test('a proposal answered on another device cannot be answered twice', async ({ page }) => {
   await open(page, 'counter');
   await tap(page, 'repair.board.row.t-2');

@@ -5,6 +5,7 @@ export * from './intake-options.js';
 export * from './options-editor.js';
 export type * from './schema.js';
 export * from './search.js';
+export { REPAIR_REFUSALS } from './rules.js';
 export { deviceCode, formatTicketNumber, ticketCounter } from './ticket-number.js';
 export type {
   CustomerRow,
