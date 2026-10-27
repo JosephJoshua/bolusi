@@ -630,8 +630,7 @@ export const recordDownPaymentInput = z
 export type RecordDownPaymentInput = z.input<typeof recordDownPaymentInput>;
 
 /**
- * Record a down payment taken after intake. Only while the phone is still in the store and only
- * once: changing an amount already recorded is an owner's correction, since a lower figure is how
+ * Record a down payment taken after intake. Only while the servisan is open and only once: changing an amount already recorded is an owner's correction, since a lower figure is how
  * cash would go missing.
  */
 export async function recordDownPaymentHandler(

@@ -201,15 +201,16 @@ export function ticketActions(
 
 /**
  * What this user may do about the down payment, shown beside it. Mirrors the commands: anyone at
- * the counter records one while the phone is in the store and none is recorded; only an owner
+ * the counter records one while the servisan is open and none is recorded; only an owner
  * changes one already recorded, since a lower figure is how cash would go missing.
  */
 export function downPaymentAction(
-  ticket: Pick<TicketSummaryRow, 'location' | 'downPayment'>,
+  ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
   can: RepairAbilities,
 ): 'record' | 'correct' | null {
   if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
-  return can.intake && ticket.location === 'in_store' ? 'record' : null;
+  const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
+  return can.intake && open ? 'record' : null;
 }
 
 /** The slips a ticket can print: the intake receipt always, the handover slip once it is ready. */
