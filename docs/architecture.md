@@ -86,6 +86,35 @@ behind adapters. Node tests do not establish native performance or correctness.
 - Preserve evidence integrity and keep credential/PIN material out of projections,
   sync responses, logs, and attachments.
 
+## Adding a module or change type
+
+These rules hold for every module. Most are checked by code, so a missing piece
+fails a build, a boot or a test rather than waiting for review:
+
+- Register the module once in `ALL_MODULES`; the server and the phone both fold from it.
+- `defineModule` refuses a manifest whose op type is not past tense, whose payload
+  schema is not `.strict()`, or which lacks a reversal note, an applier or retained
+  schemas for older versions.
+- Every op type declares its `permission`, its `entityType` and its `rule`: what
+  must hold in the records for it to be recorded (`module/op-rules.ts`), run by the
+  device before saving and by the server before accepting a push. `null` is only for
+  a type nothing in the records constrains. A module with rules lists its refusal
+  reasons with `defineRefusals`, and each reason needs id and en copy at
+  `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- Every op type needs a label (`apps/mobile/test/op-type-labels.test.ts`). Every
+  error and rejection code needs id and en copy (`pnpm i18n:check`).
+- Every op type a device can push needs a sample in
+  `apps/server/test/integration/sync/every-op-type-folds.test.ts`, which pushes it
+  through the real pipeline on PostgreSQL. An applier that Postgres refuses fails the
+  whole push, and the device would resend that batch forever.
+- Screens read through `useLiveQuery` (`screen-kit/live.ts`). The platform adapter
+  subscribes the module runtime to the module's tables, so a pulled change re-runs
+  every open read.
+- Typed search goes through a `SearchSource` and `searchIndexFor`, which match fuzzily.
+- A step that stays open (a form, photos, a signature) re-checks its target against
+  the same rule that offered it, and says why it can no longer finish. See repair's
+  `staleStep` in `flows.ts` and the `stale` prop on `FlowScreen`.
+
 ## Limits to carry into repair work
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
