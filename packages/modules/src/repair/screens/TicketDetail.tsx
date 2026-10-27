@@ -541,11 +541,15 @@ export function TicketDetail({
           );
         })}
         <View style={[repairStyles.row, styles.total]}>
-          <Text style={cancelled ? styles.notCharged : styles.totalLabel}>
+          <Text style={[cancelled ? styles.notCharged : styles.totalLabel, repairStyles.rowText]}>
             {tn('repair.price.total')}
           </Text>
           <Text
-            style={[cancelled ? styles.notCharged : styles.totalValue, styles.amount]}
+            style={[
+              cancelled ? styles.notCharged : styles.totalValue,
+              styles.amount,
+              repairStyles.rowValue,
+            ]}
             testID={`${testID}.total`}
           >
             {formatMoney(row.quoteTotal)}
@@ -556,8 +560,13 @@ export function TicketDetail({
           // owes, the same fee the board and the handover show (Rp 0 when none was set).
           <>
             <View style={[repairStyles.row, styles.owed]}>
-              <Text style={styles.totalLabel}>{tn('repair.cancel.fee')}</Text>
-              <Text style={[styles.totalValue, styles.amount]} testID={`${testID}.cancelFee`}>
+              <Text style={[styles.totalLabel, repairStyles.rowText]}>
+                {tn('repair.cancel.fee')}
+              </Text>
+              <Text
+                style={[styles.totalValue, styles.amount, repairStyles.rowValue]}
+                testID={`${testID}.cancelFee`}
+              >
                 {formatMoney(row.cancelFee ?? 0)}
               </Text>
             </View>

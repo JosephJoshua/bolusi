@@ -205,7 +205,6 @@ export function SyncStatusScreen({
             <Text style={styles.sheetBody}>
               {translateRejectionCode(openRejected.rejectionCode)}
             </Text>
-            <Text style={styles.sheetBody}>{t('sync.rejected.kept')}</Text>
             <View style={styles.technical}>
               <Text style={styles.technicalTitle}>{t('sync.rejected.technicalDetails')}</Text>
               <Text style={styles.technicalText} testID={`sync-rejected-code-${openRejected.opId}`}>

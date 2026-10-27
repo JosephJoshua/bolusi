@@ -53,9 +53,3 @@ export function roleLabel(roleKeys: readonly string[]): string {
     .filter((label): label is string => label !== null)
     .join(', ');
 }
-
-/** "Pemilik Toko · Servis Ponsel Maju": who someone is here, under their name (account menu, Settings). */
-export function roleAndStore(roleKeys: readonly string[], storeName: string): string {
-  const role = roleLabel(roleKeys);
-  return [role, storeName].filter((part) => part !== '').join(' · ');
-}

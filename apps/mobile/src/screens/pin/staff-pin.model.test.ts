@@ -73,12 +73,10 @@ describe('an owner who may only unlock', () => {
   });
 
   test('is never told to make a new PIN, and a reset-only owner is never told to unlock', () => {
-    expect(staffPinBodyKey(locked, ['unlock'])).toBe('auth.pin.staff.lockedUnlockBody');
-    expect(staffPinBodyKey(locked, ['reset'])).toBe('auth.pin.staff.lockedResetBody');
+    expect(staffPinBodyKey(locked, ['unlock'])).toBeNull();
+    expect(staffPinBodyKey(locked, ['reset'])).toBeNull();
     expect(staffPinBodyKey(locked, ['unlock', 'reset'])).toBe('auth.pin.staff.lockedBody');
-    expect(staffPinBodyKey(active, ['reset'])).toBe('auth.pin.staff.activeBody');
-    expect(staffPinBodyKey({ ...active, needsFirstPin: true }, ['reset'])).toBe(
-      'auth.pin.staff.noPinBody',
-    );
+    expect(staffPinBodyKey(active, ['reset'])).toBeNull();
+    expect(staffPinBodyKey({ ...active, needsFirstPin: true }, ['reset'])).toBe(null);
   });
 });

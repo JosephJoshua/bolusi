@@ -9,8 +9,8 @@
   },
   "permission": {
     "title": "Nyalakan notifikasi?",
-    "message": "Biar kamu langsung tahu kalau ada data yang perlu dicek atau masalah di perangkat toko, walau aplikasinya sedang ditutup.",
-    "allow": "Nyalakan notifikasi",
+    "message": "Biar kamu tahu kalau ada yang perlu dicek, walau aplikasi sedang ditutup.",
+    "allow": "Nyalakan",
     "later": "Nanti saja"
   }
 }

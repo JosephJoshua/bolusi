@@ -2,6 +2,7 @@
 // the real screen to prove the person-first flow reaches the right core call for the right person,
 // that a refused call never shows success, and that the owner only sees what they may do.
 import { DomainError } from '@bolusi/core';
+import { t } from '@bolusi/i18n';
 import { act } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
@@ -196,5 +197,32 @@ describe('opened for one person from Karyawan', () => {
     await flush();
     expect(screen.query('staff-pin-handover')).toBeNull();
     expect(screen.query(`staff-pin-target-${ACTIVE.id}`)).toBeNull();
+  });
+});
+
+describe('the person page says only what the chip and buttons do not', () => {
+  test('someone with no PIN is marked so, with one action and no extra sentence', () => {
+    const NEW: PinTargetUser = {
+      id: 'user-new',
+      name: 'Maria Wenda',
+      lockedOut: false,
+      needsFirstPin: true,
+    };
+    const { screen } = renderStaff({ users: [NEW] });
+    press(screen, `staff-pin-target-${NEW.id}`);
+    expect(screen.query('staff-pin-person-nopin')).not.toBeNull();
+    expect(screen.query('staff-pin-unlock')).toBeNull();
+    const texts = textsIn(screen.get('staff-pin-person')).join(' | ');
+    expect(texts).toBe(
+      textsIn(screen.get('staff-pin-person-who'))
+        .concat(textsIn(screen.get('staff-pin-person-nopin')))
+        .join(' | '),
+    );
+  });
+
+  test('a locked PIN the owner can unlock or replace gets the one line that tells them apart', () => {
+    const { screen } = renderStaff();
+    press(screen, `staff-pin-target-${LOCKED.id}`);
+    expect(textsIn(screen.get('staff-pin-person'))).toContain(t('auth.pin.staff.lockedBody'));
   });
 });

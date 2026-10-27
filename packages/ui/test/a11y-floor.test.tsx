@@ -103,7 +103,7 @@ describe('touch targets (§1.4, §6.2)', () => {
   // each must make the difference up in hitSlop.
   test('a compact Button is drawn smaller but still clears the floor', () => {
     const r = render(<Button testID="b" label="x" size="compact" onPress={vi.fn()} />);
-    expect(r.styleOf('b')['height']).toBeLessThan(touch.min);
+    expect(r.styleOf('b')['minHeight']).toBeLessThan(touch.min);
     expect(extent(r, 'b', 'height')).toBeGreaterThanOrEqual(touch.min);
   });
 
@@ -289,7 +289,7 @@ describe('ConfirmSheet (§3.10)', () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(r.styleOf('ui.confirmSheet.confirm')['height']).toBe(touch.primary);
-    expect(r.styleOf('ui.confirmSheet.cancel')['height']).toBe(touch.primary);
+    expect(r.styleOf('ui.confirmSheet.confirm')['minHeight']).toBe(touch.primary);
+    expect(r.styleOf('ui.confirmSheet.cancel')['minHeight']).toBe(touch.primary);
   });
 });

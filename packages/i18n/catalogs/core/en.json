@@ -91,15 +91,15 @@
     "AUTH_TOKEN_INVALID": "This device’s session has ended. Sign in again to keep sending photos."
   },
   "rejection": {
-    "BAD_SIGNATURE": "This change failed verification and was rejected by the server. Report this to the store owner.",
-    "CHAIN_BROKEN": "This device’s change history is broken. Sending has stopped. Contact the store owner right away.",
-    "CHAIN_GAP": "Some changes were missing. They’re being resent automatically.",
-    "CHAIN_HALTED": "On hold because an earlier change has a problem.",
-    "DEVICE_REVOKED": "This device has been revoked, so the change was rejected. Enroll this device again.",
-    "PERMISSION_DENIED": "The person who made this change isn’t allowed to do it in this store, so it wasn’t saved. Ask someone who is allowed to do it again.",
-    "SCHEMA_INVALID": "The server didn’t recognize this change’s format. This is an app problem — report it to the store owner.",
-    "SCOPE_VIOLATION": "This change doesn’t belong to this store or account, so it was rejected. Report it to the store owner.",
-    "UNKNOWN_TYPE": "This device’s app needs an update before this change can be sent."
+    "BAD_SIGNATURE": "Failed the server check. Tell the store owner.",
+    "CHAIN_BROKEN": "This device’s history is broken and sending stopped. Tell the store owner now.",
+    "CHAIN_GAP": "Something was missing. Resending automatically.",
+    "CHAIN_HALTED": "Waiting on an earlier change.",
+    "DEVICE_REVOKED": "This device is blocked. Enroll it again.",
+    "PERMISSION_DENIED": "Whoever made it wasn’t allowed to. Ask someone who is to redo it.",
+    "SCHEMA_INVALID": "The server didn’t recognise this change. Tell the store owner.",
+    "SCOPE_VIOLATION": "Not for this store. Tell the store owner.",
+    "UNKNOWN_TYPE": "Update the app so this can be sent."
   },
   "account": {
     "menu": "Account menu",

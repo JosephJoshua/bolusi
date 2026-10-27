@@ -193,9 +193,7 @@ export function StaffScreen({
           icon="success"
           title={t('auth.staff.addedTitle', { name: step.name })}
           message={
-            here
-              ? t('auth.staff.addedBody', { name: step.name })
-              : t('auth.staff.notYetHere', { name: step.name })
+            here ? t('auth.staff.addedBody') : t('auth.staff.notYetHere', { name: step.name })
           }
           testID="staff-added"
         />
@@ -491,7 +489,7 @@ function PersonForm({
         ) : sheet === 'deactivate' && editing !== null ? (
           <ConfirmSheet
             title={t('auth.staff.deactivateTitle', { name: editing.name })}
-            message={t('auth.staff.deactivateBody', { name: editing.name })}
+            message={t('auth.staff.deactivateBody')}
             confirmLabel={t('auth.staff.deactivateConfirm')}
             onConfirm={() => {
               setSheet(null);
@@ -555,9 +553,7 @@ function PersonForm({
           <View style={styles.more}>
             {editing.hasPin || onMakePin === undefined ? null : (
               <View style={styles.pinNote} testID="staff-edit-nopin">
-                <Text style={styles.hint}>
-                  {t('auth.staff.makePinHint', { name: editing.name })}
-                </Text>
+                <Text style={styles.hint}>{t('auth.staff.makePinHint')}</Text>
                 <View style={styles.edge}>
                   <TextButton
                     label={t('auth.staff.makePin')}
@@ -634,7 +630,7 @@ function InactivePage({
         <View style={styles.centred}>
           <Chip label={t('auth.staff.inactive')} icon="lock" />
         </View>
-        <Text style={styles.status}>{t('auth.staff.inactiveBody', { name: target.name })}</Text>
+        <Text style={styles.status}>{t('auth.staff.inactiveBody')}</Text>
       </View>
     </Shell>
   );

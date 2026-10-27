@@ -151,10 +151,10 @@ export const DEMO_REJECTED_OP_ID = 'op_9f3a';
 const DEMO_REJECTED: readonly RejectedOpRow[] = [
   {
     opId: DEMO_REJECTED_OP_ID,
-    type: 'notes.create',
+    type: 'repair.ticket_cancelled',
     at: HARNESS_NOW - 12 * MINUTE,
-    rejectionCode: 'STALE_WRITE',
-    rejectionReason: 'server has a newer version',
+    rejectionCode: 'PERMISSION_DENIED',
+    rejectionReason: 'actor lacks repair.ticket.cancel',
   },
 ];
 

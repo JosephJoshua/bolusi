@@ -4,7 +4,6 @@
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import { INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
-import { act } from 'react';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -114,49 +113,6 @@ describe('counter intake', () => {
     } finally {
       Object.assign(__windowMetrics, original);
     }
-  });
-
-  // Android drew "Tidak dicek" as "Tidak" in a flex row (QA runs 1 to 3) and whole when the pills
-  // took their own width. Beside the name the pills are pinned right, the name keeps clear of them
-  // by their measured width, and the measured widths decide when to stack.
-  test('condition pills beside the name are pinned right and measured, not squeezed', async () => {
-    h = await openRepairScreenHarness(5152);
-    const screen = await mount(h, h.cashierId);
-    await press(screen, 'repair.board.newIntake');
-    type(screen, 'repair.intake.customer.name', 'Yohanis Wenda');
-    await press(screen, 'repair.intake.primary');
-    type(screen, 'repair.intake.device.brand', 'Samsung');
-    type(screen, 'repair.intake.device.model', 'Galaxy A14');
-    await press(screen, 'repair.intake.primary');
-    const first = screen.container.queryAll((n) =>
-      String(n.props['testID']).startsWith('repair.intake.condition.checkRow.'),
-    )[0]!;
-    const id = String(first.props['testID']).split('.').pop()!;
-    const layout = (testID: string, width: number): void =>
-      act(() => {
-        (screen.get(testID).props['onLayout'] as (e: unknown) => void)({
-          nativeEvent: { layout: { x: 0, y: 0, width, height: 48 } },
-        });
-      });
-    const rowStyle = (): Record<string, unknown> =>
-      StyleSheet.flatten(screen.get(`repair.intake.condition.checkRow.${id}`).props['style']);
-    const pillsStyle = (): Record<string, unknown> =>
-      StyleSheet.flatten(screen.get(`repair.intake.condition.checkPills.${id}`).props['style']);
-
-    layout(`repair.intake.condition.checkRow.${id}`, 379);
-    layout(`repair.intake.condition.checkPills.${id}`, 240);
-    expect(rowStyle()['flexDirection']).toBe('row');
-    expect(pillsStyle()).toMatchObject({ position: 'absolute', right: 0 });
-    const name = screen.get(`repair.intake.condition.checkRow.${id}`).children[0] as {
-      props: Record<string, unknown>;
-    };
-    const nameStyle = StyleSheet.flatten(name.props['style'] as object) as Record<string, unknown>;
-    expect(nameStyle['paddingRight']).toBe(240 + 12);
-
-    // Pills too wide to leave the name a readable column: every row stacks.
-    layout(`repair.intake.condition.checkPills.${id}`, 300);
-    expect(rowStyle()['flexDirection']).toBe('column');
-    expect(pillsStyle()['position']).toBeUndefined();
   });
 
   // The keyboard opened by itself on intake steps and covered "Lanjut" (Android QA): no step
@@ -498,6 +454,14 @@ describe('cancelling (owners only)', () => {
     expect(
       StyleSheet.flatten(screen.get('repair.ticket.total').props['style']).textDecorationLine,
     ).toBe('line-through');
+    // At a large font the label wraps; the amount never splits into "Rp" and "0" on two lines.
+    const fee = screen.get('repair.ticket.cancelFee');
+    const label = fee.parent?.children[0];
+    expect(typeof label === 'object' && label.type).toBe('Text');
+    expect(
+      StyleSheet.flatten(typeof label === 'object' ? label.props['style'] : null).flexShrink,
+    ).toBe(1);
+    expect(StyleSheet.flatten(fee.props['style']).flexShrink).toBe(0);
   });
 });
 

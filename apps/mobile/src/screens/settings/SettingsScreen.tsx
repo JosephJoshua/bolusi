@@ -31,7 +31,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 import { initialsOf } from '../switcher/model.js';
-import { roleAndStore } from '../switcher/UserRow.js';
+import { roleLabel } from '../switcher/UserRow.js';
 
 import {
   localeNameKey,
@@ -115,6 +115,7 @@ export function SettingsScreen({
   pendingCount,
   onOpenSync,
 }: SettingsScreenProps): React.JSX.Element {
+  const role = roleLabel(currentUser.roleKeys);
   return (
     <AppShell
       // Plain views (no FlatList): a dozen rows plus the device facts overflow a small screen or a
@@ -145,7 +146,8 @@ export function SettingsScreen({
       {/* Who these settings are for: the PIN rows below are this person's. */}
       <View style={styles.who} testID="settings-who">
         <Text style={styles.whoName}>{currentUser.name}</Text>
-        <Text style={styles.whoMeta}>{roleAndStore(currentUser.roleKeys, device.storeName)}</Text>
+        {/* The store is in "HP ini" below, so only the role here. */}
+        {role === '' ? null : <Text style={styles.whoMeta}>{role}</Text>}
       </View>
 
       <Section title={t('core.settings.security')} testID="settings-section-security">

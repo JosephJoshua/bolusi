@@ -43,20 +43,15 @@ export function staffPinActions(
   return actions;
 }
 
-/** The sentence under the person: what happened, and only the ways forward this owner can offer. */
+/**
+ * The line under the person, only where it adds something the chip and buttons do not: a locked
+ * PIN the owner may either unlock or replace. Everywhere else the chip and the button say it all.
+ */
 export function staffPinBodyKey(
   user: PinTargetUser,
   actions: readonly StaffPinAction[],
-):
-  | 'auth.pin.staff.lockedBody'
-  | 'auth.pin.staff.lockedUnlockBody'
-  | 'auth.pin.staff.lockedResetBody'
-  | 'auth.pin.staff.activeBody'
-  | 'auth.pin.staff.noPinBody' {
-  if (user.needsFirstPin === true) return 'auth.pin.staff.noPinBody';
-  if (!user.lockedOut) return 'auth.pin.staff.activeBody';
-  const unlock = actions.includes('unlock');
-  const reset = actions.includes('reset');
-  if (unlock && reset) return 'auth.pin.staff.lockedBody';
-  return unlock ? 'auth.pin.staff.lockedUnlockBody' : 'auth.pin.staff.lockedResetBody';
+): 'auth.pin.staff.lockedBody' | null {
+  return user.lockedOut && actions.includes('unlock') && actions.includes('reset')
+    ? 'auth.pin.staff.lockedBody'
+    : null;
 }
