@@ -143,6 +143,10 @@ Write like Gojek or Tokopedia product copy: short, everyday, friendly, exact.
   phrases), no jargon from the code (op, entity, sync conflict).
 - Read every string aloud as a counter person would say it to a customer. If
   it sounds like a form, rewrite it.
+- **Short, and said once.** Be clear in one short sentence, not a paragraph.
+  Never say again what the title, a label or the button on the same screen
+  already says ("Daftarkan HP ini" as both title and button; "Terdaftar" in the
+  title and the line under it). A lead line that only restates the title goes.
 
 ## 9. Accessibility floor
 
@@ -159,6 +163,10 @@ naturally. Never rely on `numberOfLines` to hide the overflow. The only
 ellipsis allowed is a long user-entered value in a list row (a customer
 name), whose full text is one tap away.
 
+**Values never split mid-phrase.** A money amount, a date or a name stays on
+one line ("Rp" and "50.000" together). Let the label beside it wrap instead
+(`repairStyles.rowText`), or give the value its own line.
+
 Supported range: 360 dp wide phones and the system font up to 1.3×.
 
 ## 10. Review before showing anyone
@@ -172,7 +180,8 @@ Run the app, take screenshots of every changed screen and state, and check:
    ellipsized? Anything touching with no space between?
 5. Any redundant label, chevron, title, or full-width secondary button?
 6. Are paired choices equal, and risky or destructive ones set apart?
-7. Does each Indonesian string sound natural spoken aloud?
+7. Does each Indonesian string sound natural spoken aloud? Is it short, and
+   is nothing on the screen said twice?
 8. Loading, empty, error, offline and success states all present?
 9. Would this look at home next to Gojek, Tokopedia or a good banking app?
 
