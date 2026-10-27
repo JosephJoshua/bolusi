@@ -7,7 +7,6 @@
 // socket), SEC-RT-02 (revoke closes the live socket, reconnect → 401), SEC-RT-04 (tenant B's
 // activity produces zero pokes to a tenant-A device — with a zero-relationship control), SEC-RT-05
 // (junk client frames dropped, socket healthy; a flood closes it).
-import { serve } from '@hono/node-server';
 import { afterEach, describe, expect, test } from 'vitest';
 import { WebSocket } from 'ws';
 
@@ -17,8 +16,9 @@ import { createApp } from '../../../src/app.js';
 import { InMemoryTokenStore, createVerifyToken } from '../../../src/middleware/auth.js';
 import { RevocationHooks } from '../../../src/identity/revocation.js';
 import { InProcessPokeHub, type PokeScope } from '../../../src/realtime/poke-hub.js';
-import { makeRealtimeWebSocketServer } from '../../../src/realtime/serve.js';
+import { serveWithRealtime } from '../../../src/realtime/serve.js';
 import { makeFixture } from '../../helpers/fixtures.js';
+import { makeIdentityHarness, provision, seedDevice } from '../../helpers/identity-app.js';
 
 interface Rig {
   readonly port: number;
@@ -39,9 +39,8 @@ async function makeRig(): Promise<Rig> {
     pokeHub,
     revocationHooks,
   });
-  const wss = makeRealtimeWebSocketServer();
-  const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
-    const s = serve({ fetch: app.fetch, port: 0, websocket: { server: wss } }, () => resolve(s));
+  const server = await new Promise<ReturnType<typeof serveWithRealtime>>((resolve) => {
+    const s = serveWithRealtime({ fetch: app.fetch, port: 0 }, () => resolve(s));
   });
   const address = server.address();
   const port = typeof address === 'object' && address !== null ? address.port : 0;
@@ -337,5 +336,39 @@ describe('realtime WS — real upgrade (api/00 §12.1)', () => {
         new Promise((_r, reject) => setTimeout(() => reject(new Error('flood not closed')), 5_000)),
       ]),
     ).resolves.toBeTypeOf('number');
+  });
+});
+
+describe('realtime WS — production token verifier on real PostgreSQL', () => {
+  test('a device enrolled in the database opens the socket', async () => {
+    const h = await makeIdentityHarness();
+    const server = await new Promise<ReturnType<typeof serveWithRealtime>>((resolve) => {
+      const s = serveWithRealtime({ fetch: h.app.fetch, port: 0 }, () => resolve(s));
+    });
+    try {
+      const p = await provision(h, {
+        tenantName: 'T',
+        storeNames: ['S'],
+        ownerName: 'O',
+        ownerLogin: `o-${Math.random()}`,
+      });
+      const { token } = await seedDevice(h, { tenantId: p.tenantId, storeId: p.storeIds[0]! });
+      const address = server.address();
+      const port = typeof address === 'object' && address !== null ? address.port : 0;
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/realtime`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws.once('open', () => resolve());
+        ws.once('unexpected-response', (_req, res) =>
+          reject(new Error(`unexpected-response ${res.statusCode}`)),
+        );
+        ws.once('error', reject);
+      });
+      ws.close();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await h.close();
+    }
   });
 });
