@@ -122,8 +122,3 @@ export function pinPadState(view: PinView): 'entry' | 'error' | 'locked' {
       return 'locked';
   }
 }
-
-/** §8.3: the `auth.pin.forgot` affordance appears only where it is actionable — the hard lock. */
-export function showsForgotAffordance(view: PinView): boolean {
-  return view.kind === 'lockedOut';
-}

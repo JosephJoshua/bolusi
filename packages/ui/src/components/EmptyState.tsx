@@ -48,11 +48,11 @@ export function EmptyState({
   return (
     <View testID={testID} style={styles.root}>
       <Icon name="empty" size={size.iconState} color={color.textMuted} />
-      <Text testID={`${testID}.title`} numberOfLines={1} style={styles.title}>
+      <Text testID={`${testID}.title`} style={styles.title}>
         {title}
       </Text>
       {hint === undefined ? null : (
-        <Text testID={`${testID}.hint`} numberOfLines={3} style={styles.hint}>
+        <Text testID={`${testID}.hint`} style={styles.hint}>
           {hint}
         </Text>
       )}

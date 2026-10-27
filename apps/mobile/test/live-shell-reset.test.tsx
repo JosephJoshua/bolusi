@@ -98,7 +98,7 @@ async function openSettings(screen: RenderResult): Promise<void> {
 
 /** Press the six digits of `pin` on the Reset pad (fires `onComplete` on the 6th). */
 function enterOnResetPad(screen: RenderResult, pin: string): void {
-  for (const digit of pin) fireOn(screen, `reset-pin-pad.key.${digit}`);
+  for (const digit of pin) fireOn(screen, `staff-pin-entry-pad.key.${digit}`);
 }
 
 describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (task 186b-2)', () => {
@@ -124,28 +124,32 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
     });
     await signInAsOwner(screen);
 
-    // Settings → Reset a PIN (the owner holds `auth.user_reset_pin`, so the row is offered).
+    // Settings → Staff PINs (the owner holds `auth.user_reset_pin`, so the row is offered).
     await openSettings(screen);
-    expect(screen.query('settings-reset-pin')).not.toBeNull();
-    fireOn(screen, 'settings-reset-pin');
+    expect(screen.query('settings-staff-pins')).not.toBeNull();
+    fireOn(screen, 'settings-staff-pins');
     await settle();
-    expect(screen.query('reset-pin-screen')).not.toBeNull();
+    expect(screen.query('staff-pin-screen')).not.toBeNull();
 
     // Pick the target (loaded on entry), proceed past the hand-over, then enter the new PIN twice.
-    const targetRow = `reset-pin-target-${SECOND_USER_ID}`;
+    const targetRow = `staff-pin-target-${SECOND_USER_ID}`;
     await waitUntil(() => screen.query(targetRow) !== null);
-    fireOn(screen, targetRow);
+    fireOn(screen, targetRow); // → their page; the target is locked, so reset is the second action
     await settle();
-    fireOn(screen, 'reset-pin-proceed'); // hand-over → the target types their new PIN
+    fireOn(screen, 'staff-pin-reset');
+    await settle();
+    fireOn(screen, 'staff-pin-proceed'); // hand-over → the target types their new PIN
     await settle();
     enterOnResetPad(screen, NEW_PIN); // first entry
     await settle();
     enterOnResetPad(screen, NEW_PIN); // repeat → match → submitting → session.resetPin
     await waitUntil(
-      () => screen.query('reset-pin-done') !== null || screen.query('reset-pin-failed') !== null,
+      () =>
+        screen.query('staff-pin-reset-done') !== null ||
+        screen.query('staff-pin-reset-failed') !== null,
     );
     // The reset applied locally (a real verifier was written + queued). A broken link anywhere reds here.
-    expect(screen.query('reset-pin-done')).not.toBeNull();
+    expect(screen.query('staff-pin-reset-done')).not.toBeNull();
 
     // Nothing POSTs until the device is next online.
     expect(uploads).toHaveLength(0);
@@ -160,7 +164,7 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
     expect(uploads[0]?.actingUserId).toBe(fixture.userId); // the RESETTING OWNER (X-Acting-User)
   });
 
-  test('CONTROL: a non-owner sees no Reset row — the canReset gate holds over the whole stack', async () => {
+  test('CONTROL: a non-owner sees no staff PIN row — the canReset gate holds over the whole stack', async () => {
     // `seedDirectory` grants no `auth.user_reset_pin`, so `session.canReset` is false, App omits the
     // callback, SettingsScreen omits the row. Make the row unconditional and this reds.
     fixture = await bootFixture();
@@ -171,6 +175,6 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
 
     await openSettings(screen);
     expect(screen.query('settings-change-pin')).not.toBeNull(); // Security section rendered
-    expect(screen.query('settings-reset-pin')).toBeNull(); // but the owner row is gated out
+    expect(screen.query('settings-staff-pins')).toBeNull(); // but the owner row is gated out
   });
 });

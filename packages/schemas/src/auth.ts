@@ -271,6 +271,8 @@ export const UpdateUserReq = z
     name: z.string().min(1).max(64).optional(),
     storeIds: z.array(zId).min(1).optional(),
     photoMediaId: zId.nullable().optional(),
+    // Replaces every role grant the user holds (§5.4; owner decision 2026-10-27).
+    roleIds: z.array(zId).min(1).optional(),
   })
   .strict();
 export type UpdateUserReq = z.infer<typeof UpdateUserReq>;

@@ -20,7 +20,10 @@ import {
   readMeta,
   readVerifier,
   VerifierBoundsError,
+  writeMeta,
   writeVerifier,
+  DEVICE_ID_META_KEY,
+  FIRST_PIN_USER_META_KEY,
   type BundleUser,
   type CanonicalRef,
   type DeviceBundle,
@@ -298,6 +301,39 @@ describe('applyBundle — §5.3 merge & §5.2 minimization', () => {
       status: string;
     }>`SELECT status FROM users_directory WHERE id = 'u-owner'`.execute(k);
     expect(status.rows[0]?.status).toBe('deactivated');
+  });
+
+  it('a first PIN made on THIS phone survives a bundle that does not have it yet', async () => {
+    // The owner made their first PIN here; its upload has not reached the server, so the next
+    // bundle still says `pinVerifier: null`. Deleting it would leave them with no PIN anywhere.
+    const k = await open();
+    await writeMeta(k, DEVICE_ID_META_KEY, REAL_DEVICE);
+    const mine = await verifier('111111', { timestamp: 5000, deviceId: REAL_DEVICE, seq: 3 });
+    await writeVerifier(k, 'u-owner', mine);
+    await applyBundle(k, bundle([mkUser('u-owner', null)]));
+    expect((await readVerifier(k, 'u-owner'))?.hashB64).toBe(mine.hashB64);
+  });
+
+  it('CONTROL: a verifier from ANOTHER device is still dropped when the server row is empty', async () => {
+    const k = await open();
+    await writeMeta(k, DEVICE_ID_META_KEY, REAL_DEVICE);
+    await writeVerifier(
+      k,
+      'u-owner',
+      await verifier('111111', { timestamp: 1, deviceId: NIL, seq: 0 }),
+    );
+    await applyBundle(k, bundle([mkUser('u-owner', null)]));
+    expect(await readVerifier(k, 'u-owner')).toBeNull();
+  });
+
+  it('the enrolling owner’s right to make their own first PIN ends once the server has one', async () => {
+    const k = await open();
+    await writeMeta(k, FIRST_PIN_USER_META_KEY, 'u-owner');
+    await applyBundle(k, bundle([mkUser('u-owner', null)]));
+    expect(await readMeta(k, FIRST_PIN_USER_META_KEY)).toBe('u-owner');
+    const server = await verifier('222222', { timestamp: 9000, deviceId: NIL, seq: 0 });
+    await applyBundle(k, bundle([mkUser('u-owner', server)]));
+    expect(await readMeta(k, FIRST_PIN_USER_META_KEY)).toBeNull();
   });
 
   it('a user unassigned from the store (absent from the bundle) loses their verifier row', async () => {

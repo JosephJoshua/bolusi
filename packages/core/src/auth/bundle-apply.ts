@@ -16,7 +16,11 @@ import { TENANT_ID_META_KEY } from '../authz/directory.js';
 import { clampIdleLockSeconds } from './constants.js';
 import type { DeviceBundle } from './ports.js';
 import {
+  deleteMeta,
   deleteVerifier,
+  DEVICE_ID_META_KEY,
+  FIRST_PIN_USER_META_KEY,
+  readMeta,
   IDLE_LOCK_SECONDS_META_KEY,
   readVerifier,
   replaceRolesDirectory,
@@ -103,11 +107,27 @@ export async function applyBundle<DB>(db: Kysely<DB>, bundle: DeviceBundle): Pro
  * Merge the bundle's verifiers into `user_pin_verifiers` (§5.3), and delete every verifier the
  * bundle does not carry — a deactivated user (`pinVerifier: null`) or one unassigned from the store
  * (absent from `bundle.users`) loses their local verifier (§5.2).
+ *
+ * One exception: an ACTIVE user whose server row is still empty but who made a first PIN on THIS
+ * phone keeps it. That PIN has not reached the server yet (its upload waits for the next contact);
+ * deleting it would leave the person with no PIN anywhere.
+ *
+ * And once the server has a PIN for the owner who enrolled this phone, their right to make their own
+ * first PIN here ends (`FIRST_PIN_USER_META_KEY`), so it cannot outlive its purpose.
  */
 async function applyVerifiers<DB>(db: Kysely<DB>, bundle: DeviceBundle): Promise<void> {
   const keep = new Set<string>();
+  const thisDevice = await readMeta(db, DEVICE_ID_META_KEY);
+  const firstPinUser = await readMeta(db, FIRST_PIN_USER_META_KEY);
   for (const user of bundle.users) {
-    if (user.pinVerifier === null) continue;
+    if (user.pinVerifier === null) {
+      if (user.status === 'active' && thisDevice !== null) {
+        const local = await readVerifier(db, user.id);
+        if (local !== null && local.asOf.deviceId === thisDevice) keep.add(user.id);
+      }
+      continue;
+    }
+    if (user.id === firstPinUser) await deleteMeta(db, FIRST_PIN_USER_META_KEY);
     assertVerifierInBounds(user.pinVerifier); // SEC-AUTH-01 — re-check on the device, defence in depth
     const existing = await readVerifier(db, user.id);
     const winner = chooseEffectiveVerifier(existing, user.pinVerifier);

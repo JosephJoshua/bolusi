@@ -3,8 +3,8 @@
  *
  * ── THE USE CASE IS A SHARED COUNTER, AND THE BUDGET IS 5 SECONDS ───────────────────────────────
  * One phone, several staff, all day, every handover mid-conversation with a customer. NFR-1003 caps
- * the whole switch at 5 s, which rules out anything clever: no animation, no confirmation screen, no
- * search box. Speed here is not polish — a switcher slower than the task makes staff share one login
+ * the whole switch at 5 s, which rules out anything clever: no animation, no confirmation screen, and
+ * a search box only once the list outgrows a screen (`SWITCHER_SEARCH_MIN`). Speed here is not polish — a switcher slower than the task makes staff share one login
  * instead, and then every op in the log is attributed to the wrong person and the entire audit trail
  * (PRD-011 §5) is fiction. The switcher's speed IS the attribution control.
  *
@@ -22,6 +22,7 @@
  * cannot work; absence is both kinder and correct. Their name still resolves on historical ops
  * (14's `resolveUserName`) — authentication is gated on status, name resolution is not.
  */
+import { FuzzyIndex } from '@bolusi/core';
 
 /** A switcher card. Shape mirrors 14's `listSwitcherUsers` plus the shell's ordering input. */
 export interface SwitcherUser {
@@ -33,6 +34,11 @@ export interface SwitcherUser {
   readonly lastActiveAt: number | null;
   /** True when the bundle row has `pinVerifier: null` — the §6.6 first-PIN flow. */
   readonly needsFirstPin: boolean;
+  /**
+   * True only for the owner who enrolled this device and still has no PIN: the one person who may
+   * make their own first PIN (core's `firstPinUserOnThisDevice`). Everyone else gets theirs from an owner.
+   */
+  readonly canMakeOwnPin?: boolean | undefined;
   /**
    * The user's TOP-PRIVILEGE role(s) as roleKeys (design-system §8.2), from 14's
    * `resolveDisplayRoleKeys`. Usually one; more than one only when roles tie on privilege (the
@@ -88,31 +94,29 @@ export function switcherState(
   return { kind: 'ready', users: sortByRecency(users) };
 }
 
-/** §8.2's grid is 2 columns. Named once, here, because the chunking and the layout must agree. */
-export const SWITCHER_COLUMNS = 2;
-
-/** A rendered grid row: up to `SWITCHER_COLUMNS` cards, keyed for the virtualized list. */
-export interface SwitcherGridRow {
-  readonly key: string;
-  readonly users: readonly SwitcherUser[];
-}
-
-/** Group users into virtualized grid rows. A short final row gets a spacer in the screen.
- * FlatList measures each row, including avatar cards and names that wrap.
+/**
+ * A search box appears once a store has more staff than fit on one screen. Below this, a glance at
+ * the recency-sorted list is faster than typing, so the box would only be in the way.
  */
-export function toGridRows(
-  users: readonly SwitcherUser[],
-  columns: number = SWITCHER_COLUMNS,
-): readonly SwitcherGridRow[] {
-  const rows: SwitcherGridRow[] = [];
-  for (let index = 0; index < users.length; index += columns) {
-    const slice = users.slice(index, index + columns);
-    // Keyed by the row's FIRST user id, not the index: an index key would make React reuse a card
-    // for a different person when the recency order changes underneath a re-render — on a switcher,
-    // that is the wrong face under the right name.
-    rows.push({ key: slice[0]!.id, users: slice });
-  }
-  return rows;
+export const SWITCHER_SEARCH_MIN = 8;
+
+/**
+ * The users matching what was typed, best match first, typo-tolerant (the project's shared fuzzy
+ * search: "yosua" finds "Yosua Wonda", "jhon" finds "John"). An empty query keeps the recency order.
+ */
+export function filterUsers<T extends { readonly id: string; readonly name: string }>(
+  users: readonly T[],
+  query: string,
+): readonly T[] {
+  if (query.trim() === '') return users;
+  const index = new FuzzyIndex(
+    users.map((user, position) => ({ id: user.id, text: [user.name], rank: -position })),
+  );
+  const byId = new Map(users.map((user) => [user.id, user]));
+  return index
+    .search(query, users.length)
+    .map((hit) => byId.get(hit.id))
+    .filter((user): user is T => user !== undefined);
 }
 
 /** Initials for the Avatar (design-system §3.12) — 1–2 characters, uppercased. */
@@ -127,20 +131,21 @@ export function initialsOf(name: string): string {
 }
 
 /**
- * What tapping a card does. A user whose verifier is null goes to PIN SETUP, not to a PIN pad they
- * cannot satisfy (§6.6 first-PIN). Sending them to the pad would be a locked door with no key: they
- * would type guesses against a verifier that does not exist and — since a wrong-length guess still
- * burns an attempt (14's `assertPinFormat` comment) — could lock themselves out of an account they
- * have never used.
+ * What tapping a card does. A user whose verifier is null never gets a PIN pad they cannot satisfy
+ * (§6.6 first-PIN): guesses against a verifier that does not exist would still burn attempts. The
+ * enrolling owner makes their own first PIN; anyone else is told to ask an owner, because a phone that
+ * is behind may show "no PIN" for someone who already has one (core's `setFirstPin`).
  */
 export type SwitcherTap =
   | { readonly kind: 'pin'; readonly userId: string }
-  | { readonly kind: 'firstPinSetup'; readonly userId: string };
+  | { readonly kind: 'firstPinSetup'; readonly userId: string }
+  | { readonly kind: 'askOwnerForPin'; readonly userId: string };
 
 export function tapTarget(user: SwitcherUser): SwitcherTap {
-  return user.needsFirstPin
+  if (!user.needsFirstPin) return { kind: 'pin', userId: user.id };
+  return user.canMakeOwnPin === true
     ? { kind: 'firstPinSetup', userId: user.id }
-    : { kind: 'pin', userId: user.id };
+    : { kind: 'askOwnerForPin', userId: user.id };
 }
 
 // NO per-state headline label map here (task 65). A `SWITCHER_KEY` mirror once existed and was a

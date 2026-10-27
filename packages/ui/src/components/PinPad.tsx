@@ -61,7 +61,8 @@ export interface PinPadProps {
  * Key order is memory-of-place for tech-inadept users (§3.3): the layout never shuffles, so the
  * grid is a plain wrapped row of fixed-size cells and position is structural, not computed.
  */
-const KEYPAD_WIDTH = touch.key * 3 + touch.gap * 2;
+const KEY_GAP = space.xl;
+const KEYPAD_WIDTH = touch.key * 3 + KEY_GAP * 2;
 
 const styles = StyleSheet.create({
   root: { alignItems: 'center' },
@@ -77,12 +78,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     marginHorizontal: space.sm,
   },
-  message: {
-    ...type.bodySm,
-    textAlign: 'center',
+  // The message slot keeps its two-line height even when empty, so an error appearing never shifts
+  // the keys under a finger that is about to tap again.
+  messageSlot: {
+    minHeight: type.bodySm.lineHeight * 2,
+    justifyContent: 'center',
+    marginTop: space.sm,
     marginBottom: space.md,
     paddingHorizontal: space.lg,
   },
+  message: { ...type.bodySm, textAlign: 'center' },
   keypad: {
     width: KEYPAD_WIDTH,
     flexDirection: 'row',
@@ -94,7 +99,7 @@ const styles = StyleSheet.create({
     height: touch.key,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: touch.gap,
+    marginBottom: space.md,
     borderRadius: radius.full,
   },
   keyLabel: { ...type.title, color: color.text },
@@ -188,14 +193,17 @@ export function PinPad({
         ))}
       </View>
 
-      {message === undefined ? null : (
-        <Text
-          testID={`${testID}.message`}
-          style={[styles.message, { color: state === 'error' ? color.danger : color.textMuted }]}
-        >
-          {message}
-        </Text>
-      )}
+      <View style={styles.messageSlot}>
+        {message === undefined ? null : (
+          <Text
+            testID={`${testID}.message`}
+            accessibilityLiveRegion="polite"
+            style={[styles.message, { color: state === 'error' ? color.danger : color.textMuted }]}
+          >
+            {message}
+          </Text>
+        )}
+      </View>
 
       <View testID={`${testID}.keypad`} style={styles.keypad}>
         {KEYPAD.map((cell) => {

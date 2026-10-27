@@ -2,7 +2,7 @@
 // SEC-AUTH-08) — this file mounts the real screen to prove the `mode` prop is wired through.
 //
 // ── WHY THIS FILE EXISTS (task 69) ──────────────────────────────────────────────────────────────
-// `model.test.ts` covers the switcher's ordering, chunking, and state derivation. None of it renders
+// `model.test.ts` covers the switcher's ordering, search, and state derivation. None of it renders
 // the screen, so nothing sees the one wiring that lives ONLY in `SwitcherScreen`: `mode === 'lock'`
 // draws `<Banner … testID="switcher-lock-banner">`, and any other mode draws nothing. That banner is
 // SEC-AUTH-08's whole reason the idle lock is tolerable — it tells a technician, before they ask,
@@ -12,7 +12,7 @@
 // The assertion is presence/absence of a testID (public structure), never the banner's copy — T-4.
 import { describe, expect, test, vi } from 'vitest';
 
-import { render } from '../../../../../packages/ui/test/render.js';
+import { fire, render } from '../../../../../packages/ui/test/render.js';
 
 import { SwitcherScreen } from './SwitcherScreen.js';
 import type { SwitcherState, SwitcherUser } from './model.js';
@@ -104,13 +104,100 @@ describe("the card shows the user's role line, driven by roleKeys (design-system
 
   test('a user with a role renders the role line', () => {
     const screen = renderUser(['store_owner']);
-    expect(screen.query(`switcher-user-role-${USER.id}`)).not.toBeNull();
+    expect(screen.query(`switcher-user-${USER.id}.secondary`)).not.toBeNull();
   });
 
   test('POSITIVE CONTROL: a user with no role grant renders NO role line', () => {
     // Without this, the test above would pass on a screen that printed a role line unconditionally —
     // an empty muted line under every unroled name, and a raw key for any role with no catalog row.
     const screen = renderUser([]);
-    expect(screen.query(`switcher-user-role-${USER.id}`)).toBeNull();
+    expect(screen.query(`switcher-user-${USER.id}.secondary`)).toBeNull();
+  });
+});
+
+describe('each row says what will happen before the tap', () => {
+  const LOCKED: SwitcherUser = { ...USER, id: 'u-yosua', name: 'Yosua Kogoya' };
+  const NEW: SwitcherUser = { ...USER, id: 'u-maria', name: 'Maria Wenda', needsFirstPin: true };
+
+  function renderRows(over: {
+    currentUserId?: string | null;
+    lockedUserIds?: ReadonlySet<string>;
+  }) {
+    return render(
+      <SwitcherScreen
+        state={{ kind: 'ready', users: [USER, LOCKED, NEW] }}
+        mode="choose"
+        onBack={vi.fn()}
+        onSelect={vi.fn()}
+        onRetry={vi.fn()}
+        onUnauthorizedBack={vi.fn()}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={vi.fn()}
+        currentUserId={over.currentUserId ?? null}
+        lockedUserIds={over.lockedUserIds ?? new Set<string>()}
+      />,
+    );
+  }
+
+  test('a locked PIN, a missing PIN and the current user each get their own mark, and only they do', () => {
+    const screen = renderRows({ currentUserId: USER.id, lockedUserIds: new Set([LOCKED.id]) });
+    expect(screen.query(`switcher-user-locked-${LOCKED.id}`)).not.toBeNull();
+    expect(screen.query(`switcher-user-nopin-${NEW.id}`)).not.toBeNull();
+    expect(screen.query(`switcher-user-current-${USER.id}`)).not.toBeNull();
+
+    expect(screen.query(`switcher-user-locked-${USER.id}`)).toBeNull();
+    expect(screen.query(`switcher-user-nopin-${LOCKED.id}`)).toBeNull();
+    expect(screen.query(`switcher-user-current-${LOCKED.id}`)).toBeNull();
+  });
+
+  test('POSITIVE CONTROL: nobody locked and no current user ⇒ only the missing-PIN mark shows', () => {
+    const screen = renderRows({});
+    expect(screen.query(`switcher-user-locked-${LOCKED.id}`)).toBeNull();
+    expect(screen.query(`switcher-user-current-${USER.id}`)).toBeNull();
+    expect(screen.query(`switcher-user-nopin-${NEW.id}`)).not.toBeNull();
+  });
+});
+
+describe('search appears only for a long roster, and narrows it', () => {
+  const many: SwitcherUser[] = [
+    'Siti Rahayu',
+    'Yosua Kogoya',
+    'Maria Wenda',
+    'Andi Pratama',
+    'Budi Santoso',
+    'Paulus Mandowen',
+    'Dewi Lestari',
+    'Ruben Wanggai',
+  ].map((name, i) => ({ ...USER, id: `u-${i}`, name }));
+
+  function renderMany(users: readonly SwitcherUser[]) {
+    return render(
+      <SwitcherScreen
+        state={{ kind: 'ready', users }}
+        mode="choose"
+        onBack={vi.fn()}
+        onSelect={vi.fn()}
+        onRetry={vi.fn()}
+        onUnauthorizedBack={vi.fn()}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={vi.fn()}
+      />,
+    );
+  }
+
+  test('a short roster has no search box', () => {
+    expect(renderMany(many.slice(0, 3)).query('switcher-search')).toBeNull();
+  });
+
+  test('a typo still finds the person, and the others drop out', () => {
+    const screen = renderMany(many);
+    fire(screen.get('switcher-search.field'), 'onChangeText', 'mandowen');
+    expect(screen.query('switcher-user-u-5')).not.toBeNull();
+    expect(screen.query('switcher-user-u-0')).toBeNull();
+
+    fire(screen.get('switcher-search.field'), 'onChangeText', 'zzzzzz');
+    expect(screen.query('switcher-no-matches')).not.toBeNull();
   });
 });

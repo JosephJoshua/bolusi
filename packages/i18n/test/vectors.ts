@@ -58,7 +58,7 @@ export function runI18nVectors(): VectorResult[] {
   // @formatjs/intl-pluralrules (and nothing else from FormatJS) and re-run.
   check(
     't(auth.pin.attemptsLeft, {count: 1}) [en]',
-    '1 try left',
+    '1 try left.',
     t('auth.pin.attemptsLeft', { count: 1 }),
   );
 

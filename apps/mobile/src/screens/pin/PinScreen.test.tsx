@@ -96,8 +96,14 @@ describe('PinScreen wires the pad state through — the keys are dead inside a l
       expect(derivePinAuthState(lockoutRow)).toBe(state);
     });
 
-    test(`${name}: every one of the 11 keys is announced disabled AND carries no onPress`, () => {
+    test(`${name}: no key can be pressed (dead keys while delayed, no pad at all once locked out)`, () => {
       const screen = renderPin({ row: lockoutRow });
+      if (state === 'locked_out') {
+        // A hard lock has nothing to type into: the pad is replaced by the "ask the owner" state.
+        expect(screen.query('pin-pad')).toBeNull();
+        expect(screen.query('pin-locked-out')).not.toBeNull();
+        return;
+      }
       expect(KEYS).toHaveLength(11);
       for (const key of KEYS) {
         const node = screen.get(`pin-pad.key.${key}`);
