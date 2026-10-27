@@ -178,6 +178,20 @@ function journey(world: ChainWorld): OpSpec[] {
       payload: { list: 'checks', hidden: ['tinta-bocor'] },
     },
     {
+      type: 'repair.store_print_settings_changed',
+      entityType: 'repair_store_print_settings',
+      entityId: world.storeId,
+      payload: {
+        name: 'Bolusi Cell Sorong',
+        address: 'Jl. Basuki Rahmat No. 12',
+        phone: '0812-4800-1234',
+        logo: photo(12),
+        logoOnDotMatrix: false,
+        intakeTerms: 'Bawa nota ini saat ambil HP.',
+        handoverTerms: null,
+      },
+    },
+    {
       type: 'repair.customer_registered',
       entityType: 'repair_customer',
       entityId: customer,
@@ -190,6 +204,9 @@ function journey(world: ChainWorld): OpSpec[] {
       payload: { name: 'Yohanis Wenda', phone: '081234567890' },
     },
     opened(ticket, formatTicketNumber(world.deviceId, 1), id(0x200)),
+    onTicket('repair.down_payment_received', { amount: 100_000 }),
+    onTicket('repair.down_payment_corrected', { amount: 150_000, reason: 'Salah ketik' }),
+    onTicket('repair.slip_printed', { slip: 'intake' }),
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),
@@ -224,6 +241,7 @@ function journey(world: ChainWorld): OpSpec[] {
       signature: photo(11),
       note: '',
     }),
+    onTicket('repair.slip_printed', { slip: 'handover' }),
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
       type: 'repair.technician_assigned',
@@ -330,7 +348,7 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
   // The folds landed: each journey's end state is in the server's projections.
   const tickets = await db
     .selectFrom('repairTickets')
-    .select(['ticketNumber', 'outcome', 'location'])
+    .select(['ticketNumber', 'outcome', 'location', 'downPayment'])
     .orderBy('ticketNumber')
     .execute();
   expect(tickets).toEqual([
@@ -338,11 +356,13 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
       ticketNumber: formatTicketNumber(world.deviceId, 1),
       outcome: 'repaired',
       location: 'returned',
+      downPayment: '150000',
     },
     {
       ticketNumber: formatTicketNumber(world.deviceId, 2),
       outcome: 'cancelled',
       location: 'in_store',
+      downPayment: null,
     },
   ]);
   const notes = await db.selectFrom('notes').select('archived').execute();
