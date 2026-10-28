@@ -46,6 +46,8 @@ export function useDiscardConfirm({
         confirmLabel={copy.confirm}
         onConfirm={() => {
           setPending(null);
+          // The user said to drop it: a parent whose leave asks this guard must not ask again.
+          onRegisterDiscardGuard?.(null);
           pending();
         }}
         cancelLabel={copy.keep}

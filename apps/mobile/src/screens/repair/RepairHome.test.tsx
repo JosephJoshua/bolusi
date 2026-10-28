@@ -908,6 +908,61 @@ describe('hardware back', () => {
     expect(screen.query('repair.board')).not.toBeNull();
   });
 
+  test('leaving a ticket step with something typed asks first, and one yes leaves', async () => {
+    h = await openRepairScreenHarness(5511);
+    const ticketId = await openTicket(h);
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 150_000, reason: 'Kembung' },
+      h.technicianId,
+    );
+    const { screen, back } = await mountWithBack(h, h.cashierId);
+    await press(screen, `repair.board.row.${ticketId}`);
+
+    // Nothing typed: back simply leaves.
+    await press(screen, 'repair.ticket.action.changePrice');
+    await press(screen, 'repair.price.change.back');
+    expect(screen.query('repair.price.change')).toBeNull();
+
+    await press(screen, 'repair.ticket.action.changePrice');
+    type(screen, 'repair.price.change.reason', 'Ganti konektor');
+    await settle();
+    await press(screen, 'repair.price.change.back');
+    expect(screen.query('repair.price.change.discard')).not.toBeNull();
+    await press(screen, 'repair.price.change.discard.cancel');
+    expect(screen.query('repair.price.change.discard')).toBeNull();
+    expect(screen.query('repair.price.change')).not.toBeNull();
+    // Hardware back asks the same, and one confirm closes the step.
+    await back();
+    await press(screen, 'repair.price.change.discard.confirm');
+    expect(screen.query('repair.price.change.discard')).toBeNull();
+    expect(screen.query('repair.price.change')).toBeNull();
+    expect(screen.query('repair.ticket.content')).not.toBeNull();
+
+    await press(screen, 'repair.ticket.action.decidePrice');
+    type(screen, 'repair.proposal.note', 'Pelanggan mau pikir dulu');
+    await settle();
+    await press(screen, 'repair.proposal.back');
+    expect(screen.query('repair.proposal.discard')).not.toBeNull();
+    // From the header back too, one confirm is enough.
+    await press(screen, 'repair.proposal.discard.confirm');
+    expect(screen.query('repair.proposal.discard')).toBeNull();
+    expect(screen.query('repair.proposal')).toBeNull();
+  });
+
+  test('a cancel with a reason typed asks before it is dropped', async () => {
+    h = await openRepairScreenHarness(5512);
+    const ticketId = await openTicket(h);
+    const { screen, back } = await mountWithBack(h, h.storeOwnerId);
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.cancel');
+    type(screen, 'repair.cancel.reason', 'Pelanggan batal');
+    await settle();
+    await back();
+    expect(screen.query('repair.cancel.discard')).not.toBeNull();
+    expect(screen.query('repair.cancel')).not.toBeNull();
+  });
+
   test('back in the intake goes one step back, and asks before dropping a started intake', async () => {
     h = await openRepairScreenHarness(5502);
     const { screen, back } = await mountWithBack(h, h.cashierId);
