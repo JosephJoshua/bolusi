@@ -384,6 +384,7 @@ export interface PushTokens {
 export interface QrisCharges {
   accountId: string;
   amount: Int8;
+  callbackTokenHash: string;
   checkedAt: Int8 | null;
   createdAt: Int8;
   deviceId: string;
@@ -395,6 +396,7 @@ export interface QrisCharges {
   paymentId: string | null;
   qrString: string;
   requestedBy: string;
+  secretSealed: string;
   storeId: string;
   tenantId: string;
   xenditQrId: string;
@@ -405,7 +407,6 @@ export interface QrisConnections {
   callbackTokenHash: string;
   connectedAt: Int8;
   connectedBy: string;
-  disconnectedAt: Int8 | null;
   environment: string;
   secretSealed: string;
   tenantId: string;

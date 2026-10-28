@@ -9,8 +9,13 @@
 // calls back or a device asks.
 //
 // Nothing is believed from a callback alone. The callback names the QR; the payment is then read back
-// from Xendit with the account's own key (`reconcile`), the same path a device's "did they pay yet?"
-// takes when no callback came. The callback token is checked first only to turn strangers away.
+// from Xendit with the key the QR was made with (`reconcile`), the same path a device's "did they
+// pay yet?" takes when no callback came. The callback token is checked first only to turn strangers
+// away. Each charge keeps the key and token it was made under, so disconnecting or reconnecting an
+// account (even to another Xendit account) never strands a QR already on a customer's screen.
+//
+// Test mode (an `xnd_development_` key) records its payments too, so a store can try the flow, but
+// their reference starts `test:` and only someone who manages the account may have Xendit pay one.
 //
 // The charge is checked when the QR is made, by the same rule a device's own payment passes
 // (document in this store, account usable here), run as the person asking. A payment that arrives
@@ -100,13 +105,26 @@ function providerError(error: unknown): never {
   throw error;
 }
 
-export function callbackPath(tenantId: string, accountId: string): string {
-  return `/xendit/qr/${tenantId}/${accountId}`;
+/**
+ * One webhook per tenant, not per account: a Xendit account has a single QR webhook, and two
+ * payment accounts may share one Xendit account. The QR a callback names says which charge it is.
+ */
+export function callbackPath(tenantId: string): string {
+  return `/xendit/qr/${tenantId}`;
 }
 
-/** The key is sealed to its row: a sealed key moved to another account does not open. */
-function sealContext(tenantId: string, accountId: string): string {
-  return `qris:${tenantId}:${accountId}`;
+/** A key is sealed to its row: a sealed key copied onto another row does not open. */
+function sealContext(table: 'connection' | 'charge', tenantId: string, id: string): string {
+  return `qris-${table}:${tenantId}:${id}`;
+}
+
+/** The system device must be able to sign the payment before a customer is shown a QR to pay. */
+async function requireRecordable(ready: Ready, db: TenantDb, tenantId: string): Promise<void> {
+  try {
+    await loadSystemIdentity(db, tenantId, ready.systemKeyStore);
+  } catch {
+    throw new ApiError('QRIS_UNAVAILABLE');
+  }
 }
 
 // ── accounts ────────────────────────────────────────────────────────────────────────────────────
@@ -166,7 +184,6 @@ export async function listConnections(db: TenantDb, acting: ActingUser): Promise
       'moneyAccounts.storeId',
       'moneyAccounts.storeIdsJson',
     ])
-    .where('qrisConnections.disconnectedAt', 'is', null)
     .execute();
   return rows
     .filter(
@@ -203,7 +220,7 @@ export async function connectAccount(
   try {
     hook = await ready.qris.xendit.setQrWebhook(
       secretKey,
-      `${ready.qris.publicUrl}${callbackPath(acting.tenantId, accountId)}`,
+      `${ready.qris.publicUrl}${callbackPath(acting.tenantId)}`,
     );
   } catch (error) {
     providerError(error);
@@ -217,7 +234,10 @@ export async function connectAccount(
   const row = {
     accountId,
     tenantId: acting.tenantId,
-    secretSealed: ready.qris.sealer.seal(secretKey, sealContext(acting.tenantId, accountId)),
+    secretSealed: ready.qris.sealer.seal(
+      secretKey,
+      sealContext('connection', acting.tenantId, accountId),
+    ),
     callbackTokenHash: sha256Hex(hook.callbackToken),
     environment: hook.environment,
     connectedBy: acting.userId,
@@ -234,7 +254,6 @@ export async function connectAccount(
           environment: row.environment,
           connectedBy: row.connectedBy,
           connectedAt: row.connectedAt,
-          disconnectedAt: null,
         }),
       )
       .execute(),
@@ -242,10 +261,7 @@ export async function connectAccount(
   return connection;
 }
 
-/**
- * The account goes back to QRIS by hand. Its key stays, so a QR already on a customer's screen is
- * still confirmed and recorded; no new ones are made.
- */
+/** The account goes back to QRIS by hand. A QR already shown keeps its own key and still records. */
 export async function disconnectAccount(
   deps: QrisServiceDeps,
   acting: ActingUser,
@@ -255,11 +271,7 @@ export async function disconnectAccount(
     const account = await loadAccount(db, accountId);
     if (account === undefined) throw new ApiError('NOT_FOUND');
     await requireManages(db, acting, account);
-    await db
-      .updateTable('qrisConnections')
-      .set({ disconnectedAt: deps.now() })
-      .where('accountId', '=', accountId)
-      .execute();
+    await db.deleteFrom('qrisConnections').where('accountId', '=', accountId).execute();
   });
 }
 
@@ -280,6 +292,9 @@ interface ChargeRow {
   readonly checkedAt: number | null;
   readonly paymentId: string | null;
   readonly paidAt: number | null;
+  /** The account's key and callback token when the QR was made (see the file header). */
+  readonly secretSealed: string;
+  readonly callbackTokenHash: string;
 }
 
 async function loadCharge(
@@ -305,7 +320,27 @@ async function loadCharge(
     checkedAt: row.checkedAt === null ? null : Number(row.checkedAt),
     paymentId: row.paymentId,
     paidAt: row.paidAt === null ? null : Number(row.paidAt),
+    secretSealed: row.secretSealed,
+    callbackTokenHash: row.callbackTokenHash,
   };
+}
+
+/** Whether a stored charge is the one this request asks for (a retry), not another one. */
+function sameRequest(
+  charge: ChargeRow,
+  body: QrisChargeBody,
+  device: { readonly deviceId: string },
+): boolean {
+  return (
+    charge.deviceId === device.deviceId &&
+    charge.accountId === body.accountId &&
+    charge.amount === body.amount &&
+    charge.document.id === body.document.id
+  );
+}
+
+function chargeKey(ready: Ready, tenantId: string, charge: ChargeRow): string {
+  return ready.qris.sealer.open(charge.secretSealed, sealContext('charge', tenantId, charge.id));
 }
 
 function chargeView(charge: ChargeRow, now: number): QrisCharge {
@@ -342,25 +377,32 @@ function requireSameStore(acting: ActingUser, charge: ChargeRow): void {
   }
 }
 
-/** The account's Xendit key; a disconnected one's only to confirm QRs it already made. */
-async function openKey(
-  ready: Ready,
-  db: TenantDb,
-  tenantId: string,
-  accountId: string,
-  use: 'newQr' | 'confirm',
-) {
+/** The connected account's Xendit key and callback token, for a new QR. */
+async function connectionOf(ready: Ready, db: TenantDb, tenantId: string, accountId: string) {
   const connection = await db
     .selectFrom('qrisConnections')
-    .select(['secretSealed', 'environment', 'disconnectedAt'])
+    .select(['secretSealed', 'callbackTokenHash', 'environment'])
     .where('accountId', '=', accountId)
     .executeTakeFirst();
   if (connection === undefined) return undefined;
-  if (use === 'newQr' && connection.disconnectedAt !== null) return undefined;
   return {
-    secretKey: ready.qris.sealer.open(connection.secretSealed, sealContext(tenantId, accountId)),
+    secretKey: ready.qris.sealer.open(
+      connection.secretSealed,
+      sealContext('connection', tenantId, accountId),
+    ),
+    callbackTokenHash: connection.callbackTokenHash,
     environment: connection.environment as QrisEnvironment,
   };
+}
+
+/** Taking a payment: the counter's permission in the charge's store. */
+function requireReceives(db: TenantDb, acting: ActingUser, storeId: string): Promise<void> {
+  return requirePermission(db, {
+    userId: acting.userId,
+    tenantId: acting.tenantId,
+    storeId,
+    permissionId: MONEY_PERMISSION.receive,
+  });
 }
 
 /**
@@ -378,24 +420,12 @@ export async function createCharge(
   if (storeId === null) throw new ApiError('NOT_FOUND');
 
   const checked = await ready.forTenant(acting.tenantId, async (db) => {
+    await requireReceives(db, acting, storeId);
     const existing = await loadCharge(db, body.id);
     if (existing !== undefined) {
-      if (
-        existing.deviceId !== device.deviceId ||
-        existing.accountId !== body.accountId ||
-        existing.amount !== body.amount ||
-        existing.document.id !== body.document.id
-      ) {
-        throw new ApiError('IDEMPOTENCY_CONFLICT');
-      }
+      if (!sameRequest(existing, body, device)) throw new ApiError('IDEMPOTENCY_CONFLICT');
       return { existing };
     }
-    await requirePermission(db, {
-      userId: acting.userId,
-      tenantId: acting.tenantId,
-      storeId,
-      permissionId: MONEY_PERMISSION.receive,
-    });
     // The rule a payment from this person's device must pass, against the server's records. The op
     // is never signed or stored: only the rule reads it, and the rule reads the fields given here.
     const op = {
@@ -423,8 +453,9 @@ export async function createCharge(
       createAuthorLookup(db, acting.tenantId),
     );
     if (refused !== null) throw new ApiError('CHANGE_REFUSED', { reason: refused.reason });
-    const key = await openKey(ready, db, acting.tenantId, body.accountId, 'newQr');
+    const key = await connectionOf(ready, db, acting.tenantId, body.accountId);
     if (key === undefined) throw new ApiError('QRIS_NOT_CONNECTED');
+    await requireRecordable(ready, db, acting.tenantId);
     return { key };
   });
   if ('existing' in checked) return chargeView(checked.existing, ready.now());
@@ -456,6 +487,11 @@ export async function createCharge(
     checkedAt: null,
     paymentId: null,
     paidAt: null,
+    secretSealed: ready.qris.sealer.seal(
+      checked.key.secretKey,
+      sealContext('charge', acting.tenantId, body.id),
+    ),
+    callbackTokenHash: checked.key.callbackTokenHash,
   };
   const saved = await ready.forTenant(acting.tenantId, async (db) => {
     await db
@@ -473,13 +509,19 @@ export async function createCharge(
         expiresAt: charge.expiresAt,
         requestedBy: charge.requestedBy,
         deviceId: charge.deviceId,
+        secretSealed: charge.secretSealed,
+        callbackTokenHash: charge.callbackTokenHash,
         createdAt: ready.now(),
       })
-      // Two answers to one retried request: the first one in is the charge.
+      // Two requests with one id at once: the first one in is the charge (the other QR is never
+      // shown, and expires), and only a retry of that same request gets it back.
       .onConflict((oc) => oc.column('id').doNothing())
       .execute();
     return loadCharge(db, charge.id);
   });
+  if (saved !== undefined && !sameRequest(saved, body, device)) {
+    throw new ApiError('IDEMPOTENCY_CONFLICT');
+  }
   return chargeView(saved ?? charge, ready.now());
 }
 
@@ -499,6 +541,7 @@ export async function chargeStatus(
     const found = await loadCharge(db, id, { lock: true });
     if (found === undefined) throw new ApiError('NOT_FOUND');
     requireSameStore(acting, found);
+    await requireReceives(db, acting, found.storeId);
     const ask =
       found.paidAt === null &&
       (found.checkedAt === null || now - found.checkedAt >= RECHECK_MS) &&
@@ -517,33 +560,33 @@ export async function chargeStatus(
   return chargeView(settled ?? charge, ready.now());
 }
 
-/** Test mode only: have Xendit pay the QR, as a customer's app would. */
+/**
+ * Test mode only: have Xendit pay the QR, as a customer's app would. Someone who manages the account
+ * only: in a real store a cashier must not be able to mark a servisan paid with play money.
+ */
 export async function simulateCharge(
   deps: QrisServiceDeps,
   acting: ActingUser,
   id: string,
 ): Promise<QrisCharge> {
   const ready = readyOrUnavailable(deps);
-  const { charge, key } = await ready.forTenant(acting.tenantId, async (db) => {
+  const charge = await ready.forTenant(acting.tenantId, async (db) => {
     const found = await loadCharge(db, id);
     if (found === undefined) throw new ApiError('NOT_FOUND');
     requireSameStore(acting, found);
-    await requirePermission(db, {
-      userId: acting.userId,
-      tenantId: acting.tenantId,
-      storeId: found.storeId,
-      permissionId: MONEY_PERMISSION.receive,
-    });
+    const account = await loadAccount(db, found.accountId);
+    if (account === undefined) throw new ApiError('NOT_FOUND');
+    await requireManages(db, acting, account);
     if (found.environment !== 'test') throw new ApiError('NOT_FOUND');
-    return {
-      charge: found,
-      key: await openKey(ready, db, acting.tenantId, found.accountId, 'confirm'),
-    };
+    return found;
   });
-  if (key === undefined) throw new ApiError('QRIS_NOT_CONNECTED');
   if (charge.paidAt === null) {
     try {
-      await ready.qris.xendit.simulateQrPayment(key.secretKey, charge.xenditQrId, charge.amount);
+      await ready.qris.xendit.simulateQrPayment(
+        chargeKey(ready, acting.tenantId, charge),
+        charge.xenditQrId,
+        charge.amount,
+      );
     } catch (error) {
       providerError(error);
     }
@@ -557,51 +600,46 @@ export async function simulateCharge(
 export type CallbackOutcome = 'recorded' | 'ignored' | 'unauthorized' | 'retry';
 
 /**
- * Xendit's `qr.payment` callback for one connected account. The token turns strangers away; the
- * payment itself is then read back from Xendit before anything is recorded.
+ * Xendit's `qr.payment` callback. The QR it names says which charge, and so which callback token,
+ * it must carry; the payment itself is then read back from Xendit before anything is recorded.
+ * A genuine callback for a payment Xendit does not show yet answers `retry`, so Xendit calls again.
  */
 export async function handleCallback(
   deps: QrisServiceDeps,
   tenantId: string,
-  accountId: string,
   token: string | undefined,
   body: unknown,
 ): Promise<CallbackOutcome> {
   if (deps.qris === undefined || deps.systemKeyStore === undefined) return 'retry';
   const ready = deps as Ready;
-  const event = body as { event?: unknown; data?: { reference_id?: unknown; qr_id?: unknown } };
+  const event = (typeof body === 'object' && body !== null ? body : {}) as {
+    event?: unknown;
+    data?: { reference_id?: unknown; qr_id?: unknown };
+  };
+  const qrId = event.data?.qr_id;
+  // Not a QR payment, or not one this server made (the Xendit account may serve other systems):
+  // nothing here to record, and nothing for Xendit to retry.
+  if (event.event !== 'qr.payment' || typeof qrId !== 'string') return 'ignored';
 
-  const chargeId = await ready.forTenant(tenantId, async (db) => {
-    const connection = await db
-      .selectFrom('qrisConnections')
-      .select('callbackTokenHash')
-      .where('accountId', '=', accountId)
-      .executeTakeFirst();
-    if (
-      connection === undefined ||
-      token === undefined ||
-      !timingSafeEqualHex(sha256Hex(token), connection.callbackTokenHash)
-    ) {
-      return 'unauthorized' as const;
-    }
-    if (event.event !== 'qr.payment') return null;
-    const reference = event.data?.reference_id;
-    const qrId = event.data?.qr_id;
-    if (typeof reference !== 'string' || typeof qrId !== 'string') return null;
-    const charge = await db
+  const charge = await ready.forTenant(tenantId, (db) =>
+    db
       .selectFrom('qrisCharges')
-      .select('id')
+      .select(['id', 'callbackTokenHash'])
       .where('xenditQrId', '=', qrId)
-      .where('accountId', '=', accountId)
-      .executeTakeFirst();
-    // A QR this server did not make (the account is also used elsewhere): not ours to record.
-    return charge?.id === reference ? charge.id : null;
-  });
-  if (chargeId === 'unauthorized') return 'unauthorized';
-  if (chargeId === null) return 'ignored';
+      .executeTakeFirst(),
+  );
+  if (charge === undefined) return 'ignored';
+  if (token === undefined || !timingSafeEqualHex(sha256Hex(token), charge.callbackTokenHash)) {
+    return 'unauthorized';
+  }
+  if (event.data?.reference_id !== charge.id) return 'ignored';
   try {
-    const settled = await reconcile(ready, tenantId, chargeId);
-    return settled?.paidAt === null || settled === null ? 'ignored' : 'recorded';
+    const settled = await reconcile(ready, tenantId, charge.id);
+    if (settled === null) return 'ignored';
+    if (settled.paidAt !== null) return 'recorded';
+    // Xendit said it was paid but does not show it yet. While it could still be paid, have Xendit
+    // call again rather than leave it to a device that may no longer be asking.
+    return ready.now() <= settled.expiresAt + QRIS_TTL_MS ? 'retry' : 'ignored';
   } catch (error) {
     if (error instanceof XenditUnavailable || error instanceof XenditRefusal) return 'retry';
     throw error;
@@ -611,23 +649,19 @@ export async function handleCallback(
 // ── recording ───────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Ask Xendit whether the charge's QR was paid, and record the payment if so. Returns the charge as
- * it now stands, or null if it no longer exists.
+ * Ask Xendit whether the charge's QR was paid, with the key it was made with, and record the
+ * payment if so. Returns the charge as it now stands, or null if it no longer exists.
  */
 async function reconcile(ready: Ready, tenantId: string, chargeId: string) {
-  const found = await ready.forTenant(tenantId, async (db) => {
-    const charge = await loadCharge(db, chargeId);
-    if (charge === undefined) return undefined;
-    return { charge, key: await openKey(ready, db, tenantId, charge.accountId, 'confirm') };
-  });
-  if (found === undefined) return null;
-  if (found.charge.paidAt !== null || found.key === undefined) return found.charge;
+  const charge = await ready.forTenant(tenantId, (db) => loadCharge(db, chargeId));
+  if (charge === undefined) return null;
+  if (charge.paidAt !== null) return charge;
   const payments = await ready.qris.xendit.listQrPayments(
-    found.key.secretKey,
-    found.charge.xenditQrId,
+    chargeKey(ready, tenantId, charge),
+    charge.xenditQrId,
   );
   const payment = payments.find((p) => p.succeeded);
-  if (payment === undefined) return found.charge;
+  if (payment === undefined) return charge;
   return recordPayment(ready, tenantId, chargeId, payment.paymentId, payment.amount);
 }
 
@@ -658,7 +692,11 @@ async function recordPayment(
           entityType: MONEY_ENTRY_ENTITY,
           entityId: charge.id,
           schemaVersion: 1,
-          payload: paymentPayload(charge, amount, paymentId),
+          payload: paymentPayload(
+            charge,
+            amount,
+            charge.environment === 'test' ? `test:${paymentId}` : paymentId,
+          ),
           timestamp: now,
         },
       );

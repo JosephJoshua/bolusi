@@ -33,13 +33,16 @@ class FakeXendit implements XenditPort {
     { referenceId: string; amount: number; payments: XenditQrPayment[] }
   >();
   created = 0;
-  listCalls = 0;
+  /** The key each payments read was made with. */
+  readonly listKeys: string[] = [];
   down = false;
 
   setQrWebhook(secretKey: string, url: string) {
     if (!secretKey.startsWith('xnd_')) return Promise.reject(new XenditRefusal('keyInvalid'));
     this.webhooks.push({ key: secretKey, url });
-    return Promise.resolve({ callbackToken: CALLBACK_TOKEN, environment: 'test' as const });
+    // Each Xendit account has its own token; the test key's is CALLBACK_TOKEN.
+    const callbackToken = secretKey === TEST_KEY ? CALLBACK_TOKEN : `token-of-${secretKey}`;
+    return Promise.resolve({ callbackToken, environment: 'test' as const });
   }
 
   createDynamicQr(_key: string, input: { referenceId: string; amount: number }) {
@@ -49,8 +52,8 @@ class FakeXendit implements XenditPort {
     return Promise.resolve({ qrId, qrString: `qr-string-${String(this.created)}` });
   }
 
-  listQrPayments(_key: string, qrId: string) {
-    this.listCalls += 1;
+  listQrPayments(key: string, qrId: string) {
+    this.listKeys.push(key);
     if (this.down) return Promise.reject(new XenditRefusal('notFound'));
     return Promise.resolve(this.qrs.get(qrId)?.payments ?? []);
   }
@@ -89,6 +92,8 @@ interface World {
 }
 
 let world: World;
+/** The tenant's system key goes missing: no signer to record a payment with. */
+let signerMissing = false;
 
 async function makeWorld(options: { qris?: boolean } = {}): Promise<World> {
   const xendit = new FakeXendit();
@@ -103,7 +108,9 @@ async function makeWorld(options: { qris?: boolean } = {}): Promise<World> {
       ...(options.qris === false ? {} : { qris }),
       systemKeyStore: {
         getSystemSigner: () =>
-          systemKey === null ? undefined : (hash) => serverCryptoPort.sign(hash, systemKey!),
+          systemKey === null || signerMissing
+            ? undefined
+            : (hash) => serverCryptoPort.sign(hash, systemKey!),
       },
     }),
   });
@@ -196,6 +203,7 @@ async function makeWorld(options: { qris?: boolean } = {}): Promise<World> {
 }
 
 beforeEach(async () => {
+  signerMissing = false;
   world = await makeWorld();
 }, 120_000);
 
@@ -236,7 +244,7 @@ function chargeBody(overrides: Record<string, unknown> = {}) {
 
 function callback(chargeId: string, qrId: string, token = CALLBACK_TOKEN): Promise<Response> {
   return Promise.resolve(
-    world.h.app.request(`${BASE}/xendit/qr/${world.tenantId}/${world.accountId}`, {
+    world.h.app.request(`${BASE}/xendit/qr/${world.tenantId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-callback-token': token },
       body: JSON.stringify({
@@ -270,7 +278,7 @@ describe('connecting a QRIS account', () => {
       environment: 'test',
     });
     expect(world.xendit.webhooks).toEqual([
-      { key: TEST_KEY, url: `${PUBLIC_URL}/xendit/qr/${world.tenantId}/${world.accountId}` },
+      { key: TEST_KEY, url: `${PUBLIC_URL}/xendit/qr/${world.tenantId}` },
     ]);
     const row = await world.h.idb.db
       .selectFrom('qrisConnections')
@@ -381,6 +389,14 @@ describe('a QR for a payment', () => {
     expect(world.xendit.created).toBe(0);
   });
 
+  test('no QR is shown when the server could not record its payment', async () => {
+    signerMissing = true;
+    const response = await call('POST', '/v1/money/qris/charges', { body: chargeBody() });
+    expect(response.status).toBe(503);
+    expect(await errorCode(response)).toBe('QRIS_UNAVAILABLE');
+    expect(world.xendit.created).toBe(0);
+  });
+
   test('a charge is only seen from its own store', async () => {
     const body = chargeBody();
     await call('POST', '/v1/money/qris/charges', { body });
@@ -420,7 +436,8 @@ describe('recording the payment', () => {
         document: { kind: 'repair.ticket', id: world.ticketId, label: 'TH0-0001' },
         account: `account:${world.accountId}`,
         amount: 150_000,
-        reference: 'qrpy_qr_1',
+        // A test-mode payment says so.
+        reference: 'test:qrpy_qr_1',
         tendered: null,
       },
     });
@@ -442,9 +459,30 @@ describe('recording the payment', () => {
     expect(await status.json()).toMatchObject({ status: 'paid' });
   });
 
-  test('a callback is not believed until Xendit shows the payment', async () => {
-    expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+  test('a callback is not believed until Xendit shows the payment, and Xendit is asked to retry', async () => {
+    expect((await callback(chargeId, 'qr_1')).status).toBe(503);
     expect(await paymentOps()).toEqual([]);
+    world.xendit.pay('qr_1');
+    expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+    expect(await paymentOps()).toHaveLength(1);
+  });
+
+  test('a callback without a body, or for a QR this server did not make, is let go', async () => {
+    const empty = await world.h.app.request(`${BASE}/xendit/qr/${world.tenantId}`, {
+      method: 'POST',
+      headers: { 'x-callback-token': CALLBACK_TOKEN },
+    });
+    expect(empty.status).toBe(200);
+    expect((await callback(chargeId, 'qr_elsewhere')).status).toBe(200);
+    expect(await paymentOps()).toEqual([]);
+  });
+
+  test('reconnecting the account to another Xendit account still records a QR already shown', async () => {
+    expect((await connect(world.ownerId, 'xnd_development_another_account_key')).status).toBe(200);
+    world.xendit.pay('qr_1');
+    expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+    expect(await paymentOps()).toHaveLength(1);
+    expect(world.xendit.listKeys).toEqual([TEST_KEY]);
   });
 
   test('a wrong callback token records nothing', async () => {
@@ -473,10 +511,21 @@ describe('recording the payment', () => {
     expect(await paymentOps()).toHaveLength(1);
   });
 
-  test('in test mode the counter can pay its own QR', async () => {
-    const response = await call('POST', `/v1/money/qris/charges/${chargeId}/simulate`);
+  test('in test mode an owner can have Xendit pay a QR, and the counter cannot', async () => {
+    const counter = await call('POST', `/v1/money/qris/charges/${chargeId}/simulate`);
+    expect(counter.status).toBe(403);
+    const response = await call('POST', `/v1/money/qris/charges/${chargeId}/simulate`, {
+      as: world.ownerId,
+    });
     expect(await response.json()).toMatchObject({ status: 'paid' });
     expect(await paymentOps()).toHaveLength(1);
+  });
+
+  test('someone who cannot take payments cannot follow a charge', async () => {
+    const response = await call('GET', `/v1/money/qris/charges/${chargeId}`, {
+      as: world.technicianId,
+    });
+    expect(response.status).toBe(403);
   });
 
   test('a QR expires after fifteen minutes', async () => {

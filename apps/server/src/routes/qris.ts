@@ -9,11 +9,11 @@
 //
 // And Xendit, outside /v1 with no bearer token:
 //
-//   POST   /xendit/qr/:tenantId/:accountId      `qr.payment` for one connected account
+//   POST   /xendit/qr/:tenantId                 `qr.payment` for a QR this tenant made
 //
 // The callback is the one place a tenant id comes from a path rather than a bearer (tenant.ts): it
-// is authenticated by the account's callback token, compared against the hash stored in that
-// tenant's own row, and nothing is recorded until Xendit confirms the payment to the account's key.
+// is authenticated by the callback token of the QR it names, compared against the hash stored in
+// that tenant's own row, and nothing is recorded until Xendit confirms the payment to the QR's key.
 // Xendit retries anything but a 2xx, so a payment the server could not record yet gets a 503.
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -103,11 +103,11 @@ export function createQrisRouter(deps: ServerDeps) {
     });
 }
 
-const zCallbackParams = z.object({ tenantId: zUuid, accountId: zUuid });
+const zCallbackParams = z.object({ tenantId: zUuid });
 
 export function createXenditCallbackRouter(deps: ServerDeps) {
   return new Hono<AppEnv>().post(
-    '/qr/:tenantId/:accountId',
+    '/qr/:tenantId',
     bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.body(null, 413) }),
     async (c) => {
       const params = zCallbackParams.safeParse(c.req.param());
@@ -116,7 +116,6 @@ export function createXenditCallbackRouter(deps: ServerDeps) {
       const outcome = await handleCallback(
         deps,
         params.data.tenantId,
-        params.data.accountId,
         c.req.header('x-callback-token'),
         body,
       );
