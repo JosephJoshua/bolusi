@@ -4,3 +4,11 @@
 /* Classes used by the shared desktop components live outside this folder. */
 @source '../../../../packages/ui-web/src';
 @source '../../../../packages/modules/src/repair/desktop';
+
+/* Dialogs, menus and tooltips can open over the title bar's drag area; a click on them must stay a
+ * click, not start moving the window. */
+[role='dialog'],
+[role='alertdialog'],
+[data-radix-popper-content-wrapper] {
+  -webkit-app-region: no-drag;
+}

@@ -1,6 +1,7 @@
-// The counter app's frame once someone is signed in: the sidebar, and the servisan board or the
-// intake page beside it. The same frame runs over the offline core and over the seeded demo; what
-// differs (who is here, the person menu, the sync line) comes in as props.
+// The counter app's frame once someone is signed in: the title bar (store, update, sync, who is
+// here), the sidebar's sections, and the servisan board or the intake page beside them. The same
+// frame runs over the offline core and over the seeded demo; what differs (who is here, the person
+// menu, the sync status) comes in as props.
 import { t } from '@bolusi/i18n';
 import {
   IntakePage,
@@ -9,12 +10,13 @@ import {
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
-import { AppShell, Avatar, Menu, Sidebar, Tooltip, type MenuItem } from '@bolusi/ui-web';
-import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
+import { AppShell, Avatar, Menu, Sidebar, SidebarToggle, type MenuItem } from '@bolusi/ui-web';
+import { ChevronDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
 import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
+import { BAR_CONTROL, TitleBar } from './TitleBar.js';
 import { UpdateNotice } from './updates.js';
 
 type Page =
@@ -83,8 +85,8 @@ export function Counter({
   readonly menuHeader?: ReactNode;
   /** What the person menu offers: switching to someone else, locking the screen. */
   readonly menuItems: readonly MenuItem[];
-  /** The sync line at the foot of the sidebar; absent in the demo, which has nothing to send. */
-  readonly sync?: ((compact: boolean) => ReactNode) | undefined;
+  /** The sync status in the title bar; absent in the demo, which has nothing to send. */
+  readonly sync?: ReactNode;
   /** Opens the sync panel, from a servisan the server refused a change on. */
   readonly onOpenSyncStatus?: (() => void) | undefined;
   /** What Settings may do for this person besides the repair settings; the demo has none. */
@@ -133,31 +135,29 @@ export function Counter({
     <AppShell
       testId="desktop.shell"
       collapsed={collapsed}
+      titleBar={
+        <TitleBar
+          storeName={storeName}
+          leading={
+            <SidebarToggle
+              collapsed={collapsed}
+              onToggle={toggleSidebar}
+              labels={{ collapse: t('core.nav.collapse'), expand: t('core.nav.expand') }}
+              tooltipSide="bottom"
+              tone="inverse"
+            />
+          }
+        >
+          <UpdateNotice />
+          {sync}
+          <PersonMenu person={person} header={menuHeader} items={personMenu} />
+        </TitleBar>
+      }
       sidebar={
         <Sidebar
           label={t('core.nav.main')}
           collapsed={collapsed}
           onToggle={toggleSidebar}
-          toggleLabels={{ collapse: t('core.nav.collapse'), expand: t('core.nav.expand') }}
-          header={(compact) =>
-            compact ? (
-              <Tooltip label={storeName} side="right">
-                <span
-                  className="flex size-9 items-center justify-center rounded-sm bg-primary text-heading font-bold text-white"
-                  data-testid="desktop.store"
-                >
-                  {storeName.trim().charAt(0).toUpperCase()}
-                </span>
-              </Tooltip>
-            ) : (
-              <span
-                className="block break-words text-heading font-bold leading-tight text-text"
-                data-testid="desktop.store"
-              >
-                {storeName}
-              </span>
-            )
-          }
           nav={[
             {
               key: 'repair',
@@ -174,18 +174,6 @@ export function Counter({
               onSelect: () => go({ kind: 'settings' }),
             },
           ]}
-          footer={(compact) => (
-            <div className="flex flex-col gap-3">
-              <UpdateNotice compact={compact} />
-              {sync?.(compact)}
-              <PersonMenu
-                person={person}
-                compact={compact}
-                header={menuHeader}
-                items={personMenu}
-              />
-            </div>
-          )}
         />
       }
     >
@@ -222,49 +210,45 @@ export function Counter({
 
 function PersonMenu({
   person,
-  compact,
   header,
   items,
 }: {
   readonly person: CounterPerson;
-  /** Only the face, in the collapsed sidebar; the tooltip names who it is. */
-  readonly compact: boolean;
   readonly header?: ReactNode;
   readonly items: readonly MenuItem[];
 }): React.JSX.Element {
+  // The bar gives the face and, when there is room, the name; the menu says who in full, with roles.
   return (
     <Menu
-      align="start"
-      tooltip={compact ? { label: person.name, side: 'right' } : undefined}
-      header={header}
+      align="end"
+      tooltip={{ label: person.name, side: 'bottom' }}
+      header={
+        <span className="flex max-w-64 flex-col gap-2">
+          <span className="flex flex-col">
+            <span className="break-words text-body font-semibold text-text">{person.name}</span>
+            {person.role === '' ? null : (
+              <span className="break-words text-small font-normal text-text-muted">
+                {person.role}
+              </span>
+            )}
+          </span>
+          {header}
+        </span>
+      }
       items={items}
       trigger={
-        compact ? (
-          <button
-            type="button"
-            aria-label={t('core.account.menu')}
-            data-testid="desktop.person"
-            className="flex w-full cursor-pointer justify-center rounded-sm p-1 hover:bg-black/5"
-          >
-            <Avatar userId={person.userId} name={person.name} size={32} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label={t('core.account.menu')}
-            data-testid="desktop.person"
-            className="flex w-full cursor-pointer items-center gap-3 rounded-sm p-2 text-left hover:bg-black/5"
-          >
-            <Avatar userId={person.userId} name={person.name} size={32} />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="break-words text-body font-semibold text-text">{person.name}</span>
-              {person.role === '' ? null : (
-                <span className="break-words text-small text-text-muted">{person.role}</span>
-              )}
-            </span>
-            <ChevronsUpDown size={16} aria-hidden className="shrink-0 text-text-muted" />
-          </button>
-        )
+        <button
+          type="button"
+          aria-label={t('core.account.menu')}
+          data-testid="desktop.person"
+          className={`${BAR_CONTROL} pl-1`}
+        >
+          <Avatar userId={person.userId} name={person.name} size={28} />
+          <span className="hidden max-w-40 truncate font-semibold text-chrome-text @min-[56rem]:inline">
+            {person.name}
+          </span>
+          <ChevronDown size={14} aria-hidden className="shrink-0" />
+        </button>
       }
     />
   );

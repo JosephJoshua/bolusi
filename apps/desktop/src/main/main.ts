@@ -1,5 +1,5 @@
-// The Electron main process: one locked-down window for the counter screens, and the offline core
-// in its own utility process. The renderer gets no Node and no way to open other pages; the preload
+// The Electron main process: one locked-down window for the counter screens (drawing its own title
+// bar, `window-chrome.ts`), and the offline core in its own utility process. The renderer gets no Node and no way to open other pages; the preload
 // gives it a few narrow calls (`bridge.ts`): printing, updates and a port to the core. Only `wa.me`
 // links open outside the app.
 import {
@@ -19,6 +19,7 @@ import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
 import { registerPrinting } from './printing.js';
 import { registerUpdates } from './updater.js';
+import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
 
 // The dev server is for development only; an installed app never loads a page from elsewhere.
 const DEV_SERVER_URL = app.isPackaged ? undefined : process.env['BOLUSI_DESKTOP_DEV_URL'];
@@ -69,6 +70,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#ffffff',
     autoHideMenuBar: true,
+    ...frameOptions(process.platform),
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -81,6 +83,7 @@ function createWindow(): void {
   counterWindows.add(window);
   window.on('closed', () => counterWindows.delete(window));
   window.once('ready-to-show', () => window.show());
+  reportFullscreen(window);
 
   // The app is one page: nothing navigates it or opens another window. A link to a listed host
   // opens outside it, in the browser or the app that handles it (WhatsApp Desktop for wa.me).
@@ -140,6 +143,7 @@ void app.whenReady().then(() => {
   const pages = (): Electron.WebContents[] =>
     [...counterWindows].map((window) => window.webContents);
   registerUpdates(trusted, pages);
+  registerWindowChrome(trusted);
   if (!DEMO && API_BASE_URL === '')
     console.error('BOLUSI_API_URL is not set: nothing to sync with');
   quitAfter(
