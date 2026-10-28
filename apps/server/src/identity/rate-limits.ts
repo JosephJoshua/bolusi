@@ -27,20 +27,60 @@ export interface WindowLimitStore {
 interface Window {
   count: number;
   startedAt: number;
+  windowMs: number;
 }
 
-/** In-memory fixed-window store (api/00 §11 v0: single-instance). Tests can swap a fake. */
+/** How often (by the caller's clock) a call sweeps out windows that have ended. */
+const SWEEP_INTERVAL_MS = 60_000;
+/** Hard ceiling on live windows; past it the least recently used window is dropped. */
+const MAX_WINDOWS = 100_000;
+
+/**
+ * In-memory fixed-window store (api/00 §11 v0: single-instance). Tests can swap a fake.
+ *
+ * Keys carry client addresses and caller-chosen login identifiers, so the map is bounded the same
+ * way as the token-bucket store (middleware/rate-limit.ts): an ended window is dropped at the next
+ * periodic sweep (it reads the same as a missing one), and past `maxWindows` the least recently used
+ * window goes.
+ */
 export class InMemoryWindowLimitStore implements WindowLimitStore {
   readonly #windows = new Map<string, Window>();
+  readonly #maxWindows: number;
+  #lastSweepAt: number | undefined;
+
+  constructor(options: { maxWindows?: number } = {}) {
+    this.#maxWindows = options.maxWindows ?? MAX_WINDOWS;
+  }
+
+  /** Live windows — for tests of the eviction bound. */
+  get size(): number {
+    return this.#windows.size;
+  }
 
   #current(key: string, windowMs: number, nowMs: number): Window {
+    this.#sweep(nowMs);
     const existing = this.#windows.get(key);
-    if (existing === undefined || nowMs - existing.startedAt >= windowMs) {
-      const fresh = { count: 0, startedAt: nowMs };
-      this.#windows.set(key, fresh);
-      return fresh;
+    const w =
+      existing === undefined || nowMs - existing.startedAt >= windowMs
+        ? { count: 0, startedAt: nowMs, windowMs }
+        : existing;
+    // Re-insert so Map order is least-recently-used first, then trim to the ceiling.
+    this.#windows.delete(key);
+    this.#windows.set(key, w);
+    while (this.#windows.size > this.#maxWindows) {
+      const oldest = this.#windows.keys().next();
+      if (oldest.done === true) break;
+      this.#windows.delete(oldest.value);
     }
-    return existing;
+    return w;
+  }
+
+  #sweep(nowMs: number): void {
+    if (this.#lastSweepAt !== undefined && nowMs - this.#lastSweepAt < SWEEP_INTERVAL_MS) return;
+    this.#lastSweepAt = nowMs;
+    for (const [key, w] of this.#windows) {
+      if (nowMs - w.startedAt >= w.windowMs) this.#windows.delete(key);
+    }
   }
 
   #decision(w: Window, limit: number, windowMs: number, nowMs: number): RateDecision {
