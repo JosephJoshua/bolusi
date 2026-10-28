@@ -12,6 +12,7 @@ import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { OutcomeState } from '../src/components/OutcomeState.js';
 import { Sheet } from '../src/components/Sheet.js';
 import { Toast } from '../src/components/Toast.js';
+import { SyncChip } from '../src/shell/SyncChip.js';
 import { motion, overlayOpacity } from '../src/tokens.js';
 import { __setReduceMotion } from './doubles/react-native.js';
 import { fire, render } from './render.js';
@@ -141,4 +142,36 @@ test('a compact button keeps its 48 dp touch target inside its wrapper', () => {
   const slop = r.get('b').props['hitSlop'] as { top: number; bottom: number };
   expect(wrap['paddingVertical']).toBe(slop.top);
   expect(wrap['marginVertical']).toBe(-slop.bottom);
+});
+
+describe('sync chip motion', () => {
+  const labels = {
+    synced: 'Tersinkron',
+    pending: 'Menunggu',
+    syncing: 'Menyinkronkan',
+    offline: 'Offline',
+    attention: 'Perlu dicek',
+  };
+  const iconWrap = (r: ReturnType<typeof render>, state: string) =>
+    r.container.queryAll(
+      (node) =>
+        node.type === 'Animated.View' &&
+        node.queryAll((child) => child.props['testID'] === `ui.syncChip.icon.${state}`).length > 0,
+    )[0]!;
+
+  test('the arrows turn while syncing', () => {
+    const r = render(<SyncChip state="syncing" accessibilityLabels={labels} onPress={vi.fn()} />);
+    expect(iconWrap(r, 'syncing').props['style']).not.toBeNull();
+  });
+
+  test('synced since boot sits still; just synced flutters and lands upright', () => {
+    const boot = render(<SyncChip state="synced" accessibilityLabels={labels} onPress={vi.fn()} />);
+    expect(iconWrap(boot, 'synced').props['style']).toBeNull();
+
+    const r = render(<SyncChip state="syncing" accessibilityLabels={labels} onPress={vi.fn()} />);
+    r.rerender(<SyncChip state="synced" accessibilityLabels={labels} onPress={vi.fn()} />);
+    const style = flat(iconWrap(r, 'synced').props['style']);
+    expect(transformOf(style, 'scale')).toBe(1);
+    expect((style['transform'] as Record<string, { value: number }>[])[0]!['rotate']).toBeDefined();
+  });
 });

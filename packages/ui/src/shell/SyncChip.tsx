@@ -8,8 +8,10 @@
  * `offline` is NEUTRAL, never red (§4.6): offline is a normal operating mode for this product, not
  * an error. Only `attention` — a rejected op or a revocation — earns the danger token.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { NATIVE_DRIVER, easeEnter, useReducedMotion } from '../motion.js';
 import { color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon, type IconName } from '../components/Icon.js';
 
@@ -72,6 +74,93 @@ const styles = StyleSheet.create({
   },
 });
 
+/** One turn of the syncing arrows; slow enough to read as "working", not "stuck". */
+const SPIN_MS = 1_200;
+const SETTLE_MS = 420;
+
+/**
+ * The state's icon, in motion: while syncing the arrows turn, and when everything has just gone
+ * through the tick gives a small flutter, like the bird settling. Nothing moves at rest or under
+ * reduced motion, so a chip that sits synced all day costs nothing.
+ */
+function SyncIcon({
+  state,
+  settled,
+  tint,
+  testID,
+}: {
+  readonly state: SyncChipState;
+  /** It just went from syncing or pending to synced. Read once: the icon remounts per state. */
+  readonly settled: boolean;
+  readonly tint: string;
+  readonly testID: string;
+}): React.JSX.Element {
+  const still = useReducedMotion();
+  const turn = useRef(new Animated.Value(0)).current;
+  const spinning = state === 'syncing' && !still;
+  // Kept from mount: a later re-render of the header must not cut the flutter short.
+  const [arrived] = useState(settled);
+  const fluttering = arrived && !still;
+
+  useEffect(() => {
+    if (spinning) {
+      const loop = Animated.loop(
+        Animated.timing(turn, {
+          toValue: 1,
+          duration: SPIN_MS,
+          easing: Easing.linear,
+          useNativeDriver: NATIVE_DRIVER,
+        }),
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    if (fluttering) {
+      const flutter = Animated.timing(turn, {
+        toValue: 1,
+        duration: SETTLE_MS,
+        easing: easeEnter,
+        useNativeDriver: NATIVE_DRIVER,
+      });
+      flutter.start();
+      return () => flutter.stop();
+    }
+    turn.setValue(0);
+    return undefined;
+  }, [spinning, fluttering, turn]);
+
+  const motionStyle = spinning
+    ? {
+        transform: [
+          { rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
+        ],
+      }
+    : fluttering
+      ? {
+          transform: [
+            {
+              rotate: turn.interpolate({
+                inputRange: [0, 0.25, 0.5, 0.75, 1],
+                outputRange: ['0deg', '-14deg', '10deg', '-4deg', '0deg'],
+              }),
+            },
+            {
+              scale: turn.interpolate({
+                inputRange: [0, 0.3, 1],
+                outputRange: [0.8, 1.15, 1],
+              }),
+            },
+          ],
+        }
+      : null;
+
+  return (
+    <Animated.View style={motionStyle}>
+      <Icon testID={testID} name={STATE_ICON[state]} size={size.iconInline} color={tint} />
+    </Animated.View>
+  );
+}
+
 export function SyncChip({
   state,
   pendingCount,
@@ -81,6 +170,13 @@ export function SyncChip({
   testID = 'ui.syncChip',
 }: SyncChipProps): React.JSX.Element {
   const tint = STATE_COLOR[state];
+  // Where the chip was a render ago, so "just synced" can be told from "synced since boot".
+  const previous = useRef(state);
+  const settled =
+    state === 'synced' && (previous.current === 'syncing' || previous.current === 'pending');
+  useEffect(() => {
+    previous.current = state;
+  }, [state]);
 
   return (
     <Pressable
@@ -92,11 +188,13 @@ export function SyncChip({
       onPress={onPress}
       style={styles.base}
     >
-      <Icon
+      <SyncIcon
+        // A new state is a new icon: its motion starts from rest.
+        key={state}
+        state={state}
+        settled={settled}
+        tint={tint}
         testID={`${testID}.icon.${state}`}
-        name={STATE_ICON[state]}
-        size={size.iconInline}
-        color={tint}
       />
 
       {state === 'pending' && pendingCount !== undefined ? (

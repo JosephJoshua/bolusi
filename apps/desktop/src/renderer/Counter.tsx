@@ -180,6 +180,7 @@ export function Counter({
     <AppShell
       testId="desktop.shell"
       collapsed={collapsed}
+      pageKey={page.kind}
       titleBar={
         <TitleBar
           storeName={storeName}

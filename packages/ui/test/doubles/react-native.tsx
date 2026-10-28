@@ -220,18 +220,24 @@ class AnimatedValue {
   setValue(next: number): void {
     this.value = next;
   }
-  /** A live, linear mapping of this value; clamps when asked, like the real one. */
+  /** A live, piecewise-linear mapping of this value; clamps when asked, like the real one. */
   interpolate(config: {
     inputRange: number[];
-    outputRange: number[];
+    outputRange: (number | string)[];
     extrapolate?: 'clamp' | 'extend';
-  }): { readonly value: number } {
-    const [i0 = 0, i1 = 1] = config.inputRange;
-    const [o0 = 0, o1 = 1] = config.outputRange;
+  }): { readonly value: number | string } {
     const read = (): number => this.value;
+    const { inputRange: input, outputRange: output } = config;
     return {
-      get value(): number {
-        let t = (read() - i0) / (i1 - i0);
+      get value(): number | string {
+        const at = read();
+        let seg = 0;
+        while (seg < input.length - 2 && at > input[seg + 1]!) seg += 1;
+        const [i0, i1] = [input[seg]!, input[seg + 1]!];
+        const [o0, o1] = [output[seg]!, output[seg + 1]!];
+        // Strings ("12deg") only land on their stops; nothing reads between them.
+        if (typeof o0 === 'string' || typeof o1 === 'string') return at <= i0 ? o0 : o1;
+        let t = (at - i0) / (i1 - i0);
         if (config.extrapolate === 'clamp') t = Math.min(1, Math.max(0, t));
         return o0 + t * (o1 - o0);
       },
@@ -262,6 +268,11 @@ export const Animated = {
       for (const animation of animations) animation.start();
       done?.({ finished: true });
     },
+    stop: (): void => {},
+  }),
+  /** A loop never ends on its own; here it lands one pass and stops. */
+  loop: (animation: { start: (done?: () => void) => void }) => ({
+    start: (): void => animation.start(),
     stop: (): void => {},
   }),
   delay: (): { start: (done?: () => void) => void; stop: () => void } => ({
