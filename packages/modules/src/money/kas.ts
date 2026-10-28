@@ -4,6 +4,7 @@ import { formatMoney } from '@bolusi/i18n';
 
 import { CASH_ACCOUNT, type CashMoveKind } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
+import { paymentEntry, type PaymentEntry, type PaymentLine } from './payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow, PaymentAccountRow } from './queries.js';
 
 /** Local midnight of the day `now` falls in: "today" is the store's day, not UTC's. */
@@ -147,7 +148,10 @@ const ENTRY_LABEL: Readonly<Record<string, MoneyKey>> = {
 
 export interface HistoryLine {
   readonly label: MoneyKey;
-  /** The servisan, the method and the reason, as far as the record has them. */
+  /**
+   * The customer, the servisan, the method and the reason, as far as the record has them. A
+   * cancelled one keeps whose and which method it was, and says why it was cancelled instead.
+   */
   readonly details: readonly string[];
   /** Signed for the drawer's moves and refunds, as the amount reads. */
   readonly amount: string;
@@ -158,6 +162,7 @@ export interface HistoryLine {
 export function historyLine(
   entry: MoneyEntryRow,
   accounts: readonly PaymentAccountRow[],
+  customer: string | null = null,
 ): HistoryLine {
   // The drawer's own moves read as the board lists them.
   const move = drawerMoves([entry])[0];
@@ -173,17 +178,101 @@ export function historyLine(
       : entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
         ? -entry.amount
         : entry.amount;
+  const voided = entry.voidedAt !== null;
   return {
     label,
-    details: [entry.documentLabel, method, entry.reason].filter(
-      (part): part is string => part !== null && part !== '',
-    ),
+    details: [
+      customer,
+      entry.documentLabel,
+      method,
+      voided ? tm('money.history.voided', { reason: entry.voidReason ?? '' }) : entry.reason,
+    ].filter((part): part is string => part !== null && part !== ''),
     amount: `${signed < 0 ? '−' : ''}${formatMoney(Math.abs(signed))}`,
-    voided: entry.voidedAt !== null,
+    voided,
   };
 }
 
 /** Whether an owner may still cancel this record: a payment not cancelled yet. */
 export function voidable(entry: MoneyEntryRow): boolean {
   return entry.kind === 'payment_received' && entry.voidedAt === null;
+}
+
+/**
+ * The count an owner is settling, as it stands now (a payment from before the count can sync while
+ * they read), and whether it is still the one to settle.
+ */
+export function settleState(
+  counts: readonly CashCountRow[] | null,
+  count: CashCountRow,
+): { readonly live: CashCountRow; readonly open: boolean } {
+  return {
+    live: counts?.find((row) => row.id === count.id) ?? count,
+    open: counts === null || differenceToSettle(counts)?.id === count.id,
+  };
+}
+
+/** "Kurang Rp 5.000" or "Lebih Rp 5.000": a count's difference as the counter says it. */
+export function differenceText(difference: number): string {
+  if (difference === 0) return tm('money.kas.exact');
+  return tm(difference < 0 ? 'money.kas.short' : 'money.kas.over', {
+    amount: formatMoney(Math.abs(difference)),
+  });
+}
+
+export interface CashMoveCheck {
+  /** The store's bank accounts a deposit can go into. */
+  readonly banks: readonly PaymentAccountRow[];
+  /** Where a deposit goes: the one picked, else the only or first bank account. */
+  readonly depositAccount: PaymentAccountRow | null;
+  /** What is still missing before it can be saved, in words; null when nothing is. */
+  readonly missing: MoneyKey | null;
+}
+
+/**
+ * Cash out of or into the drawer: what it needs before it is saved. Cash is deposited into a bank
+ * account; QRIS and card machines settle there on their own.
+ */
+export function cashMoveCheck(move: {
+  readonly kind: CashMoveKind;
+  readonly account: string | null;
+  readonly amount: number | null;
+  readonly reason: string;
+  readonly accounts: readonly PaymentAccountRow[];
+}): CashMoveCheck {
+  const banks = move.accounts.filter((row) => row.kind === 'transfer');
+  const depositAccount =
+    move.kind === 'deposit'
+      ? (banks.find((row) => `account:${row.id}` === move.account) ?? banks[0] ?? null)
+      : null;
+  const missing: MoneyKey | null =
+    move.amount === null || move.amount <= 0
+      ? 'money.move.hintAmount'
+      : move.reason.trim() === ''
+        ? 'money.move.hintReason'
+        : move.kind === 'deposit' && depositAccount === null
+          ? 'money.move.noAccount'
+          : null;
+  return { banks, depositAccount, missing };
+}
+
+export interface DebtPayment {
+  /** The lines against the whole debt: what is left, what is over. */
+  readonly entry: PaymentEntry;
+  /** What is recorded: the amount typed, which may be part of the debt; null while nothing is. */
+  readonly taken: PaymentEntry | null;
+}
+
+/**
+ * A customer paying (part of) a debt for a phone they already took home. Part of it is fine, so
+ * what is recorded is what was typed; more than the debt is not.
+ */
+export function debtPayment(
+  owed: number,
+  lines: readonly PaymentLine[],
+  accounts: readonly PaymentAccountRow[],
+): DebtPayment {
+  const entry = paymentEntry(owed, lines, accounts);
+  const taken =
+    entry.paid > 0 && entry.overpaid === 0 ? paymentEntry(entry.paid, lines, accounts) : null;
+  return { entry, taken };
 }

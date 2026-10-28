@@ -6,6 +6,8 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import enCatalog from '../money/i18n/en.json' with { type: 'json' };
 import idCatalog from '../money/i18n/id.json' with { type: 'json' };
 import { registerMoneyCatalog } from '../src/money/i18n.js';
+import { methodStores, methodSummary } from '../src/money/methods.js';
+import { shiftDay } from '../src/money/day-records.js';
 
 import {
   countToday,
@@ -14,6 +16,7 @@ import {
   differenceToSettle,
   drawerMoves,
   historyLine,
+  settleState,
   splitOpenBalances,
   voidable,
 } from '../src/money/kas.js';
@@ -95,6 +98,18 @@ describe('counts', () => {
     expect(differenceToSettle([count({ id: 'exact', countedAt: 3 }), again, short])).toBeNull();
     expect(differenceToSettle([{ ...again, settled: -10_000 }])).toBeNull();
     expect(differenceToSettle([])).toBeNull();
+  });
+
+  test('a difference being settled follows the drawer as it syncs, and closes once overtaken', () => {
+    const opened = count({ id: 'c', difference: -10_000, countedAt: 1 });
+    // A payment from before the count synced while the owner read: the difference moved.
+    const moved = { ...opened, expected: opened.expected - 4_000, difference: -6_000 };
+    expect(settleState([moved], opened)).toEqual({ live: moved, open: true });
+    // Not read yet: the count as it was opened.
+    expect(settleState(null, opened)).toEqual({ live: opened, open: true });
+    const newer = count({ id: 'n', difference: -1_000, countedAt: 2 });
+    expect(settleState([newer, moved], opened).open).toBe(false);
+    expect(settleState([{ ...moved, settled: -6_000 }], opened).open).toBe(false);
   });
 
   test("today's count is one made since local midnight", () => {
@@ -182,6 +197,26 @@ describe('history', () => {
     expect(short.amount).toBe(`−${formatMoney(5_000)}`);
   });
 
+  test('a cancelled payment keeps its customer, servisan and method, and says why', () => {
+    const line = historyLine(
+      entry({ account: 'account:q', amount: 150_000, voidedAt: 5, voidReason: 'Salah metode' }),
+      [qris],
+      'Yulianus Wenda',
+    );
+    expect(line.details).toEqual([
+      'Yulianus Wenda',
+      'B7B-0001',
+      'QRIS BCA',
+      'Dibatalkan: Salah metode',
+    ]);
+  });
+
+  test('the day before and after start at local midnight', () => {
+    const day = new Date(2026, 9, 28).getTime();
+    expect(shiftDay(day, -1)).toBe(new Date(2026, 9, 27).getTime());
+    expect(shiftDay(day, 1)).toBe(new Date(2026, 9, 29).getTime());
+  });
+
   test('only a payment still standing can be cancelled', () => {
     expect(voidable(entry({}))).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
@@ -189,5 +224,42 @@ describe('history', () => {
     expect(historyLine(voided, []).voided).toBe(true);
     expect(voidable(entry({ kind: 'refund_paid' }))).toBe(false);
     expect(voidable(entry({ kind: 'charge_recorded' }))).toBe(false);
+  });
+});
+
+describe('payment methods', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+
+  const stores = [
+    { id: 's1', name: 'Bolusi Jayapura' },
+    { id: 's2', name: 'Bolusi Sorong' },
+  ];
+  const method = (overrides: Partial<PaymentAccountRow>): PaymentAccountRow => ({
+    id: 'm',
+    kind: 'qris',
+    name: 'QRIS Pusat',
+    active: true,
+    central: true,
+    storeIds: [],
+    ...overrides,
+  });
+
+  test('a head-office method names the stores it is for, or says every store', () => {
+    expect(methodStores(method({}), stores)).toBe('Semua toko');
+    expect(methodStores(method({ storeIds: ['s2', 's1'] }), stores)).toBe(
+      'Bolusi Sorong, Bolusi Jayapura',
+    );
+    // A store this device has not heard of yet: the count, not a list missing one.
+    expect(methodStores(method({ storeIds: ['s1', 'gone'] }), stores)).toBe('2 toko');
+  });
+
+  test("the list's line: kind, where it is used, and whether it is switched off", () => {
+    expect(methodSummary(method({ storeIds: ['s2'], active: false }), stores)).toBe(
+      'QRIS · Bolusi Sorong · Tidak dipakai',
+    );
+    expect(methodSummary(method({ central: false, kind: 'edc' }), stores)).toBe('EDC');
   });
 });

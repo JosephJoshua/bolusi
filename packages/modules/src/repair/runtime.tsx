@@ -9,7 +9,7 @@ import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
-import type { MoneyPort } from '../money/runtime.js';
+import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { CASH_ACCOUNT } from '../money/constants.js';
 import type { PaymentAccountRow } from '../money/queries.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
@@ -299,6 +299,22 @@ export async function servisanCustomers(
   return names;
 }
 const SERVISAN_PAGE = 100;
+
+/**
+ * The ledger as the Kas screens read it, from a repair runtime: its money port, live on the same
+ * change feed, naming each servisan's customer. `nameOf` names a colleague ("counted by").
+ */
+export function moneyRuntimeOf(
+  repair: RepairRuntime,
+  nameOf: (userId: string) => string | null,
+): MoneyRuntime {
+  return {
+    ...repair.money,
+    subscribe: repair.subscribe,
+    nameOf,
+    customersOf: (documents) => servisanCustomers(repair, documents),
+  };
+}
 
 export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
   const load = useRepairRuntime().loadModelPhoto;

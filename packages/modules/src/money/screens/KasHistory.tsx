@@ -14,28 +14,12 @@ import { FlowScreen, QueryView, type ScreenChrome } from '../../screen-kit/scree
 
 import { MAX_REASON, MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
+import { shiftDay, useDayRecords } from '../day-records.js';
 import { accountLabel, dayStart, historyLine, voidable } from '../kas.js';
-import type { MoneyEntryRow, PaymentAccountRow } from '../queries.js';
+import type { MoneyEntryRow } from '../queries.js';
 import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
 
 import { Row } from './Kas.js';
-
-/** The most `moneyEntries` returns at once: a day rarely needs a second page. */
-const PAGE = 500;
-
-/** Local midnight `days` days from the day starting at `day`, whatever the clock change. */
-function shiftDay(day: number, days: number): number {
-  const date = new Date(day);
-  date.setDate(date.getDate() + days);
-  return dayStart(date.getTime());
-}
-
-interface DayRecords {
-  readonly rows: readonly MoneyEntryRow[];
-  readonly more: boolean;
-  readonly customers: ReadonlyMap<string, string>;
-  readonly accounts: readonly PaymentAccountRow[];
-}
 
 export interface KasHistoryProps {
   readonly chrome: ScreenChrome;
@@ -64,37 +48,7 @@ export function KasHistory({
   const [nonce, setNonce] = useState(0);
   const today = dayStart(now());
   const day = chosen ?? today;
-  const records = useMoneyQuery<DayRecords>(
-    async (rt) => {
-      const rows: MoneyEntryRow[] = [];
-      let cursor: string | null | undefined;
-      for (let page = 0; page < pages; page += 1) {
-        const result = await rt.query('moneyEntries', {
-          from: day,
-          to: shiftDay(day, 1),
-          limit: PAGE,
-          ...(cursor === undefined || cursor === null ? {} : { cursor }),
-        });
-        rows.push(...result.rows);
-        cursor = result.nextCursor;
-        if (cursor === null) break;
-      }
-      const [customers, accounts] = await Promise.all([
-        rt.customersOf(
-          rows
-            .filter((row) => row.documentKind !== null && row.documentId !== null)
-            .map((row) => ({ kind: row.documentKind!, id: row.documentId! })),
-        ),
-        // Method names; someone who cannot take payments reads the records without them.
-        rt
-          .query('paymentAccounts', { includeInactive: true })
-          .then((result) => result.rows)
-          .catch(() => [] as PaymentAccountRow[]),
-      ]);
-      return { rows, more: cursor !== null && cursor !== undefined, customers, accounts };
-    },
-    `history:${String(day)}:${String(pages)}:${String(nonce)}`,
-  );
+  const records = useDayRecords(day, pages, nonce);
 
   const goTo = (next: number): void => {
     setPages(1);
@@ -139,25 +93,16 @@ export function KasHistory({
           ) : (
             <View>
               {rows.map((entry) => {
-                const line = historyLine(entry, accounts);
-                const customer =
-                  entry.documentId === null ? undefined : customers.get(entry.documentId);
-                // A cancelled one keeps when and whose it was, and says why instead of the method.
-                const details = [
-                  formatTime(entry.createdAt),
-                  ...(customer === undefined ? [] : [customer]),
-                  ...(line.voided
-                    ? [
-                        ...(entry.documentLabel === null ? [] : [entry.documentLabel]),
-                        tm('money.history.voided', { reason: entry.voidReason ?? '' }),
-                      ]
-                    : line.details),
-                ];
+                const line = historyLine(
+                  entry,
+                  accounts,
+                  entry.documentId === null ? null : (customers.get(entry.documentId) ?? null),
+                );
                 return (
                   <Row
                     key={entry.id}
                     label={tm(line.label)}
-                    detail={details.join(' · ')}
+                    detail={[formatTime(entry.createdAt), ...line.details].join(' · ')}
                     value={line.amount}
                     tone={line.voided ? 'struck' : 'text'}
                     onPress={mayVoid && voidable(entry) ? () => onVoid(entry) : undefined}

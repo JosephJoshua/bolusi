@@ -1,17 +1,20 @@
-// The counter app's frame once someone is signed in: the sidebar, and the servisan board or the
-// intake page beside it. The same frame runs over the offline core and over the seeded demo; what
-// differs (who is here, the person menu, the sync line) comes in as props.
+// The counter app's frame once someone is signed in: the sidebar, and the servisan board, the
+// intake page, Kas or Settings beside it. The same frame runs over the offline core and over the
+// seeded demo; what differs (who is here, the person menu, the sync line) comes in as props.
 import { t } from '@bolusi/i18n';
+import { KasPage, MONEY_PERMISSION, MoneyRuntimeProvider, tm } from '@bolusi/modules/money/desktop';
 import {
   IntakePage,
   RepairBoardPage,
+  moneyRuntimeOf,
   tn,
+  useRepairRuntime,
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
 import { AppShell, Avatar, Menu, Sidebar, Tooltip, type MenuItem } from '@bolusi/ui-web';
-import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Banknote, ChevronsUpDown, Settings, Wrench } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SettingsAccess } from './settings/access.js';
 import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
@@ -21,6 +24,7 @@ type Page =
   | { readonly kind: 'board' }
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
+  | { readonly kind: 'kas' }
   | { readonly kind: 'settings' };
 
 const SIDEBAR_KEY = 'bolusi.sidebar';
@@ -70,6 +74,7 @@ export interface CounterPerson {
 export function Counter({
   storeName,
   person,
+  nameOf,
   menuHeader,
   menuItems,
   sync,
@@ -80,6 +85,8 @@ export function Counter({
 }: {
   readonly storeName: string;
   readonly person: CounterPerson;
+  /** A colleague's name, for who counted the drawer; null for someone this PC does not know. */
+  readonly nameOf: (userId: string) => string | null;
   readonly menuHeader?: ReactNode;
   /** What the person menu offers: switching to someone else, locking the screen. */
   readonly menuItems: readonly MenuItem[];
@@ -101,6 +108,12 @@ export function Counter({
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
+  // The ledger as Kas and the payment settings read it: repair's money port, live on its feed.
+  const repair = useRepairRuntime();
+  const money = useMemo(() => moneyRuntimeOf(repair, nameOf), [repair, nameOf]);
+  // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
+  const showsKas =
+    money.hasPermission(MONEY_PERMISSION.read) || money.hasPermission(MONEY_PERMISSION.countCash);
   // Settings asks before it is left with unsaved changes.
   const leaveGuard = useRef<LeaveGuard | null>(null);
   const leave = (proceed: () => void): void => {
@@ -129,7 +142,7 @@ export function Counter({
     leaveGuard.current = guard;
   }, []);
 
-  return (
+  const shell = (
     <AppShell
       testId="desktop.shell"
       collapsed={collapsed}
@@ -163,9 +176,20 @@ export function Counter({
               key: 'repair',
               label: tn('repair.board.title'),
               icon: Wrench,
-              active: page.kind !== 'settings',
+              active: page.kind !== 'settings' && !(page.kind === 'kas' && showsKas),
               onSelect: () => go({ kind: 'board' }),
             },
+            ...(showsKas
+              ? [
+                  {
+                    key: 'kas',
+                    label: tm('money.kas.title'),
+                    icon: Banknote,
+                    active: page.kind === 'kas',
+                    onSelect: () => go({ kind: 'kas' }),
+                  },
+                ]
+              : []),
             {
               key: 'settings',
               label: t('core.settings.title'),
@@ -191,6 +215,8 @@ export function Counter({
     >
       {page.kind === 'settings' ? (
         <SettingsPage person={person} access={settings} onRegisterLeaveGuard={registerLeaveGuard} />
+      ) : page.kind === 'kas' && showsKas ? (
+        <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (
         <IntakePage
           // A claim is its own intake: it starts from its servisan and leaves the other one be.
@@ -218,6 +244,7 @@ export function Counter({
       )}
     </AppShell>
   );
+  return <MoneyRuntimeProvider runtime={money}>{shell}</MoneyRuntimeProvider>;
 }
 
 function PersonMenu({

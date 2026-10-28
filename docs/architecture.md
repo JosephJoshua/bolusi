@@ -132,6 +132,9 @@ fails a build, a boot or a test rather than waiting for review:
 - Screens read through `useLiveQuery` (`screen-kit/live.ts`). The platform adapter
   subscribes the module runtime to the module's tables, so a pulled change re-runs
   every open read.
+- Counter PC screens live in `src/<module>/desktop/`. The PC's stylesheet picks up their
+  classes from that folder, and the PC window is told every module's permissions
+  (`apps/desktop/src/core/permissions.ts`), so a new module needs no PC wiring for either.
 - Typed search goes through a `SearchSource` and `searchIndexFor`, which match fuzzily.
 - A step that stays open (a form, photos, a signature) re-checks its target against
   the same rule that offered it, and says why it can no longer finish. See repair's

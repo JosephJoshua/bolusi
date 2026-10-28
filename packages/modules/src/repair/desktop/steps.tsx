@@ -58,11 +58,10 @@ import {
 import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { outputSlip } from '../slip-output.js';
 
+import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import {
-  ActionError,
   MoneyField,
   PrinterProblemBanner,
-  QueryPanel,
   StaleNotice,
   photoLabels,
   usePhotoState,
