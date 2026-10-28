@@ -30,10 +30,12 @@ import {
   useMoneyStores,
   usePaymentMethodForm,
 } from '../methods.js';
+import { useQrisConnection } from '../qris-hooks.js';
 import type { PaymentAccountRow } from '../queries.js';
-import { useMoneyQuery, type MoneyRuntime } from '../runtime.js';
+import { useMoneyQuery, useMoneyRuntime, type MoneyRuntime } from '../runtime.js';
 
 import { MoneyDialog } from './parts.js';
+import { QrisConnectSection } from './QrisConnect.js';
 
 /** Whether this person may open the page: it reads the methods as the payment step does. */
 export function managesPaymentMethods(runtime: Pick<MoneyRuntime, 'hasPermission'>): boolean {
@@ -218,6 +220,10 @@ function MethodDialog({
   readonly onClose: () => void;
 }): React.JSX.Element {
   const form = usePaymentMethodForm(account);
+  // Xendit, for a QRIS method that exists (the server must know it before it can be connected).
+  const runtime = useMoneyRuntime();
+  const qrisPort = account?.kind === 'qris' ? runtime.qris : undefined;
+  const xendit = useQrisConnection(qrisPort, account?.id ?? '');
   const testId = 'money.desk.methodForm';
   return (
     <MoneyDialog
@@ -317,6 +323,9 @@ function MethodDialog({
           onChange={form.setActive}
           testId={`${testId}.active`}
         />
+      )}
+      {qrisPort === undefined ? null : (
+        <QrisConnectSection control={xendit} testId={`${testId}.qris`} />
       )}
     </MoneyDialog>
   );

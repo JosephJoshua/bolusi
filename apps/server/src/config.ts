@@ -21,6 +21,12 @@ const zConfig = z.object({
   // `pushPortFromConfig` FAILS CLOSED and LOUD when it is missing. Set it, or the server refuses to
   // boot.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // OPTIONAL, together. Integrated QRIS through Xendit (qris/service.ts): the 32-byte base64 key
+  // that seals each payment account's Xendit secret key at rest, and this server's public origin,
+  // where Xendit posts payments. Either unset ⇒ QRIS through Xendit is off and its routes answer
+  // 503; QRIS by hand works as before. It also needs SYSTEM_KEY_DIR (the payment is a system record).
+  PAYMENT_SECRETS_KEY: z.string().min(1).optional(),
+  PUBLIC_URL: z.url().optional(),
 });
 
 export type ServerConfig = {
@@ -31,6 +37,9 @@ export type ServerConfig = {
   /** Expo push bearer token (api/04-push §7). Absent ⇒ `pushPortFromConfig` fails closed at boot —
    *  push has no silent no-op (task 134). */
   readonly expoAccessToken?: string;
+  /** Both set ⇒ integrated QRIS is on. */
+  readonly paymentSecretsKey?: string;
+  readonly publicUrl?: string;
 };
 
 /** Validate and normalize the environment. Throws a readable error if a required var is missing. */
@@ -49,5 +58,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     ...(parsed.data.EXPO_ACCESS_TOKEN === undefined
       ? {}
       : { expoAccessToken: parsed.data.EXPO_ACCESS_TOKEN }),
+    ...(parsed.data.PAYMENT_SECRETS_KEY === undefined
+      ? {}
+      : { paymentSecretsKey: parsed.data.PAYMENT_SECRETS_KEY }),
+    ...(parsed.data.PUBLIC_URL === undefined
+      ? {}
+      : { publicUrl: parsed.data.PUBLIC_URL.replace(/\/+$/, '') }),
   };
 }

@@ -35,6 +35,12 @@ const CODE_STATUS: Record<HttpErrorCode, ContentfulStatusCode> = {
   ENROLL_KEY_REUSED: 409,
   LAST_ADMIN_PROTECTED: 409,
   LOGIN_IDENTIFIER_TAKEN: 409,
+  // Integrated QRIS (routes/qris.ts).
+  QRIS_UNAVAILABLE: 503,
+  QRIS_NOT_CONNECTED: 409,
+  QRIS_KEY_REFUSED: 422,
+  QRIS_AMOUNT_REFUSED: 422,
+  CHANGE_REFUSED: 409,
 };
 
 /** Static English developer messages (api/00 §6). Not localized, not user-facing. */
@@ -59,6 +65,11 @@ const CODE_MESSAGE: Record<HttpErrorCode, string> = {
   ENROLL_KEY_REUSED: 'Public key already registered',
   LAST_ADMIN_PROTECTED: 'Would leave the tenant with no active administrator',
   LOGIN_IDENTIFIER_TAKEN: 'Login identifier already in use',
+  QRIS_UNAVAILABLE: 'QRIS payments are not available right now',
+  QRIS_NOT_CONNECTED: 'This payment account is not connected to Xendit',
+  QRIS_KEY_REFUSED: 'Xendit refused this key',
+  QRIS_AMOUNT_REFUSED: 'Xendit refused this amount',
+  CHANGE_REFUSED: 'The records do not allow this change',
 };
 
 export type ErrorDetails = Record<string, unknown>;

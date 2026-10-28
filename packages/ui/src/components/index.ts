@@ -32,6 +32,7 @@ export { PatternLock } from './PatternLock.js';
 export { PhotoStrip } from './PhotoStrip.js';
 export { PhotoViewer } from './PhotoViewer.js';
 export { PinPad } from './PinPad.js';
+export { QrCode } from './QrCode.js';
 export { QuantityStepper } from './QuantityStepper.js';
 export { ReorderableList } from './ReorderableList.js';
 export { SearchField } from './SearchField.js';

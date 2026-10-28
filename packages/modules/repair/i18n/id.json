@@ -315,7 +315,8 @@
     "downPaymentSame": "Jumlahnya masih sama.",
     "handoverPayment": "Lengkapi pembayarannya dulu.",
     "discountLimit": "Batas diskonmu {amount} per servisan.",
-    "handoverChecks": "Centang semua, atau tulis kenapa belum."
+    "handoverChecks": "Centang semua, atau tulis kenapa belum.",
+    "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
