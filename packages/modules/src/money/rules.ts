@@ -532,8 +532,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (counterRefusal === null) return;
     if (!(await holdsPermission(op.userId, MONEY_PERMISSION.refund))) throw counterRefusal;
     // A limited role (a manager): every refund on the document, this one with them, within limit.
-    const earlier = await documentTotal(db, store, document, 'refund_paid');
-    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, earlier + amount);
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, refunded + amount);
   };
 
   /** A deposit goes into one of the store's accounts; other moves touch only the drawer. */
