@@ -33,7 +33,7 @@ interface Bucket {
 
 /** How often (by the caller's clock) a `consume` sweeps out buckets that have fully refilled. */
 const SWEEP_INTERVAL_MS = 60_000;
-/** Hard ceiling on live buckets; past it the least recently used bucket is dropped. */
+/** Hard ceiling on live buckets; past it the least recently used bucket with a token left goes. */
 const MAX_BUCKETS = 100_000;
 
 /** True when `bucket` has refilled to capacity by `nowMs`, so it says nothing a new one would not. */
@@ -42,12 +42,20 @@ function isFull(bucket: Bucket, nowMs: number): boolean {
   return bucket.tokens + Math.max(0, nowMs - bucket.updatedAt) * refillPerMs >= bucket.capacity;
 }
 
+/** True when `bucket` has not refilled one token by `nowMs`: its key is being refused. */
+function isDrained(bucket: Bucket, nowMs: number): boolean {
+  const refillPerMs = bucket.capacity / 60_000;
+  return bucket.tokens + Math.max(0, nowMs - bucket.updatedAt) * refillPerMs < 1;
+}
+
 /**
  * In-memory token-bucket store (api/00 §11 v0: single-instance per-process buckets).
  *
  * Keys come from client addresses and device ids, so the map is bounded: a full bucket is dropped
  * at the next periodic sweep (it reads the same as a missing one), and past `maxBuckets` the least
  * recently used bucket goes. Without this every address ever seen stayed for the process lifetime.
+ * A drained bucket is never the one dropped, since dropping it would lift that key's limit: when
+ * only drained buckets remain, a new key is refused as limited instead.
  */
 export class InMemoryRateLimitStore implements RateLimitStore {
   readonly #buckets = new Map<string, Bucket>();
@@ -66,7 +74,12 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   consume(key: string, capacityPerMinute: number, nowMs: number): RateLimitDecision {
     this.#sweep(nowMs);
     const refillPerMs = capacityPerMinute / 60_000;
-    const bucket = this.#buckets.get(key) ?? {
+    const existing = this.#buckets.get(key);
+    // Full of drained buckets: refuse a new key rather than lift another key's limit.
+    if (existing === undefined && !this.#makeRoom(nowMs)) {
+      return { allowed: false, retryAfterSeconds: SWEEP_INTERVAL_MS / 1000 };
+    }
+    const bucket = existing ?? {
       tokens: capacityPerMinute,
       updatedAt: nowMs,
       capacity: capacityPerMinute,
@@ -89,15 +102,22 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     return { allowed: false, retryAfterSeconds };
   }
 
-  /** Re-insert so Map order is least-recently-used first, then trim to the ceiling. */
+  /** Re-insert so Map order is least-recently-used first. */
   #put(key: string, bucket: Bucket): void {
     this.#buckets.delete(key);
     this.#buckets.set(key, bucket);
-    while (this.#buckets.size > this.#maxBuckets) {
-      const oldest = this.#buckets.keys().next();
-      if (oldest.done === true) break;
-      this.#buckets.delete(oldest.value);
+  }
+
+  /** Makes room for one more bucket; false when every bucket is drained. */
+  #makeRoom(nowMs: number): boolean {
+    if (this.#buckets.size < this.#maxBuckets) return true;
+    for (const [key, bucket] of this.#buckets) {
+      if (!isDrained(bucket, nowMs)) {
+        this.#buckets.delete(key);
+        return true;
+      }
     }
+    return false;
   }
 
   #sweep(nowMs: number): void {

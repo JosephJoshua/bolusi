@@ -1,6 +1,7 @@
 // Boot entry (08 §5.1 `pnpm dev`). Reads config once (security-guide §10), builds the app with
-// the production per-IP key source (node-server's getConnInfo — a real socket address, not the
-// testable X-Forwarded-For fallback), and serves via @hono/node-server.
+// the production per-IP key source (node-server's getConnInfo — a real socket address, read past
+// X-Forwarded-For only when that address is a configured trusted proxy), and serves via
+// @hono/node-server.
 import { assertRowSecurityRole } from '@bolusi/db-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
@@ -10,6 +11,7 @@ import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
 import { requireMediaStorageDir } from './media/config.js';
+import { clientIpBehindProxies } from './middleware/client-ip.js';
 import { serverCryptoPort } from './oplog/index.js';
 import { pushPortFromConfig } from './push/expo-transport.js';
 import { serveWithRealtime } from './realtime/serve.js';
@@ -42,7 +44,9 @@ const systemKeyStore = systemKeyStoreFromConfig(config, serverCryptoPort);
 function productionClientIp(c: Context<AppEnv>): string {
   try {
     const address = getConnInfo(c).remote.address;
-    if (address !== undefined && address !== '') return address;
+    if (address !== undefined && address !== '') {
+      return clientIpBehindProxies(address, c.req.header('x-forwarded-for'), config.trustedProxies);
+    }
   } catch {
     /* getConnInfo needs the node-server binding — fall back to the header source. */
   }

@@ -30,6 +30,15 @@ describe('loadConfig', () => {
     expect(() => at('not a url')).toThrow(/Invalid server configuration/);
   });
 
+  test('reads TRUSTED_PROXY_CIDRS, and refuses to boot on a malformed one', () => {
+    expect(loadConfig({ DATABASE_URL: 'postgres://x' }).trustedProxies).toBeUndefined();
+    const config = loadConfig({ DATABASE_URL: 'postgres://x', TRUSTED_PROXY_CIDRS: '10.0.0.0/8' });
+    expect(config.trustedProxies?.check('10.9.9.9', 'ipv4')).toBe(true);
+    expect(() =>
+      loadConfig({ DATABASE_URL: 'postgres://x', TRUSTED_PROXY_CIDRS: 'proxy' }),
+    ).toThrow(/TRUSTED_PROXY_CIDRS/);
+  });
+
   test('throws when DATABASE_URL is absent', () => {
     expect(() => loadConfig({})).toThrow(/Invalid server configuration/);
   });

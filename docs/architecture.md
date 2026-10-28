@@ -231,6 +231,12 @@ inject their transport and need no production push credentials.
 unless it is a plain-http origin, so leave it unset or https in production and set it
 to `http://<lan-ip>:3000` only for a local server phones reach over plain HTTP.
 
+`TRUSTED_PROXY_CIDRS` lists the reverse proxies in front of the server (addresses or
+CIDR ranges, comma-separated). Unset, `X-Forwarded-For` is ignored and per-IP login
+limits key by the socket address, which behind a proxy is the proxy's, so all
+clients share one bucket. Set it to the proxy's address in production; a request from
+it is keyed by the rightmost forwarded address that is not a trusted proxy.
+
 `SYSTEM_KEY_DIR` enables server conflict detection. It contains one mode-0600
 `system-device-<tenantId>.key` per tenant: a base64 Ed25519 private key created by
 tenant provisioning. Unset means detection is off. When enabled, missing/invalid

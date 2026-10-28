@@ -35,13 +35,29 @@ describe('InMemoryRateLimitStore eviction', () => {
   test('the number of live buckets never exceeds the ceiling; the least recently used goes first', () => {
     const store = new InMemoryRateLimitStore({ maxBuckets: 3 });
     store.consume('k1', 1, T0);
-    store.consume('k2', 1, T0);
-    store.consume('k3', 1, T0);
+    store.consume('k2', 5, T0);
+    store.consume('k3', 5, T0);
     store.consume('k1', 1, T0); // k1 is now the most recently used (and drained)
-    store.consume('k4', 1, T0);
+    expect(store.consume('k4', 5, T0).allowed).toBe(true);
     expect(store.size).toBe(3);
     // k2 was evicted, not the recently touched k1, which is still limited.
     expect(store.consume('k1', 1, T0).allowed).toBe(false);
+  });
+
+  test('a drained bucket is never evicted; with only those left a new key is refused', () => {
+    const store = new InMemoryRateLimitStore({ maxBuckets: 2 });
+    store.consume('ip:attacked', 1, T0); // drained
+    store.consume('ip:a', 5, T0);
+    // Least recently used is the drained one; the bucket with tokens left goes instead.
+    expect(store.consume('ip:b', 5, T0).allowed).toBe(true);
+    expect(store.consume('ip:attacked', 1, T0).allowed).toBe(false);
+
+    const full = new InMemoryRateLimitStore({ maxBuckets: 1 });
+    full.consume('ip:attacked', 1, T0);
+    expect(full.consume('ip:other', 1, T0).allowed).toBe(false);
+    expect(full.size).toBe(1);
+    // Refilled, the drained bucket can go.
+    expect(full.consume('ip:other', 1, T0 + 60_000).allowed).toBe(true);
   });
 });
 
