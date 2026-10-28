@@ -98,8 +98,8 @@ test('servisan finished before the upgrade get the time of their latest repaired
     ['repair.work_started', 2_000],
   ]);
 
-  await down(testDb.db);
-  await up(testDb.db);
+  await down(testDb.db as never);
+  await up(testDb.db as never);
 
   const rows = await testDb.db.selectFrom('repairTickets').select(['id', 'readyAt']).execute();
   const readyAt = new Map(
