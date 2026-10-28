@@ -6,7 +6,7 @@ import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia } from '@bolusi/modules/screen-kit';
 import { SIGNATURE_PX, type DrawnSignature } from '@bolusi/ui-web';
 
-import type { PcCapture } from './capture-dialogs.js';
+import { compressPhoto, type PcCapture } from './capture.js';
 import { desktopPrinting } from './print.js';
 
 export const DEMO_STORE_NAME = 'Toko Sorong Kota';
@@ -87,7 +87,9 @@ export function demoRuntimeFor(person: DemoPerson, capture: PcCapture): RepairRu
     ...runtime,
     capturePhoto: async (request) => {
       const photo = await capture.photo(request);
-      return photo === null ? null : keepDemo(photo.bytes, photo.mime, 'image');
+      if (photo === null) return null;
+      const jpeg = await compressPhoto(photo);
+      return keepDemo(jpeg.bytes, jpeg.mime, 'image');
     },
     captureSignature: async (request) => {
       const signature = await capture.signature(request);

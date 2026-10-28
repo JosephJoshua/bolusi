@@ -21,10 +21,12 @@ const FLAGS = ['--no-sandbox', '--use-fake-device-for-media-stream'];
 async function launch(): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
+  // These screens run over the seeded demo; the live app has its own tests.
+  const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
   app = await electron.launch(
     INSTALLED === undefined
-      ? { args: [...FLAGS, `${import.meta.dirname}/..`] }
-      : { executablePath: INSTALLED, args: FLAGS },
+      ? { args: [...FLAGS, `${import.meta.dirname}/..`], env }
+      : { executablePath: INSTALLED, args: FLAGS, env },
   );
   page = await app.firstWindow();
   await page.getByTestId('repair.desk.board').waitFor();
@@ -140,13 +142,15 @@ test('the page gets only the narrow print and update calls, through the real pre
     return {
       keys: bridge === undefined ? null : Object.keys(bridge).sort(),
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
+      core: bridge?.['core'] === undefined ? null : Object.keys(bridge['core']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['printers', 'updates'],
+    keys: ['core', 'printers', 'updates'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
+    core: ['connect'],
     node: 'undefined',
     process: 'undefined',
   });
