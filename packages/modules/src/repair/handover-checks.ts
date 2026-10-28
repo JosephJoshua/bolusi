@@ -27,6 +27,8 @@ export interface HandoverChecks {
   readonly touched: boolean;
   /** Whether the handover may go ahead with this note. */
   readonly ready: (note: string) => boolean;
+  /** The lines ticked, as `kind:item`, as a kept handover holds them (`HandoverDraft`). */
+  readonly ticked: readonly string[];
 }
 
 const keyOf = (line: Pick<HandoverCheck, 'kind' | 'item'>): string => `${line.kind}:${line.item}`;
@@ -42,9 +44,11 @@ export function handoverLineLabel(line: HandoverCheck): string {
 
 export function useHandoverChecks(
   ticket: Pick<TicketDetailRow, 'outcome' | 'peripherals'> | undefined,
+  /** A kept handover's ticks, restored as they were. */
+  restored?: readonly string[] | null,
 ): HandoverChecks {
   const settings = useIntakeOptionSettings();
-  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set(restored ?? []));
   // A list that cannot be read never blocks the handover: the app's own checks stand in for it.
   const loaded = settings.status !== 'loading' && ticket !== undefined;
   const offered = useMemo(
@@ -80,5 +84,6 @@ export function useHandoverChecks(
     touched: ticked.size > 0,
     ready: (note) =>
       loaded && ticket !== undefined && handoverProblem(lines, ticket.peripherals, note) === null,
+    ticked: [...ticked],
   };
 }

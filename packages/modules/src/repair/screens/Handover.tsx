@@ -19,7 +19,7 @@ import {
   type,
 } from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
@@ -34,6 +34,7 @@ import {
   repairAbilities,
   staleStep,
   ticketStatus,
+  type HandoverDraft,
 } from '../flows.js';
 import {
   DownPaymentRows,
@@ -58,6 +59,10 @@ export interface HandoverProps {
   readonly onCancel: () => void;
   /** Lets hardware back ask before dropping the photo and signature taken here. */
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+  /** This user's handover of this ticket in progress, kept by the shell; read once at mount. */
+  readonly restoredDraft?: HandoverDraft | null | undefined;
+  /** Keeps the handover in progress (null once it is done or dropped), as an intake does. */
+  readonly onDraftChange?: ((draft: HandoverDraft | null) => void) | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -67,13 +72,17 @@ export function Handover({
   onDone,
   onCancel,
   onRegisterDiscardGuard,
+  restoredDraft,
+  onDraftChange,
   testID = 'repair.handover',
 }: HandoverProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [photo, setPhoto] = useState<MediaRef | null>(null);
-  const [signature, setSignature] = useState<MediaRef | null>(null);
-  const [note, setNote] = useState('');
+  // Read once: a draft is this ticket's only when the shell kept it for this ticket.
+  const [restored] = useState(() => (restoredDraft?.ticketId === ticketId ? restoredDraft : null));
+  const [photo, setPhoto] = useState<MediaRef | null>(restored?.photo ?? null);
+  const [signature, setSignature] = useState<MediaRef | null>(restored?.signature ?? null);
+  const [note, setNote] = useState(restored?.note ?? '');
   const [reloadNonce, setReloadNonce] = useState(0);
   const query = useRepairQuery(
     async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
@@ -91,9 +100,9 @@ export function Handover({
   const balance =
     ticket === undefined ? { kind: 'due' as const, amount: 0 } : ticketBalance(ticket);
   const due = balance.kind === 'due' ? balance.amount : 0;
-  const payment = useHandoverPayment(due, accounts, canPayLater);
+  const payment = useHandoverPayment(due, accounts, canPayLater, restored?.payment);
   const { settled } = payment;
-  const checks = useHandoverChecks(ticket);
+  const checks = useHandoverChecks(ticket, restored?.ticked);
   const ready =
     photo !== null &&
     signature !== null &&
@@ -103,17 +112,62 @@ export function Handover({
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
 
+  const dirty =
+    stale === null &&
+    (photo !== null ||
+      signature !== null ||
+      note.trim() !== '' ||
+      payment.touched ||
+      checks.touched);
   const discard = useDiscardConfirm({
-    dirty:
-      stale === null &&
-      (photo !== null ||
-        signature !== null ||
-        note.trim() !== '' ||
-        payment.touched ||
-        checks.touched),
+    dirty,
     onRegisterDiscardGuard,
+    onDiscard: () => onDraftChange?.(null),
     testID,
   });
+
+  // Kept as it is filled in, so a lock, a font-size change or Android recreating the app brings
+  // the counter back to this handover with the signature and payment still there.
+  const draft: HandoverDraft = {
+    kind: 'handover',
+    ticketId,
+    photo,
+    signature,
+    note,
+    ticked: [...checks.ticked],
+    payment: {
+      ...payment.draft,
+      lines: payment.draft.lines === null ? null : [...payment.draft.lines],
+    },
+  };
+  // Published when what was entered changes, not on every render.
+  const draftKey = JSON.stringify(draft);
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
+  useEffect(() => {
+    onDraftChange?.(dirty ? latestDraft.current : null);
+  }, [dirty, draftKey, onDraftChange]);
+
+  // A kept handover can outlive its captures: one no saved record refers to is deleted a day after
+  // it was taken (06 §7). One that no longer loads is taken again rather than sent missing.
+  useEffect(() => {
+    if (restored === null) return;
+    let live = true;
+    const check = (ref: MediaRef | null, drop: () => void): void => {
+      if (ref === null) return;
+      void runtime
+        .loadThumbnail(capturedThumbnailRef(ref))
+        .catch(() => ({ kind: 'unavailable' }) as const)
+        .then((state) => {
+          if (live && state.kind !== 'ready') drop();
+        });
+    };
+    check(restored.photo, () => setPhoto(null));
+    check(restored.signature, () => setSignature(null));
+    return () => {
+      live = false;
+    };
+  }, [restored, runtime]);
 
   const capture = (
     take: () => Promise<{ readonly mediaRef: MediaRef } | null>,
@@ -138,7 +192,9 @@ export function Handover({
         }),
       )
       .then((result) => {
-        if (result !== undefined) onDone();
+        if (result === undefined) return;
+        onDraftChange?.(null);
+        onDone();
       });
   };
 

@@ -841,6 +841,47 @@ export function parseIntakeDraft(value: unknown): IntakeDraft | null {
   return parsed.success ? parsed.data : null;
 }
 
+/**
+ * A handover in progress: what was ticked, paid, photographed and signed. Kept like an intake, so
+ * a lock, a system font change (the screens remount) or Android recreating the app does not make
+ * the counter take the customer's signature again.
+ */
+const zHandoverDraft = z.strictObject({
+  kind: z.literal('handover'),
+  ticketId: z.string(),
+  photo: zMediaRef.nullable(),
+  signature: zMediaRef.nullable(),
+  note: z.string(),
+  /** The checklist lines ticked, as `kind:item`. */
+  ticked: z.array(z.string()),
+  payment: z.strictObject({
+    /** The payment lines as typed; null while the counter has not touched them. */
+    lines: z
+      .array(
+        z.strictObject({
+          key: z.string(),
+          account: z.string(),
+          amount: z.string(),
+          tendered: z.string(),
+          reference: z.string(),
+        }),
+      )
+      .nullable(),
+    payLater: z.boolean(),
+    unpaidReason: z.string(),
+  }),
+});
+
+export type HandoverDraft = z.infer<typeof zHandoverDraft>;
+
+/** The repair work a user has in progress: one intake or one handover at a time. */
+export type RepairDraft = IntakeDraft | HandoverDraft;
+
+export function parseRepairDraft(value: unknown): RepairDraft | null {
+  const parsed = z.union([zIntakeDraft, zHandoverDraft]).safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function emptyIntakeDraft(): IntakeDraft {
   return {
     kind: 'intake',

@@ -3,7 +3,12 @@
 // cashier decides, the handover, live updates from a colleague, and the intake kept across a lock.
 import { markSyncResult, OP_SYNC_STATUS_TABLE } from '@bolusi/core';
 import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
-import { emptyIntakeDraft, INTAKE_PHOTO_SLOTS, type IntakeDraft } from '@bolusi/modules/repair';
+import {
+  emptyIntakeDraft,
+  INTAKE_PHOTO_SLOTS,
+  parseRepairDraft,
+  type IntakeDraft,
+} from '@bolusi/modules/repair';
 import { color } from '@bolusi/ui';
 import { StyleSheet } from 'react-native';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -463,6 +468,80 @@ describe('price changes and handover', () => {
     // The ticket now shows the handover photo and signature with the rest of its photos.
     expect(screen.query('repair.ticket.photos.strip.handover')).not.toBeNull();
     expect(screen.query('repair.ticket.photos.strip.signature')).not.toBeNull();
+  });
+
+  test('a half-filled handover survives the screens remounting (a system font change)', async () => {
+    h = await openRepairScreenHarness(5307);
+    const ticketId = await openTicket(h);
+    await h.run('startWork', { ticketId, beforePhotos: [h.photo(40)] }, h.technicianId);
+    await h.run('markRepaired', { ticketId, afterPhotos: [h.photo(41)] }, h.technicianId);
+
+    const onDraftChange = vi.fn();
+    const before = await mount(h, h.cashierId, { onDraftChange });
+    await press(before, 'repair.board.views.pickup');
+    await press(before, `repair.board.row.${ticketId}`);
+    await press(before, 'repair.ticket.action.handover');
+    await press(before, 'repair.handover.photo.press');
+    await press(before, 'repair.handover.signature.press');
+    for (const line of [
+      'check.customerTried',
+      'check.repairWorks',
+      'accessory.charger',
+      'accessory.case',
+    ]) {
+      await press(before, `repair.handover.check.${line}`);
+    }
+    type(before, 'repair.handover.note', 'Casing tergores sedikit');
+    await settleTyping();
+    // What the shell writes to the workspace, read back as the next mount reads it.
+    const kept = parseRepairDraft(JSON.parse(JSON.stringify(onDraftChange.mock.lastCall?.[0])));
+    expect(kept).toEqual(expect.objectContaining({ kind: 'handover', ticketId }));
+    // The shell remounts every screen when the font size changes; the draft is all that is left.
+    before.unmount();
+
+    // The photo and signature are still on disk, so the kept refs load.
+    const runtime = repairRuntimeFor(h, h.cashierId);
+    const after = await mount(h, h.cashierId, {
+      restoredDraft: kept,
+      onDraftChange,
+      runtime: {
+        ...runtime,
+        loadThumbnail: () => Promise.resolve({ kind: 'ready', uri: 'file:///kept.jpg' }),
+      },
+    });
+    expect(after.query('repair.handover')).not.toBeNull();
+    expect(after.query('repair.handover.photoThumb.image')).not.toBeNull();
+    expect(after.query('repair.handover.signatureThumb.image')).not.toBeNull();
+    expect(after.get('repair.handover.note.field').props['value']).toBe('Casing tergores sedikit');
+    // Every check is still ticked, so the counter does not have to go through them again.
+    expect(after.all('repair.handover.primary')[0]!.props['disabled']).toBe(false);
+    await press(after, 'repair.handover.primary');
+
+    expect((await ticketRow(h, ticketId)).location).toBe('returned');
+    expect(onDraftChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test('a kept handover whose photo is gone asks for it again instead of sending it missing', async () => {
+    h = await openRepairScreenHarness(5308);
+    const ticketId = await openTicket(h);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
+    const screen = await mount(h, h.cashierId, {
+      restoredDraft: {
+        kind: 'handover',
+        ticketId,
+        photo: h.photo(60),
+        signature: null,
+        note: 'Ambil besok',
+        ticked: [],
+        payment: { lines: null, payLater: false, unpaidReason: '' },
+      },
+    });
+    await settle();
+    expect(screen.query('repair.handover')).not.toBeNull();
+    expect(screen.get('repair.handover.note.field').props['value']).toBe('Ambil besok');
+    // This runtime's thumbnails never load, as for a capture deleted after a day unsaved.
+    expect(screen.query('repair.handover.photoThumb.unavailable')).toBeNull();
+    expect(screen.query('repair.handover.photoThumb.loading')).toBeNull();
   });
 });
 
