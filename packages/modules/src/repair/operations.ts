@@ -34,6 +34,7 @@ import {
 } from './applier.js';
 import {
   CHECKLIST_STATES,
+  HANDOVER_CHECK_KINDS,
   HANDOVER_PHOTO_SLOTS,
   MAX_LINE_AMOUNT,
   MAX_UNCOLLECTED_DAYS,
@@ -235,6 +236,8 @@ export const ticketRepairTypesChangedPayload = z
 
 /** The lists before repair types joined them (v1 of both list ops). */
 const V1_LISTS = ['checks', 'accessories', 'photoAngles', 'brands', 'readyBy'] as const;
+/** The lists before the handover checks joined them (v2 of both list ops). */
+const V2_LISTS = [...V1_LISTS, 'repairTypes'] as const;
 
 export const intakeOptionsChangedPayloadV1 = z
   .object({
@@ -245,7 +248,7 @@ export const intakeOptionsChangedPayloadV1 = z
 
 /**
  * The whole of one franchise list, replacing the previous one (last save wins). v2: repair types,
- * whose items carry their warranty and whether they need an ownership video.
+ * whose items carry their warranty and whether they need an ownership video. v3: handover checks.
  */
 export const intakeOptionsChangedPayload = z
   .object({
@@ -269,12 +272,23 @@ export const storeIntakeOptionsChangedPayloadV1 = z
   .object({ list: z.enum(V1_LISTS), hidden: z.array(zOptionId).max(MAX_OPTIONS) })
   .strict();
 
-/** The whole set of one list's items a store hides, replacing the previous set. v2: repair types. */
+export const storeIntakeOptionsChangedPayloadV2 = z
+  .object({ list: z.enum(V2_LISTS), hidden: z.array(zOptionId).max(MAX_OPTIONS) })
+  .strict();
+
+/**
+ * The whole set of one list's items a store hides, replacing the previous set. v2: repair types;
+ * v3: handover checks.
+ */
 export const storeIntakeOptionsChangedPayload = z
   .object({
     list: z.enum(INTAKE_OPTION_LISTS),
     hidden: z.array(zOptionId).max(MAX_OPTIONS),
   })
+  .strict();
+
+export const intakeOptionsChangedPayloadV2 = intakeOptionsChangedPayload
+  .extend({ list: z.enum(V2_LISTS) })
   .strict();
 
 const emptyPayload = z.object({}).strict();
@@ -338,8 +352,21 @@ export const deviceReturnedPayloadV1 = z
   .strict();
 
 /** v2: settled in the money ledger; `unpaidReason` is an owner's word for letting it go unpaid. */
-export const deviceReturnedPayload = deviceReturnedPayloadV1
+export const deviceReturnedPayloadV2 = deviceReturnedPayloadV1
   .extend({ unpaidReason: z.string().trim().min(1).max(MAX_TEXT).nullable() })
+  .strict();
+
+/**
+ * One line the counter went through with the customer at handover: a check from the owner's list,
+ * or an accessory left at intake coming back. Named as it was shown, like the intake checklist.
+ */
+export const zHandoverCheck = zRecordedOption
+  .extend({ kind: z.enum(HANDOVER_CHECK_KINDS), done: z.boolean() })
+  .strict();
+
+/** v3: the handover checklist, every line ticked or not (`note` then says why). */
+export const deviceReturnedPayload = deviceReturnedPayloadV2
+  .extend({ checklist: z.array(zHandoverCheck).max(MAX_OPTIONS + 50) })
   .strict();
 
 /** Money the customer paid up front: a positive amount when received. */
@@ -515,9 +542,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.repairTypes, severity: 'minor' },
   },
   [REPAIR_OP.deviceReturned]: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     payload: deviceReturnedPayload,
-    payloadByVersion: { 1: deviceReturnedPayloadV1 },
+    payloadByVersion: { 1: deviceReturnedPayloadV1, 2: deviceReturnedPayloadV2 },
     reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
     rule: deviceReturnedRule,
@@ -526,9 +553,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     payload: intakeOptionsChangedPayload,
-    payloadByVersion: { 1: intakeOptionsChangedPayloadV1 },
+    payloadByVersion: { 1: intakeOptionsChangedPayloadV1, 2: intakeOptionsChangedPayloadV2 },
     reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
     apply: intakeOptionsChangedApplier,
     rule: intakeOptionsChangedRule,
@@ -540,9 +567,12 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     scope: 'tenant',
   },
   [REPAIR_OP.storeIntakeOptionsChanged]: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     payload: storeIntakeOptionsChangedPayload,
-    payloadByVersion: { 1: storeIntakeOptionsChangedPayloadV1 },
+    payloadByVersion: {
+      1: storeIntakeOptionsChangedPayloadV1,
+      2: storeIntakeOptionsChangedPayloadV2,
+    },
     reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
     apply: storeIntakeOptionsChangedApplier,
     rule: ownStoreSettingRule,

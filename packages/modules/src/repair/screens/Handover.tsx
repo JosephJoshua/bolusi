@@ -1,11 +1,23 @@
 /**
- * Handover — giving the device back: the customer pays what is left (in one or more methods), a
- * photo of the handover and their signature, then one tap records it all. What they owe is the
+ * Handover — giving the device back: the counter goes through the checklist with the customer
+ * (they tried the phone, the accessories came back; anything not ticked needs a note), the customer
+ * pays what is left (in one or more methods), a photo of the handover and their signature, then
+ * one tap records it all. What they owe is the
  * price on a repaired phone or the fee on a cancelled one, less the DP; a DP above it goes back.
  * Only an owner may let the phone go unpaid ("Bayar nanti"), which leaves a debt.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { Card, PhotoSlot, TextButton, TextInput, border, color, space, type } from '@bolusi/ui';
+import {
+  Card,
+  PhotoSlot,
+  TextButton,
+  TextInput,
+  ToggleChip,
+  border,
+  color,
+  space,
+  type,
+} from '@bolusi/ui';
 import type { MediaRef } from '@bolusi/schemas';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -35,6 +47,7 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
+import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
 import { useHandoverPayment } from '../handover-payment.js';
 import { usePaymentAccounts, useRepairQuery, useRepairRuntime } from '../runtime.js';
 
@@ -82,13 +95,24 @@ export function Handover({
   const due = balance.kind === 'due' ? balance.amount : 0;
   const payment = useHandoverPayment(due, accounts, canPayLater);
   const { settled } = payment;
+  const checks = useHandoverChecks(ticket);
+  const ready =
+    photo !== null &&
+    signature !== null &&
+    settled &&
+    loadedAccounts !== null &&
+    checks.ready(note);
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
 
   const discard = useDiscardConfirm({
     dirty:
       stale === null &&
-      (photo !== null || signature !== null || note.trim() !== '' || payment.touched),
+      (photo !== null ||
+        signature !== null ||
+        note.trim() !== '' ||
+        payment.touched ||
+        checks.touched),
     onRegisterDiscardGuard,
     testID,
   });
@@ -103,7 +127,7 @@ export function Handover({
   };
 
   const submit = (): void => {
-    if (photo === null || signature === null || !settled || loadedAccounts === null) return;
+    if (!ready || photo === null || signature === null) return;
     void runner
       .run(() =>
         runtime.run('returnDevice', {
@@ -111,6 +135,7 @@ export function Handover({
           handoverPhoto: photo,
           signature,
           note,
+          checklist: [...checks.lines],
           ...payment.input,
         }),
       )
@@ -127,8 +152,14 @@ export function Handover({
       overlay={discard.overlay}
       primaryLabel={tn('repair.action.handover')}
       onPrimary={submit}
-      primaryDisabled={photo === null || signature === null || !settled || loadedAccounts === null}
-      primaryHint={tn(settled ? 'repair.hint.handover' : 'repair.hint.handoverPayment')}
+      primaryDisabled={!ready}
+      primaryHint={tn(
+        !settled
+          ? 'repair.hint.handoverPayment'
+          : checks.loaded && !checks.ready(note)
+            ? 'repair.hint.handoverChecks'
+            : 'repair.hint.handover',
+      )}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -176,6 +207,22 @@ export function Handover({
           )
         }
       </QueryView>
+      {checks.lines.length === 0 || stale !== null ? null : (
+        <Section title={tn('repair.handover.checks')} testID={`${testID}.checks`}>
+          {/* Wrapped, not a sideways row: every line must be in sight to be gone through. */}
+          <View style={styles.checks} testID={`${testID}.checkList`}>
+            {checks.lines.map((line) => (
+              <ToggleChip
+                key={`${line.kind}:${line.item}`}
+                label={handoverLineLabel(line)}
+                selected={line.done}
+                onToggle={() => checks.toggle(line)}
+                testID={`${testID}.check.${line.kind}.${line.item}`}
+              />
+            ))}
+          </View>
+        </Section>
+      )}
       {due > 0 && stale === null ? (
         <Section
           title={tn('repair.handover.payment')}
@@ -263,7 +310,7 @@ export function Handover({
       </View>
       <View style={repairStyles.gap}>
         <TextInput
-          label={tn('repair.handover.note')}
+          label={tn(checks.noteNeeded ? 'repair.handover.noteNeeded' : 'repair.handover.note')}
           value={note}
           onChangeText={setNote}
           multiline
@@ -284,6 +331,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: { ...type.bodyBold, color: color.text },
   payLater: { gap: space.sm },
+  checks: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   // Two captures side by side, each half the row.
   half: { flexBasis: '47%', flexGrow: 1 },
 });

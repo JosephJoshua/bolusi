@@ -424,6 +424,16 @@ describe('price changes and handover', () => {
     expect(screen.all('repair.handover.primary')[0]!.props['disabled']).toBe(true);
     await press(screen, 'repair.handover.photo.press');
     await press(screen, 'repair.handover.signature.press');
+    // Not until the counter went through the checks and the accessories with the customer.
+    expect(screen.all('repair.handover.primary')[0]!.props['disabled']).toBe(true);
+    for (const line of [
+      'check.customerTried',
+      'check.repairWorks',
+      'accessory.charger',
+      'accessory.case',
+    ]) {
+      await press(screen, `repair.handover.check.${line}`);
+    }
     await press(screen, 'repair.handover.primary');
 
     const ticket = await ticketRow(h, ticketId);
@@ -748,7 +758,17 @@ describe('changes synced from another device', () => {
 
     await b.run(
       'returnDevice',
-      { ticketId, handoverPhoto: b.photo(62), signature: b.photo(63) },
+      {
+        ticketId,
+        handoverPhoto: b.photo(62),
+        signature: b.photo(63),
+        checklist: ['charger', 'case'].map((item) => ({
+          kind: 'accessory',
+          item,
+          label: null,
+          done: true,
+        })),
+      },
       b.cashierId,
     );
     await pull(a, b);

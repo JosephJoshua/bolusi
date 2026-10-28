@@ -266,6 +266,9 @@ test('the same phone takes the work photos, and the customer signs on it turned 
   }
 
   await pc.getByTestId('repair.desk.ticket.action.handover').click();
+  await pc.getByTestId('repair.desk.handover.checks').waitFor();
+  for (const line of await pc.getByTestId('repair.desk.handover.checks').getByRole('button').all())
+    await line.click();
   await pc.getByTestId('repair.desk.handover.photo').click();
   await photoOnPhone();
   await pc.getByTestId('repair.desk.handover.signature').click();
