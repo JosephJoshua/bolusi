@@ -28,6 +28,7 @@ import {
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
+import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
 import { systemClock } from './src/ports/clock.js';
 import { renderZone } from './src/navigation/RootNavigator.js';
 import type { SurfaceNav } from './src/navigation/surface.js';
@@ -98,6 +99,8 @@ import {
   type IntakeDraft,
 } from '@bolusi/modules/repair';
 import { tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
+import { ti } from '@bolusi/modules/inventory/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
 import { formatRelative, t, type Locale } from '@bolusi/i18n';
 
@@ -705,6 +708,7 @@ export default function App(props: AppProps): React.JSX.Element {
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
   const closeRepairSettings = useCallback(() => setRoute('settings'), []);
+  const closeParts = useCallback(() => setRoute('home'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
   const currentUser = useMemo(() => {
@@ -1107,6 +1111,26 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               );
             }
+            if (shellZone.route === 'parts' && props.repair?.inventory !== undefined) {
+              return (
+                <PartsRoute
+                  runtime={props.repair.inventory}
+                  syncChip={
+                    <SyncChip
+                      state={chip}
+                      pendingCount={props.sync.pendingOperationCount}
+                      accessibilityLabels={syncChipAccessibilityLabels({
+                        pendingCount: props.sync.pendingOperationCount,
+                      })}
+                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
+                    />
+                  }
+                  onClose={closeParts}
+                  onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
             if (shellZone.route === 'changePin') {
               // Reached from Settings (task 186a). `onChangePin` runs the real `auth.changePin` flow
               // through the session controller and REJECTS with its DomainError; the screen maps it.
@@ -1299,6 +1323,17 @@ export default function App(props: AppProps): React.JSX.Element {
               }}
               testID="account-menu-switch-user"
             />
+            {props.repair?.inventory?.hasPermission(INVENTORY_PERMISSION.read) === true ? (
+              <ListRow
+                leading={<Icon name="parts" size={size.iconInline} color={color.text} />}
+                primaryText={ti('inventory.list.title')}
+                onPress={() => {
+                  setAccountMenu(false);
+                  leaveHome(() => setRoute('parts'));
+                }}
+                testID="shell-open-parts"
+              />
+            ) : null}
             <ListRow
               leading={<Icon name="settings" size={size.iconInline} color={color.text} />}
               primaryText={t('core.settings.title')}
@@ -1393,6 +1428,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'staffPins',
   'printSettings',
   'printPaper',
+  'parts',
 ]);
 
 /**

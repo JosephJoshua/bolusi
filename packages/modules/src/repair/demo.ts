@@ -10,6 +10,8 @@
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
 import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
+import { demoInventoryRuntime } from '../inventory/demo.js';
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { IN_PROGRESS_OUTCOMES, REPAIR_PERMISSION, type RepairOutcome } from './constants.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
@@ -40,17 +42,26 @@ const browser = globalThis as unknown as {
 
 const HOUR = 3_600_000;
 const P = REPAIR_PERMISSION;
+const I = INVENTORY_PERMISSION;
 
 /** Who the harness can act as: the owner (everything), the counter and a technician. */
 export const DEMO_REPAIR_ROLES = {
-  owner: { userId: 'u-andi', name: 'Andi Pratama', permissions: Object.values(P) },
+  owner: {
+    userId: 'u-andi',
+    name: 'Andi Pratama',
+    permissions: [...Object.values(P), ...Object.values(I)],
+  },
   counter: {
     userId: 'u-siti',
     name: 'Siti Rahayu',
     // No cancel or discount: only owners lower what a customer pays (how counter staff kept cash).
-    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover],
+    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover, I.read, I.useParts],
   },
-  technician: { userId: 'u-budi', name: 'Budi Santoso', permissions: [P.read, P.work] },
+  technician: {
+    userId: 'u-budi',
+    name: 'Budi Santoso',
+    permissions: [P.read, P.work, I.read, I.useParts],
+  },
   /** A store owner: may choose what this store uses, not change the franchise's lists. */
   storeOwner: {
     userId: 'u-yosua',
@@ -65,6 +76,7 @@ export const DEMO_REPAIR_ROLES = {
       P.setCancelFees,
       P.correctDownPayment,
       P.setPrintSettings,
+      ...Object.values(I),
     ],
   },
 } as const;
@@ -1069,8 +1081,31 @@ export function demoRepairRuntime(
     imageDataUri: (ref) => Promise.resolve(placeholderUri(ref.mediaId)),
   };
 
+  // The parts shelf, with repair's say over which servisan may draw on it (repair/part-use.ts).
+  const inventory = demoInventoryRuntime({
+    now: HARNESS_NOW,
+    actor: () => actor,
+    checkUse: (ticketId, who) => {
+      const t = find(ticketId);
+      if (who.permissions.includes(I.correctUse)) return t.ticketNumber;
+      if (t.outcome !== 'in_repair' || t.location !== 'in_store') {
+        throw REPAIR_REFUSALS.refuse('partsNotInWork');
+      }
+      if (t.technicianId !== who.userId && !who.permissions.includes(P.assign)) {
+        throw REPAIR_REFUSALS.refuse('partsNotYours', { code: 'PERMISSION_DENIED' });
+      }
+      return t.ticketNumber;
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    notify,
+  });
+
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
+    inventory,
     get userId() {
       return actor.userId;
     },

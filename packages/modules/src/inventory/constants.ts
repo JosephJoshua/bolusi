@@ -1,0 +1,55 @@
+// Identifiers for the `inventory` module: the business's parts list and each store's stock
+// (product-scope.md, "Parts and stock").
+//
+// Stock is never stored as a number to overwrite. Every change is a movement (a count, a part taken
+// for a servisan, a part put back), and what a store has is the sum of its movements. Each movement
+// is its own entity, so two phones moving the same part offline never collide and a re-fold touches
+// one row.
+
+export const INVENTORY_MODULE_ID = 'inventory' as const;
+
+/** One part on the business's list. Tenant-wide: every store sees the same list. */
+export const INVENTORY_PART_ENTITY = 'inventory_part' as const;
+/** One stock movement in one store. */
+export const INVENTORY_MOVEMENT_ENTITY = 'inventory_movement' as const;
+
+export const INVENTORY_TABLE = {
+  parts: 'inventory_parts',
+  movements: 'inventory_movements',
+} as const;
+
+export const INVENTORY_OP = {
+  partAdded: 'inventory.part_added',
+  partEdited: 'inventory.part_edited',
+  stockCounted: 'inventory.stock_counted',
+  partTaken: 'inventory.part_taken',
+  partPutBack: 'inventory.part_put_back',
+} as const;
+
+export const INVENTORY_PERMISSION = {
+  read: 'inventory.read',
+  /** Add parts to the business's list and edit them. */
+  manageParts: 'inventory.manage_parts',
+  /** Set how many of a part the store has, from a count. */
+  count: 'inventory.count',
+  /** Take parts for a servisan and put them back, while it is being worked on. */
+  useParts: 'inventory.use_parts',
+  /** Take or put back parts on a servisan that is no longer being worked on (owners). */
+  correctUse: 'inventory.correct_use',
+} as const;
+
+/** What a movement was. */
+export const MOVEMENT_KINDS = ['counted', 'taken', 'put_back'] as const;
+export type MovementKind = (typeof MOVEMENT_KINDS)[number];
+
+/**
+ * What parts can be taken for. Each kind is checked by the module that owns it (part-use.ts), so
+ * the stock rules never read another module's records themselves.
+ */
+export const PART_USE_KINDS = ['repair_ticket'] as const;
+export type PartUseKind = (typeof PART_USE_KINDS)[number];
+
+/** The most of one part a single movement may carry, either way. Catches a mistyped extra zero. */
+export const MAX_MOVEMENT_QTY = 10_000;
+/** The most a store can count of one part. */
+export const MAX_COUNTED_QTY = 1_000_000;

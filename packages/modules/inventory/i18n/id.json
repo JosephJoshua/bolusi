@@ -1,0 +1,116 @@
+{
+  "opType": {
+    "partAdded": "Sparepart ditambahkan",
+    "partEdited": "Sparepart diubah",
+    "stockCounted": "Stok dihitung",
+    "partTaken": "Sparepart diambil",
+    "partPutBack": "Sparepart dikembalikan"
+  },
+  "refusal": {
+    "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
+    "partNotFound": "Sparepart ini tidak ada di daftar.",
+    "partArchived": "Sparepart ini sudah diarsipkan.",
+    "moreThanTaken": "Jumlahnya lebih dari yang diambil untuk servisan ini.",
+    "wrongUse": "Data servisannya tidak cocok. Coba lagi."
+  },
+  "list": {
+    "title": "Sparepart",
+    "searchHint": "Cari nama, kode, tipe HP",
+    "clearSearch": "Hapus pencarian",
+    "emptyHint": "Sparepart yang ditambahkan akan muncul di sini.",
+    "noMatches": "Sparepart tidak ditemukan. Coba kata lain.",
+    "noBelowZero": "Tidak ada stok minus.",
+    "noArchived": "Belum ada sparepart yang diarsipkan.",
+    "stock": "Stok",
+    "stockCount": "Stok: {count}",
+    "belowZero": "Stok minus",
+    "archived": "Diarsipkan"
+  },
+  "filter": {
+    "active": "Semua",
+    "belowZero": "Stok minus",
+    "archived": "Diarsipkan"
+  },
+  "action": {
+    "add": "Tambah sparepart",
+    "edit": "Ubah",
+    "count": "Hitung stok",
+    "archive": "Arsipkan",
+    "restore": "Aktifkan lagi",
+    "save": "Simpan"
+  },
+  "form": {
+    "addTitle": "Sparepart baru",
+    "editTitle": "Ubah sparepart",
+    "name": "Nama sparepart",
+    "namePlaceholder": "Contoh: LCD Redmi Note 10 + frame",
+    "code": "Kode (opsional)",
+    "fits": "Cocok untuk HP (opsional)",
+    "fitsPlaceholder": "Contoh: Redmi Note 10, Note 10S",
+    "stock": "Stok sekarang",
+    "nameRequired": "Tulis nama sparepartnya dulu."
+  },
+  "count": {
+    "title": "Hitung stok",
+    "counted": "Jumlah di rak",
+    "recorded": "Tercatat {count}",
+    "note": "Catatan (opsional)",
+    "save": "Simpan jumlah",
+    "more": "Lebih {count}",
+    "less": "Kurang {count}",
+    "same": "Sesuai"
+  },
+  "detail": {
+    "stockHere": "Stok di toko ini",
+    "code": "Kode",
+    "fits": "Cocok untuk",
+    "history": "Riwayat",
+    "noHistory": "Belum ada keluar masuk stok di toko ini.",
+    "title": "Detail sparepart"
+  },
+  "movement": {
+    "counted": "Dihitung: {count}",
+    "taken": "Diambil untuk {use}",
+    "putBack": "Dikembalikan dari {use}"
+  },
+  "stepper": {
+    "decrease": "Kurangi",
+    "increase": "Tambah"
+  },
+  "archive": {
+    "title": "Arsipkan sparepart ini?",
+    "message": "Tidak bisa diambil lagi untuk servisan. Riwayatnya tetap ada."
+  },
+  "use": {
+    "title": "Sparepart",
+    "take": "Ambil",
+    "takeTitle": "Ambil sparepart",
+    "takeAction": "Ambil sparepart",
+    "qty": "Jumlah",
+    "out": "{count} diambil",
+    "putBack": "Kembalikan",
+    "putBackTitle": "Kembalikan ke stok?",
+    "putBackMessage": "{name} kembali ke stok toko.",
+    "notReturned": "Sparepart ini belum kembali ke stok.",
+    "pickFirst": "Pilih sparepartnya dulu.",
+    "none": "Belum ada sparepart.",
+    "putBackAction": "Kembalikan ke stok",
+    "searchHint": "Cari sparepart",
+    "picked": "Dipilih"
+  },
+  "done": {
+    "added": "Sparepart ditambahkan.",
+    "saved": "Perubahan disimpan.",
+    "counted": "Jumlah stok disimpan.",
+    "archived": "Sparepart diarsipkan.",
+    "restored": "Sparepart aktif lagi.",
+    "taken": "Sparepart diambil.",
+    "putBack": "Sparepart dikembalikan ke stok."
+  },
+  "discard": {
+    "title": "Keluar tanpa menyimpan?",
+    "message": "Isian yang belum disimpan akan hilang.",
+    "confirm": "Keluar",
+    "keep": "Tetap di sini"
+  }
+}

@@ -363,8 +363,10 @@ export default {
         context.report({ node, messageId: 'uiSchemasTypeOnly', data: { source } });
         return;
       }
-      // 3. */screens subpaths only from apps/mobile.
-      if (/\/screens(\/|$)/.test(source) && workspace !== 'apps/mobile') {
+      // 3. */screens subpaths only from apps/mobile. Inside a package, one screens file may import
+      // another relatively (shared screen pieces): both are already Hermes-only UI.
+      const screensToScreens = source.startsWith('.') && /\/screens\//.test(filename);
+      if (/\/screens(\/|$)/.test(source) && workspace !== 'apps/mobile' && !screensToScreens) {
         context.report({ node, messageId: 'screensOutsideMobile', data: { source } });
         return;
       }

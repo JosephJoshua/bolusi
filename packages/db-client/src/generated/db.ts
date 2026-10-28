@@ -61,6 +61,35 @@ export interface DeviceRegistry {
   storeId: string | null;
 }
 
+export interface InventoryMovements {
+  at: number;
+  counted: number | null;
+  id: string | null;
+  kind: string;
+  note: string | null;
+  partId: string;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
+}
+
+export interface InventoryParts {
+  archived: number;
+  code: string | null;
+  createdAt: number;
+  createdBy: string;
+  fits: string | null;
+  id: string | null;
+  name: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface MediaItems {
   attachedToOperationId: string | null;
   byteSize: number;
@@ -398,6 +427,8 @@ export interface DB {
   authSessions: AuthSessions;
   conflicts: Conflicts;
   deviceRegistry: DeviceRegistry;
+  inventoryMovements: InventoryMovements;
+  inventoryParts: InventoryParts;
   mediaItems: MediaItems;
   metaKv: MetaKv;
   migrations: Migrations;

@@ -1,0 +1,116 @@
+{
+  "opType": {
+    "partAdded": "Part added",
+    "partEdited": "Part changed",
+    "stockCounted": "Stock counted",
+    "partTaken": "Part taken",
+    "partPutBack": "Part put back"
+  },
+  "refusal": {
+    "alreadyRecorded": "This was already recorded.",
+    "partNotFound": "This part is not on the list.",
+    "partArchived": "This part has been archived.",
+    "moreThanTaken": "That is more than this repair took.",
+    "wrongUse": "The repair details don’t match. Try again."
+  },
+  "list": {
+    "title": "Parts",
+    "searchHint": "Search name, code, phone model",
+    "clearSearch": "Clear search",
+    "emptyHint": "Parts you add will show here.",
+    "noMatches": "No parts found. Try another word.",
+    "noBelowZero": "No stock below zero.",
+    "noArchived": "No archived parts yet.",
+    "stock": "Stock",
+    "stockCount": "Stock: {count}",
+    "belowZero": "Below zero",
+    "archived": "Archived"
+  },
+  "filter": {
+    "active": "All",
+    "belowZero": "Below zero",
+    "archived": "Archived"
+  },
+  "action": {
+    "add": "Add part",
+    "edit": "Edit",
+    "count": "Count stock",
+    "archive": "Archive",
+    "restore": "Make active again",
+    "save": "Save"
+  },
+  "form": {
+    "addTitle": "New part",
+    "editTitle": "Edit part",
+    "name": "Part name",
+    "namePlaceholder": "E.g. LCD Redmi Note 10 + frame",
+    "code": "Code (optional)",
+    "fits": "Fits phones (optional)",
+    "fitsPlaceholder": "E.g. Redmi Note 10, Note 10S",
+    "stock": "Stock now",
+    "nameRequired": "Enter the part name first."
+  },
+  "count": {
+    "title": "Count stock",
+    "counted": "On the shelf",
+    "recorded": "Recorded {count}",
+    "note": "Note (optional)",
+    "save": "Save count",
+    "more": "{count} more",
+    "less": "{count} fewer",
+    "same": "Matches"
+  },
+  "detail": {
+    "stockHere": "Stock in this store",
+    "code": "Code",
+    "fits": "Fits",
+    "history": "History",
+    "noHistory": "No stock movements in this store yet.",
+    "title": "Part details"
+  },
+  "movement": {
+    "counted": "Counted: {count}",
+    "taken": "Taken for {use}",
+    "putBack": "Put back from {use}"
+  },
+  "stepper": {
+    "decrease": "Fewer",
+    "increase": "More"
+  },
+  "archive": {
+    "title": "Archive this part?",
+    "message": "It can no longer be taken for repairs. Its history stays."
+  },
+  "use": {
+    "title": "Parts",
+    "take": "Take",
+    "takeTitle": "Take a part",
+    "takeAction": "Take part",
+    "qty": "Quantity",
+    "out": "{count} taken",
+    "putBack": "Put back",
+    "putBackTitle": "Put back in stock?",
+    "putBackMessage": "{name} goes back into the store’s stock.",
+    "notReturned": "This part has not gone back to stock.",
+    "pickFirst": "Pick the part first.",
+    "none": "No parts yet.",
+    "putBackAction": "Put back in stock",
+    "searchHint": "Search parts",
+    "picked": "Selected"
+  },
+  "done": {
+    "added": "Part added.",
+    "saved": "Changes saved.",
+    "counted": "Stock count saved.",
+    "archived": "Part archived.",
+    "restored": "Part is active again.",
+    "taken": "Part taken.",
+    "putBack": "Part put back in stock."
+  },
+  "discard": {
+    "title": "Leave without saving?",
+    "message": "What you entered will be lost.",
+    "confirm": "Leave",
+    "keep": "Stay here"
+  }
+}

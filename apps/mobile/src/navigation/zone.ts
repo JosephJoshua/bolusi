@@ -36,6 +36,7 @@ export const SHELL_ROUTES = [
   'cancelFees',
   'printSettings',
   'printPaper',
+  'parts',
 ] as const;
 export type ShellRoute = (typeof SHELL_ROUTES)[number];
 

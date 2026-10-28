@@ -79,6 +79,8 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'customerAgreementMismatch',
   'downPaymentAboveTotal',
   'downPaymentRecorded',
+  'partsNotInWork',
+  'partsNotYours',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;

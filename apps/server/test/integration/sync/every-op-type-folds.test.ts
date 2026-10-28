@@ -90,6 +90,36 @@ function journey(world: ChainWorld): OpSpec[] {
   const ticket = id(2);
   const cancelledTicket = id(3);
   const note = id(4);
+  const part = id(8);
+  // A part drawn for the servisan while it is being worked on, and the unused one put back.
+  const partsUsed = (): OpSpec[] => {
+    const use = { kind: 'repair_ticket', id: ticket, label: formatTicketNumber(world.deviceId, 1) };
+    const movement = (n: number, type: string, payload: Record<string, unknown>): OpSpec => ({
+      type,
+      entityType: 'inventory_movement',
+      entityId: id(0x300 + n),
+      payload,
+    });
+    return [
+      {
+        type: 'inventory.part_added',
+        entityType: 'inventory_part',
+        entityId: part,
+        storeId: null,
+        payload: { name: 'LCD Samsung A14', code: null, fits: 'Galaxy A14' },
+      },
+      {
+        type: 'inventory.part_edited',
+        entityType: 'inventory_part',
+        entityId: part,
+        storeId: null,
+        payload: { name: 'LCD Samsung A14', code: 'LCD-A14', fits: 'Galaxy A14', archived: false },
+      },
+      movement(1, 'inventory.stock_counted', { partId: part, counted: 3, expected: 0, note: null }),
+      movement(2, 'inventory.part_taken', { partId: part, qty: 2, use }),
+      movement(3, 'inventory.part_put_back', { partId: part, qty: 1, use }),
+    ];
+  };
   const opened = (ticketId: string, ticketNumber: string, lineId: string): OpSpec => ({
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
@@ -210,6 +240,7 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),
+    ...partsUsed(),
     onTicket('repair.quote_change_proposed', {
       lineId: id(0x201),
       kind: 'part',

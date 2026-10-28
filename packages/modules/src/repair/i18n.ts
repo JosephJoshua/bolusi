@@ -345,6 +345,8 @@ export const REPAIR_KEYS = [
   'repair.refusal.notTechnician',
   'repair.refusal.numberNotThisDevice',
   'repair.refusal.numberUsed',
+  'repair.refusal.partsNotInWork',
+  'repair.refusal.partsNotYours',
   'repair.refusal.priceChangeDecided',
   'repair.refusal.priceChangeDifferent',
   'repair.refusal.priceChangeNotFound',

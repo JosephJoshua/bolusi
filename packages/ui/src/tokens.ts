@@ -174,6 +174,8 @@ export const size = Object.freeze({
   iconChip: 16,
   /** §3.6 Banner / inline icon. */
   iconInline: 20,
+  /** QuantityStepper: the number between its buttons, wide enough for a four-digit count. */
+  stepperValue: 96,
   /** §3.8 EmptyState / ErrorState / UnauthorizedState centred glyph. */
   iconState: 48,
   /** §3.4 ListRow leading slot (icon/avatar). */

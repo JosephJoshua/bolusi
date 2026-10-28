@@ -37,6 +37,14 @@
       "types": "./dist/repair/desktop/index.d.ts",
       "default": "./dist/repair/desktop/index.js"
     },
+    "./inventory": {
+      "types": "./dist/inventory/index.d.ts",
+      "default": "./dist/inventory/index.js"
+    },
+    "./inventory/screens": {
+      "types": "./dist/inventory/screens/index.d.ts",
+      "default": "./dist/inventory/screens/index.js"
+    },
     "./screen-kit": {
       "types": "./dist/screen-kit/index.d.ts",
       "default": "./dist/screen-kit/index.js"
@@ -44,12 +52,15 @@
     "./notes/i18n/id.json": "./notes/i18n/id.json",
     "./notes/i18n/en.json": "./notes/i18n/en.json",
     "./repair/i18n/id.json": "./repair/i18n/id.json",
-    "./repair/i18n/en.json": "./repair/i18n/en.json"
+    "./repair/i18n/en.json": "./repair/i18n/en.json",
+    "./inventory/i18n/id.json": "./inventory/i18n/id.json",
+    "./inventory/i18n/en.json": "./inventory/i18n/en.json"
   },
   "files": [
     "dist",
     "notes/i18n",
-    "repair/i18n"
+    "repair/i18n",
+    "inventory/i18n"
   ],
   "dependencies": {
     "@bolusi/core": "workspace:*",

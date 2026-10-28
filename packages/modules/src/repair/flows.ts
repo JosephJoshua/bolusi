@@ -5,6 +5,7 @@ import type { MediaRef, MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 import { zMediaRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
+import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { OpenTicketInput } from './commands.js';
 import {
   CHECKLIST_STATES,
@@ -141,6 +142,22 @@ export function repairAbilities(hasPermission: (id: string) => boolean): RepairA
     correctDownPayment: hasPermission(P.correctDownPayment),
     setPrintSettings: hasPermission(P.setPrintSettings),
   };
+}
+
+/**
+ * Whether this user may take or put back parts on the ticket now: the client side of repair's
+ * part-use rule (part-use.ts), for showing the actions. The rule decides again on save. Owners may
+ * correct any ticket past intake, so they see the actions on finished and cancelled ones too.
+ */
+export function canUseParts(
+  ticket: Pick<TicketSummaryRow, 'outcome' | 'location' | 'technicianId'>,
+  userId: string,
+  hasPermission: (id: string) => boolean,
+): boolean {
+  if (!hasPermission(INVENTORY_PERMISSION.useParts)) return false;
+  if (hasPermission(INVENTORY_PERMISSION.correctUse)) return ticket.outcome !== 'received';
+  if (ticket.outcome !== 'in_repair' || ticket.location !== 'in_store') return false;
+  return ticket.technicianId === userId || hasPermission(REPAIR_PERMISSION.assign);
 }
 
 export type TicketAction =

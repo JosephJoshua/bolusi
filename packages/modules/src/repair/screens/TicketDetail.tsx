@@ -42,6 +42,7 @@ import { tn, type RepairKey } from '../i18n.js';
 import { LOCK_KIND_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   amountOwed,
+  canUseParts,
   downPaymentAction,
   downPaymentStale,
   photoInSlot,
@@ -71,6 +72,16 @@ import {
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
+import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
+import { ti } from '../../inventory/i18n.js';
+import type { UsedPartRow } from '../../inventory/queries.js';
+import { InventoryRuntimeProvider } from '../../inventory/runtime.js';
+import {
+  PutBackStep,
+  TakePartStep,
+  UsedPartsSection,
+  type PartUse,
+} from '../../inventory/screens/UsedParts.js';
 import {
   AssignStep,
   CancelStep,
@@ -80,6 +91,11 @@ import {
   ProposalStep,
   WorkPhotosStep,
 } from './TicketSteps.js';
+
+/** The servisan as stock records it: parts taken for it carry its number. */
+function partUse(ticket: Pick<TicketDetailRow, 'id' | 'ticketNumber'>): PartUse {
+  return { kind: 'repair_ticket', id: ticket.id, label: ticket.ticketNumber };
+}
 
 /** What an action that runs in place says once it lands, in the fixed banner slot. */
 const DONE_KEY: Partial<Record<TicketAction, RepairKey>> = {
@@ -110,7 +126,9 @@ type Step =
   | Exclude<TicketStep, { readonly kind: 'proposal' | 'handover' }>
   | { readonly kind: 'proposal'; readonly lineId: string; readonly line: QuoteLineRow }
   | { readonly kind: 'downPayment'; readonly mode: 'record' | 'correct' }
-  | { readonly kind: 'print' };
+  | { readonly kind: 'print' }
+  | { readonly kind: 'takePart' }
+  | { readonly kind: 'putBackPart'; readonly part: UsedPartRow };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -148,7 +166,8 @@ export function TicketDetail({
   const runner = useActionRunner();
   const [step, setStep] = useState<Step>({ kind: 'none' });
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [done, setDone] = useState<RepairKey | null>(null);
+  // What the last action did, already in words: repair's own steps and the parts steps say it.
+  const [done, setDone] = useState<string | null>(null);
   const [passcodeShown, setPasscodeShown] = useState(false);
   // An open step holding photos asks before it is dropped (header back, hardware back).
   const stepGuardRef = useRef<DiscardGuard | null>(null);
@@ -204,7 +223,11 @@ export function TicketDetail({
   // The ticket keeps reading live under an open step, so a change synced from another device while
   // the user fills the step in is caught here rather than as a refusal once they submit.
   const stale: StaleStep | null =
-    step.kind === 'none' || step.kind === 'print' || ticket === undefined
+    step.kind === 'none' ||
+    step.kind === 'print' ||
+    step.kind === 'takePart' ||
+    step.kind === 'putBackPart' ||
+    ticket === undefined
       ? null
       : step.kind === 'downPayment'
         ? downPaymentStale(ticket, can, step.mode)
@@ -227,7 +250,7 @@ export function TicketDetail({
           stage={step.kind}
           onDone={() => {
             closeStep();
-            setDone(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired');
+            setDone(tn(step.kind === 'before' ? 'repair.done.start' : 'repair.done.repaired'));
           }}
         />
       );
@@ -257,7 +280,7 @@ export function TicketDetail({
           total={ticket === undefined ? 0 : amountOwed(ticket)}
           onDone={() => {
             closeStep();
-            setDone('repair.done.downPayment');
+            setDone(tn('repair.done.downPayment'));
           }}
         />
       );
@@ -271,10 +294,42 @@ export function TicketDetail({
           onCancel={closeStep}
           onDone={(notice) => {
             closeStep();
-            setDone(notice);
+            setDone(tn(notice));
           }}
         />
       );
+    case 'takePart':
+    case 'putBackPart': {
+      const inventory = runtime.inventory;
+      if (ticket === undefined || inventory === undefined) break;
+      const use = partUse(ticket);
+      return (
+        <InventoryRuntimeProvider runtime={inventory}>
+          {step.kind === 'takePart' ? (
+            <TakePartStep
+              chrome={chrome}
+              use={use}
+              onCancel={closeStep}
+              onDone={() => {
+                closeStep();
+                setDone(ti('inventory.done.taken'));
+              }}
+            />
+          ) : (
+            <PutBackStep
+              chrome={chrome}
+              use={use}
+              part={step.part}
+              onCancel={closeStep}
+              onDone={() => {
+                closeStep();
+                setDone(ti('inventory.done.putBack'));
+              }}
+            />
+          )}
+        </InventoryRuntimeProvider>
+      );
+    }
     case 'none':
       break;
   }
@@ -282,7 +337,8 @@ export function TicketDetail({
   const runInPlace = (action: TicketAction, run: () => Promise<unknown>): void => {
     setDone(null);
     void runner.run(run).then((result) => {
-      if (result !== undefined) setDone(DONE_KEY[action] ?? null);
+      const key = DONE_KEY[action];
+      if (result !== undefined) setDone(key === undefined ? null : tn(key));
     });
   };
 
@@ -350,7 +406,7 @@ export function TicketDetail({
     ) : done !== null ? (
       <Banner
         variant="info"
-        message={tn(done)}
+        message={done}
         onPress={() => setDone(null)}
         testID={`${testID}.done`}
       />
@@ -538,6 +594,19 @@ export function TicketDetail({
         )}
 
         {renderPrice(row, contextual('changePrice') ?? contextual('proposePrice'))}
+        {runtime.inventory === undefined ||
+        !runtime.inventory.hasPermission(INVENTORY_PERMISSION.read) ? null : (
+          <InventoryRuntimeProvider runtime={runtime.inventory}>
+            <UsedPartsSection
+              use={partUse(row)}
+              editable={canUseParts(row, runtime.userId, runtime.inventory.hasPermission)}
+              flagUnreturned={row.outcome === 'cancelled'}
+              onTake={() => setStep({ kind: 'takePart' })}
+              onPutBack={(part) => setStep({ kind: 'putBackPart', part })}
+              testID={`${testID}.parts`}
+            />
+          </InventoryRuntimeProvider>
+        )}
         {photos.section}
         {renderCondition(row)}
         <DeviceSpecs

@@ -476,6 +476,36 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  QuantityStepper: [
+    {
+      id: 'one',
+      render: (l) => (
+        <componentInventory.QuantityStepper
+          label={l.primaryText}
+          value={1}
+          min={1}
+          onChange={noop}
+          decreaseLabel={l.primaryText}
+          increaseLabel={l.primaryText}
+          caption={l.hint}
+        />
+      ),
+    },
+    {
+      id: 'many',
+      render: (l) => (
+        <componentInventory.QuantityStepper
+          label={l.primaryText}
+          value={1240}
+          max={1240}
+          onChange={noop}
+          decreaseLabel={l.primaryText}
+          increaseLabel={l.primaryText}
+        />
+      ),
+    },
+  ],
+
   SwitchRow: [
     {
       id: 'on',

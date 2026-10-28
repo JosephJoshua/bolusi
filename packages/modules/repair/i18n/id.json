@@ -587,7 +587,9 @@
     "discountOwnerOnly": "Hanya pemilik toko yang bisa memberi diskon.",
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
-    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
+    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
+    "partsNotInWork": "Sparepart hanya bisa diambil atau dikembalikan saat servisan sedang dikerjakan.",
+    "partsNotYours": "Servisan ini dipegang teknisi lain."
   },
   "paper": {
     "title": "Kertas nota",

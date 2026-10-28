@@ -11,10 +11,16 @@ import { ALL_MODULES } from './index.js';
 // the real push path; client: bootstrap.test.ts over the real bootstrap). This is the source's own
 // denominator, so the shared list cannot silently empty in between.
 describe('ALL_MODULES — the single registration source (T-14 denominator)', () => {
-  test('carries exactly the platform, notes, repair and auth modules — in that order', () => {
+  test('carries exactly the platform, notes, repair, inventory and auth modules — in that order', () => {
     // The COUNT and the id set, asserted — not "it is an array". Dropping a module reds here AND on
     // both apps; emptying the list reds here.
-    expect(ALL_MODULES.map((m) => m.id)).toStrictEqual(['platform', 'notes', 'repair', 'auth']);
+    expect(ALL_MODULES.map((m) => m.id)).toStrictEqual([
+      'platform',
+      'notes',
+      'repair',
+      'inventory',
+      'auth',
+    ]);
   });
 
   test('registerModules(ALL_MODULES) assembles a non-trivial registry — folds, validates, resolves', () => {
@@ -30,18 +36,20 @@ describe('ALL_MODULES — the single registration source (T-14 denominator)', ()
         'platform.user_locale_changed',
         'notes.note_created',
         'repair.ticket_opened',
+        'inventory.part_taken',
         'auth.permission_denied',
       ]),
     );
     // permission vocabulary size (02 §3) — an empty registry denies `unknown_permission` on every
-    // call forever (02 §5.2). 32 = platform(3) + notes(4) + repair(13) + auth(12); the client bootstrap suite
+    // call forever (02 §5.2). 37 = platform(3) + notes(4) + repair(13) + inventory(5) + auth(12); the client bootstrap suite
     // asserts the identical total from the identical list.
-    expect(registry.permissions.size).toBe(32);
+    expect(registry.permissions.size).toBe(37);
     // module count — the modules that assembled, in list order.
     expect(registry.modules.map((m) => m.id)).toStrictEqual([
       'platform',
       'notes',
       'repair',
+      'inventory',
       'auth',
     ]);
   });

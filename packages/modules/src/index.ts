@@ -36,8 +36,18 @@
 // site. The cast lives ONCE here now, in the manifests' home, rather than per element in two apps.
 import { authModule, platformModule, type AnyModuleDefinition } from '@bolusi/core';
 
+import { defineInventoryModule, type InventoryModule } from './inventory/index.js';
 import { notesModule } from './notes/manifest.js';
 import { repairModule } from './repair/manifest.js';
+import { repairPartUse } from './repair/part-use.js';
+
+/**
+ * The one `inventory` instance: stock rules ask the module that owns each use whether parts may be
+ * drawn for it, so the uses are wired here, where every module is in reach.
+ */
+export const inventoryModule: InventoryModule = defineInventoryModule({
+  repair_ticket: repairPartUse,
+});
 
 /**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`
@@ -49,5 +59,6 @@ export const ALL_MODULES = [
   platformModule,
   notesModule,
   repairModule,
+  inventoryModule,
   authModule,
 ] as unknown as readonly AnyModuleDefinition<never>[];

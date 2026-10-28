@@ -278,6 +278,31 @@ The repair payment journey supports deposits, split payments, and the remaining 
 
 The owner chose an actual repair business outcome rather than stock control alone, a retail-sale-first sequence, or intake without pickup/payment. A full repair journey needs genuine stock, customer, payment, evidence, and printing seams, but does not require shipping a standalone retail checkout first. Automatically treating an externally paid QRIS/EDC transaction as provider-confirmed would substitute a cashier claim for a provider result. Promising universal printer or existing-bank API compatibility without real hardware/merchant access would create a false acceptance gate.
 
+## Parts and stock (2026-10-28)
+
+Agreed with the owner, as the first part of parts, purchasing and stock.
+
+- **One parts list for the business** (the inventory module), built for
+  thousands of parts. Stock is per store. Owners add parts and count stock;
+  starting stock comes from a count.
+- **Taking a part drops stock; putting it back returns it.** Technicians take
+  parts for their own servisan, and the counter (who assigns work) can take for
+  any servisan. There is no storekeeper.
+- **No cheating the shelf:** parts move only for a servisan being worked on
+  (Dikerjakan, in the store); every take records who and when; only what a
+  servisan took can go back; once it is repaired, cancelled or handed back only
+  an owner corrects its parts. A cancelled servisan shows parts not yet back.
+- **Customers never see part prices:** parts are not bill lines, and taking a
+  part never changes the price.
+- **Offline first:** two phones may take the last part; stock goes below zero
+  and the owner sees it under "Stok minus" instead of the repair being blocked.
+  A count keeps what the phone showed, so a take synced later still comes off.
+- **Next, in order:** supplier orders and receiving, supplier invoices and
+  payments (on the shared money ledger), transfers between stores, supplier
+  returns, stock counts across many parts (a fast table on the PC). Part costs
+  will be seen only by owners and whoever records purchases; a sell price per
+  store waits for the shop POS.
+
 ## Open product choices
 
 - Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.

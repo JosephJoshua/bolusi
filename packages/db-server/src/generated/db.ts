@@ -127,6 +127,35 @@ export interface IdentityAudit {
   tenantId: string;
 }
 
+export interface InventoryMovements {
+  at: Int8;
+  counted: number | null;
+  id: string;
+  kind: string;
+  note: string | null;
+  partId: string;
+  qty: number;
+  storeId: string;
+  tenantId: string;
+  useId: string | null;
+  useKind: string | null;
+  useLabel: string | null;
+  userId: string;
+}
+
+export interface InventoryParts {
+  archived: number;
+  code: string | null;
+  createdAt: Int8;
+  createdBy: string;
+  fits: string | null;
+  id: string;
+  name: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
 export interface Media {
   attachedOperationId: string | null;
   byteSize: Int8;
@@ -512,6 +541,8 @@ export interface DB {
   devices: Devices;
   idempotencyKeys: IdempotencyKeys;
   identityAudit: IdentityAudit;
+  inventoryMovements: InventoryMovements;
+  inventoryParts: InventoryParts;
   media: Media;
   mediaChunks: MediaChunks;
   notes: Notes;

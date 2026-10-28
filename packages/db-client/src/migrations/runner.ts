@@ -12,6 +12,7 @@ import { repairCancelFeesMigration } from './011-repair-cancel-fees.js';
 import { repairPrintingMigration } from './013-repair-printing.js';
 import { pendingPinVerifiersMigration } from './014-pending-pin-verifiers.js';
 import { userWorkMigration } from './015-user-work.js';
+import { inventoryMigration } from './019-inventory.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -28,6 +29,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   repairPrintingMigration,
   pendingPinVerifiersMigration,
   userWorkMigration,
+  inventoryMigration,
 ];
 
 export interface RunMigrationsOptions {

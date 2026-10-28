@@ -15,6 +15,7 @@ import type { Kysely } from 'kysely';
 import type { MediaClient } from '../media/client.js';
 import type { GalleryPort } from '../media/import.js';
 import { createPhotoSharer, type SharePlatform } from '../media/share.js';
+import { createInventoryRuntime } from '../screens/inventory/runtime-adapter.js';
 import { createRepairRuntime, type RepairMediaSeams } from '../screens/repair/runtime-adapter.js';
 
 import type { Bootstrapped } from './bootstrap.js';
@@ -85,17 +86,20 @@ export function createSessionRepairRuntime(deps: {
           loadThumbnail: deps.media.loadThumbnail,
           platform: deps.print,
         });
+  const runtime = deps.runtime.moduleRuntimeFor({
+    tenantId: identity.tenantId,
+    storeId: identity.storeId,
+    deviceId: identity.deviceId,
+  });
   return createRepairRuntime({
-    runtime: deps.runtime.moduleRuntimeFor({
-      tenantId: identity.tenantId,
-      storeId: identity.storeId,
-      deviceId: identity.deviceId,
-    }),
+    runtime,
     db: app.db.db,
     invalidation: app.invalidation,
     identity,
     media: deps.media,
     printing,
+    // The parts a servisan draws on, and the parts list the shell opens from the account menu.
+    inventory: createInventoryRuntime({ runtime, invalidation: app.invalidation, identity }),
   });
 }
 

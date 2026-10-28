@@ -113,6 +113,12 @@ export const ICON_GLYPHS = Object.freeze({
   reveal: 'eye-outline',
   /** TextInput: hides it again. */
   conceal: 'eye-off-outline',
+  /** Sparepart and stock: the parts list. */
+  parts: 'package-variant-closed',
+  /** QuantityStepper: one fewer. (`add` is one more.) */
+  decrease: 'minus',
+  /** Stock: a count of what is on the shelf. */
+  count: 'clipboard-check-outline',
 } as const);
 
 export type IconName = keyof typeof ICON_GLYPHS;
