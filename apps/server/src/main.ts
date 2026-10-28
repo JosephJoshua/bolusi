@@ -9,12 +9,14 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { defaultClientIp } from './deps.js';
 import type { AppEnv } from './env.js';
+import { requireMediaStorageDir } from './media/config.js';
 import { serverCryptoPort } from './oplog/index.js';
 import { pushPortFromConfig } from './push/expo-transport.js';
 import { serveWithRealtime } from './realtime/serve.js';
 import { systemKeyStoreFromConfig } from './sync/system-key-store.js';
 
 const config = loadConfig();
+requireMediaStorageDir();
 
 // Tenant isolation is RLS, and a superuser or BYPASSRLS login skips it even under FORCE. Refuse to
 // listen on such a DATABASE_URL (10-db §6.3: the server connects as bolusi_app).

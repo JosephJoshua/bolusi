@@ -95,3 +95,58 @@ describe('SEC-MEDIA-04 path-traversal defense (blobs stay under the root)', () =
     expect(key).toMatch(/^t\/[0-9a-f-]{36}\/m\/[0-9a-f-]{36}$/);
   });
 });
+
+describe('symlinks and permissions inside the root', () => {
+  const key = mediaStorageKey(
+    '11111111-1111-7111-8111-111111111111',
+    '22222222-2222-7222-8222-222222222222',
+  );
+  let outside: string;
+  beforeEach(async () => {
+    outside = await fs.mkdtemp(path.join(os.tmpdir(), 'bolusi-blob-outside-'));
+  });
+  afterEach(async () => {
+    await fs.rm(outside, { recursive: true, force: true });
+  });
+
+  test('a directory symlink planted inside the root does not redirect a write', async () => {
+    await fs.symlink(outside, path.join(root, 't'));
+    await expect(store.put(key, Uint8Array.from([1, 2, 3]))).rejects.toBeInstanceOf(
+      UnsafeBlobKeyError,
+    );
+    expect(await fs.readdir(outside)).toEqual([]);
+  });
+
+  test('a blob symlinked to a file outside the root is neither read nor reported', async () => {
+    const secret = path.join(outside, 'secret');
+    await fs.writeFile(secret, 'not media');
+    await store.put(key, Uint8Array.from([1]));
+    const blobPath = path.join(root, key);
+    await fs.rm(blobPath);
+    await fs.symlink(secret, blobPath);
+    await expect(store.getStream(key)).rejects.toBeInstanceOf(UnsafeBlobKeyError);
+    expect(await store.exists(key)).toBe(false);
+  });
+
+  test('delete through a planted directory symlink leaves the outside file alone', async () => {
+    await fs.mkdir(path.join(outside, 'x', 'm'), { recursive: true });
+    const victim = path.join(outside, 'x', 'm', 'media');
+    await fs.writeFile(victim, 'keep');
+    await fs.symlink(outside, path.join(root, 't'));
+    await expect(store.delete('t/x/m/media')).rejects.toBeInstanceOf(UnsafeBlobKeyError);
+    expect(await fs.readFile(victim, 'utf8')).toBe('keep');
+  });
+
+  test('directories are created 0700 and blobs 0600, whatever the umask', async () => {
+    const previous = process.umask(0o000);
+    try {
+      await store.put(key, Uint8Array.from([9]));
+    } finally {
+      process.umask(previous);
+    }
+    const mode = async (p: string) => (await fs.stat(p)).mode & 0o777;
+    expect(await mode(path.join(root, key))).toBe(0o600);
+    expect(await mode(path.join(root, 't'))).toBe(0o700);
+    expect(await mode(path.dirname(path.join(root, key)))).toBe(0o700);
+  });
+});

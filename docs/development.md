@@ -47,7 +47,8 @@ In another terminal, start the server with it and your configuration:
 DATABASE_URL="$(pnpm -s db:app-url)" pnpm dev:server
 ```
 
-Set `EXPO_ACCESS_TOKEN` in your local environment first. See
+Set `EXPO_ACCESS_TOKEN` and `MEDIA_STORAGE_DIR` (a private directory for photos) in your
+local environment first. See
 `apps/server/.env.example`, `src/config.ts` and `src/main.ts` for boot requirements.
 Use `pnpm --filter @bolusi/server provision-tenant --help` for enrollment setup.
 Do not paste provisioning secrets into chats or commit them.
