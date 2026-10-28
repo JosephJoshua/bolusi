@@ -17,6 +17,7 @@ export default tseslint.config(
       '**/android/**',
       '**/ios/**',
       '**/.claude/**',
+      'apps/desktop/release/**',
     ],
   },
   ...tseslint.configs.recommended,

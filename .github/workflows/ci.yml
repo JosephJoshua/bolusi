@@ -51,6 +51,47 @@ jobs:
           pnpm --filter @bolusi/db-client db:codegen
           git diff --exit-code -- packages/db-client/src/generated
 
+  # The counter PC app on Windows, the only place its printing and installer can be checked: a RAW
+  # job through the real spooler to a printer whose port is a file, then the installer is built,
+  # installed silently and the e2e suite runs against the installed app.
+  desktop-windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b packages/modules/tsconfig.build.json packages/ui-web/tsconfig.build.json
+      - name: Install a test printer that writes to a file
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'bolusi-print.prn'
+          Add-PrinterDriver -Name 'Generic / Text Only'
+          Add-PrinterPort -Name $out
+          Add-Printer -Name 'Bolusi Test' -DriverName 'Generic / Text Only' -PortName $out
+          "BOLUSI_TEST_PRINTER=Bolusi Test" >> $env:GITHUB_ENV
+          "BOLUSI_TEST_PRINT_FILE=$out" >> $env:GITHUB_ENV
+      - run: pnpm --filter @bolusi/desktop exec vitest run test/raw-print.windows.test.ts
+      - run: pnpm --filter @bolusi/desktop dist
+      - name: Install it silently, as an update would
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem apps/desktop/release/Bolusi-Setup-*.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\bolusi\Bolusi.exe'
+          if (-not (Test-Path $exe)) { Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Filter Bolusi.exe | Select-Object -First 1 | ForEach-Object { $exe = $_.FullName } }
+          "BOLUSI_E2E_EXECUTABLE=$exe" >> $env:GITHUB_ENV
+      - run: pnpm --filter @bolusi/desktop exec playwright test -c e2e/playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bolusi-desktop-installer
+          path: apps/desktop/release/Bolusi-Setup-*.exe
+          retention-days: 7
+
   secrets:
     runs-on: ubuntu-latest
     steps:
