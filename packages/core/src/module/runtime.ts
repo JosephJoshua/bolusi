@@ -99,6 +99,7 @@ export function createModuleRuntime<DB>(
               permissionId,
             }).allowed,
           ),
+        sha256: (data) => options.crypto.sha256(data),
       }),
   });
 

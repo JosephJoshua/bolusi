@@ -3,7 +3,7 @@
 // a page closes a while after the warranty ends, and the lookup is limited per IP.
 import { type DB, type ForTenant, type TenantDb } from '@bolusi/db-server';
 import { createTestDatabase } from '@bolusi/db-server/testing';
-import { formatTicketNumber } from '@bolusi/modules/repair';
+import { displayStatusCode, formatTicketNumber, statusCodeFor } from '@bolusi/modules/repair';
 import { STATUS_PAGE_GRACE_MS, zPublicRepairStatus, type MediaRef } from '@bolusi/schemas';
 import { ChainBuilder, makeWorld, type ChainWorld, type OpSpec } from '@bolusi/test-support';
 import { sql, type Kysely } from 'kysely';
@@ -20,7 +20,8 @@ import { grantRole, seedWorld } from './oplog/helpers.js';
 import { readError } from '../helpers/http.js';
 
 const NOW = 1_726_100_000_000;
-const CODE = 'K7M2Q9XA4B';
+/** The nonce a phone drew for a servisan's link; the code comes from it and where the servisan lives. */
+const NONCE = '0123456789abcdef'.repeat(2);
 const BASE = 'http://srv.test/v1/public/status';
 
 let db: Kysely<DB>;
@@ -86,8 +87,15 @@ function app(now = NOW, perIpStore = new InMemoryRateLimitStore()) {
   });
 }
 
-/** A servisan taken in with a DP and a status link, started, with a price change waiting. */
-async function pushServisan(seed: number, code: string): Promise<ChainWorld> {
+/**
+ * A servisan taken in with a DP and a status link, started, with a price change waiting: the world,
+ * its link code, and what the server said to the link op. `claim` pushes that code for the link
+ * instead of the one its nonce gives, as a copier would.
+ */
+async function pushServisan(
+  seed: number,
+  claim?: string,
+): Promise<{ world: ChainWorld; code: string; linkStatus: string }> {
   const id = idsOf(seed);
   const world = makeWorld(seed, serverCryptoPort);
   const builder = new ChainBuilder(world, serverCryptoPort);
@@ -111,6 +119,8 @@ async function pushServisan(seed: number, code: string): Promise<ChainWorld> {
     deviceId: world.deviceId,
   });
   const ticket = id(2);
+  const owner = { tenantId: world.tenantId, storeId: world.storeId, ticketId: ticket };
+  const code = statusCodeFor(owner, NONCE, (data) => serverCryptoPort.sha256(data));
   const ticketNumber = formatTicketNumber(world.deviceId, 1);
   const onTicket = (type: string, payload: Record<string, unknown>): OpSpec => ({
     type,
@@ -162,7 +172,7 @@ async function pushServisan(seed: number, code: string): Promise<ChainWorld> {
       }),
       schemaVersion: 3,
     },
-    onTicket('repair.status_link_made', { code }),
+    onTicket('repair.status_link_made', { code: claim ?? code, nonce: NONCE }),
     {
       type: 'money.payment_received',
       entityType: 'money_entry',
@@ -200,14 +210,15 @@ async function pushServisan(seed: number, code: string): Promise<ChainWorld> {
     { deviceId: world.deviceId, tenantId: world.tenantId },
     ops,
   );
-  expect(result.results.filter((r) => r.status !== 'accepted')).toEqual([]);
-  return world;
+  const linkAt = specs.findIndex((spec) => spec.type === 'repair.status_link_made') + 1;
+  expect(result.results.filter((r, i) => i !== linkAt && r.status !== 'accepted')).toEqual([]);
+  return { world, code, linkStatus: result.results[linkAt]!.status };
 }
 
 test('a link code shows the customer their servisan, without a token', async () => {
-  const world = await pushServisan(4101, CODE);
+  const { world, code } = await pushServisan(4101);
 
-  const res = await app().request(`${BASE}/${CODE}`);
+  const res = await app().request(`${BASE}/${code}`);
 
   expect(res.status).toBe(200);
   expect(res.headers.get('cache-control')).toBe('no-store');
@@ -242,47 +253,65 @@ test('a link code shows the customer their servisan, without a token', async () 
 });
 
 test('a code typed from paper is read the way Crockford base32 allows', async () => {
-  await pushServisan(4102, CODE);
+  const { code } = await pushServisan(4102);
 
-  const res = await app().request(`${BASE}/k7m2q-9xa4b`);
+  const res = await app().request(`${BASE}/${displayStatusCode(code).toLowerCase()}`);
 
   expect(res.status).toBe(200);
 });
 
 test('an unknown or malformed code finds nothing', async () => {
-  await pushServisan(4103, CODE);
+  const { code: real } = await pushServisan(4103);
 
-  for (const code of ['K7M2Q9XA4C', 'nope', `${CODE}0`]) {
+  for (const code of [
+    real === 'K7M2Q9XA4BRS' ? 'K7M2Q9XA4BRT' : 'K7M2Q9XA4BRS',
+    'nope',
+    `${real}0`,
+  ]) {
     const res = await app().request(`${BASE}/${code}`);
     expect(res.status, code).toBe(404);
     expect((await readError(res)).error.code).toBe('NOT_FOUND');
   }
 });
 
-test('each tenant’s code shows its own servisan', async () => {
-  const a = await pushServisan(4104, CODE);
-  const b = await pushServisan(4105, 'B7M2Q9XA4B');
+test('each tenant’s code shows its own servisan, even from the same nonce', async () => {
+  const a = await pushServisan(4104);
+  const b = await pushServisan(4105);
+  expect(a.code).not.toBe(b.code);
 
-  const fromA = zPublicRepairStatus.parse(await (await app().request(`${BASE}/${CODE}`)).json());
-  const fromB = zPublicRepairStatus.parse(await (await app().request(`${BASE}/B7M2Q9XA4B`)).json());
+  const fromA = zPublicRepairStatus.parse(await (await app().request(`${BASE}/${a.code}`)).json());
+  const fromB = zPublicRepairStatus.parse(await (await app().request(`${BASE}/${b.code}`)).json());
 
-  expect(fromA.ticketNumber).toBe(formatTicketNumber(a.deviceId, 1));
-  expect(fromB.ticketNumber).toBe(formatTicketNumber(b.deviceId, 1));
+  expect(fromA.ticketNumber).toBe(formatTicketNumber(a.world.deviceId, 1));
+  expect(fromB.ticketNumber).toBe(formatTicketNumber(b.world.deviceId, 1));
+});
+
+test('a code copied off a slip cannot be recorded by another tenant', async () => {
+  const victim = await pushServisan(4108);
+
+  // The code must be the one the op's nonce gives the copier's own servisan, so it is refused.
+  const copier = await pushServisan(4109, victim.code);
+
+  expect(copier.linkStatus).not.toBe('accepted');
+  const page = zPublicRepairStatus.parse(
+    await (await app().request(`${BASE}/${victim.code}`)).json(),
+  );
+  expect(page.ticketNumber).toBe(formatTicketNumber(victim.world.deviceId, 1));
 });
 
 test('the page closes 30 days after the warranty from pickup ends', async () => {
-  await pushServisan(4106, CODE);
+  const { code } = await pushServisan(4106);
   const pickedUp = NOW;
   // The server folds what the store pushed; a pickup is set here directly to keep the journey short.
   await db
     .updateTable('repairTickets')
     .set({ location: 'returned', returnedAt: BigInt(pickedUp) })
-    .where('statusCode', '=', CODE)
+    .where('statusCode', '=', code)
     .execute();
   const warrantyEnds = pickedUp + 30 * 24 * 60 * 60 * 1000;
 
-  const open = await app(warrantyEnds + STATUS_PAGE_GRACE_MS).request(`${BASE}/${CODE}`);
-  const closed = await app(warrantyEnds + STATUS_PAGE_GRACE_MS + 1).request(`${BASE}/${CODE}`);
+  const open = await app(warrantyEnds + STATUS_PAGE_GRACE_MS).request(`${BASE}/${code}`);
+  const closed = await app(warrantyEnds + STATUS_PAGE_GRACE_MS + 1).request(`${BASE}/${code}`);
 
   expect(open.status).toBe(200);
   expect(zPublicRepairStatus.parse(await open.json()).status).toBe('returned');
@@ -291,14 +320,14 @@ test('the page closes 30 days after the warranty from pickup ends', async () => 
 });
 
 test('lookups are limited per IP', async () => {
-  await pushServisan(4107, CODE);
+  const { code } = await pushServisan(4107);
   const store = new InMemoryRateLimitStore();
   const server = app(NOW, store);
 
   for (let i = 0; i < PUBLIC_STATUS_IP_PER_MINUTE; i += 1) {
-    expect((await server.request(`${BASE}/K7M2Q9XA4C`)).status).toBe(404);
+    expect((await server.request(`${BASE}/K7M2Q9XA4BRT`)).status).toBe(404);
   }
-  const limited = await server.request(`${BASE}/${CODE}`);
+  const limited = await server.request(`${BASE}/${code}`);
 
   expect(limited.status).toBe(429);
   expect(limited.headers.get('retry-after')).not.toBeNull();

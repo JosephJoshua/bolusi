@@ -37,7 +37,7 @@ import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
 import { amountOwed } from './flows.js';
 import { REPAIR_REFUSALS, claimProblem } from './rules.js';
-import { STATUS_CODE_BYTES, statusCodeFrom } from './status-link.js';
+import { statusCodeFor } from './status-link.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -287,9 +287,12 @@ function ticket(spec: {
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
-    // A fixed code per demo servisan, so a preview's QR and link stay the same between reloads.
-    statusCode: statusCodeFrom(
-      Uint8Array.from(spec.id.padEnd(STATUS_CODE_BYTES, '0'), (c) => c.charCodeAt(0)),
+    // A fixed code per demo servisan, so a preview's QR and link stay the same between reloads. The
+    // demo has no crypto port, and its codes only need to differ, so the "hash" is the input's tail.
+    statusCode: statusCodeFor(
+      { tenantId: 'demo', storeId: 'demo', ticketId: spec.id },
+      '',
+      (data) => data.subarray(-8),
     ),
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,

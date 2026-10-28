@@ -20,7 +20,7 @@ import { enforceBucket } from '../middleware/rate-limit.js';
 
 /**
  * Lookups per IP per minute. Generous, because many customers share one carrier address; a code has
- * 50 random bits, so guessing stays hopeless at this rate.
+ * 60 bits, so guessing stays hopeless at this rate.
  */
 export const PUBLIC_STATUS_IP_PER_MINUTE = 120;
 

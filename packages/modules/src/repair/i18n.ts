@@ -627,6 +627,7 @@ export const REPAIR_KEYS = [
   'repair.handover.unchecked',
   'repair.refusal.handoverAccessories',
   'repair.refusal.handoverNoteNeeded',
+  'repair.refusal.statusLinkMismatch',
   'repair.customerPage.title',
   'repair.customerPage.reference',
   'repair.customerPage.step.received',

@@ -6,9 +6,10 @@
 // lookup, as token verification does (0006): the function's fixed body reads one ticket by its code
 // and returns where it lives, nothing else, and the app role stays NOBYPASSRLS for everything else.
 //
-// The index is not UNIQUE: codes are random and made offline on devices, so two tenants could in
-// theory draw the same one, and a unique violation would make the server refuse a whole sync batch.
-// The lookup instead fails closed when a code names more than one servisan.
+// The index is not UNIQUE: codes are made offline on devices, and a unique violation would make the
+// server refuse a whole sync batch. A code is a hash of a random nonce and the tenant, store and
+// servisan it belongs to (modules repair/status-link.ts), so no other servisan can be given a code
+// copied off a slip; should two ever share one, the lookup fails closed.
 import { sql, type Kysely } from 'kysely';
 
 const AUTH_ROLE = 'bolusi_auth';

@@ -7,7 +7,7 @@
 // refusal key (`<module>.refusal.<reason>`), which the device shows as the problem's copy. Any other
 // throw is a fault and propagates (the batch rolls back as a 500), so a broken rule cannot pass an
 // op by accident.
-import { DomainError, refusalKeyOf } from '@bolusi/core';
+import { DomainError, refusalKeyOf, type CryptoPort } from '@bolusi/core';
 import type { TenantDb } from '@bolusi/db-server';
 import type { SignedOperation } from '@bolusi/schemas';
 
@@ -23,6 +23,7 @@ export async function checkRules(
   device: DeviceRecord,
   registry: OpRegistry,
   lookup: AuthorLookup,
+  crypto: CryptoPort,
 ): Promise<RuleOutcome> {
   try {
     await registry.checkRule(op, {
@@ -40,6 +41,7 @@ export async function checkRules(
           permissionId,
         }).allowed;
       },
+      sha256: (data) => crypto.sha256(data),
     });
     return null;
   } catch (error) {

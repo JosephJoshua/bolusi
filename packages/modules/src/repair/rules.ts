@@ -43,11 +43,13 @@ import type {
   quoteChangeProposedPayload,
   quoteProposalDeclinedPayload,
   slipPrintedPayload,
+  statusLinkMadePayload,
   technicianAssignedPayload,
   ticketOpenedPayload,
   workPhotosAddedPayload,
 } from './operations.js';
 import type { RepairDatabase } from './schema.js';
+import { statusCodeFor } from './status-link.js';
 import { deviceCode, ticketCounter } from './ticket-number.js';
 
 type Rule = OpRule<RepairDatabase>;
@@ -103,6 +105,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'downPaymentRefunded',
   'handoverAccessories',
   'handoverNoteNeeded',
+  'statusLinkMismatch',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -958,8 +961,21 @@ export const slipPrintedRule: Rule = async (op, { db }) => {
   }
 };
 
-/** One status link per servisan, made with it: a second would leave a printed link dead. */
-export const statusLinkMadeRule: Rule = async (op, { db }) => {
+/**
+ * One status link per servisan, made with it: a second would leave a printed link dead. Its code
+ * must be the one its nonce gives this servisan, so a code copied off another store's slip is
+ * refused.
+ */
+export const statusLinkMadeRule: Rule = async (op, { db, sha256 }) => {
+  const { code, nonce } = payloadOf<z.infer<typeof statusLinkMadePayload>>(op);
+  const owner = { tenantId: op.tenantId, storeId: storeOf(op), ticketId: op.entityId };
+  if (code !== statusCodeFor(owner, nonce, sha256)) {
+    throw refuse('statusLinkMismatch', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'code', issue: 'does not match its nonce' },
+      message: `status link of ${op.entityId} does not match its nonce`,
+    });
+  }
   await loadTicket(db, op);
   const row = await db
     .selectFrom('repairTickets')

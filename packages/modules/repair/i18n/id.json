@@ -654,7 +654,8 @@
     "claimChargeOwnerOnly": "Klaim garansi gratis. Hanya pemilik yang bisa menagih biaya.",
     "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya.",
     "handoverAccessories": "Ada kelengkapan yang tidak ada di daftar serah terima.",
-    "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu."
+    "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu.",
+    "statusLinkMismatch": "Link status servisan ini tidak sah."
   },
   "paper": {
     "title": "Kertas nota",
@@ -806,7 +807,7 @@
       "label": "Kode servisan",
       "placeholder": "Contoh: K7M2Q-9XA4B",
       "submit": "Cek",
-      "invalid": "Kodenya 10 huruf dan angka. Cek lagi, ya."
+      "invalid": "Kodenya 12 huruf dan angka. Cek lagi, ya."
     }
   }
 }

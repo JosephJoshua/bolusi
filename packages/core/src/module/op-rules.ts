@@ -37,6 +37,11 @@ export interface OpRuleContext<DB> {
    * user who must be able to do something (a technician being assigned).
    */
   holdsPermission(userId: string, permissionId: string): Promise<boolean>;
+  /**
+   * SHA-256 from the judging side's crypto port, for a value an op must have derived by hash (a
+   * customer's status link code) rather than chosen.
+   */
+  sha256(data: Uint8Array): Uint8Array;
 }
 
 /** Throws a `DomainError` when `op` must not be recorded against the current records. */

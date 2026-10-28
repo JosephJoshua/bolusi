@@ -85,7 +85,7 @@ import {
   workStartedRule,
 } from './rules.js';
 import type { RepairDatabase } from './schema.js';
-import { STATUS_CODE_PATTERN } from './status-link.js';
+import { STATUS_CODE_PATTERN, STATUS_NONCE_PATTERN } from './status-link.js';
 
 const MAX_TEXT = 2000;
 const zName = z.string().trim().min(1).max(200);
@@ -382,9 +382,15 @@ export const downPaymentCorrectedPayload = z
 
 export const slipPrintedPayload = z.object({ slip: z.enum(SLIP_KINDS) }).strict();
 
-/** The customer's status link (status-link.ts), made with the servisan at intake. */
+/**
+ * The customer's status link (status-link.ts), made with the servisan at intake: the code and the
+ * nonce it was derived from, which the rule checks against each other.
+ */
 export const statusLinkMadePayload = z
-  .object({ code: z.string().regex(STATUS_CODE_PATTERN) })
+  .object({
+    code: z.string().regex(STATUS_CODE_PATTERN),
+    nonce: z.string().regex(STATUS_NONCE_PATTERN),
+  })
   .strict();
 
 /** Longest terms a slip prints, all lines together. */

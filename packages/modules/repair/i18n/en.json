@@ -654,7 +654,8 @@
     "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
     "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan.",
     "handoverAccessories": "An accessory is missing from the handover list.",
-    "handoverNoteNeeded": "Something isn’t ticked. Write a note first."
+    "handoverNoteNeeded": "Something isn’t ticked. Write a note first.",
+    "statusLinkMismatch": "This repair’s status link isn’t valid."
   },
   "paper": {
     "title": "Slip paper",
@@ -806,7 +807,7 @@
       "label": "Repair code",
       "placeholder": "For example: K7M2Q-9XA4B",
       "submit": "Check",
-      "invalid": "The code is 10 letters and numbers. Please check it."
+      "invalid": "The code is 12 letters and numbers. Please check it."
     }
   }
 }

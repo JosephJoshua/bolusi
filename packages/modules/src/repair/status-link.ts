@@ -6,32 +6,65 @@
 // customer's phone, which are easy to guess. It is made on the device at intake so it works
 // offline, and the page shows it once the servisan has synced.
 //
-// Ten Crockford base32 characters: 50 random bits, no I, L, O or U, so a code typed from paper
-// survives a misread 0/O or 1/I/L, and fits a small QR code in alphanumeric mode.
+// The code is a hash of a random nonce and where the servisan lives (tenant, store, servisan). The op
+// carries both, and its rule checks the one against the other on the device and on the server, so
+// a code copied off a slip cannot be recorded for a servisan anywhere else, which would kill the
+// customer's link or point it at another store; that would take a 60-bit hash preimage.
+//
+// Twelve Crockford base32 characters: 60 bits, no I, L, O or U, so a code typed from paper survives
+// a misread 0/O or 1/I/L, and fits a small QR code in alphanumeric mode.
+import { utf8ToBytes } from '@bolusi/core';
 
 /** Crockford's base32 alphabet. */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-export const STATUS_CODE_LENGTH = 10;
+export const STATUS_CODE_LENGTH = 12;
 
 /** A code as stored and as the link carries it. */
-export const STATUS_CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{10}$/;
+export const STATUS_CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{12}$/;
 
 /** The path of the customer's page, under the site that serves it. */
 export const STATUS_PATH_PREFIX = '/c/';
 
-/** Bytes to draw a code from: 7 bytes give 56 bits, of which 50 are used. */
-export const STATUS_CODE_BYTES = 7;
+/** Random bytes in a link's nonce (`ctx.randomBytes(STATUS_NONCE_BYTES)`). */
+export const STATUS_NONCE_BYTES = 16;
 
-/** A code from CSPRNG bytes (`ctx.randomBytes(STATUS_CODE_BYTES)`). */
-export function statusCodeFrom(bytes: Uint8Array): string {
-  if (bytes.length < STATUS_CODE_BYTES) throw new RangeError('statusCodeFrom: too few bytes');
+/** A nonce as the op carries it: lowercase hex. */
+export const STATUS_NONCE_PATTERN = /^[0-9a-f]{32}$/;
+
+/** Separates this hash from any other the app takes over the same ids. */
+const DOMAIN = 'bolusi/repair-status-link/v1';
+
+export function statusNonceFrom(bytes: Uint8Array): string {
+  if (bytes.length < STATUS_NONCE_BYTES) throw new RangeError('statusNonceFrom: too few bytes');
+  return Array.from(bytes.subarray(0, STATUS_NONCE_BYTES), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+}
+
+/** Where a servisan lives: what its code is bound to. */
+export interface StatusLinkOwner {
+  readonly tenantId: string;
+  readonly storeId: string;
+  readonly ticketId: string;
+}
+
+/**
+ * The code for a servisan's link nonce: the first 60 bits of a SHA-256 over both, by the injected
+ * crypto port (`ctx.sha256`).
+ */
+export function statusCodeFor(
+  owner: StatusLinkOwner,
+  nonce: string,
+  sha256: (data: Uint8Array) => Uint8Array,
+): string {
+  const input = [DOMAIN, owner.tenantId, owner.storeId, owner.ticketId, nonce].join('\n');
+  const digest = sha256(utf8ToBytes(input));
   let bits = 0n;
-  for (const byte of bytes.subarray(0, STATUS_CODE_BYTES)) bits = (bits << 8n) | BigInt(byte);
+  for (const byte of digest.subarray(0, 8)) bits = (bits << 8n) | BigInt(byte);
   let code = '';
   for (let i = 0; i < STATUS_CODE_LENGTH; i += 1) {
-    code += ALPHABET[Number(bits & 31n)];
-    bits >>= 5n;
+    code += ALPHABET[Number((bits >> BigInt(64 - 5 * (i + 1))) & 31n)];
   }
   return code;
 }
@@ -45,9 +78,9 @@ export function normalizeStatusCode(typed: string): string | null {
   return STATUS_CODE_PATTERN.test(code) ? code : null;
 }
 
-/** The code in two groups of five, for reading aloud or typing from paper: `K7M2Q-9XA4B`. */
+/** The code in three groups of four, for reading aloud or typing from paper: `K7M2-Q9XA-4BRS`. */
 export function displayStatusCode(code: string): string {
-  return `${code.slice(0, 5)}-${code.slice(5)}`;
+  return code.match(/.{1,4}/g)?.join('-') ?? code;
 }
 
 /** The customer's link under `site` (e.g. `https://bolusi.id`), without a trailing slash. */

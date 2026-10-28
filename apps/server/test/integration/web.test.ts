@@ -21,7 +21,7 @@ describe('the web app', () => {
   test('a status link gets the page, not cached and not indexed', async () => {
     const { app } = makeTestApp({ webDir: build() });
 
-    for (const path of ['/c/K7M2Q9XA4B', '/C/K7M2Q-9XA4B', '/']) {
+    for (const path of ['/c/K7M2Q9XA4BRS', '/C/K7M2-Q9XA-4BRS', '/']) {
       const res = await app.request(`http://srv.test${path}`);
       expect(res.status, path).toBe(200);
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
@@ -29,6 +29,20 @@ describe('the web app', () => {
       expect(res.headers.get('x-robots-tag')).toBe('noindex');
       expect(await res.text()).toContain('<title>Bolusi</title>');
     }
+  });
+
+  test('a link code, the page’s only credential, never reaches the access log', async () => {
+    const { app, accessLogs } = makeTestApp({ webDir: build() });
+
+    for (const path of ['/c/K7M2Q9XA4BRS', '/C/K7M2-Q9XA-4BRS', '/v1/public/status/K7M2Q9XA4BRS']) {
+      await app.request(`http://srv.test${path}`);
+    }
+
+    expect(accessLogs.map((log) => log.path)).toEqual([
+      '/c/:code',
+      '/c/:code',
+      '/v1/public/status/:code',
+    ]);
   });
 
   test('built assets are cached for good; a missing one is a 404', async () => {
@@ -57,6 +71,6 @@ describe('the web app', () => {
     expect(res.status).toBe(401);
 
     const apiOnly = makeTestApp().app;
-    expect((await apiOnly.request('http://srv.test/c/K7M2Q9XA4B')).status).toBe(404);
+    expect((await apiOnly.request('http://srv.test/c/K7M2Q9XA4BRS')).status).toBe(404);
   });
 });

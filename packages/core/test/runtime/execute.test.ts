@@ -347,6 +347,7 @@ describe('ctx — the §5.2 surface', () => {
         'deviceId',
         'newId',
         'randomBytes',
+        'sha256',
         'op',
         'query',
         'requirePermission',
@@ -492,6 +493,7 @@ describe('ctx provenance (04 §5.2)', () => {
       op: (draft: unknown) => draft,
       newId: () => fixture.newId(),
       randomBytes: (length: number) => new Uint8Array(length),
+      sha256: (data: Uint8Array) => data,
       requirePermission: () => Promise.resolve(),
       query: () => Promise.resolve(undefined),
     };

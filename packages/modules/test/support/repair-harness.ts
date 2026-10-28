@@ -252,7 +252,11 @@ export async function openRepairHarness(
     db,
     engine,
     checkRule: (op) =>
-      registry.checkOpRule(op, { db: db as never, holdsPermission: () => Promise.resolve(true) }),
+      registry.checkOpRule(op, {
+        db: db as never,
+        holdsPermission: () => Promise.resolve(true),
+        sha256: (data) => noblePort.sha256(data),
+      }),
     tenantId,
     storeId,
     deviceId,

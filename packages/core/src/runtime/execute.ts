@@ -381,6 +381,7 @@ export class CommandRuntime {
         identity: this.#identityFor(userId),
         newId: this.#idSource,
         randomBytes: (length) => this.#crypto.randomBytes(length),
+        sha256: (data) => this.#crypto.sha256(data),
         resolveSchemaVersion: (type) => this.#resolveSchemaVersion(type),
         resolveScope: (type) => this.#resolveScope(type),
         requirePermission: (identity, permissionId, tgt, surface) =>

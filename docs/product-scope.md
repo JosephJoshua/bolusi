@@ -399,10 +399,12 @@ Agreed with the owner, as the first part of parts, purchasing and stock.
 
 ## Customers follow their repair online (2026-10-28)
 
-- Each servisan gets a random 10-character link code (Crockford base32) made on
-  the device at intake, so it works offline. The code is the only credential: no
-  lookup by servisan number or phone number. It appears on the page once the
-  servisan has synced.
+- Each servisan gets a 12-character link code (Crockford base32) made on the
+  device at intake, so it works offline. The code is the only credential: no
+  lookup by servisan number or phone number, and access logs mask it. It appears
+  on the page once the servisan has synced. The code is a hash of a random nonce
+  and the servisan's tenant, store and id, so a code copied off a slip cannot be
+  recorded on another store's servisan to break or hijack the link.
 - The page (`<site>/c/<code>`, served by our server from `apps/web`) shows the
   status and its history, the phone model, Total, paid and Sisa, price changes
   waiting for the customer's yes (read only; they answer the store on WhatsApp),

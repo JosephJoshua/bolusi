@@ -1,17 +1,19 @@
-// The customer's status link: a random code made with the servisan at intake (offline), read back
-// from paper the forgiving way, and one per servisan.
+// The customer's status link: a code made with the servisan at intake (offline) from a random nonce
+// and where the servisan lives, read back from paper the forgiving way, and one per servisan.
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 import { STATUS_PAGE_GRACE_MS } from '@bolusi/schemas';
+import { noblePort } from '@bolusi/test-support';
 
 import { statusPageEndsAt } from '../src/repair/customer-status.js';
 import {
   STATUS_CODE_PATTERN,
   displayStatusCode,
   normalizeStatusCode,
-  statusCodeFrom,
+  statusCodeFor,
   statusLink,
+  statusNonceFrom,
 } from '../src/repair/status-link.js';
 import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
@@ -24,37 +26,51 @@ afterEach(async () => {
 const DAY = 86_400_000;
 
 describe('the code', () => {
-  test('is ten Crockford base32 characters drawn from the bytes', () => {
-    const zeros = statusCodeFrom(new Uint8Array(7));
-    const ones = statusCodeFrom(new Uint8Array(7).fill(0xff));
-    const mixed = statusCodeFrom(Uint8Array.from([1, 2, 3, 4, 5, 6, 7]));
+  const owner = { tenantId: 't-1', storeId: 's-1', ticketId: 'k-1' };
+  const nonce = statusNonceFrom(Uint8Array.from({ length: 16 }, (_, i) => i));
+  const sha256 = (data: Uint8Array) => noblePort.sha256(data);
 
-    expect(zeros).toBe('0000000000');
-    expect(ones).toBe('ZZZZZZZZZZ');
-    for (const code of [zeros, ones, mixed]) expect(code).toMatch(STATUS_CODE_PATTERN);
-    expect(mixed).toBe(statusCodeFrom(Uint8Array.from([1, 2, 3, 4, 5, 6, 7])));
-    expect(mixed).not.toBe(statusCodeFrom(Uint8Array.from([1, 2, 3, 4, 5, 6, 8])));
-    expect(() => statusCodeFrom(new Uint8Array(6))).toThrow(RangeError);
+  test('is twelve Crockford base32 characters, the same for the same nonce and servisan', () => {
+    expect(nonce).toBe('000102030405060708090a0b0c0d0e0f');
+    expect(() => statusNonceFrom(new Uint8Array(15))).toThrow(RangeError);
+    const code = statusCodeFor(owner, nonce, sha256);
+
+    expect(code).toMatch(STATUS_CODE_PATTERN);
+    expect(statusCodeFor({ ...owner }, nonce, sha256)).toBe(code);
+  });
+
+  test('changes with the nonce and with every part of where the servisan lives', () => {
+    const code = statusCodeFor(owner, nonce, sha256);
+    const others = [
+      statusCodeFor(owner, nonce.replace(/f$/, 'e'), sha256),
+      statusCodeFor({ ...owner, tenantId: 't-2' }, nonce, sha256),
+      statusCodeFor({ ...owner, storeId: 's-2' }, nonce, sha256),
+      statusCodeFor({ ...owner, ticketId: 'k-2' }, nonce, sha256),
+    ];
+
+    for (const other of others) expect(other).not.toBe(code);
   });
 
   test('typed from paper: any case, dashes and spaces, O for 0 and I or L for 1', () => {
-    expect(normalizeStatusCode('k7m2q-9xa4b')).toBe('K7M2Q9XA4B');
-    expect(normalizeStatusCode(' K7M2Q 9XA4B ')).toBe('K7M2Q9XA4B');
-    expect(normalizeStatusCode('O7M2Q-IXAL4')).toBe('07M2Q1XA14');
-    // U is not in the alphabet, and a code is exactly ten characters.
-    for (const bad of ['K7M2Q9XA4U', 'K7M2Q9XA4', 'K7M2Q9XA4BB', '', 'K7M2Q/9XA4B']) {
+    expect(normalizeStatusCode('k7m2-q9xa-4brs')).toBe('K7M2Q9XA4BRS');
+    expect(normalizeStatusCode(' K7M2 Q9XA 4BRS ')).toBe('K7M2Q9XA4BRS');
+    expect(normalizeStatusCode('O7M2-QIXA-L4RS')).toBe('07M2Q1XA14RS');
+    // U is not in the alphabet, and a code is exactly twelve characters.
+    for (const bad of ['K7M2Q9XA4BRU', 'K7M2Q9XA4BR', 'K7M2Q9XA4BRSS', '', 'K7M2/Q9XA/4BRS']) {
       expect(normalizeStatusCode(bad), bad).toBeNull();
     }
   });
 
-  test('is shown in two groups of five, under the site that serves the page', () => {
-    expect(displayStatusCode('K7M2Q9XA4B')).toBe('K7M2Q-9XA4B');
-    expect(statusLink('https://bolusi.id/', 'K7M2Q9XA4B')).toBe('https://bolusi.id/c/K7M2Q9XA4B');
+  test('is shown in three groups of four, under the site that serves the page', () => {
+    expect(displayStatusCode('K7M2Q9XA4BRS')).toBe('K7M2-Q9XA-4BRS');
+    expect(statusLink('https://bolusi.id/', 'K7M2Q9XA4BRS')).toBe(
+      'https://bolusi.id/c/K7M2Q9XA4BRS',
+    );
   });
 });
 
 describe('the servisan', () => {
-  test('gets its own code at intake, and a second code is refused', async () => {
+  test('gets its own code at intake from a nonce, and a second link is refused', async () => {
     h = await openRepairHarness(4201);
     const first = (await h.run('openTicket', intake(h), h.cashierId)) as { ticketId: string };
     const second = (await h.run('openTicket', intake(h), h.cashierId)) as { ticketId: string };
@@ -68,14 +84,34 @@ describe('the servisan', () => {
     expect(a).not.toBe(b);
 
     const made = (await h.ownOps()).filter((op) => op.type === 'repair.status_link_made');
-    expect(made.map((op) => [op.entityId, op.payload])).toEqual([
-      [first.ticketId, { code: a }],
-      [second.ticketId, { code: b }],
-    ]);
+    expect(made.map((op) => op.entityId)).toEqual([first.ticketId, second.ticketId]);
+    // The op carries the code and the nonce it comes from where the servisan lives.
+    const payloads = made.map((op) => op.payload as { code: string; nonce: string });
+    expect(payloads.map((p) => p.code)).toEqual([a, b]);
+    payloads.forEach((p, i) => {
+      const owner = { tenantId: h!.tenantId, storeId: h!.storeId, ticketId: made[i]!.entityId };
+      expect(statusCodeFor(owner, p.nonce, (data) => noblePort.sha256(data))).toBe(p.code);
+    });
     // The same op again, as a tampered phone might push it: the servisan already has its link.
     const err = await h.checkRule(made[0]!).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DomainError);
     expect(refusalKeyOf(err)).toBe('repair.refusal.alreadyRecorded');
+  });
+
+  test('refuses a code its nonce does not give this servisan, as one copied off a slip', async () => {
+    h = await openRepairHarness(4202);
+    await h.run('openTicket', intake(h), h.cashierId);
+    await h.run('openTicket', intake(h), h.cashierId);
+    const made = (await h.ownOps()).filter((op) => op.type === 'repair.status_link_made');
+    const [own, other] = made.map((op) => op.payload as { code: string; nonce: string });
+
+    // The second servisan's link op, claiming the first one's code (with or without its nonce).
+    for (const payload of [{ ...other!, code: own!.code }, own!]) {
+      const forged = { ...made[1]!, payload };
+      const err = await h.checkRule(forged).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(DomainError);
+      expect(refusalKeyOf(err)).toBe('repair.refusal.statusLinkMismatch');
+    }
   });
 });
 

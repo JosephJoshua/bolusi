@@ -342,7 +342,7 @@ export async function processPushBatch(
 
       // 8. the op type's rules, against the server's records as of this op (earlier ops of the
       // batch are already folded). No anomaly: two people changing one ticket offline is not tamper.
-      const rules = await checkRules(db, op, device, deps.registry, authors);
+      const rules = await checkRules(db, op, device, deps.registry, authors, deps.crypto);
       if (rules !== null) {
         await refuse(op, 'RULE_VIOLATED', rules.reason);
         continue;

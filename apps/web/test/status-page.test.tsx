@@ -57,12 +57,12 @@ const squashed = (el: HTMLElement): string => el.textContent!.replace(/\s/g, '')
 describe('a servisan in the store', () => {
   test('leads with the status, then what is owed, the price waiting for a yes and the history', async () => {
     const server = serverAnswering(200, IN_REPAIR);
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={server} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={server} />);
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Sedang diperbaiki' }),
     ).toBeTruthy();
-    expect(server).toHaveBeenCalledWith('/v1/public/status/K7M2Q9XA4B', expect.anything());
+    expect(server).toHaveBeenCalledWith('/v1/public/status/K7M2Q9XA4BRS', expect.anything());
     expect(screen.getByText('Samsung Galaxy A14')).toBeTruthy();
     expect(screen.getByText('Servisan K7Q-0042')).toBeTruthy();
     expect(screen.getByText(/^Perkiraan selesai/)).toBeTruthy();
@@ -82,7 +82,7 @@ describe('a servisan in the store', () => {
   });
 
   test('chats with the store on WhatsApp with the servisan named, or calls it', async () => {
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={serverAnswering(200, IN_REPAIR)} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={serverAnswering(200, IN_REPAIR)} />);
 
     const chat = await screen.findByRole('link', { name: 'Chat toko' });
     const url = new URL(chat.getAttribute('href')!);
@@ -98,7 +98,7 @@ describe('a servisan in the store', () => {
 
   test('loads again on Muat ulang', async () => {
     const server = serverAnswering(200, IN_REPAIR);
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={server} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={server} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Muat ulang' }));
 
@@ -107,7 +107,7 @@ describe('a servisan in the store', () => {
 
   test('without a store phone there is nothing to contact, so no bar', async () => {
     const status = { ...IN_REPAIR, store: { ...IN_REPAIR.store, phone: '' } };
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={serverAnswering(200, status)} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={serverAnswering(200, status)} />);
 
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('link', { name: 'Chat toko' })).toBeNull();
@@ -130,7 +130,7 @@ describe('after pickup', () => {
       pendingPrices: [],
       returnedAt: pickedUp,
     };
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={serverAnswering(200, status)} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={serverAnswering(200, status)} />);
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Sudah diambil' })).toBeTruthy();
     expect(screen.getByText(/^Diambil /)).toBeTruthy();
@@ -145,7 +145,7 @@ describe('after pickup', () => {
 
 test('paid in full says so, not Rp 0', async () => {
   const status = { ...IN_REPAIR, money: { total: 650_000, paid: 650_000 } };
-  render(<StatusPage code="K7M2Q9XA4B" fetcher={serverAnswering(200, status)} />);
+  render(<StatusPage code="K7M2Q9XA4BRS" fetcher={serverAnswering(200, status)} />);
 
   expect(squashed(await screen.findByTestId('money'))).toContain('SisabayarLunas');
 });
@@ -159,7 +159,7 @@ describe('a cancelled servisan', () => {
       money: { total: 50_000, paid: 100_000 },
       pendingPrices: [],
     };
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={serverAnswering(200, status)} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={serverAnswering(200, status)} />);
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Dibatalkan' })).toBeTruthy();
     expect(screen.getByText('HP-mu bisa diambil di toko.')).toBeTruthy();
@@ -173,7 +173,7 @@ describe('when there is nothing to show', () => {
   test('an unknown code says to check the slip', async () => {
     render(
       <StatusPage
-        code="K7M2Q9XA4C"
+        code="K7M2Q9XA4BRT"
         fetcher={serverAnswering(404, { error: { code: 'NOT_FOUND', message: 'not found' } })}
       />,
     );
@@ -184,7 +184,7 @@ describe('when there is nothing to show', () => {
   test('an ended link says the warranty is over', async () => {
     render(
       <StatusPage
-        code="K7M2Q9XA4B"
+        code="K7M2Q9XA4BRS"
         fetcher={serverAnswering(404, {
           error: { code: 'NOT_FOUND', message: 'not found', details: { reason: 'ended' } },
         })}
@@ -199,7 +199,7 @@ describe('when there is nothing to show', () => {
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValue(new Response(JSON.stringify(IN_REPAIR), { status: 200 }));
-    render(<StatusPage code="K7M2Q9XA4B" fetcher={server} />);
+    render(<StatusPage code="K7M2Q9XA4BRS" fetcher={server} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Coba lagi' }));
 
@@ -210,7 +210,7 @@ describe('when there is nothing to show', () => {
 
   test('a server fault or an answer the page cannot read also offers to try again', async () => {
     for (const server of [serverAnswering(500, {}), serverAnswering(200, { hello: 'world' })]) {
-      render(<StatusPage code="K7M2Q9XA4B" fetcher={server} />);
+      render(<StatusPage code="K7M2Q9XA4BRS" fetcher={server} />);
       expect(await screen.findByRole('button', { name: 'Coba lagi' })).toBeTruthy();
       cleanup();
     }
@@ -223,11 +223,11 @@ describe('the front page', () => {
     render(<LookupPage onOpen={onOpen} />);
 
     fireEvent.change(screen.getByLabelText('Kode servisan'), {
-      target: { value: ' k7m2q-9xa4b ' },
+      target: { value: ' k7m2-q9xa-4brs ' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Cek' }));
 
-    expect(onOpen).toHaveBeenCalledWith('/c/K7M2Q9XA4B');
+    expect(onOpen).toHaveBeenCalledWith('/c/K7M2Q9XA4BRS');
   });
 
   test('says what a code looks like when it cannot be one', () => {
@@ -238,6 +238,6 @@ describe('the front page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cek' }));
 
     expect(onOpen).not.toHaveBeenCalled();
-    expect(screen.getByText('Kodenya 10 huruf dan angka. Cek lagi, ya.')).toBeTruthy();
+    expect(screen.getByText('Kodenya 12 huruf dan angka. Cek lagi, ya.')).toBeTruthy();
   });
 });
