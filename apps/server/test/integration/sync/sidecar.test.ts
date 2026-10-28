@@ -97,6 +97,29 @@ describe('sidecar snapshot semantics (api/01-sync §4.1)', () => {
     expect(peerInfo?.revokedAt).not.toBeNull(); // still listed, with its revocation time
   });
 
+  test('a device holding a version from before the snapshot held every store refetches it once', async () => {
+    const a1 = await h.seedDevice(82);
+    const store2 = await h.seedStore(a1.world.tenantId, 83);
+    const a2 = await h.seedDeviceIn(a1.world.tenantId, store2, 84);
+    // What the earlier formula (devices + revoked devices) gave this tenant, for a snapshot that
+    // left store 2 out: a device holding it must not be told its snapshot is current.
+    const earlier = 2;
+    const body = await pullJson(
+      await h.pull(a1.auth, { cursor: 0, devicesDirectoryVersion: earlier }),
+    );
+    expect(idsOf(body.devices)).toContain(a2.world.deviceId);
+    expect(body.devicesDirectoryVersion).not.toBe(earlier);
+
+    // Once it holds the new version, it is current again.
+    const again = await pullJson(
+      await h.pull(a1.auth, {
+        cursor: 0,
+        devicesDirectoryVersion: body.devicesDirectoryVersion as number,
+      }),
+    );
+    expect(again.devices).toBeUndefined();
+  });
+
   test('snapshot carries the other stores’ devices of the tenant, never another tenant’s', async () => {
     const a1 = await h.seedDevice(78); // tenant A, store 1
     const store2 = await h.seedStore(a1.world.tenantId, 79);

@@ -40,8 +40,8 @@ function reconstructWireOp(row: {
 /**
  * The per-tenant `devicesDirectoryVersion` (api/01-sync §4.1). No dedicated column exists server-
  * side (10-db has only the client-side `sync_state.devices_directory_version`) and this task adds
- * no migration, so it is DERIVED from the append-only device directory: `count(devices) +
- * count(revoked devices)`. Devices are never hard-deleted (terminal `revoked`, no un-revoke —
+ * no migration, so it is DERIVED from the append-only device directory: `SNAPSHOT_SHAPE_OFFSET +
+ * count(devices) + count(revoked devices)`. Devices are never hard-deleted (terminal `revoked`, no un-revoke —
  * 03-state-machines §5), so this is strictly monotonic and bumps by exactly one on every enrollment
  * (a new row) and every revocation (a newly-non-null `revoked_at`) — precisely "bumped on any device
  * enrollment/revocation". Tenant-wide (all stores), scoped by the `forTenant` RLS predicate; the
@@ -64,8 +64,17 @@ async function directoryVersion(db: TenantDb): Promise<number> {
     .selectFrom('devices')
     .select((eb) => [eb.fn.countAll().as('total'), eb.fn.count('revokedAt').as('revoked')])
     .executeTakeFirstOrThrow();
-  return Number(row.total) + Number(row.revoked);
+  return SNAPSHOT_SHAPE_OFFSET + Number(row.total) + Number(row.revoked);
 }
+
+/**
+ * Raised whenever what a snapshot holds changes, so every device's stored version stops matching
+ * once and it fetches the new snapshot; the client re-verifies its quarantined ops against every
+ * sidecar it receives (core sync/pull.ts), which releases the ones the old snapshot left unknown.
+ * A version stored under the old offset is far below the new one, so the two never meet.
+ * 1_000_000 (from 0): the snapshot became every device of the tenant, not only the puller's store's.
+ */
+const SNAPSHOT_SHAPE_OFFSET = 1_000_000;
 
 /**
  * The devices sidecar snapshot (api/01-sync §4.1): EVERY device of the tenant, including the
