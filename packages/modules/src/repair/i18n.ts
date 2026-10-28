@@ -126,6 +126,7 @@ export const REPAIR_KEYS = [
   'repair.handover.payLaterNote',
   'repair.handover.refundReason',
   'repair.hint.handoverPayment',
+  'repair.hint.handoverQris',
   'repair.handover.photo',
   'repair.handover.sign',
   'repair.handover.signAgain',
@@ -628,6 +629,19 @@ export const REPAIR_KEYS = [
   'repair.handover.unchecked',
   'repair.refusal.handoverAccessories',
   'repair.refusal.handoverNoteNeeded',
+  'repair.refusal.ownershipVideoNeeded',
+  'repair.problem.ownershipVideo',
+  'repair.video.title',
+  'repair.video.hint',
+  'repair.video.record',
+  'repair.video.retake',
+  'repair.video.play',
+  'repair.video.recordNext',
+  'repair.video.recorded',
+  'repair.video.recordedAt',
+  'repair.video.noCamera',
+  'repair.video.label',
+  'repair.video.expired',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];

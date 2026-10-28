@@ -50,14 +50,14 @@
   /* Motion: short and calm, so a counter used all day never waits on an animation. Overlays fade,
    * dialogs and menus grow from just under their size, a side pane slides in from its edge. Tailwind
    * v4 positions with the `translate` property, so these `transform` keyframes compose with it. */
-  --animate-fade-in: fade-in 140ms ease-out;
-  --animate-fade-out: fade-out 120ms ease-in forwards;
-  --animate-dialog-in: dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-dialog-out: dialog-out 120ms ease-in forwards;
-  --animate-pop-in: pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-in: fade-in var(--b-duration-fast) ease-out;
+  --animate-fade-out: fade-out var(--b-duration-fast) ease-in forwards;
+  --animate-dialog-in: dialog-in var(--b-duration-base) var(--b-ease-enter);
+  --animate-dialog-out: dialog-out var(--b-duration-fast) ease-in forwards;
+  --animate-pop-in: pop-in var(--b-duration-fast) var(--b-ease-enter);
   --animate-pop-out: fade-out 100ms ease-in forwards;
-  --animate-pane-in: pane-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-rise-in: rise-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pane-in: pane-in var(--b-duration-slow) var(--b-ease-enter);
+  --animate-rise-in: rise-in var(--b-duration-base) var(--b-ease-enter);
   --animate-shake: shake 280ms ease-in-out;
 
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;

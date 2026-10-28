@@ -8,7 +8,7 @@
 // rather than as an empty-string SHA-256 the drain would later call `HASH_MISMATCH` ("your evidence
 // rotted"). One home means a fix to that ordering reaches both capture paths.
 import type { MediaFilePort } from '@bolusi/core';
-import type { MediaRef } from '@bolusi/schemas';
+import type { AnyMediaRef } from '@bolusi/schemas';
 import type { Kysely } from 'kysely';
 
 import type { CaptureIdentity } from './capture.js';
@@ -29,28 +29,28 @@ export interface FinalizeMediaDeps<DB> {
   readonly onCaptured: () => void;
 }
 
-/** What varies between a photo and a signature: the produced bytes' location and identity. */
-export interface FinalizeMediaInput {
+/** What varies between a photo, a signature and a clip: the produced bytes' location and identity. */
+export interface FinalizeMediaInput<R extends AnyMediaRef = AnyMediaRef> {
   /** The cache URI the produced bytes already live at (a compressed photo, or a written PNG). */
   readonly sourceUri: string;
   readonly mediaId: string;
   readonly extension: string;
-  readonly type: MediaRef['type'];
-  readonly mime: MediaRef['mime'];
+  readonly type: R['type'];
+  readonly mime: R['mime'];
   readonly capturedAt: number;
-  readonly location: MediaRef['location'];
+  readonly location: R['location'];
 }
 
-export interface FinalizedMedia {
+export interface FinalizedMedia<R extends AnyMediaRef = AnyMediaRef> {
   readonly localPath: string;
   /** The signed ref the command embeds (06 §4). Carries the MEASURED `sha256`/`sizeBytes`. */
-  readonly ref: MediaRef;
+  readonly ref: R;
 }
 
-export async function finalizeMediaCapture<DB>(
+export async function finalizeMediaCapture<DB, R extends AnyMediaRef>(
   deps: FinalizeMediaDeps<DB>,
-  input: FinalizeMediaInput,
-): Promise<FinalizedMedia> {
+  input: FinalizeMediaInput<R>,
+): Promise<FinalizedMedia<R>> {
   // Step 5 — cache → document dir, AWAITED, before anything references the file.
   const localPath = await deps.moveToDocuments(input.sourceUri, input.mediaId, input.extension);
 
@@ -82,6 +82,7 @@ export async function finalizeMediaCapture<DB>(
   // producer's report: the op signature covers them, and they must describe the bytes on disk.
   return {
     localPath,
+    // `type` and `mime` arrive as a matched pair of R's (the input type), so the ref is an R.
     ref: {
       mediaId: input.mediaId,
       sha256,
@@ -92,6 +93,6 @@ export async function finalizeMediaCapture<DB>(
       location: input.location,
       userId: deps.identity.userId,
       deviceId: deps.identity.deviceId,
-    },
+    } as R,
   };
 }

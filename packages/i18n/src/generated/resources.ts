@@ -162,6 +162,15 @@ const source = {
         signOnPhone: 'Minta pelanggan tanda tangan di HP',
         waitingSend: 'Menunggu kiriman dari HP…',
       },
+      video: {
+        denied:
+          'Kamera atau mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi, lalu coba lagi.',
+        saveFailed: 'Videonya belum bisa disimpan. Coba lagi.',
+        loading: 'Memuat video…',
+        failed: 'Videonya belum bisa diputar. Coba lagi.',
+        noMicrophone:
+          'Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi.',
+      },
     },
     auth: {
       switcher: {
@@ -388,6 +397,34 @@ const source = {
           lockedCount: '{count} terkunci',
           pinFor: 'PIN baru untuk {name}',
         },
+        setup: {
+          title: 'Siapkan komputer ini',
+          step: 'Langkah {step} dari {total}',
+          next: 'Lanjut',
+          back: 'Kembali',
+          later: 'Nanti saja',
+          laterHint: 'Bisa dibuka lagi di Pengaturan > Komputer ini.',
+          cameraTitle: 'Foto dan tanda tangan',
+          cameraWebcam: 'Foto HP pelanggan diambil dengan webcam ini.',
+          cameraPhone:
+            'Komputer ini belum punya webcam, jadi foto diambil lewat HP toko. Saat pertama kali ambil foto, scan kode QR yang muncul dengan HP.',
+          signatureScreen: 'Pelanggan tanda tangan langsung di layar sentuh ini.',
+          signaturePhone: 'Pelanggan tanda tangan di HP toko, lewat kode QR yang sama.',
+          doneTitle: 'Komputer siap dipakai',
+          donePrinter: 'Printer',
+          donePaper: 'Kertas',
+          donePhotos: 'Foto',
+          doneSignature: 'Tanda tangan',
+          noPrinter: 'Belum dipilih',
+          viaWebcam: 'Webcam',
+          viaScreen: 'Layar sentuh',
+          viaPhone: 'HP toko',
+          start: 'Mulai',
+          reopen: 'Buka panduan persiapan',
+          printerReminder: 'Printer belum dipilih',
+          printerGone: 'Printer tidak ditemukan',
+          printerReminderHint: 'Nota belum bisa dicetak dari komputer ini.',
+        },
       },
       limits: {
         title: 'Batas wewenang',
@@ -524,11 +561,11 @@ const source = {
         titleSyncing: 'Sedang mengirim',
         titleOffline: 'Tidak ada koneksi',
         titleAttention: 'Ada yang perlu dicek',
-        titlePhotosPending: 'Foto belum terkirim',
+        titlePhotosPending: 'Foto & video belum terkirim',
         screenTitle: 'Status data',
         savedHere: '{count} perubahan tersimpan di HP ini dan akan dikirim otomatis.',
         changesLabel: 'Perubahan',
-        photosLabel: 'Foto',
+        photosLabel: 'Foto & video',
         waitingCount: '{count} belum terkirim',
       },
       banner: {
@@ -600,6 +637,9 @@ const source = {
         camera: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
         cameraDeniedTitle: 'Kamera belum diizinkan',
         cameraDeniedBody: 'Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera.',
+        videoDeniedTitle: 'Kamera atau mikrofon belum diizinkan',
+        videoDeniedBody:
+          'Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera dan Mikrofon.',
       },
       storage: {
         lowWarning: 'Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.',
@@ -613,6 +653,18 @@ const source = {
       },
       upload: { persistentFailure: '{count} foto belum sampai ke server.' },
       scan: { title: 'Pindai kode', hint: 'Arahkan kamera ke barcode atau kode QR.' },
+      video: {
+        start: 'Mulai rekam',
+        stop: 'Selesai rekam',
+        retake: 'Rekam ulang',
+        use: 'Pakai video ini',
+        time: '{elapsed} / {max}',
+        refusedBody:
+          'Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.',
+        unavailableTitle: 'Video belum ada di HP ini',
+        unavailableBody: 'Videonya belum terkirim dari HP yang merekam. Coba lagi nanti.',
+        tooLarge: 'Videonya terlalu besar. Rekam ulang lebih singkat.',
+      },
     },
     platform: {
       opType: {
@@ -820,6 +872,15 @@ export const resources = {
           photoOnPhone: 'Take the photo on the phone',
           signOnPhone: 'Ask the customer to sign on the phone',
           waitingSend: 'Waiting for the phone to send…',
+        },
+        video: {
+          denied:
+            'The camera or microphone isn’t allowed. Allow them in Windows Settings › Privacy, then try again.',
+          saveFailed: 'The video couldn’t be saved. Try again.',
+          loading: 'Loading video…',
+          failed: 'The video couldn’t play. Try again.',
+          noMicrophone:
+            'No microphone found. Plug in a microphone or a webcam that has one, then try again.',
         },
       },
       auth: {
@@ -1053,6 +1114,34 @@ export const resources = {
             lockedCount: '{count} locked',
             pinFor: 'New PIN for {name}',
           },
+          setup: {
+            title: 'Set up this computer',
+            step: 'Step {step} of {total}',
+            next: 'Next',
+            back: 'Back',
+            later: 'Later',
+            laterHint: 'You can open it again in Settings > This computer.',
+            cameraTitle: 'Photos and signatures',
+            cameraWebcam: 'Customer phone photos are taken with this webcam.',
+            cameraPhone:
+              'This computer has no webcam, so photos are taken with a store phone. The first time you take a photo, scan the QR code that appears with the phone.',
+            signatureScreen: 'Customers sign right on this touch screen.',
+            signaturePhone: 'Customers sign on the store phone, through the same QR code.',
+            doneTitle: 'This computer is ready',
+            donePrinter: 'Printer',
+            donePaper: 'Paper',
+            donePhotos: 'Photos',
+            doneSignature: 'Signatures',
+            noPrinter: 'Not chosen',
+            viaWebcam: 'Webcam',
+            viaScreen: 'Touch screen',
+            viaPhone: 'Store phone',
+            start: 'Start',
+            reopen: 'Open the setup guide',
+            printerReminder: 'No printer chosen',
+            printerGone: 'Printer not found',
+            printerReminderHint: 'Slips cannot be printed from this computer yet.',
+          },
         },
         limits: {
           title: 'Limits',
@@ -1189,12 +1278,12 @@ export const resources = {
           titleSyncing: 'Sending',
           titleOffline: 'No connection',
           titleAttention: 'Something needs a look',
-          titlePhotosPending: 'Photos aren’t sent yet',
+          titlePhotosPending: 'Photos and videos aren’t sent yet',
           screenTitle: 'Sync status',
           savedHere:
             '{count, plural, one {# change is saved on this phone and will be sent automatically.} other {# changes are saved on this phone and will be sent automatically.}}',
           changesLabel: 'Changes',
-          photosLabel: 'Photos',
+          photosLabel: 'Photos & videos',
           waitingCount: '{count} not sent yet',
         },
         banner: {
@@ -1277,6 +1366,9 @@ export const resources = {
           cameraDeniedTitle: 'Camera is not allowed',
           cameraDeniedBody:
             'Open your phone Settings, find this app, then turn on the Camera permission.',
+          videoDeniedTitle: 'Camera or microphone not allowed',
+          videoDeniedBody:
+            'Open the phone’s Settings, find this app, then turn on Camera and Microphone.',
         },
         storage: {
           lowWarning:
@@ -1294,6 +1386,18 @@ export const resources = {
             '{count, plural, one {# photo hasn’t reached the server.} other {# photos haven’t reached the server.}}',
         },
         scan: { title: 'Scan code', hint: 'Point the camera at a barcode or QR code.' },
+        video: {
+          start: 'Start recording',
+          stop: 'Stop recording',
+          retake: 'Record again',
+          use: 'Use this video',
+          time: '{elapsed} / {max}',
+          refusedBody:
+            'Can’t record because storage is almost full. Free up space, then try again.',
+          unavailableTitle: 'The video isn’t on this phone yet',
+          unavailableBody: 'It hasn’t been sent from the phone that recorded it. Try again later.',
+          tooLarge: 'The video is too big. Record a shorter one.',
+        },
       },
       platform: {
         opType: {

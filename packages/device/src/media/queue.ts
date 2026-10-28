@@ -25,7 +25,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import { encryptColumnValue, type PrunableItem } from '@bolusi/core';
-import type { MediaRef } from '@bolusi/schemas';
+import type { AnyMediaRef, MediaRef } from '@bolusi/schemas';
 
 /** The row as capture writes it (06 §2.2 step 7). Everything here is frozen from this moment on. */
 export interface NewMediaItem {
@@ -36,8 +36,8 @@ export interface NewMediaItem {
   readonly storeId: string | null;
   readonly userId: string;
   readonly deviceId: string;
-  readonly type: 'image' | 'signature';
-  readonly mime: 'image/jpeg' | 'image/png';
+  readonly type: AnyMediaRef['type'];
+  readonly mime: AnyMediaRef['mime'];
   readonly sizeBytes: number;
   readonly sha256: string;
   readonly capturedAt: number;

@@ -99,7 +99,7 @@ async function loadSystemDirectory(
     // reached conflict detection without them is a provisioning bug, and failing the push loudly
     // (rolling it back) beats emitting an unsigned or mis-attributed conflict op.
     throw new Error(
-      `tenant ${tenantId} has no system ${user === undefined ? 'actor' : 'device'} (01 §3.6, I-11) — cannot emit a conflict op`,
+      `tenant ${tenantId} has no system ${user === undefined ? 'actor' : 'device'} (01 §3.6, I-11): cannot emit a system op`,
     );
   }
 
@@ -107,6 +107,29 @@ async function loadSystemDirectory(
     userId: user.id,
     deviceId: device.id,
     publicKey: base64ToBytes(device.signingKeyPublic),
+  };
+}
+
+/**
+ * The tenant's system actor, device and signer, for an op the server writes itself (a detected
+ * conflict, a QRIS payment Xendit confirmed). Throws when the key store has no key for the tenant:
+ * an op that cannot be signed must not be half-recorded (10-db §3 atomic).
+ */
+export async function loadSystemIdentity(
+  db: TenantDb,
+  tenantId: string,
+  keyStore: SystemKeyStore,
+): Promise<SystemIdentity> {
+  const signer = await keyStore.getSystemSigner(tenantId);
+  if (signer === undefined) {
+    throw new Error(`no system signer for tenant ${tenantId}: the key store produced no key`);
+  }
+  const dir = await loadSystemDirectory(db, tenantId);
+  return {
+    systemDeviceId: dir.deviceId,
+    systemUserId: dir.userId,
+    systemDevicePublicKey: dir.publicKey,
+    sign: signer,
   };
 }
 
@@ -130,24 +153,8 @@ export interface ConflictDetectionWiringDeps {
 export function buildConflictDetection(deps: ConflictDetectionWiringDeps): DetectConflictsFn {
   const registry = buildConflictRegistry(deps.modules);
 
-  const systemIdentity = async (db: TenantDb, tenantId: string): Promise<SystemIdentity> => {
-    const signer = await deps.keyStore.getSystemSigner(tenantId);
-    if (signer === undefined) {
-      // Reached only if the store returned a signer at wiring time (so detection was enabled) but
-      // not now — a store whose key set changed under us. Fail the push loudly rather than emit an
-      // unsigned op; a conflict that cannot be signed must not be half-recorded (10-db §3 atomic).
-      throw new Error(
-        `no system signer for tenant ${tenantId} — conflict detection was enabled but the key store produced no key`,
-      );
-    }
-    const dir = await loadSystemDirectory(db, tenantId);
-    return {
-      systemDeviceId: dir.deviceId,
-      systemUserId: dir.userId,
-      systemDevicePublicKey: dir.publicKey,
-      sign: signer,
-    };
-  };
+  const systemIdentity = (db: TenantDb, tenantId: string) =>
+    loadSystemIdentity(db, tenantId, deps.keyStore);
 
   const detectionDeps = {
     crypto: deps.crypto,

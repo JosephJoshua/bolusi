@@ -9,7 +9,9 @@ import { extname, join } from 'node:path';
 import {
   createUuidV7Generator,
   DomainError,
+  finishDeviceSetup,
   readDeviceId,
+  readDeviceSetupFor,
   readSyncState,
   type ClockPort,
   type CommandIdentity,
@@ -39,6 +41,7 @@ import {
   type RoleChange,
   type StaffControls,
 } from '@bolusi/device/bootstrap/staff';
+import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
 import { resolveShellInputs } from '@bolusi/device/bootstrap/shell-inputs';
 import { createSyncClientForApp, type SyncClient } from '@bolusi/device/bootstrap/sync-client';
@@ -65,13 +68,29 @@ import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import { moneyModule } from '@bolusi/modules';
+import { QrisError, type QrisPort } from '@bolusi/modules/money';
 import { repairModule } from '@bolusi/modules/repair';
-import type { ThumbnailRef } from '@bolusi/modules/screen-kit';
-import type { HandoffKind, HandoffPageLabels, MediaRef } from '@bolusi/schemas';
+import type { ThumbnailRef, VideoMediaRef } from '@bolusi/modules/screen-kit';
+import {
+  MEDIA_EXTENSION,
+  VIDEO_MAX_SIZE_BYTES,
+  isVideoMime,
+  type HandoffKind,
+  type HandoffPageLabels,
+  type MediaRef,
+  type QrisChargeBody,
+  type VideoMime,
+} from '@bolusi/schemas';
 
 import type { Handlers } from '../main/rpc.js';
 import { actingSession, actingStaffAdmin } from './acting.js';
-import type { CoreState, HandoffEvent, SessionView } from './api.js';
+import type {
+  CoreState,
+  CoreVideoLoad,
+  CoreVideoOutcome,
+  HandoffEvent,
+  SessionView,
+} from './api.js';
 import { createHandoffClient } from './handoff.js';
 import { heldPermissions } from './permissions.js';
 import { initCoreI18n } from './i18n.js';
@@ -188,6 +207,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     deviceToken: loadDeviceToken,
     ...fetchOptions,
   });
+  const qrisFor = createFetchQris({
+    baseUrl: deps.apiBaseUrl,
+    deviceToken: loadDeviceToken,
+    ...fetchOptions,
+  });
 
   let app: Bootstrapped | null = null;
   let enrollment: AppEnrollment | null = null;
@@ -196,6 +220,8 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
   let media: MediaClient | null = null;
   let ticker: IdleTicker | null = null;
   let deviceInfo: DeviceInfo | null = null;
+  /** The owner this PC's first-run setup waits for (core device-setup.ts), or null. */
+  let setupFor: string | null = null;
   let syncReads: SyncStatusReads = NO_SYNC_STATUS_READS;
   let bootError: string | null = null;
   let stopped = false;
@@ -231,6 +257,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     bootError: null,
     device: 'unenrolled',
     deviceInfo: null,
+    setupFor: null,
     session: null,
     sync: null,
   };
@@ -305,6 +332,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       bootError: null,
       device: shell.device,
       deviceInfo,
+      setupFor,
       session: sessionView(),
       sync: shell.sync,
     };
@@ -357,6 +385,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         // A PC's thumbnails are already `data:` URIs.
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
+      qris: qrisFor,
     });
   }
 
@@ -369,6 +398,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const runtime = activeRepair();
     if (runtime === null || runtime.userId !== userId) throw new DomainError('NOT_AUTHENTICATED');
     return runtime;
+  }
+
+  /** QRIS for the person signed in now; a call for anyone else is refused like a repair call. */
+  function qrisOf(userId: string): QrisPort {
+    const port = repairFor(userId).money.qris;
+    if (port === undefined) throw new QrisError('unavailable');
+    return port;
   }
 
   /** Who a photo or signature from the window is stamped with: the person signed in now. */
@@ -613,6 +649,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         platform: PLATFORM,
         appVersion: deps.appVersion,
       });
+      setupFor = await readDeviceSetupFor(booted.db.db);
       emit();
       const started = generation;
       await startSync(booted, enroll);
@@ -670,6 +707,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     );
     startProjectionRebuild(booting);
     deviceInfo = await readDeviceInfo(booting, { platform: PLATFORM, appVersion: deps.appVersion });
+    setupFor = await readDeviceSetupFor(booting.db.db);
     emit();
     await startEnrolledServices(booting, enroll);
     await rereadSyncStatus();
@@ -719,6 +757,13 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'enrollment.heldPhone': () => requireEnrollment().controller.heldPhone(),
     'enrollment.finish'() {
       requireEnrollment().controller.finish();
+    },
+    // The first-run setup is finished or skipped: it does not open by itself again.
+    async 'device.finishSetup'() {
+      if (app === null) return;
+      await finishDeviceSetup(app.db.db);
+      setupFor = null;
+      emit();
     },
 
     // ── PIN session ─────────────────────────────────────────────────────────────────────────────
@@ -785,6 +830,16 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     'money.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
     'money.stores': (userId: string) => repairFor(userId).money.stores(),
+    // QRIS through Xendit: server calls as the same person, made from here like the staff calls.
+    'money.qris.connections': (userId: string) => qrisOf(userId).connections(),
+    'money.qris.connect': (userId: string, accountId: string, secretKey: string) =>
+      qrisOf(userId).connect(accountId, secretKey),
+    'money.qris.disconnect': (userId: string, accountId: string) =>
+      qrisOf(userId).disconnect(accountId),
+    'money.qris.createCharge': (userId: string, body: QrisChargeBody) =>
+      qrisOf(userId).createCharge(body),
+    'money.qris.charge': (userId: string, id: string) => qrisOf(userId).charge(id),
+    'money.qris.simulate': (userId: string, id: string) => qrisOf(userId).simulate(id),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),
@@ -815,6 +870,37 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       const outcome = await client.importImage(identity, { uri: scratch, mime: image.mime });
       if (outcome.kind !== 'imported') return { kind: outcome.kind } as const;
       return { kind: 'captured', mediaRef: outcome.ref } as const;
+    },
+    // The ownership video as the webcam recorded it, kept like the phone's: encrypted and queued.
+    async 'media.importVideo'(
+      userId: string,
+      video: { bytes: Uint8Array; mime: VideoMime },
+    ): Promise<CoreVideoOutcome> {
+      const { identity, client } = captureFor(userId);
+      // The window is trusted only as far as the server would trust it.
+      if (!isVideoMime(video.mime)) throw new DomainError('VALIDATION_FAILED');
+      if (video.bytes.length > VIDEO_MAX_SIZE_BYTES) return { kind: 'refused_too_large' };
+      // `importVideo` deletes the scratch copy whenever it does not keep it.
+      const scratch = mediaFiles.writeToCache(video.bytes, newId(), MEDIA_EXTENSION[video.mime]);
+      const outcome = await client.importVideo(identity, { uri: scratch, mime: video.mime });
+      if (outcome.kind !== 'imported') return { kind: outcome.kind };
+      return { kind: 'captured', videoRef: outcome.ref };
+    },
+    'media.hasLocal': (userId: string, mediaId: string) =>
+      captureFor(userId).client.hasLocal(mediaId),
+    /** A stored clip's bytes to play, checked against its signed hash; downloaded when not here. */
+    async 'media.loadVideo'(userId: string, ref: VideoMediaRef): Promise<CoreVideoLoad> {
+      const { client } = captureFor(userId);
+      const rendered = await client.loadForRender(ref);
+      if (rendered.kind === 'unavailable') return { kind: 'unavailable' };
+      if (rendered.kind === 'mismatch') return { kind: 'failed' };
+      // `toRenderUri` hands the window a data uri; the bytes cross the port as they are.
+      const base64 = rendered.uri.slice(rendered.uri.indexOf(',') + 1);
+      return {
+        kind: 'ready',
+        bytes: new Uint8Array(Buffer.from(base64, 'base64')),
+        mime: ref.mime,
+      };
     },
     async 'media.captureSignature'(userId: string, strokes: SignatureStroke[], pad: PadSize) {
       const { identity, client } = captureFor(userId);

@@ -253,7 +253,8 @@
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentReference": "Isi kode approval dari mesin EDC.",
-    "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
+    "screenLock": "Isi kunci layarnya, atau pilih Tidak ada.",
+    "ownershipVideo": "Video kepemilikan belum direkam."
   },
   "ready": {
     "today": "Hari ini",
@@ -314,7 +315,8 @@
     "downPaymentSame": "Jumlahnya masih sama.",
     "handoverPayment": "Lengkapi pembayarannya dulu.",
     "discountLimit": "Batas diskonmu {amount} per servisan.",
-    "handoverChecks": "Centang semua, atau tulis kenapa belum."
+    "handoverChecks": "Centang semua, atau tulis kenapa belum.",
+    "handoverQris": "Tunggu QRIS masuk. Pastikan internet nyala."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -655,7 +657,8 @@
     "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya.",
     "overLimit": "Melebihi batasmu. Minta pemilik toko.",
     "handoverAccessories": "Ada kelengkapan yang tidak ada di daftar serah terima.",
-    "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu."
+    "handoverNoteNeeded": "Ada yang belum dicentang. Tulis catatannya dulu.",
+    "ownershipVideoNeeded": "Rekam video kepemilikan dulu."
   },
   "paper": {
     "title": "Kertas nota",
@@ -748,5 +751,18 @@
   "handoverCheck": {
     "customerTried": "Sudah dicoba pelanggan",
     "repairWorks": "Bagian yang diperbaiki berfungsi"
+  },
+  "video": {
+    "title": "Video kepemilikan",
+    "hint": "Minta pelanggan bilang di video bahwa HP ini miliknya. Maks. 1 menit.",
+    "record": "Rekam video",
+    "retake": "Rekam ulang",
+    "play": "Putar",
+    "recordNext": "Rekam video kepemilikan",
+    "recorded": "Sudah direkam",
+    "recordedAt": "Direkam {at}",
+    "noCamera": "Rekam lewat HP toko: buka servisan ini di HP.",
+    "label": "Video",
+    "expired": "Video kepemilikan sudah terhapus. Rekam ulang, ya."
   }
 }

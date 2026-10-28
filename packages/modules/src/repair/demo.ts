@@ -8,16 +8,17 @@
  * Photos resolve to a labelled grey placeholder image, never anything that looks like a real photo.
  */
 import { FuzzyIndex, type PaperSettings } from '@bolusi/core';
-import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
+import type { AnyMediaRef, MediaRef, ThumbnailRef, VideoRef } from '@bolusi/schemas';
 
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
-import { demoMoneyLedger } from '../money/demo.js';
+import { demoMoneyLedger, demoQris } from '../money/demo.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
   REPAIR_PERMISSION,
+  ownershipVideoSlot,
   type RepairOutcome,
 } from './constants.js';
 import { partsInWork } from './flows.js';
@@ -26,6 +27,7 @@ import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
   handoverProblem,
+  needsOwnershipVideo,
   recordRepairTypes,
   storeIntakeOptions,
   type HandoverCheck,
@@ -228,7 +230,22 @@ function demoMedia(mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): MediaRef {
   };
 }
 
-function photoRow(slot: string, ref: MediaRef = demoMedia()): TicketPhotoRow {
+function demoVideo(): VideoRef {
+  const { mediaId, sha256, sizeBytes, capturedAt, location, userId, deviceId } = demoMedia();
+  return {
+    mediaId,
+    sha256,
+    mime: 'video/mp4',
+    type: 'video',
+    sizeBytes: sizeBytes * 60,
+    capturedAt,
+    location,
+    userId,
+    deviceId,
+  };
+}
+
+function photoRow(slot: string, ref: AnyMediaRef = demoMedia()): TicketPhotoRow {
   return {
     slot,
     mediaId: ref.mediaId,
@@ -1077,6 +1094,12 @@ export function demoRepairRuntime(
           throw REPAIR_REFUSALS.refuse(problem.reason);
         }
       }
+      const repairTypes = recordedTypes(input['repairTypes'], []);
+      const video = (input['ownershipVideo'] as VideoRef | null | undefined) ?? null;
+      // As the intake rule judges it.
+      if (video === null && needsOwnershipVideo(repairTypes)) {
+        throw REPAIR_REFUSALS.refuse('ownershipVideoNeeded');
+      }
       const created = withTotals({
         ...seedTickets()[0]!,
         id,
@@ -1105,7 +1128,7 @@ export function demoRepairRuntime(
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
         peripherals: input['peripherals'] as TicketDetailRow['peripherals'],
-        repairTypes: recordedTypes(input['repairTypes'], []),
+        repairTypes,
         claimOfTicketId: claimOf,
         intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
@@ -1115,7 +1138,10 @@ export function demoRepairRuntime(
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),
-        photos: photos.map(({ slot, ref }) => photoRow(slot, ref)),
+        photos: [
+          ...photos.map(({ slot, ref }) => photoRow(slot, ref)),
+          ...(video === null ? [] : [photoRow(ownershipVideoSlot(video.mediaId), video)]),
+        ],
       });
       tickets = [created, ...tickets];
       notify();
@@ -1425,6 +1451,28 @@ export function demoRepairRuntime(
     },
     notify,
   );
+  // The QRIS method is connected to a Xendit test account; a paid QR lands as the server would
+  // record it, lowering what the servisan or the debt still owes.
+  const qris = demoQris({
+    now: () => Date.now(),
+    connectedAccounts: DEMO_ACCOUNTS.filter((row) => row.kind === 'qris').map((row) => row.id),
+    onPaid: (body) => {
+      ledger.recordPayment({
+        id: body.id,
+        document: body.document,
+        account: `account:${body.accountId}`,
+        amount: body.amount,
+      });
+      if ((ledger.documentMoney(body.document.id)?.charged ?? 0) === 0) {
+        tickets = tickets.map((t) =>
+          t.id === body.document.id
+            ? withTotals({ ...t, downPayment: (t.downPayment ?? 0) + body.amount })
+            : t,
+        );
+        notify();
+      }
+    },
+  });
   let permitted = new Set<string>(actor.permissions);
   const runtime = {
     inventory,
@@ -1458,15 +1506,29 @@ export function demoRepairRuntime(
     money: {
       query: (name: string, input: Input) => {
         if (name === 'documentMoney') {
-          const t = find(String(input['id']));
-          const paid = t.downPayment ?? 0;
+          const id = String(input['id']);
+          const recorded = ledger.documentMoney(id);
+          // A debt is the ledger's; a servisan still in the store keeps its DP on the ticket.
+          if (recorded !== null && recorded.charged > 0) {
+            return Promise.resolve({ rows: [recorded], nextCursor: null });
+          }
+          const paid = find(id).downPayment ?? 0;
           return Promise.resolve({
-            rows: [{ balance: -paid, charged: 0, reduced: 0, paid, entries: [] }],
+            rows: [
+              {
+                balance: -paid,
+                charged: 0,
+                reduced: 0,
+                paid,
+                entries: recorded?.entries ?? [],
+              },
+            ],
             nextCursor: null,
           });
         }
         return ledger.query(name, input);
       },
+      qris,
       run: (name: string, input: Input) => ledger.run(name, input),
       hasPermission: (id: string) => permitted.has(id),
       colleagueHasPermission: () => false,
@@ -1482,6 +1544,9 @@ export function demoRepairRuntime(
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),
     captureSignature: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
     pickPhoto: () => Promise.resolve({ mediaRef: demoMedia('image/png') }),
+    recordVideo: () => Promise.resolve({ videoRef: demoVideo() }),
+    // The demo has no clip to show; the player closes at once.
+    playVideo: () => Promise.resolve(),
     printing,
     loadModelPhoto: demoModelPhoto,
     loadThumbnail: (ref: ThumbnailRef) =>

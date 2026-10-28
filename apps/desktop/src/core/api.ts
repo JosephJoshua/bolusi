@@ -7,7 +7,7 @@ import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
 import type { DeviceStatus } from '@bolusi/device/navigation/zone';
 import type { LockReason } from '@bolusi/device/session/shell-session';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
-import type { MediaRef } from '@bolusi/schemas';
+import type { MediaRef, VideoMime, VideoRef } from '@bolusi/schemas';
 
 /** The PIN session as the window renders it. */
 export interface SessionView {
@@ -42,6 +42,8 @@ export interface CoreState {
   readonly bootError: string | null;
   readonly device: DeviceStatus;
   readonly deviceInfo: DeviceInfo | null;
+  /** The owner this PC's first-run setup waits for; null once done, or on a PC set up before it. */
+  readonly setupFor: string | null;
   /** Null before the PC is enrolled. */
   readonly session: SessionView | null;
   /** Null until the core has booted. */
@@ -60,6 +62,16 @@ export type CoreCaptureOutcome =
   | { readonly kind: 'captured'; readonly mediaRef: MediaRef }
   | { readonly kind: 'refused_low_storage' }
   | { readonly kind: 'refused_empty' };
+
+/** A recorded clip as the core kept it, or why it did not. */
+export type CoreVideoOutcome =
+  | { readonly kind: 'captured'; readonly videoRef: VideoRef }
+  | { readonly kind: 'refused_low_storage' | 'refused_too_large' };
+
+/** A stored clip for the window's player. */
+export type CoreVideoLoad =
+  | { readonly kind: 'ready'; readonly bytes: Uint8Array; readonly mime: VideoMime }
+  | { readonly kind: 'unavailable' | 'failed' };
 
 /** The phone handoff (core/handoff.ts): a new pairing's id and the page the phone opens. */
 export type HandoffOpened =

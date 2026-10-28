@@ -149,7 +149,7 @@ export async function capturePhoto<DB>(deps: CaptureDeps<DB>): Promise<CaptureOu
 
   // Steps 5–8 — the shared finalization tail (move → hash+size → row → onCaptured → signed ref).
   const mediaId = deps.newId();
-  const { localPath, ref } = await finalizeMediaCapture(deps, {
+  const { localPath, ref } = await finalizeMediaCapture<DB, MediaRef>(deps, {
     sourceUri: compressed.uri,
     mediaId,
     extension: PHOTO_EXTENSION,

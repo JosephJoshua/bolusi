@@ -18,11 +18,11 @@
     "titleSyncing": "Sending",
     "titleOffline": "No connection",
     "titleAttention": "Something needs a look",
-    "titlePhotosPending": "Photos aren’t sent yet",
+    "titlePhotosPending": "Photos and videos aren’t sent yet",
     "screenTitle": "Sync status",
     "savedHere": "{count, plural, one {# change is saved on this phone and will be sent automatically.} other {# changes are saved on this phone and will be sent automatically.}}",
     "changesLabel": "Changes",
-    "photosLabel": "Photos",
+    "photosLabel": "Photos & videos",
     "waitingCount": "{count} not sent yet"
   },
   "banner": {

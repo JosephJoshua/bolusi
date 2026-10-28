@@ -112,6 +112,34 @@ describe('init validation matrix (api/03 §3.1)', () => {
     expect((await readError(res)).error.code).toBe('MEDIA_TOO_LARGE');
   });
 
+  test('a video clip gets its own cap: up to 48 MiB, never more', async () => {
+    const ctx = await h.seedDevice('init-video');
+    const bytes = buildImage(300, 'video/mp4', 'init-video');
+    const body = { ...initBodyFor(ctx, bytes, 'video/mp4'), sizeBytes: 48 * 1024 * 1024 };
+    const ok = await h.app.request(initReq(detUuidV7('init-video:media'), body, ctx.auth));
+    expect(ok.status).toBe(200);
+    const big = { ...body, sizeBytes: 48 * 1024 * 1024 + 1 };
+    const res = await h.app.request(initReq(detUuidV7('init-video-big:media'), big, ctx.auth));
+    expect(res.status).toBe(413);
+    expect((await readError(res)).error.code).toBe('MEDIA_TOO_LARGE');
+  });
+
+  test('a clip is only ever a video item, and a video item only ever a clip', async () => {
+    const ctx = await h.seedDevice('init-kind');
+    const clip = buildImage(300, 'video/webm', 'init-kind');
+    const asImage = { ...initBodyFor(ctx, clip, 'video/webm'), type: 'image' };
+    const photo = buildImage(300, 'image/jpeg', 'init-kind');
+    const asVideo = { ...initBodyFor(ctx, photo, 'image/jpeg'), type: 'video' };
+    for (const [seed, body] of [
+      ['init-kind-a', asImage],
+      ['init-kind-b', asVideo],
+    ] as const) {
+      const res = await h.app.request(initReq(detUuidV7(`${seed}:media`), body, ctx.auth));
+      expect(res.status).toBe(422);
+      expect((await readError(res)).error.code).toBe('MIME_UNSUPPORTED');
+    }
+  });
+
   test('sizeBytes 0 → 422 VALIDATION_FAILED (Zod min(1))', async () => {
     const ctx = await h.seedDevice('init-zero');
     const bytes = buildImage(300, 'image/jpeg', 'init-zero');

@@ -219,6 +219,33 @@
       "colStatus": "Status",
       "lockedCount": "{count} locked",
       "pinFor": "New PIN for {name}"
+    },
+    "setup": {
+      "title": "Set up this computer",
+      "step": "Step {step} of {total}",
+      "next": "Next",
+      "back": "Back",
+      "later": "Later",
+      "laterHint": "You can open it again in Settings > This computer.",
+      "cameraTitle": "Photos and signatures",
+      "cameraWebcam": "Customer phone photos are taken with this webcam.",
+      "cameraPhone": "This computer has no webcam, so photos are taken with a store phone. The first time you take a photo, scan the QR code that appears with the phone.",
+      "signatureScreen": "Customers sign right on this touch screen.",
+      "signaturePhone": "Customers sign on the store phone, through the same QR code.",
+      "doneTitle": "This computer is ready",
+      "donePrinter": "Printer",
+      "donePaper": "Paper",
+      "donePhotos": "Photos",
+      "doneSignature": "Signatures",
+      "noPrinter": "Not chosen",
+      "viaWebcam": "Webcam",
+      "viaScreen": "Touch screen",
+      "viaPhone": "Store phone",
+      "start": "Start",
+      "reopen": "Open the setup guide",
+      "printerReminder": "No printer chosen",
+      "printerGone": "Printer not found",
+      "printerReminderHint": "Slips cannot be printed from this computer yet."
     }
   },
   "limits": {

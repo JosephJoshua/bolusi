@@ -86,7 +86,7 @@ export async function captureSignature<DB>(
   const cacheUri = deps.writeToCache(png, mediaId, SIGNATURE_EXTENSION);
 
   // Steps 5–8 — the shared finalization tail (move → hash+size → row → onCaptured → signed ref).
-  const { localPath, ref } = await finalizeMediaCapture(deps, {
+  const { localPath, ref } = await finalizeMediaCapture<DB, MediaRef>(deps, {
     sourceUri: cacheUri,
     mediaId,
     extension: SIGNATURE_EXTENSION,

@@ -33,29 +33,40 @@ export const DEMO_PEOPLE: readonly DemoPerson[] = [
 // Captures live only in this window's memory: the demo has no media store. The real build hands
 // them to the offline core instead.
 const captured = new Map<string, string>();
+/** Recorded clips, kept as blobs: each playing gets its own url, which the player lets go. */
+const clips = new Map<string, Blob>();
+
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function demoRef<M extends string, T extends string>(
+  bytes: Uint8Array<ArrayBuffer>,
+  mime: M,
+  type: T,
+) {
+  return {
+    mediaId: crypto.randomUUID(),
+    sha256: await sha256Hex(bytes),
+    mime,
+    type,
+    sizeBytes: bytes.length,
+    capturedAt: Date.now(),
+    location: null,
+    userId: 'u-siti',
+    deviceId: 'd-demo',
+  };
+}
 
 async function keepDemo(
   bytes: Uint8Array<ArrayBuffer>,
   mime: 'image/jpeg' | 'image/png',
   type: 'image' | 'signature',
 ): Promise<CapturedMedia> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-  const sha256 = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  const mediaId = crypto.randomUUID();
-  captured.set(mediaId, URL.createObjectURL(new Blob([bytes], { type: mime })));
-  return {
-    mediaRef: {
-      mediaId,
-      sha256,
-      mime,
-      type,
-      sizeBytes: bytes.length,
-      capturedAt: Date.now(),
-      location: null,
-      userId: 'u-siti',
-      deviceId: 'd-demo',
-    },
-  };
+  const mediaRef = await demoRef(bytes, mime, type);
+  captured.set(mediaRef.mediaId, URL.createObjectURL(new Blob([bytes], { type: mime })));
+  return { mediaRef };
 }
 
 /** The strokes drawn on a white pad, as a PNG; the real build renders them with the phone's code. */
@@ -101,6 +112,23 @@ export function demoRuntimeFor(person: DemoPerson, capture: PcCapture): RepairRu
         ? null
         : keepDemo(await signaturePng(signature), 'image/png', 'signature');
     },
+    recordVideo: async (request) => {
+      const video = await capture.video(request);
+      if (video === null) return null;
+      const videoRef = await demoRef(video.bytes, video.mime, 'video' as const);
+      clips.set(videoRef.mediaId, new Blob([video.bytes], { type: video.mime }));
+      return { videoRef };
+    },
+    // A clip recorded here plays; the seeded ones have none to show.
+    playVideo: (ref, request) =>
+      capture.play(request, () => {
+        const clip = clips.get(ref.mediaId);
+        return Promise.resolve(
+          clip === undefined
+            ? { kind: 'unavailable' }
+            : { kind: 'ready', url: URL.createObjectURL(clip) },
+        );
+      }),
     // A photo taken here shows itself; the seeded ones show the demo's placeholders.
     loadThumbnail: (ref) => {
       const url = captured.get(ref.mediaId);

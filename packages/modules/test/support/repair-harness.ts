@@ -4,7 +4,7 @@
 import { CamelCasePlugin, Kysely } from 'kysely';
 
 import { createClientDialect, runClientMigrations, type ClientDatabase } from '@bolusi/db-client';
-import type { MediaRef, SignedOperation } from '@bolusi/schemas';
+import type { MediaRef, SignedOperation, VideoRef } from '@bolusi/schemas';
 import { mulberry32, noblePort, randomBytes as prngBytes, opRowOf } from '@bolusi/test-support';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
@@ -124,6 +124,8 @@ export interface RepairHarness {
   ownOps(): Promise<SignedOperation[]>;
   deliverPulled(op: SignedOperation, arrivalSeq: number): Promise<void>;
   photo(n: number): MediaRef;
+  /** An ownership video clip, signed like a photo. */
+  video(n: number): VideoRef;
   /** Moves the device's clock on, so changes after it are signed that much later. */
   advance(ms: number): void;
   close(): Promise<void>;
@@ -292,6 +294,22 @@ export async function openRepairHarness(
   });
 
   let photoCounter = 0;
+  const photo = (n: number): MediaRef => {
+    photoCounter += 1;
+    const hex = (n * 1000 + photoCounter).toString(16).padStart(12, '0');
+    return {
+      mediaId: `01920000-0000-7000-8000-${hex}`,
+      // Digest-shaped (random hex), so size and compression measurements see a real hash.
+      sha256: bytesToHex(prngBytes(mulberry32(n * 1000 + photoCounter), 32)),
+      mime: 'image/jpeg',
+      type: 'image',
+      sizeBytes: 120_000,
+      capturedAt: clock.value,
+      location: null,
+      userId: cashierId!,
+      deviceId,
+    };
+  };
 
   return {
     runtime,
@@ -388,22 +406,13 @@ export async function openRepairHarness(
     advance: (ms: number): void => {
       clock.value += ms;
     },
-    photo: (n: number): MediaRef => {
-      photoCounter += 1;
-      const hex = (n * 1000 + photoCounter).toString(16).padStart(12, '0');
-      return {
-        mediaId: `01920000-0000-7000-8000-${hex}`,
-        // Digest-shaped (random hex), so size and compression measurements see a real hash.
-        sha256: bytesToHex(prngBytes(mulberry32(n * 1000 + photoCounter), 32)),
-        mime: 'image/jpeg',
-        type: 'image',
-        sizeBytes: 120_000,
-        capturedAt: clock.value,
-        location: null,
-        userId: cashierId!,
-        deviceId,
-      };
-    },
+    photo,
+    video: (n: number): VideoRef => ({
+      ...photo(n),
+      mime: 'video/mp4',
+      type: 'video',
+      sizeBytes: 9_000_000,
+    }),
     close: async () => {
       await db.destroy();
       await driver.close();

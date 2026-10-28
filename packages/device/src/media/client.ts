@@ -67,7 +67,7 @@ import {
   type PruneReport,
   type RemoteCacheEntry,
 } from './pruning.js';
-import { importImage, type PickedImage } from './import.js';
+import { importImage, importVideo, type PickedImage, type RecordedVideo } from './import.js';
 import { attachMediaToOperation } from './queue.js';
 import type { MediaRef } from '@bolusi/schemas';
 import {
@@ -160,6 +160,8 @@ export interface MediaClient {
   ): Promise<SignatureOutcome>;
   /** A picture picked from the gallery (the store logo), through the same finalization tail. */
   importImage(identity: CaptureIdentity, picked: PickedImage): ReturnType<typeof importImage>;
+  /** A recorded clip (the ownership video), kept as it is through the same finalization tail. */
+  importVideo(identity: CaptureIdentity, recorded: RecordedVideo): ReturnType<typeof importVideo>;
   /** 04 §5.1 step 5 — the command runtime's attach. Task 25 drives it from a real command. */
   attach(
     ref: Pick<MediaRef, 'mediaId' | 'sha256'>,
@@ -169,6 +171,11 @@ export interface MediaClient {
   loadForRender(ref: RenderableMediaRef): Promise<RenderableMedia>;
   /** 06 §6 for an attachment with NO signed hash (v1/v2 payloads): local file or nothing. */
   loadLocalForRender(mediaId: string): Promise<RenderableMedia>;
+  /**
+   * Whether a capture taken here is still kept (its row and file), without reading it: a draft
+   * kept across a lock can outlive a capture nothing referred to (06 §7's orphan rule).
+   */
+  hasLocal(mediaId: string): Promise<boolean>;
   /** 06 §5.2 (b): an append attached captures to its op, so they are drainable now. */
   notifyAttached(): void;
   /** 06 §5.2 (e). */
@@ -337,20 +344,25 @@ class MediaClientImpl implements MediaClient {
   }
 
   importImage(identity: CaptureIdentity, picked: PickedImage): ReturnType<typeof importImage> {
-    return importImage(
-      {
-        db: this.deps.db.db,
-        identity,
-        files: this.deps.files,
-        moveToDocuments: this.deps.moveToDocuments,
-        location: this.deps.location,
-        clock: this.deps.clock,
-        newId: this.deps.newId,
-        freeSpaceBytes: this.deps.freeSpaceBytes,
-        onCaptured: () => this.triggers.notifyCapture(),
-      },
-      picked,
-    );
+    return importImage(this.importDeps(identity), picked);
+  }
+
+  importVideo(identity: CaptureIdentity, recorded: RecordedVideo): ReturnType<typeof importVideo> {
+    return importVideo(this.importDeps(identity), recorded);
+  }
+
+  private importDeps(identity: CaptureIdentity) {
+    return {
+      db: this.deps.db.db,
+      identity,
+      files: this.deps.files,
+      moveToDocuments: this.deps.moveToDocuments,
+      location: this.deps.location,
+      clock: this.deps.clock,
+      newId: this.deps.newId,
+      freeSpaceBytes: this.deps.freeSpaceBytes,
+      onCaptured: () => this.triggers.notifyCapture(),
+    };
   }
 
   async attach(
@@ -388,6 +400,11 @@ class MediaClientImpl implements MediaClient {
       },
       mediaId,
     );
+  }
+
+  async hasLocal(mediaId: string): Promise<boolean> {
+    const path = (await findMediaItem(this.deps.db.db, mediaId))?.localPath ?? null;
+    return path !== null && (await this.deps.files.exists(path));
   }
 
   notifyAttached(): void {

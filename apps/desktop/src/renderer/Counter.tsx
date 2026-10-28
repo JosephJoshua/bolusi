@@ -19,6 +19,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import type { SettingsAccess } from './settings/access.js';
 import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
+import { DeviceSetupPage } from './setup/DeviceSetupPage.js';
+import { PrinterReminder } from './setup/PrinterReminder.js';
 import { BAR_CONTROL, TitleBar } from './TitleBar.js';
 import { UpdateNotice } from './updates.js';
 
@@ -27,7 +29,9 @@ type Page =
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
   | { readonly kind: 'kas' }
-  | { readonly kind: 'settings' };
+  | { readonly kind: 'settings'; readonly section?: 'computer' }
+  // The first-run setup of this PC (setup/DeviceSetupPage.tsx).
+  | { readonly kind: 'setup' };
 
 const SIDEBAR_KEY = 'bolusi.sidebar';
 const NARROW_PX = 1280;
@@ -84,6 +88,8 @@ export function Counter({
   settings = {},
   restoredDraft,
   onDraftChange,
+  setupPending = false,
+  onSetupDone,
 }: {
   readonly storeName: string;
   readonly person: CounterPerson;
@@ -101,10 +107,18 @@ export function Counter({
   /** This person's unfinished intake, kept across a lock or a switch to someone else. */
   readonly restoredDraft: IntakeDraft | null;
   readonly onDraftChange: (draft: IntakeDraft | null) => void;
+  /** This PC's first-run setup waits for this person: it opens first. */
+  readonly setupPending?: boolean;
+  /** The setup was finished or put off; absent where there is none to record (the demo). */
+  readonly onSetupDone?: (() => void) | undefined;
 }): React.JSX.Element {
   // Someone who left an intake half done comes back to it, as on the phone.
   const [page, setPage] = useState<Page>(() =>
-    restoredDraft === null ? { kind: 'board' } : { kind: 'intake' },
+    setupPending
+      ? { kind: 'setup' }
+      : restoredDraft === null
+        ? { kind: 'board' }
+        : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   // The queue and search the person was on are still there when they come back from an intake.
@@ -123,8 +137,26 @@ export function Counter({
     if (guard === null) proceed();
     else guard(proceed);
   };
+  // Each opening of Settings at a section is a fresh Settings, so it lands there again even when
+  // the person had moved to another section since.
+  const [settingsVisit, setSettingsVisit] = useState(0);
   const go = (next: Page): void => {
-    if (next.kind !== page.kind) leave(() => setPage(next));
+    // Settings opened at a section (the printer reminder) goes there even from Settings.
+    const toSection = next.kind === 'settings' && next.section !== undefined;
+    if (next.kind !== page.kind || toSection) {
+      leave(() => {
+        if (toSection) setSettingsVisit((n) => n + 1);
+        setPage(next);
+      });
+    }
+  };
+  // The core reads whom the setup waits for just after the session opens; it may land after this.
+  useEffect(() => {
+    if (setupPending) setPage({ kind: 'setup' });
+  }, [setupPending]);
+  const finishSetup = (): void => {
+    onSetupDone?.();
+    setPage(restoredDraft === null ? { kind: 'board' } : { kind: 'intake' });
   };
   // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
   // as well; locking keeps everything as it is.
@@ -162,6 +194,12 @@ export function Counter({
           }
         >
           <UpdateNotice />
+          {page.kind === 'setup' ? null : (
+            <PrinterReminder
+              recheck={page.kind}
+              onChoose={() => go({ kind: 'settings', section: 'computer' })}
+            />
+          )}
           {sync}
           <PersonMenu person={person} header={menuHeader} items={personMenu} />
         </TitleBar>
@@ -176,7 +214,10 @@ export function Counter({
               key: 'repair',
               label: tn('repair.board.title'),
               icon: Wrench,
-              active: page.kind !== 'settings' && !(page.kind === 'kas' && showsKas),
+              active:
+                page.kind === 'board' ||
+                page.kind === 'intake' ||
+                (page.kind === 'kas' && !showsKas),
               onSelect: () => go({ kind: 'board' }),
             },
             ...(showsKas
@@ -201,8 +242,17 @@ export function Counter({
         />
       }
     >
-      {page.kind === 'settings' ? (
-        <SettingsPage person={person} access={settings} onRegisterLeaveGuard={registerLeaveGuard} />
+      {page.kind === 'setup' ? (
+        <DeviceSetupPage onDone={finishSetup} />
+      ) : page.kind === 'settings' ? (
+        <SettingsPage
+          key={`${page.section ?? 'settings'}.${settingsVisit}`}
+          person={person}
+          access={settings}
+          initialPage={page.section}
+          onOpenSetup={() => setPage({ kind: 'setup' })}
+          onRegisterLeaveGuard={registerLeaveGuard}
+        />
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (

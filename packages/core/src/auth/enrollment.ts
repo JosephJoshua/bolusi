@@ -26,6 +26,7 @@ import type { IdSource } from '../runtime/ports.js';
 import { resetSyncStateForNewDevice } from '../sync/state.js';
 import { applyBundle } from './bundle-apply.js';
 import { carryOverUnsyncedChanges } from './carry-over.js';
+import { markDeviceSetupPending } from './device-setup.js';
 import { AUTH_ENTITY, AUTH_OP } from './operations.js';
 import type { EnrollResponse, EnrollTransportPort, KeyStorePort } from './ports.js';
 import {
@@ -197,6 +198,8 @@ export async function runEnrollment<DB>(
   if (owner !== undefined && owner.pinVerifier === null) {
     await writeMeta(deps.db, FIRST_PIN_USER_META_KEY, params.ownerUserId);
   }
+  // The same owner then sets the device up (printer, camera, ...) once they are in.
+  await markDeviceSetupPending(deps.db, params.ownerUserId);
 
   await deleteMeta(deps.db, ENROLLMENT_DRAFT_KEY); // enrollment complete — the draft is spent
   return { deviceId: draft.deviceId, response, genesis, carriedOver: carried, loggedIn: false };

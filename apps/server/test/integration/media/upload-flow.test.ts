@@ -44,6 +44,20 @@ describe('media upload → resume → complete → download', () => {
     expect(sha256Hex(got)).toBe(sha256Hex(bytes)); // downloaded bytes hash-match init sha256
   });
 
+  test('a video clip past the photo cap uploads in chunks and downloads as itself', async () => {
+    for (const mime of ['video/mp4', 'video/webm'] as const) {
+      const ctx = await h.seedDevice(`flow-${mime}`);
+      // Past the photo cap of 10 MiB, as a 60 s clip is.
+      const bytes = new Uint8Array(11 * 1024 * 1024).map((_, i) => (i * 31) & 0xff);
+      bytes.set(buildImage(16, mime, `flow-${mime}`));
+      const { mediaId } = await uploadFull(h, ctx, bytes, mime, `flow-${mime}`);
+      const dl = await h.app.request(downloadReq(mediaId, ctx.auth));
+      expect(dl.status).toBe(200);
+      expect(dl.headers.get('Content-Type')).toBe(mime);
+      expect(sha256Hex(new Uint8Array(await dl.arrayBuffer()))).toBe(sha256Hex(bytes));
+    }
+  });
+
   test('multi-chunk upload: interrupt mid-file → status resume → complete', async () => {
     const ctx = await h.seedDevice('flow-multi');
     const size = 2 * 262144 + 500; // 3 chunks (two full + a short last)

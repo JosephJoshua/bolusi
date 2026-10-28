@@ -19,7 +19,7 @@ import {
   type LaneCredentials,
   type RunningHarnessServer,
 } from '@bolusi/harness';
-import type { MediaRef } from '@bolusi/schemas';
+import type { MediaRef, VideoRef } from '@bolusi/schemas';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
@@ -211,6 +211,26 @@ async function photo(device: Device): Promise<MediaRef> {
   return outcome.mediaRef;
 }
 
+/** The EBML header a WebM clip starts with, and a little after it: what the webcam recorder gives. */
+const WEBM = new Uint8Array([
+  0x1a,
+  0x45,
+  0xdf,
+  0xa3,
+  ...Array.from({ length: 2048 }, (_, i) => i % 251),
+]);
+
+async function video(device: Device): Promise<VideoRef> {
+  const userId = (await device.state()).session!.active!.userId;
+  const outcome = await device.call<{ kind: string; videoRef: VideoRef }>(
+    'media.importVideo',
+    userId,
+    { bytes: new Uint8Array(WEBM), mime: 'video/webm' },
+  );
+  expect(outcome.kind).toBe('captured');
+  return outcome.videoRef;
+}
+
 async function signature(device: Device): Promise<MediaRef> {
   const userId = (await device.state()).session!.active!.userId;
   const stroke = [
@@ -330,12 +350,14 @@ describe('one servisan from intake to handover, offline in between', () => {
     await settle(bench);
     await signIn(bench, technician, TECH_PIN);
 
-    // ── Intake at the counter while the internet is down: photos, a repair type and a DP ─────
+    // ── Intake at the counter while the internet is down: photos, repair types, the customer's ──
+    // ownership video (unlocking asks for it) and a DP
     await switchTo(counter, cashier, CASHIER_PIN);
     await counter.setOnline(false);
     const slots = ['front', 'back', 'left', 'right', 'top', 'bottom'];
     const photos = [];
     for (const slot of slots) photos.push({ slot, label: null, ref: await photo(counter) });
+    const clip = await video(counter);
     const opened = await act(counter, 'repair')('openTicket', {
       customer: { name: 'Yakobus Mandowen', phone: '0813-4455-6677' },
       device: { brand: 'Samsung', model: 'Galaxy A54', color: 'Hitam', imei: '356789104455667' },
@@ -346,7 +368,8 @@ describe('one servisan from intake to handover, offline in between', () => {
         { kind: 'part', description: 'LCD A54', amount: 550_000 },
         { kind: 'labour', description: 'Pasang LCD', amount: 100_000 },
       ],
-      repairTypes: ['screen'],
+      repairTypes: ['screen', 'unlock'],
+      ownershipVideo: clip,
       photos,
       downPayment: DP,
     });
@@ -362,7 +385,7 @@ describe('one servisan from intake to handover, offline in between', () => {
     await bench.setOnline(false);
     await tech('claimTicket', { ticketId });
     await tech('startWork', { ticketId, beforePhotos: [await photo(bench)] });
-    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery'] });
+    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'unlock', 'battery'] });
     const proposal = await tech('proposeQuoteChange', {
       ticketId,
       kind: 'part',
@@ -451,8 +474,24 @@ describe('one servisan from intake to handover, offline in between', () => {
     });
     expect((first!.ticket['repairTypes'] as { item: string }[]).map((type) => type.item)).toEqual([
       'screen',
+      'unlock',
       'battery',
     ]);
+    // The clip the counter took plays on a device that never had it: fetched and checked.
+    const clips = (first!.ticket['photos'] as { slot: string; mediaId: string }[]).filter((p) =>
+      p.slot.startsWith('ownershipVideo:'),
+    );
+    expect(clips.map((p) => p.mediaId)).toEqual([clip.mediaId]);
+    await until(
+      () =>
+        fresh.call<{ kind: string; bytes?: Uint8Array }>('media.loadVideo', owner, {
+          mediaId: clip.mediaId,
+          sha256: clip.sha256,
+          mime: clip.mime,
+        }),
+      (loaded) => loaded.kind === 'ready',
+      'the ownership video to reach the new device',
+    ).then((loaded) => expect(new Uint8Array(loaded.bytes!)).toEqual(WEBM));
     expect(first!.money).toMatchObject({ balance: 0, charged: total, paid: total });
     expect(
       (first!.money['entries'] as { kind: string; amount: number }[]).map((e) => [
@@ -505,12 +544,13 @@ describe('one servisan from intake to handover, offline in between', () => {
       SELECT location, quote_total::text AS quote_total FROM repair_tickets WHERE id = ${ticketId}
     `.execute(db);
     expect(ticketRow.rows[0]).toEqual({ location: 'returned', quoteTotal: String(total) });
-    // Six intake photos, before, after, the handover photo and the signature: all uploaded, once.
+    // Six intake photos, before, after, the ownership video, the handover photo and the signature:
+    // all uploaded, once.
     const media = await sql<{ status: string; n: number }>`
       SELECT status, count(*)::int AS n FROM media WHERE tenant_id = ${lane.tenantId}
       GROUP BY status
     `.execute(db);
-    expect(media.rows).toEqual([{ status: 'complete', n: 10 }]);
+    expect(media.rows).toEqual([{ status: 'complete', n: 11 }]);
     expect(await serverChecklists(ticketId)).toEqual([HANDOVER_CHECKLIST]);
   }, 300_000);
 
