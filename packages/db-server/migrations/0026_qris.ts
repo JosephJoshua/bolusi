@@ -7,7 +7,7 @@
 // `reference_id` at Xendit and the id of the money record its payment becomes, so one QR can never
 // record two payments. A charge keeps the sealed key and token hash it was made under, so a QR
 // already on a customer's screen is still confirmed after its account is disconnected or
-// reconnected. Merge after 0025: the migrator refuses an earlier number later.
+// reconnected; the key is cleared once the QR is paid or long expired. Merge after 0025: the migrator refuses an earlier number later.
 import { sql, type Kysely } from 'kysely';
 
 import { secureTenantTable } from '../src/schema/security.js';
@@ -42,7 +42,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       device_id       uuid NOT NULL,
       created_at      bigint NOT NULL,
       checked_at      bigint,
-      secret_sealed       text NOT NULL,
+      secret_sealed       text,
       callback_token_hash text NOT NULL,
       payment_id      text,
       paid_at         bigint

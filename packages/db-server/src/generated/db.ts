@@ -396,7 +396,7 @@ export interface QrisCharges {
   paymentId: string | null;
   qrString: string;
   requestedBy: string;
-  secretSealed: string;
+  secretSealed: string | null;
   storeId: string;
   tenantId: string;
   xenditQrId: string;

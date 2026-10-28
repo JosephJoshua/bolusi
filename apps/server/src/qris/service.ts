@@ -12,7 +12,8 @@
 // from Xendit with the key the QR was made with (`reconcile`), the same path a device's "did they
 // pay yet?" takes when no callback came. The callback token is checked first only to turn strangers
 // away. Each charge keeps the key and token it was made under, so disconnecting or reconnecting an
-// account (even to another Xendit account) never strands a QR already on a customer's screen.
+// account (even to another Xendit account) never strands a QR already on a customer's screen; the
+// key is cleared once the QR is paid or long past its time.
 //
 // Test mode (an `xnd_development_` key) records its payments too, so a store can try the flow, but
 // their reference starts `test:` and only someone who manages the account may have Xendit pay one.
@@ -64,6 +65,12 @@ import {
 
 /** How often a waiting charge may ask Xendit itself, when a device keeps asking about it. */
 const RECHECK_MS = 4_000;
+
+/**
+ * A QR past its time still waits this long, and for one look at Xendit after it, before it is said
+ * to be expired: a customer who paid in its last second must not be asked to pay again.
+ */
+const SETTLE_MS = 10_000;
 
 /** What integrated QRIS needs from the deployment. Absent ⇒ every QRIS route is 503. */
 export interface QrisConfig {
@@ -298,8 +305,8 @@ interface ChargeRow {
   readonly checkedAt: number | null;
   readonly paymentId: string | null;
   readonly paidAt: number | null;
-  /** The account's key and callback token when the QR was made (see the file header). */
-  readonly secretSealed: string;
+  /** The account's key when the QR was made (see the file header); cleared once it is done with. */
+  readonly secretSealed: string | null;
   readonly callbackTokenHash: string;
 }
 
@@ -345,14 +352,32 @@ function sameRequest(
   );
 }
 
-function chargeKey(ready: Ready, tenantId: string, charge: ChargeRow): string {
-  return ready.qris.sealer.open(charge.secretSealed, sealContext('charge', tenantId, charge.id));
+/**
+ * The key to ask Xendit about a charge with: the one it was made under, or, once that is cleared (a
+ * late callback for a QR long expired), the account's current one.
+ */
+async function chargeKey(ready: Ready, tenantId: string, charge: ChargeRow): Promise<string> {
+  if (charge.secretSealed !== null) {
+    return ready.qris.sealer.open(charge.secretSealed, sealContext('charge', tenantId, charge.id));
+  }
+  const connection = await ready.forTenant(tenantId, (db) =>
+    connectionOf(ready, db, tenantId, charge.accountId),
+  );
+  if (connection === undefined) throw new XenditRefusal('keyInvalid');
+  return connection.secretKey;
+}
+
+/** Waiting until Xendit was asked after the QR's time and showed no payment (`SETTLE_MS`). */
+function expired(charge: ChargeRow, now: number): boolean {
+  if (charge.paidAt !== null || now <= charge.expiresAt) return false;
+  if (now > charge.expiresAt + QRIS_TTL_MS) return true;
+  return charge.checkedAt !== null && charge.checkedAt >= charge.expiresAt + SETTLE_MS;
 }
 
 function chargeView(charge: ChargeRow, now: number): QrisCharge {
   return {
     id: charge.id,
-    status: charge.paidAt !== null ? 'paid' : charge.expiresAt <= now ? 'expired' : 'waiting',
+    status: charge.paidAt !== null ? 'paid' : expired(charge, now) ? 'expired' : 'waiting',
     amount: charge.amount,
     qrString: charge.qrString,
     environment: charge.environment,
@@ -508,6 +533,15 @@ export async function createCharge(
     callbackTokenHash: checked.key.callbackTokenHash,
   };
   const saved = await ready.forTenant(acting.tenantId, async (db) => {
+    // Keys of QRs long past their time are no longer needed: a late callback asks with the
+    // account's current key.
+    await db
+      .updateTable('qrisCharges')
+      .set({ secretSealed: null })
+      .where('secretSealed', 'is not', null)
+      .where('paidAt', 'is', null)
+      .where('expiresAt', '<', String(ready.now() - QRIS_TTL_MS))
+      .execute();
     await db
       .insertInto('qrisCharges')
       .values({
@@ -562,21 +596,38 @@ export async function chargeStatus(
       return { charge: found, due: false };
     }
     // One asker per few seconds: the update claims the check, so two devices asking at once (or a
-    // device asking fast) ask Xendit once.
+    // device asking fast) ask Xendit once. Past the QR's time, the look that settles it is always due.
+    const settles = found.expiresAt + SETTLE_MS;
     const claimed = await db
       .updateTable('qrisCharges')
       .set({ checkedAt: now })
       .where('id', '=', id)
       .where((eb) =>
-        eb.or([eb('checkedAt', 'is', null), eb('checkedAt', '<=', String(now - RECHECK_MS))]),
+        eb.or([
+          eb('checkedAt', 'is', null),
+          eb('checkedAt', '<=', String(now - RECHECK_MS)),
+          ...(now >= settles ? [eb('checkedAt', '<', String(settles))] : []),
+        ]),
       )
       .executeTakeFirst();
     return { charge: found, due: claimed.numUpdatedRows > 0n };
   });
   if (!due) return chargeView(charge, now);
-  const settled = await reconcile(ready, acting.tenantId, charge).catch((error: unknown) => {
-    // A device asking again is the retry; Xendit being slow is not this request's failure.
-    if (error instanceof XenditUnavailable || error instanceof XenditRefusal) return null;
+  const looked = { ...charge, checkedAt: now };
+  const settled = await reconcile(ready, acting.tenantId, looked).catch(async (error: unknown) => {
+    // A device asking again is the retry; Xendit being slow is not this request's failure. The
+    // look did not happen, so it must not count as the one that says the QR expired.
+    if (error instanceof XenditUnavailable || error instanceof XenditRefusal) {
+      await ready.forTenant(acting.tenantId, (db) =>
+        db
+          .updateTable('qrisCharges')
+          .set({ checkedAt: charge.checkedAt })
+          .where('id', '=', id)
+          .where('checkedAt', '=', String(now))
+          .execute(),
+      );
+      return charge;
+    }
     throw error;
   });
   return chargeView(settled ?? charge, ready.now());
@@ -605,7 +656,7 @@ export async function simulateCharge(
   if (charge.paidAt === null) {
     try {
       await ready.qris.xendit.simulateQrPayment(
-        chargeKey(ready, acting.tenantId, charge),
+        await chargeKey(ready, acting.tenantId, charge),
         charge.xenditQrId,
         charge.amount,
       );
@@ -634,6 +685,8 @@ export async function handleCallback(
 ): Promise<CallbackOutcome> {
   if (deps.qris === undefined || deps.systemKeyStore === undefined) return 'retry';
   const ready = deps as Ready;
+  // Without a token nothing is read or looked up.
+  if (token === undefined || token === '') return 'unauthorized';
   const event = (typeof body === 'object' && body !== null ? body : {}) as {
     event?: unknown;
     data?: { reference_id?: unknown; qr_id?: unknown };
@@ -643,15 +696,25 @@ export async function handleCallback(
   // nothing here to record, and nothing for Xendit to retry.
   if (event.event !== 'qr.payment' || typeof qrId !== 'string') return 'ignored';
 
+  // A QR this server does not know and a token that is not this QR's answer alike, so a stranger
+  // cannot learn which QR ids are real.
+  const presented = sha256Hex(token);
+  const matches = (hashes: readonly string[]) =>
+    hashes.reduce((any, hash) => timingSafeEqualHex(presented, hash) || any, false);
+
   const found = await ready.forTenant(tenantId, async (db) => {
     const id = await db
       .selectFrom('qrisCharges')
       .select('id')
       .where('xenditQrId', '=', qrId)
       .executeTakeFirst();
-    if (id === undefined) return undefined;
-    const charge = await loadCharge(db, id.id);
-    if (charge === undefined) return undefined;
+    const charge = id === undefined ? undefined : await loadCharge(db, id.id);
+    if (charge === undefined) {
+      // Another system's QR on a Xendit account connected here: let go, for a caller holding one of
+      // this tenant's tokens.
+      const all = await db.selectFrom('qrisConnections').select('callbackTokenHash').execute();
+      return { charge: undefined, genuine: matches(all.map((row) => row.callbackTokenHash)) };
+    }
     // The token the QR was made under, or the account's current one (an owner rotated the token in
     // Xendit and reconnected while this QR was on screen).
     const current = await db
@@ -659,14 +722,14 @@ export async function handleCallback(
       .select('callbackTokenHash')
       .where('accountId', '=', charge.accountId)
       .executeTakeFirst();
-    return { charge, hashes: [charge.callbackTokenHash, current?.callbackTokenHash] };
+    const hashes = [
+      charge.callbackTokenHash,
+      ...(current === undefined ? [] : [current.callbackTokenHash]),
+    ];
+    return { charge, genuine: matches(hashes) };
   });
-  if (found === undefined) return 'ignored';
-  const presented = token === undefined ? null : sha256Hex(token);
-  const genuine =
-    presented !== null &&
-    found.hashes.some((hash) => hash !== undefined && timingSafeEqualHex(presented, hash));
-  if (!genuine) return 'unauthorized';
+  if (!found.genuine) return 'unauthorized';
+  if (found.charge === undefined) return 'ignored';
   if (event.data?.reference_id !== found.charge.id) return 'ignored';
   try {
     const settled = await reconcile(ready, tenantId, found.charge);
@@ -693,7 +756,7 @@ async function reconcile(
 ): Promise<ChargeRow | null> {
   if (charge.paidAt !== null) return charge;
   const payments = await ready.qris.xendit.listQrPayments(
-    chargeKey(ready, tenantId, charge),
+    await chargeKey(ready, tenantId, charge),
     charge.xenditQrId,
   );
   const payment = payments.find((p) => p.succeeded);
@@ -753,10 +816,10 @@ async function recordPayment(
       await engine.advancePulledWatermarks();
       await db
         .updateTable('qrisCharges')
-        .set({ paymentId, paidAt })
+        .set({ paymentId, paidAt, secretSealed: null })
         .where('id', '=', chargeId)
         .execute();
-      return { charge: { ...charge, paymentId, paidAt }, recorded: true };
+      return { charge: { ...charge, paymentId, paidAt, secretSealed: null }, recorded: true };
     }),
   );
   if (outcome === null) return null;

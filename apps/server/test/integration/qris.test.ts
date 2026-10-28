@@ -572,12 +572,79 @@ describe('recording the payment', () => {
     expect(response.status).toBe(403);
   });
 
-  test('a QR expires after fifteen minutes', async () => {
+  const status = async () =>
+    ((await (await call('GET', `/v1/money/qris/charges/${chargeId}`)).json()) as { status: string })
+      .status;
+
+  test('a QR expires after fifteen minutes, once Xendit was asked after that and shows no payment', async () => {
     world.h.clock.advance(15 * 60 * 1000 + 1);
-    const response = await call('GET', `/v1/money/qris/charges/${chargeId}`);
-    expect(await response.json()).toMatchObject({ status: 'expired' });
+    // Just past its time: the customer may have paid in its last second.
+    expect(await status()).toBe('waiting');
+    world.h.clock.advance(10_000);
+    expect(await status()).toBe('expired');
+  });
+
+  test('a customer who paid in the QR’s last second is not told it expired', async () => {
+    world.h.clock.advance(15 * 60 * 1000 - 1_000);
+    world.xendit.pay('qr_1');
+    world.h.clock.advance(20_000);
+    expect(await status()).toBe('paid');
+    expect(await paymentOps()).toHaveLength(1);
+  });
+
+  test('a QR past its time is not said to be expired while Xendit cannot be asked', async () => {
+    world.xendit.down = true;
+    world.h.clock.advance(15 * 60 * 1000 + 11_000);
+    expect(await status()).toBe('waiting');
+    world.h.clock.advance(5_000);
+    expect(await status()).toBe('waiting');
+    world.xendit.down = false;
+    world.h.clock.advance(5_000);
+    expect(await status()).toBe('expired');
+  });
+
+  test('the key a QR was made with is cleared once it is paid', async () => {
+    world.xendit.pay('qr_1');
+    expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+    expect(await sealedKey(chargeId)).toBeNull();
+  });
+
+  test('a QR long expired loses its key, and a late callback still records with the account’s', async () => {
+    world.h.clock.advance(2 * 15 * 60 * 1000 + 1);
+    // Another QR made later clears the keys no longer needed.
+    expect((await call('POST', '/v1/money/qris/charges', { body: chargeBody() })).status).toBe(200);
+    expect(await sealedKey(chargeId)).toBeNull();
+    world.xendit.pay('qr_1');
+    expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+    expect(await paymentOps()).toHaveLength(1);
+  });
+
+  test('a callback without a token is refused before anything is looked up', async () => {
+    const response = await world.h.app.request(`${BASE}/xendit/qr/${world.tenantId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'qr.payment',
+        data: { qr_id: 'qr_1', reference_id: chargeId },
+      }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test('a wrong token gets the same answer for a real QR and an unknown one', async () => {
+    expect((await callback(chargeId, 'qr_1', 'guessed')).status).toBe(401);
+    expect((await callback(chargeId, 'qr_elsewhere', 'guessed')).status).toBe(401);
   });
 });
+
+async function sealedKey(chargeId: string): Promise<string | null> {
+  const row = await world.h.idb.db
+    .selectFrom('qrisCharges')
+    .select('secretSealed')
+    .where('id', '=', chargeId)
+    .executeTakeFirstOrThrow();
+  return row.secretSealed;
+}
 
 test('without the deployment set up for it, QRIS through Xendit is unavailable', async () => {
   await world.h.close();
