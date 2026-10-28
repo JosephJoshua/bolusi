@@ -7,8 +7,10 @@
 import { processPushBatch, type OpRegistry } from '../oplog/index.js';
 import type { OplogPipelineDeps } from '../oplog/types.js';
 import type { DeliveryDispatcher } from '../push/dispatcher.js';
-import { sendSyncWake, type PushDeliveryDeps } from '../push/fanout.js';
+import type { PushDeliveryDeps } from '../push/fanout.js';
+import { announceChange } from '../realtime/announce.js';
 import type { PokeHub, PokeScope } from '../realtime/poke-hub.js';
+import type { TenantQueue } from './tenant-queue.js';
 import type { CryptoPort, ProjectionRegistry } from '@bolusi/core';
 import type { DB, ForTenant } from '@bolusi/db-server';
 import type { PushRequest, PushResponse, PushResult } from '@bolusi/schemas';
@@ -22,6 +24,9 @@ export interface PushIdentity {
 
 export interface PushDeps {
   readonly forTenant: ForTenant;
+  /** Holds a tenant's pushes in memory until the previous one finishes (tenant-queue.ts). Absent ⇒
+   *  pushes go straight to the database and wait there. */
+  readonly tenantQueue?: TenantQueue;
   /** Ed25519 verify + SHA-256 over the JCS bytes (05 §3) — the task-07 pipeline's crypto port. */
   readonly crypto: CryptoPort;
   readonly now: () => number;
@@ -72,24 +77,27 @@ export async function runPush(
     };
   }
 
-  const { results } = await processPushBatch(
-    {
-      forTenant: deps.forTenant,
-      crypto: deps.crypto,
-      now: deps.now,
-      newId: deps.newId,
-      registry: deps.registry,
-      projections: deps.projections,
-      // Threaded straight through: the pipeline runs detection inside the push transaction and
-      // fires the hook post-commit. Both undefined by default (no key store) — detection off.
-      ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
-      ...(deps.onConflictSurfaced === undefined
-        ? {}
-        : { onConflictSurfaced: deps.onConflictSurfaced }),
-      ...(deps.onDeviceAnomaly === undefined ? {} : { onDeviceAnomaly: deps.onDeviceAnomaly }),
-    },
-    { deviceId: identity.deviceId, tenantId: identity.tenantId },
-    request.ops,
+  const queue = deps.tenantQueue ?? ((_tenantId, task) => task());
+  const { results } = await queue(identity.tenantId, () =>
+    processPushBatch(
+      {
+        forTenant: deps.forTenant,
+        crypto: deps.crypto,
+        now: deps.now,
+        newId: deps.newId,
+        registry: deps.registry,
+        projections: deps.projections,
+        // Threaded straight through: the pipeline runs detection inside the push transaction and
+        // fires the hook post-commit. Both undefined by default (no key store) — detection off.
+        ...(deps.detectConflicts === undefined ? {} : { detectConflicts: deps.detectConflicts }),
+        ...(deps.onConflictSurfaced === undefined
+          ? {}
+          : { onConflictSurfaced: deps.onConflictSurfaced }),
+        ...(deps.onDeviceAnomaly === undefined ? {} : { onDeviceAnomaly: deps.onDeviceAnomaly }),
+      },
+      { deviceId: identity.deviceId, tenantId: identity.tenantId },
+      request.ops,
+    ),
   );
 
   // Emit one scoped poke per DISTINCT pull scope among the accepted ops (api/01-sync §4.1). An
@@ -104,28 +112,10 @@ export async function runPush(
     if (op === undefined) continue;
     scopes.set(`${op.storeId ?? ''}`, { tenantId: identity.tenantId, storeId: op.storeId });
   }
-  deps.pokeHub.publish([...scopes.values()]);
-
-  // Post-commit `sync` wake (api/04-push §3/§6): the SAME accepted-op scopes the poke carries, but
-  // delivered as a data-only push to the in-scope devices WITHOUT a live realtime connection (the
-  // fanout filters on `liveConnections`; connected devices already got the poke, and the per-device
-  // 60s coalescer caps it).
-  //
-  // FIRE-AND-FORGET, NOT awaited (api/04-push §1/§6). This is the common write path — awaiting the
-  // Expo round-trip (network + retry backoff up to minutes) would make an in-contract Expo outage
-  // block EVERY accepted sync push and pile up workers, i.e. push load-bearing on the latency axis.
-  // `dispatch` starts the delivery OFF the request path and returns immediately; `sendSyncWake`
-  // swallows every failure (§6). Absent `pushDelivery`/`deliveryDispatcher` (the pipeline-only test
-  // deps) ⇒ no wake.
-  if (deps.pushDelivery !== undefined && deps.deliveryDispatcher !== undefined) {
-    const pushDelivery = deps.pushDelivery;
-    const dispatcher = deps.deliveryDispatcher;
-    for (const scope of scopes.values()) {
-      dispatcher.dispatch(() =>
-        sendSyncWake(pushDelivery, { tenantId: scope.tenantId, opStoreId: scope.storeId }),
-      );
-    }
-  }
+  // Poke the live devices and wake the rest (api/04-push §3/§6): the shared announcer, so a sync push
+  // and a directory write reach devices the same way. Duplicates and rejections change no reader's
+  // view, so they warrant neither.
+  announceChange(deps, [...scopes.values()]);
 
   return {
     results: results.map<PushResult>((result) =>

@@ -14,7 +14,7 @@
 //       transition INTO connectivity — including the first reading at boot, which is what kicks the
 //       initial sync when the app opens online. NetInfo autolinks (no Expo config plugin) and the
 //       adapter is `ports/netinfo.ts` (a native module, injected like op-sqlite).
-//   (b) debounced 3 s after any local append          — **WIRED**, `scheduler` (04 §5.1 step 7).
+//   (b) debounced 1 s after any local append          — **WIRED**, `scheduler` (04 §5.1 step 7).
 //   (c) periodic every 60 s while online + foreground — **WIRED**, `start()`.
 //   (d) background task, best-effort                  — **WIRED**, background-sync.ts. Defined at
 //       module scope in index.ts, registered by the client's `start()`, one bounded pass over the
@@ -32,8 +32,12 @@ import type { SyncSchedulerPort, SyncTriggerReason, TimerPort } from '@bolusi/co
 
 import { createTriggerLoop } from './trigger-loop.js';
 
-/** api/01-sync §5 (b): "debounced 3 s after any local append". */
-export const APPEND_DEBOUNCE_MS = 3_000;
+/**
+ * api/01-sync §5 (b): debounced after any local append. 1 s, down from the spec's 3 s (2026-10-26):
+ * a colleague's change should reach the other screens in the store within a couple of seconds, and
+ * one command already appends its ops together, so the longer window bought little coalescing.
+ */
+export const APPEND_DEBOUNCE_MS = 1_000;
 
 /** api/01-sync §5 (c): "periodic every 60 s while online and app foregrounded". */
 export const FOREGROUND_INTERVAL_MS = 60_000;
@@ -96,7 +100,7 @@ export interface SyncTriggers {
 /**
  * Wire §5's buildable triggers onto a {@link createTriggerLoop} (which lives in the neutral
  * `trigger-loop.ts`, not here — FR-1138 keeps the media loop from importing this sync module's
- * scheduling). The debounce coalesces N appends inside 3 s into ONE sync; the loop's own rerun flag
+ * scheduling). The debounce coalesces N appends inside 1 s into ONE sync; the loop's own rerun flag
  * is the second line of that defence (03 §10).
  */
 export function createSyncTriggers(deps: SyncTriggerDeps): SyncTriggers {

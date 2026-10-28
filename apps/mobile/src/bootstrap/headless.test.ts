@@ -1,69 +1,7 @@
-// One boot per process for the UI and the background tasks, and the headless client a pass builds.
+// The headless client a background pass builds. The shared boot is tested in test/bootstrap.test.ts.
 import { describe, expect, test } from 'vitest';
 
-import { headlessPass, shareBoot, type HeadlessClient } from './headless.js';
-
-describe('shareBoot', () => {
-  test('every caller gets the same boot, run once', async () => {
-    let boots = 0;
-    const boot = shareBoot(async () => {
-      boots += 1;
-      return { connection: boots };
-    });
-    const [a, b] = await Promise.all([boot(), boot()]);
-    expect(a).toBe(b); // without a refresh, the very same object
-    expect(await boot()).toBe(a);
-    expect(boots).toBe(1);
-  });
-
-  test('each caller gets the shared boot refreshed, so a later enrollment is seen', async () => {
-    let boots = 0;
-    let enrolledAs: string | null = null;
-    const boot = shareBoot(
-      async () => {
-        boots += 1;
-        return { connection: 1, deviceId: null as string | null };
-      },
-      async (app) => ({ ...app, deviceId: enrolledAs }),
-    );
-    expect((await boot()).deviceId).toBeNull();
-    enrolledAs = 'device-1';
-    const later = await boot();
-    expect(later).toEqual({ connection: 1, deviceId: 'device-1' });
-    expect(boots).toBe(1);
-  });
-
-  test('a failed boot is not cached, so the next caller tries again', async () => {
-    let boots = 0;
-    const boot = shareBoot(async () => {
-      boots += 1;
-      if (boots === 1) throw new Error('keychain locked');
-      return 'booted';
-    });
-    await expect(boot()).rejects.toThrow('keychain locked');
-    await expect(boot()).resolves.toBe('booted');
-    expect(boots).toBe(2);
-  });
-});
-
-test('a caller that joined a failed boot retries once its own way', async () => {
-  const modes: string[] = [];
-  let release: (() => void) | null = null;
-  const boot = shareBoot(async (mode: 'foreground' | 'background') => {
-    modes.push(mode);
-    if (mode === 'background') {
-      await new Promise<void>((resolve) => (release = resolve));
-      throw new Error('foreign database'); // a background boot never wipes to heal this
-    }
-    return 'healed';
-  });
-  const background = boot('background');
-  const foreground = boot('foreground'); // the user opens the app while it is in flight
-  release!();
-  await expect(background).rejects.toThrow('foreign database');
-  await expect(foreground).resolves.toBe('healed');
-  expect(modes).toEqual(['background', 'foreground']);
-});
+import { headlessPass, type HeadlessClient } from './headless.js';
 
 function fakeClient(options: { failStart?: boolean } = {}) {
   const calls: string[] = [];

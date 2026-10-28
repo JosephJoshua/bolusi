@@ -52,7 +52,13 @@ async function seed(options: {
     location: null,
     localPath: `/documents/media/${options.id}.jpg`,
   });
-  if (options.attached) await attachMediaToOperation(db.db, options.id, `op-${options.id}`);
+  if (options.attached) {
+    await attachMediaToOperation(
+      db.db,
+      { mediaId: options.id, sha256: 'a'.repeat(64) },
+      { id: `op-${options.id}`, userId: 'user-1' },
+    );
+  }
   // The insert is capture-shaped by design (`pending`, no `uploadedAt`); the drain's own writers own
   // the rest, so the fixture nudges the bookkeeping columns directly — never an immutable one.
   await sql`

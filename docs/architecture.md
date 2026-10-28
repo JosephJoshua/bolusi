@@ -24,12 +24,43 @@ continuity, and persists operations in PostgreSQL. Replay must not duplicate eff
 | Media                 | `apps/mobile/src/media`, `apps/server/src/media`                                |
 | Translations          | `packages/i18n/catalogs`, module screen catalogs                                |
 | Search                | `packages/core/src/search`, each module's `search.ts`                           |
+| Printing              | `packages/core/src/print` (HTML, ESC/P), each module's `print.ts` templates     |
 
 Search is shared: modules declare a `SearchSource` (what to load, which entity
 changes affect it) and query through `searchIndexFor`. Matching is fuzzy for
 anything typed (edit distance over names, digits and codes, never exact). On a
 device the index lives in memory per store, loads once, and reloads only the
 entities the projection engine reports as changed.
+
+Screens are live the same way: a module's screen reads through `useLiveQuery`
+(`packages/modules/src/screen-kit/live.ts`), which re-reads whenever the
+projection engine's invalidation bus reports a write to the module's tables, or
+a push changes op sync status (`OP_SYNC_STATUS_TABLE`). Local commands and
+pulled operations take the same path, so another device's change shows on an
+open screen with no extra wiring. A device pushes 1 s after a local change and
+pulls on the server's realtime poke, so a colleague's change normally reaches
+other screens in the store within a couple of seconds online. A step a user has
+open re-checks its ticket against the same rule that offered it and says so when
+a synced change has made it impossible to finish.
+
+Unfinished work is kept per user. Each screen writes its draft (and where the user
+was) through `SessionManager.saveWork`, which also stores it sealed in the device's
+`user_work` table, so it survives a lock, Android recreating the activity, or the app
+being killed. Only that user's next PIN unlock reads it back. Saved work of users who
+leave the roster is deleted. Modules get this by publishing drafts into the workspace;
+they need no storage of their own.
+
+The phone catalog is global reference data, not ops: Postgres `phone_models`
+(no RLS; the app role can only read it), crawled by `apps/server/src/catalog`.
+Devices pull rows by `revision` from `GET /v1/catalog/phones` into SQLite
+`phone_models` and fetch a photo from `/v1/catalog/phones/:id/photo` only when
+shown, keeping it in the evictable cache after checking its sha256. Each row
+carries the model's spec sheet (`PhoneSpecs`). Intake model search
+(`repair/device-models.ts`) joins it with models this store took in before.
+
+Every `AppShell` lifts its content and bottom action above the on-screen keyboard
+and scrolls a focused `TextInput`/`SearchField` into sight (`ui/src/shell/keyboard.tsx`);
+Android is edge to edge, so the window no longer resizes for the keyboard.
 
 Shared core runs on Node and mobile Hermes. Native storage, crypto and UI belong
 behind adapters. Node tests do not establish native performance or correctness.
@@ -40,23 +71,75 @@ behind adapters. Node tests do not establish native performance or correctness.
   can change without rewriting signed facts.
 - Apply operations transactionally and make replay idempotent. Interrupted rebuilds
   and reordered sync must preserve resulting business state.
+- A projection version bump rebuilds on the device in the background, re-folding one
+  entity at a time from the op log. Appliers write only their own entity's rows, so
+  screens and commands keep working while it runs.
 - Tenant-bound access and PostgreSQL row-level security isolate tenants. Within a
   tenant, store scope still matters; a store owner is not a tenant administrator.
 - Signatures establish device attribution/integrity, not user authorization or
   payment settlement.
+- The server is the authority. Devices sync signed events, and every change type
+  declares a permission and a `rule` (a legal state change, a target in this
+  store, values only this device may mint, or `null` with a reason). The device
+  runs both before saving; the server runs both again against its own records and
+  refuses what fails. The device then re-folds the record without the refused
+  change and lists it under sync problems.
+- A change stamped more than 10 minutes ahead of the server clock is refused, so
+  a wrong clock cannot win last-writer-wins. A device whose last sync found its
+  clock that far ahead saves nothing until the clock is fixed.
 - Pending, rejected, and conflicting offline work stays visible and recoverable.
 - Money uses integer IDR. Stock receipt, consumption, shipment, and payment are
   distinct events; business modules need direct tests for their effects.
 - Preserve evidence integrity and keep credential/PIN material out of projections,
   sync responses, logs, and attachments.
 
+## Adding a module or change type
+
+These rules hold for every module. Most are checked by code, so a missing piece
+fails a build, a boot or a test rather than waiting for review:
+
+- Register the module once in `ALL_MODULES`; the server and the phone both fold from it.
+- `defineModule` refuses a manifest whose op type is not past tense, whose payload
+  schema is not `.strict()`, or which lacks a reversal note, an applier or retained
+  schemas for older versions.
+- Every op type declares its `permission`, its `entityType` and its `rule`: what
+  must hold in the records for it to be recorded (`module/op-rules.ts`), run by the
+  device before saving and by the server before accepting a push. `null` is only for
+  a type nothing in the records constrains. A module with rules lists its refusal
+  reasons with `defineRefusals`, and each reason needs id and en copy at
+  `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- A change that lowers what a customer owes (a price, a down payment, a fee) needs
+  an owner-only permission, checked in the type's `permission` or its `rule` with
+  `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
+- Every op type needs a label (`apps/mobile/test/op-type-labels.test.ts`). Every
+  error and rejection code needs id and en copy (`pnpm i18n:check`).
+- Every op type a device can push needs a sample in
+  `apps/server/test/integration/sync/every-op-type-folds.test.ts`, which pushes it
+  through the real pipeline on PostgreSQL. An applier that Postgres refuses fails the
+  whole push, and the device would resend that batch forever.
+- Screens read through `useLiveQuery` (`screen-kit/live.ts`). The platform adapter
+  subscribes the module runtime to the module's tables, so a pulled change re-runs
+  every open read.
+- Typed search goes through a `SearchSource` and `searchIndexFor`, which match fuzzily.
+- A step that stays open (a form, photos, a signature) re-checks its target against
+  the same rule that offered it, and says why it can no longer finish. See repair's
+  `staleStep` in `flows.ts` and the `stale` prop on `FlowScreen`.
+
 ## Limits to carry into repair work
 
 - Platform, auth, Notes and the repair core are registered. Repair has no screens
   yet; inventory and accounting do not exist.
-- General pushed business operations are not reauthorized server-side in v0.
-  Privileged PIN operations are an exception. High-risk v1 approvals still need
-  a server validation/revocation policy covering legitimate offline work.
+- Every op type declares the permission its author needs and the record kind it
+  writes. The server checks each pushed op with the same `evaluatePermission`
+  the device runs, against the server's roles in the device's store. A refused
+  op is stored in `refused_operations`, still uses up its place in the device
+  chain (so later ops keep syncing), and gets the same answer when pushed again.
+  A deactivated user's unsynced ops are all refused, and an op is only credited
+  to an employee of the device's store (PINs are verified on the device, so
+  within a store the device's claim of who is signed in is trusted). Refused
+  positions leave gaps in a device's logged chain that `refused_operations`
+  (seq and hash) accounts for. Each refusal carries a reason the module
+  declares (`defineRefusals`), with its own copy in every language.
 - Pull scope is tied to the enrolled store. Cross-store workflows require sync
   and authorization work, not just screens.
 - Physical 2 GB Android performance was deferred, not measured. Emulator/Simulator
@@ -65,15 +148,39 @@ behind adapters. Node tests do not establish native performance or correctness.
 - First sync on a new device replays the store's whole history; there is no
   snapshot. `pnpm --filter @bolusi/modules bench:first-sync` measures it with
   realistic repair tickets. On a laptop (Node, October 2026), one year at 50
-  tickets a day is about 122k ops: 22 MB gzipped on the wire, 205 s to pull,
-  verify and apply, and a 555 MB device database (the op log is about 70% of it).
-  Phone timings are still unmeasured.
+  tickets a day is about 122k ops: about 28 MB gzipped on the wire, about 250 s
+  to pull, verify and apply, and a 304 MB device database (555 MB before client
+  migration 6 stopped storing each payload twice and compressed the signed text;
+  the op log went from 394 MB to 143 MB). Phone timings are still unmeasured; on
+  Hermes the compression costs about 0.8 ms per pulled op.
+- Board volume: `pnpm --filter @bolusi/modules bench:board` times the board's
+  reads on a device holding a store's history, and `apps/mobile/e2e-web/board-perf.mjs`
+  times the board itself in throttled Chromium (`?tickets=N` fills the web demo).
+  Screens must keep lists windowed: the `AppShell` content slot is fixed in height
+  so a `List` only renders what is near the screen, and rows should be memoized.
+  The first search of a session builds the search index (about 0.25 s on a laptop
+  for 5k tickets, roughly 1 s or more expected on a cheap phone; unmeasured there).
+- Server sync capacity (`bench:sync-load`, one Node process on one core, Postgres
+  16 on two cores, October 2026). A busy hour is light even at 1,000 stores and
+  4,000 devices: push p50 about 100 ms, and changes reach the store's other
+  devices within 0.1 s at p95. The limit is ingest: each change is about 13
+  sequential statements under the tenant's counter lock, so one business takes
+  about 90 changes a second and one server process about 250. A 100-store
+  business reconnecting after two hours offline (23k changes) catches up in
+  about 3.5 minutes. Pushes are queued per tenant in memory and at most 6 run at
+  once (`apps/server/src/sync/tenant-queue.ts`), so pulls keep their connections.
+  Batching the per-change statements is the next lever.
+- Op-log values are deflated with a frozen preset dictionary
+  (`db-client/src/crypto/compression.ts`). Changing the dictionary makes stored
+  ops unreadable; a better one needs a new scheme prefix.
 - Local confidentiality uses application-layer encryption; SQLCipher is disabled.
   Old comments/report names do not establish whole-database encryption.
-- Extended chaos has unresolved large-workload failures: the recorded October 14
-  run hit rate limits in CHAOS-03 and timeouts in CHAOS-08; later nightly runs also
-  failed. Removing the schedule does not resolve them. Reproduce a bounded seed
-  before attributing a failure to the application or test workload.
+- Extended chaos (`pnpm chaos:extended`) failed from October 14 to 24 in CHAOS-03
+  (HTTP 429) and CHAOS-08 (timeout). Both were harness problems, fixed October 26:
+  the harness server's fake clock never advanced, so its per-device rate limit
+  never refilled, and CHAOS-08's timeout had no room for four workers sharing a
+  box. Reproduce a bounded seed before attributing a failure to the application
+  or test workload.
 - A future rekey/pre-key-tag fleet migration may need verified key-tag backfill.
   It was deferred because current creation tags the DB before enrollment. Add a
   migration when a real upgrade needs it, not to satisfy a historical task entry.

@@ -209,6 +209,38 @@ export interface Permissions {
   scope: string;
 }
 
+export interface PhoneCatalogBrands {
+  listedAt: Int8 | null;
+  name: string;
+  path: string;
+}
+
+export interface PhoneModelPhotos {
+  bytes: Buffer;
+  fetchedAt: Int8;
+  mime: string;
+  modelId: number;
+  sha256: string;
+}
+
+export interface PhoneModels {
+  announcedYear: number | null;
+  brand: string;
+  createdAt: Int8;
+  detailsAt: Int8 | null;
+  id: number;
+  kind: string;
+  modelCodes: Generated<string>;
+  name: string;
+  pagePath: string;
+  photoAt: Int8 | null;
+  photoSha256: string | null;
+  photoUrl: string | null;
+  revision: Int8;
+  specs: Generated<Json>;
+  updatedAt: Int8;
+}
+
 export interface PinLockoutEvents {
   at: Int8;
   deviceId: string;
@@ -236,6 +268,21 @@ export interface PushTokens {
   userId: string | null;
 }
 
+export interface RefusedOperations {
+  code: string;
+  deviceId: string;
+  entityId: string;
+  entityType: string;
+  hash: string;
+  id: string;
+  reason: string;
+  receivedAt: Int8;
+  seq: Int8;
+  tenantId: string;
+  type: string;
+  userId: string;
+}
+
 export interface RepairCustomers {
   createdAt: Int8;
   createdBy: string;
@@ -243,6 +290,14 @@ export interface RepairCustomers {
   name: string;
   phone: string | null;
   storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface RepairIntakeOptions {
+  itemsJson: string;
+  list: string;
   tenantId: string;
   updatedAt: Int8;
   updatedBy: string;
@@ -264,6 +319,40 @@ export interface RepairQuoteLines {
   storeId: string;
   tenantId: string;
   ticketId: string;
+}
+
+export interface RepairStoreCancelFees {
+  afterWork: Int8;
+  beforeWork: Int8;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface RepairStoreIntakeOptions {
+  hiddenJson: string;
+  list: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
+}
+
+export interface RepairStorePrintSettings {
+  address: string;
+  handoverTerms: string | null;
+  intakeTerms: string | null;
+  logoMediaId: string | null;
+  logoMime: string | null;
+  logoOnDotMatrix: number;
+  logoSha256: string | null;
+  name: string | null;
+  phone: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: Int8;
+  updatedBy: string;
 }
 
 export interface RepairTicketEvents {
@@ -291,6 +380,10 @@ export interface RepairTicketPhotos {
 }
 
 export interface RepairTickets {
+  cancelFee: Int8 | null;
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
+  cancelStandardFee: Int8 | null;
   checklistJson: string;
   complaint: string;
   createdAt: Int8;
@@ -301,9 +394,13 @@ export interface RepairTickets {
   deviceImei: string | null;
   deviceModel: string;
   devicePasscode: string | null;
+  downPayment: Int8 | null;
+  downPaymentAt: Int8 | null;
+  downPaymentBy: string | null;
   estimatedReadyAt: Int8 | null;
   id: string;
   intakeNotes: string;
+  intakePhotosJson: string | null;
   location: string;
   outcome: string;
   outcomeNote: string | null;
@@ -420,11 +517,19 @@ export interface DB {
   notes: Notes;
   operations: Operations;
   permissions: Permissions;
+  phoneCatalogBrands: PhoneCatalogBrands;
+  phoneModelPhotos: PhoneModelPhotos;
+  phoneModels: PhoneModels;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   pushTokens: PushTokens;
+  refusedOperations: RefusedOperations;
   repairCustomers: RepairCustomers;
+  repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreCancelFees: RepairStoreCancelFees;
+  repairStoreIntakeOptions: RepairStoreIntakeOptions;
+  repairStorePrintSettings: RepairStorePrintSettings;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;

@@ -7,10 +7,13 @@ import {
   base64ToBytes,
   bytesToBase64,
   bytesToHex,
+  bytesToUtf8,
   concatBytes,
   hexToBytes,
+  isCanonicalBase64,
   utf8ToBytes,
 } from '@bolusi/core';
+import { mulberry32 } from '@bolusi/test-support';
 import { describe, expect, it } from 'vitest';
 
 describe('concatBytes (the shared bytes primitive, task 185)', () => {
@@ -251,5 +254,104 @@ describe('utf8ToBytes', () => {
 
   it('matches the RFC 8785 §3.2.4 euro-sign bytes', () => {
     expect([...utf8ToBytes('€$')]).toEqual([0xe2, 0x82, 0xac, 0x24]);
+  });
+});
+
+// The codecs build their output in typed arrays and convert in chunks (a sealed op-log cell is
+// kilobytes, decoded on every fold). These pin them to the platform codecs across the chunk boundary,
+// which Node has and Hermes does not, on text mixing every UTF-8 width.
+describe('codecs at op-log sizes', () => {
+  const SAMPLES = ['a', 'Z', '{', '"', 'é', 'ö', 'ŋ', '€', '中', 'ꙮ', '\u{1f600}', '\u{10348}'];
+
+  function randomText(seed: number, length: number): string {
+    const prng = mulberry32(seed);
+    let out = '';
+    while (out.length < length) out += SAMPLES[Math.floor(prng() * SAMPLES.length)];
+    return out;
+  }
+
+  it.each([0, 1, 4095, 4096, 4097, 12_289])(
+    'UTF-8 round-trips like TextEncoder/TextDecoder at %i code units',
+    (length) => {
+      const text = randomText(length, length);
+      const bytes = utf8ToBytes(text);
+      expect(bytes).toEqual(new TextEncoder().encode(text));
+      expect(bytesToUtf8(bytes)).toBe(text);
+      expect(bytesToUtf8(bytes)).toBe(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    },
+  );
+
+  it('ASCII past one chunk decodes exactly', () => {
+    const text = 'x'.repeat(10_000) + 'END';
+    expect(bytesToUtf8(utf8ToBytes(text))).toBe(text);
+  });
+
+  it('still rejects invalid UTF-8 after a long valid prefix', () => {
+    const prefix = utf8ToBytes('ok'.repeat(5000));
+    const bad = concatBytes([prefix, new Uint8Array([0xc3])]);
+    expect(() => bytesToUtf8(bad)).toThrow(RangeError);
+    expect(() => bytesToUtf8(concatBytes([prefix, new Uint8Array([0xed, 0xa0, 0x80])]))).toThrow(
+      RangeError,
+    );
+  });
+
+  it('encodes a lone surrogate as its 3-byte form, as before', () => {
+    expect([...utf8ToBytes('\ud800')]).toEqual([0xed, 0xa0, 0x80]);
+  });
+
+  it.each([0, 1, 2, 3, 3071, 3072, 3073, 9000])('base64 matches Node at %i bytes', (length) => {
+    const prng = mulberry32(length + 1);
+    const bytes = Uint8Array.from({ length }, () => Math.floor(prng() * 256));
+    const encoded = bytesToBase64(bytes);
+    expect(encoded).toBe(Buffer.from(bytes).toString('base64'));
+    expect(base64ToBytes(encoded)).toEqual(bytes);
+  });
+});
+
+describe('isCanonicalBase64 answers exactly what base64ToBytes accepts', () => {
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const accepts = (value: string): boolean => {
+    try {
+      base64ToBytes(value);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('agrees on every 4-character string over the alphabet, padding and a stray', () => {
+    // 66^4 ≈ 19M is too many; every first-two pair with every last-two from a set that covers each
+    // padding position, every tail-bit pattern and non-alphabet characters.
+    const tails = [...ALPHABET, '=', ' ', '!', '-', '_', 'é'];
+    const heads = ['A', 'Z', 'a', '0', '+', '/', '=', '!'];
+    let disagreements = 0;
+    let checked = 0;
+    for (const h0 of heads)
+      for (const h1 of heads)
+        for (const t0 of tails)
+          for (const t1 of tails) {
+            const value = h0 + h1 + t0 + t1;
+            checked += 1;
+            if (isCanonicalBase64(value) !== accepts(value)) disagreements += 1;
+          }
+    expect(checked).toBeGreaterThan(200_000);
+    expect(disagreements).toBe(0);
+  });
+
+  it.each([
+    '',
+    'Zg==',
+    'Zm8=',
+    'Zm9v',
+    'Zh==',
+    'Zm9=',
+    'A',
+    'Zm9vYmFy=',
+    '=AAA',
+    'Zm 9v',
+    'Zm9v====',
+    'AAAAAA==',
+  ])('agrees on %j', (value) => {
+    expect(isCanonicalBase64(value)).toBe(accepts(value));
   });
 });

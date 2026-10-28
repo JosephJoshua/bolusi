@@ -1,8 +1,6 @@
 /**
- * The target-user list the two OWNER PIN screens pick from (api/02-auth §6.5–§6.6; 02-permissions
- * §5.4.6). Owner reset and owner unlock both start by choosing a user from this device's directory,
- * so the row shape and the "who is locked" filter live here once (CLAUDE.md §2.8), not copied into
- * each screen's model.
+ * The target-user list the owner's staff PIN screen picks from (api/02-auth §6.5–§6.6; 02-permissions
+ * §5.4.6): a user from this device's directory with whether their PIN is locked.
  *
  * `lockedOut` is computed by the CALLER from task 14's `derivePinAuthState` over the target's
  * `pin_attempt_state` row — this module never re-derives the lockout machine (a second copy could
@@ -14,17 +12,12 @@
 export interface PinTargetUser {
   readonly id: string;
   readonly name: string;
+  /** Top-privilege role keys for the row's role line; empty or absent ⇒ no role line. */
+  readonly roleKeys?: readonly string[] | undefined;
+  /** True when this device has no PIN for them yet (api/02-auth §6.6): the owner makes the first. */
+  readonly needsFirstPin?: boolean | undefined;
   /** True iff task 14's machine reads `locked_out` for this user on this device (caller-derived). */
   readonly lockedOut: boolean;
-}
-
-/**
- * The locked-out subset — the only users `auth.clearPinLockout` can act on (the flow throws
- * `INVALID_TRANSITION` for an unlocked target, api/02-auth §6.5). A copy is returned, never the
- * caller's array, so a re-render cannot mutate a query result underneath a list.
- */
-export function lockedTargets(users: readonly PinTargetUser[]): readonly PinTargetUser[] {
-  return users.filter((user) => user.lockedOut);
 }
 
 /**

@@ -5,18 +5,18 @@
 // `AtRestDeviceEnv` it consumes — the thing that actually SEEDS a real device DB. This file builds it.
 //
 // ── WHAT IT DRIVES, AND WHY THROUGH THE REAL WRITERS (T-16 / T-13) ──────────────────────────────
-// The coverage half of the gate (`checkDbAtRestIsCiphertext`) is ALL-OR-NOTHING: every one of the 11
+// The coverage half of the gate (`checkDbAtRestIsCiphertext`) is ALL-OR-NOTHING: every one of the 9
 // signed-off columns must be observed with a non-null SEALED cell, or the gate reds. So the seed must
 // drive EVERY real production writer of an encrypted column — not hand-INSERT sealed bytes, which
 // would prove only that the test can seal (T-13). Traced to producers (T-16):
-//   operations.payload/signed_core_jcs/location  → the real op-store (`createClientOpStore.insertOp`)
+//   operations.signed_core_jcs                    → the real op-store (`createClientOpStore.insertOp`)
 //   notes.title/body                              → the module-applier builder INSERT (04 §4.1)
 //   user_pin_verifiers.salt/hash/params           → core `writeVerifier` (SEC-AUTH-09 material)
 //   quarantined_ops.signed_core_jcs               → core `insertQuarantinedOp` (a rejected op)
 //   users_directory.name                          → core `replaceUsersDirectory` (a user sync)
 //   media_items.location                          → apps/mobile `insertMediaItem` (a media attach)
-// Each writer seals through the SAME production cipher — the builder plugin for op-store/notes, the
-// `encryptColumnValue` registry seam for the five raw-`sql` writers — so a green here is the PRODUCTION
+// Each writer seals through the SAME production cipher — the builder plugin for notes, the
+// `encryptColumnValue` registry seam for the raw-`sql` writers — so a green here is the PRODUCTION
 // seal, exactly as `packages/harness/test/at-rest-column-encryption.test.ts` proves on Node.
 //
 // ── PLATFORM-AGNOSTIC BY CONSTRUCTION (so the seed+coverage logic is host-provable) ─────────────
@@ -24,7 +24,7 @@
 // three filesystem operations are INJECTED as `AtRestDeviceSeams`. On device, run-and-emit.ts binds
 // op-sqlite + `deviceColumnAead` + expo-file-system (the one place that may). In CI, the host test
 // binds better-sqlite3 + `nodeColumnAead` + `node:fs`, which is what lets vitest prove the seed
-// populates all 11 columns and that the coverage check reds when one is missing — as far as op-sqlite
+// populates all 9 columns and that the coverage check reds when one is missing — as far as op-sqlite
 // allows off-device. The op-sqlite path + the real file bytes are the only emulator-only residual.
 import { CamelCasePlugin, Kysely } from 'kysely';
 
@@ -34,6 +34,7 @@ import {
   createClientDialect,
   CLIENT_PRAGMAS,
   COLUMN_CIPHER_SCHEME_PREFIX,
+  COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX,
   openClientDb,
   type AeadCipher,
   type ClientDb,
@@ -41,6 +42,7 @@ import {
   type DbDriverFactory,
   type ClientDatabase,
 } from '@bolusi/db-client';
+import type { SignedOperation } from '@bolusi/schemas';
 import {
   insertQuarantinedOp,
   replaceUsersDirectory,
@@ -49,6 +51,7 @@ import {
 } from '@bolusi/core';
 import {
   AT_REST_ENCRYPTED_COLUMNS,
+  opRowOf,
   type AtRestProbeContext,
   type SealedCell,
 } from '@bolusi/test-support/device';
@@ -75,12 +78,10 @@ const MEDIA_LAT = -6.2214987654321;
  *
  * `plaintextMarkers` is derived from the columns actually SEEDED, so a skipped column drops its marker
  * from both the leak hunt and the control witness — which is why skipping a column reds the COVERAGE
- * check (`checkDbAtRestIsCiphertext` enumerates all 11 independently) rather than the control.
+ * check (`checkDbAtRestIsCiphertext` enumerates all 9 independently) rather than the control.
  */
 const COLUMN_MARKERS: Readonly<Record<ColumnKey, string>> = {
-  'operations.payload': 'BOLUSI-ATREST-payload-krankas-invoice-77',
   'operations.signed_core_jcs': 'BOLUSI-ATREST-signedcore-krankas-invoice-77',
-  'operations.location': 'BOLUSI-ATREST-opgps-jakarta-selatan',
   'notes.title': 'BOLUSI-ATREST-notetitle-Stok Oli Mesin',
   'notes.body': 'BOLUSI-ATREST-notebody-dua belas krat diperiksa',
   'user_pin_verifiers.salt': 'BOLUSI-ATREST-salt-krankas-verifier',
@@ -91,7 +92,7 @@ const COLUMN_MARKERS: Readonly<Record<ColumnKey, string>> = {
   'media_items.location': String(MEDIA_LAT),
 };
 
-/** The marker for a column, or `''` if unmapped (never happens for the 11 signed-off columns). */
+/** The marker for a column, or `''` if unmapped (never happens for the 9 signed-off columns). */
 const markerFor = (table: string, column: string): string =>
   COLUMN_MARKERS[columnKey(table, column)] ?? '';
 
@@ -141,45 +142,37 @@ const HARNESS_DB_KEY = 'a'.repeat(64);
  *
  * `skip` exists ONLY so the falsification host-test can watch the coverage check go red: skipping a
  * column drops the writer that produces it, and `checkDbAtRestIsCiphertext` (which independently
- * enumerates all 11 columns) then reds naming the gap. Production seeds ALL 11 (empty skip).
+ * enumerates all 9 columns) then reds naming the gap. Production seeds ALL 9 (empty skip).
  */
 async function seedAllColumns(target: SeedTarget, skip: ReadonlySet<ColumnKey>): Promise<void> {
   const run = (...columns: ColumnKey[]): boolean => columns.every((c) => !skip.has(c));
 
-  // operations.payload / signed_core_jcs / location — the REAL production op-store (05 §1).
-  if (run('operations.payload', 'operations.signed_core_jcs', 'operations.location')) {
+  // operations.signed_core_jcs — the REAL production op-store (05 §1). The column is the op's only
+  // copy of its payload and location, so the marker rides in the payload of a real canonical text.
+  if (run('operations.signed_core_jcs')) {
     const store = createClientOpStore(target);
-    await store.transaction(async (tx) => {
-      await tx.insertOp({
-        op: {
-          id: 'op-atrest-1',
-          tenantId: 'tenant-1',
-          storeId: 'store-1',
-          userId: 'user-1',
-          deviceId: 'device-1',
-          seq: 1,
-          type: 'notes.note_created',
-          entityType: 'note',
-          entityId: 'note-atrest-1',
-          schemaVersion: 3,
-          payload: { marker: markerFor('operations', 'payload') } as never,
-          timestamp: 1_700_000_000_000,
-          location: {
-            lat: -7.5,
-            lng: 110.0,
-            accuracyMeters: 5,
-            marker: markerFor('operations', 'location'),
-          } as never,
-          source: 'ui',
-          agentInitiated: false,
-          agentConversationId: null,
-          previousHash: '0'.repeat(64),
-          hash: '1'.repeat(64),
-          signature: 'c2ln',
-        },
-        signedCoreJcs: `{"marker":"${markerFor('operations', 'signed_core_jcs')}"}`,
-      });
-    });
+    const op: SignedOperation = {
+      id: 'op-atrest-1',
+      tenantId: 'tenant-1',
+      storeId: 'store-1',
+      userId: 'user-1',
+      deviceId: 'device-1',
+      seq: 1,
+      type: 'notes.note_created',
+      entityType: 'note',
+      entityId: 'note-atrest-1',
+      schemaVersion: 3,
+      payload: { marker: markerFor('operations', 'signed_core_jcs') } as never,
+      timestamp: 1_700_000_000_000,
+      location: { lat: -7.5, lng: 110.0, accuracyMeters: 5 } as never,
+      source: 'ui',
+      agentInitiated: false,
+      agentConversationId: null,
+      previousHash: '0'.repeat(64),
+      hash: '1'.repeat(64),
+      signature: 'c2ln',
+    };
+    await store.transaction((tx) => tx.insertOp(opRowOf(op)));
   }
 
   // notes.title / notes.body — the module-applier builder INSERT (04 §4.1); the seam seals them
@@ -290,9 +283,9 @@ async function checkpoint(driver: DbDriver): Promise<void> {
 /**
  * Build the at-rest device env `runAtRestGate` consumes.
  *
- * `seedColumns` defaults to ALL 11 signed-off columns; it is a seam, not a backdoor — the gate's own
- * coverage check enumerates all 11 independently, so an env told to seed fewer makes the gate RED. The
- * falsification host-test uses that: seed 10, watch coverage red naming the 11th.
+ * `seedColumns` defaults to ALL 9 signed-off columns; it is a seam, not a backdoor — the gate's own
+ * coverage check enumerates all 9 independently, so an env told to seed fewer makes the gate RED. The
+ * falsification host-test uses that: seed 8, watch coverage red naming the 9th.
  */
 export function createAtRestDeviceEnv(
   seams: AtRestDeviceSeams,
@@ -306,7 +299,7 @@ export function createAtRestDeviceEnv(
 
   // The markers actually planted — one per SEEDED column. A skipped column contributes no marker, so
   // the control witnesses exactly what was seeded and the leak hunt looks for exactly what was planted;
-  // the SKIP is then caught by the coverage check (all 11 enumerated), not by a spurious control miss.
+  // the SKIP is then caught by the coverage check (all 9 enumerated), not by a spurious control miss.
   const seededMarkers: readonly string[] = Object.freeze(
     seedColumns.map(([t, c]) => markerFor(t, c)).filter((marker) => marker.length > 0),
   );
@@ -318,7 +311,7 @@ export function createAtRestDeviceEnv(
       // A BARE connection — no encryption plugin, no registered cipher — so `encryptColumnValue` is a
       // pass-through and every builder/raw writer lands PLAINTEXT (the graceful-degradation path
       // column-encryption-plugin.ts documents). CamelCasePlugin is still required so the builder
-      // writers (op-store, notes) map camelCase → snake_case; its option matches
+      // writer (notes) maps camelCase → snake_case; its option matches
       // connection.ts:CLIENT_CAMEL_CASE_OPTIONS (10-db §11.4). No column here has a single-letter
       // camel segment, so the option is not load-bearing for this seed — the round-trip is still
       // proven by the host test writing and reading these very rows.
@@ -375,7 +368,7 @@ export function createAtRestDeviceEnv(
         readCopyBytes: () => Promise.resolve(copyBytes),
         plaintextMarkers: seededMarkers,
         readSealedCells: () => Promise.resolve(cells),
-        sealedPrefix: COLUMN_CIPHER_SCHEME_PREFIX,
+        sealedPrefixes: [COLUMN_CIPHER_SCHEME_PREFIX, COMPRESSED_COLUMN_CIPHER_SCHEME_PREFIX],
       };
     },
   };

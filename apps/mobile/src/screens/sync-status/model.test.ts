@@ -23,7 +23,6 @@ import {
   isOfflineButHealthy,
   manualSync,
   mediaQueue,
-  MEDIA_STATUS_KEY,
   reassurance,
   REASSURANCE_KEY,
   showsRejectedSection,
@@ -88,6 +87,7 @@ function rejectedRow(code: string): RejectedOpRow {
     at: NOW,
     rejectionCode: code,
     rejectionReason: 'detail',
+    subject: null,
   };
 }
 
@@ -105,7 +105,7 @@ describe('THE THESIS — offline is a normal state, not an error', () => {
     expect(isOfflineButHealthy(given)).toBe(true);
     // And the app says so as a RECEIPT, not a warning.
     expect(reassurance(given)).toEqual({ kind: 'savedHere', pendingOperationCount: 47 });
-    expect(REASSURANCE_KEY.savedHere).toBe('sync.status.pending');
+    expect(REASSURANCE_KEY.savedHere).toBe('sync.status.savedHere');
   });
 
   test('the offline chip is the neutral `offline`, never `attention` (§4 rule 6)', () => {
@@ -263,7 +263,7 @@ describe('the reassurance line reads REASSURANCE_KEY — the map the screen rend
   // asserts the resulting KEY — the stable identifier, never the localized copy.
   test.each([
     ['allSent', input(), 'sync.status.upToDate'],
-    ['savedHere', input({ pendingOperationCount: 3 }), 'sync.status.pending'],
+    ['savedHere', input({ pendingOperationCount: 3 }), 'sync.status.savedHere'],
     ['photosPending', input({ pendingMediaCount: 3 }), 'sync.status.photosPending'],
     ['syncing', input({ loopState: 'pushing' }), 'sync.status.syncing'],
     ['syncing', input({ loopState: 'pulling' }), 'sync.status.syncing'],
@@ -503,15 +503,12 @@ describe('the media queue (§8.4 item 5)', () => {
     expect(mediaQueue(input({ media })).map((r) => r.uploadStatus)).toEqual(['pending', 'failed']);
   });
 
-  test('each queued status has a label key, and `uploading` carries progress', () => {
-    expect(MEDIA_STATUS_KEY.pending).toBe('media.status.pending');
-    expect(MEDIA_STATUS_KEY.uploading).toBe('media.status.uploading');
-    expect(MEDIA_STATUS_KEY.failed).toBe('media.status.failed');
+  test('`uploading` carries progress', () => {
     expect(mediaQueue(input({ media: [row('uploading', 42)] }))[0]?.progressPercent).toBe(42);
   });
 
   test('a failed upload is not a data problem — the photo is on the device and retryable', () => {
-    // media.status.failed is "Gagal mengirim. Ketuk untuk coba lagi." — an action, not an alarm.
+    // A failed photo is an action ("Kirim ulang foto"), not an alarm.
     // It must not push the whole screen into `attention`, or a flaky hotspot would cry wolf daily.
     const given = input({ media: [row('failed')], pendingMediaCount: 1 });
     expect(syncProblems(given)).toEqual([]);

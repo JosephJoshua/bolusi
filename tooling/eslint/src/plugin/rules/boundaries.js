@@ -14,7 +14,7 @@
 //      TEST/TOOLING files only — it is the in-process Postgres the applier-conformance suite runs,
 //      a test-only engine that must never reach shipping source any more than better-sqlite3 does)
 //   2b. db-client is Hermes-only: no node:* in its shipping source (08 §3.2)
-//   3. */screens subpaths importable only from apps/mobile
+//   3. */screens subpaths importable only from apps/mobile; */desktop only from apps/desktop
 //   4. @bolusi/server edge (harness value-import only; type-only ./client elsewhere)
 //   5. nothing imports @bolusi/mobile
 //   6. §3.4 platform-free deny prefixes for core/schemas/i18n/modules-manifest
@@ -40,16 +40,19 @@ const FORBIDDEN_EVERYWHERE = new Map([
   // 06-media-pipeline §2.1 (FR-818): evidence media is capturable ONLY through the in-app camera,
   // and the enforcement is deliberately STRUCTURAL rather than per-screen — "the shared
   // MediaCapture component is the only capture surface, and `expo-image-picker` is a banned
-  // import (lint rule, same class as the no-UPDATE-on-operations rule)". v0 has no non-evidence
-  // media surface, so the ban is repo-wide with no exemption. Added task 18. The package is not
-  // installed today, which is exactly when to add the ban: it costs nothing now and refuses the
-  // one-line `expo install expo-image-picker` that would otherwise quietly re-open gallery import
-  // of "evidence" a technician never photographed.
+  // import (lint rule, same class as the no-UPDATE-on-operations rule)". Added task 18. The one
+  // non-evidence picture, the store logo on printed slips, may come from the gallery, so exactly
+  // one file may import it (GALLERY_FILE below); it feeds only `RepairRuntime.pickPhoto`, which the
+  // print settings screen alone uses. Every other import still refuses gallery "evidence" a
+  // technician never photographed.
   [
     'expo-image-picker',
     'gallery selection may never exist where evidence is required — live capture only, via the shared MediaCapture component (06-media-pipeline §2.1, FR-818)',
   ],
 ]);
+
+/** The store-logo gallery binding: the only file that may import `expo-image-picker`. */
+const GALLERY_FILE = /(?:^|\/)apps\/mobile\/src\/media\/native-gallery\.ts$/;
 
 // Styling / animation libraries banned in v0 (design-system §7 lint (c) + 08 §2.6). No workspace
 // legitimately imports these — the design system is tokens + StyleSheet, zero styling deps, on the
@@ -259,6 +262,8 @@ export default {
         "'{{source}}': @bolusi/ui may import @bolusi/schemas TYPE-ONLY (08-stack-and-repo §3.3 hard rule 8) — the design system reuses the canonical enum types (e.g. SyncStatus) but must stay platform-free and pull no zod. Use `import type`; a value import would put a runtime edge to schemas (and its zod) into ui's emit.",
       screensOutsideMobile:
         "'{{source}}': */screens subpaths are Hermes-only UI and may be imported only from apps/mobile (08-stack-and-repo §3.2 modules row).",
+      desktopOutsideApp:
+        "'{{source}}': */desktop subpaths are React DOM screens and may be imported only from apps/desktop.",
       serverImport:
         "'{{source}}': @bolusi/server may be value-imported only by @bolusi/harness; the sole app→app edge is a type-only import of '@bolusi/server/client' (08-stack-and-repo §4.3).",
       stylingLib: "'{{source}}' is forbidden: {{reason}}.",
@@ -277,7 +282,7 @@ export default {
     function check(node, source, importKind) {
       // 1. Banned packages, anywhere.
       const banReason = FORBIDDEN_EVERYWHERE.get(source);
-      if (banReason) {
+      if (banReason && !(source === 'expo-image-picker' && GALLERY_FILE.test(filename))) {
         context.report({
           node,
           messageId: 'forbiddenEverywhere',
@@ -361,6 +366,11 @@ export default {
       // 3. */screens subpaths only from apps/mobile.
       if (/\/screens(\/|$)/.test(source) && workspace !== 'apps/mobile') {
         context.report({ node, messageId: 'screensOutsideMobile', data: { source } });
+        return;
+      }
+      // 3b. */desktop subpaths only from apps/desktop (the counter PC app's React DOM screens).
+      if (/^@bolusi\/[^/]+\/.*\/desktop(\/|$)/.test(source) && workspace !== 'apps/desktop') {
+        context.report({ node, messageId: 'desktopOutsideApp', data: { source } });
         return;
       }
       // 4. @bolusi/server: harness-only value import; type-only ./client subpath elsewhere.

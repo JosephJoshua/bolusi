@@ -66,6 +66,12 @@ export interface BundleRefreshConfig {
    * no runtime composed leaves it undefined — and a CLEAN injected seam, never a resolving no-op.
    */
   readonly onBundleRefreshed?: () => void | Promise<void>;
+  /**
+   * Invoked after EVERY successful bundle answer, a 304 included: the server was just reached. This
+   * is where work waiting for any online contact runs (the queued PIN verifier uploads). A steady
+   * device gets 304s, so hanging that work on `onBundleRefreshed` would never run it.
+   */
+  readonly onBundleChecked?: () => void | Promise<void>;
   /** Injected for tests; defaults to the global. */
   readonly fetchImpl?: typeof fetch;
 }
@@ -98,7 +104,10 @@ export function createFetchBundleRefresh(config: BundleRefreshConfig): BundleRef
       });
 
       // 304 is the steady state — a SUCCESS. Return WITHOUT touching the directory or the ETag.
-      if (response.status === 304) return 'unchanged';
+      if (response.status === 304) {
+        await config.onBundleChecked?.();
+        return 'unchanged';
+      }
       if (!response.ok) throw await toTransportError(response);
 
       const body = (await response.json()) as BundleResponseBody;
@@ -107,6 +116,7 @@ export function createFetchBundleRefresh(config: BundleRefreshConfig): BundleRef
         await writeMeta(config.db.db, BUNDLE_ETAG_META_KEY, body.etag);
       });
       await config.onBundleRefreshed?.();
+      await config.onBundleChecked?.();
       return 'refreshed';
     },
   };

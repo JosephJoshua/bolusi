@@ -179,7 +179,8 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
     //    the seam the sync loop folds through (04 §4). The invalidation bus is constructed here and
     //    injected (rather than left to the engine's internal default) so the composition root can
     //    subscribe module screens to it — see `Bootstrapped.invalidation`.
-    const invalidation = new InvalidationBus();
+    // Given the connection's transaction boundaries so listeners only see committed rows.
+    const invalidation = new InvalidationBus(db);
     const engine = createProjectionEngine<never>(db.db as never, registry.projections, {
       invalidation,
     });
@@ -225,14 +226,47 @@ export async function bootstrap(deps: BootstrapDeps): Promise<Bootstrapped> {
 }
 
 /**
- * A booted app with the two facts that change after boot read again: `deviceId` (a live enrollment
- * writes it) and `syncState` (every sync does). For a boot shared across callers (headless.ts), so a
- * later caller does not see the device as it was when the process started.
+ * Boot the data layer once per JS realm, however many callers want it.
+ *
+ * Android can destroy and recreate the activity while the process lives on ("Don't keep
+ * activities", backing out and relaunching from the launcher, memory pressure). The JS realm
+ * survives, so React mounts `Root` again and its boot effect calls `boot()` a second time. A killed
+ * app woken for a background task boots before any Root exists, and a Root that mounts later joins
+ * that realm too (headless.ts). op-sqlite allows one connection per database (08 §2.2), so a second
+ * `bootstrap()` throws `already_open`, and the shell renders nothing until a force-stop.
+ *
+ * A later call reuses the first boot's connection, registry and engine, and re-reads `deviceId` and
+ * `syncState`, because the device may have enrolled or synced since. `arg` reaches `boot` only for
+ * the call that boots. A failed boot is not kept, so the next caller retries it, and a caller that
+ * joined someone else's failed boot retries once with its own `arg`: the UI still gets its
+ * self-healing boot after a background boot (which never wipes) failed.
  */
-export async function refreshBootstrapped(app: Bootstrapped): Promise<Bootstrapped> {
-  return {
-    ...app,
-    deviceId: await readDeviceId(app.db.db as never),
-    syncState: await readSyncState(app.db.db as never),
+export function bootOncePerRealm<A = void>(
+  boot: (arg: A) => Promise<Bootstrapped>,
+): (arg: A) => Promise<Bootstrapped> {
+  let first: Promise<Bootstrapped> | null = null;
+  const run = async (arg: A, mayRetry: boolean): Promise<Bootstrapped> => {
+    if (first === null) {
+      const attempt = boot(arg);
+      first = attempt;
+      attempt.catch(() => {
+        if (first === attempt) first = null;
+      });
+      return attempt;
+    }
+    let app: Bootstrapped;
+    try {
+      app = await first;
+    } catch (error) {
+      if (mayRetry) return run(arg, false);
+      throw error;
+    }
+    return {
+      ...app,
+      migrationsApplied: [],
+      deviceId: await readDeviceId(app.db.db as never),
+      syncState: await readSyncState(app.db.db as never),
+    };
   };
+  return (arg) => run(arg, true);
 }

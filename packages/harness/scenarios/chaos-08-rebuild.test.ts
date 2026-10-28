@@ -2,10 +2,11 @@
 //
 // A device with a large op history rebuilds its projection from the log; a control device holding the
 // identical op set never rebuilds. PASS (§3.6): post-rebuild digest == control's incremental digest ==
-// canonical fold (including the mid-stream ops); rebuild RESUMABILITY is proven by watermark
-// monotonicity — a rebuild killed at 25/50/75% and resumed never re-applies below the checkpoint, so
-// every op is folded EXACTLY ONCE (the engine's `rebuildApplies` counter, summed across resumes, equals
-// the history size — no more).
+// canonical fold (including the mid-stream ops, which arrive through the real pull path while the
+// rebuild is paused); rebuild RESUMABILITY is proven by the cursor — a rebuild killed at 25/50/75% and
+// resumed never re-folds an entity at or before the checkpoint, so each entity is re-folded EXACTLY
+// ONCE (the engine's `rebuildApplies` counter, summed across resumes, equals the history plus the
+// mid-stream ops of the entities still ahead of the cursor — no more).
 //
 // The rebuild is the REAL engine's `runRebuild` (04 §4.3), driven through `device.rebuild` — never
 // re-implemented (T-7). `stopAfterBatches` models a process kill at a batch boundary; the durable
@@ -17,13 +18,12 @@
 // 20,000-op rebuild is ~54 s and vitest runs a file's tests SERIALLY, so the old seeds-1–10 sweep
 // serialized this one file to ~9 min and was the gate's long pole.
 //
-// Falsification (§2.11): the watermark guard is load-bearing precisely because a rebuild that DID
-// re-apply below the checkpoint would double-count `edit_count` and inflate `rebuildApplies` past the
-// history size. The control below watches that go RED — forcing a fresh restart on resume (clearing the
-// cursor) folds the whole history TWICE, and both the digest-vs-control and the exact-count assertions
-// fail.
+// Falsification (§2.11): forcing a fresh restart on resume (clearing the cursor) re-folds the entities
+// already done, and the exact-count assertion goes RED. The digest stays right, because re-folding an
+// entity is idempotent: a lost cursor costs time, never correctness.
 import { describe, expect, test } from 'vitest';
 
+import { createSqlRebuildStore } from '@bolusi/core';
 import { FakeClock, mulberry32, type Prng } from '@bolusi/test-support';
 import { notesOnly } from '@bolusi/test-support/chaos';
 import type { SignedOperation } from '@bolusi/schemas';
@@ -63,7 +63,11 @@ function chaos08Seeds(env: NodeJS.ProcessEnv = process.env): number[] {
 const CLOCK_BASE = 1_726_100_000_000;
 const HISTORY = activeVolumes().rebuildHistory; // 20,000 at CI scale (§3.6) — the meta-test pins it.
 const INTERLEAVED = activeVolumes().rebuildInterleaved; // 500 mid-stream ops.
-const REBUILD_BATCH = 500; // DEFAULT_REBUILD_BATCH_SIZE → 40 batches over 20,000.
+const REBUILD_BATCH = 100; // entities per batch: about 50 batches over 20,000 ops.
+/** Cost is proportional to volume. At ×4 one seed takes about 3 min alone (2026-10-26) but took up to
+ *  559 s in the extended run, where four workers share the box; the default 120 s × scale timed it out.
+ *  Five minutes per unit of scale leaves room for that contention while a real hang still fails. */
+const TIMEOUT_MS = 300_000 * activeVolumes().scale;
 
 /** Author `count` real signed ops (creates + edits) on a device — the incremental control's history. */
 async function author(
@@ -96,7 +100,7 @@ async function loadLogOnly(
   return seq;
 }
 
-describe('CHAOS-08 projection rebuild mid-stream', () => {
+describe('CHAOS-08 projection rebuild mid-stream', { timeout: TIMEOUT_MS }, () => {
   for (const seed of chaos08Seeds()) {
     test(`CHAOS-08 kill+resume at 25/50/75% then mid-stream ops: rebuilt == control == canonical fold [seed ${seed}]`, async () => {
       await withSeed(
@@ -126,45 +130,59 @@ describe('CHAOS-08 projection rebuild mid-stream', () => {
             // The rebuild device holds the identical ops in its LOG (unfolded).
             const seq = await loadLogOnly(rebuild, history, 0);
 
-            const totalBatches = Math.ceil(HISTORY / REBUILD_BATCH);
+            const entities = new Set(history.map((op) => op.entityId)).size;
+            const totalBatches = Math.ceil(entities / REBUILD_BATCH);
+            expect(totalBatches).toBeGreaterThanOrEqual(8); // T-14b
             const kills = [0.25, 0.5, 0.75].map((f) => Math.max(1, Math.floor(totalBatches * f)));
 
-            // (a) Kill at 25/50/75% of the watermark, resuming from the durable cursor each time.
+            // (a) Kill at 25/50/75% of the entities, resuming from the durable cursor each time.
             let out = await rebuild.rebuild('notes', {
               batchSize: REBUILD_BATCH,
               stopAfterBatches: kills[0]!,
             });
             expect(out.complete).toBe(false);
-            expect(out.startedFresh).toBe(true); // the ONE fresh start — clears tables once
+            expect(out.startedFresh).toBe(true); // the ONE fresh start
             out = await rebuild.rebuild('notes', {
               batchSize: REBUILD_BATCH,
               stopAfterBatches: kills[1]! - kills[0]!,
             });
-            expect(out.startedFresh).toBe(false); // resumed, did NOT clear again
+            expect(out.startedFresh).toBe(false); // resumed, did NOT restart
             out = await rebuild.rebuild('notes', {
               batchSize: REBUILD_BATCH,
               stopAfterBatches: kills[2]! - kills[1]!,
             });
             expect(out.startedFresh).toBe(false);
 
-            // (b) 500 new ops arrive mid-stream (via pull) BEFORE the rebuild finishes; the control
-            // folds them incrementally, the completing rebuild picks them up from the log.
+            // (b) 500 new ops arrive mid-stream through the real pull path (insert + fold) BEFORE the
+            // rebuild finishes, for entities on both sides of its cursor; the control folds them too.
+            const paused = await createSqlRebuildStore(rebuild.db).readCursor('notes');
+            const cursorEntity = paused?.after?.entityId;
+            expect(cursorEntity).toBeDefined();
             control.clock.advance(1_000);
             await author(control, prng, INTERLEAVED, noteIds);
             const midStream = notesOnly(await control.wireOps()).slice(HISTORY);
             expect(midStream.length).toBe(INTERLEAVED);
-            await loadLogOnly(rebuild, midStream, seq);
+            let arrival = seq;
+            for (const op of midStream) {
+              arrival += 1;
+              await insertPulledOp(rebuild.db, op, arrival, op.timestamp);
+              await rebuild.pullApply(op);
+            }
+            const aheadOfCursor = midStream.filter((op) => op.entityId > cursorEntity!).length;
+            expect(aheadOfCursor).toBeGreaterThan(0);
+            expect(aheadOfCursor).toBeLessThan(INTERLEAVED); // both sides of the cursor (T-14b)
 
             // Resume to completion.
             out = await rebuild.rebuild('notes', { batchSize: REBUILD_BATCH });
             expect(out.complete).toBe(true);
             expect(out.startedFresh).toBe(false);
 
-            // Watermark monotonicity: every op folded EXACTLY ONCE across all resumes — never below the
-            // checkpoint. The direct witness: rebuildApplies == the whole history, no double-count.
+            // Each entity re-folded EXACTLY ONCE across all resumes — never at or before the checkpoint.
+            // The direct witness: rebuildApplies == the history, plus the mid-stream ops of entities
+            // the rebuild had not reached yet (it re-folds those with them); no double-count.
             const stats = rebuild.stats.snapshot();
             expect(stats.rebuilds).toBe(1); // exactly one fresh start despite three resumes
-            expect(stats.rebuildApplies).toBe(HISTORY + INTERLEAVED);
+            expect(stats.rebuildApplies).toBe(HISTORY + aheadOfCursor);
 
             // Convergence: rebuilt == control's incremental == canonical fold (incl. mid-stream).
             const universe = [...history, ...midStream];

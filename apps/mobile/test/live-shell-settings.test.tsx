@@ -131,6 +131,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
 
     // 2. THE AFFORDANCE. Not `setRoute('settings')` — the header control a user's thumb reaches.
     //    Before this task no such node existed anywhere in shipping source and `screen.get` threw.
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
 
@@ -149,7 +150,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     //    wrong locale which row is currently theirs.
     expect(screen.query('settings-locale-id')).not.toBeNull();
     expect(screen.query('settings-locale-en')).not.toBeNull();
-    expect(screen.query('settings-locale-active-id')).not.toBeNull();
+    expect(screen.query('settings-locale-id.check')).not.toBeNull();
   });
 
   test('THE REPRODUCTION (task 211): tapping the English row renders the shell IN English', async () => {
@@ -165,6 +166,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     // catalog directly, independent of the ACTIVE language, so the expectations come from the same
     // source the screen renders from — and the test keeps working when the copy is reworded.
     const screen = await unlockedShell();
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
 
@@ -185,7 +187,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     await settle();
 
     // 3. The marker moves. This is the ENTIRE old assertion surface; it passes either way.
-    expect(screen.query('settings-locale-active-en')).not.toBeNull();
+    expect(screen.query('settings-locale-en.check')).not.toBeNull();
 
     // 4. THE DEFECT. The active locale and the rendered string must follow the tap. On an
     //    Indonesian-first product these rows are documented (07-i18n §1.2) as the only way out of a
@@ -221,6 +223,7 @@ describe('the LIVE shell reaches Settings from the home surface (task 124)', () 
     // `home`, and this drives the REAL `BackHandler` listener `useHardwareBack` registered — so a
     // user who opens Settings can always get out the way the platform expects.
     const screen = await unlockedShell();
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
     expect(screen.query('settings-screen')).not.toBeNull();

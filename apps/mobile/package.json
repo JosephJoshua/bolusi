@@ -6,6 +6,7 @@
   "description": "Expo SDK 57 app (dev-client only — Expo Go is forbidden, 08 §1). Screens/ports/sync wiring land in tasks 14/15/18/24.",
   "scripts": {
     "dev": "expo start",
+    "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "tsc -b ../.. && vitest run",
     "build:web": "tsc -b ../.. && expo export --platform web --output-dir dist",
@@ -33,9 +34,12 @@
     "expo-file-system": "57.0.0",
     "expo-image": "57.0.0",
     "expo-image-manipulator": "57.0.2",
+    "expo-image-picker": "57.0.20",
     "expo-location": "57.0.2",
     "expo-notifications": "57.0.3",
+    "expo-print": "57.0.2",
     "expo-secure-store": "57.0.0",
+    "expo-sharing": "57.0.3",
     "expo-status-bar": "57.0.0",
     "expo-system-ui": "57.0.1",
     "expo-task-manager": "57.0.2",
@@ -49,9 +53,9 @@
     "react-native-web": "0.21.2"
   },
   "devDependencies": {
+    "@bolusi/sqlite-test-driver": "workspace:*",
     "@bolusi/test-support": "workspace:*",
     "@bolusi/tsconfig": "workspace:*",
-    "@bolusi/sqlite-test-driver": "workspace:*",
     "@playwright/test": "1.56.1",
     "@types/better-sqlite3": "catalog:",
     "@types/react": "19.2.17",

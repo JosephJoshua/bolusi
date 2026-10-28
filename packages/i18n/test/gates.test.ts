@@ -74,14 +74,14 @@ describe('error-code coverage gate (07-i18n §7.3)', () => {
     expect(errors[0]).toContain('CHAIN_HALTED');
   });
 
-  it('passes on the full seed — DomainError, transport, media and all 8 rejection codes', () => {
-    expect(DOMAIN_ERROR_CODES).toHaveLength(12);
-    // 12 DomainError + IDEMPOTENCY_CONFLICT + RATE_LIMITED + 16 media (api/03 §8, task 18) +
-    // UNEXPECTED = 31. MEDIA_ERROR_CODES surface through the same `core.errors.<CODE>` derivation
+  it('passes on the full seed — DomainError, transport, media and all 11 rejection codes', () => {
+    expect(DOMAIN_ERROR_CODES).toHaveLength(13);
+    // 13 DomainError + IDEMPOTENCY_CONFLICT + RATE_LIMITED + 16 media (api/03 §8, task 18) +
+    // UNEXPECTED = 32. MEDIA_ERROR_CODES surface through the same `core.errors.<CODE>` derivation
     // (06 §8); see error-code-registry.mjs for why they ride `core.*` and not `media.errors.*`.
     expect(MEDIA_ERROR_CODES).toHaveLength(16);
-    expect(ALL_ERROR_CODES).toHaveLength(31);
-    expect(REJECTION_CODES).toHaveLength(8);
+    expect(ALL_ERROR_CODES).toHaveLength(32);
+    expect(REJECTION_CODES).toHaveLength(11);
     expect(checkErrorCodeCoverage(realSources())).toEqual([]);
   });
 

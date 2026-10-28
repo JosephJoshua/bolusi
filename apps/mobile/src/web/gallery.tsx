@@ -35,15 +35,24 @@ import {
 } from '../screens/enrollment/model.js';
 import { EnrollmentScreen } from '../screens/enrollment/EnrollmentScreen.js';
 import { ChangePinScreen } from '../screens/pin/ChangePinScreen.js';
-import { ClearLockoutScreen } from '../screens/pin/ClearLockoutScreen.js';
 import type { PinTargetUser } from '../screens/pin/pin-target.js';
+import type { SwitcherUser } from '../screens/switcher/model.js';
 import { PinScreen } from '../screens/pin/PinScreen.js';
-import { ResetPinScreen } from '../screens/pin/ResetPinScreen.js';
+import { PinSetupScreen } from '../screens/pin/PinSetupScreen.js';
+import { StaffPinScreen } from '../screens/pin/StaffPinScreen.js';
 import { SettingsScreen } from '../screens/settings/SettingsScreen.js';
 import { SyncStatusScreen } from '../screens/sync-status/SyncStatusScreen.js';
 import { SwitcherScreen } from '../screens/switcher/SwitcherScreen.js';
 import type { AppProps } from '../../App.js';
 
+import {
+  DEMO_REPAIR_ROLES,
+  demoRepairRuntime,
+  demoRoleOf,
+  demoTicketCount,
+  type DemoRepairRole,
+} from '@bolusi/modules/repair/demo';
+import { STAFF_ACTOR, STAFF_DEMO, STAFF_MANY, StaffDemo } from './staff-demo.js';
 import {
   DEMO_DEVICE_INFO,
   DEMO_LOGIN,
@@ -62,6 +71,32 @@ function noop(): void {
 }
 
 const CURRENT_USER = { id: 'u-andi', initials: 'AP' } as const;
+/** The same person as Settings shows them: name and role. */
+const CURRENT_PERSON = { id: 'u-andi', name: 'Andi Pratama', roleKeys: ['main_owner'] } as const;
+
+/** A busy store's roster: enough staff that the switcher grows a search box, with long names. */
+const MANY_STAFF: readonly SwitcherUser[] = [
+  ...DEMO_USERS,
+  ...[
+    'Yohanis Mandowen',
+    'Maria Kogoya',
+    'Petrus Yikwa',
+    'Ester Mandowen',
+    'Agustinus Wenda',
+    'Fransiska Rumbiak',
+    'Kristian Tabuni',
+    'Natalia Wamafma Rumbekwan',
+    'Lukas Enembe',
+    'Selfina Ayomi',
+  ].map((name, index) => ({
+    id: `u-staff-${String(index)}`,
+    name,
+    photoMediaId: null,
+    lastActiveAt: index < 4 ? HARNESS_NOW - (index + 5) * 3_600_000 : null,
+    needsFirstPin: false,
+    roleKeys: index % 3 === 0 ? ['technician'] : ['cashier'],
+  })),
+];
 
 /** A ReactNode slot the harness fills where a screen wants a chip/avatar it does not screenshot. */
 function slot(testID: string): ReactNode {
@@ -140,10 +175,32 @@ function SettingsInteractive(): React.JSX.Element {
       }}
       onOpenNotificationSettings={noop}
       device={DEMO_DEVICE_INFO}
-      currentUser={CURRENT_USER}
+      currentUser={CURRENT_PERSON}
       onBack={noop}
       onOpenSwitcher={noop}
       onOpenChangePin={noop}
+      onOpenStaff={noop}
+      onOpenStaffPins={noop}
+      lockedStaffCount={1}
+      repair={{
+        section: 'Servisan',
+        rows: [
+          {
+            icon: 'list',
+            title: 'Pilihan saat terima HP',
+            summary: 'Cek fungsi, kelengkapan, sisi HP yang difoto',
+            onOpen: noop,
+            testID: 'settings-intake-options',
+          },
+          {
+            icon: 'money',
+            title: 'Biaya pembatalan',
+            summary: 'Dibayar pelanggan kalau servisan dibatalkan',
+            onOpen: noop,
+            testID: 'settings-cancel-fees',
+          },
+        ],
+      }}
       syncChip="synced"
       pendingCount={0}
       onOpenSync={noop}
@@ -160,13 +217,26 @@ function SettingsInteractive(): React.JSX.Element {
 function EnrollmentInteractive({
   revoked,
   step,
+  over = {},
 }: {
   readonly revoked: boolean;
   readonly step: EnrollmentStep;
+  /** A case on top of the step: one store, a picked store, a failed attempt. */
+  readonly over?: Partial<EnrollmentState>;
 }): React.JSX.Element {
-  const [state, setState] = useState<EnrollmentState>(() => {
+  const [state, setState] = useState<EnrollmentState>(() => ({ ...initial(), ...over }));
+  function initial(): EnrollmentState {
     const base = initialEnrollmentState(revoked);
     if (step === 'confirm') {
+      return {
+        ...base,
+        step,
+        login: DEMO_LOGIN,
+        // Two stores: nothing is preselected, as in the app (App.tsx runLogin).
+        selectedStoreId: null,
+      };
+    }
+    if (step === 'done') {
       return {
         ...base,
         step,
@@ -174,9 +244,8 @@ function EnrollmentInteractive({
         selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
       };
     }
-    if (step === 'done') return { ...base, step, login: DEMO_LOGIN };
     return base;
-  });
+  }
   const [discardPrompt, setDiscardPrompt] = useState(false);
   return (
     <View style={styles.body}>
@@ -188,7 +257,7 @@ function EnrollmentInteractive({
             ...s,
             step: 'confirm',
             login: DEMO_LOGIN,
-            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+            selectedStoreId: null,
           }))
         }
         onEnroll={() => setState((s) => ({ ...s, step: 'done' }))}
@@ -219,6 +288,12 @@ function EnrollmentInteractive({
   );
 }
 
+/** The preview opens on any PIN, so nobody there waits for an owner to make theirs. */
+const PREVIEW_USERS: readonly SwitcherUser[] = DEMO_USERS.map((user) => ({
+  ...user,
+  needsFirstPin: false,
+}));
+
 /**
  * App-mode: the FULL prop-driven `App` (its RootNavigator gate → real screens), fed the demo seed.
  * `session: null` lands on the User Switcher (the enrolled-device happy path); a `session` value
@@ -227,25 +302,48 @@ function EnrollmentInteractive({
  * instead of the empty `shell-home` placeholder it used to render. Proves the whole navigation gate
  * renders real screens from fake data, not just isolated components.
  */
-function AppMode({ session }: { readonly session: AppProps['session'] }): React.JSX.Element {
+function AppMode({
+  session,
+  repairRole,
+}: {
+  readonly session: AppProps['session'];
+  /** Puts the repair module on the home surface, signed in as this demo role. */
+  readonly repairRole?: DemoRepairRole;
+}): React.JSX.Element {
   const [, force] = useReducer((n: number) => n + 1, 0);
   // One runtime per mount, so a create/edit interaction accumulates instead of resetting each render.
   const [notes] = useState(() => demoNotesRuntime());
+  const [repair] = useState(() =>
+    repairRole === undefined
+      ? undefined
+      : demoRepairRuntime(repairRole, {
+          tickets: demoTicketCount(typeof window === 'undefined' ? '' : window.location.search),
+        }),
+  );
+  // "Switch user" works: any PIN opens the chosen person, who acts on the same demo tickets.
+  const [current, setCurrent] = useState(session);
+  const onSubmitPin = (userId: string): Promise<boolean> => {
+    const role = demoRoleOf(userId);
+    if (role !== undefined) repair?.actAs(role);
+    setCurrent({ userId });
+    return Promise.resolve(true);
+  };
   return (
     <App
       device="active"
-      users={DEMO_USERS}
+      users={PREVIEW_USERS}
       usersError={null}
       pinRow={() => null}
       now={HARNESS_NOW}
-      session={session}
+      session={current}
       notes={notes}
+      repair={repair}
       locked={false}
       sync={demoSyncInput()}
       onSyncNow={noop}
       onRetryMedia={noop}
       onRetryUsers={noop}
-      onSubmitPin={noop}
+      onSubmitPin={onSubmitPin}
       onChangePin={() => Promise.resolve()}
       canUnlock
       listPinTargets={() => Promise.resolve([])}
@@ -284,12 +382,15 @@ function pinScreen(
   state: string,
   row: PinAttemptRow | null,
   lastAttempt: 'none' | 'wrong',
+  needsFirstPin = false,
 ): React.JSX.Element {
   return (
     <ApproxFrame screen="pin" state={state}>
       <PinScreen
         userId="u-andi"
         userName="Andi Pratama"
+        roleKeys={['main_owner']}
+        needsFirstPin={needsFirstPin}
         row={row}
         now={HARNESS_NOW}
         lastAttempt={lastAttempt}
@@ -356,6 +457,7 @@ function switcherScreen(
   screenState: Parameters<typeof SwitcherScreen>[0]['state'],
   mode: 'choose' | 'lock' = 'choose',
 ): React.JSX.Element {
+  const locked: ReadonlySet<string> = new Set(['u-yosua']);
   return (
     <ApproxFrame screen="switcher" state={state}>
       <SwitcherScreen
@@ -368,6 +470,8 @@ function switcherScreen(
         syncChip="synced"
         pendingCount={0}
         onOpenSync={noop}
+        currentUserId={mode === 'lock' ? null : 'u-andi'}
+        lockedUserIds={locked}
       />
     </ApproxFrame>
   );
@@ -401,56 +505,65 @@ const PIN_ADMIN_ACTOR = 'u-ocep';
 /** A store's directory for the owner PIN screens: the acting owner, a locked colleague, an open one. */
 const PIN_TARGETS: readonly PinTargetUser[] = [
   { id: PIN_ADMIN_ACTOR, name: 'Ocep Wanggai', lockedOut: false },
-  { id: 'u-ani', name: 'Ani Koibur', lockedOut: true },
-  { id: 'u-budi', name: 'Budi Rumbewas', lockedOut: false },
+  { id: 'u-ani', name: 'Ani Koibur', roleKeys: ['staff'], lockedOut: true },
+  { id: 'u-budi', name: 'Budi Rumbewas', roleKeys: ['staff'], lockedOut: false },
+  {
+    id: 'u-maria',
+    name: 'Maria Wenda',
+    roleKeys: ['staff'],
+    lockedOut: false,
+    needsFirstPin: true,
+  },
 ];
-
-/** A directory with nobody locked — the reassuring "no one is locked out" case. */
-const PIN_TARGETS_NONE_LOCKED: readonly PinTargetUser[] = PIN_TARGETS.map((user) => ({
-  ...user,
-  lockedOut: false,
-}));
 
 function changePinScreen(state: string): React.JSX.Element {
   return (
     <ApproxFrame screen="change-pin" state={state}>
-      <ChangePinScreen onChangePin={() => Promise.resolve()} onClose={noop} />
-    </ApproxFrame>
-  );
-}
-
-function resetPinScreen(
-  state: string,
-  opts: { canReset: boolean; users: readonly PinTargetUser[] },
-): React.JSX.Element {
-  return (
-    <ApproxFrame screen="reset-pin" state={state}>
-      <ResetPinScreen
-        canReset={opts.canReset}
-        loading={false}
-        error={null}
-        users={opts.users}
-        actorUserId={PIN_ADMIN_ACTOR}
-        onResetPin={() => Promise.resolve()}
+      <ChangePinScreen
+        person={CURRENT_PERSON}
+        onChangePin={() => Promise.resolve()}
         onClose={noop}
       />
     </ApproxFrame>
   );
 }
 
-function clearLockoutScreen(
+function staffPinScreen(
   state: string,
-  opts: { canUnlock: boolean; users: readonly PinTargetUser[] },
+  opts: { canUnlock: boolean; canReset: boolean; users: readonly PinTargetUser[] },
 ): React.JSX.Element {
   return (
-    <ApproxFrame screen="clear-lockout" state={state}>
-      <ClearLockoutScreen
+    <ApproxFrame screen="staff-pins" state={state}>
+      <StaffPinScreen
         canUnlock={opts.canUnlock}
+        canReset={opts.canReset}
         loading={false}
         error={null}
         users={opts.users}
+        actorUserId={PIN_ADMIN_ACTOR}
         onClearLockout={() => Promise.resolve()}
+        onResetPin={() => Promise.resolve()}
+        onReload={noop}
         onClose={noop}
+      />
+    </ApproxFrame>
+  );
+}
+
+/** A new staff member making their first PIN. */
+function pinSetupScreen(state: string): React.JSX.Element {
+  return (
+    <ApproxFrame screen="pin-setup" state={state}>
+      <PinSetupScreen
+        userId="u-budi"
+        userName="Budi Santoso"
+        roleKeys={['staff']}
+        onSetFirstPin={() => Promise.resolve()}
+        onSignIn={noop}
+        onBack={noop}
+        syncChip="synced"
+        pendingCount={0}
+        onOpenSync={noop}
       />
     </ApproxFrame>
   );
@@ -481,6 +594,11 @@ export const ENTRIES: readonly HarnessEntry[] = [
   },
   {
     screen: 'switcher',
+    state: 'many',
+    render: () => switcherScreen('many', { kind: 'ready', users: MANY_STAFF }),
+  },
+  {
+    screen: 'switcher',
     state: 'lock',
     render: () => switcherScreen('lock', { kind: 'ready', users: DEMO_USERS }, 'lock'),
   },
@@ -488,6 +606,11 @@ export const ENTRIES: readonly HarnessEntry[] = [
   // PIN — the pad's real states + the interactive pad.
   { screen: 'pin', state: 'entry', render: () => pinScreen('entry', DEMO_PIN_ROWS.clean, 'none') },
   { screen: 'pin', state: 'wrong', render: () => pinScreen('wrong', PIN_WRONG_ROW, 'wrong') },
+  {
+    screen: 'pin',
+    state: 'needsFirstPin',
+    render: () => pinScreen('needsFirstPin', DEMO_PIN_ROWS.clean, 'none', true),
+  },
   {
     screen: 'pin',
     state: 'delayed',
@@ -511,46 +634,69 @@ export const ENTRIES: readonly HarnessEntry[] = [
   // Change PIN — the interactive current → new → repeat → done flow (task 138 item 1).
   { screen: 'change-pin', state: 'interactive', render: () => changePinScreen('interactive') },
 
-  // Reset PIN (owner) — the §5 list states. Unauthorized ≠ Empty: a non-owner sees the lock, not a
-  // blank list. Ready excludes the acting owner; Empty is a device with no other users.
+  // First PIN for someone who has none (api/02-auth §6.6).
+  { screen: 'pin-setup', state: 'interactive', render: () => pinSetupScreen('interactive') },
+
+  // Staff PINs (owner) — one list for unlock and reset. Unauthorized ≠ Empty: a non-owner sees the
+  // lock, not a blank list. Ready leaves out the acting owner and puts locked PINs first.
   {
-    screen: 'reset-pin',
+    screen: 'staff-pins',
     state: 'unauthorized',
-    render: () => resetPinScreen('unauthorized', { canReset: false, users: PIN_TARGETS }),
+    render: () =>
+      staffPinScreen('unauthorized', { canUnlock: false, canReset: false, users: PIN_TARGETS }),
   },
   {
-    screen: 'reset-pin',
+    screen: 'staff-pins',
     state: 'empty',
     render: () =>
-      resetPinScreen('empty', {
+      staffPinScreen('empty', {
+        canUnlock: true,
         canReset: true,
         users: PIN_TARGETS.filter((user) => user.id === PIN_ADMIN_ACTOR),
       }),
   },
   {
-    screen: 'reset-pin',
+    screen: 'staff-pins',
     state: 'ready',
-    render: () => resetPinScreen('ready', { canReset: true, users: PIN_TARGETS }),
+    render: () => staffPinScreen('ready', { canUnlock: true, canReset: true, users: PIN_TARGETS }),
+  },
+  {
+    screen: 'staff-pins',
+    state: 'many',
+    render: () =>
+      staffPinScreen('many', {
+        canUnlock: true,
+        canReset: true,
+        users: [
+          ...PIN_TARGETS,
+          ...MANY_STAFF.map((user, index) => ({
+            id: user.id,
+            name: user.name,
+            lockedOut: index === 6,
+          })),
+        ],
+      }),
   },
 
-  // Clear lockout (owner) — the §5 list states. Ready lists only locked users; the empty list is the
-  // reassuring "no one is locked out"; a non-owner sees Unauthorized.
-  {
-    screen: 'clear-lockout',
-    state: 'unauthorized',
-    render: () => clearLockoutScreen('unauthorized', { canUnlock: false, users: PIN_TARGETS }),
-  },
-  {
-    screen: 'clear-lockout',
-    state: 'noneLocked',
-    render: () =>
-      clearLockoutScreen('noneLocked', { canUnlock: true, users: PIN_TARGETS_NONE_LOCKED }),
-  },
-  {
-    screen: 'clear-lockout',
-    state: 'ready',
-    render: () => clearLockoutScreen('ready', { canUnlock: true, users: PIN_TARGETS }),
-  },
+  // Karyawan (owner) — add, edit, deactivate, reactivate, over an in-memory server. A store owner
+  // sees owners but cannot open them; the main owner can. `offline` refuses every change.
+  ...(
+    [
+      ['ready', { members: STAFF_DEMO }],
+      ['main-owner', { members: STAFF_DEMO, tenantAdmin: true }],
+      ['many', { members: STAFF_MANY }],
+      ['empty', { members: STAFF_DEMO.filter((m) => m.id === STAFF_ACTOR) }],
+      ['offline', { members: STAFF_DEMO, offline: true }],
+    ] as const
+  ).map(([state, props]) => ({
+    screen: 'staff',
+    state,
+    render: () => (
+      <ApproxFrame screen="staff" state={state}>
+        <StaffDemo {...props} />
+      </ApproxFrame>
+    ),
+  })),
 
   // Settings — the live ID↔EN language toggle.
   {
@@ -633,6 +779,86 @@ export const ENTRIES: readonly HarnessEntry[] = [
   },
   {
     screen: 'enrollment',
+    state: 'confirmPicked',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="confirmPicked">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{ selectedStoreId: DEMO_LOGIN.stores[1]?.id ?? null, deviceName: 'HP Kasir 1' }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'confirmOneStore',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="confirmOneStore">
+        <EnrollmentInteractive
+          revoked={false}
+          step="confirm"
+          over={{
+            login: { ...DEMO_LOGIN, stores: DEMO_LOGIN.stores.slice(0, 1) },
+            selectedStoreId: DEMO_LOGIN.stores[0]?.id ?? null,
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'wrongPassword',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="wrongPassword">
+        <EnrollmentInteractive
+          revoked={false}
+          step="credentials"
+          over={{
+            loginIdentifier: 'maju',
+            password: 'salah-sandi-1',
+            failure: { kind: 'credentials' },
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'offline',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="offline">
+        <EnrollmentInteractive
+          revoked={false}
+          step="credentials"
+          over={{
+            loginIdentifier: 'maju',
+            password: 'sandi-benar-1',
+            failure: { kind: 'offline' },
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
+    state: 'notOwner',
+    render: () => (
+      <ApproxFrame screen="enrollment" state="notOwner">
+        <EnrollmentInteractive
+          revoked={false}
+          step="credentials"
+          over={{
+            loginIdentifier: 'kasir',
+            password: 'sandi-benar-1',
+            failure: { kind: 'notPermitted' },
+          }}
+        />
+      </ApproxFrame>
+    ),
+  },
+  {
+    screen: 'enrollment',
     state: 'revoked',
     render: () => (
       <ApproxFrame screen="enrollment" state="revoked">
@@ -709,6 +935,18 @@ export const ENTRIES: readonly HarnessEntry[] = [
       </ApproxFrame>
     ),
   },
+
+  // Repair — the full App with the repair module home, one entry per role. The flows behind the
+  // board (ticket, steps, intake, handover) are reached by tapping, over an in-memory runtime.
+  ...(Object.keys(DEMO_REPAIR_ROLES) as DemoRepairRole[]).map((role) => ({
+    screen: 'repair',
+    state: role,
+    render: () => (
+      <ApproxFrame screen="repair" state={role}>
+        <AppMode session={{ userId: DEMO_REPAIR_ROLES[role].userId }} repairRole={role} />
+      </ApproxFrame>
+    ),
+  })),
 ];
 
 export function findEntry(screen: string, state: string): HarnessEntry | undefined {

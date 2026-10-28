@@ -12,11 +12,12 @@ import {
   type DbDriver,
 } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
-import { noblePort } from '@bolusi/test-support';
+import { noblePort, opRowOf } from '@bolusi/test-support';
 
 import {
   createProjectionEngine,
   digestModule,
+  insertOpLogRow,
   ProjectionRegistry,
   type ModuleProjectionManifest,
   type ProjectionEngine,
@@ -90,36 +91,11 @@ export async function insertOpRow(
   op: SignedOperation,
   arrivalSeq: number | null,
 ): Promise<void> {
-  await db
-    .insertInto('operations')
-    .values({
-      id: op.id,
-      tenantId: op.tenantId,
-      storeId: op.storeId,
-      userId: op.userId,
-      deviceId: op.deviceId,
-      seq: op.seq,
-      type: op.type,
-      entityType: op.entityType,
-      entityId: op.entityId,
-      schemaVersion: op.schemaVersion,
-      payload: JSON.stringify(op.payload),
-      timestampMs: op.timestamp,
-      location: op.location === null ? null : JSON.stringify(op.location),
-      source: op.source,
-      agentInitiated: op.agentInitiated ? 1 : 0,
-      agentConversationId: op.agentConversationId,
-      previousHash: op.previousHash,
-      hash: op.hash,
-      signature: op.signature,
-      // Not verified by the projection engine (that is the sync layer's job) — a placeholder
-      // satisfying the NOT NULL column. Distinct per op so no accidental collision hides a bug.
-      signedCoreJcs: `test-jcs:${op.id}`,
-      syncStatus: arrivalSeq === null ? 'local' : 'synced',
-      arrivalSeq,
-      syncedAt: arrivalSeq === null ? null : 1,
-    })
-    .execute();
+  await insertOpLogRow(db, opRowOf(op), {
+    syncStatus: arrivalSeq === null ? 'local' : 'synced',
+    syncedAt: arrivalSeq === null ? null : 1,
+    arrivalSeq,
+  });
 }
 
 /** True if an op `id` already exists locally (the pull/append dedup key, 05 §5). */

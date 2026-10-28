@@ -39,8 +39,8 @@ import {
   type SyncHarness,
   type TestDevice,
 } from './_fixtures.js';
-import { runPullPhase, type PulledBatch } from '../../src/index.js';
-import { noblePort } from '@bolusi/test-support';
+import { insertOpLogRow, runPullPhase, type PulledBatch } from '../../src/index.js';
+import { noblePort, opRowOf } from '@bolusi/test-support';
 
 let harness: SyncHarness;
 let device: TestDevice;
@@ -267,19 +267,11 @@ describe('THE FALSIFICATION — per-op commits durably skip ops (why the batch i
 
 /** Raw op insert — the falsification's own plumbing, deliberately not the production path. */
 async function insertRaw(op: SignedOperation, arrivalSeq: number): Promise<void> {
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status,
-      synced_at, arrival_seq
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${`jcs:${op.id}`}, 'synced', ${1}, ${arrivalSeq}
-    )
-  `.execute(harness.db);
+  await insertOpLogRow(harness.db, opRowOf(op), {
+    syncStatus: 'synced',
+    syncedAt: 1,
+    arrivalSeq,
+  });
 }
 
 describe('batch progress is reported only for committed batches', () => {

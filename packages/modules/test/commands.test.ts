@@ -50,12 +50,16 @@ async function expectDomainError(p: Promise<unknown>, code: string): Promise<Dom
 }
 
 async function opsOfType(harness: Harness, type: string): Promise<Record<string, unknown>[]> {
-  const rows = await sql<Record<string, unknown>>`
-    SELECT id, type, schema_version AS "schemaVersion", payload, user_id AS "userId",
-           store_id AS "storeId", timestamp_ms AS "timestampMs"
+  const rows = await sql<Record<string, unknown> & { signedCoreJcs: string }>`
+    SELECT id, type, schema_version AS "schemaVersion", signed_core_jcs AS "signedCoreJcs",
+           user_id AS "userId", store_id AS "storeId", timestamp_ms AS "timestampMs"
     FROM operations WHERE type = ${type}
   `.execute(harness.db);
-  return rows.rows;
+  // The payload's one stored copy is inside the signed text (client migration 6).
+  return rows.rows.map(({ signedCoreJcs, ...row }) => ({
+    ...row,
+    payload: JSON.stringify((JSON.parse(signedCoreJcs) as { payload: unknown }).payload),
+  }));
 }
 
 async function notesRows(harness: Harness): Promise<Record<string, unknown>[]> {

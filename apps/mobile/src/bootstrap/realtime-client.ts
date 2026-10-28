@@ -36,6 +36,8 @@ import {
   type RuntimeTimerPort,
 } from '@bolusi/core';
 
+import { consoleDiagnostics } from '../ports/diagnostics.js';
+
 /** The subset of RN's `WebSocket` instance the adapter drives (a WHATWG-ish event surface). */
 export interface RealtimeSocketLike {
   onopen: (() => void) | null;
@@ -286,11 +288,22 @@ export function createRnRealtimeTransports(config: RealtimeTransportConfig): {
  */
 export function createRealtimeController(config: RealtimeClientConfig): RealtimeController {
   const transports = createRnRealtimeTransports(config);
-  return new RealtimeController({
+  const controllerStats = () => {
+    const { wsConnectFailures, sseConnectFailures } = controller.getStats();
+    return { wsConnectFailures, sseConnectFailures };
+  };
+  const controller: RealtimeController = new RealtimeController({
     ws: transports.ws,
     sse: transports.sse,
     trigger: config.trigger,
     clock: config.clock,
     timer: config.timer,
+    // A degraded channel must show up in the logs, not just cost latency silently.
+    onRungChange: (rung) =>
+      consoleDiagnostics.warn(
+        rung === 'ws' ? 'realtime recovered on WebSocket' : `realtime fell back to ${rung}`,
+        { rung, ...controllerStats() },
+      ),
   });
+  return controller;
 }

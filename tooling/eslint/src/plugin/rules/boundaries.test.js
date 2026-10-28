@@ -36,6 +36,11 @@ tester.run('boundaries', rule, {
       code: `import { readFileSync } from 'node:fs';`,
       filename: '/repo/packages/core/test/jcs-vectors/run.test.ts',
     },
+    // The store-logo gallery binding is the one file that may open the photo picker.
+    {
+      code: `import * as ImagePicker from 'expo-image-picker';`,
+      filename: '/repo/apps/mobile/src/media/native-gallery.ts',
+    },
     // db-client is THE importer of op-sqlite (08 §3.2)
     {
       code: `import { open } from '@op-engineering/op-sqlite';`,
@@ -70,6 +75,11 @@ tester.run('boundaries', rule, {
     {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
       filename: '/repo/apps/mobile/src/navigation.tsx',
+    },
+    // the counter PC app imports the React DOM screens
+    {
+      code: `import { RepairBoardPage } from '@bolusi/modules/repair/desktop';`,
+      filename: '/repo/apps/desktop/src/renderer/App.tsx',
     },
     // harness may value-import the server app (in-process, test-only)
     {
@@ -316,6 +326,12 @@ tester.run('boundaries', rule, {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
       filename: '/repo/apps/server/src/routers/sync.ts',
       errors: [{ messageId: 'screensOutsideMobile' }],
+    },
+    // React DOM screens outside the desktop app → error (the phone bundle must not pull react-dom)
+    {
+      code: `import { RepairBoardPage } from '@bolusi/modules/repair/desktop';`,
+      filename: '/repo/apps/mobile/src/app/index.tsx',
+      errors: [{ messageId: 'desktopOutsideApp' }],
     },
     // value-import of @bolusi/server outside harness → error (primary fixture)
     {
@@ -615,6 +631,17 @@ tester.run('boundaries', rule, {
     {
       code: `import { createNodeWebSocket } from '@hono/node-ws';`,
       filename: '/repo/apps/server/src/realtime.ts',
+      errors: [{ messageId: 'forbiddenEverywhere' }],
+    },
+    // gallery import anywhere else could pass off a picked picture as evidence (FR-818)
+    {
+      code: `import * as ImagePicker from 'expo-image-picker';`,
+      filename: '/repo/apps/mobile/src/media/CaptureScreen.tsx',
+      errors: [{ messageId: 'forbiddenEverywhere' }],
+    },
+    {
+      code: `import * as ImagePicker from 'expo-image-picker';`,
+      filename: '/repo/packages/modules/src/repair/screens/native-gallery.ts',
       errors: [{ messageId: 'forbiddenEverywhere' }],
     },
     // expo-file-system/legacy throws at runtime in SDK 57 (08 §2.2)

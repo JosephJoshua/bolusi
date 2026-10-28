@@ -16,9 +16,10 @@ import { SELECTABLE_LOCALES } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import type { OperationDeclaration } from '../module/define-module.js';
-import { PLATFORM_OP } from './constants.js';
+import { PLATFORM_ENTITY, PLATFORM_OP, PLATFORM_PERMISSION } from './constants.js';
 import { conflictAcknowledgedApplier, conflictDetectedApplier } from './projections/conflicts.js';
 import { userLocaleChangedApplier } from './projections/user-prefs.js';
+import { conflictAcknowledgedRule, userLocaleChangedRule } from './rules.js';
 import type { PlatformDatabase } from './schema.js';
 
 /** `platform.conflict_detected` payload (01 §6). `.strict()` per 04 §3. */
@@ -61,6 +62,10 @@ export const platformOperations: Readonly<Record<string, OperationDeclaration<Pl
       reversal:
         'NOT reversible, by design (01 §5.4, I-7). A detection op records that two ops collided — a fact about history, which cannot become untrue. The owner responds with platform.conflict_acknowledged and, if the data needs correcting, an ordinary new op (the system never rewrites anything — FR-1131, 05 §1).',
       apply: conflictDetectedApplier,
+      // Built by the server alone; the scope step refuses one from any other device.
+      rule: null,
+      permission: null,
+      entityType: PLATFORM_ENTITY.conflict,
       // Store-scoped: the envelope carries the CONFLICTED entity's store, which routes the conflict
       // to the right devices via pull scope (01 §5.4). Left as the 'store' default rather than
       // declared, because the server builds this op directly (appendSystemOp) — it never travels
@@ -73,6 +78,9 @@ export const platformOperations: Readonly<Record<string, OperationDeclaration<Pl
       reversal:
         'NOT reversible (01 §5.4, I-7: `acknowledged` is terminal). An acknowledgment is a decision record — that the owner saw this conflict and accepted the recorded outcome. Un-seeing it is not a thing; a changed mind is a new ordinary op correcting the data.',
       apply: conflictAcknowledgedApplier,
+      rule: conflictAcknowledgedRule,
+      permission: PLATFORM_PERMISSION.conflictAcknowledge,
+      entityType: PLATFORM_ENTITY.conflict,
     },
 
     [PLATFORM_OP.userLocaleChanged]: {
@@ -81,6 +89,9 @@ export const platformOperations: Readonly<Record<string, OperationDeclaration<Pl
       reversal:
         'Reversed by a subsequent platform.user_locale_changed carrying the previous locale (07-i18n §1.1).',
       apply: userLocaleChangedApplier,
+      rule: userLocaleChangedRule,
+      permission: PLATFORM_PERMISSION.setLocale,
+      entityType: PLATFORM_ENTITY.userPref,
       // TENANT-scoped (01 §6): "the preference follows the user to every device". Without this the
       // runtime would stamp the emitting device's store and the preference would reach only that
       // store's devices — the one op type in v0 that is not store-scoped.

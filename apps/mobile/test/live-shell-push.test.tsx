@@ -80,6 +80,7 @@ import {
 import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
 
 import type { RootProps } from '../src/bootstrap/Root.js';
+import type { NotificationPermissionPort } from '../src/push/permission.js';
 import type { PushResponse } from '../src/push/router.js';
 import { createAppEnrollment, type EnrollmentPlatform } from '../src/bootstrap/enrollment.js';
 import { SecureStoreKeyStore } from '../src/ports/keystore.js';
@@ -328,7 +329,8 @@ describe('a push tap preserves the draft and does not drift the switcher origin 
     const router = fakePushRouter();
     const screen = await liveShellWithSession(fixture, { pushRouter: router.port });
 
-    fireOn(screen, 'ui.avatarButton'); // open the switcher (voluntary quick-switch) from home
+    fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user'); // open the switcher (voluntary quick-switch) from home
     await settle();
     expect(screen.query('switcher-screen')).not.toBeNull();
 
@@ -352,6 +354,7 @@ async function liveShellWithSession(
   push: {
     readonly createPushRegistration?: RootProps['createPushRegistration'];
     readonly pushRouter?: RootProps['pushRouter'];
+    readonly notificationPermission?: RootProps['notificationPermission'];
   },
 ): Promise<RenderResult> {
   await enrolledDevice(target);
@@ -530,10 +533,8 @@ describe('the enrollment wizard shows its DONE step before the zone hands off (t
     fireOn(screen, 'enroll-submit');
     await waitUntil(() => screen.query('enroll-device-name') !== null);
 
-    // Step 2 — name the device, confirm the binding, bind.
+    // Step 2 — name the device, then bind (the button names the store).
     fire(screen.get('enroll-device-name.field'), 'onChangeText', 'Kasir 1');
-    await settle();
-    fireOn(screen, 'enroll-confirm-toggle');
     await settle();
     fireOn(screen, 'enroll-bind');
 
@@ -560,5 +561,58 @@ describe('the enrollment wizard shows its DONE step before the zone hands off (t
     // ("database connection is not open"). Under a running app the client DB is never closed, so there
     // is nothing to fix in production; here we settle the in-flight reads before the fixture closes.
     await settle();
+  });
+});
+
+/** A fake permission seam: the OS has not been asked yet unless `asked` says our sheet already ran. */
+function fakeNotificationPermission(asked = false) {
+  const calls: string[] = [];
+  let shown = asked;
+  const port: NotificationPermissionPort = {
+    status: async () => ({ granted: false, canAskAgain: true }),
+    request: async () => {
+      calls.push('request');
+    },
+    readAsked: async () => shown,
+    writeAsked: async () => {
+      calls.push('writeAsked');
+      shown = true;
+    },
+  };
+  return { port, calls };
+}
+
+describe('the shell asks for notifications once, after unlock, with the reason first', () => {
+  test('the sheet shows on the work screen and "Nyalakan" opens the OS prompt', async () => {
+    fixture = await bootFixture();
+    const permission = fakeNotificationPermission();
+    const screen = await liveShellWithSession(fixture, { notificationPermission: permission.port });
+    await waitUntil(() => screen.query('notification-ask') !== null);
+    // Nothing reaches the OS until the person has read why.
+    expect(permission.calls).toEqual([]);
+
+    fireOn(screen, 'notification-ask.confirm');
+    await settle();
+    expect(screen.query('notification-ask')).toBeNull();
+    expect(permission.calls).toEqual(['writeAsked', 'request']);
+  });
+
+  test('"Nanti saja" closes it without the OS prompt; a device that already answered is never asked', async () => {
+    fixture = await bootFixture();
+    const permission = fakeNotificationPermission();
+    const screen = await liveShellWithSession(fixture, { notificationPermission: permission.port });
+    await waitUntil(() => screen.query('notification-ask') !== null);
+    fireOn(screen, 'notification-ask.cancel');
+    await settle();
+    expect(screen.query('notification-ask')).toBeNull();
+    expect(permission.calls).toEqual(['writeAsked']);
+    await fixture.close();
+
+    fixture = await bootFixture();
+    const answered = fakeNotificationPermission(true);
+    const again = await liveShellWithSession(fixture, { notificationPermission: answered.port });
+    await settle();
+    expect(again.query('notes.list.title')).not.toBeNull();
+    expect(again.query('notification-ask')).toBeNull();
   });
 });

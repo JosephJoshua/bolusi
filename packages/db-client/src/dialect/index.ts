@@ -23,6 +23,13 @@ function isRowReturningStatement(sql: string, node: RootOperationNode | undefine
   return /^\s*(?:select|pragma|with|explain|values)\b/i.test(sql);
 }
 
+/** The exact statements kysely-generic-sqlite issues for `beginTransaction` and friends. */
+const TRANSACTION_CONTROL: ReadonlyMap<string, 'begin' | 'commit' | 'rollback'> = new Map([
+  ['begin', 'begin'],
+  ['commit', 'commit'],
+  ['rollback', 'rollback'],
+]);
+
 /**
  * Adapts the driver to kysely-generic-sqlite's executor contract.
  *
@@ -42,6 +49,13 @@ function toGenericSqlite(driver: DbDriver): IGenericSqlite<DbDriver> {
         return result.rows as DbRow[];
       },
       run: async (sql, parameters) => {
+        // `db.transaction()` reaches us as the raw statements below; routing them to the driver's own
+        // primitives puts Kysely transactions in the same queue as every other one (connection.ts).
+        const control = TRANSACTION_CONTROL.get(sql);
+        if (control !== undefined) {
+          await driver[control]();
+          return { rows: [] };
+        }
         const result = await driver.execute(sql, parameters as readonly DbValue[] | undefined);
         const insertId = parseBigInt(result.insertId);
         const numAffectedRows = parseBigInt(result.rowsAffected);

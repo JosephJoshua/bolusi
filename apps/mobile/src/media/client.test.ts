@@ -184,7 +184,7 @@ describe('capture → compress → queue → drain → the real MediaTransportPo
     expect((await rowFor(outcome.ref.mediaId))['uploadStatus']).toBe('pending');
 
     // 04 §5.1 step 5 — the command runtime's attach. Task 25 will drive this from a real command.
-    await rig.client.attach(outcome.ref.mediaId, OPERATION_ID);
+    await rig.client.attach(outcome.ref, { id: OPERATION_ID, userId: outcome.ref.userId });
 
     // §5.2 (b): the 3 s debounce. Nothing has drained yet — the trigger is a timer, not a call.
     expect(rig.server.sessions.size).toBe(0);
@@ -212,7 +212,7 @@ describe('capture → compress → queue → drain → the real MediaTransportPo
 
     const outcome = await rig.client.capturePhoto(IDENTITY, rig.camera);
     if (outcome.kind !== 'captured') throw new Error(`expected a capture, got ${outcome.kind}`);
-    await rig.client.attach(outcome.ref.mediaId, OPERATION_ID);
+    await rig.client.attach(outcome.ref, { id: OPERATION_ID, userId: outcome.ref.userId });
 
     // No `runPending()` — the debounce never elapses.
     await rig.client.settle();
@@ -240,7 +240,7 @@ describe('capture → compress → queue → drain → the real MediaTransportPo
     const rig = buildRig();
     const outcome = await rig.client.capturePhoto(IDENTITY, rig.camera);
     if (outcome.kind !== 'captured') throw new Error('expected a capture');
-    await rig.client.attach(outcome.ref.mediaId, OPERATION_ID);
+    await rig.client.attach(outcome.ref, { id: OPERATION_ID, userId: outcome.ref.userId });
     rig.timer.runPending();
     await rig.client.settle();
 
@@ -292,7 +292,7 @@ describe('capture → compress → queue → drain → the real MediaTransportPo
     const rig = buildRig();
     const outcome = await rig.client.capturePhoto(IDENTITY, rig.camera);
     if (outcome.kind !== 'captured') throw new Error('expected a capture');
-    await rig.client.attach(outcome.ref.mediaId, OPERATION_ID);
+    await rig.client.attach(outcome.ref, { id: OPERATION_ID, userId: outcome.ref.userId });
     await sql`UPDATE media_items SET upload_status = 'uploading' WHERE id = ${outcome.ref.mediaId}`.execute(
       db.db,
     );

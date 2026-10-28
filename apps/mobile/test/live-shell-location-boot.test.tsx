@@ -44,6 +44,7 @@ vi.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
   requestForegroundPermissionsAsync: vi.fn(async () => ({ status: 'granted', granted: true })),
   getForegroundPermissionsAsync: vi.fn(async () => ({ status: 'granted', granted: true })),
+  hasServicesEnabledAsync: vi.fn(async () => true),
   watchPositionAsync: vi.fn(() => new Promise<never>(() => {})),
 }));
 

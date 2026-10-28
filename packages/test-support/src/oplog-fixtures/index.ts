@@ -18,3 +18,4 @@ export {
   mutateUserIdPostHash,
   relabelDeviceId,
 } from './tamper.js';
+export { opRowOf } from './row.js';

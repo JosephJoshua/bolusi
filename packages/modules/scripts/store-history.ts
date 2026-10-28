@@ -89,6 +89,8 @@ export interface StoreHistoryOptions {
   readonly days: number;
   readonly ticketsPerDay: number;
   readonly seed: number;
+  /** Tickets still in the shop at the end, in every stage a busy counter sees. Default none. */
+  readonly openTickets?: number;
   /** Called after each simulated day, for progress output on long runs. */
   readonly onDay?: (day: number) => void;
 }
@@ -101,6 +103,33 @@ export interface StoreHistory {
 }
 
 const pick = <T>(prng: Prng, items: readonly T[]): T => items[Math.floor(prng() * items.length)]!;
+
+/** Syllables for clan and given names beyond the common lists, so the name vocabulary keeps growing. */
+const SYLLABLES = [
+  'ya',
+  'ko',
+  'bu',
+  'we',
+  'nda',
+  'ru',
+  'mi',
+  'ta',
+  'se',
+  'lo',
+  'ma',
+  'ni',
+  'ka',
+  'pa',
+];
+
+/** About half the customers have a third, less common name, as a real store's book does. */
+function customerName(prng: Prng): string {
+  const name = `${pick(prng, FIRST_NAMES)} ${pick(prng, LAST_NAMES)}`;
+  if (prng() < 0.5) return name;
+  const length = 2 + Math.floor(prng() * 2);
+  const rare = Array.from({ length }, () => pick(prng, SYLLABLES)).join('');
+  return `${name} ${rare[0]!.toUpperCase()}${rare.slice(1)}`;
+}
 
 const digits = (prng: Prng, count: number): string =>
   Array.from({ length: count }, () => Math.floor(prng() * 10)).join('');
@@ -119,15 +148,18 @@ export async function writeStoreHistory(options: StoreHistoryOptions): Promise<S
     }
     options.onDay?.(day + 1);
   }
+  for (let i = 0; i < (options.openTickets ?? 0); i += 1) {
+    await writeOpenTicket(writer, prng, customers);
+    tickets += 1;
+  }
 
   return { ops: await readWireOps(writer.db), tickets, writer };
 }
 
-async function writeTicketJourney(
-  h: RepairHarness,
-  prng: Prng,
-  customers: string[],
-): Promise<void> {
+/** Work photos are the technician's own captures, so the server binds them to the technician. */
+const techPhoto = (h: RepairHarness, n: number) => ({ ...h.photo(n), userId: h.technicianId });
+
+async function openStoreTicket(h: RepairHarness, prng: Prng, customers: string[]) {
   const returning = customers.length > 0 && prng() < 0.35;
   const [brand, model] = pick(prng, DEVICES);
   const [part, price] = pick(prng, PARTS);
@@ -137,7 +169,7 @@ async function writeTicketJourney(
       customer: returning
         ? { customerId: pick(prng, customers) }
         : {
-            name: `${pick(prng, FIRST_NAMES)} ${pick(prng, LAST_NAMES)}`,
+            name: customerName(prng),
             phone: `08${digits(prng, 10)}`,
           },
       device: { brand, model, color: pick(prng, COLORS), imei: digits(prng, 15) },
@@ -149,13 +181,53 @@ async function writeTicketJourney(
     }),
     h.cashierId,
   )) as { ticketId: string; customerId: string };
-  const { ticketId } = opened;
   if (!returning) customers.push(opened.customerId);
+  return opened;
+}
+
+/** A ticket still in the shop: waiting, with a technician, waiting for parts or for pickup. */
+async function writeOpenTicket(h: RepairHarness, prng: Prng, customers: string[]): Promise<void> {
+  const { ticketId } = await openStoreTicket(h, prng, customers);
+  const stage = prng();
+  if (stage < 0.3) return;
+  await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
+  if (stage < 0.45) return;
+  await h.run('startWork', { ticketId, beforePhotos: [techPhoto(h, 9)] }, h.technicianId);
+  if (prng() < 0.3) {
+    await h.run(
+      'proposeQuoteChange',
+      { ticketId, kind: 'part', description: 'Baterai', amount: 250_000, reason: 'Ikut rusak' },
+      h.technicianId,
+    );
+  }
+  if (stage < 0.7) return;
+  if (stage < 0.8) {
+    await h.run(
+      'markWaitingForParts',
+      { ticketId, note: 'Tunggu part dari Jayapura' },
+      h.technicianId,
+    );
+    return;
+  }
+  await h.run(
+    'markRepaired',
+    { ticketId, note: 'Sudah dites', afterPhotos: [techPhoto(h, 10)] },
+    h.technicianId,
+  );
+}
+
+async function writeTicketJourney(
+  h: RepairHarness,
+  prng: Prng,
+  customers: string[],
+): Promise<void> {
+  const opened = await openStoreTicket(h, prng, customers);
+  const { ticketId } = opened;
 
   if (prng() < 0.25) {
     await h.run('assignTechnician', { ticketId, technicianId: h.technicianId }, h.cashierId);
   }
-  await h.run('startWork', { ticketId }, h.technicianId);
+  await h.run('startWork', { ticketId, beforePhotos: [techPhoto(h, 9)] }, h.technicianId);
   if (prng() < 0.2) {
     await h.run(
       'markWaitingForParts',
@@ -178,9 +250,13 @@ async function writeTicketJourney(
     }
   }
   if (prng() < 0.08) {
-    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.cashierId);
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal' }, h.storeOwnerId);
   } else {
-    await h.run('markRepaired', { ticketId, note: 'Sudah dites' }, h.technicianId);
+    await h.run(
+      'markRepaired',
+      { ticketId, note: 'Sudah dites', afterPhotos: [techPhoto(h, 10)] },
+      h.technicianId,
+    );
   }
   await h.run(
     'returnDevice',
@@ -192,7 +268,7 @@ async function writeTicketJourney(
       'correctCustomerDetails',
       {
         customerId: opened.customerId,
-        name: `${pick(prng, FIRST_NAMES)} ${pick(prng, LAST_NAMES)}`,
+        name: customerName(prng),
         phone: `08${digits(prng, 10)}`,
       },
       h.cashierId,

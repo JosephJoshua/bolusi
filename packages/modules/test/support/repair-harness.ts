@@ -1,17 +1,20 @@
 // A full `repair` runtime over in-memory SQLite: the real command and query runtimes, the real
 // projection engine and the real client migrations, with the agreed role split — a cashier, two
-// technicians and a user with no grants. Built the same way as the notes harness.
+// technicians, the owners (only they cancel) and a user with no grants. Built the same way as the notes harness.
 import { CamelCasePlugin, Kysely } from 'kysely';
 
 import { createClientDialect, runClientMigrations, type ClientDatabase } from '@bolusi/db-client';
 import type { MediaRef, SignedOperation } from '@bolusi/schemas';
-import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+import { mulberry32, noblePort, randomBytes as prngBytes, opRowOf } from '@bolusi/test-support';
 import { openMemoryDriver } from '@bolusi/sqlite-test-driver';
 
 import {
   assemblePermissionRegistry,
   bytesToBase64,
+  bytesToHex,
   createModuleRuntime,
+  insertOpLogRow,
+  operationFromSignedCoreJcs,
   createProjectionEngine,
   SearchIndexCache,
   createUuidV7Generator,
@@ -29,10 +32,12 @@ import { SqliteOpStore } from './harness.js';
 
 const CASHIER_ROLE = 'role-cashier';
 const TECHNICIAN_ROLE = 'role-technician';
+const OWNER_ROLE = 'role-owner';
+const STORE_OWNER_ROLE = 'role-store-owner';
 const P = REPAIR_PERMISSION;
 
-const role = (permissionIds: readonly string[]): DirectoryRole => ({
-  scopeType: 'store',
+const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
+  scopeType,
   permissionIdsJson: JSON.stringify(permissionIds),
 });
 
@@ -53,6 +58,13 @@ export interface RepairHarness {
   readonly technicianId: string;
   readonly technician2Id: string;
   readonly zeroUserId: string;
+  /** Holds every repair permission tenant-wide, as the franchise owner does. */
+  readonly ownerId: string;
+  /**
+   * May hide intake options at this store (not change the franchise's lists), cancel repairs and
+   * set the store's cancellation fees.
+   */
+  readonly storeOwnerId: string;
   /** Run a repair command as `userId`. */
   run<K extends keyof typeof repairModule.commands>(
     command: K,
@@ -96,12 +108,8 @@ export async function openRepairHarness(
   });
   const tenantId = shared?.tenantId ?? staticIds();
   const storeId = shared?.storeId ?? staticIds();
-  const [cashierId, technicianId, technician2Id, zeroUserId] = shared?.users ?? [
-    staticIds(),
-    staticIds(),
-    staticIds(),
-    staticIds(),
-  ];
+  const [cashierId, technicianId, technician2Id, zeroUserId, ownerId, storeOwnerId] =
+    shared?.users ?? [staticIds(), staticIds(), staticIds(), staticIds(), staticIds(), staticIds()];
   const deviceId = staticIds();
   const keypair = noblePort.ed25519Keygen(prngBytes(prng, 32));
   const newId = createUuidV7Generator({
@@ -116,20 +124,36 @@ export async function openRepairHarness(
         Promise.resolve({
           tenantId,
           users: new Map(
-            [cashierId!, technicianId!, technician2Id!, zeroUserId!].map((id) => [
-              id,
-              { status: 'active' as const },
-            ]),
+            [cashierId!, technicianId!, technician2Id!, zeroUserId!, ownerId!, storeOwnerId!].map(
+              (id) => [id, { status: 'active' as const }],
+            ),
           ),
           roles: new Map<string, DirectoryRole>([
-            [CASHIER_ROLE, role([P.read, P.intake, P.assign, P.quoteChange, P.cancel, P.handover])],
+            [CASHIER_ROLE, role([P.read, P.intake, P.assign, P.quoteChange, P.handover])],
             [TECHNICIAN_ROLE, role([P.read, P.work])],
+            [OWNER_ROLE, role(Object.values(P), 'tenant')],
+            [
+              STORE_OWNER_ROLE,
+              role([
+                P.read,
+                P.intake,
+                P.quoteChange,
+                P.hideIntakeOptions,
+                P.cancel,
+                P.discount,
+                P.setCancelFees,
+                P.correctDownPayment,
+                P.setPrintSettings,
+              ]),
+            ],
           ]),
           grantsByUser: new Map<string, readonly DirectoryGrant[]>([
             [cashierId!, [{ roleId: CASHIER_ROLE, storeId }]],
             [technicianId!, [{ roleId: TECHNICIAN_ROLE, storeId }]],
             [technician2Id!, [{ roleId: TECHNICIAN_ROLE, storeId }]],
             [zeroUserId!, []],
+            [ownerId!, [{ roleId: OWNER_ROLE, storeId: null }]],
+            [storeOwnerId!, [{ roleId: STORE_OWNER_ROLE, storeId }]],
           ]),
         }),
     },
@@ -173,6 +197,8 @@ export async function openRepairHarness(
     technicianId: technicianId!,
     technician2Id: technician2Id!,
     zeroUserId: zeroUserId!,
+    ownerId: ownerId!,
+    storeOwnerId: storeOwnerId!,
     run: async (command, input, userId) => {
       const outcome = await runtime.commands.execute(
         repairModule.commands[command] as never,
@@ -192,65 +218,19 @@ export async function openRepairHarness(
     ownOps: async () => {
       const rows = await db
         .selectFrom('operations')
-        .selectAll()
+        .select(['signedCoreJcs', 'hash', 'signature'])
         .where('deviceId', '=', deviceId)
         .where('type', 'like', 'repair.%')
         .orderBy('seq', 'asc')
         .execute();
-      return rows.map(
-        (row) =>
-          ({
-            id: row.id,
-            tenantId: row.tenantId,
-            storeId: row.storeId,
-            userId: row.userId,
-            deviceId: row.deviceId,
-            seq: row.seq,
-            type: row.type,
-            entityType: row.entityType,
-            entityId: row.entityId,
-            schemaVersion: row.schemaVersion,
-            payload: JSON.parse(row.payload),
-            timestamp: row.timestampMs,
-            location: null,
-            source: row.source,
-            agentInitiated: row.agentInitiated === 1,
-            agentConversationId: row.agentConversationId,
-            previousHash: row.previousHash,
-            hash: row.hash,
-            signature: row.signature,
-          }) as SignedOperation,
-      );
+      return rows.map((row) => operationFromSignedCoreJcs(row.signedCoreJcs, row));
     },
     deliverPulled: async (op, arrivalSeq) => {
-      await db
-        .insertInto('operations')
-        .values({
-          id: op.id,
-          tenantId: op.tenantId,
-          storeId: op.storeId,
-          userId: op.userId,
-          deviceId: op.deviceId,
-          seq: op.seq,
-          type: op.type,
-          entityType: op.entityType,
-          entityId: op.entityId,
-          schemaVersion: op.schemaVersion,
-          payload: JSON.stringify(op.payload),
-          timestampMs: op.timestamp,
-          location: null,
-          source: op.source,
-          agentInitiated: op.agentInitiated ? 1 : 0,
-          agentConversationId: op.agentConversationId,
-          previousHash: op.previousHash,
-          hash: op.hash,
-          signature: op.signature,
-          signedCoreJcs: `jcs:${op.id}`,
-          syncStatus: 'synced',
-          arrivalSeq,
-          syncedAt: clock.value,
-        })
-        .execute();
+      await insertOpLogRow(db, opRowOf(op), {
+        syncStatus: 'synced',
+        syncedAt: clock.value,
+        arrivalSeq,
+      });
       await engine.applyPulledOp(op);
     },
     photo: (n: number): MediaRef => {
@@ -258,7 +238,8 @@ export async function openRepairHarness(
       const hex = (n * 1000 + photoCounter).toString(16).padStart(12, '0');
       return {
         mediaId: `01920000-0000-7000-8000-${hex}`,
-        sha256: (n % 10).toString().repeat(64),
+        // Digest-shaped (random hex), so size and compression measurements see a real hash.
+        sha256: bytesToHex(prngBytes(mulberry32(n * 1000 + photoCounter), 32)),
         mime: 'image/jpeg',
         type: 'image',
         sizeBytes: 120_000,
@@ -282,22 +263,22 @@ export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}
     device: { brand: 'Samsung', model: 'Galaxy A14', color: 'Hitam', imei: '356789104455667' },
     complaint: 'Layar retak, sentuhan tidak responsif',
     checklist: [
-      { item: 'screen', state: 'issue', note: 'retak kiri atas' },
-      { item: 'speaker', state: 'ok', note: '' },
+      { item: 'screen', label: null, state: 'issue', note: 'retak kiri atas' },
+      { item: 'speaker', label: null, state: 'ok', note: '' },
     ],
-    peripherals: ['charger', 'case'],
+    peripherals: [
+      { item: 'charger', label: null },
+      { item: 'case', label: null },
+    ],
     quoteLines: [
       { kind: 'part', description: 'LCD A14 original', amount: 650_000 },
       { kind: 'labour', description: 'Pasang LCD', amount: 100_000 },
     ],
-    photos: {
-      front: h.photo(1),
-      back: h.photo(2),
-      left: h.photo(3),
-      right: h.photo(4),
-      top: h.photo(5),
-      bottom: h.photo(6),
-    },
+    photos: ['front', 'back', 'left', 'right', 'top', 'bottom'].map((slot, i) => ({
+      slot,
+      label: null,
+      ref: h.photo(i + 1),
+    })),
     ...overrides,
   };
 }

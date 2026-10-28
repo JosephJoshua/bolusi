@@ -53,7 +53,9 @@ import { assertConvergence, canonicalFold, notesRows } from '../src/oracle.js';
 import { CountingTransport, HttpTransport, pullDevice, pushDevice } from '../src/transport.js';
 import { activeVolumes, nightlyX4Seeds, resolveSeeds, withSeed } from '../src/index.js';
 
-const CLOCK_BASE = 1_726_100_000_000;
+// Before the harness server's now (its clock base, 1_726_100_000_000): the server refuses a timestamp
+// ahead of its own clock (core sync/clock-guard.ts), and the offline week is authored in the past and sync later.
+const CLOCK_BASE = 1_726_100_000_000 - 8 * 24 * 60 * 60 * 1_000;
 const PUSH_BATCH = 500; // api/01 §3 cap.
 const PULL_LIMIT = 500;
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -62,6 +64,15 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
  *  reason convergence.ts pre-shares its pool). Large + spread edits keep each entity's history short,
  *  so the merge's re-fold cost (04 §4.2 re-folds an entity's WHOLE history) stays bounded. */
 const SHARED_POOL = 300;
+/** Server time one sync request takes. The harness server's clock is a FakeClock that nothing else
+ *  advances, so without this the per-device rate limit (120 requests/min, refilled over time) never
+ *  refills and a device's 121st request of the whole test is a 429. That is what failed the ×4 runs,
+ *  whose devices each make more than 120 push and pull requests. One second matches the measured cost
+ *  of a 500-op page (docs/architecture.md: ~250 s to pull 122k ops on a laptop), so the limiter stays
+ *  real but a normal client never trips it. */
+const ROUND_TRIP_MS = 1_000;
+/** The server's default per-device request burst (api/00 §11: 120/min; apps/server deps.ts). */
+const DEVICE_REQUEST_BURST = 120;
 /** Fraction of a device's ops authored as edits on the shared pool (the rest own-note creates) —
  *  enough cross-device same-entity contention to make the merge real, low enough to bound re-fold. */
 const EDIT_FRACTION = 0.15;
@@ -101,6 +112,8 @@ interface BulkWorld {
   readonly server: HarnessServer;
   readonly devices: readonly VirtualDevice[];
   readonly transports: readonly CountingTransport[];
+  /** Each device's bearer header, for a transport that bypasses the paced one. */
+  readonly auths: readonly string[];
   /** Every NOTES op, deduped — the convergence fold input + authored-volume denominator (14,000). */
   readonly notesUniverse: readonly SignedOperation[];
   /** Count of ALL ops deduped, incl. each device's genesis `auth.device_enrolled` — the pull/applied
@@ -195,13 +208,17 @@ async function buildWorld(
   const universeAllCount = dedupeById(perDevice.flat()).length; // notes + one genesis per device
 
   const transports = devices.map(
-    (_, index) => new CountingTransport(new HttpTransport(server.fetch, seeded[index]!.auth)),
+    (_, index) =>
+      new CountingTransport(
+        new PacedTransport(new HttpTransport(server.fetch, seeded[index]!.auth), server.clock),
+      ),
   );
 
   return {
     server,
     devices,
     transports,
+    auths: seeded.map((device) => device.auth),
     notesUniverse,
     universeAllCount,
     authoredNotes,
@@ -440,6 +457,31 @@ describe('CHAOS-03 days-offline bulk merge', () => {
       await world.close();
     }
   });
+
+  // The ×4 runs make more requests per device than the rate-limit burst. This proves, cheaply, that
+  // such a sync completes once server time passes, and that a frozen server clock is what made it 429.
+  test('CHAOS-03 a sync longer than the rate-limit burst completes because server time passes', async () => {
+    const POOL = 20;
+    const SMALL_PAGE = 3; // device 0's 401 ops ⇒ 134 pull pages, over the burst
+    const world = await buildWorld(1, 3, 1, 400, POOL);
+    try {
+      const { server, devices, transports, auths, localCounts } = world;
+      await pushDevice(devices[0]!, transports[0]!, { batchSize: PUSH_BATCH });
+
+      // Control: the same pull with the server clock frozen runs out of tokens.
+      const frozen = new HttpTransport(server.fetch, auths[2]!);
+      await expect(pullDevice(devices[2]!, frozen, { limit: SMALL_PAGE })).rejects.toMatchObject({
+        code: 'RATE_LIMITED',
+      });
+
+      const pull = await pullDevice(devices[1]!, transports[1]!, { limit: SMALL_PAGE });
+      expect(transports[1]!.pullOpCounts.length).toBeGreaterThan(DEVICE_REQUEST_BURST);
+      expect(pull.drained).toBe(true);
+      expect(pull.applied).toBe(localCounts[0]! - POOL); // device 0's ops minus the pool it holds
+    } finally {
+      await world.close();
+    }
+  });
 });
 
 /**
@@ -458,5 +500,22 @@ class DroppingPullTransport implements SyncTransportPort {
   async pull(request: PullRequest): Promise<PullResponse> {
     const response = await this.inner.pull(request);
     return { ...response, ops: response.ops.filter((op) => op.id !== this.dropId) };
+  }
+}
+
+/** Advances the server clock by {@link ROUND_TRIP_MS} before each request, so server time passes
+ *  while a device syncs the way it does in production. Delegates verbatim otherwise. */
+class PacedTransport implements SyncTransportPort {
+  constructor(
+    private readonly inner: SyncTransportPort,
+    private readonly serverClock: FakeClock,
+  ) {}
+  push(request: PushRequest): Promise<PushResponse> {
+    this.serverClock.advance(ROUND_TRIP_MS);
+    return this.inner.push(request);
+  }
+  pull(request: PullRequest): Promise<PullResponse> {
+    this.serverClock.advance(ROUND_TRIP_MS);
+    return this.inner.pull(request);
   }
 }

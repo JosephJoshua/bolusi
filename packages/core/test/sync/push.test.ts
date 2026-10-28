@@ -19,9 +19,9 @@ import {
   type PushResult,
   type SignedOperation,
 } from '@bolusi/schemas';
-import { noblePort } from '@bolusi/test-support';
+import { opRowOf } from '@bolusi/test-support';
 
-import { runPushPhase, signedCoreJcsOf } from '../../src/index.js';
+import { insertOpLogRow, runPushPhase } from '../../src/index.js';
 import {
   makeDevice,
   makeSignedNoteOp,
@@ -74,18 +74,11 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
   // `signed_core_jcs` via the REAL canonicalizer — the push path rebuilds the wire op from these
   // bytes (05 §3 verbatim-storage), so a hand-rolled approximation here would test a fixture's
   // serializer rather than the product's.
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${signedCoreJcsOf(op, noblePort)}, 'local'
-    )
-  `.execute(harness.db);
+  await insertOpLogRow(harness.db, opRowOf(op), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
   return op;
 }
 
@@ -96,6 +89,8 @@ function deps() {
     surface: harness.surface,
     clock: harness.clock,
     deviceId: device.id,
+    transaction: harness.transaction,
+    refoldRefused: (op: SignedOperation) => harness.engine.refoldRefused(op),
     onChainBroken: async () => {
       chainBrokenCalls += 1;
       await sql`UPDATE sync_state SET push_halted = 1 WHERE id = 1`.execute(harness.db);
@@ -252,6 +247,102 @@ describe('every rejection code in 05 §8 is surfaced — the closed set, never a
     expect(surfaced[0]?.code).toBe('FUTURE_CODE_v9');
     expect((await statusOf(a.id)).status).toBe('rejected');
     expect((await statusOf(a.id)).code).toBe('FUTURE_CODE_v9');
+  });
+});
+
+describe('a refused op is rolled out of this device`s projection', () => {
+  /** Append a local op for `entityId` and fold it, as a command would. */
+  async function appendLocal(
+    seq: number,
+    entityId: string,
+    type: string,
+    payload: Record<string, unknown>,
+  ): Promise<SignedOperation> {
+    const prng = prngFor(8000 + seq);
+    clockAt += 1000;
+    const op = makeSignedNoteOp({
+      device,
+      seq,
+      timestamp: clockAt,
+      tenantId,
+      storeId,
+      userId,
+      entityId,
+      type,
+      payload,
+      prng,
+    });
+    await insertOpLogRow(harness.db, opRowOf(op), {
+      syncStatus: 'local',
+      syncedAt: null,
+      arrivalSeq: null,
+    });
+    await harness.engine.applyAppendedOp(op);
+    return op;
+  }
+
+  async function noteBody(id: string): Promise<string | undefined> {
+    const rows = await sql<{ body: string }>`SELECT body FROM notes WHERE id = ${id}`.execute(
+      harness.db,
+    );
+    return rows.rows[0]?.body;
+  }
+
+  it('re-folds the record without the refused op, keeping the accepted ones', async () => {
+    const noteId = uuidV7(prngFor(8100), clockAt);
+    const created = await appendLocal(1, noteId, 'notes.note_created', {
+      title: 'Stok LCD',
+      body: 'awal',
+      mediaRef: null,
+    });
+    const edit = await appendLocal(2, noteId, 'notes.note_body_edited', { body: 'ditolak' });
+    expect(await noteBody(noteId)).toBe('ditolak');
+
+    harness.transport.scriptPush({
+      results: [
+        { id: created.id, status: 'accepted', serverSeq: 1 },
+        { id: edit.id, status: 'rejected', code: 'RULE_VIOLATED', reason: 'archived' },
+      ],
+      serverTime: clockAt,
+    });
+    await runPushPhase(deps());
+
+    expect(await statusOf(edit.id)).toEqual({ status: 'rejected', code: 'RULE_VIOLATED' });
+    expect(await noteBody(noteId)).toBe('awal');
+  });
+
+  it('a refused create removes the record entirely', async () => {
+    const noteId = uuidV7(prngFor(8200), clockAt);
+    const created = await appendLocal(1, noteId, 'notes.note_created', {
+      title: 'Stok LCD',
+      body: 'awal',
+      mediaRef: null,
+    });
+
+    harness.transport.scriptPush({
+      results: [{ id: created.id, status: 'rejected', code: 'PERMISSION_DENIED', reason: 'x' }],
+      serverTime: clockAt,
+    });
+    await runPushPhase(deps());
+
+    expect(await noteBody(noteId)).toBeUndefined();
+  });
+
+  it('CHAIN_GAP is not a refusal: the record keeps the op', async () => {
+    const noteId = uuidV7(prngFor(8300), clockAt);
+    const created = await appendLocal(1, noteId, 'notes.note_created', {
+      title: 'Stok LCD',
+      body: 'awal',
+      mediaRef: null,
+    });
+
+    harness.transport.scriptPush({
+      results: [{ id: created.id, status: 'rejected', code: 'CHAIN_GAP', reason: 'gap' }],
+      serverTime: clockAt,
+    });
+    await runPushPhase(deps());
+
+    expect(await noteBody(noteId)).toBe('awal');
   });
 });
 

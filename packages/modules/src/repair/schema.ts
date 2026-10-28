@@ -35,9 +35,9 @@ export interface RepairTicketsTable {
   devicePasscode: string | null;
   complaint: string;
   intakeNotes: string;
-  /** JSON array of `{ item, state, note }`. */
+  /** JSON array of `{ item, label?, state, note }` (no `label` before intake lists were editable). */
   checklistJson: string;
-  /** JSON array of strings (charger, case, SIM…). */
+  /** JSON array of `{ item, label }`, or of plain item ids before intake lists were editable. */
   peripheralsJson: string;
   estimatedReadyAt: number | null;
   outcome: string;
@@ -52,6 +52,23 @@ export interface RepairTicketsTable {
   updatedAt: number;
   returnedBy: string | null;
   returnedAt: number | null;
+  /**
+   * JSON array of `{ slot, label }`: the intake photo angles asked for, in order, as named then.
+   * Null for a ticket opened before the list was editable, which has the six default angles.
+   */
+  intakePhotosJson: string | null;
+  /**
+   * Integer IDR the customer pays for a cancelled servisan, and the store's fee in force when it was
+   * cancelled. Null when not cancelled, or cancelled before fees existed (nothing was charged then).
+   */
+  cancelFee: number | null;
+  cancelStandardFee: number | null;
+  cancelledBy: string | null;
+  cancelledAt: number | null;
+  /** Integer IDR the customer paid up front; null when nothing was. Not a cash ledger. */
+  downPayment: number | null;
+  downPaymentBy: string | null;
+  downPaymentAt: number | null;
 }
 
 export interface RepairQuoteLinesTable {
@@ -102,10 +119,91 @@ export interface RepairTicketEventsTable {
   detailJson: string;
 }
 
+/** The franchise's intake option lists (intake-options.ts), one row per list. */
+export interface RepairIntakeOptionsTable {
+  tenantId: string;
+  list: string;
+  /** JSON array of `{ id, label }`, in the order the counter sees them. */
+  itemsJson: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** The intake options one store hides, one row per list. */
+export interface RepairStoreIntakeOptionsTable {
+  storeId: string;
+  list: string;
+  tenantId: string;
+  /** JSON array of option ids. */
+  hiddenJson: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** One store's cancellation fees, integer IDR. A store that never set them charges nothing. */
+export interface RepairStoreCancelFeesTable {
+  storeId: string;
+  tenantId: string;
+  /** Before any work started on the phone. */
+  beforeWork: number;
+  /** Once a technician has started work on it. */
+  afterWork: number;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** What one store's slips print at the top and in their terms. A store that never set it prints its own name only. */
+export interface RepairStorePrintSettingsTable {
+  storeId: string;
+  tenantId: string;
+  /** The business name printed in large type; null prints the store's name. */
+  name: string | null;
+  address: string;
+  phone: string;
+  logoMediaId: string | null;
+  logoSha256: string | null;
+  logoMime: string | null;
+  /** 1 = the dot-matrix prints the logo too (slow, so off unless the owner turns it on). */
+  logoOnDotMatrix: number;
+  /** One term per line; null prints the app's default terms. */
+  intakeTerms: string | null;
+  handoverTerms: string | null;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/**
+ * The phone catalog (client migration 8, server migration 0016). Not a repair projection: no op
+ * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
+ * suggest models at intake (device-models.ts). The server's table has the same columns and more.
+ */
+export interface PhoneModelsTable {
+  /** GSMArena's device number. */
+  id: number;
+  brand: string;
+  /** Without the brand: `Galaxy A55`. */
+  name: string;
+  /** `phone`, `tablet` or `watch`. */
+  kind: string;
+  announcedYear: number | null;
+  /** Comma-separated maker codes, '' when unknown. */
+  modelCodes: string;
+  /** Null when there is no photo to show. */
+  photoSha256: string | null;
+  /** The spec sheet as JSON text (`PhoneSpecs`, @bolusi/schemas). */
+  specs: string;
+  revision: number;
+}
+
 export interface RepairDatabase {
+  phoneModels: PhoneModelsTable;
   repairCustomers: RepairCustomersTable;
   repairTickets: RepairTicketsTable;
   repairQuoteLines: RepairQuoteLinesTable;
   repairTicketPhotos: RepairTicketPhotosTable;
   repairTicketEvents: RepairTicketEventsTable;
+  repairIntakeOptions: RepairIntakeOptionsTable;
+  repairStoreIntakeOptions: RepairStoreIntakeOptionsTable;
+  repairStoreCancelFees: RepairStoreCancelFeesTable;
+  repairStorePrintSettings: RepairStorePrintSettingsTable;
 }

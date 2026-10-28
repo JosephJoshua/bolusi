@@ -56,7 +56,7 @@ function ciphertextCtx(): AtRestProbeContext {
     readCopyBytes: () => Promise.resolve(encode('SQLite format 3\u0000blobs')),
     plaintextMarkers: MARKERS,
     readSealedCells: () => Promise.resolve(sealedCells()),
-    sealedPrefix: SEALED_PREFIX,
+    sealedPrefixes: [SEALED_PREFIX],
   };
 }
 
@@ -69,7 +69,7 @@ function plaintextCtx(): AtRestProbeContext {
       Promise.resolve(new Uint8Array([...encode('SQLite format 3'), ...encode(MARKERS[0] ?? '')])),
     plaintextMarkers: MARKERS,
     readSealedCells: () => Promise.resolve(cells),
-    sealedPrefix: SEALED_PREFIX,
+    sealedPrefixes: [SEALED_PREFIX],
   };
 }
 

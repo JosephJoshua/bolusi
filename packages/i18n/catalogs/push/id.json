@@ -6,5 +6,11 @@
   "device": {
     "title": "Peringatan perangkat",
     "body": "Ada masalah pada salah satu perangkat toko. Ketuk untuk memeriksa."
+  },
+  "permission": {
+    "title": "Nyalakan notifikasi?",
+    "message": "Biar kamu tahu kalau ada yang perlu dicek, walau aplikasi sedang ditutup.",
+    "allow": "Nyalakan",
+    "later": "Nanti saja"
   }
 }

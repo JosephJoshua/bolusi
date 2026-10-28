@@ -81,6 +81,8 @@ export interface ModulePermissionManifest {
   readonly commands?: Readonly<Record<string, PermissionRequiringSurface>>;
   /** Query name → its slice. Checked identically to commands (04 §6). */
   readonly queries?: Readonly<Record<string, PermissionRequiringSurface>>;
+  /** Op type → the permission its author must hold; `null` for types no command emits. */
+  readonly operations?: Readonly<Record<string, { readonly permission: string | null }>>;
 }
 
 /** A startup failure (§3.2). Thrown during assembly — never at runtime, never demoted to a warning. */
@@ -95,7 +97,7 @@ export class PermissionRegistryError extends Error {
 export interface PermissionReference {
   /** The declaring module's id. */
   readonly module: string;
-  readonly surface: 'command' | 'query';
+  readonly surface: 'command' | 'query' | 'operation';
   /** The command/query name (the manifest key). */
   readonly name: string;
   /** The permission id it requires. */
@@ -103,7 +105,7 @@ export interface PermissionReference {
 }
 
 /**
- * Every command/query → permission reference across the given modules, in module order.
+ * Every command/query/op-type → permission reference across the given modules, in module order.
  *
  * Exported so a coverage check can assert its own DENOMINATOR (testing-guide T-14): "every
  * command's permission resolves" is a vacuous assertion unless the test also states how many
@@ -130,6 +132,15 @@ export function collectPermissionReferences(
         surface: 'query',
         name,
         permission: surface.permission,
+      });
+    }
+    for (const [type, declaration] of Object.entries(module.operations ?? {})) {
+      if (declaration.permission === null) continue;
+      references.push({
+        module: module.id,
+        surface: 'operation',
+        name: type,
+        permission: declaration.permission,
       });
     }
   }
@@ -246,8 +257,13 @@ export function assemblePermissionRegistry(
   // Rule 3, against the MERGED registry.
   for (const reference of collectPermissionReferences(modules)) {
     if (!entries.has(reference.permission)) {
+      // Op types are already module-prefixed; commands and queries are named within their module.
+      const name =
+        reference.surface === 'operation'
+          ? reference.name
+          : `${reference.module}.${reference.name}`;
       throw new PermissionRegistryError(
-        `${reference.surface} ${reference.module}.${reference.name} requires permission ${reference.permission}, which no registered module declares (02-permissions §3.2 rule 3)`,
+        `${reference.surface} ${name} requires permission ${reference.permission}, which no registered module declares (02-permissions §3.2 rule 3)`,
       );
     }
   }

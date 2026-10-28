@@ -19,7 +19,6 @@ import {
   createLockedOutEmitter,
   createUuidV7Generator,
   DEFAULT_KDF_PARAMS,
-  PinVerifierQueue,
   writeVerifier,
   type ClockPort,
   type CryptoPort,
@@ -80,7 +79,8 @@ export interface AuthOpRow {
   readonly type: string;
   readonly userId: string;
   readonly source: string;
-  readonly payload: string;
+  /** The op's stored signed text, which holds its payload (client migration 6). */
+  readonly signedCoreJcs: string;
 }
 
 export interface PinFixture {
@@ -232,13 +232,12 @@ export async function openPinFixture(
       clock: clockPort,
       idSource,
       deviceId,
-      queue: new PinVerifierQueue(),
       emitter,
     }),
     authOps: async () => {
       const rows = await db
         .selectFrom('operations')
-        .select(['type', 'userId', 'source', 'payload'])
+        .select(['type', 'userId', 'source', 'signedCoreJcs'])
         .orderBy('deviceId')
         .orderBy('seq')
         .execute();

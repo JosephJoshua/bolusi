@@ -12,13 +12,14 @@
 // deliberately covers the derived ones plus the handful of screen keys that arrive through a
 // `satisfies Record<…>` map, where the value type is `string` rather than `TranslationKey`.
 import { hasKey, LOCALES, SELECTABLE_LOCALES, type Locale } from '@bolusi/i18n';
+import { REJECTION_CODES } from '@bolusi/schemas';
 import { describe, expect, test } from 'vitest';
 
 import { failureKey } from './enrollment/model.js';
 import { PIN_MESSAGE_KEY } from './pin/model.js';
 import { categoryNameKey, localeNameKey, MUTABLE_PUSH_CATEGORIES } from './settings/model.js';
 import { SWITCHER_EMPTY_HINT_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
-import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status/model.js';
+import { REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status/model.js';
 
 /**
  * The catalogs a v0 user can actually reach. `zh` is scaffolded in `LOCALES` but ships NO catalog
@@ -27,18 +28,6 @@ import { MEDIA_STATUS_KEY, REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status
  * joins this gate automatically instead of silently escaping it.
  */
 const CATALOGS: readonly Locale[] = SELECTABLE_LOCALES;
-
-/** 05-operation-log §8's closed rejection-code set, as the `core` catalog carries it (07-i18n §10.2). */
-const REJECTION_CODES = [
-  'BAD_SIGNATURE',
-  'CHAIN_BROKEN',
-  'CHAIN_GAP',
-  'CHAIN_HALTED',
-  'DEVICE_REVOKED',
-  'SCHEMA_INVALID',
-  'SCOPE_VIOLATION',
-  'UNKNOWN_TYPE',
-] as const;
 
 /** The DomainError codes these screens can actually render (04 §5.3 subset + transport codes). */
 const ERROR_CODES = [
@@ -93,7 +82,7 @@ describe('derived keys — the ones the compiler cannot check', () => {
       covered += 1;
     }
     expect(covered).toBe(REJECTION_CODES.length);
-    expect(covered).toBe(8);
+    expect(covered).toBe(11);
   });
 
   test('every error code these screens can render has a row in both catalogs', () => {
@@ -148,12 +137,10 @@ describe('screen key maps', () => {
     expectInEveryCatalog(SWITCHER_LOCK_KEY);
   });
 
-  test('every sync-status reassurance and media-status key exists', () => {
+  test('every sync-status reassurance key exists', () => {
     for (const key of Object.values(REASSURANCE_KEY)) expectInEveryCatalog(key);
-    for (const key of Object.values(MEDIA_STATUS_KEY)) expectInEveryCatalog(key);
     // 5 since task 147 added `photosPending` — ops sent, photos still draining (FR-1138).
     expect(Object.values(REASSURANCE_KEY)).toHaveLength(5);
-    expect(Object.values(MEDIA_STATUS_KEY)).toHaveLength(3);
   });
 
   test('every sync-status header title key exists in both catalogs (task 126)', () => {

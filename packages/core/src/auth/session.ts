@@ -9,12 +9,15 @@
 // In-progress work SURVIVES a lock (SEC-AUTH-08, PRD-011 §6.2): draft state is retained keyed by
 // userId and handed back on that user's next unlock — and NEVER to a different user. A lock that
 // lost work would get disabled by whoever can disable it, so preserving it is a security control.
+// With a `workStore`, that work is also written to disk, so it outlives the process: Android may
+// recreate the activity or kill the app mid-intake, and the same user's next unlock brings it back.
 import type { AppendedOp } from '../oplog/append.js';
 import type { CommandRuntime } from '../runtime/execute.js';
 import type { ClockPort, IdSource } from '../runtime/ports.js';
 import { clampIdleLockSeconds } from './constants.js';
 import { AUTH_ENTITY, AUTH_OP } from './operations.js';
 import type { LockedOutEmitter } from './pin-verify.js';
+import type { WorkStore } from './work-store.js';
 
 /** The permission-memo invalidation seam (02-permissions §6) — `PermissionEvaluator` satisfies it. */
 export interface PermissionMemo {
@@ -31,19 +34,26 @@ export interface ActiveSession {
 /** Why a session ended (api/02-auth §6.2). */
 export type SessionEndReason = 'switch' | 'idle_lock' | 'manual_lock';
 
-export interface SessionManagerDeps {
+export interface SessionManagerDeps<TWork = unknown> {
   readonly runtime: CommandRuntime;
   readonly idSource: IdSource;
   readonly clock: ClockPort;
   readonly memo: PermissionMemo;
   /** Bundle `idleLockSeconds` (api/02-auth §6.4). Clamped to [60, 3600]; default 300. */
   readonly idleLockSeconds?: number;
+  /**
+   * Durable copy of each user's work. Without it, work lives only as long as this instance; with
+   * it, `saveWork` writes through and `switchTo` reads back what an earlier run saved.
+   */
+  readonly workStore?: WorkStore<TWork>;
+  /** Told when the store fails to read or write. Work in memory is kept either way. */
+  readonly onWorkStoreError?: (error: unknown) => void;
 }
 
 /**
  * The switcher/session state machine (api/02-auth §6.3/§6.4). One instance per device. Holds the
- * open session, the per-user work-state retention (SEC-AUTH-08), and the idle deadline — all in
- * memory; the durable facts are the ops it emits.
+ * open session, the per-user work-state retention (SEC-AUTH-08), and the idle deadline in memory;
+ * the durable facts are the ops it emits, plus the work it writes through to `workStore`.
  */
 export class SessionManager<TWork = unknown> {
   readonly #runtime: CommandRuntime;
@@ -56,14 +66,21 @@ export class SessionManager<TWork = unknown> {
   #lastActivityAt: number;
   /** Per-user in-progress work, keyed by userId — survives locks; never shared across users. */
   readonly #workByUser = new Map<string, TWork>();
+  readonly #workStore: WorkStore<TWork> | undefined;
+  readonly #onWorkStoreError: (error: unknown) => void;
+  /** Work saved in memory but not yet on disk: only the latest per user is ever written. */
+  readonly #unwritten = new Map<string, TWork>();
+  #writing: Promise<void> | null = null;
 
-  constructor(deps: SessionManagerDeps) {
+  constructor(deps: SessionManagerDeps<TWork>) {
     this.#runtime = deps.runtime;
     this.#idSource = deps.idSource;
     this.#clock = deps.clock;
     this.#memo = deps.memo;
     this.#idleLockSeconds = clampIdleLockSeconds(deps.idleLockSeconds ?? Number.NaN);
     this.#lastActivityAt = deps.clock.now();
+    this.#workStore = deps.workStore;
+    this.#onWorkStoreError = deps.onWorkStoreError ?? (() => undefined);
   }
 
   /** The open session, or null when the device is at the switcher. */
@@ -87,11 +104,10 @@ export class SessionManager<TWork = unknown> {
    * Emits, IN ORDER: `auth.session_ended` (`reason: 'switch'`, only if a session was open) for the
    * OUTGOING session, then `auth.user_switched` for the new one — BOTH with envelope `userId` = the
    * incoming user. Invalidates the permission memo (§6). Restores and returns the incoming user's
-   * retained work state, if any.
+   * retained work state, if any: from memory, or else what `workStore` kept from an earlier run.
+   * Callers reach this only after the user's PIN verified, so saved work is never read for anyone else.
    */
-  async switchTo(
-    userId: string,
-  ): Promise<{
+  async switchTo(userId: string): Promise<{
     readonly session: ActiveSession;
     readonly work: TWork | undefined;
     readonly ops: readonly AppendedOp[];
@@ -133,7 +149,7 @@ export class SessionManager<TWork = unknown> {
     // §6: the active user changed — drop the effective-set memo so the new user is evaluated fresh.
     await this.#memo.onUserSwitch();
 
-    return { session: this.#current, work: this.#workByUser.get(userId), ops: emitted };
+    return { session: this.#current, work: await this.#retainedWork(userId), ops: emitted };
   }
 
   /** Manual lock (switcher button, §6.4): `reason: 'manual_lock'`, `source: 'ui'`. */
@@ -162,11 +178,54 @@ export class SessionManager<TWork = unknown> {
   /** Retain in-progress work for `userId` (SEC-AUTH-08) — survives a lock, restored on next unlock. */
   saveWork(userId: string, work: TWork): void {
     this.#workByUser.set(userId, work);
+    if (this.#workStore === undefined) return;
+    this.#unwritten.set(userId, work);
+    this.#writing ??= this.#writeUnwritten(this.#workStore);
+  }
+
+  /**
+   * Resolves once every `saveWork` so far is on disk (or failed and was reported). Writes run one at
+   * a time and only the newest work per user is written, so a burst of keystrokes costs a few writes
+   * rather than one each, and the row never moves backwards.
+   */
+  async flushWork(): Promise<void> {
+    while (this.#writing !== null) await this.#writing;
   }
 
   /** The retained work for `userId`, or undefined. NEVER another user's — the key is the userId. */
   work(userId: string): TWork | undefined {
     return this.#workByUser.get(userId);
+  }
+
+  async #writeUnwritten(store: WorkStore<TWork>): Promise<void> {
+    try {
+      for (const [userId, work] of this.#unwritten) {
+        this.#unwritten.delete(userId);
+        try {
+          await store.save(userId, work);
+        } catch (error: unknown) {
+          this.#onWorkStoreError(error);
+        }
+      }
+    } finally {
+      this.#writing = null;
+    }
+  }
+
+  async #retainedWork(userId: string): Promise<TWork | undefined> {
+    const held = this.#workByUser.get(userId);
+    if (held !== undefined || this.#workStore === undefined) return held;
+    let saved: TWork | undefined;
+    try {
+      saved = await this.#workStore.load(userId);
+    } catch (error: unknown) {
+      this.#onWorkStoreError(error);
+      return undefined;
+    }
+    // A save that landed while the read ran is newer than what was read.
+    const latest = this.#workByUser.get(userId) ?? saved;
+    if (latest !== undefined) this.#workByUser.set(userId, latest);
+    return latest;
   }
 
   async #lock(

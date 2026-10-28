@@ -8,7 +8,7 @@
  */
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
-import { border, color, radius, space, touch, type } from '../tokens.js';
+import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'destructive';
 
@@ -24,6 +24,11 @@ export interface ButtonProps {
    * locally and return instantly (§4.1).
    */
   readonly busy?: boolean | undefined;
+  /**
+   * `compact` is for a secondary action among content (a row of status actions on a detail screen):
+   * drawn 36 dp tall with its hit area padded to the 48 dp floor. The bottom action stays `regular`.
+   */
+  readonly size?: 'regular' | 'compact' | undefined;
   readonly testID?: string | undefined;
 }
 
@@ -41,7 +46,10 @@ const LABEL_COLOR = {
 
 const styles = StyleSheet.create({
   base: {
-    height: touch.primary,
+    // minHeight, not height: a label that wraps to its second line grows the button instead of
+    // touching its edges (a long store name at 1.3x font).
+    minHeight: touch.primary,
+    paddingVertical: space.sm,
     borderRadius: radius.md,
     paddingHorizontal: space.lg,
     alignItems: 'center',
@@ -52,11 +60,20 @@ const styles = StyleSheet.create({
     borderWidth: border.hairline,
     borderColor: color.border,
   },
+  compact: {
+    minHeight: sizes.control,
+    paddingVertical: 0,
+    borderRadius: radius.full,
+    paddingHorizontal: space.lg,
+  },
   label: {
     ...type.bodyBold,
     textAlign: 'center',
   },
+  compactLabel: { ...type.bodySm, fontWeight: '600' },
 });
+
+const COMPACT_SLOP = (touch.min - sizes.control) / 2;
 
 export function Button({
   label,
@@ -64,9 +81,11 @@ export function Button({
   variant = 'primary',
   disabled = false,
   busy = false,
+  size = 'regular',
   testID,
 }: ButtonProps): React.JSX.Element {
   const inert = disabled || busy;
+  const compact = size === 'compact';
 
   return (
     <Pressable
@@ -80,8 +99,10 @@ export function Button({
       onPress={inert ? undefined : onPress}
       disabled={inert}
       android_ripple={{ color: color.overlay, borderless: false }}
+      hitSlop={compact ? { top: COMPACT_SLOP, bottom: COMPACT_SLOP } : undefined}
       style={({ pressed }) => [
         styles.base,
+        compact ? styles.compact : null,
         variant === 'secondary' ? styles.secondaryOutline : null,
         // `disabled` wins over `busy` for fill: a disabled button is inert-looking, a busy one
         // keeps its identity while it works.
@@ -103,8 +124,11 @@ export function Button({
         <Text
           testID={testID === undefined ? undefined : `${testID}.label`}
           // §3.1: labels wrap to 2 lines rather than truncate — ID/EN length variance (§0).
-          numberOfLines={2}
-          style={[styles.label, { color: disabled ? color.textDisabled : LABEL_COLOR[variant] }]}
+          numberOfLines={compact ? 1 : 2}
+          style={[
+            compact ? styles.compactLabel : styles.label,
+            { color: disabled ? color.textDisabled : LABEL_COLOR[variant] },
+          ]}
         >
           {label}
         </Text>

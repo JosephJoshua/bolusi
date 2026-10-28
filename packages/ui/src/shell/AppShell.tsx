@@ -23,11 +23,13 @@
  * Android hardware back must equal `onBack` (§8.1). That binding is navigation's job (task 24);
  * this component only surfaces the affordance.
  */
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '../components/Icon.js';
 import { border, color, size, space, touch, type } from '../tokens.js';
+import { RevealProvider, useKeyboardLift, useRevealingScroll } from './keyboard.js';
+import { ScrollLockContext } from './scroll-lock.js';
 
 export interface AppShellProps {
   /** Already-localized screen title. */
@@ -70,6 +72,12 @@ export interface AppShellProps {
    */
   readonly scrollable?: boolean | undefined;
   /**
+   * With `scrollable`, the content starts again at the top whenever this changes. A wizard passes
+   * its step, so a new step does not open at the previous step's scroll position with its header
+   * scrolled out of view.
+   */
+  readonly scrollKey?: string | number | undefined;
+  /**
    * Screen-covering overlays — today only `ConfirmSheet` (§3.10, the one sanctioned modal).
    *
    * They render as a SIBLING of the content slot, never inside it, and that placement is the whole
@@ -88,7 +96,10 @@ export interface AppShellProps {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.surface },
   header: {
-    height: size.header,
+    // A floor, not a fixed height: a title that wraps at a large font grows the bar instead of
+    // spilling out of it.
+    minHeight: size.header,
+    paddingVertical: space.xs,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.sm,
@@ -110,9 +121,18 @@ const styles = StyleSheet.create({
    * `flex: 1` would clamp the content to the viewport height and defeat scrolling entirely; the
    * screen would clip exactly as it did before. `flexGrow: 1` lets short content still fill the
    * viewport (so the centered empty / loading / error states stay centered) while tall content is
-   * free to exceed it and scroll.
+   * free to exceed it and scroll. The padding moves onto the measured view inside, so a field's
+   * measured position is its scroll position (keyboard.tsx).
    */
-  contentContainer: { flexGrow: 1, padding: space.lg },
+  scrollContainer: { flexGrow: 1 },
+  contentInner: { flexGrow: 1, padding: space.lg },
+  /**
+   * The plain slot is exactly the space between the header and the action bar. A list inside
+   * windows its rows against this height; a slot that grew with its content (`flexGrow` alone)
+   * let a `List` take its full content height, so it rendered every loaded row at once and the
+   * action bar slid off screen.
+   */
+  contentFixed: { flex: 1, padding: space.lg },
   actionBar: {
     padding: space.lg,
     borderTopWidth: border.hairline,
@@ -131,75 +151,117 @@ export function AppShell({
   children,
   bottomAction,
   scrollable = false,
+  scrollKey,
   overlay,
   testID = 'ui.appShell',
 }: AppShellProps): React.JSX.Element {
+  const [locks, setLocks] = useState(0);
+  const scrollLock = useMemo(
+    () => ({
+      lock: () => {
+        setLocks((n) => n + 1);
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          setLocks((n) => n - 1);
+        };
+      },
+    }),
+    [],
+  );
+  const reveal = useRevealingScroll();
+  const keyboard = useKeyboardLift();
   return (
-    <View testID={testID} style={styles.root}>
-      <View testID={`${testID}.header`} style={styles.header}>
-        {onBack === undefined ? null : (
-          <Pressable
-            testID={`${testID}.back`}
-            accessibilityRole="button"
-            accessibilityLabel={backLabel}
-            onPress={onBack}
-            style={styles.back}
+    <ScrollLockContext.Provider value={scrollLock}>
+      {/* The keyboard covers the screen rather than shrinking it (keyboard.tsx), so the shell lifts
+          its content and bottom action above it. Measured in the window, so it adds nothing on a
+          platform where the window did shrink. */}
+      <View
+        ref={keyboard.ref}
+        testID={testID}
+        style={[styles.root, keyboard.lift === 0 ? null : { paddingBottom: keyboard.lift }]}
+      >
+        <View testID={`${testID}.header`} style={styles.header}>
+          {onBack === undefined ? null : (
+            <Pressable
+              testID={`${testID}.back`}
+              accessibilityRole="button"
+              accessibilityLabel={backLabel}
+              onPress={onBack}
+              style={styles.back}
+            >
+              <Icon name="back" size={size.iconInline} color={color.text} />
+            </Pressable>
+          )}
+
+          <Text
+            testID={`${testID}.title`}
+            // Labels never truncate (design guide): at a large font a long title takes a second line
+            // instead of losing its end ("Siapa yang ..."); the bar grows to hold it.
+            numberOfLines={2}
+            ellipsizeMode="tail"
+            style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
           >
-            <Icon name="back" size={size.iconInline} color={color.text} />
-          </Pressable>
-        )}
+            {title}
+          </Text>
 
-        <Text
-          testID={`${testID}.title`}
-          // §0: buttons and titles wrap or ellipsize, never silently truncate mid-word; the title
-          // is one line by §8.1 geometry, so tail-ellipsis is the honest fallback.
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={titleVariant === 'root' ? styles.titleRoot : styles.titleDetail}
-        >
-          {title}
-        </Text>
-
-        <View testID={`${testID}.headerRight`} style={styles.headerRight}>
-          {syncChip}
-          {avatar}
+          <View testID={`${testID}.headerRight`} style={styles.headerRight}>
+            {syncChip}
+            {avatar}
+          </View>
         </View>
-      </View>
 
-      {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
+        {banner === undefined ? null : <View testID={`${testID}.bannerSlot`}>{banner}</View>}
 
-      {/*
+        {/*
         The content slot. Plain View by default; a ScrollView only when the screen opts in (task 206
         — see the `scrollable` prop docs for why this is not the default). The slot keeps ONE testID
         either way so navigation and the Maestro flows do not care which shape it took.
       */}
-      {scrollable ? (
-        <ScrollView
-          testID={`${testID}.content`}
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
-          // would read as the whole screen coming loose.
-          bounces={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View testID={`${testID}.content`} style={styles.contentContainer}>
-          {children}
-        </View>
-      )}
+        {scrollable ? (
+          <ScrollView
+            key={scrollKey}
+            ref={reveal.scrollRef}
+            testID={`${testID}.content`}
+            style={styles.content}
+            contentContainerStyle={styles.scrollContainer}
+            // The header/action bar are fixed chrome; only this slot scrolls, so a bounce at the edges
+            // would read as the whole screen coming loose.
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            // A drag inside the content (reordering a list) holds the page still until it ends.
+            scrollEnabled={locks === 0}
+            onLayout={reveal.onLayout}
+            onScroll={reveal.onScroll}
+            scrollEventThrottle={16}
+          >
+            {/* What a focused field is measured against when it is scrolled into sight. */}
+            <View
+              ref={reveal.contentRef}
+              collapsable={false}
+              style={styles.contentInner}
+              testID={`${testID}.contentInner`}
+            >
+              <RevealProvider port={reveal.port}>{children}</RevealProvider>
+            </View>
+          </ScrollView>
+        ) : (
+          <View testID={`${testID}.content`} style={styles.contentFixed}>
+            {children}
+          </View>
+        )}
 
-      {bottomAction === undefined ? null : (
-        <View testID={`${testID}.actionBar`} style={styles.actionBar}>
-          {bottomAction}
-        </View>
-      )}
+        {bottomAction === undefined ? null : (
+          <View testID={`${testID}.actionBar`} style={styles.actionBar}>
+            {bottomAction}
+          </View>
+        )}
 
-      {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
+        {/* Outside the content slot on purpose — see the `overlay` prop docs. Last, so it paints over
           the header and action bar the way a modal must. */}
-      {overlay}
-    </View>
+        {overlay}
+      </View>
+    </ScrollLockContext.Provider>
   );
 }

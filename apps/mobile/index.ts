@@ -4,10 +4,11 @@ import { Platform } from 'react-native';
 
 import { createUuidV7Generator, type CommandIdentity } from '@bolusi/core';
 import type { NotesRuntime } from '@bolusi/modules/notes/screens';
+import type { RepairRuntime } from '@bolusi/modules/repair/screens';
 import { DEFAULT_DATABASE_NAME } from '@bolusi/db-client';
 import { deleteOpSqliteDatabase, openOpSqliteDriver } from '@bolusi/db-client/op-sqlite';
 
-import { bootstrap, refreshBootstrapped, type Bootstrapped } from './src/bootstrap/bootstrap.js';
+import { bootOncePerRealm, bootstrap, type Bootstrapped } from './src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery } from './src/bootstrap/recovery.js';
 import { pushProjectId, requireApiBaseUrl } from './src/bootstrap/config.js';
 import { createEnrollTransport, createLoginTransport } from './src/bootstrap/enroll-transport.js';
@@ -18,23 +19,36 @@ import {
 } from './src/bootstrap/enrollment.js';
 import { readDeviceInfo } from './src/bootstrap/device-info.js';
 import { createSessionNotesRuntime, notesMediaSeamsFor } from './src/bootstrap/notes.js';
+import {
+  createSessionRepairRuntime,
+  galleryPickerFor,
+  repairMediaSeamsFor,
+  type RepairMediaSeams,
+} from './src/bootstrap/repair.js';
+import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
 import { createFetchPinVerifierUpload } from './src/bootstrap/pin-verifier-transport.js';
+import { createFetchStaffAdmin } from './src/bootstrap/staff-transport.js';
 import type { PushResponse, PushRouterPort } from './src/push/router.js';
-import { Root } from './src/bootstrap/Root.js';
+import { Root, type RootProps } from './src/bootstrap/Root.js';
 import type { AppRuntime } from './src/bootstrap/runtime.js';
 import { createAppSession, type AppSessionController } from './src/bootstrap/session.js';
 import { SYNC_BACKGROUND_TASK } from './src/bootstrap/background-sync.js';
 import { createBackgroundHost, type BackgroundHost } from './src/bootstrap/background-task.js';
-import { headlessPass, shareBoot } from './src/bootstrap/headless.js';
+import { headlessPass } from './src/bootstrap/headless.js';
 import { createSyncClientForApp, type SyncClient } from './src/bootstrap/sync-client.js';
 import { MEDIA_DRAIN_TASK } from './src/media/background-task.js';
 import type { MediaClient } from './src/media/client.js';
 import { createMediaClientForApp } from './src/media/native.js';
 import { createExpoCapturePlatform } from './src/media/native-capture.js';
+import { expoGallery } from './src/media/native-gallery.js';
+import { expoSharePlatform } from './src/media/native-share.js';
 import { createFetchMediaTransport } from './src/media/transport.js';
+import { phonePhotoFiles, sha256Hex } from './src/media/files.js';
+import { createPhonePhotoLoader } from './src/media/phone-photos.js';
 import { appStatePort } from './src/ports/app-state.js';
+import { expoPrintPlatform } from './src/ports/print.js';
 import { expoBackgroundTaskPlatform } from './src/ports/background-task.js';
 import { systemClock } from './src/ports/clock.js';
 import { deviceColumnAead } from './src/ports/aead.js';
@@ -93,7 +107,7 @@ import './src/harness/register.js';
  */
 const APP_VERSION = '';
 
-function boot(launch: 'foreground' | 'background'): Promise<Bootstrapped> {
+function bootDataLayer(launch: 'foreground' | 'background'): Promise<Bootstrapped> {
   // ONE key store serves BOTH the boot (mint/read the at-rest column-encryption key — security-guide §6.4; quick-
   // crypto is the CSPRNG, §6.4/D8) AND the recovery wipe (crypto-erase that key).
   const keyStore = new SecureStoreDbKeyStore(quickCryptoPort);
@@ -121,7 +135,7 @@ function boot(launch: 'foreground' | 'background'): Promise<Bootstrapped> {
     });
   // A BACKGROUND LAUNCH NEVER WIPES. Nobody is there to re-enroll, and a locked iPhone's keychain is
   // no evidence that the key is gone. The background boot fails instead, the shared boot forgets
-  // the failure (bootstrap/headless.ts), and the next foreground boot decides.
+  // the failure (`bootOncePerRealm`), and the next foreground boot decides.
   if (launch === 'background') return open();
   return bootWithLocalRecovery({
     boot: open,
@@ -140,6 +154,15 @@ function boot(launch: 'foreground' | 'background'): Promise<Bootstrapped> {
     },
   });
 }
+
+/**
+ * ONE BOOT PER PROCESS. Root boots again whenever Android recreates the activity in the same process,
+ * and the background tasks below boot when the OS wakes a killed app. They all share one connection
+ * to one database (see `bootOncePerRealm`).
+ */
+const boot = bootOncePerRealm(bootDataLayer);
+const foregroundBoot = (): Promise<Bootstrapped> => boot('foreground');
+const backgroundBoot = (): Promise<Bootstrapped> => boot('background');
 
 /**
  * THE OTHER NATIVE-BINDING SITE (task 89): NetInfo and RN `AppState` are native modules that cannot
@@ -161,14 +184,6 @@ function boot(launch: 'foreground' | 'background'): Promise<Bootstrapped> {
 function apiBaseUrl(): string {
   return requireApiBaseUrl(process.env['EXPO_PUBLIC_API_URL']);
 }
-
-/**
- * ONE BOOT PER PROCESS. Root and the background tasks below share it, so a killed app woken by the
- * OS and then opened by the user keeps one connection to one database (bootstrap/headless.ts).
- */
-const sharedBoot = shareBoot(boot, refreshBootstrapped);
-const foregroundBoot = (): Promise<Bootstrapped> => sharedBoot('foreground');
-const backgroundBoot = (): Promise<Bootstrapped> => sharedBoot('background');
 
 function reportBackgroundError(task: string): (error: unknown) => void {
   return (error) =>
@@ -201,8 +216,9 @@ expoBackgroundTaskPlatform.defineTask(MEDIA_DRAIN_TASK, () => backgroundMedia.ru
 function createSync(
   app: Bootstrapped,
   onBundleRefreshed?: () => void | Promise<void>,
+  onBundleChecked?: () => void | Promise<void>,
 ): SyncClient | null {
-  return buildSync(app, { background: true, onBundleRefreshed });
+  return buildSync(app, { background: true, onBundleRefreshed, onBundleChecked });
 }
 
 /** `background: false` builds a client for one headless pass: the host drives it directly. */
@@ -211,11 +227,12 @@ function buildSync(
   options: {
     readonly background: boolean;
     readonly onBundleRefreshed?: (() => void | Promise<void>) | undefined;
+    readonly onBundleChecked?: (() => void | Promise<void>) | undefined;
   },
 ): SyncClient | null {
   if (app.deviceId === null) return null;
   const keystore = new SecureStoreKeyStore();
-  const { onBundleRefreshed } = options;
+  const { onBundleRefreshed, onBundleChecked } = options;
   return createSyncClientForApp(app, {
     baseUrl: apiBaseUrl(),
     deviceId: app.deviceId,
@@ -228,6 +245,7 @@ function buildSync(
       ? { background: { platform: expoBackgroundTaskPlatform, host: backgroundSync } }
       : {}),
     ...(onBundleRefreshed === undefined ? {} : { onBundleRefreshed }),
+    ...(onBundleChecked === undefined ? {} : { onBundleChecked }),
   });
 }
 
@@ -400,6 +418,35 @@ function createNotes(
   });
 }
 
+/** The repair surface: Node-safe composition in `bootstrap/repair.ts`, native media seams here. */
+function createRepair(
+  app: Bootstrapped,
+  runtime: AppRuntime,
+  identity: CommandIdentity,
+  media: MediaClient | null,
+  capture: Pick<RepairMediaSeams, 'capturePhoto' | 'captureSignature'>,
+): RepairRuntime {
+  const keystore = new SecureStoreKeyStore();
+  const loadModelPhoto = createPhonePhotoLoader({
+    baseUrl: apiBaseUrl(),
+    deviceToken: () => keystore.loadDeviceToken(),
+    sha256Hex,
+    files: phonePhotoFiles,
+  });
+  return createSessionRepairRuntime({
+    app,
+    runtime,
+    identity,
+    media: repairMediaSeamsFor(
+      media,
+      { ...capture, loadModelPhoto },
+      expoSharePlatform,
+      galleryPickerFor(media, identity, expoGallery),
+    ),
+    print: expoPrintPlatform,
+  });
+}
+
 /**
  * THE PUSH-TOKEN REGISTRATION PORTS (api/04-push §2) — bound to the native seams `registration.ts`
  * leaves to the composition root: `getExpoPushTokenAsync` (native, inside `registration.ts`), the
@@ -466,25 +513,64 @@ const expoPushRouter: PushRouterPort = {
   },
 };
 
-function Bootstrapped(): React.JSX.Element | null {
-  return Root({
+/**
+ * THE NOTIFICATION PERMISSION SEAM (`src/push/permission.ts`), bound over `expo-notifications` here
+ * like the tap router. The "already asked" flag shares the prefs file the push token uses: UI state,
+ * not a secret.
+ */
+const NOTIFICATIONS_ASKED_KEY = 'bolusi.notifications_asked';
+
+const expoNotificationPermission: NotificationPermissionPort = {
+  async status() {
+    const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
+    return { granted, canAskAgain };
+  },
+  async request() {
+    await Notifications.requestPermissionsAsync();
+  },
+  readAsked: async () => (await fileLocaleStore.read(NOTIFICATIONS_ASKED_KEY)) !== null,
+  writeAsked: () => fileLocaleStore.write(NOTIFICATIONS_ASKED_KEY, '1'),
+};
+
+/**
+ * Root's props, built ONCE. `Bootstrapped` calls `Root(...)` as a function, so Root's hooks run in
+ * this component and every prop built inline was a new object on every render. A seam that keys an
+ * effect then re-fired it on every render: a fresh `capturePlatform` rebuilt the capture callbacks,
+ * which rebuilt the signed-in user's screens, which rendered again, forever (the idle Servisan
+ * board at 120% CPU, October 2026; task 201's blank screen was the same churn on `readDeviceInfo`).
+ * Built on the first render and kept, every identity holds for the app's life. (First render, not
+ * module load: a build missing its API URL still fails where it always did, after the background
+ * tasks above are registered.)
+ */
+let rootProps: RootProps | null = null;
+
+function buildRootProps(): RootProps {
+  return {
     boot: foregroundBoot,
     createSync,
     createEnrollment,
     createMedia,
     createSession,
     createNotes,
+    createRepair,
     // THE PUSH VERTICAL, CLIENT HALF (api/04-push §2/§4; task 135). `createPushRegistration` returns
     // `undefined` on an unenrolled device or a build with no EAS project id — `Root` then simply does
     // not register (push is best-effort, §1). `expoPushRouter` binds the native tap listener so a
     // notification deep-links into the reachable shell route.
     createPushRegistration,
     pushRouter: expoPushRouter,
+    notificationPermission: expoNotificationPermission,
     // THE PIN-VERIFIER POST TRANSPORT (api/02-auth §5.4; task 186a-2). Bound here for the same reason
     // `postToken` is: the fetch wire + the SecureStore device bearer, neither Node-safe. `Root` drains
-    // it on `onBundleRefreshed` (online-only), so a locally-applied PIN change reaches the server and
+    // it on `onBundleChecked` (every online bundle answer), so a locally-applied PIN change reaches the server and
     // every other device (§5.2). A fresh keystore per call reads the bearer at call time (§7.3).
     uploadPinVerifier: createFetchPinVerifierUpload({
+      baseUrl: apiBaseUrl(),
+      deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
+    }),
+    // THE OWNER'S STAFF CALLS (owner decision 2026-10-27): online-only `POST/PATCH /v1/users…` as the
+    // signed-in owner, on the same per-call device bearer.
+    staffAdmin: createFetchStaffAdmin({
       baseUrl: apiBaseUrl(),
       deviceToken: () => new SecureStoreKeyStore().loadDeviceToken(),
     }),
@@ -509,7 +595,12 @@ function Bootstrapped(): React.JSX.Element | null {
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         appVersion: APP_VERSION,
       }),
-  });
+  };
+}
+
+function Bootstrapped(): React.JSX.Element | null {
+  rootProps ??= buildRootProps();
+  return Root(rootProps);
 }
 
 registerRootComponent(Bootstrapped);

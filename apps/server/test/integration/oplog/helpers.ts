@@ -20,6 +20,8 @@ import { sql, type Kysely, type Selectable } from 'kysely';
 import { expect, inject } from 'vitest';
 import { z } from 'zod';
 
+import { serverOpRegistry } from '../../../src/deps.js';
+import { permissionRegistry } from '../../../src/identity/permissions.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { isFoldableSchemaVersion } from '../../../src/oplog/schema-version.js';
 import type { OpRegistry, OplogPipelineDeps } from '../../../src/oplog/types.js';
@@ -176,8 +178,45 @@ export function testScopeOf(isKnown: (type: string) => boolean): OpRegistry['sco
     isKnown(type) ? (TENANT_SCOPED_OP_TYPES.has(type) ? 'tenant' : 'store') : undefined;
 }
 
+/**
+ * A test registry's `permissionOf`: the PRODUCTION declaration for a type production knows (so a
+ * stub can never quietly drop the authorization step), `null` for a stub-only probe type, and
+ * `undefined` for a type the stub does not know.
+ */
+export function testPermissionOf(isKnown: (type: string) => boolean): OpRegistry['permissionOf'] {
+  return (type) => {
+    if (!isKnown(type)) return undefined;
+    const declared = serverOpRegistry.permissionOf(type);
+    return declared === undefined ? null : declared;
+  };
+}
+
+/**
+ * A test registry's `entityTypeOf`: the PRODUCTION declaration for a type production knows, the
+ * stub's own `probes` entry for a stub-only type, `undefined` for a type the stub does not know.
+ */
+export function testEntityTypeOf(
+  isKnown: (type: string) => boolean,
+  probes: Readonly<Record<string, string>> = {},
+): OpRegistry['entityTypeOf'] {
+  return (type) => {
+    if (!isKnown(type)) return undefined;
+    const declared = serverOpRegistry.entityTypeOf(type) ?? probes[type];
+    if (declared === undefined) throw new Error(`test registry: no entityType for ${type}`);
+    return declared;
+  };
+}
+
+/** A test registry's `checkRule`: the production rules, so a type production knows is judged as in production. */
+export const testCheckRule: OpRegistry['checkRule'] = (op, ctx) =>
+  serverOpRegistry.checkRule(op, ctx);
+
 export const testRegistry: OpRegistry = {
   scopeOf: testScopeOf((type) => type in SCHEMAS),
+  // The production rule per type (a test-only type declares none).
+  checkRule: testCheckRule,
+  permissionOf: testPermissionOf((type) => type in SCHEMAS),
+  entityTypeOf: testEntityTypeOf((type) => type in SCHEMAS),
 
   resolve(type: string, schemaVersion: number) {
     const schema = SCHEMAS[type];
@@ -242,6 +281,12 @@ export interface SeedWorldOptions {
   readonly lastHash?: string | null;
   readonly lastSyncAt?: number | null;
   readonly userStatus?: 'active' | 'deactivated';
+  /**
+   * The world user's grants. Default `'all'`: a tenant-wide role holding every registered
+   * permission, so a suite about something else is not refused by the authorization step. `'none'`
+   * seeds the user with no role, for suites about authorization itself.
+   */
+  readonly grants?: 'all' | 'none';
   /** Seed the tenant_op_counters row at this value (default 1). */
   readonly counterStart?: number;
   readonly createdAt?: number;
@@ -300,6 +345,35 @@ export async function seedWorld(
       createdAt,
     })
     .execute();
+  // The author works at the device's store: the server refuses an op credited to anyone else.
+  if (options.deviceKind !== 'system') {
+    await db
+      .insertInto('userStores')
+      .values({ userId: world.userId, storeId: world.storeId, tenantId: world.tenantId })
+      .execute();
+  }
+  if ((options.grants ?? 'all') === 'all') {
+    await grantAllPermissions(db, world.tenantId, world.userId);
+  }
+}
+
+/**
+ * Give a user a tenant-wide role holding every registered permission, so a suite about something
+ * other than authorization is never refused by the authorization step. The role id is derived from
+ * the tenant and user, so two seeded users never share or collide on one.
+ */
+export async function grantAllPermissions(
+  db: Kysely<DB>,
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  await grantRole(db, {
+    tenantId,
+    userId,
+    roleId: `${tenantId.slice(0, 24)}${userId.slice(24)}`,
+    roleName: 'test_all_permissions',
+    permissionIds: permissionRegistry.ids(),
+  });
 }
 
 /**
@@ -331,6 +405,7 @@ export async function seedDevice(
 }
 
 /** Seed an extra user in a tenant (membership directory). */
+/** Seed a user who works at every store the tenant has so far (so they may author its ops). */
 export async function seedUser(
   db: Kysely<DB>,
   tenantId: string,
@@ -341,6 +416,14 @@ export async function seedUser(
     .insertInto('users')
     .values({ id: userId, tenantId, name: `user-${userId}`, status, createdAt: 1_726_000_000_000n })
     .execute();
+  const stores = await db
+    .selectFrom('stores')
+    .select('id')
+    .where('tenantId', '=', tenantId)
+    .execute();
+  for (const store of stores) {
+    await db.insertInto('userStores').values({ userId, storeId: store.id, tenantId }).execute();
+  }
 }
 
 /** Seed a role + its permissions, and grant it to a user (tenant-scoped). */
@@ -418,5 +501,79 @@ export async function readAnomalies(
     .selectAll()
     .where('deviceId', '=', deviceId)
     .orderBy('at')
+    .execute();
+}
+
+/**
+ * A repair ticket already on the server, as an accepted intake would have folded it: in the store,
+ * `received`, taken by `technicianId` (or nobody) and, unless told otherwise, with a before photo,
+ * so the repair rules let it be started or cancelled. For tests about who may act, not about the
+ * ticket's history.
+ */
+export async function seedRepairTicket(
+  db: Kysely<DB>,
+  world: ChainWorld,
+  ticketId: string,
+  options: { readonly technicianId?: string | null; readonly beforePhoto?: boolean } = {},
+): Promise<void> {
+  const customerId = `${ticketId.slice(0, -4)}cccc`;
+  const at = 1_726_000_000_000n;
+  const scope = { tenantId: world.tenantId, storeId: world.storeId };
+  await db
+    .insertInto('repairCustomers')
+    .values({
+      ...scope,
+      id: customerId,
+      name: 'Pelanggan',
+      phone: null,
+      createdBy: world.userId,
+      createdAt: at,
+      updatedBy: world.userId,
+      updatedAt: at,
+    })
+    .execute();
+  await db
+    .insertInto('repairTickets')
+    .values({
+      ...scope,
+      id: ticketId,
+      ticketNumber: 'SEED-0001',
+      customerId,
+      deviceBrand: 'Samsung',
+      deviceModel: 'A14',
+      deviceColor: '',
+      deviceImei: null,
+      devicePasscode: null,
+      complaint: 'Layar retak',
+      intakeNotes: '',
+      checklistJson: '[]',
+      peripheralsJson: '[]',
+      estimatedReadyAt: null,
+      outcome: 'received',
+      outcomeNote: null,
+      location: 'in_store',
+      technicianId: options.technicianId === undefined ? world.userId : options.technicianId,
+      quoteTotal: 650_000n,
+      createdBy: world.userId,
+      createdAt: at,
+      updatedAt: at,
+      returnedBy: null,
+      returnedAt: null,
+    })
+    .execute();
+  if (options.beforePhoto === false) return;
+  await db
+    .insertInto('repairTicketPhotos')
+    .values({
+      ...scope,
+      ticketId,
+      slot: `before:${customerId}`,
+      mediaId: customerId,
+      mediaSha256: 'd'.repeat(64),
+      mediaMime: 'image/jpeg',
+      capturedAt: at,
+      addedBy: world.userId,
+      addedAt: at,
+    })
     .execute();
 }

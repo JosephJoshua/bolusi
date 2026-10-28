@@ -1,7 +1,8 @@
 // The command context (04-module-contract §5.2) — the ENTIRE surface a handler may touch.
 //
 // §5.2 lists it exhaustively: `tenantId, storeId, userId, deviceId`, `op()`, `newId()`,
-// `requirePermission()`, `query()`. This file builds exactly that and nothing more, and the suite
+// `requirePermission()`, `query()`, plus `colleagueHasPermission()` for handlers whose input names
+// another user (assign to a technician). This file builds exactly that and nothing more, and the suite
 // pins the key set — because the interesting property of `ctx` is what is ABSENT from it:
 //
 //   NO clock      — the runtime stamps `timestamp` once per command (§5.2). A handler that could
@@ -163,6 +164,13 @@ export interface CommandContext extends CommandIdentity {
    */
   requirePermission(permissionId: string): Promise<void>;
   /**
+   * Whether ANOTHER user holds a permission in this ctx's tenant and store, for a handler whose
+   * input names a colleague who must be able to do something (e.g. "assign to a technician").
+   * Silent and synchronous like the UI's check: it shapes validation, it is not a denial of the
+   * acting user, so it leaves no audit trace.
+   */
+  colleagueHasPermission(userId: string, permissionId: string): boolean;
+  /**
    * Read through the query layer (04 §5.2) — the same layer the UI uses. The only read seam a
    * handler has.
    */
@@ -255,6 +263,8 @@ export interface CommandContextInternals {
     target: string,
     surface: DenialSurface,
   ) => Promise<void>;
+  /** The runtime's silent check (the enforcement point's `hasPermission`). */
+  readonly hasPermission: (identity: CommandIdentity, permissionId: string) => boolean;
   readonly queryExecutor: QueryExecutorPort;
   /** Attribution for every op this invocation produces, and for its denial op (02 §7). */
   readonly invocation: InvocationMeta;
@@ -329,6 +339,10 @@ export function createCommandContext(
 
     requirePermission(permissionId: string): Promise<void> {
       return internals.requirePermission(identity, permissionId, target, 'command');
+    },
+
+    colleagueHasPermission(userId: string, permissionId: string): boolean {
+      return internals.hasPermission({ ...identity, userId }, permissionId);
     },
 
     query<TInput, TOutput>(query: QueryHandle<TInput, TOutput>, input: TInput): Promise<TOutput> {

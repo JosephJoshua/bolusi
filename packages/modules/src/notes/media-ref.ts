@@ -9,33 +9,10 @@
 // policy — the rule that decides "may these bytes be fetched" has to be testable in a plain lane.
 import type { MediaRefMime } from '@bolusi/schemas';
 
-/**
- * What a renderer hands the media client to resolve one attachment (06 §6).
- *
- * Two arms, because an attachment is NOT always accompanied by a signed hash, and the difference
- * decides whether fetching is permissible at all:
- *
- *  - `signed` (schemaVersion 3 payloads): the `sha256` rode inside the op payload under the
- *    originating device's Ed25519 signature (05 §2), so bytes fetched from the server can be
- *    verified against it before display — the whole of 06 §6.
- *  - `legacy` (schemaVersion 1/2 payloads): an id, and NO signed hash — there never was one. Such a
- *    note is resolvable only from a local file. It must never be fetched, because there would be
- *    nothing to check the bytes against, and "shown unverified" is indistinguishable to the user
- *    from "shown verified".
- *
- * A discriminated union rather than `{mediaId, sha256: string | null}` so that "fetch these bytes
- * and trust them" has NO INHABITANT: the `legacy` arm has no `sha256` field, so a caller cannot
- * physically reach the verifying fetch without producing a hash. The type is the enforcement — not
- * a comment asking the next author to remember (CLAUDE.md §2.11).
- */
-export type ThumbnailRef =
-  | {
-      readonly kind: 'signed';
-      readonly mediaId: string;
-      readonly sha256: string;
-      readonly mime: MediaRefMime;
-    }
-  | { readonly kind: 'legacy'; readonly mediaId: string };
+import type { ThumbnailRef } from '../screen-kit/thumbnail.js';
+
+/** The render-path ref (06 §6); shared by every module's screens (screen-kit/thumbnail.ts). */
+export type { ThumbnailRef };
 
 /** The subset of a note row this policy reads — so it is callable from a query row or a fixture. */
 export interface NoteMediaFields {

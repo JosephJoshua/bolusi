@@ -88,6 +88,8 @@ export function makeWorld(seed: number, crypto: CryptoPort): ChainWorld {
 }
 
 export interface OpSpec {
+  /** Forces the op id; only for tests of a tampered client that reuses one. */
+  readonly id?: string;
   readonly type: string;
   readonly entityType: string;
   readonly entityId?: string;
@@ -160,7 +162,7 @@ export class ChainBuilder {
     const timestamp = spec.timestamp ?? (this.clock += 1_000);
 
     const core: SignedCore = {
-      id: uuidV7(this.ids, timestamp + seq),
+      id: spec.id ?? uuidV7(this.ids, timestamp + seq),
       tenantId: this.world.tenantId,
       storeId: spec.storeId === undefined ? this.world.storeId : spec.storeId,
       userId: spec.userId ?? this.world.userId,

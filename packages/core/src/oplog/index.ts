@@ -25,6 +25,7 @@ export {
   type OpAppendStore,
   type OpAppendTx,
   type OpRow,
+  type OpCheck,
   type ProjectionApply,
 } from './append.js';
 export {
@@ -37,6 +38,7 @@ export {
   type SyncResultEvent,
   type SyncTransition,
 } from './bookkeeping.js';
+export { insertOpLogRow, type OpLogRowBookkeeping } from './row.js';
 export {
   verifyChain,
   verifyOpDetailed,

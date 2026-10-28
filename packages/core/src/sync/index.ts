@@ -4,9 +4,17 @@
 // `auth/`: the internals below (raw-SQL row shapes, the batch helpers) are implementation, and a
 // blanket re-export is how a private shape becomes someone's dependency without anyone deciding it.
 export { SYNC_BACKOFF_SCHEDULE_MS, syncBackoffDelayMs } from './backoff.js';
+export {
+  assertDeviceClockTrusted,
+  CLOCK_AHEAD_MARGIN_MS,
+  isAheadOfServer,
+  isDeviceClockAhead,
+  type ClockReading,
+} from './clock-guard.js';
 export { readDeviceRegistry, replaceDeviceRegistry, type DeviceRegistryEntry } from './devices.js';
 export { SYNC_LOOP_MACHINE, type SyncLoopEvent, type SyncLoopState } from './loop-machine.js';
 export {
+  BUNDLE_REFRESH_INTERVAL_MS,
   SyncLoop,
   type SyncCycleStats,
   type SyncLoopOptions,
@@ -37,13 +45,13 @@ export {
   runPushPhase,
   type PushPhaseDeps,
   type PushPhaseResult,
+  type PushSettled,
 } from './push.js';
 export {
   insertQuarantinedOp,
   QUARANTINE_LABEL_KEY,
   readQuarantinedOps,
   reconstructQuarantinedOp,
-  signedCoreJcsOf,
   verifyPulledOp,
   type PulledOpVerification,
   type QuarantinedOp,

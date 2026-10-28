@@ -7,6 +7,9 @@
 // production endpoints it serves are the SEC-owned surfaces; this file guards that opening a port added
 // no hole. §2.5 is satisfied by these adversarial tests existing + being falsified BEFORE review — each
 // negative below was watched red (see FALSIFY notes) — not by a SEC id for test-only infra.
+import { randomBytes } from 'node:crypto';
+import { request } from 'node:http';
+
 import { FakeClock, mulberry32 } from '@bolusi/test-support';
 import { describe, expect, test } from 'vitest';
 
@@ -19,6 +22,31 @@ import { HttpTransport, pullDevice, pushDevice } from './transport.js';
 
 const CLOCK_BASE = 1_726_100_000_000;
 const PUSH_URL = 'http://harness.test/v1/sync/push';
+
+/** Send a WebSocket upgrade for GET /v1/realtime and resolve with the HTTP status (101 = upgraded). */
+function realtimeUpgradeStatus(baseUrl: string, auth: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = request(`${baseUrl}/v1/realtime`, {
+      headers: {
+        Authorization: auth,
+        Connection: 'Upgrade',
+        Upgrade: 'websocket',
+        'Sec-WebSocket-Version': '13',
+        'Sec-WebSocket-Key': randomBytes(16).toString('base64'),
+      },
+    });
+    req.once('upgrade', (res, socket) => {
+      socket.destroy();
+      resolve(res.statusCode ?? 0);
+    });
+    req.once('response', (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+    });
+    req.once('error', reject);
+    req.end();
+  });
+}
 
 /** A device authoring one note, so a push over the socket carries REAL ops (genesis + a notes op). */
 async function openAuthoring(
@@ -94,6 +122,18 @@ describe('startHarnessServer — real socket exposure (task 198 step 1)', () => 
       expect(push.synced).toBeGreaterThan(0); // ops crossed the wire AND the real server applied them
     } finally {
       await device.close();
+      await running.close();
+    }
+  });
+  test('a seeded device opens the realtime WebSocket over the socket (no polling fallback)', async () => {
+    // Regression: the lane server once served without the WebSocket server wired, so every
+    // authenticated upgrade got a 500 and devices silently fell back to polling.
+    const running = await startHarnessServer();
+    const [identity] = mintIdentities(70_401, 1).devices;
+    const seeded = await running.server.seedDevice(identity!);
+    try {
+      expect(await realtimeUpgradeStatus(running.url, seeded.auth)).toBe(101);
+    } finally {
       await running.close();
     }
   });

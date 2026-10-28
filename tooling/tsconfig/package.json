@@ -2,15 +2,17 @@
   "name": "@bolusi/tsconfig",
   "version": "0.0.0",
   "private": true,
-  "description": "Base tsconfigs (08-stack-and-repo §4.1): base (platform-free), node, react-native",
+  "description": "Base tsconfigs (08-stack-and-repo \u00a74.1): base (platform-free), node, react-native, dom (desktop/web UI)",
   "exports": {
     "./base.json": "./base.json",
     "./node.json": "./node.json",
-    "./react-native.json": "./react-native.json"
+    "./react-native.json": "./react-native.json",
+    "./dom.json": "./dom.json"
   },
   "files": [
     "base.json",
     "node.json",
-    "react-native.json"
+    "react-native.json",
+    "dom.json"
   ]
 }

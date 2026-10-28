@@ -8,21 +8,25 @@
  * from the command/query runtime (the media client; the op-log bookkeeping) and keeping them as
  * parameters is what lets a test drive the SAME screens over a real runtime with fake media.
  */
-import { NOTE_ENTITY, NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
-import type { CapturedMedia, NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
-import type { CommandIdentity, CommandOutcome, InvalidationBus, ModuleRuntime } from '@bolusi/core';
+import { NOTES_TABLE, notesModule } from '@bolusi/modules/notes';
+import type { NoteSyncStatuses, NotesRuntime } from '@bolusi/modules/notes/screens';
+import {
+  bindModulePort,
+  OP_SYNC_STATUS_TABLE,
+  type CommandIdentity,
+  type InvalidationBus,
+  type ModuleRuntime,
+} from '@bolusi/core';
 import type { ClientDatabase } from '@bolusi/db-client';
-import type { OperationSyncStatus } from '@bolusi/ui';
-import type { Kysely } from 'kysely';
 
 export interface NotesRuntimeDeps {
   readonly runtime: ModuleRuntime<ClientDatabase>;
   readonly invalidation: InvalidationBus;
   readonly identity: CommandIdentity;
-  /** Per-note op statuses (design-system §3.5) — read from the op log, see `readNoteSyncStatuses`. */
+  /** Per-note op statuses (design-system §3.5), read from the op log (`readEntitySyncStatuses`). */
   readonly noteSyncStatuses: (noteIds: readonly string[]) => Promise<NoteSyncStatuses>;
   /** Task-82 capture flow, resolved to the attached media id (or null on cancel). */
-  readonly capturePhoto: () => Promise<CapturedMedia | null>;
+  readonly capturePhoto: NotesRuntime['capturePhoto'];
   /**
    * Media client's verified thumbnail (06 §6).
    *
@@ -34,54 +38,20 @@ export interface NotesRuntimeDeps {
 }
 
 /** `CommandRuntime.execute` returns `{ ops, result, timestamp }`; the screens want the typed result. */
-async function resultOf<T>(outcome: Promise<CommandOutcome<T>>): Promise<T> {
-  const settled = await outcome;
-  if (settled.result === undefined) {
-    throw new Error('command returned no result (04 §5.1) — a handler must return one');
-  }
-  return settled.result;
-}
-
 export function createNotesRuntime(deps: NotesRuntimeDeps): NotesRuntime {
-  const ctx = deps.runtime.commands.createContext(deps.identity.userId);
+  const port = bindModulePort(notesModule, deps.runtime, deps.identity);
   return {
-    listNotes: (input) =>
-      deps.runtime.queries.execute(notesModule.queries.listNotes, input, deps.identity),
-    getNote: (input) =>
-      deps.runtime.queries.execute(notesModule.queries.getNote, input, deps.identity),
-    createNote: (input) =>
-      resultOf(deps.runtime.commands.execute(notesModule.commands.createNote, input, ctx)),
-    editNoteBody: (input) =>
-      resultOf(deps.runtime.commands.execute(notesModule.commands.editNoteBody, input, ctx)),
-    archiveNote: (input) =>
-      resultOf(deps.runtime.commands.execute(notesModule.commands.archiveNote, input, ctx)),
+    listNotes: (input) => port.query('listNotes', input),
+    getNote: (input) => port.query('getNote', input),
+    createNote: (input) => port.run('createNote', input),
+    editNoteBody: (input) => port.run('editNoteBody', input),
+    archiveNote: (input) => port.run('archiveNote', input),
     noteSyncStatuses: deps.noteSyncStatuses,
-    subscribe: (listener) => deps.invalidation.subscribeTable(NOTES_TABLE, listener),
-    hasPermission: (permissionId) =>
-      deps.runtime.commands.enforcementPoint.hasPermission(deps.identity, permissionId),
+    // The op log too: the list and detail show each note's sync status.
+    subscribe: (listener) =>
+      deps.invalidation.subscribeTables([NOTES_TABLE, OP_SYNC_STATUS_TABLE], listener),
+    hasPermission: port.hasPermission,
     capturePhoto: deps.capturePhoto,
     loadThumbnail: deps.loadThumbnail,
   };
-}
-
-/**
- * Read each note's op sync statuses from the op log (design-system §3.5 — the projection row carries
- * no op status). A note with no rows is all-`synced` (absent from the map ⇒ the silent chip).
- */
-export async function readNoteSyncStatuses(
-  db: Kysely<ClientDatabase>,
-  noteIds: readonly string[],
-): Promise<NoteSyncStatuses> {
-  if (noteIds.length === 0) return {};
-  const rows = await db
-    .selectFrom('operations')
-    .select(['entityId', 'syncStatus'])
-    .where('entityType', '=', NOTE_ENTITY)
-    .where('entityId', 'in', [...noteIds])
-    .execute();
-  const out: Record<string, OperationSyncStatus[]> = {};
-  for (const row of rows) {
-    (out[row.entityId] ??= []).push(row.syncStatus as OperationSyncStatus);
-  }
-  return out;
 }

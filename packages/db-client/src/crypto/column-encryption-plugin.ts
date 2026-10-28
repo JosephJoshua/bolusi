@@ -31,15 +31,15 @@
 // halves are always present together there.
 import {
   ColumnNode,
+  InsertQueryNode,
   OperationNodeTransformer,
   PrimitiveValueListNode,
   TableNode,
+  UpdateQueryNode,
   ValueListNode,
   ValueNode,
   ValuesNode,
   type ColumnUpdateNode,
-  type InsertQueryNode,
-  type UpdateQueryNode,
   type KyselyPlugin,
   type OperationNode,
   type PluginTransformQueryArgs,
@@ -54,24 +54,20 @@ import type { ColumnCipher } from '@bolusi/core';
 
 /**
  * Encrypted columns written through the Kysely QUERY BUILDER, in snake_case (this plugin runs AFTER
- * `CamelCasePlugin`, so node identifiers are already snake_case). These are exactly the two
- * builder-written tables:
+ * `CamelCasePlugin`, so node identifiers are already snake_case):
  *
- *   - `operations` — op-store's local-append INSERT (05 §1). The PULL insert of `operations` is raw
- *     `sql` and seals via the registry, not here.
  *   - `notes` — the module appliers' INSERT/UPDATE (04 §4).
  *   - `repair_*` — customer name/phone, the device passcode, and the free-text notes staff type
  *     (complaint, intake notes, outcome notes, price-change reasons, event details), which can carry
  *     personal data. Columns lists filter and sort on stay plaintext; name/phone search decrypts
  *     and ranks in JS (modules/repair/search.ts).
  *
- * The other nine encrypted cells (user_pin_verifiers salt/hash/params, media_items.location,
- * quarantined_ops.signed_core_jcs, users_directory.name) are raw-`sql`-written and sealed at the
+ * The other encrypted cells (operations.signed_core_jcs, user_pin_verifiers salt/hash/params,
+ * media_items.location, quarantined_ops.signed_core_jcs, users_directory.name) are raw-`sql`-written and sealed at the
  * value via `encryptColumnValue`. This map is deliberately the BUILDER half only; the D22 addendum-2
  * set as a whole is enforced by the adversarial raw-file test, which drives every real writer.
  */
 const BUILDER_ENCRYPTED_COLUMNS: Readonly<Record<string, ReadonlySet<string>>> = {
-  operations: new Set(['payload', 'signed_core_jcs', 'location']),
   notes: new Set(['title', 'body']),
   repair_customers: new Set(['name', 'phone']),
   repair_tickets: new Set(['device_passcode', 'complaint', 'intake_notes', 'outcome_note']),
@@ -170,6 +166,16 @@ class ColumnEncryptTransformer extends OperationNodeTransformer {
   }
 }
 
+/** The table an INSERT or UPDATE writes, when it is one of the builder-encrypted ones; else undefined. */
+function encryptedTarget(node: RootOperationNode): string | undefined {
+  let table: string | undefined;
+  if (InsertQueryNode.is(node)) table = node.into?.table.identifier.name;
+  else if (UpdateQueryNode.is(node) && node.table !== undefined && TableNode.is(node.table)) {
+    table = node.table.table.identifier.name;
+  }
+  return table !== undefined && BUILDER_ENCRYPTED_COLUMNS[table] !== undefined ? table : undefined;
+}
+
 /** Decrypt every marker-bearing value in a result row; rows with no ciphertext are returned as-is. */
 function decryptRow(cipher: ColumnCipher, row: UnknownRow): UnknownRow {
   let out: Record<string, unknown> | undefined;
@@ -191,6 +197,10 @@ export function createColumnEncryptionPlugin(cipher: ColumnCipher): KyselyPlugin
   const transformer = new ColumnEncryptTransformer(cipher);
   return {
     transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
+      // Only an INSERT or UPDATE into an encrypted table has a value to seal, and SQLite runs no DML
+      // nested inside another statement. Every other query passes through without a tree copy,
+      // which on Hermes costs about as much as compiling the query.
+      if (encryptedTarget(args.node) === undefined) return args.node;
       return transformer.transformNode(args.node, args.queryId);
     },
     transformResult(args: PluginTransformResultArgs): Promise<QueryResult<UnknownRow>> {

@@ -17,6 +17,9 @@ import { Card } from '../src/components/Card.js';
 import { Chip } from '../src/components/Chip.js';
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
 import { ListRow } from '../src/components/ListRow.js';
+import { SearchField } from '../src/components/SearchField.js';
+import { SegmentedControl } from '../src/components/SegmentedControl.js';
+import { TextButton } from '../src/components/TextButton.js';
 import { color, touch } from '../src/tokens.js';
 import { render, type RenderResult } from './render.js';
 
@@ -94,6 +97,49 @@ describe('touch targets (§1.4, §6.2)', () => {
     );
     expect(extent(r, 'ui.syncChip', 'height')).toBeGreaterThanOrEqual(touch.min);
     expect(extent(r, 'ui.syncChip', 'width')).toBeGreaterThanOrEqual(touch.min);
+  });
+
+  // The compact controls are drawn below the floor on purpose (they must not outweigh content), so
+  // each must make the difference up in hitSlop.
+  test('a compact Button is drawn smaller but still clears the floor', () => {
+    const r = render(<Button testID="b" label="x" size="compact" onPress={vi.fn()} />);
+    expect(r.styleOf('b')['minHeight']).toBeLessThan(touch.min);
+    expect(extent(r, 'b', 'height')).toBeGreaterThanOrEqual(touch.min);
+  });
+
+  test('a compact SegmentedControl option clears the floor', () => {
+    const r = render(
+      <SegmentedControl
+        testID="seg"
+        options={[{ value: 'a', label: 'A' }]}
+        value="a"
+        size="compact"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(r.styleOf('seg.a')['minHeight']).toBeLessThan(touch.min);
+    expect(extent(r, 'seg.a', 'height')).toBeGreaterThanOrEqual(touch.min);
+  });
+
+  test('a TextButton clears the floor', () => {
+    const r = render(<TextButton testID="tb" label="Ganti" onPress={vi.fn()} />);
+    expect(extent(r, 'tb', 'height')).toBeGreaterThanOrEqual(touch.min);
+  });
+
+  test('the SearchField and its clear button meet the floor', () => {
+    const r = render(
+      <SearchField
+        testID="s"
+        value="maria"
+        onChangeText={vi.fn()}
+        placeholder="Cari"
+        accessibilityLabel="Cari"
+        clearLabel="Hapus"
+      />,
+    );
+    expect(extent(r, 's', 'height')).toBeGreaterThanOrEqual(touch.min);
+    expect(extent(r, 's.clear', 'height')).toBeGreaterThanOrEqual(touch.min);
+    expect(extent(r, 's.clear', 'width')).toBeGreaterThanOrEqual(touch.min);
   });
 
   test('AvatarButton meets the 48 dp floor', () => {
@@ -243,7 +289,7 @@ describe('ConfirmSheet (§3.10)', () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(r.styleOf('ui.confirmSheet.confirm')['height']).toBe(touch.primary);
-    expect(r.styleOf('ui.confirmSheet.cancel')['height']).toBe(touch.primary);
+    expect(r.styleOf('ui.confirmSheet.confirm')['minHeight']).toBe(touch.primary);
+    expect(r.styleOf('ui.confirmSheet.cancel')['minHeight']).toBe(touch.primary);
   });
 });

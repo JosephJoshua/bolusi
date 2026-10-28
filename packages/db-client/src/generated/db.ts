@@ -122,8 +122,6 @@ export interface Operations {
   entityType: string;
   hash: string;
   id: string | null;
-  location: string | null;
-  payload: string;
   previousHash: string;
   rejectionCode: string | null;
   rejectionReason: string | null;
@@ -139,6 +137,31 @@ export interface Operations {
   timestampMs: number;
   type: string;
   userId: string;
+}
+
+export interface PendingPinVerifiers {
+  actorUserId: string;
+  algo: string;
+  asOfDeviceId: string;
+  asOfSeq: number;
+  asOfTimestamp: number;
+  hash: string;
+  params: string;
+  salt: string;
+  userId: string;
+  verifierRef: string | null;
+}
+
+export interface PhoneModels {
+  announcedYear: number | null;
+  brand: string;
+  id: Generated<number | null>;
+  kind: string;
+  modelCodes: string;
+  name: string;
+  photoSha256: string | null;
+  revision: number;
+  specs: Generated<string>;
 }
 
 export interface PinAttemptState {
@@ -189,6 +212,14 @@ export interface RepairCustomers {
   updatedBy: string;
 }
 
+export interface RepairIntakeOptions {
+  itemsJson: string;
+  list: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export interface RepairQuoteLines {
   amount: number;
   createdAt: number;
@@ -205,6 +236,40 @@ export interface RepairQuoteLines {
   storeId: string;
   tenantId: string;
   ticketId: string;
+}
+
+export interface RepairStoreCancelFees {
+  afterWork: number;
+  beforeWork: number;
+  storeId: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface RepairStoreIntakeOptions {
+  hiddenJson: string;
+  list: string;
+  storeId: string;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+export interface RepairStorePrintSettings {
+  address: string;
+  handoverTerms: string | null;
+  intakeTerms: string | null;
+  logoMediaId: string | null;
+  logoMime: string | null;
+  logoOnDotMatrix: number;
+  logoSha256: string | null;
+  name: string | null;
+  phone: string;
+  storeId: string | null;
+  tenantId: string;
+  updatedAt: number;
+  updatedBy: string;
 }
 
 export interface RepairTicketEvents {
@@ -232,6 +297,10 @@ export interface RepairTicketPhotos {
 }
 
 export interface RepairTickets {
+  cancelFee: number | null;
+  cancelledAt: number | null;
+  cancelledBy: string | null;
+  cancelStandardFee: number | null;
   checklistJson: string;
   complaint: string;
   createdAt: number;
@@ -242,9 +311,13 @@ export interface RepairTickets {
   deviceImei: string | null;
   deviceModel: string;
   devicePasscode: string | null;
+  downPayment: number | null;
+  downPaymentAt: number | null;
+  downPaymentBy: string | null;
   estimatedReadyAt: number | null;
   id: string | null;
   intakeNotes: string;
+  intakePhotosJson: string | null;
   location: string;
   outcome: string;
   outcomeNote: string | null;
@@ -314,6 +387,12 @@ export interface UsersDirectory {
   status: string;
 }
 
+export interface UserWork {
+  updatedAt: number;
+  userId: string | null;
+  work: string;
+}
+
 export interface DB {
   authPermissionDenials: AuthPermissionDenials;
   authSessions: AuthSessions;
@@ -324,12 +403,18 @@ export interface DB {
   migrations: Migrations;
   notes: Notes;
   operations: Operations;
+  pendingPinVerifiers: PendingPinVerifiers;
+  phoneModels: PhoneModels;
   pinAttemptState: PinAttemptState;
   pinLockoutEvents: PinLockoutEvents;
   projectionWatermarks: ProjectionWatermarks;
   quarantinedOps: QuarantinedOps;
   repairCustomers: RepairCustomers;
+  repairIntakeOptions: RepairIntakeOptions;
   repairQuoteLines: RepairQuoteLines;
+  repairStoreCancelFees: RepairStoreCancelFees;
+  repairStoreIntakeOptions: RepairStoreIntakeOptions;
+  repairStorePrintSettings: RepairStorePrintSettings;
   repairTicketEvents: RepairTicketEvents;
   repairTicketPhotos: RepairTicketPhotos;
   repairTickets: RepairTickets;
@@ -339,4 +424,5 @@ export interface DB {
   userPrefs: UserPrefs;
   userRolesDirectory: UserRolesDirectory;
   usersDirectory: UsersDirectory;
+  userWork: UserWork;
 }

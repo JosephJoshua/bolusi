@@ -18,15 +18,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { PushResult, SignedOperation } from '@bolusi/schemas';
 
-import { noblePort } from '@bolusi/test-support';
+import { opRowOf } from '@bolusi/test-support';
 
 import {
+  BUNDLE_REFRESH_INTERVAL_MS,
   DomainError,
   SYNC_BACKOFF_SCHEDULE_MS,
   SYNC_LOOP_MACHINE,
   SyncTransportError,
   runTransition,
-  signedCoreJcsOf,
+  insertOpLogRow,
   type SyncLoopEvent,
   type SyncLoopState,
   type SyncTriggerReason,
@@ -85,18 +86,11 @@ async function seedLocalOp(seq: number): Promise<SignedOperation> {
     entityId: uuidV7(prng, timestamp),
     prng,
   });
-  await sql`
-    INSERT INTO operations (
-      id, tenant_id, store_id, user_id, device_id, seq, type, entity_type, entity_id,
-      schema_version, payload, timestamp_ms, location, source, agent_initiated,
-      agent_conversation_id, previous_hash, hash, signature, signed_core_jcs, sync_status
-    ) VALUES (
-      ${op.id}, ${op.tenantId}, ${op.storeId}, ${op.userId}, ${op.deviceId}, ${op.seq}, ${op.type},
-      ${op.entityType}, ${op.entityId}, ${op.schemaVersion}, ${JSON.stringify(op.payload)},
-      ${op.timestamp}, ${null}, ${op.source}, ${0}, ${null}, ${op.previousHash}, ${op.hash},
-      ${op.signature}, ${signedCoreJcsOf(op, noblePort)}, 'local'
-    )
-  `.execute(harness.db);
+  await insertOpLogRow(harness.db, opRowOf(op), {
+    syncStatus: 'local',
+    syncedAt: null,
+    arrivalSeq: null,
+  });
   return op;
 }
 
@@ -385,6 +379,7 @@ describe('trigger guards (03 §10)', () => {
       timer: harness.timer,
       deviceId: device.id,
       applyPulledOp: async () => undefined,
+      refoldRefused: async () => undefined,
       bundle: { refresh: async () => 'unchanged' as const },
     });
     expect(() => loop.requestSync('manual')).toThrow(/hydrate/);
@@ -700,7 +695,57 @@ describe('the loop never throws to its caller (api/01 §6)', () => {
   });
 });
 
-describe('bundle refresh (api/01 §6, once per loop)', () => {
+describe('bundle refresh throttle (busy devices stay under the 120-per-hour server limit)', () => {
+  it('automatic cycles inside the interval skip the bundle; the next one after it refreshes', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.requestSync('periodic');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(1);
+
+    for (const reason of ['append', 'periodic', 'append'] as const) {
+      harness.timer.advance(10_000);
+      loop.requestSync(reason);
+      await loop.settle();
+      expect(loop.state).toBe('idle');
+    }
+    expect(harness.bundleRefreshes()).toBe(1);
+
+    harness.timer.advance(BUNDLE_REFRESH_INTERVAL_MS - 30_000);
+    loop.requestSync('append');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(2);
+  });
+
+  it('a manual trigger refreshes at once; connectivity (which realtime pokes also use) does not', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.requestSync('periodic');
+    await loop.settle();
+    loop.requestSync('connectivity');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(1);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(2);
+  });
+
+  it('a failed refresh is retried on the next cycle rather than waiting out the interval', async () => {
+    const loop = await harness.makeLoop({ deviceId: device.id });
+    loop.requestSync('periodic');
+    await loop.settle();
+    harness.failBundle(1);
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(loop.state).toBe('backoff');
+    expect(harness.bundleRefreshes()).toBe(2);
+
+    harness.timer.advance(SYNC_BACKOFF_SCHEDULE_MS[0]);
+    await loop.settle();
+    expect(harness.bundleRefreshes()).toBe(3);
+    expect(loop.state).toBe('idle');
+  });
+});
+
+describe('bundle refresh (api/01 §6)', () => {
   it('is invoked exactly once per cycle and 304 (unchanged) is success', async () => {
     const loop = await harness.makeLoop({ deviceId: device.id });
     loop.requestSync('manual');
@@ -723,5 +768,71 @@ describe('bundle refresh (api/01 §6, once per loop)', () => {
 
     expect(loop.state).toBe('backoff');
     expect((await syncStateRow()).lastSuccessfulSyncAt).toBeNull();
+  });
+});
+
+describe('onPushed tells the screens that ops changed status', () => {
+  it('fires once per push phase that settled an op, taken or refused, and not otherwise', async () => {
+    const pushed: Array<{ synced: number; rejected: number }> = [];
+    const loop = await harness.makeLoop({
+      deviceId: device.id,
+      onPushed: ({ synced, rejected }) => pushed.push({ synced, rejected }),
+    });
+
+    // Nothing local: no status changed, so nothing to re-read.
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(pushed).toEqual([]);
+
+    const taken = await seedLocalOp(1);
+    const refused = await seedLocalOp(2);
+    harness.transport.scriptPush({
+      results: [
+        { id: taken.id, status: 'accepted' },
+        { id: refused.id, status: 'rejected', code: 'SCOPE_VIOLATION', reason: 'nope' },
+      ] as PushResult[],
+      serverTime: 1,
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(pushed).toEqual([{ synced: 1, rejected: 1 }]);
+  });
+
+  it('reports a batch already taken when a later batch of the same push fails', async () => {
+    const pushed: Array<{ synced: number; rejected: number }> = [];
+    const first = await seedLocalOp(1);
+    await seedLocalOp(2);
+    const loop = await harness.makeLoop({
+      deviceId: device.id,
+      pushBatchSize: 1,
+      onPushed: ({ synced, rejected }) => pushed.push({ synced, rejected }),
+    });
+    harness.transport.scriptPush(
+      { results: [{ id: first.id, status: 'accepted' }] as PushResult[], serverTime: 1 },
+      netFail,
+    );
+    loop.requestSync('manual');
+    await loop.settle();
+    // The cycle failed into backoff, but the first op did sync and its screens must hear of it.
+    expect(loop.state).toBe('backoff');
+    expect(pushed).toEqual([{ synced: 1, rejected: 0 }]);
+  });
+
+  it('a throwing listener does not fail the cycle', async () => {
+    const op = await seedLocalOp(1);
+    const loop = await harness.makeLoop({
+      deviceId: device.id,
+      onPushed: () => {
+        throw new Error('screen exploded');
+      },
+    });
+    harness.transport.scriptPush({
+      results: [{ id: op.id, status: 'accepted' }] as PushResult[],
+      serverTime: 1,
+    });
+    loop.requestSync('manual');
+    await loop.settle();
+    expect(loop.state).toBe('idle');
+    expect((await syncStateRow()).lastSuccessfulSyncAt).not.toBeNull();
   });
 });

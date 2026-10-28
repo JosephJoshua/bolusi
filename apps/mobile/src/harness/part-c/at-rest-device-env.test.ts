@@ -2,10 +2,10 @@
 //
 // The DETECTION logic (`checkDbAtRestIsCiphertext` + its T-14b control) is already Node-falsified in
 // `@bolusi/test-support` and `at-rest-device-ctx.test.ts`. What is NEW in task 178 is the SEED: driving
-// the 11 real production writers so a real DB carries a non-null SEALED cell in every signed-off column.
+// the real production writers so a real DB carries a non-null SEALED cell in every signed-off column.
 // This suite binds the env's platform seams to better-sqlite3 + `nodeColumnAead` + node:fs (op-sqlite is
 // a JSI module that cannot load under Node — testing-guide §2.3), which lets vitest prove:
-//   1. a full seed makes the at-rest gate PASS (all 11 columns observed + sealed, control witnessed);
+//   1. a full seed makes the at-rest gate PASS (all 9 columns observed + sealed, control witnessed);
 //   2. SKIPPING one column reds the COVERAGE check, NAMING the missing column (the seed falsification
 //      the task calls for — a partial seed is a RED, not a vacuous pass);
 //   3. SEC-AUTH-09 leg 1 (the verifier-scoped gate) goes green on a full seed and RED when the verifier
@@ -68,8 +68,8 @@ function allBut(table: string, column: string): readonly (readonly [string, stri
 // device-verified at-rest claim — the real op-sqlite bytes are the emulator's. So the SEC ids are
 // deliberately kept OUT of these titles; a green here must never read as the shipped device claim
 // (the same discipline packages/harness/test/at-rest-column-encryption.test.ts follows).
-describe('createAtRestDeviceEnv — the real 11-column at-rest seed (task 178; Node leg)', () => {
-  test('a full seed of all 11 columns makes the at-rest gate PASS', async () => {
+describe('createAtRestDeviceEnv — the real 9-column at-rest seed (task 178; Node leg)', () => {
+  test('a full seed of all 9 columns makes the at-rest gate PASS', async () => {
     const env = createAtRestDeviceEnv(hostSeams());
     const gate = await runAtRestGate(env);
     expect(gate.status, gate.detail).toBe('pass');

@@ -12,12 +12,13 @@ import {
   type DbDriver,
 } from '@bolusi/db-client';
 import type { SignedOperation } from '@bolusi/schemas';
-import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-support';
+import { mulberry32, noblePort, randomBytes as prngBytes, opRowOf } from '@bolusi/test-support';
 
 import {
   assemblePermissionRegistry,
   createModuleRuntime,
   createProjectionEngine,
+  insertOpLogRow,
   createUuidV7Generator,
   InvalidationBus,
   PermissionEvaluator,
@@ -63,36 +64,8 @@ export class SqliteOpStore implements OpAppendStore {
           `.execute(this.db);
           return rows.rows.length > 0;
         },
-        insertOp: async ({ op, signedCoreJcs }) => {
-          await this.db
-            .insertInto('operations')
-            .values({
-              id: op.id,
-              tenantId: op.tenantId,
-              storeId: op.storeId,
-              userId: op.userId,
-              deviceId: op.deviceId,
-              seq: op.seq,
-              type: op.type,
-              entityType: op.entityType,
-              entityId: op.entityId,
-              schemaVersion: op.schemaVersion,
-              payload: JSON.stringify(op.payload),
-              timestampMs: op.timestamp,
-              location: op.location === null ? null : JSON.stringify(op.location),
-              source: op.source,
-              agentInitiated: op.agentInitiated ? 1 : 0,
-              agentConversationId: op.agentConversationId,
-              previousHash: op.previousHash,
-              hash: op.hash,
-              signature: op.signature,
-              signedCoreJcs,
-              syncStatus: 'local',
-              arrivalSeq: null,
-              syncedAt: null,
-            })
-            .execute();
-        },
+        insertOp: (row) =>
+          insertOpLogRow(this.db, row, { syncStatus: 'local', syncedAt: null, arrivalSeq: null }),
       });
       await this.driver.commit();
       return result;
@@ -216,34 +189,11 @@ export async function openHarness(seed: number): Promise<Harness> {
     deviceId,
     identity: (userId: string): CommandIdentity => ({ tenantId, storeId, userId, deviceId }),
     deliverPulled: async (op: SignedOperation, arrivalSeq: number): Promise<void> => {
-      await db
-        .insertInto('operations')
-        .values({
-          id: op.id,
-          tenantId: op.tenantId,
-          storeId: op.storeId,
-          userId: op.userId,
-          deviceId: op.deviceId,
-          seq: op.seq,
-          type: op.type,
-          entityType: op.entityType,
-          entityId: op.entityId,
-          schemaVersion: op.schemaVersion,
-          payload: JSON.stringify(op.payload),
-          timestampMs: op.timestamp,
-          location: null,
-          source: op.source,
-          agentInitiated: op.agentInitiated ? 1 : 0,
-          agentConversationId: op.agentConversationId,
-          previousHash: op.previousHash,
-          hash: op.hash,
-          signature: op.signature,
-          signedCoreJcs: `jcs:${op.id}`,
-          syncStatus: 'synced',
-          arrivalSeq,
-          syncedAt: clock.value,
-        })
-        .execute();
+      await insertOpLogRow(db, opRowOf(op), {
+        syncStatus: 'synced',
+        syncedAt: clock.value,
+        arrivalSeq,
+      });
       await engine.applyPulledOp(op);
     },
     close: async () => {

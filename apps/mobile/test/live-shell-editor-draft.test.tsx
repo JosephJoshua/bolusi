@@ -216,6 +216,7 @@ describe('Leg B — a header-chrome tap must not discard the draft (task 145)', 
     expect(screen.query('switcher-screen')).toBeNull();
 
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
 
     // Before the fix this tap unmounted `NotesHome` — `switcher-screen` present, draft gone, no
@@ -231,6 +232,7 @@ describe('Leg B — a header-chrome tap must not discard the draft (task 145)', 
     await typeBody(screen, HALF_WRITTEN);
     expect(screen.query('settings-screen')).toBeNull();
 
+    fireOn(screen, 'ui.avatarButton');
     fireOn(screen, 'shell-open-settings');
     await settle();
 
@@ -246,6 +248,7 @@ describe('Leg B — a header-chrome tap must not discard the draft (task 145)', 
     await typeBody(screen, HALF_WRITTEN);
 
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
     expect(screen.query('notes.editor.discard')).not.toBeNull();
 
@@ -260,6 +263,7 @@ describe('Leg B — a header-chrome tap must not discard the draft (task 145)', 
     const screen = await openEditor();
 
     fireOn(screen, 'ui.avatarButton');
+    fireOn(screen, 'account-menu-switch-user');
     await settle();
 
     // Nothing to discard ⇒ the tap navigates straight through to the switcher, no ConfirmSheet.

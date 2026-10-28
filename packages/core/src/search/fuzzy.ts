@@ -37,8 +37,9 @@ const FOLDS: readonly (readonly [RegExp, string])[] = [
   [/v/g, 'f'], // Vera → Fera
   [/j/g, 'y'], // Johanis → Yohanis, Jusuf → Yusuf
   [/y/g, 'i'], // Yanti/Yanty, then j and y meet
-  [/([a-z])\1+/g, '$1'], // Hanna → Hana, Yohannes → Yohanes
-  [/([aeiou])h$/g, '$1'], // Fatimah → Fatima, Sarah → Sara
+  // Fatimah → Fatima, Sarah → Sara. Not a short word, which is more likely a name still being typed
+  // ("yoh" for Yohanis) than one ending in h.
+  [/(..[aeiou])h$/g, '$1'],
 ];
 
 /** Fold one normalized word to its spelling-insensitive key. Digits are left alone. */
@@ -48,6 +49,11 @@ export function foldWord(word: string): string {
   if (cached !== undefined) return cached;
   let out = word;
   for (const [pattern, replacement] of FOLDS) out = out.replace(pattern, replacement);
+  // Hanna → Hana, Riyanto → Rianto, Alexsander → Aleksander. Only a pair: a longer run ("zzzz") is
+  // no spelling variant. Not down to a word of one or two letters either, where it would turn
+  // nonsense into a prefix of half the store ("qx" → "kks" → "ks", the start of Xiaomi).
+  const squeezed = out.replace(/([a-z])\1+/g, (run) => (run.length === 2 ? run[0]! : run));
+  if (squeezed.length >= 3) out = squeezed;
   if (foldCache.size >= 10_000) foldCache.clear();
   foldCache.set(word, out);
   return out;
@@ -185,25 +191,31 @@ export function words(texts: readonly (string | null)[]): Words {
   return { plain, folded, terms: [...new Set([...plain, ...folded])], compact };
 }
 
-/** How well one query word matches one target word, in [0, 1]; 0 means no match. */
-export function wordSimilarity(query: string, target: string): number {
+/**
+ * How well one query word matches one target word, in [0, 1]; 0 means no match. `typed` is the
+ * length the person typed: a spelling fold can lengthen a word ("qx" → "kks"), and the edits it
+ * may carry follow what was typed, not what the fold made of it.
+ */
+export function wordSimilarity(query: string, target: string, typed = query.length): number {
   if (query === target) return 1;
-  const tolerance = wordTolerance(query.length);
+  const length = Math.min(query.length, typed);
+  const tolerance = wordTolerance(length);
   let best = 0;
   const whole = alignDistance(query, target, 'whole', tolerance);
-  if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
+  if (whole <= tolerance) best = 0.95 * closeness(whole, length);
   if (query.length < target.length) {
     // A word still being typed: "yoh" for Yohanis, or "yohns" with a typo on the way.
+    // A typo needs four letters: three with one wrong ("xyz" for Xiaomi) is too little to go on.
     const prefix = alignDistance(query, target, 'prefix', tolerance);
-    if (prefix <= tolerance && (prefix === 0 || query.length >= 3)) {
-      const typed = query.length / target.length;
-      best = Math.max(best, (0.7 + 0.15 * typed) * closeness(prefix, query.length));
+    if (prefix <= tolerance && (prefix === 0 || length >= 4)) {
+      const done = query.length / target.length;
+      best = Math.max(best, (0.7 + 0.15 * done) * closeness(prefix, length));
     }
-    if (query.length >= 3) {
+    if (length >= 3) {
       // Inside a longer word: "tono" in Sutono. One fewer edit allowed, since it may start anywhere.
       const infixTolerance = Math.max(0, tolerance - 1);
       const infix = alignDistance(query, target, 'infix', infixTolerance);
-      if (infix <= infixTolerance) best = Math.max(best, 0.6 * closeness(infix, query.length));
+      if (infix <= infixTolerance) best = Math.max(best, 0.6 * closeness(infix, length));
     }
   }
   return best;
@@ -216,7 +228,7 @@ function bestWord(query: Words, i: number, target: Words): number {
   let best = 0;
   for (const term of target.terms) {
     best = Math.max(best, wordSimilarity(plain, term));
-    if (folded !== plain) best = Math.max(best, wordSimilarity(folded, term));
+    if (folded !== plain) best = Math.max(best, wordSimilarity(folded, term, plain.length));
     if (best === 1) break;
   }
   return best;
@@ -241,17 +253,21 @@ function wordsScore(query: Words, target: Words): number {
   return total / query.plain.length;
 }
 
-/** The query with spaces removed, aligned inside one compact term. */
-export function compactSimilarity(query: string, term: string): number {
-  if (query.length < 4) return 0;
-  const tolerance = wordTolerance(query.length);
-  const edits = alignDistance(query, term, 'infix', tolerance);
-  return edits <= tolerance ? 0.85 * closeness(edits, query.length) : 0;
+/**
+ * The query with spaces removed, aligned with the start of one compact term: all of it, or a prefix
+ * still being typed. Not anywhere inside it: a few letters with a typo can be found inside almost
+ * any pair of joined words ("xyz" in "xiaomiredmi").
+ */
+export function compactSimilarity(query: CompiledQuery, term: string): number {
+  const tolerance = query.compactTolerance;
+  if (tolerance < 0) return 0;
+  const edits = alignDistance(query.compact, term, 'prefix', tolerance);
+  return edits <= tolerance ? 0.85 * closeness(edits, query.compactLength) : 0;
 }
 
 function compactScore(query: CompiledQuery, target: Words): number {
   let best = 0;
-  for (const term of target.compact) best = Math.max(best, compactSimilarity(query.compact, term));
+  for (const term of target.compact) best = Math.max(best, compactSimilarity(query, term));
   return best;
 }
 
@@ -260,13 +276,16 @@ export function digitScore(query: string, stored: string): number {
   if (stored === '') return 0;
   if (query === stored) return 1;
   const tolerance = digitTolerance(query.length);
-  let best = 0;
-  const whole = alignDistance(query, stored, 'whole', tolerance);
-  if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
-  const suffix = alignDistance(query, stored, 'suffix', tolerance);
-  if (suffix <= tolerance) best = Math.max(best, 0.85 * closeness(suffix, query.length));
+  // An infix alignment is never worse than a suffix or whole one, so a stored number the query is
+  // not even inside cannot match at all: most numbers stop after one alignment instead of three.
   const infix = alignDistance(query, stored, 'infix', tolerance);
-  if (infix <= tolerance) best = Math.max(best, 0.7 * closeness(infix, query.length));
+  if (infix > tolerance) return 0;
+  let best = 0.7 * closeness(infix, query.length);
+  const suffix = alignDistance(query, stored, 'suffix', tolerance);
+  if (suffix > tolerance) return best;
+  best = Math.max(best, 0.85 * closeness(suffix, query.length));
+  const whole = alignDistance(query, stored, 'whole', tolerance);
+  if (whole <= tolerance) best = Math.max(best, 0.95 * closeness(whole, query.length));
   return best;
 }
 
@@ -295,6 +314,15 @@ export interface CompiledQuery {
   readonly words: Words;
   /** The folded words joined, for `compactSimilarity`. */
   readonly compact: string;
+  /** `compact`'s length for its edit budget: what was typed, if the folds made it longer. */
+  readonly compactLength: number;
+  /**
+   * Edits `compact` may carry, or -1 when it is too short to compare. Words typed apart must be
+   * spelled right once joined ("rum biak"): their typos are the word match's job, and a budget for
+   * the whole would let a stray word ride along on a real one ("samsung abc"). One word typed
+   * together keeps its typo budget ("galaxia14").
+   */
+  readonly compactTolerance: number;
   /** The query as one digit string when it has no letters (phone, IMEI, counter). */
   readonly digits: string | null;
   /** The query as a compact code, for ticket numbers. */
@@ -307,9 +335,14 @@ export function compileQuery(query: string): CompiledQuery | null {
   const digitCount = query.replace(/\D/g, '').length;
   const letterCount = normalized.replace(/[^a-z]/g, '').length;
   const parsed = words([query]);
+  const compact = parsed.folded.join('');
+  const compactLength = Math.min(compact.length, parsed.plain.join('').length);
   return {
     words: parsed,
-    compact: parsed.folded.join(''),
+    compact,
+    compactLength,
+    compactTolerance:
+      compactLength < 4 ? -1 : parsed.plain.length > 1 ? 0 : wordTolerance(compactLength),
     digits: digitCount >= 3 && letterCount === 0 ? normalizePhone(query) : null,
     code: compactCode(query),
   };
@@ -319,16 +352,27 @@ export function normalizeNumber(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-/** A code query against a stored code, in [0, 1]. The counter alone ("0042") also matches. */
+/**
+ * A code query against a stored code, in [0, 1]. The counter alone ("0042") also matches, and so
+ * does a number still being typed ("K7Q", "K7Q-00").
+ */
 export function codeScore(query: string, stored: string): number {
   if (query.length < 3 || stored === '') return 0;
   if (query === stored) return 1;
   const tolerance = digitTolerance(query.length);
   let best = 0;
-  const whole = alignDistance(query, stored, 'whole', tolerance);
-  if (whole <= tolerance) best = 0.95 * closeness(whole, query.length);
+  // A suffix alignment is never worse than a whole one (see `digitScore`), so a whole alignment
+  // is only tried when the suffix one matched.
   const suffix = alignDistance(query, stored, 'suffix', tolerance);
-  if (suffix <= tolerance) best = Math.max(best, 0.8 * closeness(suffix, query.length));
+  if (suffix <= tolerance) {
+    best = 0.8 * closeness(suffix, query.length);
+    const whole = alignDistance(query, stored, 'whole', tolerance);
+    if (whole <= tolerance) best = Math.max(best, 0.95 * closeness(whole, query.length));
+  }
+  // A start typed exactly: with an edit allowed, "K7Q-001" would also list 0009, 0008 and on.
+  if (query.length < stored.length && stored.startsWith(query)) {
+    best = Math.max(best, 0.7 + 0.15 * (query.length / stored.length));
+  }
   return best;
 }
 

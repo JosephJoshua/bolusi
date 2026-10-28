@@ -21,6 +21,7 @@
     "@bolusi/core": "workspace:*",
     "@bolusi/schemas": "workspace:*",
     "@op-engineering/op-sqlite": "catalog:",
+    "fflate": "catalog:",
     "kysely": "catalog:",
     "kysely-generic-sqlite": "catalog:"
   },

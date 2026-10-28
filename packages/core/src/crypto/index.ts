@@ -6,6 +6,7 @@ export {
   bytesToUtf8,
   concatBytes,
   hexToBytes,
+  isCanonicalBase64,
   utf8ToBytes,
 } from './bytes.js';
 export {
@@ -15,7 +16,13 @@ export {
   type JsonPrimitive,
   type JsonValue,
 } from './jcs.js';
-export { encryptColumnValue, registerColumnCipher, type ColumnCipher } from './column-cipher.js';
+export {
+  encryptColumnValue,
+  registerColumnCipher,
+  type ColumnCipher,
+  SIGNED_CORE_SEAL,
+  type SealOptions,
+} from './column-cipher.js';
 export {
   deriveMediaFileKey,
   frameCountFor,
@@ -33,6 +40,14 @@ export {
   MEDIA_FILE_TAG_BYTES,
   type MediaFileAead,
 } from './media-file-cipher.js';
+export {
+  ED25519_RAW_LENGTH,
+  frameEd25519Pkcs8,
+  frameEd25519Spki,
+  PKCS8_ED25519_PREFIX,
+  pointFromSpkiDer,
+  SPKI_ED25519_PREFIX,
+} from './ed25519-der.js';
 export { compareCanonicalOrder, sortCanonical, type CanonicalOrderKey } from './order.js';
 export {
   DEFAULT_KDF_PARAMS,
@@ -40,4 +55,11 @@ export {
   type Ed25519KeyPair,
   type KdfParams,
 } from './port.js';
-export { hashSignedCore, signOp, verifyOp, type SignedCoreDigest } from './signed-core.js';
+export {
+  hashSignedCore,
+  operationFromSignedCoreJcs,
+  signedCoreJcsOf,
+  signOp,
+  verifyOp,
+  type SignedCoreDigest,
+} from './signed-core.js';

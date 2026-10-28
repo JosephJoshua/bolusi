@@ -50,6 +50,7 @@ import {
   type AppendContext,
   type AppendedOp,
   type OpAppendStore,
+  type OpCheck,
   type ProjectionApply,
 } from '../oplog/append.js';
 import type { OpDraft } from '../oplog/draft.js';
@@ -134,6 +135,17 @@ export interface CommandDefinition<TInput = unknown, TResult = void> {
   ) => CommandHandlerResult<TResult> | Promise<CommandHandlerResult<TResult>>;
 }
 
+/** Per-call options for `execute`. */
+export interface ExecuteOptions {
+  /**
+   * A local write that must commit atomically with the command's ops, such as a secret that cannot
+   * ride in a payload. Runs inside the append transaction after the ops are inserted and projected;
+   * a throw rolls the command back. It runs after the permission check and the handler, so it can
+   * never let a refused command write anything.
+   */
+  readonly withinAppend?: (ops: readonly AppendedOp[]) => Promise<void>;
+}
+
 /** What `execute` returns: the appended ops and the handler's optional typed result. */
 export interface CommandOutcome<TResult = void> {
   readonly ops: readonly AppendedOp[];
@@ -194,6 +206,16 @@ export interface CommandRuntimeOptions {
   readonly queryExecutor: QueryExecutorPort;
   /** Task 08's engine plugs in here; it runs INSIDE the append transaction (§5.1 steps 5–6). */
   readonly applyProjection: ProjectionApply;
+  /**
+   * The op-type rules (module/op-rules.ts), run on every op before it is saved. `createModuleRuntime`
+   * always wires the registry's; only a runtime built by hand for modules without rules omits it.
+   */
+  readonly checkOp?: OpCheck;
+  /**
+   * Refuses a command when this device's clock is known to run ahead of the server
+   * (sync/clock-guard.ts), before the handler runs. Devices wire it; the harness and tests may not.
+   */
+  readonly guardClock?: () => Promise<void>;
   readonly syncScheduler: SyncSchedulerPort;
   /** Overrides the §7 denial-throttle window. For the suite's boundary cases only. */
   readonly denialThrottleWindowMs?: number;
@@ -244,6 +266,8 @@ export class CommandRuntime {
   readonly #signingKey: SigningKeyPort;
   readonly #queryExecutor: QueryExecutorPort;
   readonly #applyProjection: ProjectionApply;
+  readonly #checkOp: OpCheck | undefined;
+  readonly #guardClock: (() => Promise<void>) | undefined;
   readonly #syncScheduler: SyncSchedulerPort;
   readonly #denialEmitter: DenialEmitter;
   /**
@@ -266,6 +290,8 @@ export class CommandRuntime {
     this.#signingKey = options.signingKey;
     this.#queryExecutor = options.queryExecutor;
     this.#applyProjection = options.applyProjection;
+    this.#checkOp = options.checkOp;
+    this.#guardClock = options.guardClock;
     this.#syncScheduler = options.syncScheduler;
 
     // The emitter is constructed HERE, with its port bound to this runtime's emission channel —
@@ -358,6 +384,8 @@ export class CommandRuntime {
         resolveScope: (type) => this.#resolveScope(type),
         requirePermission: (identity, permissionId, tgt, surface) =>
           this.#requirePermission(identity, permissionId, tgt, surface, invocation),
+        hasPermission: (identity, permissionId) =>
+          this.#enforcement.hasPermission(identity, permissionId),
         queryExecutor: this.#queryExecutor,
         invocation,
         brand: this.#brand,
@@ -430,6 +458,7 @@ export class CommandRuntime {
     command: CommandDefinition<TInput, TResult>,
     rawInput: unknown,
     ctx: CommandContext,
+    options: ExecuteOptions = {},
   ): Promise<CommandOutcome<TResult>> {
     // Step 0 — provenance. A ctx this runtime did not mint has an identity this runtime never
     // established, so there is nothing trustworthy to evaluate the permission against. Fail closed
@@ -480,6 +509,9 @@ export class CommandRuntime {
       invocation,
     );
 
+    // A device whose clock runs ahead would stamp ops the server refuses, so it saves nothing.
+    await this.#guardClock?.();
+
     // Step 3 — the handler. PURE (§5.2): its whole surface is the ctx built here.
     //
     // A handler may DECLARE a §5.4 restriction denial (e.g. auth.pin_change targeting non-self,
@@ -505,6 +537,33 @@ export class CommandRuntime {
         );
       }
       throw cause;
+    }
+
+    // Step 3b — every emitted op type declares the permission its author must hold, and the server
+    // re-checks exactly that on push. A command whose own permission differs from an op type it
+    // emits must not write an op the server will refuse, so the actor must hold that one too. A
+    // type declared with no permission is one only the runtime or the server writes; a command
+    // emitting it would be an op nobody authorizes, so that is a defect, not a fast path.
+    const opPermissions = new Set<string>();
+    for (const draft of handlerResult.ops) {
+      // The record kind is part of the type's contract too: the server refuses a mismatch, so the
+      // runtime must never write one.
+      const entityType = this.#operations.entityTypeFor(draft.type);
+      if (draft.entityType !== entityType) {
+        throw new Error(
+          `${command.name} emitted ${draft.type} on entityType ${draft.entityType}; the type declares ${String(entityType)}`,
+        );
+      }
+      const permission = this.#operations.permissionFor(draft.type);
+      if (typeof permission !== 'string') {
+        throw new Error(
+          `${command.name} emitted ${draft.type}, which declares no permission; only the runtime or the server may write it`,
+        );
+      }
+      if (permission !== command.permission) opPermissions.add(permission);
+    }
+    for (const permission of opPermissions) {
+      await this.#requirePermission(identity, permission, command.name, 'command', invocation);
     }
 
     // Steps 4–6 — completion + atomic append + projection.
@@ -534,6 +593,8 @@ export class CommandRuntime {
       now: () => timestamp,
       location,
       applyProjection: this.#applyProjection,
+      ...(this.#checkOp !== undefined ? { checkOp: this.#checkOp } : {}),
+      ...(options.withinAppend === undefined ? {} : { withinAppend: options.withinAppend }),
     });
 
     // Step 7 — schedule sync (debounced; task 15 owns the loop). AFTER the transaction committed,
@@ -615,6 +676,7 @@ export class CommandRuntime {
       now: () => timestamp,
       location,
       applyProjection: this.#applyProjection,
+      ...(this.#checkOp !== undefined ? { checkOp: this.#checkOp } : {}),
     });
     this.#syncScheduler.schedule();
     return ops;

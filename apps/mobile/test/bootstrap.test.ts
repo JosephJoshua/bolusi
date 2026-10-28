@@ -57,8 +57,7 @@ import {
   type ProjectionOperation,
 } from '@bolusi/core';
 
-import { bootstrap, refreshBootstrapped } from '../src/bootstrap/bootstrap.js';
-import { shareBoot } from '../src/bootstrap/headless.js';
+import { bootOncePerRealm, bootstrap } from '../src/bootstrap/bootstrap.js';
 import { bootWithLocalRecovery, isUnrecoverableLocalDbError } from '../src/bootstrap/recovery.js';
 import { CLIENT_MODULES } from '../src/bootstrap/modules.js';
 import { SecureStoreDbKeyStore } from '../src/ports/db-keystore.js';
@@ -229,9 +228,9 @@ describe('EXACTLY ONE connection per DB, app-wide (08 §2.2 — a data-corruptio
   });
 });
 
-describe('one boot shared by the UI and background tasks (bootstrap/headless.ts)', () => {
+describe('one boot shared by the UI and background tasks (bootOncePerRealm)', () => {
   test('a later caller reuses the one connection and sees an enrollment made after boot', async () => {
-    const shared = shareBoot(() => boot(), refreshBootstrapped);
+    const shared = bootOncePerRealm(() => boot());
     const first = await shared();
     expect(first.deviceId).toBeNull();
 
@@ -240,6 +239,29 @@ describe('one boot shared by the UI and background tasks (bootstrap/headless.ts)
     expect(later.db).toBe(first.db);
     expect(later.deviceId).toBe('device-enrolled-live');
     await first.close();
+  });
+
+  test('a caller that joined a failed background boot retries once its own way', async () => {
+    const launches: string[] = [];
+    let failBackground: (() => void) | null = null;
+    const shared = bootOncePerRealm(async (launch: 'foreground' | 'background') => {
+      launches.push(launch);
+      if (launch === 'background') {
+        await new Promise<void>((resolve) => (failBackground = resolve));
+        throw new Error('keychain locked'); // a background boot never wipes to heal
+      }
+      return boot();
+    });
+
+    const background = shared('background');
+    const foreground = shared('foreground'); // the user opens the app while it is in flight
+    failBackground!();
+
+    await expect(background).rejects.toThrow('keychain locked');
+    const app = await foreground;
+    expect(launches).toEqual(['background', 'foreground']);
+    expect(isClientDbOpen()).toBe(true);
+    await app.close();
   });
 });
 
@@ -381,7 +403,7 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
 
     // Permissions: the authz denominator. An empty registry denies `unknown_permission` on every
     // call forever — a permanent outage wearing an authorization decision's clothes (02 §5.2).
-    expect(app.registry.permissions.size).toBe(26);
+    expect(app.registry.permissions.size).toBe(32);
     expect(app.registry.permissions.ids()).toStrictEqual([
       'auth.audit_view',
       'auth.device_enroll',
@@ -404,10 +426,16 @@ describe('module registration (04 §1/§3/§4; 02 §3.2 "startup failure, not a 
       'platform.set_locale',
       'repair.assign',
       'repair.cancel',
+      'repair.correct_down_payment',
+      'repair.discount',
       'repair.handover',
+      'repair.hide_intake_options',
       'repair.intake',
+      'repair.manage_intake_options',
       'repair.quote_change',
       'repair.read',
+      'repair.set_cancel_fees',
+      'repair.set_print_settings',
       'repair.work',
     ]);
     await app.close();

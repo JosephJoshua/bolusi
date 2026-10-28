@@ -34,12 +34,14 @@ const PUSH_NEVER_REBUILDS: RebuildStore = {
  * (04 §4) — the SAME appliers the client runs (04 §2, T-8). The returned engine's `applyPulledOp`
  * folds an accepted op into the server read models and advances the tenant/module watermark to the
  * highest CONTIGUOUS serverSeq in the log, all through `db`, so it commits or rolls back with the
- * op insert (10-db §3 — atomic by sharing the transaction).
+ * op insert (10-db §3 — atomic by sharing the transaction). With `batchWatermarks`, the caller
+ * advances the watermarks once after its batch (`advancePulledWatermarks`) instead of per op.
  */
 export function createServerProjectionEngine<DB>(
   db: Kysely<DB>,
   tenantId: string,
   registry: ProjectionRegistry<DB>,
+  options: { readonly batchWatermarks?: boolean } = {},
 ): ProjectionEngine<DB> {
   return new ProjectionEngine<DB>({
     db,
@@ -49,7 +51,9 @@ export function createServerProjectionEngine<DB>(
     // The client's `arrival_seq` (10-db §9.2, D20 §4) is a different number and does not exist in
     // this schema, so a mis-wiring here errors rather than answering wrongly.
     seqColumn: 'server_seq',
+    // A refused push never enters the server's log (refused_operations holds the verdict).
+    logKeepsRefusedOps: false,
+    batchPulledWatermarks: options.batchWatermarks ?? false,
     makeRebuildStore: () => PUSH_NEVER_REBUILDS,
-    invalidateRebuildCursor: async () => {},
   });
 }

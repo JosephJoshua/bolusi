@@ -35,6 +35,7 @@
     "dev:tsc": "tsc -b --watch --preserveWatchOutput",
     "dev:server": "pnpm --filter @bolusi/server dev",
     "dev:mobile": "pnpm --filter @bolusi/mobile dev",
+    "dev:web": "pnpm --filter @bolusi/mobile web",
     "secrets:check": "gitleaks git --redact --no-banner",
     "chaos:extended": "tsc -b && CHAOS_NIGHTLY=1 CHAOS_SCALE=4 vitest run --project harness"
   },
@@ -54,6 +55,7 @@
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",
+      "electron",
       "esbuild"
     ]
   },

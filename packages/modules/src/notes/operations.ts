@@ -12,7 +12,14 @@ import type { OperationDeclaration } from '@bolusi/core';
 import { zMediaRef, zUuidV7 } from '@bolusi/schemas';
 
 import { noteArchivedApplier, noteBodyEditedApplier, noteCreatedApplier } from './applier.js';
-import { NOTE_BODY_CONFLICT_KEY, NOTE_CREATED_SCHEMA_VERSION, NOTES_OP } from './constants.js';
+import {
+  NOTE_BODY_CONFLICT_KEY,
+  NOTE_CREATED_SCHEMA_VERSION,
+  NOTE_ENTITY,
+  NOTES_OP,
+  NOTES_PERMISSION,
+} from './constants.js';
+import { existingNoteRule, noteCreatedRule } from './rules.js';
 import type { NotesDatabase } from './schema.js';
 
 /**
@@ -124,6 +131,9 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     reversal:
       'Reversed by notes.note_archived on the same entityId (04 §3 / 05 §7) — a note is not deleted, it is archived (01 §9: no hard delete, archive is terminal). v0 keeps this as documentation; an executable buildReversal slots in for V2.',
     apply: noteCreatedApplier,
+    rule: noteCreatedRule,
+    permission: NOTES_PERMISSION.create,
+    entityType: NOTE_ENTITY,
     // No `conflict`: two devices creating a note mint two DIFFERENT entities (fresh entityId each),
     // so there is nothing to collide on. Store-scoped by default (01 §9).
   },
@@ -134,6 +144,9 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     reversal:
       'Reversed by a subsequent notes.note_body_edited carrying the previous body (04 §3 / 05 §7). The earlier body survives in the append-only log even after the projection shows the later one (01 §8.3: the losing author’s text is never lost).',
     apply: noteBodyEditedApplier,
+    rule: existingNoteRule,
+    permission: NOTES_PERMISSION.edit,
+    entityType: NOTE_ENTITY,
     // 01 §8.1: two accepted body edits on one note collide on `note.body`. minor (01 §8.3):
     // canonical-order LWW already produced a nothing-lost outcome; recorded for reporting, surfaced
     // to nobody. The server's Rule-1 detection keys off this declaration.
@@ -146,6 +159,9 @@ export const notesOperations: Readonly<Record<string, OperationDeclaration<Notes
     reversal:
       'NOT reversible in v0 (01 §9: archive is terminal, there is no unarchive). Recorded because 04 §3 makes reversal MANDATORY: the honest answer is "there is no undo", and stating it is the point. Unarchive is roadmap.',
     apply: noteArchivedApplier,
+    rule: existingNoteRule,
+    permission: NOTES_PERMISSION.archive,
+    entityType: NOTE_ENTITY,
     // No `conflict`: archive is terminal and idempotent, so two archives of one note are a
     // sequence, not a collision. The edit-after-archive case is Rule-2 (conflict-checks.ts).
   },

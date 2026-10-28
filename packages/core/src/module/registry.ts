@@ -27,6 +27,8 @@
 // and are likewise called. This file's own contribution is the operation registry (04 §3) and the
 // composition — one module list feeding three registries that previously had no common entry point
 // (CLAUDE.md §2.8).
+import type { SignedOperation } from '@bolusi/schemas';
+
 import {
   assemblePermissionRegistry,
   type ModulePermissionManifest,
@@ -47,6 +49,7 @@ import type {
   OperationDeclaration,
   OperationScope,
 } from './define-module.js';
+import type { OpRule, OpRuleContext } from './op-rules.js';
 
 /** A registration defect (04 §1/§3; 02 §3.2). Thrown at assembly — before the first command. */
 export class ModuleRegistryError extends Error {
@@ -72,6 +75,7 @@ export interface AnyModuleDefinition<DB> {
   readonly commands?: Readonly<Record<string, AnyCommandDeclaration & { readonly name: string }>>;
   readonly queries?: Readonly<Record<string, AnyQueryDeclaration & { readonly name: string }>>;
   readonly permissions?: Readonly<Record<string, PermissionDeclaration>>;
+  readonly refusals?: readonly string[];
 }
 
 /**
@@ -96,6 +100,13 @@ export interface OperationRegistry {
    * resolves it here rather than letting a handler state it per emission.
    */
   scopeFor(type: string): OperationScope | undefined;
+  /**
+   * The permission an op type's author must hold (`OperationDeclaration.permission`), `null` for a
+   * type no command emits, or `undefined` when no module declares the type.
+   */
+  permissionFor(type: string): string | null | undefined;
+  /** The declared entity type for an op type (`OperationDeclaration.entityType`), or `undefined`. */
+  entityTypeFor(type: string): string | undefined;
   /**
    * The declared conflict rule for an op type (01 §8.1), or `undefined` when the type declares
    * none (⇒ it never produces a Conflict record). The server's Rule-1 detection reads this.
@@ -123,6 +134,12 @@ export interface ModuleRegistry<DB> {
   commandNames(): readonly string[];
   /** Every `<moduleId>.<name>` query key, sorted — a sweep's denominator (T-14). */
   queryNames(): readonly string[];
+  /**
+   * Run the op type's declared rule (op-rules.ts), if it has one. Throws the rule's `DomainError`
+   * when the op must not be recorded. The one entry point both the device's append path and the
+   * server's push ingestion call.
+   */
+  checkOpRule(op: SignedOperation, ctx: OpRuleContext<DB>): Promise<void>;
 }
 
 /**
@@ -158,6 +175,7 @@ export function registerModules<DB>(
     ...(module.permissions === undefined ? {} : { permissions: module.permissions }),
     ...(module.commands === undefined ? {} : { commands: module.commands }),
     ...(module.queries === undefined ? {} : { queries: module.queries }),
+    operations: module.operations,
   }));
   const permissions = assemblePermissionRegistry(permissionManifests);
 
@@ -174,9 +192,15 @@ export function registerModules<DB>(
   const schemaVersions = new Map<string, number>();
   const scopes = new Map<string, OperationScope>();
   const conflicts = new Map<string, ConflictDeclaration>();
+  const opPermissions = new Map<string, string | null>();
+  const entityTypes = new Map<string, string>();
+  const rules = new Map<string, OpRule<DB>>();
   for (const module of modules) {
     for (const [type, declaration] of Object.entries(module.operations)) {
       schemaVersions.set(type, declaration.schemaVersion);
+      if (declaration.rule !== null) rules.set(type, declaration.rule);
+      opPermissions.set(type, declaration.permission);
+      entityTypes.set(type, declaration.entityType);
       // Default here, once, rather than at each reader: an absent `scope` means 'store' (01 §6),
       // and a reader that had to remember that is how the two answers drift apart.
       scopes.set(type, declaration.scope ?? 'store');
@@ -201,6 +225,8 @@ export function registerModules<DB>(
     // `undefined` (the caller's fail-closed signal) rather than the 'store' default.
     scopeFor: (type) => (schemaVersions.has(type) ? (scopes.get(type) ?? 'store') : undefined),
     conflictFor: (type) => conflicts.get(type),
+    permissionFor: (type) => opPermissions.get(type),
+    entityTypeFor: (type) => entityTypes.get(type),
     types: () => [...schemaVersions.keys()].sort(),
     get size() {
       return schemaVersions.size;
@@ -216,6 +242,9 @@ export function registerModules<DB>(
     query: (name) => queries.get(name),
     commandNames: () => [...commands.keys()].sort(),
     queryNames: () => [...queries.keys()].sort(),
+    checkOpRule: async (op, ctx) => {
+      await rules.get(op.type)?.(op, ctx);
+    },
   };
 }
 

@@ -47,22 +47,44 @@ export type { ListProps, ListState } from './components/List.js';
 export type { ButtonProps, ButtonVariant } from './components/Button.js';
 export type { CardProps } from './components/Card.js';
 export type { ChipProps, ChipTone } from './components/Chip.js';
+export type { ChipRowProps } from './components/ChipRow.js';
 export type { ConfirmSheetProps } from './components/ConfirmSheet.js';
 export type { EmptyStateProps } from './components/EmptyState.js';
+export type { FactProps } from './components/Fact.js';
+export type { OutcomeStateProps, OutcomeTone } from './components/OutcomeState.js';
 export type { ErrorStateProps } from './components/ErrorState.js';
 export type { IconName, IconProps } from './components/Icon.js';
 export type { ListRowProps } from './components/ListRow.js';
 export type { LoadingStateProps } from './components/LoadingState.js';
+export type { PhotoSlotProps } from './components/PhotoSlot.js';
+export type { PhotoStripItem, PhotoStripProps } from './components/PhotoStrip.js';
+export type {
+  PhotoShareResult,
+  PhotoViewerItem,
+  PhotoViewerLabels,
+  PhotoViewerProps,
+} from './components/PhotoViewer.js';
+export type { PatternLockProps } from './components/PatternLock.js';
 export type { PinPadProps, PinPadState } from './components/PinPad.js';
+export type { SearchFieldProps } from './components/SearchField.js';
+export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';
+export type { ReorderableListProps } from './components/ReorderableList.js';
+export type { SheetProps } from './components/Sheet.js';
+export type { SwitchRowProps } from './components/SwitchRow.js';
+export type { StepHeaderProps } from './components/StepHeader.js';
 export type {
   OperationSyncStatus,
   SyncChipKind,
   SyncStatusChipProps,
 } from './components/SyncStatusChip.js';
+export type { TextButtonProps } from './components/TextButton.js';
 export type { TextInputProps } from './components/TextInput.js';
+export type { TimelineEntry, TimelineProps } from './components/Timeline.js';
 export type { ToastProps, ToastTone } from './components/Toast.js';
+export type { ToggleChipProps } from './components/ToggleChip.js';
 export type { UnauthorizedStateProps } from './components/UnauthorizedState.js';
 export type { AppShellProps } from './shell/AppShell.js';
+export { useScrollLock, type ScrollLock } from './shell/scroll-lock.js';
 export type { AvatarButtonProps } from './shell/AvatarButton.js';
 export type { SyncChipProps, SyncChipState } from './shell/SyncChip.js';
 

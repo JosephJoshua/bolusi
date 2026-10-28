@@ -94,7 +94,7 @@ const noop = (): void => undefined;
 
 const BUTTON_VARIANTS = ['primary', 'secondary', 'destructive'] as const;
 
-/** §3.1: all four states are mandatory for ALL three variants — 12 entries, generated, not typed out. */
+/** §3.1: all four states are mandatory for ALL three variants, plus the compact size — generated. */
 const buttonStates: readonly GalleryState[] = BUTTON_VARIANTS.flatMap((variant) => [
   {
     id: `${variant}.default`,
@@ -140,6 +140,18 @@ const buttonStates: readonly GalleryState[] = BUTTON_VARIANTS.flatMap((variant) 
         onPress={noop}
         variant={variant}
         busy
+      />
+    ),
+  },
+  {
+    id: `${variant}.compact`,
+    render: (l: GalleryLabels) => (
+      <componentInventory.Button
+        testID="ui.button"
+        label={l.action}
+        onPress={noop}
+        variant={variant}
+        size="compact"
       />
     ),
   },
@@ -359,6 +371,12 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
         />
       ),
     },
+    {
+      id: 'selected',
+      render: (l) => (
+        <componentInventory.ListRow primaryText={l.primaryText} onPress={noop} selected />
+      ),
+    },
   ],
 
   Card: [
@@ -376,6 +394,336 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
         <componentInventory.Card onPress={noop} accessibilityLabel={l.action}>
           <Text>{l.primaryText}</Text>
         </componentInventory.Card>
+      ),
+    },
+  ],
+
+  /** One choice from a short set; the selected option is filled AND announced. */
+  SegmentedControl: [
+    {
+      id: 'first-selected',
+      render: (l) => (
+        <componentInventory.SegmentedControl
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+            { value: 'c', label: l.title },
+          ]}
+          value="a"
+          onChange={noop}
+        />
+      ),
+    },
+    {
+      id: 'later-selected',
+      render: (l) => (
+        <componentInventory.SegmentedControl
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+          ]}
+          value="b"
+          onChange={noop}
+        />
+      ),
+    },
+    {
+      id: 'compact',
+      render: (l) => (
+        <componentInventory.SegmentedControl
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+          ]}
+          value="a"
+          size="compact"
+          onChange={noop}
+        />
+      ),
+    },
+  ],
+
+  ToggleChip: [
+    {
+      id: 'off',
+      render: (l) => (
+        <componentInventory.ToggleChip label={l.primaryText} selected={false} onToggle={noop} />
+      ),
+    },
+    {
+      id: 'on',
+      render: (l) => (
+        <componentInventory.ToggleChip label={l.primaryText} selected onToggle={noop} />
+      ),
+    },
+  ],
+
+  ChipRow: [
+    {
+      id: 'many',
+      render: (l) => (
+        <componentInventory.ChipRow>
+          {Array.from({ length: 12 }, (_, i) => (
+            <componentInventory.ToggleChip
+              key={i}
+              label={`${l.primaryText} ${i + 1}`}
+              selected={i === 1}
+              onToggle={noop}
+            />
+          ))}
+        </componentInventory.ChipRow>
+      ),
+    },
+  ],
+
+  SwitchRow: [
+    {
+      id: 'on',
+      render: (l) => (
+        <componentInventory.SwitchRow label={l.primaryText} value onValueChange={noop} />
+      ),
+    },
+    {
+      id: 'off',
+      render: (l) => (
+        <componentInventory.SwitchRow
+          label={l.primaryText}
+          caption={l.hint}
+          value={false}
+          onValueChange={noop}
+        />
+      ),
+    },
+  ],
+
+  ReorderableList: [
+    {
+      id: 'rows',
+      render: (l) => (
+        <componentInventory.ReorderableList
+          items={[l.primaryText, l.title, l.hint]}
+          keyOf={(item) => item}
+          renderItem={(item, handle) => (
+            <componentInventory.ListRow primaryText={item} trailing={handle} />
+          )}
+          onMove={noop}
+          handleLabel={l.primaryText}
+          moveUpLabel={l.primaryText}
+          moveDownLabel={l.primaryText}
+        />
+      ),
+    },
+  ],
+
+  StepHeader: [
+    {
+      id: 'first',
+      render: (l) => (
+        <componentInventory.StepHeader step={1} total={4} progressLabel={l.hint} title={l.title} />
+      ),
+    },
+    {
+      id: 'last',
+      render: (l) => (
+        <componentInventory.StepHeader step={4} total={4} progressLabel={l.hint} title={l.title} />
+      ),
+    },
+  ],
+
+  PhotoSlot: [
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.PhotoSlot
+          label={l.primaryText}
+          image={null}
+          actionLabel={l.action}
+          onPress={noop}
+        />
+      ),
+    },
+    {
+      id: 'filled',
+      render: (l) => (
+        <componentInventory.PhotoSlot
+          label={l.primaryText}
+          image={<Text>{l.secondaryText}</Text>}
+          actionLabel={l.action}
+          onPress={noop}
+        />
+      ),
+    },
+    {
+      id: 'read-only',
+      render: (l) => (
+        <componentInventory.PhotoSlot
+          label={l.primaryText}
+          image={<Text>{l.secondaryText}</Text>}
+          actionLabel={l.action}
+        />
+      ),
+    },
+  ],
+
+  PatternLock: [
+    {
+      id: 'drawn',
+      render: (l) => (
+        <componentInventory.PatternLock
+          value="14753"
+          onChange={noop}
+          accessibilityLabel={l.primaryText}
+        />
+      ),
+    },
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.PatternLock
+          value=""
+          onChange={noop}
+          accessibilityLabel={l.primaryText}
+        />
+      ),
+    },
+  ],
+
+  PhotoStrip: [
+    {
+      id: 'several',
+      render: (l) => (
+        <componentInventory.PhotoStrip
+          photos={[
+            { key: 'a', label: l.primaryText, image: <Text>{l.secondaryText}</Text> },
+            { key: 'b', label: l.secondaryText, image: <Text>{l.secondaryText}</Text> },
+          ]}
+          onOpen={noop}
+          openLabel={l.action}
+        />
+      ),
+    },
+  ],
+
+  PhotoViewer: [
+    {
+      id: 'with-share',
+      render: (l) => (
+        <componentInventory.PhotoViewer
+          photos={[
+            { key: 'a', label: l.primaryText },
+            { key: 'b', label: l.secondaryText },
+          ]}
+          initialIndex={0}
+          renderImage={() => <Text>{l.secondaryText}</Text>}
+          onClose={noop}
+          onShare={() => Promise.resolve('done')}
+          labels={{
+            close: l.cancel,
+            share: l.action,
+            position: () => l.hint,
+            shareFailed: l.fieldError,
+          }}
+        />
+      ),
+    },
+    {
+      id: 'view-only',
+      render: (l) => (
+        <componentInventory.PhotoViewer
+          photos={[{ key: 'a', label: l.primaryText }]}
+          initialIndex={0}
+          renderImage={() => <Text>{l.secondaryText}</Text>}
+          onClose={noop}
+          labels={{
+            close: l.cancel,
+            share: l.action,
+            position: () => l.hint,
+            shareFailed: l.fieldError,
+          }}
+        />
+      ),
+    },
+  ],
+
+  SearchField: [
+    {
+      id: 'empty',
+      render: (l) => (
+        <componentInventory.SearchField
+          value=""
+          onChangeText={noop}
+          placeholder={l.fieldPlaceholder}
+          accessibilityLabel={l.fieldLabel}
+          clearLabel={l.cancel}
+        />
+      ),
+    },
+    {
+      id: 'typed',
+      render: (l) => (
+        <componentInventory.SearchField
+          value={l.primaryText}
+          onChangeText={noop}
+          placeholder={l.fieldPlaceholder}
+          accessibilityLabel={l.fieldLabel}
+          clearLabel={l.cancel}
+        />
+      ),
+    },
+  ],
+
+  Sheet: [
+    {
+      id: 'open',
+      render: (l) => (
+        <componentInventory.Sheet title={l.title} closeLabel={l.cancel} onClose={noop}>
+          <Text>{l.message}</Text>
+        </componentInventory.Sheet>
+      ),
+    },
+    {
+      id: 'withPerson',
+      render: (l) => (
+        <componentInventory.Sheet
+          title={l.title}
+          subtitle={l.hint}
+          leading={<componentInventory.Avatar userId="u-gallery" initials="AP" size="row" />}
+          closeLabel={l.cancel}
+          onClose={noop}
+        >
+          <Text>{l.message}</Text>
+        </componentInventory.Sheet>
+      ),
+    },
+  ],
+
+  TextButton: [
+    {
+      id: 'primary',
+      render: (l) => <componentInventory.TextButton label={l.action} onPress={noop} icon="edit" />,
+    },
+    {
+      id: 'danger',
+      render: (l) => (
+        <componentInventory.TextButton label={l.action} onPress={noop} tone="danger" />
+      ),
+    },
+    {
+      id: 'disabled',
+      render: (l) => <componentInventory.TextButton label={l.action} onPress={noop} disabled />,
+    },
+  ],
+
+  Timeline: [
+    {
+      id: 'several',
+      render: (l) => (
+        <componentInventory.Timeline
+          entries={[
+            { key: 'b', title: l.primaryText, meta: l.hint, detail: l.message },
+            { key: 'a', title: l.secondaryText, meta: l.hint },
+          ]}
+        />
       ),
     },
   ],
@@ -519,6 +867,48 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
           hint={l.hint}
           createLabel={l.create}
           onCreate={noop}
+        />
+      ),
+    },
+  ],
+
+  Fact: [
+    { id: 'default', render: (l) => <componentInventory.Fact label={l.title} value={l.hint} /> },
+    { id: 'wide', render: (l) => <componentInventory.Fact label={l.title} value={l.hint} wide /> },
+  ],
+
+  FactGrid: [
+    {
+      id: 'twoUp',
+      render: (l) => (
+        <componentInventory.FactGrid>
+          <componentInventory.Fact label={l.title} value={l.hint} />
+          <componentInventory.Fact label={l.title} value={l.action} />
+        </componentInventory.FactGrid>
+      ),
+    },
+  ],
+
+  OutcomeState: [
+    {
+      id: 'success',
+      render: (l) => (
+        <componentInventory.OutcomeState
+          tone="success"
+          icon="success"
+          title={l.title}
+          message={l.hint}
+        />
+      ),
+    },
+    {
+      id: 'warning',
+      render: (l) => (
+        <componentInventory.OutcomeState
+          tone="warning"
+          icon="lock"
+          title={l.title}
+          message={l.hint}
         />
       ),
     },

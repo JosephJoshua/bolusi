@@ -35,13 +35,21 @@ overrides the earlier "foundations first" ordering in product direction.
   never do intake. Each ticket tracks **repair outcome** (received, in repair,
   waiting for parts, repaired, cancelled) separately from **device location**
   (in store, returned to customer), so "cancelled, still in store" is visible.
+- **Work photos:** besides the 6 intake photos the counter takes, technicians
+  take at least one before photo to start work and at least one after photo
+  each time they mark a repair done.
+- **One device per job:** counter staff and technicians can each do their whole
+  job on a phone or on a computer; nobody is made to switch devices mid-job. A
+  PC without a camera or touch screen hands photos and signatures to a store
+  phone (this hand-off may need a connection). Owners use either and see at
+  least what staff see. Ownership video, when specified, is taken at intake.
 - **Price changes:** after intake, each change is a new logged line with a reason
   and a "customer agreed" mark. Only the cashier or store owner applies changes;
   technicians propose.
 - **Handover:** photo, signature and a printed final document.
 - **Clients:** three over time sharing the offline core, logic and translations:
   the Expo mobile app (technicians, phone-only counters); an **Electron** desktop
-  app for Windows counter PCs with its own DOM UI (shadcn/Radix + Tailwind); and
+  app for Windows counter PCs with its own DOM UI (see Counter PC app below); and
   a web app later for back-office work. A pure web counter was rejected: browsers
   cannot send raw output to dot-matrix printers and their offline storage is
   less durable.
@@ -54,6 +62,166 @@ overrides the earlier "foundations first" ordering in product direction.
 - **UX:** screens follow user flows, not record editing; guided photo capture;
   search-first finding. Admin grids later get Excel-like in-place bulk editing.
 - **No paid components:** use high-quality open-source libraries or build it.
+
+## Counter PC app (2026-10-26)
+
+Agreed with the owner before building the Electron app.
+
+- **Its own desktop UI.** The counter is used all day, so the PC must not feel
+  like a phone app in a window: real tables, mouse and keyboard, side-by-side
+  panes. Screens are React DOM (Radix, Tailwind, TanStack Table); repair rules,
+  queries, commands, search and translations stay shared with the phone. A test
+  of the phone screens in a desktop browser was fast enough but read as a
+  stretched phone list. The later web back office reuses the desktop parts.
+- **Counter first.** v1 covers what the phone does today: enrolment, PIN
+  switching, the board, intake, ticket, handover, settings, plus printing.
+  Back-office screens belong to the web app later.
+- **One-page intake** with sections (customer, device, condition, price,
+  photos) instead of the phone's wizard, so keyboard users can Tab through.
+- **Camera:** use the PC's webcam when present, otherwise hand the step to a
+  store phone by QR.
+- **Enrolment** works like a phone: an owner signs in once and picks the store,
+  then staff switch by PIN. One PC belongs to one store.
+- **Windows 10 and 11 only.** Electron and Chrome dropped Windows 7/8 in 2023;
+  a store still on Windows 7 upgrades or uses a phone at the counter. Must stay
+  responsive on 4 GB machines.
+- **Install and updates:** a normal installer that updates itself from GitHub
+  Releases. Unsigned for the pilot (Windows warns on first install).
+- **Printing:** dot-matrix printers are USB and installed in Windows; the app
+  sends raw ESC/P through the Windows spooler and HTML pages through normal
+  printing. Templates are shared code owned by the printing work.
+
+## Configurable intake lists and phone catalog (2026-10-26)
+
+Agreed with the owner after slice 1's phone screens.
+
+- **Editable lists:** intake condition checks, accessories left with the phone,
+  intake photo angles, quick brand buttons and ready-by choices stop being fixed
+  in code. The owner sets them for the whole franchise; a store may hide items
+  it does not use. Edits happen on the owner's phone (later also the back-office
+  web) and sync like any other change, so counters work offline with the last
+  list they received.
+- **History stays true:** a servisan keeps showing what was recorded at intake,
+  even after an item is renamed or removed.
+- **As built:** avatar menu → Pengaturan → Servisan → "Pilihan saat terima HP"
+  (the avatar menu also holds "Ganti pengguna"). Rows reorder by dragging their
+  handle; a store hides an item with its "Tampil di toko ini" switch, while
+  "Hapus dari semua toko" removes it everywhere. Changing a list
+  needs `repair.manage_intake_options` (tenant-wide, main owner); hiding items
+  for a store needs `repair.hide_intake_options` (store owner, or the owner on
+  that store's device). Built-in items keep their translated names until
+  renamed. Every listed photo angle is required at intake, and a store always
+  keeps at least one photo angle and one ready-by choice. Ready-by choices are
+  day counts (0 to 60) plus an optional "Belum tahu". The later save wins.
+- **Phone catalog:** the owner chose to crawl GSMArena, slowly, including phone
+  photos, knowingly accepting its terms-of-use and image-copyright risk. Models
+  learned from intakes supplement it. The catalog syncs to devices for offline
+  typo-tolerant model search; photos download only when shown.
+  Built with these defaults: one request a second, slowing down by itself when
+  refused, robots.txt obeyed; phones, tablets and watches all kept; learned
+  models come from the store's own intakes. The model is typed first and a
+  catalog match fills the brand. Specs are kept per model: the counter sees
+  memory variants and colour choices, someone who repairs also sees screen,
+  chipset, battery and charging, port, SIM, card slot and system.
+- **Screen lock at intake:** none, PIN, password or pattern (drawn on a 3 x 3
+  pad the way the customer draws it). It stays in the ticket's one passcode
+  text as `kind:value` (`pattern:14789`), so no operation changed; older
+  passcodes show as typed. Hidden on the ticket until someone taps to show it.
+  Choice chips from lists that grow (colours, quick brands, accessories) scroll
+  sideways in one row instead of wrapping.
+
+## Cancelling a servisan (2026-10-26)
+
+Agreed with the owner. Counter staff have kept a customer's cash by marking the
+repair cancelled, so cancelling is an owner decision, as in the old system.
+
+- **Owners only:** the store owner or main owner cancels, always with a reason.
+  Cashiers no longer can; a cashier who needs a cancel asks the owner, who does
+  it on their phone or with their PIN on the counter device.
+- **Any time before handover:** a repaired phone can still be cancelled (the
+  customer won't pay or collect), since only owners can do it.
+- **Cancellation fee:** each store has two fees set by its owner in Settings →
+  Servisan: before work starts and after work has started (a technician has
+  started work on it at least once). Both start at Rp 0. The fee in force is
+  filled in when cancelling and the owner may change it; the record keeps both.
+- **Customer sees it:** the handover of a cancelled phone shows the fee owed
+  ("Biaya pembatalan"), and the customer signs under it. The printed slip will
+  show it too once printing lands.
+- **Owners see every cancel:** a "Dibatalkan" view on the board, for owners
+  only, lists each cancel with who, when, reason and fee, and flags a fee that
+  differs from the store's.
+- **Discounts are owners' too:** any line that lowers a price (a discount, or a
+  negative adjustment) needs an owner, at intake or later. Counter staff and
+  technicians can still raise a price or propose a part or labour; the counter
+  can decline an owner's proposed discount but not apply it.
+- **Any drop in what a customer owes is an owner's** (2026-10-27): a lower
+  price, a lower or removed down payment, a lower cancellation fee. Every later
+  module follows this rule (for example a POS discount or a refund).
+- **A price change counts only once the customer agrees:** whether a technician
+  proposes it or the counter enters it, a change waits ("Menunggu persetujuan
+  pelanggan") and is left out of the total until the counter records the
+  customer's yes; a no drops it. There is no applying without asking, and the
+  phone cannot be handed back while a change waits. Technicians keep proposing,
+  since they find the extra fault once the phone is open.
+
+## Printing repair slips (2026-10-26)
+
+Agreed with the owner before building printing.
+
+- **Paper:** two-ply carbonless continuous paper (pink kept by the store, yellow
+  for the customer) on whatever Epson-compatible dot-matrix the store has, or
+  plain paper. No printer model is assumed: text mode uses the basic ESC/P set,
+  and the store picks a paper preset (9.5" continuous half form, the landscape
+  default, or full form; A4 or A5 either way round) or types a size, then checks
+  it with a test page. Windows printing cannot report the paper, so it is never
+  auto-detected. The paper is a setting of each device, picked once in its
+  Settings (owner, 2026-10-27), not at every print.
+- **Layout:** on landscape paper the money and terms sit beside the customer and
+  phone details. Every field is printed whole at its longest allowed length,
+  wrapping rather than cutting. An ordinary slip fits one half form at the
+  printer's default 6 lines per inch, a line down from the perforation; only a
+  longer one tightens to 8 lines per inch (only 1/6" and 1/8" mean the same on
+  9-pin and 24-pin Epsons) before spilling onto a second form. Spare lines go
+  above the signatures. Plain paper gets more spacing. A cancelled servisan's
+  slip has no warranty terms.
+- **Two documents:** the intake receipt ("Tanda terima servisan") and the
+  handover slip ("Nota servisan") for a pickup or a cancel, which is also the
+  customer's receipt. No technician job sheet. Repair counters have no separate
+  thermal printer, so receipts use the same paper; thermal stays for POS.
+- **Money on the slips:** the intake receipt shows the quoted lines and total;
+  the handover slip shows the lines that count (or the cancellation fee) and the
+  total. A down payment ("DP") taken at intake is recorded on the servisan now,
+  ahead of the payments slice, printed on both slips with what is left to pay,
+  and only an owner can change it.
+- **Signatures:** a signature line for the customer and the staff member on both
+  slips; the handover also keeps the on-screen signature, shown on plain paper.
+- **Header and terms:** owners edit the store name, address, phone, an optional
+  logo and the terms of each slip. The logo prints on plain paper and PDF, and
+  on dot-matrix only when switched on. The unlock code is never printed.
+- **Reprints** say "Cetak ulang ke-N", and every print is logged on the servisan.
+- **Phone-only counters** make a PDF to print through the phone's print dialog
+  or share (for example on WhatsApp), on A4 or A5 (remembered per phone).
+  Dot-matrix printing is the desktop app's. Android's print dialog does not
+  report a cancel, so the phone asks whether the slip printed before logging it;
+  a cancelled first print never makes the real one read "Cetak ulang".
+- **Logo from the gallery:** the store logo is the one picture that may come from
+  the phone's gallery. Evidence photos stay camera-only; the lint rule allows the
+  photo picker in exactly one file, which feeds only the slip settings screen.
+- **Code:** one shared printing layer (core `print`: document model, HTML and
+  ESC/P renderers) that POS receipts will reuse; slips are module templates.
+
+## Who makes a first PIN (2026-10-26)
+
+A phone that is offline or behind can show "no PIN yet" for someone who made one
+elsewhere, so a self-made first PIN there would let a coworker sign in as them.
+
+- **The owner who set up the phone** makes their own first PIN on it, right after
+  setup, and only if the server has no PIN for them.
+- **Everyone else** gets their first PIN from an owner (Settings → PIN karyawan),
+  typed by the person themselves. Their name in the switcher says "Belum ada PIN"
+  and tells them to ask an owner.
+- Phones set up before this change have no such owner on record, so an owner
+  without a PIN there gets theirs from another owner.
 
 ## Decision
 
@@ -79,7 +247,7 @@ The first shippable v1 workflow is the **complete repair journey**, not an intak
 
 **Supplier payment boundary (owner follow-ups, 2026-10-14):** v1 records payments made outside Bolusi (for example by bank transfer or cash); it does **not** initiate transfers or disburse money to suppliers. A store owner or a manager **explicitly granted supplier-payment-recording permission for that store** may record a payment; this does not grant permission to initiate a bank transfer or confer authority at another store. Record the amount, method, external reference/evidence where available, actor and time against the supplier invoice, including partial payments and the remaining balance. A manager's record stays **pending approval**: the store owner or a **different manager explicitly granted supplier-payment-approval permission at that store** must approve it before it reduces the invoice's outstanding balance or posts to the payment ledger. Recording and approval are distinct permissions; the recording manager cannot approve their own record, including via a second role or device. A store owner's own record posts without a second approver, but is still audited. Approval must be replay-safe and must not double-post if retried offline or after sync. Every manually recorded/approved payment remains a staff assertion, not bank/provider-verified settlement; display and audit that distinction. Specify correction/reversal and duplicate-reference handling before authoring the finance contracts.
 
-**User-facing atomic permissions (owner follow-up, 2026-10-16):** the first v1 release must expose a usable role/permission administration flow for all shipped v0 and repair-first v1 modules, not just hard-code manager checks. Keep the existing registered, versioned `<module>.<action>` capability model and per-store/tenant grants (02-permissions); define distinct permissions for meaningful actions and sensitive reads across customer/intake/evidence/printing, repair/QC/warranty, parts orders/receipts/transfers/returns/replacements, supplier invoices/payments/credits, and repair payments/refunds/overrides. In particular, supplier-return approval is separate from creating a return, dispatching it and approving supplier payments. Offer sensible editable role presets and grouped, plain-language Bahasa Indonesia/English permission descriptions, highlighting dangerous grants; show effective access and store scope to the person configuring staff. Permission checks must be enforced by command/query handlers, not merely hidden UI controls, and role/grant changes must be audited and respect anti-escalation, last-admin, data visibility and offline propagation rules. V0 has only three seeded roles and generally does **not** reject unauthorized pushed business ops from a tampered client (02-permissions §4): before calling v1 approvals secure, specify and test server-side enforcement for high-risk v1 ops, including the legitimate-offline-work versus revocation policy, rather than claiming the current client guard is sufficient. Do not invent runtime-defined permission IDs.
+**User-facing atomic permissions (owner follow-up, 2026-10-16):** the first v1 release must expose a usable role/permission administration flow for all shipped v0 and repair-first v1 modules, not just hard-code manager checks. Keep the existing registered, versioned `<module>.<action>` capability model and per-store/tenant grants (02-permissions); define distinct permissions for meaningful actions and sensitive reads across customer/intake/evidence/printing, repair/QC/warranty, parts orders/receipts/transfers/returns/replacements, supplier invoices/payments/credits, and repair payments/refunds/overrides. In particular, supplier-return approval is separate from creating a return, dispatching it and approving supplier payments. Offer sensible editable role presets and grouped, plain-language Bahasa Indonesia/English permission descriptions, highlighting dangerous grants; show effective access and store scope to the person configuring staff. Permission checks must be enforced by command/query handlers, not merely hidden UI controls, and role/grant changes must be audited and respect anti-escalation, last-admin, data visibility and offline propagation rules. Since 2026-10-26 (owner decision) the server refuses every pushed op whose author lacks the op type's declared permission in the device's store, using the same evaluator as the device; the refused op keeps its chain place so the device keeps syncing, and a deactivated user's unsynced ops are all refused. Per-type business rules and v1 approval policies (separation of duties, limits) still need their own server-side checks before v1 approvals are called secure. Do not invent runtime-defined permission IDs.
 
 **Role governance (owner follow-up, 2026-10-16):** only the main owner can create or edit role definitions (the sets of capabilities and role presets) for the tenant. Store owners may assign/revoke available roles for staff **only within their own stores** and set the already-decided manager approval limits within the main-owner caps; they cannot alter role definitions, grant tenant-wide authority, grant a role exceeding their own effective authority, assign access to another store, or edit main-owner grants. Managers have no role-management or grant-assignment power by default. Show each role's effective permissions and store scope before confirmation; audit who changed each definition and assignment. V0's `auth.role_manage` is tenant-scoped and mixes editing with grants: preserve its shipped ID/semantics, and specify an additional store-scoped assignment capability plus server-enforced scope/subset and last-admin rules for v1 rather than reusing `auth.role_manage` as a store-owner editor. Directory mutations stay online-only; offline devices receive updated roles through bundle refresh.
 
@@ -115,12 +283,11 @@ The owner chose an actual repair business outcome rather than stock control alon
 - Reconfirm PRD-001 and dependent PRDs against this milestone: supplier ordering/receiving, physical returns and invoice/payment reconciliation (including partial receipts/payments and repair linkage), cross-store sourcing authorization, the user-facing v1 permission/grant matrix and server/offline enforcement of high-risk approvals, manager refund/price-override caps and per-store limits, customer identity, payment ledger/refunds and split rules, warranty, cross-store reporting, and what remains out of scope. Preserve iOS parity (D17/D18) or explicitly decide any exception.
 - Choose and verify a QRIS integration provider, onboarding and merchant-account model, fees/settlement and verification/reconciliation semantics; test both central and per-store account needs. No provider (including Midtrans) is selected here.
 - Inspect representative ordinary printers and carbonless forms, then define supported hardware, layouts, failure/retry and offline acceptance. Confirm video duration/compression/retention and low-end-device budget.
-- Pursue authorized GSMArena access; in parallel evaluate a lawful alternative model/specification source against fields, Indonesian device coverage, lookup/IMEI capabilities, cost, attribution, offline caching and retention rights. Choose and validate at least one source before promising model lookup for v1; GSMArena specifically is preferred, not a launch gate.
 
-Changing the roadmap does not resolve the existing extended-chaos failures or
-establish physical-device performance; see [architecture](architecture.md) for
-current limits. Resolve relevant open choices and record a concise agreement as
-each repair slice is selected. The former phase/task workflow is retired.
+Changing the roadmap does not establish physical-device performance; see
+[architecture](architecture.md) for current limits. Resolve relevant open choices
+and record a concise agreement as each repair slice is selected. The former
+phase/task workflow is retired.
 
 ## Deferred and excluded scope
 
