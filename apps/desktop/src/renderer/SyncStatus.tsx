@@ -23,7 +23,8 @@ import {
   RefreshCw,
   type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useTick } from '@bolusi/modules/screen-kit';
+import { useMemo, useState } from 'react';
 
 import { BAR_CONTROL } from './TitleBar.js';
 
@@ -50,8 +51,22 @@ const TONE: Readonly<Record<SyncTitleState, string | undefined>> = {
 /** How many refused changes the panel lists; the rest wait behind "Tampilkan lainnya". */
 const REJECTED_SHOWN = 20;
 
+/** How often "Terakhir terhubung …" and the staleness are read again without a new snapshot. */
+export const SYNC_AGE_REFRESH_MS = 30_000;
+
+/**
+ * The snapshot with its `now` moved on by the time since it arrived. A server that hangs sends no
+ * new snapshot, and "baru saja" must still turn into "5 menit lalu". The core's clock stays the
+ * reference; only the time passed is read here.
+ */
+function useAgedInput(input: SyncStatusInput): SyncStatusInput {
+  useTick(SYNC_AGE_REFRESH_MS);
+  const arrivedAt = useMemo(() => ({ input, at: Date.now() }), [input]);
+  return { ...input, now: input.now + Math.max(0, Date.now() - arrivedAt.at) };
+}
+
 export function SyncStatusButton({
-  input,
+  input: snapshot,
   open,
   onOpenChange: setOpen,
   onSyncNow,
@@ -65,6 +80,7 @@ export function SyncStatusButton({
   /** Opens registration again, for when the server no longer knows this PC. */
   readonly onReenrol: () => void;
 }): React.JSX.Element {
+  const input = useAgedInput(snapshot);
   const state = syncTitleState(input);
   const Icon = ICON[state];
   const title = t(SYNC_TITLE_KEY[state]);
