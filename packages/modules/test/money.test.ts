@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
+import { MONEY_OP } from '../src/money/index.js';
 import { REPAIR_DOCUMENT_KIND } from '../src/repair/index.js';
 import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
 
@@ -450,6 +451,90 @@ describe('the drawer', () => {
       'countSettled',
     );
     await expectBalancedBooks(h);
+  });
+
+  test('only the latest count is settled: a later count finds the same difference again', async () => {
+    h = await openRepairHarness(511);
+    await h.money('moveCash', { kind: 'float', amount: 100_000, reason: 'Modal' }, h.cashierId);
+    const count = async (counted: number) =>
+      (
+        (await h!.money('countCash', { counted, note: '' }, h!.cashierId)) as {
+          entryId: string;
+        }
+      ).entryId;
+    const first = await count(90_000);
+    const second = await count(90_000);
+    const drawer = (await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0];
+    // The same 10.000, found twice.
+    expect(drawer.counts.map((c: { difference: number }) => c.difference)).toEqual([
+      -10_000, -10_000,
+    ]);
+    await expectRefused(
+      h.money('adjustCash', { amount: -10_000, countId: first, reason: 'Kurang' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'countSuperseded',
+    );
+    await h.money(
+      'adjustCash',
+      { amount: -10_000, countId: second, reason: 'Kurang' },
+      h.storeOwnerId,
+    );
+    expect((await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0].expected).toBe(90_000);
+    await expectBalancedBooks(h);
+  });
+
+  test('an owner settles the difference as it stands, not as an older screen showed it', async () => {
+    h = await openRepairHarness(512);
+    await h.money('moveCash', { kind: 'float', amount: 100_000, reason: 'Modal' }, h.cashierId);
+    const { entryId: countId } = (await h.money(
+      'countCash',
+      { counted: 90_000, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    await expectRefused(
+      h.money('adjustCash', { amount: -5_000, countId, reason: 'Kurang' }, h.storeOwnerId),
+      'INVALID_TRANSITION',
+      'differenceChanged',
+    );
+    await h.money('adjustCash', { amount: -10_000, countId, reason: 'Kurang' }, h.storeOwnerId);
+    await expectBalancedBooks(h);
+  });
+
+  test('a count made before the owner settled, and synced after, already includes the correction', async () => {
+    h = await openRepairHarness(513);
+    await h.money('moveCash', { kind: 'float', amount: 100_000, reason: 'Modal' }, h.cashierId);
+    const { entryId: first } = (await h.money(
+      'countCash',
+      { counted: 90_000, note: '' },
+      h.cashierId,
+    )) as { entryId: string };
+    // Time passes before the owner looks: any record that leaves the drawer alone.
+    await h.money('saveAccount', { kind: 'transfer', name: 'BRI toko' }, h.storeOwnerId);
+    await h.money(
+      'adjustCash',
+      { amount: -10_000, countId: first, reason: 'Kurang' },
+      h.storeOwnerId,
+    );
+    // Another phone counted the same 90.000 between the first count and the owner's correction,
+    // and its count arrives only now.
+    const ops = await h.ownOps();
+    const counted = ops.find((op) => op.type === MONEY_OP.cashCounted)!;
+    const settledAt = ops.find((op) => op.type === MONEY_OP.cashAdjusted)!.timestamp;
+    const late = {
+      ...counted,
+      id: '01920000-0000-7000-8000-00000000c0de',
+      entityId: '01920000-0000-7000-8000-00000000c0df',
+      deviceId: '01920000-0000-7000-8000-00000000c0e0',
+      timestamp: counted.timestamp + 1,
+    };
+    expect(late.timestamp).toBeLessThan(settledAt);
+    await h.deliverPulled(late as never, 1);
+
+    const drawer = (await h.moneyQuery('cashDrawer', {}, h.cashierId)).rows[0];
+    expect(drawer.counts[0].id).toBe(late.entityId);
+    // Nothing more to settle: the 10.000 the owner wrote off is the one this count found.
+    expect(drawer.counts[0].difference).toBe(0);
+    expect(drawer.expected).toBe(90_000);
   });
 
   test('a deposit goes into a store account; other moves touch only the drawer', async () => {

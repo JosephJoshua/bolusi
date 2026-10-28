@@ -286,6 +286,11 @@ book for repairs and starts the store's money ledger.
   what should be there (cash in, less refunds, less cash taken out with a
   reason: to the owner, a small expense, a bank deposit; or change money put
   in). The difference is kept for the owners, and only an owner settles it.
+  Only the latest count is settled (a later count finds an unsettled difference
+  again), and for exactly the difference it shows when the owner settles. A
+  count made before a settlement and synced after already includes it. On the
+  phone this lives in a Kas tab beside Servisan, for whoever counts the drawer
+  or reads the store's money.
 - **Real books behind it:** every money record posts balanced double-entry lines
   in one ledger the stock and purchasing work also posts to. Owners see plain
   views for now (money in by method, the drawer, the unpaid list); accountant

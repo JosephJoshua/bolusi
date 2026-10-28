@@ -3,13 +3,15 @@
  * desktop's denser form, over the same `paymentEntry` arithmetic. Each method is a row of chips,
  * then its amount beside what that method needs (cash handed over, an EDC's approval code).
  */
-import { formatMoney, formatNumber } from '@bolusi/i18n';
+import { formatMoney } from '@bolusi/i18n';
 import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { Plus } from 'lucide-react';
 
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
+  digitsOf,
+  digitsText,
   lineKind,
   newPaymentLine,
   offeredAccount,
@@ -26,17 +28,6 @@ export interface PaymentLinesProps {
   readonly onChange: (lines: readonly PaymentLine[]) => void;
   readonly newKey: () => string;
   readonly testId?: string | undefined;
-}
-
-const MAX_DIGITS = 13;
-
-function digitsOf(text: string): string | null {
-  const digits = text.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-  return digits.length > MAX_DIGITS ? null : digits;
-}
-
-function digitsText(digits: string): string {
-  return digits === '' ? '' : formatNumber(Number(digits));
 }
 
 export function PaymentLines({

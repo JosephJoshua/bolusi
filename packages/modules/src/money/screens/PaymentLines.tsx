@@ -5,13 +5,15 @@
  * A field still empty is not an error: the bottom bar's hint says what is missing. Only a value
  * that cannot be right (less cash than the amount) is marked.
  */
-import { formatMoney, formatNumber } from '@bolusi/i18n';
+import { formatMoney } from '@bolusi/i18n';
 import { ChipRow, TextButton, TextInput, ToggleChip, border, color, space, type } from '@bolusi/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { referenceRequired } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
+  digitsOf,
+  digitsText,
   lineKind,
   newPaymentLine,
   offeredAccount,
@@ -30,18 +32,6 @@ export interface PaymentLinesProps {
   /** Where a line's key comes from, so a screen keeps keys stable across renders. */
   readonly newKey: () => string;
   readonly testID?: string | undefined;
-}
-
-/** "650.000" for typed digits, empty for none: the amount reads as the customer hears it. */
-function digitsText(digits: string): string {
-  return digits === '' ? '' : formatNumber(Number(digits));
-}
-
-const MAX_DIGITS = 13;
-
-function digitsOf(text: string): string | null {
-  const digits = text.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
-  return digits.length > MAX_DIGITS ? null : digits;
 }
 
 export function PaymentLines({
