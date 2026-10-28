@@ -306,7 +306,7 @@ describe('migration 6 keeps one copy of each op', () => {
       migrations: CLIENT_MIGRATIONS.filter((m) => m.version <= 6),
     });
 
-    expect(result.applied).toEqual([6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18]);
+    expect(result.applied).toEqual([6]);
     const columns = await driver.execute(`SELECT name FROM pragma_table_info('operations')`);
     const names = columns.rows.map((row) => String(row['name']));
     expect(names).not.toContain('payload');
