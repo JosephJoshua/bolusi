@@ -453,6 +453,9 @@ describe('refunds and voids are guarded', () => {
       reduced: 100_000,
       paid: TOTAL - 100_000,
     });
+    // The servisan's slip reads the same reduction, so its bill matches the ledger.
+    const ticket = (await h.query('getTicket', { ticketId: document.id }, h.cashierId)).rows[0];
+    expect(ticket).toMatchObject({ chargeReduced: 100_000 });
     await expectRefused(
       h.money('reduceCharge', { document, amount: TOTAL, reason: 'x' }, h.storeOwnerId),
       'VALIDATION_FAILED',

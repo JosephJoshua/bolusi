@@ -463,6 +463,7 @@
     "downPayment": "DP",
     "paid": "Sudah dibayar",
     "balance": "Sisa bayar",
+    "reduced": "Potongan",
     "sign": {
       "customer": "Pelanggan",
       "customerPickup": "Pelanggan, HP sudah diterima",

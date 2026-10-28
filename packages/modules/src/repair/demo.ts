@@ -362,6 +362,7 @@ function ticket(spec: {
     returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
     downPayment: spec.downPayment ?? null,
     slipPrints: { intake: 1, handover: 0 },
+    chargeReduced: 0,
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
     events: [
@@ -1135,6 +1136,7 @@ export function demoRepairRuntime(
         createdAt: HARNESS_NOW,
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
         slipPrints: { intake: 0, handover: 0 },
+        chargeReduced: 0,
         quoteLines: lines.map((l) =>
           line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
         ),

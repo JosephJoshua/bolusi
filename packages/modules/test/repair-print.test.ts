@@ -57,6 +57,33 @@ describe('intake slip', () => {
     expect(text).toMatch(/Sisa bayar\s+Rp 750\.000/);
   });
 
+  it('a reprint after the price changed shows what was paid but no balance against the estimate', () => {
+    const raised = sampleTicket({
+      quoteTotal: 1_250_000,
+      downPayment: 1_000_000,
+      quoteLines: [
+        line({ id: 'l1' }),
+        line({ id: 'l2', kind: 'labour', description: 'Jasa pasang', amount: 100_000 }),
+        line({ id: 'l3', description: 'Ganti baterai', amount: 300_000, status: 'applied' }),
+      ],
+    });
+    const text = allText(intakeSlip(raised, ctx));
+    expect(text).toMatch(/Estimasi total\s+Rp 950\.000/);
+    expect(text).toMatch(/DP\s+-Rp 1\.000\.000/);
+    expect(text).not.toContain('Dikembalikan');
+    expect(text).not.toContain('Sisa bayar');
+
+    const cancelled = sampleTicket({
+      outcome: 'cancelled',
+      cancelFee: 50_000,
+      downPayment: 50_000,
+      location: 'returned',
+    });
+    const cancelledText = allText(intakeSlip(cancelled, ctx));
+    expect(cancelledText).toMatch(/Sudah dibayar\s+-Rp 50\.000/);
+    expect(cancelledText).not.toContain('Sisa bayar');
+  });
+
   it('prints the store terms one per line instead of the default ones', () => {
     const text = allText(intakeSlip(sampleTicket(), { ...ctx, terms: 'Satu.\n\n  Dua.  ' }));
     expect(text).toContain('1. Satu.');
@@ -106,6 +133,18 @@ describe('handover slip', () => {
     expect(text).toMatch(/Status\s+: Selesai/);
     expect(text).toContain('Pelanggan, HP sudah diterima');
     expect(text).toContain('KETENTUAN');
+  });
+
+  it('bills what the money ledger charges, less an owner reduction', () => {
+    const text = allText(
+      handoverSlip(
+        { ...repaired, chargeReduced: 150_000, downPayment: 1_000_000 },
+        { ...ctx, handedOverByName: 'Maria Kasir', signature: null },
+      ),
+    );
+    expect(text).toMatch(/Potongan\s+-Rp 150\.000/);
+    expect(text).toMatch(/Total\s+Rp 1\.000\.000/);
+    expect(text).toMatch(/Sisa bayar\s+Rp 0/);
   });
 
   it('charges only the cancellation fee on a cancelled servisan', () => {

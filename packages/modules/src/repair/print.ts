@@ -17,7 +17,13 @@ import type {
 import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 
 import type { SlipKind } from './constants.js';
-import { balanceAfterDownPayment, photoInSlot, photoThumbnailRef, ticketStatus } from './flows.js';
+import {
+  amountOwed,
+  balanceAfterDownPayment,
+  photoInSlot,
+  photoThumbnailRef,
+  ticketStatus,
+} from './flows.js';
 import { tn } from './i18n.js';
 import {
   CHECK_STATE_KEY,
@@ -156,14 +162,16 @@ function totals(
   total: number,
   paidSoFar: number | null,
   paidLabel: string,
+  /** False when the total is no longer what the customer owes, so a balance would be wrong. */
+  withBalance = true,
 ): PrintAmountRow[] {
   const paid = paidSoFar ?? 0;
   const rows: PrintAmountRow[] = [
-    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 },
+    { label: totalLabel, amount: formatMoney(total), strong: paid === 0 || !withBalance },
   ];
-  if (paid > 0) {
+  if (paid > 0) rows.push({ label: paidLabel, amount: formatMoney(-paid) });
+  if (paid > 0 && withBalance) {
     const balance = balanceAfterDownPayment(total, paid);
-    rows.push({ label: paidLabel, amount: formatMoney(-paid) });
     rows.push({
       label: tn(balance.kind === 'due' ? 'repair.slip.balance' : 'repair.slip.refund'),
       amount: formatMoney(balance.amount),
@@ -171,6 +179,11 @@ function totals(
     });
   }
   return rows;
+}
+
+/** What the customer is billed: the agreed price or the cancellation fee, less any reduction. */
+function billTotal(ticket: TicketDetailRow): number {
+  return amountOwed(ticket) - ticket.chargeReduced;
 }
 
 function termsBlocks(terms: string | null, fallback: string): PrintBlock[] {
@@ -221,6 +234,9 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
   // The price the customer left with; later changes belong on the handover slip.
   const lines = ticket.quoteLines.filter((line) => line.status === 'intake');
   const total = lines.reduce((sum, line) => sum + line.amount, 0);
+  // What was paid counts against the estimate only while the estimate is still the bill: once the
+  // price changed or the servisan was cancelled, the balance belongs on the handover slip.
+  const estimateStands = ticket.outcome !== 'cancelled' && billTotal(ticket) === total;
   const blocks: PrintBlock[] = [
     { kind: 'fields', fields },
     { kind: 'heading', text: tn('repair.slip.section.complaint') },
@@ -246,6 +262,7 @@ export function intakeSlip(ticket: TicketDetailRow, ctx: SlipContext): PrintDocu
         ticket.downPayment,
         // Reprinted after pickup, what was paid is more than the DP.
         tn(ticket.location === 'returned' ? 'repair.slip.paid' : 'repair.slip.downPayment'),
+        estimateStands,
       ),
     },
     ...termsBlocks(ctx.terms, tn('repair.slip.terms.intake')),
@@ -292,30 +309,26 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
   if (cancelled && ticket.outcomeNote !== null && ticket.outcomeNote.trim() !== '') {
     fields.push({ label: tn('repair.slip.field.cancelReason'), value: ticket.outcomeNote });
   }
-  const amounts: PrintBlock = cancelled
-    ? {
-        kind: 'amounts',
-        rows: [{ label: tn('repair.cancel.fee'), amount: formatMoney(ticket.cancelFee ?? 0) }],
-        totals: totals(
-          tn('repair.slip.total'),
-          ticket.cancelFee ?? 0,
-          ticket.downPayment,
-          tn('repair.slip.paid'),
-        ),
-      }
-    : {
-        kind: 'amounts',
-        // What counts toward the total: intake lines and agreed changes, never open proposals.
-        rows: ticket.quoteLines
-          .filter((line) => line.status === 'intake' || line.status === 'applied')
-          .map(lineRow),
-        totals: totals(
-          tn('repair.slip.total'),
-          ticket.quoteTotal,
-          ticket.downPayment,
-          tn('repair.slip.paid'),
-        ),
-      };
+  const rows: PrintAmountRow[] = cancelled
+    ? [{ label: tn('repair.cancel.fee'), amount: formatMoney(ticket.cancelFee ?? 0) }]
+    : // What counts toward the total: intake lines and agreed changes, never open proposals.
+      ticket.quoteLines
+        .filter((line) => line.status === 'intake' || line.status === 'applied')
+        .map(lineRow);
+  // An owner's reduction on the money ledger lowers the bill, so the slip matches what is owed.
+  if (ticket.chargeReduced > 0) {
+    rows.push({ label: tn('repair.slip.reduced'), amount: formatMoney(-ticket.chargeReduced) });
+  }
+  const amounts: PrintBlock = {
+    kind: 'amounts',
+    rows,
+    totals: totals(
+      tn('repair.slip.total'),
+      billTotal(ticket),
+      ticket.downPayment,
+      tn('repair.slip.paid'),
+    ),
+  };
   const aside: PrintBlock[] = [
     { kind: 'heading', text: tn('repair.slip.section.costs') },
     amounts,

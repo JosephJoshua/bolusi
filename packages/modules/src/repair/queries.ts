@@ -1,7 +1,7 @@
 // The `repair` queries. Every read is scoped to the runtime-minted tenant and store, never to
 // anything in the input or cursor. They run on the device, where customer names and phones are
 // decrypted transparently by the connection; search goes through the shared fuzzy index (search.ts).
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -43,6 +43,8 @@ import {
 } from './intake-options.js';
 import { userNames } from '../shared/user-names.js';
 import { paidOnDocumentSql } from '../money/queries.js';
+import { documentTotal } from '../money/rules.js';
+import type { MoneyDatabase } from '../money/schema.js';
 import { REPAIR_DOCUMENT_KIND } from './money-document.js';
 import type { RepairDatabase } from './schema.js';
 import { customerSearchSource, ticketSearchSource } from './search.js';
@@ -177,6 +179,8 @@ export interface TicketDetailRow extends TicketSummaryRow {
   readonly workStarted: boolean;
   /** How many times each slip was printed or shared, so the next one is marked as a reprint. */
   readonly slipPrints: Readonly<Record<SlipKind, number>>;
+  /** What an owner took off the charge on the money ledger, so the bill matches it; 0 when nothing. */
+  readonly chargeReduced: number;
   readonly quoteLines: readonly QuoteLineRow[];
   readonly photos: readonly TicketPhotoRow[];
   readonly events: readonly TicketEventRow[];
@@ -714,6 +718,12 @@ export async function getTicketHandler(
     detail.createdBy,
     ...events.map((event) => event.actorId),
   ]);
+  const chargeReduced = await documentTotal(
+    qctx.db as unknown as Kysely<MoneyDatabase>,
+    qctx.storeId ?? '',
+    { kind: REPAIR_DOCUMENT_KIND, id: input.ticketId },
+    'charge_reduced',
+  );
   const slipPrints: Record<SlipKind, number> = { intake: 0, handover: 0 };
   for (const event of events) {
     if (event.kind !== REPAIR_OP.slipPrinted) continue;
@@ -752,6 +762,7 @@ export async function getTicketHandler(
         returnedAt: detail.returnedAt === null ? null : Number(detail.returnedAt),
         workStarted: events.some((event) => event.kind === REPAIR_OP.workStarted),
         slipPrints,
+        chargeReduced,
         quoteLines: lines.map((line) => ({
           id: line.id,
           kind: line.kind as QuoteLineKind,

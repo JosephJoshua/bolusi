@@ -463,6 +463,7 @@
     "downPayment": "Down payment",
     "paid": "Paid",
     "balance": "Balance due",
+    "reduced": "Reduction",
     "sign": {
       "customer": "Customer",
       "customerPickup": "Customer, phone received",

@@ -300,6 +300,7 @@ export const REPAIR_KEYS = [
   'repair.ready.tomorrow',
   'repair.ready.unknown',
   'repair.slip.balance',
+  'repair.slip.reduced',
   'repair.slip.copy.customer',
   'repair.slip.copy.store',
   'repair.slip.downPayment',
