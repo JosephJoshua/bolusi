@@ -391,6 +391,84 @@ describe('refunds and voids are guarded', () => {
     await expectBalancedBooks(h);
   });
 
+  test('an owner gives back nothing on a debt the customer never paid', async () => {
+    h = await openRepairHarness(515);
+    const document = await repaired(h);
+    // Bayar nanti: charged, nothing paid. A refund would hand out cash and forgive the debt.
+    await charge(h, document, TOTAL, h.cashierId);
+    await expectRefused(
+      h.money(
+        'refund',
+        { document, account: 'cash', amount: 100_000, reason: 'Komplain' },
+        h.storeOwnerId,
+      ),
+      'VALIDATION_FAILED',
+      'refundAbovePaid',
+    );
+    // Part paid: what came in, and no more, can go back.
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 50_000 }] },
+      h.cashierId,
+    );
+    await expectRefused(
+      h.money(
+        'refund',
+        { document, account: 'cash', amount: 50_001, reason: 'Komplain' },
+        h.storeOwnerId,
+      ),
+      'VALIDATION_FAILED',
+      'refundAbovePaid',
+    );
+    await h.money(
+      'refund',
+      { document, account: 'cash', amount: 50_000, reason: 'Komplain' },
+      h.storeOwnerId,
+    );
+    expect(await documentMoney(h, document)).toMatchObject({ balance: TOTAL - 50_000, paid: 0 });
+    await expectBalancedBooks(h);
+  });
+
+  test('the server refuses refunds beyond what was paid, even an owner’s from two phones', async () => {
+    h = await openRepairHarness(516);
+    const document = await repaired(h);
+    await charge(h, document, TOTAL, h.cashierId);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: TOTAL }] },
+      h.cashierId,
+    );
+    // Each phone's command saw the whole payment; their refunds arrive one after the other. The
+    // rule alone must hold, so drive the refund op past the command.
+    const { refundOp } = await import('../src/money/index.js');
+    const ownerRefund = () => {
+      const ctx = h!.runtime.commands.createContext(h!.storeOwnerId);
+      return h!.runtime.commands.execute(
+        {
+          permission: 'money.refund',
+          input: { parse: (x: unknown) => x },
+          handler: (_input: unknown, c: typeof ctx) => ({
+            ops: [
+              refundOp(c, document as never, {
+                account: 'cash',
+                amount: 400_000,
+                reason: 'Komplain',
+                reference: null,
+              }),
+            ],
+            result: null,
+          }),
+        } as never,
+        {} as never,
+        ctx,
+      );
+    };
+    await ownerRefund();
+    await expectRefused(ownerRefund(), 'VALIDATION_FAILED', 'refundAbovePaid');
+    expect(await documentMoney(h, document)).toMatchObject({ paid: TOTAL - 400_000 });
+    await expectBalancedBooks(h);
+  });
+
   test('only an owner voids a payment, once, and the void reverses its lines', async () => {
     h = await openRepairHarness(508);
     const document = await openTicket(h);

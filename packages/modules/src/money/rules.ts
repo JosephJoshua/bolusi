@@ -7,6 +7,7 @@
 //   - A refund without an owner gives back no more than the customer paid beyond their charges,
 //     and only through the account they paid with, so a made-up transfer cannot come back as cash.
 //   - Lowering a charge, voiding a payment and settling a cash difference are owners' permissions.
+//   - Nobody refunds more on a document than its customer paid in payments that still count.
 //
 // Every read is constrained to the op's own store. Postgres hands `bigint` sums back as strings,
 // hence the `Number(...)`.
@@ -211,6 +212,24 @@ async function netPaidThrough(
   return Number(row?.net ?? 0);
 }
 
+/** What a document's customer paid in payments that still count (a voided one does not). */
+async function documentPaidIn(
+  db: Db,
+  storeId: string,
+  document: { kind: string; id: string },
+): Promise<number> {
+  const row = await db
+    .selectFrom('moneyEntries')
+    .select(sql<string | number>`COALESCE(SUM(amount), 0)`.as('total'))
+    .where('storeId', '=', storeId)
+    .where('kind', '=', 'payment_received')
+    .where('voidedBy', 'is', null)
+    .where('documentKind', '=', document.kind)
+    .where('documentId', '=', document.id)
+    .executeTakeFirst();
+  return Number(row?.total ?? 0);
+}
+
 async function entryExists(db: Db, id: string): Promise<boolean> {
   const row = await db
     .selectFrom('moneyEntries')
@@ -389,6 +408,16 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     // A since deactivated account may still give back what was paid through it.
     await requireAccount(db, op, account, { includeInactive: true });
     const store = storeOf(op);
+    // Nobody, not even an owner, gives back more than came in: two phones that each saw the same
+    // payment must not both hand it back.
+    const refunded = await documentTotal(db, store, document, 'refund_paid');
+    const paidIn = await documentPaidIn(db, store, document);
+    if (refunded + amount > paidIn) {
+      throw refuse('refundAbovePaid', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'amount', issue: `at most ${Math.max(0, paidIn - refunded)}` },
+      });
+    }
     const counterRefusal = await (async () => {
       // Charged at least what the document costs: a later price drop only shrinks the credit.
       const expected = await source.charge(db as unknown as Kysely<never>, lookup);

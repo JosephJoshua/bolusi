@@ -212,14 +212,16 @@ export async function refundHandler(
   const { kind, id } = input.document;
   const money = (await ctx.query(documentMoneyQuery, { kind, id })).rows[0]!;
   const credit = Math.max(0, -money.balance);
+  // What came in and still counts, less what already went back: on a debt nothing was paid.
+  const paid = Math.max(0, money.paid);
+  if (input.amount > paid) {
+    throw MONEY_REFUSALS.refuse('refundAbovePaid', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'amount', issue: `at most ${paid}` },
+    });
+  }
   const ops: OpDraft[] = [];
   if (input.amount > credit && ctx.colleagueHasPermission(ctx.userId, MONEY_PERMISSION.refund)) {
-    if (input.amount > credit + money.charged - money.reduced) {
-      throw MONEY_REFUSALS.refuse('refundAbovePaid', {
-        code: 'VALIDATION_FAILED',
-        details: { field: 'amount', issue: `at most ${credit + money.charged - money.reduced}` },
-      });
-    }
     ops.push(
       entryOp(ctx, MONEY_OP.chargeReduced, {
         document: input.document,
