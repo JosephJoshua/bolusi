@@ -28,12 +28,13 @@ import {
   type MediaFilePort,
   type MediaTransportPort,
 } from '@bolusi/core';
+import { MEDIA_EXTENSION, type MediaMime } from '@bolusi/schemas';
 
 /** The signed fields this path needs. Sourced from the op payload's `mediaRef` — see the header. */
 export interface RenderableMediaRef {
   readonly mediaId: string;
   readonly sha256: string;
-  readonly mime: 'image/jpeg' | 'image/png';
+  readonly mime: MediaMime;
 }
 
 /**
@@ -78,11 +79,6 @@ export interface RemoteMediaDeps {
    * signed ref — decryption is never a substitute for verification, it follows it.
    */
   readonly toRenderUri: (path: string) => Promise<string>;
-}
-
-/** 06 §2.2 step 5 / §2.3: the extension follows the mime, and there are exactly two mimes in v0. */
-function extensionFor(mime: RenderableMediaRef['mime']): string {
-  return mime === 'image/png' ? 'png' : 'jpg';
 }
 
 /**
@@ -140,7 +136,7 @@ export async function loadMediaForRender(
     // WITHOUT deleting the file (header) — the cache and the network are both verifying paths.
   }
 
-  const extension = extensionFor(ref.mime);
+  const extension = MEDIA_EXTENSION[ref.mime];
   const cached = deps.findCached(ref.mediaId, extension);
   if (cached !== null) {
     // Re-verify what the cache holds against the SIGNED hash (see the header).

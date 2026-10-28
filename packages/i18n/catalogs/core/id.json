@@ -164,5 +164,12 @@
     "photoOnPhone": "Ambil fotonya di HP",
     "signOnPhone": "Minta pelanggan tanda tangan di HP",
     "waitingSend": "Menunggu kiriman dari HP…"
+  },
+  "video": {
+    "denied": "Kamera atau mikrofon belum diizinkan. Izinkan di Pengaturan Windows › Privasi, lalu coba lagi.",
+    "saveFailed": "Videonya belum bisa disimpan. Coba lagi.",
+    "loading": "Memuat video…",
+    "failed": "Videonya belum bisa diputar. Coba lagi.",
+    "noMicrophone": "Mikrofon tidak ditemukan. Pasang mikrofon atau webcam yang ada mikrofonnya, lalu coba lagi."
   }
 }

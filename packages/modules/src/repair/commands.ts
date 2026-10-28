@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 import { DomainError, type CommandContext, type CommandHandlerResult } from '@bolusi/core';
-import { zMediaRef, type MediaRef } from '@bolusi/schemas';
+import { zMediaRef, zVideoRef, type MediaRef } from '@bolusi/schemas';
 
 import {
   MAX_LINE_AMOUNT,
@@ -230,6 +230,8 @@ export const openTicketInput = z
     quoteLines: z.array(zLineInput).min(1).max(100),
     /** One photo per angle the store asks for, labelled as the counter saw it. */
     photos: zIntakePhotosV2,
+    /** The customer saying the phone is theirs, when a picked repair type asks for it. */
+    ownershipVideo: zVideoRef.nullable().default(null),
     /** Integer IDR the customer paid up front; 0 when nothing was. */
     downPayment: z.number().int().min(0).max(MAX_LINE_AMOUNT).default(0),
     /** How the DP was paid: the drawer or one of the store's accounts. */
@@ -318,6 +320,7 @@ export async function openTicketHandler(
       claimOf: input.claimOf,
       quoteLines: input.quoteLines.map((line) => ({ lineId: ctx.newId(), ...line })),
       photos: input.photos,
+      ownershipVideo: input.ownershipVideo,
     }),
   );
   if (input.downPayment > 0) {

@@ -30,6 +30,7 @@ import { documentBalance, documentTotal } from '../money/rules.js';
 import {
   handoverProblem,
   intakeListProblems,
+  needsOwnershipVideo,
   recordedOption,
   warrantyUntil,
   type RecordedRepairType,
@@ -106,6 +107,7 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'overLimit',
   'handoverAccessories',
   'handoverNoteNeeded',
+  'ownershipVideoNeeded',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -682,6 +684,14 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
   );
   const total = payload.quoteLines.reduce((sum, line) => sum + line.amount, 0);
   checkTotal(0, total);
+  // From v4 the customer's ownership video comes with the intake that needs one.
+  if (
+    op.schemaVersion >= 4 &&
+    payload.ownershipVideo === null &&
+    needsOwnershipVideo(payload.repairTypes)
+  ) {
+    throw ownershipVideoNeeded();
+  }
   // v1 and v2 intakes were signed before claims.
   const claimOf = (payload as { claimOf?: string | null }).claimOf ?? null;
   if (claimOf !== null) {
@@ -896,6 +906,13 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
   // Before v3 there was no checklist to judge.
   if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
 };
+
+function ownershipVideoNeeded(): DomainError {
+  return refuse('ownershipVideoNeeded', {
+    code: 'VALIDATION_FAILED',
+    details: { field: 'ownershipVideo', issue: 'a repair type needs the ownership video' },
+  });
+}
 
 /** Every accessory left at intake is on the checklist, and whatever is not ticked has a note. */
 async function requireHandoverChecks(db: Db, op: SignedOperation): Promise<void> {

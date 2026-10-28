@@ -11,6 +11,14 @@ export {
   type ButtonVariant,
 } from './components/Button.js';
 export { CameraDialog, type CameraLabels } from './components/Camera.js';
+export {
+  VideoPlayerDialog,
+  VideoRecorderDialog,
+  type RecordedClip,
+  type RecordedVideoMime,
+  type VideoPlayerSource,
+  type VideoRecorderLabels,
+} from './components/Video.js';
 export { Chip, ToggleChip, type ChipTone } from './components/Chip.js';
 export { ChoiceList, type ChoiceOption } from './components/ChoiceList.js';
 export { ConfirmDialog } from './components/ConfirmDialog.js';

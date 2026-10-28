@@ -69,14 +69,16 @@ const REQUIRED_IOS_USAGE_DESCRIPTIONS: Record<string, Readonly<Record<string, st
     NSLocationWhenInUseUsageDescription:
       'Izinkan aplikasi memakai lokasi untuk mencatat tempat pekerjaan dilakukan.',
   },
-  // Photos only (06-media-pipeline; `media.permission.camera` = "ambil foto"). Microphone disabled.
+  // Photos, and the ownership video with its sound.
   'expo-camera': {
-    NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+    NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto dan video.',
+    NSMicrophoneUsageDescription:
+      'Izinkan aplikasi memakai mikrofon untuk merekam video pelanggan.',
   },
   // The store logo, picked from the gallery (repair print settings).
   'expo-image-picker': {
     NSPhotoLibraryUsageDescription: 'Izinkan aplikasi membuka galeri untuk memilih logo toko.',
-    NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
+    NSCameraUsageDescription: 'Izinkan aplikasi memakai kamera untuk ambil foto dan video.',
   },
 };
 
@@ -90,7 +92,6 @@ const MUST_BE_ABSENT: readonly string[] = [
   'NSLocationAlwaysAndWhenInUseUsageDescription',
   'NSLocationAlwaysUsageDescription',
   'NSMotionUsageDescription',
-  'NSMicrophoneUsageDescription',
 ];
 
 /** The library English defaults — a shipped usage description must never equal one of these. */

@@ -20,7 +20,7 @@ import {
   type ProjectionOperation,
   type ProjectionTableManifest,
 } from '@bolusi/core';
-import type { MediaRef } from '@bolusi/schemas';
+import type { AnyMediaRef, MediaRef, VideoRef } from '@bolusi/schemas';
 
 import {
   INTAKE_PHOTO_SLOTS,
@@ -31,6 +31,7 @@ import {
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
+  ownershipVideoSlot,
   workPhotoSlot,
   type DeviceLocation,
   type RepairOutcome,
@@ -285,12 +286,13 @@ export interface TicketOpenedPayload {
   readonly photos: readonly { slot: string; label: string | null; ref: MediaRef }[];
   readonly repairTypes: readonly RecordedRepairType[];
   readonly claimOf: string | null;
+  readonly ownershipVideo: VideoRef | null;
 }
 
 /** v1: checks without labels, accessories as plain keys, exactly the six default photo angles. */
 interface TicketOpenedV1Payload extends Omit<
   TicketOpenedPayload,
-  'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
+  'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf' | 'ownershipVideo'
 > {
   readonly checklist: readonly { item: string; state: string; note: string }[];
   readonly peripherals: readonly string[];
@@ -392,7 +394,7 @@ async function refreshQuoteTotal(db: Db, op: ProjectionOperation): Promise<void>
 async function insertPhotos(
   db: Db,
   op: ProjectionOperation,
-  photos: readonly (readonly [slot: string, ref: MediaRef])[],
+  photos: readonly (readonly [slot: string, ref: AnyMediaRef])[],
 ): Promise<void> {
   const storeId = storeIdOf(op);
   await db
@@ -463,7 +465,7 @@ export const customerDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> 
 function ticketOpenedRows(op: ProjectionOperation): {
   payload: Omit<
     TicketOpenedPayload,
-    'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
+    'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf' | 'ownershipVideo'
   >;
   checklist: readonly object[];
   peripherals: readonly unknown[];
@@ -471,6 +473,7 @@ function ticketOpenedRows(op: ProjectionOperation): {
   intakePhotos: readonly { slot: string; label: string | null }[] | null;
   repairTypes: readonly object[];
   claimOf: string | null;
+  ownershipVideo: VideoRef | null;
 } {
   switch (op.schemaVersion) {
     case 1: {
@@ -483,10 +486,12 @@ function ticketOpenedRows(op: ProjectionOperation): {
         intakePhotos: null,
         repairTypes: [],
         claimOf: null,
+        ownershipVideo: null,
       };
     }
     case 2:
-    case 3: {
+    case 3:
+    case 4: {
       const payload = payloadOf<TicketOpenedPayload>(op);
       return {
         payload,
@@ -495,8 +500,10 @@ function ticketOpenedRows(op: ProjectionOperation): {
         photos: payload.photos,
         intakePhotos: payload.photos.map(({ slot, label }) => ({ slot, label })),
         // v2 tickets were opened before repair types.
-        repairTypes: op.schemaVersion === 3 ? payload.repairTypes : [],
-        claimOf: op.schemaVersion === 3 ? payload.claimOf : null,
+        repairTypes: op.schemaVersion >= 3 ? payload.repairTypes : [],
+        claimOf: op.schemaVersion >= 3 ? payload.claimOf : null,
+        // Before v4 no repair type asked for a video.
+        ownershipVideo: op.schemaVersion >= 4 ? payload.ownershipVideo : null,
       };
     }
     default:
@@ -508,8 +515,16 @@ function ticketOpenedRows(op: ProjectionOperation): {
 }
 
 export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { payload, checklist, peripherals, photos, intakePhotos, repairTypes, claimOf } =
-    ticketOpenedRows(op);
+  const {
+    payload,
+    checklist,
+    peripherals,
+    photos,
+    intakePhotos,
+    repairTypes,
+    claimOf,
+    ownershipVideo,
+  } = ticketOpenedRows(op);
   const storeId = storeIdOf(op);
   await db
     .insertInto('repairTickets')
@@ -578,11 +593,12 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       .execute();
   }
 
-  await insertPhotos(
-    db,
-    op,
-    photos.map(({ slot, ref }) => [slot, ref] as const),
-  );
+  await insertPhotos(db, op, [
+    ...photos.map(({ slot, ref }) => [slot, ref] as const),
+    ...(ownershipVideo === null
+      ? []
+      : [[ownershipVideoSlot(ownershipVideo.mediaId), ownershipVideo] as const]),
+  ]);
   await recordEvent(db, op, {});
 };
 

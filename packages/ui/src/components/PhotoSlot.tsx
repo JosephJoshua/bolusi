@@ -18,7 +18,7 @@ export interface PhotoSlotProps {
   /** Already-localized; read out with the label, e.g. "Ambil foto" / "Ambil ulang". */
   readonly actionLabel: string;
   /** What an empty slot asks for; a camera unless the slot takes something else (a signature). */
-  readonly emptyIcon?: 'camera' | 'signature' | undefined;
+  readonly emptyIcon?: 'camera' | 'signature' | 'video' | undefined;
   /** Absent ⇒ the slot is read-only (a ticket's recorded evidence). */
   readonly onPress?: (() => void) | undefined;
   readonly testID?: string | undefined;

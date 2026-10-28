@@ -28,6 +28,7 @@ import {
   type Sha256Factory,
 } from '@bolusi/core';
 import type { MediaClientDeps } from '@bolusi/device/media/client';
+import { MEDIA_EXTENSION } from '@bolusi/schemas';
 import type { PhonePhotoFiles } from '@bolusi/device/media/phone-photos';
 
 import { nodeColumnAead } from './crypto.js';
@@ -67,9 +68,8 @@ const rawIo: RawMediaFileIo = {
 };
 
 const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
-  jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
-  png: 'image/png',
+  ...Object.fromEntries(Object.entries(MEDIA_EXTENSION).map(([mime, ext]) => [ext, mime])),
 };
 
 export type DesktopMediaFiles = Pick<

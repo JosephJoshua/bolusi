@@ -138,17 +138,15 @@ const config: ExpoConfig = {
         isAndroidBackgroundLocationEnabled: false,
       },
     ],
-    // expo-camera is registered now, before task 82 wires capture, so the plist/manifest are correct
-    // on both platforms the moment capture lands — and so the denominator guard covers it (task 87
-    // acceptance / the cross-reference to 82). Photos only: microphone + Android RECORD_AUDIO are
-    // disabled (the app has no audio/video path; 06-media-pipeline is stills). If task 82 adds
-    // audio/video, flip microphonePermission to an Indonesian string and recordAudioAndroid to true.
+    // expo-camera takes the photos and, since the ownership video (a repair type can ask for the
+    // customer saying on camera the phone is theirs), records clips with sound: so the microphone
+    // string and Android RECORD_AUDIO are on.
     [
       'expo-camera',
       {
-        cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
-        microphonePermission: false,
-        recordAudioAndroid: false,
+        cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto dan video.',
+        microphonePermission: 'Izinkan aplikasi memakai mikrofon untuk merekam video pelanggan.',
+        recordAudioAndroid: true,
       },
     ],
     // The store logo is picked from the gallery (repair print settings). The camera string repeats
@@ -157,8 +155,8 @@ const config: ExpoConfig = {
       'expo-image-picker',
       {
         photosPermission: 'Izinkan aplikasi membuka galeri untuk memilih logo toko.',
-        cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto.',
-        microphonePermission: false,
+        cameraPermission: 'Izinkan aplikasi memakai kamera untuk ambil foto dan video.',
+        microphonePermission: 'Izinkan aplikasi memakai mikrofon untuk merekam video pelanggan.',
       },
     ],
     // ── The on-device harness entry activity (task 27a/175) ───────────────────────────────────────

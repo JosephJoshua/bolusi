@@ -10,6 +10,7 @@
 // chunk-PUT rate limit 600/min/device, others 120/min/device.
 import { bodyLimit } from 'hono/body-limit';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { isVideoMime } from '@bolusi/schemas';
 
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
@@ -21,6 +22,7 @@ import { renderMediaError } from '../media/errors.js';
 import {
   MEDIA_CHUNK_SIZE,
   MEDIA_MAX_SIZE_BYTES,
+  VIDEO_MAX_SIZE_BYTES,
   zMediaChunkParam,
   zMediaIdParam,
   zMediaInitBody,
@@ -65,8 +67,8 @@ function toUint8(value: unknown): Uint8Array {
   return value instanceof Uint8Array ? value : Uint8Array.from(value as ArrayLike<number>);
 }
 
-/** Consume a blob stream into bytes. v0 media is ≤ 300 KiB, so buffering the download body is
- *  bounded; the streaming BlobStore interface is kept for the v1 S3/MinIO backend + video. */
+/** Consume a blob stream into bytes. A photo is ≤ 300 KiB and a clip ≤ 48 MiB, so buffering the
+ *  download body is bounded; the streaming BlobStore interface is kept for an S3/MinIO backend. */
 async function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
@@ -191,7 +193,11 @@ export function createMediaRouter(deps: ServerDeps) {
 
           // Media-code semantic checks (NOT VALIDATION_FAILED): allowlist + size cap (api/03 §3.1).
           if (!isAllowedMime(body.mime)) return renderMediaError(c, 'MIME_UNSUPPORTED');
-          if (body.sizeBytes > MEDIA_MAX_SIZE_BYTES) return renderMediaError(c, 'MEDIA_TOO_LARGE');
+          // A clip is only ever a `video` item, and a `video` item only ever a clip.
+          const video = isVideoMime(body.mime);
+          if (video !== (body.type === 'video')) return renderMediaError(c, 'MIME_UNSUPPORTED');
+          const cap = video ? VIDEO_MAX_SIZE_BYTES : MEDIA_MAX_SIZE_BYTES;
+          if (body.sizeBytes > cap) return renderMediaError(c, 'MEDIA_TOO_LARGE');
 
           return withTenant(c, async (db) => {
             const existing = await db
