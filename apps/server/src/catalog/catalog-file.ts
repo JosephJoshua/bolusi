@@ -5,8 +5,8 @@
 //
 // The file is newline-delimited JSON, one brand or model per line. A model carries what the
 // listing gives (name, type, page, photo address) and may add its page's details (codes, specs)
-// and its photo (or say it has none). The committed seed has names and codes only; the full catalog with specs and
-// photos is kept privately (docs/development.md says why).
+// and its photo (or say it has none). The committed seed (apps/server/seed) has everything but
+// the photos, which are kept privately (seed/README.md says why).
 import { createHash } from 'node:crypto';
 
 import type { ListedPhoneModel, PhoneCatalogWriter, PhoneModelPhoto } from '@bolusi/db-server';

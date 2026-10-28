@@ -65,11 +65,11 @@ narrow a run. Devices download the catalog after sync and photos when shown.
 GSMArena refuses cloud and datacenter addresses (429s, a Cloudflare check), so
 run it from a home or office connection; the crawler never tries to get past a check.
 
-The full catalog (about 15k models with specs and photos) was assembled off-repo in
-October 2026 and is kept privately as a catalog file, not in Git: GSMArena photos are
-copyrighted and most spec text carries CC BY-SA 4.0 or GPL-3.0 terms, so read its
-`SOURCES.md` before sharing it beyond our own stores. Load it, or any catalog file,
-with the owner role's URL:
+The full catalog (about 15k models, assembled off-repo in October 2026) is committed
+without photos as `apps/server/seed/phone-catalog.ndjson.gz`; its sources and licences
+are in that folder's README. `pnpm db:seed-catalog` loads it into the dev database.
+The photos are copyrighted, so they are kept privately as a catalog file of their own.
+Load that, or any catalog file, with the owner role's URL:
 
 ```sh
 DATABASE_URL=<owner url> pnpm --filter @bolusi/server load-phone-catalog <file.ndjson.gz>

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 
 import type { PhoneCatalogWriter } from '@bolusi/db-server';
 import { describe, expect, test } from 'vitest';
@@ -108,4 +110,17 @@ describe('a catalog file', () => {
     );
     expect(calls).toEqual([]);
   });
+});
+
+test('the committed seed is a valid catalog without photos', () => {
+  const text = gunzipSync(
+    readFileSync(new URL('../../seed/phone-catalog.ndjson.gz', import.meta.url)),
+  ).toString('utf8');
+  const lines = parseCatalogFile(text);
+  const models = lines.filter((l) => l.type === 'model');
+  expect(models.length).toBeGreaterThan(14_000);
+  expect(models.every((m) => m.photo === undefined)).toBe(true);
+  expect(models.filter((m) => m.details !== undefined).length).toBeGreaterThan(14_000);
+  const brands = new Set(lines.flatMap((l) => (l.type === 'brand' ? [l.name] : [])));
+  expect(models.every((m) => brands.has(m.brand))).toBe(true);
 });
