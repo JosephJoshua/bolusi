@@ -1,92 +1,19 @@
 // The window over the offline core: which screen shows for each state the core reports, and what
 // the window asks the core for. The core here is a stand-in that answers repair calls from the
 // seeded demo and records everything else, so the gate and the calls are tested without a process.
-import type { ActiveSession } from '@bolusi/core';
 import type { SyncStatusInput } from '@bolusi/device/models/sync-status/model';
-import type { SwitcherUser } from '@bolusi/device/models/switcher/model';
 import { initI18n } from '@bolusi/i18n';
-import { demoRepairRuntime } from '@bolusi/modules/repair/demo';
 import enRepairCatalog from '@bolusi/modules/repair/i18n/en.json';
 import idRepairCatalog from '@bolusi/modules/repair/i18n/id.json';
 import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import { registerRepairCatalog } from '@bolusi/modules/repair/desktop';
 import { TooltipProvider } from '@bolusi/ui-web';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CoreState, SessionView } from '../src/core/api.js';
-import type { Client } from '../src/main/rpc.js';
 import type { CoreView } from '../src/renderer/use-core.js';
 
-const OWNER: SwitcherUser = {
-  id: 'u-owner',
-  name: 'Andi Pratama',
-  photoMediaId: null,
-  lastActiveAt: null,
-  needsFirstPin: false,
-  roleKeys: ['main_owner'],
-};
-const TECH: SwitcherUser = {
-  id: 'u-tech',
-  name: 'Budi Santoso',
-  photoMediaId: null,
-  lastActiveAt: null,
-  needsFirstPin: false,
-  roleKeys: ['technician'],
-};
-const ALL = Object.values(REPAIR_PERMISSION);
-
-/** The stand-in core: a state the test sets, and a log of every call. */
-class FakeCore {
-  state: CoreState;
-  readonly calls: { method: string; args: unknown[] }[] = [];
-  answers: Record<string, (...args: unknown[]) => unknown> = {};
-  private readonly listeners = new Set<() => void>();
-  private readonly demo = demoRepairRuntime('owner', { volume: 'sample' });
-
-  constructor(state: CoreState) {
-    this.state = state;
-  }
-
-  readonly client: Client = {
-    call: <T,>(method: string, ...args: readonly unknown[]): Promise<T> => {
-      this.calls.push({ method, args: [...args] });
-      const answer = this.answers[method];
-      if (answer !== undefined) return Promise.resolve(answer(...args) as T);
-      // Repair reads and writes come from the seeded demo; the first argument names the person.
-      if (method === 'repair.query') {
-        return this.demo.query(args[1] as never, args[2] as never) as Promise<T>;
-      }
-      if (method === 'repair.technicians') return this.demo.technicians() as Promise<T>;
-      if (method === 'repair.ticketSyncStatuses') {
-        return this.demo.ticketSyncStatuses(args[1] as string[]) as Promise<T>;
-      }
-      return Promise.resolve(undefined as T);
-    },
-    on: () => () => undefined,
-    close: () => undefined,
-  };
-
-  set(next: Partial<CoreState>): void {
-    this.state = { ...this.state, ...next };
-    act(() => {
-      for (const listener of this.listeners) listener();
-    });
-  }
-
-  session(next: Partial<SessionView>): void {
-    this.set({ session: { ...this.state.session!, ...next } });
-  }
-
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  methods(): string[] {
-    return this.calls.map((call) => call.method);
-  }
-}
+import { ALL, FakeCore, OWNER, ready, session, signedIn, TECH } from './fake-core.js';
 
 let core: FakeCore;
 
@@ -104,49 +31,6 @@ vi.mock('../src/renderer/use-core.js', async () => {
 });
 
 const { App } = await import('../src/renderer/App.js');
-
-function session(over: Partial<SessionView> = {}): SessionView {
-  return {
-    active: null,
-    users: [OWNER, TECH],
-    usersError: null,
-    pinRows: {},
-    locked: false,
-    lockReason: null,
-    workspace: null,
-    canUnlock: true,
-    canReset: true,
-    canManageStaff: true,
-    tenantAdmin: true,
-    permissions: [],
-    colleaguePermissions: {},
-    ...over,
-  };
-}
-
-function ready(over: Partial<CoreState> = {}): CoreState {
-  return {
-    phase: 'ready',
-    bootError: null,
-    device: 'active',
-    deviceInfo: {
-      deviceId: 'd-1',
-      deviceName: 'PC Kasir',
-      storeName: 'Toko Sorong Kota',
-      tenantName: 'Bolusi',
-      platform: 'windows',
-      appVersion: '0.1.0',
-    },
-    session: session(),
-    sync: null,
-    ...over,
-  };
-}
-
-const signedIn = (user: SwitcherUser, permissions: readonly string[]): Partial<SessionView> => ({
-  active: { sessionId: `s-${user.id}`, userId: user.id } satisfies ActiveSession,
-  permissions,
-});
 
 function renderApp(): void {
   render(

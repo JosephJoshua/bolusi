@@ -539,6 +539,13 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
     },
 
     async listPinTargets(): Promise<readonly PinTargetUser[]> {
+      // Colleagues' PIN and lockout state is for those who may unlock or reset a PIN, on every device.
+      if (
+        !actingUserHolds(AUTH_PERMISSION.pinUnlock) &&
+        !actingUserHolds(AUTH_PERMISSION.userResetPin)
+      ) {
+        throw new DomainError('PERMISSION_DENIED');
+      }
       const directory = await listSwitcherUsers(db);
       return Promise.all(
         directory.map(async (user) => {
