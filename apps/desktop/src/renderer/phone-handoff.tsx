@@ -1,26 +1,72 @@
 // Taking photos and signatures on a store phone instead of this PC. The first time, the counter
 // shows a QR the phone scans with its camera; after that the phone stays paired, and every photo
-// or signature the counter asks for appears on it by itself until the pairing ends. The phone and
-// PC must be on the same Wi-Fi; nothing goes through the internet.
+// or signature the counter asks for appears on it by itself until the pairing ends. Both go
+// through the server (the offline core talks to it), so the PC and the phone need the internet.
 import { t } from '@bolusi/i18n';
+import type { HandoffKind, HandoffPageLabels } from '@bolusi/schemas';
 import { Banner, Button, Dialog, QrCode, Spinner, type DrawnSignature } from '@bolusi/ui-web';
 import { RefreshCw, Smartphone } from 'lucide-react';
 
-import type {
-  HandoffBridge,
-  HandoffEvent,
-  HandoffKind,
-  HandoffPageLabels,
-} from '../main/bridge.js';
+import { CORE_EVENTS, type HandoffEvent, type HandoffOpened } from '../core/api.js';
+import type { Client } from '../main/rpc.js';
+import { connectToCore, hasCoreBridge } from './core-client.js';
 
-/** The desktop app's phone handoff, when the page runs inside it. */
-export function handoffBridge(): HandoffBridge | undefined {
-  return (window as { bolusi?: { handoff?: HandoffBridge } }).bolusi?.handoff;
+/** The core's side of the phone handoff (core/handoff.ts), as the window calls it. */
+export interface HandoffBridge {
+  /** Whether there is a server to pair through (not in the seeded demo). */
+  available(): Promise<boolean>;
+  /** A new QR for a phone to pair with; any earlier pairing ends. */
+  pair(labels: HandoffPageLabels): Promise<HandoffOpened>;
+  /** Puts one step in front of the paired phone; null when the pairing has ended. */
+  ask(id: string, kind: HandoffKind, title: string): Promise<number | null>;
+  /** The counter backed out of that step. */
+  withdraw(id: string, seq: number): Promise<void>;
+  unpair(id: string): Promise<void>;
+  /** Calls back when the phone pairs or sends, or the pairing ends. */
+  onEvent(listener: (event: HandoffEvent) => void): () => void;
+}
+
+/**
+ * The phone handoff over the line to the core, once it is connected; none outside the desktop app
+ * (the dev server in a browser), and none with the seeded demo, which has no server.
+ */
+export function windowHandoff(): HandoffBridge | undefined {
+  if (!hasCoreBridge()) return undefined;
+  const live = connectToCore().then((core) => (core.mode === 'live' ? core.client : null));
+  const withClient = async <T,>(use: (client: Client) => Promise<T>, none: T): Promise<T> => {
+    const client = await live;
+    return client === null ? none : use(client);
+  };
+  return {
+    available: () => live.then((client) => client !== null),
+    pair: (labels) =>
+      withClient((client) => client.call<HandoffOpened>('handoff.pair', labels), {
+        ok: false,
+        problem: 'failed',
+      }),
+    ask: (id, kind, title) =>
+      withClient((client) => client.call<number | null>('handoff.ask', id, kind, title), null),
+    withdraw: (id, seq) =>
+      withClient((client) => client.call<void>('handoff.withdraw', id, seq), undefined),
+    unpair: (id) => withClient((client) => client.call<void>('handoff.unpair', id), undefined),
+    onEvent(listener) {
+      let stop: (() => void) | null = null;
+      let stopped = false;
+      void live.then((client) => {
+        if (client === null || stopped) return;
+        stop = client.on(CORE_EVENTS.handoff, (event) => listener(event as HandoffEvent));
+      });
+      return () => {
+        stopped = true;
+        stop?.();
+      };
+    },
+  };
 }
 
 export type PhoneLink =
   | { readonly state: 'none' | 'opening' }
-  | { readonly state: 'problem'; readonly problem: 'noNetwork' | 'failed' | 'expired' }
+  | { readonly state: 'problem'; readonly problem: 'offline' | 'failed' | 'expired' }
   | {
       readonly state: 'ready';
       readonly id: string;
@@ -144,7 +190,14 @@ export class PhoneLinkStore {
     const step = this.step;
     const link = this.link;
     if (step === null || step.seq !== null || link.state !== 'ready') return;
-    const seq = await this.handoff.ask(link.id, step.kind, step.title);
+    let seq: number | null;
+    try {
+      seq = await this.handoff.ask(link.id, step.kind, step.title);
+    } catch {
+      // The server is out of reach: say so; "try again" pairs afresh.
+      if (this.step === step) this.set({ state: 'problem', problem: 'offline' });
+      return;
+    }
     if (this.step !== step) {
       if (seq !== null) void this.handoff.withdraw(link.id, seq);
       return;

@@ -34,7 +34,7 @@ import {
 } from '@bolusi/i18n';
 
 import { registerModuleCatalogs } from './bootstrap/module-catalogs.js';
-import { consoleDiagnostics } from './ports/diagnostics.js';
+import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 
 /** The storage key for the device locale. */
 export const DEVICE_LOCALE_KEY = 'bolusi.device_locale';

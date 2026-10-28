@@ -127,7 +127,8 @@
     "none": "Kamera tidak ditemukan. Pasang webcam, lalu coba lagi.",
     "denied": "Kamera belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Kamera, lalu coba lagi.",
     "failed": "Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.",
-    "saveFailed": "Fotonya belum bisa disimpan. Coba lagi."
+    "saveFailed": "Fotonya belum bisa disimpan. Coba lagi.",
+    "fromFile": "Pilih file foto"
   },
   "signature": {
     "hint": "Minta pelanggan tanda tangan di kotak ini.",
@@ -139,11 +140,11 @@
     "usePhone": "Pakai HP",
     "useWebcam": "Pakai webcam",
     "useScreen": "Tanda tangan di layar",
-    "scanHint": "Pindai kode ini dengan kamera HP. HP harus pakai Wi-Fi yang sama dengan komputer ini.",
+    "scanHint": "Pindai kode ini dengan kamera HP.",
     "qrLabel": "Kode QR untuk HP",
     "orOpen": "Atau buka di HP:",
     "waiting": "Menunggu HP…",
-    "noNetwork": "Komputer ini belum tersambung ke Wi-Fi toko. Sambungkan dulu, lalu coba lagi.",
+    "offline": "Komputer ini belum tersambung ke internet. Sambungkan dulu, lalu coba lagi.",
     "failed": "HP belum bisa disambungkan. Coba lagi.",
     "expired": "Sambungan ke HP sudah berakhir. Buat kode baru.",
     "page": {
@@ -151,7 +152,7 @@
       "send": "Kirim ke komputer",
       "sending": "Mengirim…",
       "sent": "Terkirim.",
-      "failed": "Belum terkirim. Pastikan HP masih pakai Wi-Fi toko dan kodenya masih tampil di komputer, lalu coba lagi.",
+      "failed": "Belum terkirim. Pastikan HP tersambung ke internet, lalu coba lagi.",
       "expired": "Kode ini sudah kedaluwarsa. Pindai kode baru dari komputer.",
       "unreadable": "Fotonya tidak bisa dibaca. Ambil lagi.",
       "waiting": "HP sudah tersambung. Langkah berikutnya muncul di sini.",

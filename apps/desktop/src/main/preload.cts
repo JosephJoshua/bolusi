@@ -3,7 +3,19 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- a sandboxed preload is CommonJS
 import electron = require('electron');
 
-import type { DesktopBridge, HandoffEvent, UpdateState } from './bridge.js';
+import type { CorePortMode, DesktopBridge, UpdateState } from './bridge.js';
+
+// Duplicated from bridge.ts: a sandboxed preload can require only `electron`, not its own modules.
+const CORE_PORT_MESSAGE = 'bolusi:core-port';
+
+// A port cannot cross the context bridge as a value; posting it to the page's own window is the
+// documented way. The page accepts it only from its own window (see the renderer's core client).
+const page = globalThis as unknown as {
+  postMessage(message: unknown, targetOrigin: string, transfer: readonly unknown[]): void;
+};
+electron.ipcRenderer.on('core:port', (event, mode: CorePortMode) => {
+  page.postMessage({ type: CORE_PORT_MESSAGE, mode }, '*', event.ports);
+});
 
 const bridge: DesktopBridge = {
   printers: {
@@ -24,16 +36,8 @@ const bridge: DesktopBridge = {
     },
     install: () => electron.ipcRenderer.invoke('updates:install'),
   },
-  handoff: {
-    pair: (labels) => electron.ipcRenderer.invoke('handoff:pair', labels),
-    ask: (id, kind, title) => electron.ipcRenderer.invoke('handoff:ask', id, kind, title),
-    withdraw: (id, seq) => electron.ipcRenderer.invoke('handoff:withdraw', id, seq),
-    unpair: (id) => electron.ipcRenderer.invoke('handoff:unpair', id),
-    onEvent: (listener) => {
-      const relay = (_event: unknown, event: HandoffEvent): void => listener(event);
-      electron.ipcRenderer.on('handoff:event', relay);
-      return () => electron.ipcRenderer.removeListener('handoff:event', relay);
-    },
+  core: {
+    connect: () => electron.ipcRenderer.send('core:connect'),
   },
 };
 

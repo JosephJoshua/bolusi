@@ -6,7 +6,7 @@
 // — anything that is not clearly `active`/`background` counts as `inactive` (the interval disarms).
 import { AppState, type AppStateStatus } from 'react-native';
 
-import type { AppStatePort, AppStatus } from '../bootstrap/triggers.js';
+import type { AppStatePort, AppStatus } from '@bolusi/device/bootstrap/triggers';
 
 function narrow(status: AppStateStatus): AppStatus {
   if (status === 'active') return 'active';

@@ -49,8 +49,8 @@ vi.mock('expo-location', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 
-import { createAppEnrollment, type EnrollmentPlatform } from '../src/bootstrap/enrollment.js';
-import type { LoginTransportPort } from '../src/bootstrap/enroll-transport.js';
+import { createAppEnrollment, type EnrollmentPlatform } from '@bolusi/device/bootstrap/enrollment';
+import type { LoginTransportPort } from '@bolusi/device/bootstrap/enroll-transport';
 import type { RootProps } from '../src/bootstrap/Root.js';
 import { SecureStoreKeyStore } from '../src/ports/keystore.js';
 

@@ -25,7 +25,14 @@ const styles = StyleSheet.create({
   fact: { width: '50%', paddingRight: space.sm },
   wide: { width: '100%' },
   label: { ...type.caption, color: color.textMuted },
-  valueRow: { flexDirection: 'row', alignItems: 'center', minHeight: size.control },
+  // The action wraps under the value when both don't fit, so a name never breaks around it.
+  valueRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: space.sm,
+    minHeight: size.control,
+  },
   value: { ...type.bodySm, fontWeight: '600', color: color.text, flexShrink: 1 },
 });
 

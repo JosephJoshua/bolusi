@@ -49,66 +49,19 @@ export interface UpdatesBridge {
   install(): Promise<void>;
 }
 
-export type HandoffKind = 'photo' | 'signature';
-
-/** The copy on the page the phone opens, in the counter's language. */
-export interface HandoffPageLabels {
-  readonly photoHint: string;
-  readonly signatureHint: string;
-  readonly take: string;
-  readonly retake: string;
-  readonly clear: string;
-  readonly send: string;
-  readonly sending: string;
-  readonly sent: string;
-  /** Paired, with nothing asked yet. */
-  readonly waiting: string;
-  /** A signature needs the phone on its side. */
-  readonly rotate: string;
-  readonly rotateNow: string;
-  readonly failed: string;
-  /** The counter backed out of the step the phone was on. */
-  readonly withdrawn: string;
-  readonly expired: string;
-  readonly unreadable: string;
-}
-
-export type HandoffOpened =
-  | { readonly ok: true; readonly id: string; readonly urls: readonly string[] }
-  /** No store network to offer the page on, or the port would not open. */
-  | { readonly ok: false; readonly problem: 'noNetwork' | 'failed' };
-
-export type HandoffEvent =
-  /** The phone opened the page; or nothing happened for a long time and the pairing ended. */
-  | { readonly id: string; readonly type: 'paired' | 'expired' }
-  | {
-      readonly id: string;
-      readonly type: 'photo';
-      readonly seq: number;
-      readonly bytes: Uint8Array;
-    }
-  | {
-      readonly id: string;
-      readonly type: 'signature';
-      readonly seq: number;
-      readonly strokes: readonly (readonly { readonly x: number; readonly y: number }[])[];
-      readonly pad: { readonly width: number; readonly height: number };
-    };
-
-export interface HandoffBridge {
-  /** A new QR for a phone to pair with; any earlier pairing ends. */
-  pair(labels: HandoffPageLabels): Promise<HandoffOpened>;
-  /** Puts one step in front of the paired phone; null when the pairing has ended. */
-  ask(id: string, kind: HandoffKind, title: string): Promise<number | null>;
-  /** The counter backed out of that step. */
-  withdraw(id: string, seq: number): Promise<void>;
-  unpair(id: string): Promise<void>;
-  /** Calls back when the phone pairs or sends, or the pairing expires. */
-  onEvent(listener: (event: HandoffEvent) => void): () => void;
-}
-
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
   readonly updates: UpdatesBridge;
-  readonly handoff: HandoffBridge;
+  readonly core: CoreBridge;
 }
+
+/** The offline core's door: ask main for a port to it (on every page load, so a reload reconnects). */
+export interface CoreBridge {
+  connect(): void;
+}
+
+/** Main's answer, posted to the page's own window with the port attached. */
+export const CORE_PORT_MESSAGE = 'bolusi:core-port';
+
+/** `live`: a port to the core is attached; `demo`: run the seeded demo; `unavailable`: the core is down. */
+export type CorePortMode = 'live' | 'demo' | 'unavailable';

@@ -448,13 +448,14 @@ export function RepairBoardPage({
       </PageHeader>
 
       {/* The servisan opens beside the table when both fit (the table's fixed columns need about
-          650 px); on a narrower screen it slides over the table's right side instead. */}
+          680 px, next to a 400 px pane); on a narrower screen it slides over the table's right
+          side instead. */}
       <div className="flex min-h-0 flex-1 flex-col @container">
         <div
           className={
             selectedTicketId === null
               ? 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
-              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1048px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
+              : 'relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] @[1080px]:grid-cols-[minmax(0,1fr)_clamp(400px,38%,600px)]'
           }
         >
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -548,7 +549,7 @@ export function RepairBoardPage({
           {selectedTicketId === null ? null : (
             <div
               ref={paneRef}
-              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1048px]:static @[1048px]:w-auto @[1048px]:shadow-none"
+              className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
             >
               <TicketPane
                 // A fresh pane per ticket: nothing said about the last one carries over.
@@ -623,7 +624,9 @@ function boardColumns({
       header: tn('repair.desk.col.customer'),
       // Names are encrypted on the device, so only search results (decrypted) sort by name.
       enableSorting: searching,
-      meta: { track: 'minmax(140px, 1.3fr)' },
+      // The name is how the counter finds a servisan, so it gets as much room as the device and a
+      // minimum that holds a typical full name.
+      meta: { track: 'minmax(168px, 2fr)' },
       // With the device column folded away (a narrow window, or the pane open) the device takes the
       // phone number's place under the name.
       cell: ({ row: { original: row }, table }) => (
@@ -657,7 +660,7 @@ function boardColumns({
       id: 'technician',
       accessorFn: (row) => (showCancel ? row.cancelledByName : row.technicianName) ?? '',
       header: tn(showCancel ? 'repair.desk.col.cancelledBy' : 'repair.desk.col.technician'),
-      meta: { track: 'minmax(140px, 0.9fr)', fold: 2 },
+      meta: { track: 'minmax(132px, 1fr)', fold: 2 },
       enableSorting: false,
       cell: ({ row: { original: row } }) =>
         showCancel ? (
@@ -674,7 +677,7 @@ function boardColumns({
       id: 'status',
       accessorFn: (row) => statusLabel(ticketStatus(row)),
       header: tn('repair.desk.col.status'),
-      meta: { track: 'minmax(196px, 1.1fr)' },
+      meta: { track: 'minmax(196px, 1fr)' },
       enableSorting: false,
       cell: ({ row: { original: row } }) => {
         const feeChanged =
@@ -705,7 +708,7 @@ function boardColumns({
       id: 'received',
       accessorFn: (row) => (showCancel ? (row.cancelledAt ?? 0) : row.createdAt),
       header: tn(showCancel ? 'repair.desk.col.cancelledAt' : 'repair.desk.col.received'),
-      meta: { track: '112px', fold: 1 },
+      meta: { track: '104px', fold: 1 },
       // The owners' cancelled view lists by when it was cancelled, a date the query only sorts newest first.
       enableSorting: !showCancel,
       cell: ({ row: { original: row } }) => {

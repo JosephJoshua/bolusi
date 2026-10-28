@@ -22,10 +22,12 @@ const TILES = '[data-testid^="repair.desk.intake.photo."]:not([data-testid$=".al
 async function launch(flags: readonly string[] = FLAGS): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
+  // These screens run over the seeded demo; the live app has its own tests.
+  const env = { ...process.env, BOLUSI_DESKTOP_DEMO: '1' };
   app = await electron.launch(
     INSTALLED === undefined
-      ? { args: [...flags, `${import.meta.dirname}/..`] }
-      : { executablePath: INSTALLED, args: [...flags] },
+      ? { args: [...flags, `${import.meta.dirname}/..`], env }
+      : { executablePath: INSTALLED, args: [...flags], env },
   );
   page = await app.firstWindow();
   await page.getByTestId('repair.desk.board').waitFor();
@@ -61,7 +63,9 @@ for (const [width, height] of [
   [1024, 640],
   [1280, 720],
   [1366, 768],
+  [1536, 864],
   [1920, 1080],
+  [2560, 1440],
 ] as const) {
   test(`the board fits a ${String(width)}×${String(height)} screen, with and without a servisan open`, async () => {
     await page.setViewportSize({ width, height });
@@ -73,6 +77,17 @@ for (const [width, height] of [
         ),
       );
       expect(overflow).toBe(false);
+      // Customer names show in full; only free text such as a complaint may be cut.
+      const cutNames = await table.evaluate((grid) => {
+        const headers = [...grid.querySelectorAll('[role="columnheader"]')];
+        const column = headers.findIndex((header) => header.textContent?.trim() === 'Pelanggan');
+        return [...grid.querySelectorAll('[role="row"]')]
+          .slice(1)
+          .map((row) => row.children[column]?.querySelector('.truncate'))
+          .filter((name) => name != null && name.scrollWidth > name.clientWidth)
+          .map((name) => name!.textContent);
+      });
+      expect(cutNames).toEqual([]);
       await expect(page.getByRole('columnheader', { name: 'Total' })).toBeInViewport({ ratio: 1 });
       // Only the table and the pane scroll; the window never does, so paging stays in reach.
       expect(
@@ -122,21 +137,21 @@ for (const [width, height, sidebar] of [
   });
 }
 
-test('the page gets only the narrow print, update and handoff calls, through the real preload', async () => {
+test('the page gets only the narrow print, update and core calls, through the real preload', async () => {
   const shape = await page.evaluate(() => {
     const bridge = (window as { bolusi?: Record<string, Record<string, unknown>> }).bolusi;
     return {
       keys: bridge === undefined ? null : Object.keys(bridge).sort(),
       printers: bridge?.['printers'] === undefined ? null : Object.keys(bridge['printers']).sort(),
-      handoff: bridge?.['handoff'] === undefined ? null : Object.keys(bridge['handoff']).sort(),
+      core: bridge?.['core'] === undefined ? null : Object.keys(bridge['core']).sort(),
       node: typeof (window as { require?: unknown }).require,
       process: typeof (window as { process?: unknown }).process,
     };
   });
   expect(shape).toEqual({
-    keys: ['handoff', 'printers', 'updates'],
+    keys: ['core', 'printers', 'updates'],
     printers: ['choose', 'list', 'printPage', 'printRaw', 'setPaper', 'settings'],
-    handoff: ['ask', 'onEvent', 'pair', 'unpair', 'withdraw'],
+    core: ['connect'],
     node: 'undefined',
     process: 'undefined',
   });
@@ -190,8 +205,6 @@ test('takes the customer signature at handover, over the handover dialog', async
   await page.getByTestId('repair.desk.ticket.action.handover').click();
   await page.getByTestId('repair.desk.handover').waitFor();
   await page.getByTestId('repair.desk.handover.signature').click();
-  // No touch screen here, so the phone is offered first; this test signs on the PC.
-  await page.getByTestId('desktop.handoff.back').click();
   const pad = page.getByTestId('desktop.signature.pad');
   await expect(page.getByTestId('desktop.signature.use')).toBeDisabled();
   const box = (await pad.boundingBox())!;
@@ -203,116 +216,6 @@ test('takes the customer signature at handover, over the handover dialog', async
   await page.getByTestId('desktop.signature.use').click();
   await expect(page.getByTestId('desktop.signature')).toBeHidden();
   await expect(page.getByTestId('repair.desk.handover')).toBeVisible();
-  await expect(page.getByTestId('repair.desk.handover.signature').locator('img')).toHaveAttribute(
-    'src',
-    /^blob:/,
-  );
-});
-
-/**
- * A phone's browser on the store Wi-Fi, played by a plain window of the same Electron (no extra
- * browser to install on CI). It reaches the page over the PC's LAN address like a phone would.
- */
-async function phoneOpening(
-  url: string,
-  size = { width: 390, height: 844 },
-): Promise<{ phone: Page; done: () => Promise<void> }> {
-  const opening = app.waitForEvent('window');
-  await app.evaluate(
-    ({ BrowserWindow }, { address, size }) => {
-      const window = new BrowserWindow({ ...size, show: true });
-      void window.loadURL(address);
-    },
-    { address: url, size },
-  );
-  const phone = await opening;
-  await phone.setViewportSize(size);
-  await phone.waitForLoadState();
-  return { phone, done: () => phone.close() };
-}
-
-async function jpegOn(phone: Page): Promise<Buffer> {
-  const bytes = await phone.evaluate(async () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 2400;
-    canvas.height = 1800;
-    const context = canvas.getContext('2d')!;
-    context.fillStyle = '#2a6';
-    context.fillRect(0, 0, 2400, 1800);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', 0.9),
-    );
-    return [...new Uint8Array(await blob!.arrayBuffer())];
-  });
-  return Buffer.from(bytes);
-}
-
-test('a PC without a webcam takes every intake photo on one paired phone', async () => {
-  await app.close();
-  await launch(['--no-sandbox']);
-  await page.getByTestId('repair.desk.board.newIntake').click();
-  const tiles = page.locator(TILES);
-  const count = await tiles.count();
-  await page.getByTestId('repair.desk.intake.photo.all').click();
-  // No webcam: straight to the QR, no camera error first.
-  const url = (await page.getByTestId('desktop.handoff.url').textContent())!;
-  expect(url).toMatch(/^http:\/\/[\d.]+:\d+\/h\//);
-
-  const { phone, done } = await phoneOpening(url);
-  try {
-    await expect(page.getByTestId('desktop.handoff.onPhone')).toBeVisible();
-    const jpeg = await jpegOn(phone);
-    // One scan, then each angle shows up on the phone by itself.
-    for (let n = 0; n < count; n += 1) {
-      const title = (await tiles.nth(n).textContent())!;
-      await expect(phone.locator('#photo-title')).toBeVisible();
-      expect(title).toContain(await phone.locator('#photo-title').textContent());
-      await phone.locator('#file').setInputFiles({
-        name: 'shot.jpg',
-        mimeType: 'image/jpeg',
-        buffer: jpeg,
-      });
-      await expect(phone.locator('#preview')).toBeVisible();
-      await phone.locator('#photo-send').click();
-      await expect(tiles.nth(n).locator('img')).toHaveAttribute('src', /^blob:/);
-    }
-    await expect(phone.locator('#waiting')).toBeVisible();
-  } finally {
-    await done();
-  }
-  await expect(page.getByTestId('desktop.handoff')).toBeHidden();
-  await expect(page.getByTestId('repair.desk.intake.photo.all')).toBeHidden();
-});
-
-test('the customer signs on a phone turned on its side', async () => {
-  await page.getByTestId('repair.desk.board.views.pickup').click();
-  await page.getByText('Ester Mandowen').click();
-  await page.getByTestId('repair.desk.ticket.action.handover').click();
-  await page.getByTestId('repair.desk.handover.signature').click();
-  // No touch screen on this PC: the phone is offered straight away.
-  const url = (await page.getByTestId('desktop.handoff.url').textContent())!;
-  const { phone, done } = await phoneOpening(url);
-  try {
-    // Held upright, the page asks to turn the phone.
-    await expect(phone.locator('#rotate')).toBeVisible();
-    await expect(phone.locator('#pad')).toBeHidden();
-    await phone.setViewportSize({ width: 844, height: 390 });
-    const pad = phone.locator('#pad');
-    await expect(pad).toBeVisible();
-    const box = (await pad.boundingBox())!;
-    // Most of the screen is pad.
-    expect(box.width).toBeGreaterThan(560);
-    await phone.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.6);
-    await phone.mouse.down();
-    await phone.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3, { steps: 8 });
-    await phone.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.6, { steps: 8 });
-    await phone.mouse.up();
-    await phone.locator('#sign-send').click();
-    await expect(phone.locator('#note')).toContainText('Terkirim');
-  } finally {
-    await done();
-  }
-  await expect(page.getByTestId('desktop.handoff')).toBeHidden();
   await expect(page.getByTestId('repair.desk.handover.signature').locator('img')).toHaveAttribute(
     'src',
     /^blob:/,

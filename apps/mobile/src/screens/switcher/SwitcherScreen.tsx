@@ -29,7 +29,7 @@ import {
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { SwitcherMode } from '../../navigation/zone.js';
+import type { SwitcherMode } from '@bolusi/device/navigation/zone';
 import { syncChipAccessibilityLabels } from '../sync-status/chip-a11y.js';
 
 import {
@@ -39,7 +39,7 @@ import {
   SWITCHER_SEARCH_MIN,
   type SwitcherState,
   type SwitcherUser,
-} from './model.js';
+} from '@bolusi/device/models/switcher/model';
 import { UserRow } from './UserRow.js';
 
 export interface SwitcherScreenProps {

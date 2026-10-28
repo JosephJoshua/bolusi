@@ -5,29 +5,22 @@
 // answers the same way; one scan covers every step after it. Storing and signing what was taken
 // is the runtime's job.
 import { t } from '@bolusi/i18n';
-import type { CaptureRequest } from '@bolusi/modules/screen-kit';
 import { Button, CameraDialog, SignatureDialog, type DrawnSignature } from '@bolusi/ui-web';
-import { Smartphone } from 'lucide-react';
+import { FileImage, Smartphone } from 'lucide-react';
 import { useEffect, useSyncExternalStore } from 'react';
 
-import type { HandoffBridge } from '../main/bridge.js';
-import { PhoneHandoffDialog, PhoneLinkStore, type HandoffResult } from './phone-handoff.js';
-
-export interface WebcamPhoto {
-  readonly bytes: Uint8Array<ArrayBuffer>;
-  readonly mime: 'image/jpeg';
-}
-
-/** What this PC can take: a webcam photo, or a signature drawn on screen. */
-export interface PcCapture {
-  photo(request?: CaptureRequest): Promise<WebcamPhoto | null>;
-  signature(request?: CaptureRequest): Promise<DrawnSignature | null>;
-}
+import { pickPhotoFile, type PcCapture, type PcPhoto } from './capture.js';
+import {
+  PhoneHandoffDialog,
+  PhoneLinkStore,
+  type HandoffBridge,
+  type HandoffResult,
+} from './phone-handoff.js';
 
 type Pending = (
   | {
       readonly kind: 'photo';
-      readonly resolve: (photo: WebcamPhoto | null) => void;
+      readonly resolve: (photo: PcPhoto | null) => void;
     }
   | {
       readonly kind: 'signature';
@@ -61,23 +54,30 @@ const hasTouch = (): boolean =>
 /** `handoff` is the desktop app's phone handoff; without it (a plain browser) there is none. */
 export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
   const phone = handoff === undefined ? null : new PhoneLinkStore(handoff);
+  const phoneAvailable = handoff?.available().catch(() => false) ?? Promise.resolve(false);
+  /** Offer the phone only once there is a server to pair through. */
+  let offerPhone = false;
   let pending: Pending | null = null;
   const listeners = new Set<() => void>();
   const emit = (): void => {
     for (const listener of listeners) listener();
   };
+  void phoneAvailable.then((available) => {
+    offerPhone = available;
+    emit();
+  });
   const subscribe = (listener: () => void): (() => void) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
   };
 
   /** Ends the open capture with `value`, and closes its dialog. */
-  const settle = (value: WebcamPhoto | DrawnSignature | null): void => {
+  const settle = (value: PcPhoto | DrawnSignature | null): void => {
     const current = pending;
     if (current === null) return;
     pending = null;
     phone?.withdraw();
-    (current.resolve as (value: WebcamPhoto | DrawnSignature | null) => void)(value);
+    (current.resolve as (value: PcPhoto | DrawnSignature | null) => void)(value);
     emit();
   };
   const close = (): void => settle(null);
@@ -110,7 +110,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
 
   /** Straight to the phone when it is already paired, or when this PC cannot do the step. */
   const startVia = async (kind: Pending['kind']): Promise<Pending['via']> => {
-    if (phone === null) return 'pc';
+    if (phone === null || !(await phoneAvailable)) return 'pc';
     if (phone.paired) return 'phone';
     return (kind === 'photo' ? await hasWebcam() : hasTouch()) ? 'pc' : 'phone';
   };
@@ -121,13 +121,16 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     if (pending === current) settle({ bytes, mime: 'image/jpeg' });
   };
+  const keepPicture = (photo: PcPhoto | null): void => {
+    if (pending?.kind === 'photo' && photo !== null) settle(photo);
+  };
   const keepSignature = (signature: DrawnSignature): Promise<void> => {
     if (pending?.kind === 'signature') settle(signature);
     return Promise.resolve();
   };
 
-  const usePhone =
-    phone === null ? undefined : (
+  const usePhone = (): React.JSX.Element | null =>
+    !offerPhone ? null : (
       <Button
         label={t('core.handoff.usePhone')}
         icon={Smartphone}
@@ -136,12 +139,27 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
         data-testid="desktop.usePhone"
       />
     );
+  // No webcam, or Windows refused it: a store phone, or a photo saved on this PC.
+  const photoFallback = (): React.JSX.Element => (
+    <>
+      {usePhone()}
+      <Button
+        label={t('core.camera.fromFile')}
+        icon={FileImage}
+        variant="text"
+        onClick={() => void pickPhotoFile().then(keepPicture, () => undefined)}
+        data-testid="desktop.camera.file"
+      />
+    </>
+  );
 
   const noLink = { state: 'none' } as const;
   const noSubscribe = (): (() => void) => () => undefined;
 
   function Host(): React.JSX.Element {
     const current = useSyncExternalStore(subscribe, () => pending);
+    // Re-render when the phone becomes available.
+    useSyncExternalStore(subscribe, () => offerPhone);
     const link = useSyncExternalStore(phone?.subscribe ?? noSubscribe, () =>
       phone === null ? noLink : phone.snapshot(),
     );
@@ -169,7 +187,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
         />
         <CameraDialog
           open={current?.via === 'pc' && current.kind === 'photo'}
-          fallback={usePhone}
+          fallback={photoFallback()}
           title={current?.title ?? ''}
           onUse={keepPhoto}
           onClose={close}
@@ -190,7 +208,7 @@ export function createCaptureDialogs(handoff?: HandoffBridge): CaptureDialogs {
         />
         <SignatureDialog
           open={current?.via === 'pc' && current.kind === 'signature'}
-          fallback={usePhone}
+          fallback={usePhone() ?? undefined}
           title={current?.title ?? ''}
           onUse={keepSignature}
           onClose={close}

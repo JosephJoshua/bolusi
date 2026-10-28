@@ -40,7 +40,7 @@ import {
   staffChange,
   staffDraftProblem,
   toggleRole,
-} from './model.js';
+} from '@bolusi/device/models/staff/model';
 
 /**
  * The add form, and an active person's page: name, roles, then (for an existing person) the ways

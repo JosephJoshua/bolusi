@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
 import type * as CaptureDialogs from '../src/renderer/capture-dialogs.js';
+import type * as Capture from '../src/renderer/capture.js';
 
 // jsdom has no webcam: a photo asked for is taken at once. The dialogs have their own tests.
 vi.mock('../src/renderer/capture-dialogs.js', async (importOriginal) => {
@@ -26,6 +27,13 @@ vi.mock('../src/renderer/capture-dialogs.js', async (importOriginal) => {
     },
   };
 });
+
+// Nor can it decode a picture: the stand-in photo is kept as it is.
+vi.mock('../src/renderer/capture.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof Capture>()),
+  compressPhoto: (photo: { bytes: Uint8Array<ArrayBuffer> }) =>
+    Promise.resolve({ bytes: photo.bytes, mime: 'image/jpeg' }),
+}));
 
 beforeEach(() => {
   window.localStorage.clear();

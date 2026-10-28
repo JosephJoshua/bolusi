@@ -80,8 +80,12 @@ vi.mock('expo-location', () => ({
 import * as SecureStore from 'expo-secure-store';
 import { sql } from 'kysely';
 
-import { emptyWorkspace, withDraft, type UserWorkspace } from '../src/state/user-workspaces.js';
-import type { AppSessionController } from '../src/bootstrap/session.js';
+import {
+  emptyWorkspace,
+  withDraft,
+  type UserWorkspace,
+} from '@bolusi/device/state/user-workspaces';
+import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
   advanceableClock,
   bootFixture,

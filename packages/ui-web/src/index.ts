@@ -58,6 +58,7 @@ export { Pagination, pageWindow, type PaginationLabels } from './components/Pagi
 export { OverflowText } from './components/OverflowText.js';
 export { QrCode } from './components/QrCode.js';
 export { PatternPad } from './components/PatternPad.js';
+export { PinPad, type PinPadState } from './components/PinPad.js';
 export { SearchField } from './components/SearchField.js';
 export {
   SignatureDialog,

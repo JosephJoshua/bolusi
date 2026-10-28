@@ -125,6 +125,7 @@ const source = {
         failed:
           'Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.',
         saveFailed: 'Fotonya belum bisa disimpan. Coba lagi.',
+        fromFile: 'Pilih file foto',
       },
       signature: {
         hint: 'Minta pelanggan tanda tangan di kotak ini.',
@@ -136,12 +137,11 @@ const source = {
         usePhone: 'Pakai HP',
         useWebcam: 'Pakai webcam',
         useScreen: 'Tanda tangan di layar',
-        scanHint:
-          'Pindai kode ini dengan kamera HP. HP harus pakai Wi-Fi yang sama dengan komputer ini.',
+        scanHint: 'Pindai kode ini dengan kamera HP.',
         qrLabel: 'Kode QR untuk HP',
         orOpen: 'Atau buka di HP:',
         waiting: 'Menunggu HP…',
-        noNetwork: 'Komputer ini belum tersambung ke Wi-Fi toko. Sambungkan dulu, lalu coba lagi.',
+        offline: 'Komputer ini belum tersambung ke internet. Sambungkan dulu, lalu coba lagi.',
         failed: 'HP belum bisa disambungkan. Coba lagi.',
         expired: 'Sambungan ke HP sudah berakhir. Buat kode baru.',
         page: {
@@ -149,8 +149,7 @@ const source = {
           send: 'Kirim ke komputer',
           sending: 'Mengirim…',
           sent: 'Terkirim.',
-          failed:
-            'Belum terkirim. Pastikan HP masih pakai Wi-Fi toko dan kodenya masih tampil di komputer, lalu coba lagi.',
+          failed: 'Belum terkirim. Pastikan HP tersambung ke internet, lalu coba lagi.',
           expired: 'Kode ini sudah kedaluwarsa. Pindai kode baru dari komputer.',
           unreadable: 'Fotonya tidak bisa dibaca. Ambil lagi.',
           waiting: 'HP sudah tersambung. Langkah berikutnya muncul di sini.',
@@ -349,6 +348,23 @@ const source = {
         keepEditing: 'Lanjut ubah',
         makePinHint: 'Belum bisa masuk karena belum punya PIN.',
       },
+      pc: {
+        enrollTitle: 'Daftarkan komputer ini',
+        instruction: 'Cukup sekali di komputer ini. Pastikan ada internet.',
+        deviceNameField: 'Nama komputer',
+        deviceNamePlaceholder: 'Contoh: PC Kasir',
+        nameDeviceFirst: 'Kasih nama komputernya dulu.',
+        emptyUsers: 'Belum ada karyawan di komputer ini. Minta pemilik toko menambahkannya.',
+        lock: 'Kunci layar',
+        opening: 'Membuka data toko…',
+        openFailed: 'Data di komputer ini belum bisa dibuka',
+        openFailedHint:
+          'Tutup aplikasinya, lalu buka lagi. Kalau masih begini, hubungi pemilik toko.',
+        backTo: 'Kembali ke {name}',
+        otherPerson: 'Bukan kamu?',
+        showPassword: 'Lihat kata sandi',
+        hidePassword: 'Sembunyikan kata sandi',
+      },
     },
     sync: {
       chip: { pending: 'Belum terkirim', rejected: 'Ditolak' },
@@ -404,6 +420,10 @@ const source = {
         failedTitle: 'Foto gagal dikirim',
         failedBody: '{count} foto belum bisa dikirim. Fotonya aman di HP ini.',
         retry: 'Kirim ulang foto',
+      },
+      pc: {
+        savedHere: '{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.',
+        offline: 'Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.',
       },
     },
     conflict: {
@@ -618,6 +638,7 @@ export const resources = {
             'The camera isn’t allowed. Allow it in Windows Settings › Privacy › Camera, then try again.',
           failed: 'The camera won’t start. Close other apps using it, then try again.',
           saveFailed: 'Couldn’t save the photo. Try again.',
+          fromFile: 'Choose a photo file',
         },
         signature: {
           hint: 'Ask the customer to sign in this box.',
@@ -629,12 +650,11 @@ export const resources = {
           usePhone: 'Use a phone',
           useWebcam: 'Use the webcam',
           useScreen: 'Sign on screen',
-          scanHint:
-            'Scan this code with a phone’s camera. The phone must be on the same Wi-Fi as this computer.',
+          scanHint: 'Scan this code with a phone’s camera.',
           qrLabel: 'QR code for the phone',
           orOpen: 'Or open on the phone:',
           waiting: 'Waiting for the phone…',
-          noNetwork: 'This computer isn’t on the store Wi-Fi. Connect it, then try again.',
+          offline: 'This computer isn’t online. Connect it, then try again.',
           failed: 'Couldn’t connect a phone. Try again.',
           expired: 'The phone connection has ended. Make a new code.',
           page: {
@@ -642,8 +662,7 @@ export const resources = {
             send: 'Send to computer',
             sending: 'Sending…',
             sent: 'Sent.',
-            failed:
-              'Not sent. Check the phone is still on the store Wi-Fi and the code is still showing on the computer, then try again.',
+            failed: 'Not sent. Check the phone is online, then try again.',
             expired: 'This code has expired. Scan a new one from the computer.',
             unreadable: 'Couldn’t read that photo. Take it again.',
             waiting: 'Phone connected. The next step will show up here.',
@@ -846,6 +865,23 @@ export const resources = {
           keepEditing: 'Keep editing',
           makePinHint: 'Can’t sign in yet without a PIN.',
         },
+        pc: {
+          enrollTitle: 'Register this computer',
+          instruction: 'Only once on this computer. Make sure it is online.',
+          deviceNameField: 'Computer name',
+          deviceNamePlaceholder: 'For example: Counter PC',
+          nameDeviceFirst: 'Name the computer first.',
+          emptyUsers: 'No staff on this computer yet. Ask the store owner to add them.',
+          lock: 'Lock screen',
+          opening: 'Opening the store’s data…',
+          openFailed: 'This computer’s data could not be opened',
+          openFailedHint:
+            'Close the app and open it again. If it still happens, contact the store owner.',
+          backTo: 'Back to {name}',
+          otherPerson: 'Not you?',
+          showPassword: 'Show password',
+          hidePassword: 'Hide password',
+        },
       },
       sync: {
         chip: { pending: 'Not sent yet', rejected: 'Rejected' },
@@ -905,6 +941,11 @@ export const resources = {
           failedBody:
             '{count, plural, one {# photo couldn’t be sent. It’s safe on this phone.} other {# photos couldn’t be sent. They’re safe on this phone.}}',
           retry: 'Send photos again',
+        },
+        pc: {
+          savedHere:
+            '{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}',
+          offline: 'Changes are saved on this computer and sent when it is online.',
         },
       },
       conflict: {

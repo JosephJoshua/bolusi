@@ -3,8 +3,9 @@ import { TooltipProvider } from '@bolusi/ui-web';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { HandoffBridge, HandoffEvent, HandoffOpened } from '../src/main/bridge.js';
+import type { HandoffEvent, HandoffOpened } from '../src/core/api.js';
 import { createCaptureDialogs, type CaptureDialogs } from '../src/renderer/capture-dialogs.js';
+import type { HandoffBridge } from '../src/renderer/phone-handoff.js';
 
 beforeEach(() => {
   initI18n({ locale: 'id' });
@@ -142,6 +143,7 @@ function fakeHandoff(opened: HandoffOpened): HandoffBridge & {
     withdrawn: [] as number[],
     unpaired: [] as string[],
     pairs: 0,
+    available: () => Promise.resolve(true),
     pair: () => {
       fake.pairs += 1;
       return Promise.resolve(opened);
@@ -170,7 +172,7 @@ function fakeHandoff(opened: HandoffOpened): HandoffBridge & {
   return fake as never;
 }
 
-const URL_ON_LAN = `http://192.168.1.23:51234/h/${'k'.repeat(32)}`;
+const PHONE_PAGE = 'https://api.bolusi.test/h/abcdefghijklmnopqrstuvwxyz012345';
 
 function track<T>(promise: Promise<T>): { value: T | 'pending' } {
   const box: { value: T | 'pending' } = { value: 'pending' };
@@ -183,7 +185,7 @@ function track<T>(promise: Promise<T>): { value: T | 'pending' } {
 describe('phone handoff', () => {
   it('goes straight to a phone when the PC has no webcam, and keeps it paired for the next photo', async () => {
     cameras([]);
-    const handoff = fakeHandoff({ ok: true, id: 'h1', urls: [URL_ON_LAN] });
+    const handoff = fakeHandoff({ ok: true, id: 'h1', urls: [PHONE_PAGE] });
     const dialogs = mount(handoff);
     let front!: { value: unknown };
     await act(async () => {
@@ -192,8 +194,8 @@ describe('phone handoff', () => {
     });
     // No camera problem first: the QR straight away.
     const qr = await screen.findByTestId('desktop.handoff.qr');
-    expect(qr.getAttribute('data-value')).toBe(URL_ON_LAN);
-    expect(screen.getByTestId('desktop.handoff.url').textContent).toBe(URL_ON_LAN);
+    expect(qr.getAttribute('data-value')).toBe(PHONE_PAGE);
+    expect(screen.getByTestId('desktop.handoff.url').textContent).toBe(PHONE_PAGE);
     expect(screen.queryByTestId('desktop.camera')).toBeNull();
     await waitFor(() => expect(handoff.asks).toEqual([{ kind: 'photo', title: 'Depan', seq: 1 }]));
 
@@ -231,7 +233,7 @@ describe('phone handoff', () => {
   });
 
   it('sends the signature to the phone on a PC without touch, or back to the pad', async () => {
-    const handoff = fakeHandoff({ ok: true, id: 'h2', urls: [URL_ON_LAN] });
+    const handoff = fakeHandoff({ ok: true, id: 'h2', urls: [PHONE_PAGE] });
     const dialogs = mount(handoff);
     let signature!: { value: unknown };
     await act(async () => {
@@ -264,7 +266,7 @@ describe('phone handoff', () => {
 
   it('offers a new code for another phone, and lets go of the phone when the app closes', async () => {
     cameras([]);
-    const handoff = fakeHandoff({ ok: true, id: 'h3', urls: [URL_ON_LAN] });
+    const handoff = fakeHandoff({ ok: true, id: 'h3', urls: [PHONE_PAGE] });
     const dialogs = mount(handoff);
     act(() => void dialogs.capture.photo({ title: 'Depan' }));
     await screen.findByTestId('desktop.handoff.qr');
@@ -277,23 +279,25 @@ describe('phone handoff', () => {
     expect(handoff.unpaired).toEqual(['h3', 'h3']);
   });
 
-  it('says when the PC is on no network, and closing backs out', async () => {
+  it('says when the PC is offline, and closing backs out', async () => {
     cameras([]);
-    const handoff = fakeHandoff({ ok: false, problem: 'noNetwork' });
+    const handoff = fakeHandoff({ ok: false, problem: 'offline' });
     const dialogs = mount(handoff);
     let photo!: { value: unknown };
     await act(async () => {
       photo = track(dialogs.capture.photo({ title: 'Depan' }));
       await Promise.resolve();
     });
-    expect((await screen.findByTestId('desktop.handoff.problem')).textContent).toContain('Wi-Fi');
+    expect((await screen.findByTestId('desktop.handoff.problem')).textContent).toContain(
+      'internet',
+    );
     fireEvent.keyDown(screen.getByTestId('desktop.handoff'), { key: 'Escape' });
     await waitFor(() => expect(photo.value).toBeNull());
   });
 
   it('uses the webcam when there is one, with the phone a click away', async () => {
     cameras([{ kind: 'videoinput', deviceId: 'cam' }], 'NotReadableError');
-    const handoff = fakeHandoff({ ok: true, id: 'h4', urls: [URL_ON_LAN] });
+    const handoff = fakeHandoff({ ok: true, id: 'h4', urls: [PHONE_PAGE] });
     const dialogs = mount(handoff);
     await act(async () => {
       void dialogs.capture.photo({ title: 'Depan' });

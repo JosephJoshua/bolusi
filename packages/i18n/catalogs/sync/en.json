@@ -58,5 +58,9 @@
     "failedTitle": "Photos didn’t send",
     "failedBody": "{count, plural, one {# photo couldn’t be sent. It’s safe on this phone.} other {# photos couldn’t be sent. They’re safe on this phone.}}",
     "retry": "Send photos again"
+  },
+  "pc": {
+    "savedHere": "{count, plural, one {# change is saved on this computer and will be sent automatically.} other {# changes are saved on this computer and will be sent automatically.}}",
+    "offline": "Changes are saved on this computer and sent when it is online."
   }
 }

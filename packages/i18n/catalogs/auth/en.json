@@ -180,5 +180,21 @@
     "discard": "Discard",
     "keepEditing": "Keep editing",
     "makePinHint": "Can’t sign in yet without a PIN."
+  },
+  "pc": {
+    "enrollTitle": "Register this computer",
+    "instruction": "Only once on this computer. Make sure it is online.",
+    "deviceNameField": "Computer name",
+    "deviceNamePlaceholder": "For example: Counter PC",
+    "nameDeviceFirst": "Name the computer first.",
+    "emptyUsers": "No staff on this computer yet. Ask the store owner to add them.",
+    "lock": "Lock screen",
+    "opening": "Opening the store’s data…",
+    "openFailed": "This computer’s data could not be opened",
+    "openFailedHint": "Close the app and open it again. If it still happens, contact the store owner.",
+    "backTo": "Back to {name}",
+    "otherPerson": "Not you?",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   }
 }

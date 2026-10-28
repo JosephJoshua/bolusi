@@ -15,11 +15,15 @@ import { hasKey, LOCALES, SELECTABLE_LOCALES, type Locale } from '@bolusi/i18n';
 import { REJECTION_CODES } from '@bolusi/schemas';
 import { describe, expect, test } from 'vitest';
 
-import { failureKey } from './enrollment/model.js';
-import { PIN_MESSAGE_KEY } from './pin/model.js';
-import { categoryNameKey, localeNameKey, MUTABLE_PUSH_CATEGORIES } from './settings/model.js';
-import { SWITCHER_EMPTY_HINT_KEY, SWITCHER_LOCK_KEY } from './switcher/model.js';
-import { REASSURANCE_KEY, SYNC_TITLE_KEY } from './sync-status/model.js';
+import { failureKey } from '@bolusi/device/models/enrollment/model';
+import { PIN_MESSAGE_KEY } from '@bolusi/device/models/pin/model';
+import {
+  categoryNameKey,
+  localeNameKey,
+  MUTABLE_PUSH_CATEGORIES,
+} from '@bolusi/device/models/settings/model';
+import { SWITCHER_EMPTY_HINT_KEY, SWITCHER_LOCK_KEY } from '@bolusi/device/models/switcher/model';
+import { REASSURANCE_KEY, SYNC_TITLE_KEY } from '@bolusi/device/models/sync-status/model';
 
 /**
  * The catalogs a v0 user can actually reach. `zh` is scaffolded in `LOCALES` but ships NO catalog

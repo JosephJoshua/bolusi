@@ -74,15 +74,26 @@ Mobile's `EXPO_PUBLIC_API_URL` must reach the server (typically
 ### Counter PC app
 
 The Windows counter app (`apps/desktop`) is Electron with its own React DOM screens
-(`packages/ui-web` and `packages/modules/src/repair/desktop`). It currently runs over
-the in-memory repair demo; the offline core is wired in next.
+(`packages/ui-web` and `packages/modules/src/repair/desktop`). The phone's offline core
+(`packages/device`: SQLite store, op log, sync, media, PIN sessions) runs in an Electron
+utility process (`src/core`, bundled to `dist/main/core.js`); the window reaches it over a
+MessagePort (`src/renderer/core-client.ts`) and never sees a secret. Secrets are sealed
+with Windows DPAPI (`safeStorage`) by the main process. The PC enrols like a phone.
 
 ```sh
 pnpm exec tsc -b
-pnpm --filter @bolusi/desktop start   # build, then open the Electron window
-pnpm --filter @bolusi/desktop dev     # renderer only, in a browser at localhost:5183
+pnpm harness:serve-lane                # a local server with an owner (prints the login and PIN)
+BOLUSI_API_URL=http://127.0.0.1:3000 pnpm --filter @bolusi/desktop start
+BOLUSI_DESKTOP_DEMO=1 pnpm --filter @bolusi/desktop start   # seeded demo, no core
+pnpm --filter @bolusi/desktop dev     # renderer only (demo), in a browser at localhost:5183
 pnpm --filter @bolusi/desktop e2e     # Electron end-to-end tests; use xvfb-run on Linux
 ```
+
+`BOLUSI_API_URL` is read when the app is built (written to `dist/main/build-config.json`)
+and, in a development run, also at start. `BOLUSI_DESKTOP_DATA_DIR` keeps a development
+run's data away from a real install. On Linux without a keyring, development runs seal
+secrets with Electron's fixed key; an installed app never does. The e2e suite starts its
+own server (`e2e/live.spec.ts`) and runs the screen tests over the demo.
 
 Printing: the printer and paper are picked once in the app's Settings and kept in
 `device-settings.json` in the app's data folder. Dot-matrix paper (continuous) goes to
@@ -93,17 +104,16 @@ Windows driver should be "Generic / Text Only" or an Epson ESC/P (v3) driver; a 
 to a file-port printer, builds the installer, installs it and runs the e2e suite on it.
 
 Photos and signatures: the webcam and the on-screen pad when the PC has them, otherwise
-a store phone. The PC serves one small page on the store network (`src/main/handoff.ts`)
-and shows its address as a QR with a secret key; a phone on the same Wi-Fi opens it in
-its own browser once and stays paired, so every later photo and the signature appear on
-it by themselves (signatures on a landscape pad). The port is open only while paired;
-the pairing ends on "Ganti HP", a counter reload, or 30 minutes without a step. Windows
-asks once to let Bolusi through its firewall on private networks; allow it. On Linux,
-e2e needs a private address (10/8, 172.16/12 or 192.168/16) on some interface for the
-handoff tests, e.g. `sudo ip addr add 192.168.77.1/32 dev eth0`.
+a store phone, through the server (`apps/server/src/handoff`). The PC asks the server for
+a pairing and shows the phone page's address (`<BOLUSI_API_URL>/h/<key>`) as a QR; the
+phone opens it once in its own browser and stays paired, so every later photo and the
+signature appear on it by themselves (signatures on a landscape pad). Both need the
+internet at that moment. The pairing lives in the server’s memory and ends on "Ganti HP",
+a server restart, or 30 minutes without a step.
 
-Releasing: bump `version` in `apps/desktop/package.json`, merge, then push a tag
-`desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
+Releasing: set the `BOLUSI_API_URL` repository variable to the production server once
+(the workflow refuses to build without it), bump `version` in `apps/desktop/package.json`,
+merge, then push a tag `desktop-v<version>`. The `desktop-release` workflow builds the unsigned per-user
 installer on Windows and publishes it with `latest.yml` to that GitHub Release.
 Installed apps check the latest release a minute after start and every 4 hours,
 download in the background and install on the next close (or "Pasang sekarang" in

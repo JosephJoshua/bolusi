@@ -82,10 +82,10 @@ import { mulberry32, noblePort, randomBytes as prngBytes } from '@bolusi/test-su
 import type { RootProps } from '../src/bootstrap/Root.js';
 import type { NotificationPermissionPort } from '../src/push/permission.js';
 import type { PushResponse } from '../src/push/router.js';
-import { createAppEnrollment, type EnrollmentPlatform } from '../src/bootstrap/enrollment.js';
+import { createAppEnrollment, type EnrollmentPlatform } from '@bolusi/device/bootstrap/enrollment';
 import { SecureStoreKeyStore } from '../src/ports/keystore.js';
-import type { LoginResult } from '../src/screens/enrollment/model.js';
-import type { AppEnrollment } from '../src/bootstrap/enrollment.js';
+import type { LoginResult } from '@bolusi/device/models/enrollment/model';
+import type { AppEnrollment } from '@bolusi/device/bootstrap/enrollment';
 import {
   bootFixture,
   closeClientDb,

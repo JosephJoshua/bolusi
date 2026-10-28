@@ -9,7 +9,10 @@ import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { fire, render, textsIn } from '../../../../../packages/ui/test/render.js';
 
 import { EnrollmentScreen } from './EnrollmentScreen.js';
-import { initialEnrollmentState, type EnrollmentState } from './model.js';
+import {
+  initialEnrollmentState,
+  type EnrollmentState,
+} from '@bolusi/device/models/enrollment/model';
 
 const STORE_A = { id: 'store-a', name: 'Cabang Sorong' };
 const STORE_B = { id: 'store-b', name: 'Cabang Manokwari' };

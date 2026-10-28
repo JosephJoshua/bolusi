@@ -481,6 +481,7 @@ test('a step that raced a cancel on another device is refused with its reason', 
 }) => {
   await open(page, 'owner');
   await tap(page, 'repair.board.row.t-1');
+  await tap(page, 'repair.ticket.more.open');
   // The cancel lands just as the owner taps: the tap runs on the screen they saw.
   await page.evaluate(() => {
     const hook = (window as unknown as Record<string, { run(n: string, i: unknown): unknown }>)[
