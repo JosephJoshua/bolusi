@@ -9,6 +9,8 @@ import { zMediaRef, type MediaRef } from '@bolusi/schemas';
 
 import {
   MAX_LINE_AMOUNT,
+  MAX_UNCOLLECTED_DAYS,
+  MIN_UNCOLLECTED_DAYS,
   QUOTE_LINE_KINDS,
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_INTAKE_OPTIONS_ENTITY,
@@ -16,6 +18,7 @@ import {
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+  REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
   SLIP_KINDS,
   WORK_PHOTOS_MAX,
@@ -49,6 +52,7 @@ import {
   nextTicketCounterQuery,
   printSettingsQuery,
   standardCancelFee,
+  uncollectedDaysQuery,
   type CancelFees,
   type PrintSettings,
   type TicketDetailRow,
@@ -475,6 +479,38 @@ export async function setCancelFeesHandler(
       }),
     ],
     result: fees,
+  };
+}
+
+export const setUncollectedDaysInput = z
+  .object({ days: z.number().int().min(MIN_UNCOLLECTED_DAYS).max(MAX_UNCOLLECTED_DAYS) })
+  .strict();
+export type SetUncollectedDaysInput = z.input<typeof setUncollectedDaysInput>;
+
+/** Set after how many days this store flags a ready phone nobody collected. Flagging only. */
+export async function setUncollectedDaysHandler(
+  input: z.output<typeof setUncollectedDaysInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ days: number }>> {
+  if (ctx.storeId === null) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'days', issue: 'this device has no store' },
+      'a store-less device cannot set when phones are flagged',
+    );
+  }
+  const current = (await ctx.query(uncollectedDaysQuery, {})).rows[0]!;
+  if (current.days === input.days) throw nothingChanged('days');
+  return {
+    ops: [
+      ctx.op({
+        type: REPAIR_OP.storeUncollectedDaysChanged,
+        entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
+        entityId: ctx.storeId,
+        payload: { days: input.days },
+      }),
+    ],
+    result: { days: input.days },
   };
 }
 

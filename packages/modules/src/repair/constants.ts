@@ -14,6 +14,8 @@ export const REPAIR_STORE_INTAKE_OPTIONS_ENTITY = 'repair_store_intake_options' 
 export const REPAIR_STORE_CANCEL_FEES_ENTITY = 'repair_store_cancel_fees' as const;
 /** One store's slip header and terms: one entity per store, keyed by the store id. */
 export const REPAIR_STORE_PRINT_SETTINGS_ENTITY = 'repair_store_print_settings' as const;
+/** When one store flags a phone nobody collected: one entity per store, keyed by the store id. */
+export const REPAIR_STORE_UNCOLLECTED_ENTITY = 'repair_store_uncollected' as const;
 
 export const REPAIR_TABLE = {
   customers: 'repair_customers',
@@ -25,6 +27,7 @@ export const REPAIR_TABLE = {
   storeIntakeOptions: 'repair_store_intake_options',
   storeCancelFees: 'repair_store_cancel_fees',
   storePrintSettings: 'repair_store_print_settings',
+  storeUncollected: 'repair_store_uncollected',
 } as const;
 
 export const REPAIR_OP = {
@@ -49,6 +52,7 @@ export const REPAIR_OP = {
   downPaymentCorrected: 'repair.down_payment_corrected',
   slipPrinted: 'repair.slip_printed',
   storePrintSettingsChanged: 'repair.store_print_settings_changed',
+  storeUncollectedDaysChanged: 'repair.store_uncollected_days_changed',
 } as const;
 
 /**
@@ -76,6 +80,8 @@ export const REPAIR_PERMISSION = {
   correctDownPayment: 'repair.correct_down_payment',
   /** Store-scoped: edit what the store's slips print at the top and in their terms. */
   setPrintSettings: 'repair.set_print_settings',
+  /** Store-scoped: set after how many days a phone nobody collected is flagged. */
+  setUncollectedDays: 'repair.set_uncollected_days',
 } as const;
 
 /** The slips a servisan prints: the intake receipt, and the handover slip (pickup or cancel). */
@@ -131,6 +137,15 @@ export function workPhotoStage(slot: string): WorkPhotoStage | null {
     ? (stage as WorkPhotoStage)
     : null;
 }
+
+/**
+ * A repaired or cancelled phone still in the store this many days after it was ready is flagged as
+ * not collected (owner decision, 2026-10-28: two months), unless the store set its own number.
+ * Flagging only: nothing happens to the phone.
+ */
+export const DEFAULT_UNCOLLECTED_DAYS = 60;
+export const MIN_UNCOLLECTED_DAYS = 1;
+export const MAX_UNCOLLECTED_DAYS = 365;
 
 /** Handover evidence slots. */
 export const HANDOVER_PHOTO_SLOTS = ['handover', 'signature'] as const;

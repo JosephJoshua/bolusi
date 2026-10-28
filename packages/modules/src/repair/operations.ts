@@ -12,6 +12,7 @@ import {
   intakeOptionsChangedApplier,
   storeIntakeOptionsChangedApplier,
   storeCancelFeesChangedApplier,
+  storeUncollectedDaysChangedApplier,
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
@@ -34,6 +35,8 @@ import {
   CHECKLIST_STATES,
   HANDOVER_PHOTO_SLOTS,
   MAX_LINE_AMOUNT,
+  MAX_UNCOLLECTED_DAYS,
+  MIN_UNCOLLECTED_DAYS,
   QUOTE_LINE_KINDS,
   REPAIR_CONFLICT_KEY,
   REPAIR_CUSTOMER_ENTITY,
@@ -43,6 +46,7 @@ import {
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+  REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
   SLIP_KINDS,
   WORK_PHOTO_STAGES,
@@ -227,6 +231,11 @@ export const ticketCancelledPayload = ticketCancelledPayloadV1
 /** Both of a store's cancellation fees, replacing the previous ones. */
 export const storeCancelFeesChangedPayload = z
   .object({ beforeWork: zFee, afterWork: zFee })
+  .strict();
+
+/** After how many days a ready phone still in the store is flagged, replacing the previous number. */
+export const storeUncollectedDaysChangedPayload = z
+  .object({ days: z.number().int().min(MIN_UNCOLLECTED_DAYS).max(MAX_UNCOLLECTED_DAYS) })
   .strict();
 
 export const quoteChangeProposedPayload = zQuoteLineDraft
@@ -499,5 +508,14 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     rule: ownStoreSettingRule,
     permission: REPAIR_PERMISSION.setPrintSettings,
     entityType: REPAIR_STORE_PRINT_SETTINGS_ENTITY,
+  },
+  [REPAIR_OP.storeUncollectedDaysChanged]: {
+    schemaVersion: 1,
+    payload: storeUncollectedDaysChangedPayload,
+    reversal: 'Reversed by saving the previous number of days again.',
+    apply: storeUncollectedDaysChangedApplier,
+    rule: ownStoreSettingRule,
+    permission: REPAIR_PERMISSION.setUncollectedDays,
+    entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
   },
 };

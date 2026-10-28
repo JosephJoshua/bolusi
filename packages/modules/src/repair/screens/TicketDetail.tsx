@@ -30,6 +30,12 @@ import type { ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HANDOVER_PHOTO_SLOTS, REPAIR_OP } from '../constants.js';
+import {
+  MESSAGE_ACTION_KEY,
+  customerMessageKind,
+  customerMessageUrl,
+  type CustomerMessageKind,
+} from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import {
@@ -54,6 +60,8 @@ import {
   staleStep,
   ticketActions,
   ticketStatus,
+  flagsUncollected,
+  uncollectedDays,
   workPhotos,
   type StaleStep,
   type TicketAction,
@@ -73,7 +81,12 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
-import { useRepairQuery, useRepairRuntime } from '../runtime.js';
+import {
+  useRepairQuery,
+  useRepairRuntime,
+  useStoreDisplayName,
+  useUncollectedLimit,
+} from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
 import {
   AssignStep,
@@ -104,6 +117,8 @@ type Step =
 export interface TicketDetailProps {
   readonly ticketId: string;
   readonly chrome: RepairChrome;
+  /** The clock a phone's wait is counted against (phones not collected). */
+  readonly now: () => number;
   readonly onBack: () => void;
   /** Beside the board on a tablet there is nothing to go back to: the board is already in view. */
   readonly hideBack?: boolean | undefined;
@@ -124,6 +139,7 @@ interface LoadedTicket {
 export function TicketDetail({
   ticketId,
   chrome,
+  now,
   onBack,
   hideBack = false,
   onHandover,
@@ -139,6 +155,9 @@ export function TicketDetail({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [done, setDone] = useState<RepairKey | null>(null);
   const [passcodeShown, setPasscodeShown] = useState(false);
+  const [messageFailed, setMessageFailed] = useState(false);
+  const storeName = useStoreDisplayName();
+  const uncollectedLimit = useUncollectedLimit();
   // An open step holding photos asks before it is dropped (header back, hardware back).
   const stepGuardRef = useRef<DiscardGuard | null>(null);
   const registerStepGuard = useCallback((guard: DiscardGuard | null): void => {
@@ -326,17 +345,34 @@ export function TicketDetail({
       : arrangeTicketActions(actions, ticket, runtime.userId);
   const primary = layout.next ?? undefined;
   const canCancel = actions.includes('cancel');
+  const messageKind = ticket === undefined ? null : customerMessageKind(ticket, can);
+  // Writes the message and opens WhatsApp on the customer's number; the person checks it and sends.
+  const sendMessage = (kind: CustomerMessageKind, row: TicketDetailRow): void => {
+    const url = customerMessageUrl(kind, row, storeName);
+    if (url === null) return;
+    setDone(null);
+    setMessageFailed(false);
+    Linking.openURL(url).catch(() => setMessageFailed(true));
+  };
   const label = (action: TicketAction): string =>
     tn(actionKey(action, ticket?.technicianId ?? null));
 
   // One banner at a time, in the fixed slot so it shows wherever the user has scrolled: a refusal of
-  // what they just did, then a rejected op from sync, then what their last action did.
+  // what they just did (WhatsApp not opening included; dismissing it shows what it covered), then a
+  // rejected op from sync, then what their last action did.
   const banner =
     runner.errorCode !== null ? (
       <ActionErrorBanner
         errorCode={runner.errorCode}
         onDismiss={runner.clearError}
         testID={`${testID}.actionError`}
+      />
+    ) : messageFailed ? (
+      <Banner
+        variant="danger"
+        message={tn('repair.message.openFailed')}
+        onPress={() => setMessageFailed(false)}
+        testID={`${testID}.messageFailed`}
       />
     ) : rejected ? (
       <Banner
@@ -454,10 +490,25 @@ export function TicketDetail({
         />
       ) : null;
     const more = moreActions(row);
+    // The counter and owners call the customer about a phone left too long; technicians need not.
+    const waited =
+      flagsUncollected(can) && uncollectedLimit.status === 'ready'
+        ? uncollectedDays(row, uncollectedLimit.data.days, now())
+        : null;
     return (
       <View testID={`${testID}.content`}>
         <Card testID={`${testID}.summary`}>
-          <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+          <View style={styles.statusRow}>
+            <StatusChip status={ticketStatus(row)} testID={`${testID}.status`} />
+            {waited === null ? null : (
+              <Chip
+                label={tn('repair.board.waited', { days: waited })}
+                icon="warning"
+                tone="warning"
+                testID={`${testID}.uncollected`}
+              />
+            )}
+          </View>
           <Text style={styles.customer} testID={`${testID}.customer`}>
             {row.customerName}
           </Text>
@@ -554,8 +605,18 @@ export function TicketDetail({
           )}
         </View>
 
-        {layout.alternative === null && more.length === 0 ? null : (
+        {layout.alternative === null && more.length === 0 && messageKind === null ? null : (
           <View style={styles.actions}>
+            {messageKind === null ? null : (
+              <Button
+                label={tn(MESSAGE_ACTION_KEY[messageKind])}
+                variant="secondary"
+                size="compact"
+                onPress={() => sendMessage(messageKind, row)}
+                disabled={runner.busy}
+                testID={`${testID}.action.message`}
+              />
+            )}
             {layout.alternative === null ? null : (
               <Button
                 label={label(layout.alternative)}
@@ -898,6 +959,7 @@ const styles = StyleSheet.create({
   facts: { marginTop: space.lg },
   note: { marginTop: space.xs },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.lg },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
   cancel: { marginTop: space['2xl'], alignItems: 'center' },
   line: { paddingVertical: space.sm },
   lineRow: { alignItems: 'flex-start' },

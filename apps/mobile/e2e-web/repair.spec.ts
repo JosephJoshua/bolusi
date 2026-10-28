@@ -678,3 +678,75 @@ test('the owner sets what the slips print at the top', async ({ page }) => {
   await tap(page, 'repair.printSettings.primary');
   await expect(page.getByText('Tampilan nota disimpan.').first()).toBeVisible();
 });
+
+/** Presses the message button and returns the WhatsApp link it opened; nothing reaches wa.me. */
+async function openedWhatsApp(page: Page): Promise<URL> {
+  await page.context().route('https://wa.me/**', (route) => route.fulfill({ body: '' }));
+  const request = page
+    .context()
+    .waitForEvent('request', (r) => r.url().startsWith('https://wa.me/'));
+  await tap(page, 'repair.ticket.action.message');
+  return new URL((await request).url());
+}
+
+test('the counter sees a phone nobody collected and messages the customer on WhatsApp', async ({
+  page,
+}) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.views.uncollected');
+  await expect(page.getByTestId('repair.board.row.t-7.uncollected')).toContainText(
+    '72 hari belum diambil',
+  );
+  // Only phones past the limit: one repaired yesterday is not listed.
+  await expect(page.getByTestId('repair.board.row.t-4')).toHaveCount(0);
+  await shoot(page, 'uncollected-board');
+  await tap(page, 'repair.board.row.t-7');
+  await expect(page.getByTestId('repair.ticket.uncollected')).toBeVisible();
+  await shoot(page, 'uncollected-ticket');
+
+  const url = await openedWhatsApp(page);
+  expect(`${url.host}${url.pathname}`).toBe('wa.me/6281344556677');
+  expect(url.searchParams.get('text')).toContain(
+    'Halo Kak Markus Yikwa, HP Oppo A57 sudah selesai diservis dan bisa diambil',
+  );
+  expect(url.searchParams.get('text')).toContain('No. servisan: K7Q-0006');
+});
+
+test('the counter asks the customer about a price change on WhatsApp', async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-2');
+  await expect(page.getByTestId('repair.ticket.action.message')).toHaveText('Tanya pelanggan');
+  await shoot(page, 'message-price-change');
+  const text = (await openedWhatsApp(page)).searchParams.get('text') ?? '';
+  expect(text).toContain('- Baterai: Rp');
+  expect(text).toContain('Boleh kami lanjutkan, Kak?');
+});
+
+test('a technician gets neither the not-collected list nor the message button', async ({
+  page,
+}) => {
+  await open(page, 'technician');
+  await expect(page.getByTestId('repair.board.views.uncollected')).toHaveCount(0);
+  await tap(page, 'repair.board.views.pickup');
+  await tap(page, 'repair.board.row.t-7');
+  await expect(page.getByTestId('repair.ticket.uncollected')).toHaveCount(0);
+  await expect(page.getByTestId('repair.ticket.action.message')).toHaveCount(0);
+});
+
+test('the store owner sets when a phone counts as not collected', async ({ page }) => {
+  await open(page, 'storeOwner');
+  await tap(page, 'ui.avatarButton');
+  await tap(page, 'shell-open-settings');
+  await shoot(page, 'uncollected-settings-row');
+  await tap(page, 'settings-uncollected-days');
+  await expect(page.getByTestId('repair.uncollected.days.field')).toHaveValue('60');
+  await fill(page, 'repair.uncollected.days', '90');
+  await shoot(page, 'uncollected-settings');
+  await tap(page, 'repair.uncollected.primary');
+  await expect(page.getByText('Batas hari disimpan.').first()).toBeVisible();
+  await tap(page, 'repair.uncollected.back');
+  await tap(page, 'settings-screen.back');
+  // 72 days is no longer past the limit.
+  await tap(page, 'repair.board.views.uncollected');
+  await expect(page.getByTestId('repair.board.row.t-7')).toHaveCount(0);
+});

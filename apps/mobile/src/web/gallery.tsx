@@ -66,6 +66,8 @@ import {
   fakeEnrollmentController,
 } from './seed.js';
 
+const harnessClock = (): number => HARNESS_NOW;
+
 function noop(): void {
   /* harness stub — the shipping wiring lives in Root.tsx / the screens' callers. */
 }
@@ -335,6 +337,8 @@ function AppMode({
       usersError={null}
       pinRow={() => null}
       now={HARNESS_NOW}
+      // The demo's servisan are dated from the same pinned time, so ages on screen stay put.
+      clock={harnessClock}
       session={current}
       notes={notes}
       repair={repair}
