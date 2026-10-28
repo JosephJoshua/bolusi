@@ -41,3 +41,7 @@ secrets.*
 
 # Private Claude-to-Codex transcript and memory archive (may contain secrets)
 .codex/claude-migration/
+
+# interactive QA state and screenshots (scripts/qa-mobile.mjs)
+.qa/
+qa-artifacts/

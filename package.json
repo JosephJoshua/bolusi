@@ -37,7 +37,8 @@
     "dev:mobile": "pnpm --filter @bolusi/mobile dev",
     "dev:web": "pnpm --filter @bolusi/mobile web",
     "secrets:check": "gitleaks git --redact --no-banner",
-    "chaos:extended": "tsc -b && CHAOS_NIGHTLY=1 CHAOS_SCALE=4 vitest run --project harness"
+    "chaos:extended": "tsc -b && CHAOS_NIGHTLY=1 CHAOS_SCALE=4 vitest run --project harness",
+    "qa:mobile": "node scripts/qa-mobile.mjs"
   },
   "devDependencies": {
     "@bolusi/eslint-config": "workspace:*",

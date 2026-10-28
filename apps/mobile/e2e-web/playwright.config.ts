@@ -31,6 +31,8 @@ export default defineConfig({
     headless: true,
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
+    // Cloud agent containers ship a different Chromium build than this pinned Playwright expects.
+    launchOptions: { executablePath: process.env['PLAYWRIGHT_CHROMIUM_PATH'] },
   },
   webServer: {
     command: `node ${path.join(__dirname, 'static-server.mjs')} ${path.join(MOBILE_ROOT, 'dist')}`,

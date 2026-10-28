@@ -13,6 +13,7 @@ work, not completed features.
 ## Start here
 
 - [Development](docs/development.md): install, run, test, and troubleshoot.
+- [QA](docs/qa.md): automated tests and interactive QA with screenshots.
 - [Architecture](docs/architecture.md): implementation map and important limits.
 - [Product direction](docs/product-direction.md): the full vision, milestones,
   later feature ideas and how to refine each scope before implementation.
