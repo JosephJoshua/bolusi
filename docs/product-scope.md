@@ -214,13 +214,22 @@ Agreed with the owner before building printing.
 
 Agreed with the owner after reviewing what the repair release still lacks.
 
-- **Repair types ("Jenis servis"):** an owner-edited list like the intake lists. Each
+- **Repair types ("Jenis servisan"):** an owner-edited list like the intake lists. Each
   type has its warranty days and whether it needs an ownership video (unlocking
   types do). A servisan can have several. Keluhan stays the customer's words. No
   automatic suggestion for now: a fuzzy match is not useful, and a smarter model can
-  come later, trained on the counter's picks, as a suggestion only.
+  come later, trained on the counter's picks, as a suggestion only. The counter
+  picks them at intake; the counter or a technician can change them until the phone
+  goes home or the servisan is cancelled. A servisan keeps the warranty its types
+  had when picked, so editing the list later never changes a promise already made.
+  The warranty counts from pickup (owner decision) and is
+  printed per type on the handover slip.
 - **Warranty claims:** a claim opens a new servisan linked to the old one, at Rp 0.
-  Charging for a claim, or a claim after the warranty ended, needs an owner.
+  Charging for a claim, or a claim after the warranty ended, needs an owner. The
+  counter starts it from the servisan that went home ("Klaim garansi"), with the same
+  customer and phone. A claim always names the first servisan, never another claim,
+  and has no repair types of its own, so its warranty is that servisan's and a claim
+  never extends it. A later price rise on a claim also needs an owner.
 - **Ownership video:** taken by the counter at intake when a chosen type needs it. It
   shows the customer saying on camera that the phone is theirs. Up to 60 seconds at
   720p; it uploads in the background like photos.

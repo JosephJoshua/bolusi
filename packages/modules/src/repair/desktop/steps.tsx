@@ -13,6 +13,7 @@ import {
   Segmented,
   TextArea,
   TextField,
+  ToggleChip,
 } from '@bolusi/ui-web';
 import { Check, Printer, Signature } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -36,14 +37,17 @@ import {
   printableSlips,
   priceKinds,
   signedAmount,
+  toggled,
   type PriceKind,
   type StaleStep,
 } from '../flows.js';
+import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { standardCancelFee, type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { tn, type RepairKey } from '../i18n.js';
-import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY } from '../labels.js';
+import { DOWN_PAYMENT_GAP_KEY, PRICE_KIND_KEY, optionLabel } from '../labels.js';
 import {
   useCancelFees,
+  useIntakeOptionSettings,
   useDownPaymentMethod,
   usePaymentAccounts,
   useRepairQuery,
@@ -350,6 +354,76 @@ export function WaitForPartsDialog({
   );
 }
 
+// ── repair types ──────────────────────────────────────────────────────────────────────────────
+
+/** What is being repaired, changed once the diagnosis shows it (the phone's RepairTypesStep). */
+export function RepairTypesDialog({
+  ticketId,
+  stale,
+  current,
+  onDone,
+  onClose,
+}: StepDialogProps & { readonly current: TicketDetailRow['repairTypes'] }): React.JSX.Element {
+  const runtime = useRepairRuntime();
+  const runner = useActionRunner();
+  const settings = useIntakeOptionSettings();
+  const [picked, setPicked] = useState<readonly string[]>(() => current.map((type) => type.item));
+  const changed =
+    picked.length !== current.length || picked.some((id, i) => id !== current[i]!.item);
+  const submit = (): void => {
+    if (!changed) {
+      onClose();
+      return;
+    }
+    void runner
+      .run(() => runtime.run('setRepairTypes', { ticketId, repairTypes: [...picked] }))
+      .then((result) => {
+        if (result !== undefined) onDone();
+      });
+  };
+  return (
+    <StepDialog
+      title={tn('repair.repairTypes.title')}
+      runner={runner}
+      stale={stale}
+      onRequestClose={onClose}
+      size="sm"
+      testId="repair.desk.repairTypes"
+      footer={
+        <>
+          <CancelButton onClick={onClose} />
+          <Button
+            label={tn('repair.repairTypes.save')}
+            variant="primary"
+            onClick={submit}
+            busy={runner.busy}
+            disabled={stale !== null}
+            data-testid="repair.desk.repairTypes.submit"
+          />
+        </>
+      }
+    >
+      <QueryPanel query={settings} onRetry={() => undefined}>
+        {(data) => (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2" data-testid="repair.desk.repairTypes.chips">
+              {repairTypeChoices(storeIntakeOptions(data).repairTypes, current).map((option) => (
+                <ToggleChip
+                  key={option.id}
+                  label={optionLabel('repairTypes', option)}
+                  selected={picked.includes(option.id)}
+                  onToggle={() => setPicked((ids) => toggled(ids, option.id))}
+                />
+              ))}
+            </div>
+            <p className="text-small text-text-muted">{tn('repair.warranty.fromPickup')}</p>
+          </div>
+        )}
+      </QueryPanel>
+    </StepDialog>
+  );
+}
+
 // ── cancel (owners) ─────────────────────────────────────────────────────────────────────────
 
 /**
@@ -360,9 +434,14 @@ export function CancelDialog({
   ticketId,
   stale,
   workStarted,
+  claimOf,
   onDone,
   onClose,
-}: StepDialogProps & { readonly workStarted: boolean }): React.JSX.Element {
+}: StepDialogProps & {
+  readonly workStarted: boolean;
+  /** The servisan this one is a warranty claim on, if it is one: then it is free to cancel. */
+  readonly claimOf: string | null;
+}): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -371,7 +450,10 @@ export function CancelDialog({
   // Null until the owner chooses to change it; the store's fee applies until then.
   const [fee, setFee] = useState<number | null | undefined>(undefined);
   const changing = fee !== undefined;
-  const standard = fees.status === 'ready' ? standardCancelFee({ workStarted }, fees.data) : null;
+  const standard =
+    fees.status === 'ready'
+      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf }, fees.data)
+      : null;
   const charged = changing ? fee : standard;
   const changed = standard !== null && charged !== null && charged !== standard;
   const complete = charged !== null && reason.trim() !== '';
@@ -461,7 +543,13 @@ export function CancelDialog({
               <p className="mt-1 text-small text-text-muted">
                 {changed
                   ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
-                  : tn(workStarted ? 'repair.cancel.afterWork' : 'repair.cancel.beforeWork')}
+                  : tn(
+                      claimOf !== null
+                        ? 'repair.cancel.claimFree'
+                        : workStarted
+                          ? 'repair.cancel.afterWork'
+                          : 'repair.cancel.beforeWork',
+                    )}
               </p>
             </div>
           )}

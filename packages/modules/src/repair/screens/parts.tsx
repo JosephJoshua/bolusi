@@ -317,6 +317,8 @@ export const repairStyles = StyleSheet.create({
   /** The amount side of a `row`: never shrinks, so "Rp" and its number stay on one line. */
   rowValue: { flexShrink: 0 },
   warning: { ...type.bodySm, color: color.warning },
+  /** Choice chips that wrap, where a whole screen holds them (not a strip in a long form). */
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });
 
 const styles = StyleSheet.create({

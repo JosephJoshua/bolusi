@@ -34,6 +34,7 @@ export const REPAIR_OP = {
   customerRegistered: 'repair.customer_registered',
   customerDetailsCorrected: 'repair.customer_details_corrected',
   ticketOpened: 'repair.ticket_opened',
+  ticketRepairTypesChanged: 'repair.ticket_repair_types_changed',
   ticketClaimed: 'repair.ticket_claimed',
   technicianAssigned: 'repair.technician_assigned',
   workPhotosAdded: 'repair.work_photos_added',
@@ -82,6 +83,8 @@ export const REPAIR_PERMISSION = {
   setPrintSettings: 'repair.set_print_settings',
   /** Store-scoped: set after how many days a phone nobody collected is flagged. */
   setUncollectedDays: 'repair.set_uncollected_days',
+  /** Store-scoped: open a warranty claim after the warranty ended, or charge for one (owners). */
+  warrantyException: 'repair.warranty_exception',
 } as const;
 
 /** The slips a servisan prints: the intake receipt, and the handover slip (pickup or cancel). */
@@ -182,4 +185,5 @@ export const REPAIR_CONFLICT_KEY = {
   technician: 'repair_ticket.technician',
   customer: 'repair_customer.details',
   downPayment: 'repair_ticket.down_payment',
+  repairTypes: 'repair_ticket.repair_types',
 } as const;

@@ -1,6 +1,8 @@
 // The catalog key for each stored repair value. Values are stored as stable keys (a check, a
 // peripheral, a photo slot) so either language reads them; a key this build does not know shows as
 // it was stored. An intake list item the owner named shows that name instead.
+import { formatDate } from '@bolusi/i18n';
+
 import type { ChecklistState, IntakePhotoSlot, QuoteLineKind } from './constants.js';
 
 import { tn, type RepairKey } from './i18n.js';
@@ -14,6 +16,9 @@ import {
   type IntakeOption,
   type IntakeOptionList,
   type Peripheral,
+  type RecordedRepairType,
+  type RepairTypeId,
+  warrantyEnds,
 } from './intake-options.js';
 
 const STATUS_KEY: Readonly<Record<TicketStatus, RepairKey>> = {
@@ -70,6 +75,19 @@ const PERIPHERAL_KEY: Readonly<Record<Peripheral, RepairKey>> = {
   box: 'repair.peripheral.box',
 };
 
+const REPAIR_TYPE_KEY: Readonly<Record<RepairTypeId, RepairKey>> = {
+  screen: 'repair.repairType.screen',
+  battery: 'repair.repairType.battery',
+  chargingPort: 'repair.repairType.chargingPort',
+  camera: 'repair.repairType.camera',
+  audio: 'repair.repairType.audio',
+  buttons: 'repair.repairType.buttons',
+  noPower: 'repair.repairType.noPower',
+  software: 'repair.repairType.software',
+  waterDamage: 'repair.repairType.waterDamage',
+  unlock: 'repair.repairType.unlock',
+};
+
 export const statusLabel = (status: TicketStatus): string => tn(STATUS_KEY[status]);
 
 /** "Hari ini", "Besok", "3 hari", "Belum tahu": a ready-by choice reads as its number of days. */
@@ -87,6 +105,7 @@ const BUILT_IN_KEYS: Readonly<Record<IntakeOptionList, Readonly<Record<string, R
   photoAngles: INTAKE_SLOT_KEY,
   brands: {},
   readyBy: {},
+  repairTypes: REPAIR_TYPE_KEY,
 };
 
 /** The app's own name for a built-in intake list item, in the current language, or null. */
@@ -103,6 +122,35 @@ export function builtInLabel(list: IntakeOptionList, id: string): string | null 
 export function optionLabel(list: IntakeOptionList, option: IntakeOption): string {
   if (list === 'readyBy') return readyLabel(option.id);
   return option.label ?? builtInLabel(list, option.id) ?? option.id;
+}
+
+/** A recorded repair type's name, as the servisan showed it. */
+export function repairTypeLabel(type: Pick<RecordedRepairType, 'item' | 'label'>): string {
+  return optionLabel('repairTypes', { id: type.item, label: type.label });
+}
+
+/**
+ * One repair type's warranty as the counter tells the customer: its length while the phone is in
+ * the store, its last day once the phone went home. "30 hari", "s/d 27/11/2026", "tanpa garansi".
+ */
+export function warrantyTerms(type: RecordedRepairType, returnedAt: number | null): string {
+  const ends = warrantyEnds(type, returnedAt);
+  return type.warrantyDays === 0
+    ? tn('repair.warranty.none')
+    : ends === null
+      ? tn('repair.warranty.days', { count: type.warrantyDays })
+      : tn('repair.warranty.until', { date: formatDate(ends) });
+}
+
+/**
+ * A type and its warranty on one line, as the ticket lists them: "Ganti layar · garansi 30 hari",
+ * "Ganti layar · garansi s/d 27/11/2026", "Kena air · tanpa garansi".
+ */
+export function warrantyLine(type: RecordedRepairType, returnedAt: number | null): string {
+  const name = repairTypeLabel(type);
+  return type.warrantyDays === 0
+    ? tn('repair.warranty.lineNone', { name })
+    : tn('repair.warranty.line', { name, terms: warrantyTerms(type, returnedAt) });
 }
 
 /** What an open step says once the ticket changed under it and the step can no longer finish. */

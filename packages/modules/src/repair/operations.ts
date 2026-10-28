@@ -27,6 +27,7 @@ import {
   ticketCancelledApplier,
   ticketClaimedApplier,
   ticketOpenedApplier,
+  ticketRepairTypesChangedApplier,
   workPausedApplier,
   workPhotosAddedApplier,
   workStartedApplier,
@@ -52,7 +53,12 @@ import {
   WORK_PHOTO_STAGES,
   WORK_PHOTOS_MAX,
 } from './constants.js';
-import { INTAKE_OPTION_LISTS, MAX_LABEL, MAX_OPTIONS } from './intake-options.js';
+import {
+  INTAKE_OPTION_LISTS,
+  MAX_LABEL,
+  MAX_OPTIONS,
+  MAX_WARRANTY_DAYS,
+} from './intake-options.js';
 import {
   customerDetailsCorrectedRule,
   customerRegisteredRule,
@@ -70,6 +76,7 @@ import {
   ticketCancelledRule,
   ticketClaimedRule,
   ticketOpenedRule,
+  ticketRepairTypesChangedRule,
   workPausedRule,
   workPhotosAddedRule,
   workStartedRule,
@@ -115,6 +122,26 @@ export const zChecklistItemV2 = z
   .strict();
 
 export const zRecordedOption = z.object({ item: zOptionId, label: zRecordedLabel }).strict();
+
+const zWarrantyDays = z.number().int().min(0).max(MAX_WARRANTY_DAYS);
+
+/** The most repair types one servisan records. */
+export const MAX_TICKET_REPAIR_TYPES = 10;
+
+/**
+ * A repair type as a servisan recorded it: its name and its terms then, so a later change to the
+ * owner's list never changes the warranty a customer was given.
+ */
+export const zRecordedRepairType = zRecordedOption
+  .extend({ warrantyDays: zWarrantyDays, needsVideo: z.boolean() })
+  .strict();
+
+export const zRecordedRepairTypes = z
+  .array(zRecordedRepairType)
+  .max(MAX_TICKET_REPAIR_TYPES)
+  .refine((types) => new Set(types.map((type) => type.item)).size === types.length, {
+    message: 'a repair type is listed twice',
+  });
 
 export const zIntakePhoto = z
   .object({ slot: zOptionId, label: zRecordedLabel, ref: zMediaRef })
@@ -185,7 +212,7 @@ export const ticketOpenedPayloadV1 = z
  * `repair.ticket_opened` v2: checks, accessories and photos carry the label the counter saw, and
  * the photos are whichever angles the store asked for, in order.
  */
-export const ticketOpenedPayload = ticketOpenedPayloadV1
+export const ticketOpenedPayloadV2 = ticketOpenedPayloadV1
   .extend({
     checklist: z.array(zChecklistItemV2).max(100),
     peripherals: z.array(zRecordedOption).max(50),
@@ -193,15 +220,56 @@ export const ticketOpenedPayload = ticketOpenedPayloadV1
   })
   .strict();
 
-/** The whole of one franchise list, replacing the previous one (last save wins). */
-export const intakeOptionsChangedPayload = z
+/**
+ * `repair.ticket_opened` v3: the repair types picked at intake, with their terms (may be none), and
+ * the servisan this one is a warranty claim on (null for an ordinary one).
+ */
+export const ticketOpenedPayload = ticketOpenedPayloadV2
+  .extend({ repairTypes: zRecordedRepairTypes, claimOf: zUuid.nullable() })
+  .strict();
+
+/** The repair types of an open servisan, replacing the previous ones (after the diagnosis). */
+export const ticketRepairTypesChangedPayload = z
+  .object({ repairTypes: zRecordedRepairTypes })
+  .strict();
+
+/** The lists before repair types joined them (v1 of both list ops). */
+const V1_LISTS = ['checks', 'accessories', 'photoAngles', 'brands', 'readyBy'] as const;
+
+export const intakeOptionsChangedPayloadV1 = z
   .object({
-    list: z.enum(INTAKE_OPTION_LISTS),
+    list: z.enum(V1_LISTS),
     items: z.array(z.object({ id: zOptionId, label: zRecordedLabel }).strict()).max(MAX_OPTIONS),
   })
   .strict();
 
-/** The whole set of one list's items a store hides, replacing the previous set. */
+/**
+ * The whole of one franchise list, replacing the previous one (last save wins). v2: repair types,
+ * whose items carry their warranty and whether they need an ownership video.
+ */
+export const intakeOptionsChangedPayload = z
+  .object({
+    list: z.enum(INTAKE_OPTION_LISTS),
+    items: z
+      .array(
+        z
+          .object({
+            id: zOptionId,
+            label: zRecordedLabel,
+            warrantyDays: zWarrantyDays.optional(),
+            needsVideo: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_OPTIONS),
+  })
+  .strict();
+
+export const storeIntakeOptionsChangedPayloadV1 = z
+  .object({ list: z.enum(V1_LISTS), hidden: z.array(zOptionId).max(MAX_OPTIONS) })
+  .strict();
+
+/** The whole set of one list's items a store hides, replacing the previous set. v2: repair types. */
 export const storeIntakeOptionsChangedPayload = z
   .object({
     list: z.enum(INTAKE_OPTION_LISTS),
@@ -327,9 +395,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
   [REPAIR_OP.ticketOpened]: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     payload: ticketOpenedPayload,
-    payloadByVersion: { 1: ticketOpenedPayloadV1 },
+    payloadByVersion: { 1: ticketOpenedPayloadV1, 2: ticketOpenedPayloadV2 },
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
@@ -435,6 +503,17 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     permission: REPAIR_PERMISSION.quoteChange,
     entityType: REPAIR_TICKET_ENTITY,
   },
+  [REPAIR_OP.ticketRepairTypesChanged]: {
+    schemaVersion: 1,
+    payload: ticketRepairTypesChangedPayload,
+    reversal: 'Reversed by another repair.ticket_repair_types_changed with the previous types.',
+    apply: ticketRepairTypesChangedApplier,
+    rule: ticketRepairTypesChangedRule,
+    // The counter and the technician both set it; the rule checks for either.
+    permission: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.repairTypes, severity: 'minor' },
+  },
   [REPAIR_OP.deviceReturned]: {
     schemaVersion: 2,
     payload: deviceReturnedPayload,
@@ -447,8 +526,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: intakeOptionsChangedPayload,
+    payloadByVersion: { 1: intakeOptionsChangedPayloadV1 },
     reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
     apply: intakeOptionsChangedApplier,
     rule: intakeOptionsChangedRule,
@@ -460,8 +540,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     scope: 'tenant',
   },
   [REPAIR_OP.storeIntakeOptionsChanged]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: storeIntakeOptionsChangedPayload,
+    payloadByVersion: { 1: storeIntakeOptionsChangedPayloadV1 },
     reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
     apply: storeIntakeOptionsChangedApplier,
     rule: ownStoreSettingRule,

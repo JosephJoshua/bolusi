@@ -58,6 +58,7 @@ const LIST_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
   photoAngles: 'repair.options.list.photoAngles',
   brands: 'repair.options.list.brands',
   readyBy: 'repair.options.list.readyBy',
+  repairTypes: 'repair.options.list.repairTypes',
 };
 
 const HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
@@ -66,6 +67,7 @@ const HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
   photoAngles: 'repair.options.hint.photoAngles',
   brands: 'repair.options.hint.brands',
   readyBy: 'repair.options.hint.readyBy',
+  repairTypes: 'repair.options.hint.repairTypes',
 };
 
 const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
@@ -73,6 +75,7 @@ const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
   labelTooLong: 'repair.options.problem.labelTooLong',
   duplicate: 'repair.options.problem.duplicate',
   badReadyBy: 'repair.options.problem.badReadyBy',
+  badWarranty: 'repair.options.problem.badWarranty',
   empty: 'repair.options.problem.empty',
   tooMany: 'repair.options.problem.tooMany',
   hidesAll: 'repair.options.problem.hidesAll',
@@ -397,7 +400,11 @@ function OptionRow({
             value={row.text}
             onChangeText={(text) => onChange({ text })}
             keyboardType={list === 'readyBy' ? 'number-pad' : 'default'}
-            errorMessage={problem === undefined ? undefined : tn(PROBLEM_KEY[problem])}
+            errorMessage={
+              problem === undefined || problem === 'badWarranty'
+                ? undefined
+                : tn(PROBLEM_KEY[problem])
+            }
             autoFocus={row.id === null}
             testID={`${testID}.name`}
           />
@@ -411,6 +418,28 @@ function OptionRow({
             <Text style={styles.name}>{name}</Text>
           </Pressable>
         )}
+        {list === 'repairTypes' ? (
+          <View style={styles.terms}>
+            <TextInput
+              label={tn('repair.options.warrantyDays')}
+              value={row.warranty}
+              onChangeText={(warranty) => onChange({ warranty: warranty.replace(/\D/g, '') })}
+              keyboardType="number-pad"
+              maxLength={3}
+              errorMessage={
+                problem === 'badWarranty' ? tn('repair.options.problem.badWarranty') : undefined
+              }
+              testID={`${testID}.warranty`}
+            />
+            <SwitchRow
+              label={tn('repair.options.needsVideo')}
+              caption={tn('repair.options.needsVideoCaption')}
+              value={row.needsVideo}
+              onValueChange={(needsVideo) => onChange({ needsVideo })}
+              testID={`${testID}.needsVideo`}
+            />
+          </View>
+        ) : null}
         {hide ? (
           row.id === null ? (
             <Text style={[repairStyles.caption, styles.notSaved]}>
@@ -446,11 +475,16 @@ function OptionRow({
     );
   }
 
+  const terms = list === 'repairTypes' ? termsSummary(row) : null;
   const caption =
     problem !== undefined ? (
       <Text style={styles.rowProblem}>{tn(PROBLEM_KEY[problem])}</Text>
-    ) : row.hidden ? (
-      <Text style={repairStyles.caption}>{tn('repair.options.hiddenHere')}</Text>
+    ) : row.hidden || terms !== null ? (
+      <Text style={repairStyles.caption}>
+        {[terms, row.hidden ? tn('repair.options.hiddenHere') : null]
+          .filter((part) => part !== null)
+          .join(' · ')}
+      </Text>
     ) : null;
 
   if (!manage) {
@@ -478,7 +512,7 @@ function OptionRow({
         testID={testID}
         accessibilityRole="button"
         accessibilityState={{ expanded: false }}
-        accessibilityLabel={[name, row.hidden ? tn('repair.options.hiddenHere') : '']
+        accessibilityLabel={[name, terms ?? '', row.hidden ? tn('repair.options.hiddenHere') : '']
           .filter((s) => s !== '')
           .join(', ')}
         accessibilityHint={t('core.action.edit')}
@@ -496,6 +530,16 @@ function OptionRow({
       {handle}
     </View>
   );
+}
+
+/** "Garansi 30 hari · Perlu video": a repair type's terms under its name. */
+function termsSummary(row: EditorRow): string {
+  const days = Number(row.warranty);
+  const warranty =
+    row.warranty.trim() === '' || days === 0
+      ? tn('repair.options.noWarranty')
+      : tn('repair.options.warranty', { count: days });
+  return row.needsVideo ? `${warranty} · ${tn('repair.options.videoShort')}` : warranty;
 }
 
 const styles = StyleSheet.create({
@@ -538,6 +582,7 @@ const styles = StyleSheet.create({
   rowProblem: { ...type.caption, color: color.danger, marginTop: space.xs },
   editLabel: { ...type.bodySm, fontWeight: '600', color: color.primary },
   useHere: { marginTop: space.sm },
+  terms: { marginTop: space.md, gap: space.sm },
   notSaved: { marginTop: space.md },
   actions: {
     flexDirection: 'row',

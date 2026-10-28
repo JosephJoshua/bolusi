@@ -24,12 +24,16 @@ import { catalogModelSearch } from './model-picker.js';
 import {
   DEFAULT_INTAKE_OPTIONS,
   NOTHING_HIDDEN,
+  recordRepairTypes,
+  storeIntakeOptions,
+  type IntakeOption,
   type IntakeOptionSettings,
 } from './intake-options.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
+import { standardCancelFee } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
 import { amountOwed } from './flows.js';
-import { REPAIR_REFUSALS } from './rules.js';
+import { REPAIR_REFUSALS, claimProblem } from './rules.js';
 import {
   demoFindDeviceModel,
   demoModelPhoto,
@@ -97,6 +101,7 @@ export const DEMO_REPAIR_ROLES = {
       P.correctDownPayment,
       P.setPrintSettings,
       P.setUncollectedDays,
+      P.warrantyException,
       // Categories are the business owner's alone.
       ...Object.values(I).filter((id) => id !== I.manageCategories),
       ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
@@ -216,6 +221,8 @@ function ticket(spec: {
   returnedBy?: string;
   /** Hours since it was marked repaired; a cancel is ready to collect when it was cancelled. */
   readyHoursAgo?: number;
+  /** Repair type ids from the default list. */
+  repairTypes?: readonly string[];
 }): TicketDetailRow {
   const createdAt = HARNESS_NOW - spec.hoursAgo * HOUR;
   return {
@@ -263,6 +270,10 @@ function ticket(spec: {
       { item: 'charger', label: null },
       { item: 'case', label: null },
     ],
+    repairTypes: demoRepairTypes(spec.repairTypes ?? []),
+    claimOfTicketId: null,
+    claimOf: null,
+    claims: [],
     intakePhotos: INTAKE_SLOTS.map((slot) => ({ slot, label: null })),
     outcomeNote: spec.cancel?.reason ?? null,
     createdBy: 'u-siti',
@@ -287,6 +298,11 @@ function ticket(spec: {
   };
 }
 
+function demoRepairTypes(ids: readonly string[]): TicketDetailRow['repairTypes'] {
+  const recorded = recordRepairTypes(ids, DEFAULT_INTAKE_OPTIONS.repairTypes);
+  return 'types' in recorded ? recorded.types : [];
+}
+
 function seedTickets(): TicketDetailRow[] {
   return [
     ticket({
@@ -301,6 +317,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'received',
       technicianId: null,
       lines: [line('part', 'LCD A14 original', 650_000), line('labour', 'Pasang LCD', 100_000)],
+      repairTypes: ['screen'],
       hoursAgo: 2,
     }),
     ticket({
@@ -323,6 +340,7 @@ function seedTickets(): TicketDetailRow[] {
           createdBy: 'u-budi',
         }),
       ],
+      repairTypes: ['chargingPort', 'battery'],
       hoursAgo: 20,
       extraPhotos: [photoRow('before:m1'), photoRow('before:m2')],
       downPayment: 50_000,
@@ -339,6 +357,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'waiting_for_parts',
       technicianId: 'u-yosua',
       lines: [line('labour', 'Cek mesin', 50_000)],
+      repairTypes: ['noPower', 'waterDamage'],
       hoursAgo: 48,
       extraPhotos: [photoRow('before:m3')],
     }),
@@ -354,6 +373,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'repaired',
       technicianId: 'u-budi',
       lines: [line('part', 'Speaker Y21', 75_000), line('labour', 'Pasang speaker', 40_000)],
+      repairTypes: ['audio'],
       hoursAgo: 70,
       extraPhotos: [photoRow('before:m4'), photoRow('after:m5')],
       downPayment: 100_000,
@@ -370,6 +390,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'cancelled',
       technicianId: 'u-budi',
       lines: [line('part', 'Kamera C55', 220_000), line('labour', 'Pasang kamera', 50_000)],
+      repairTypes: ['camera'],
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
       downPayment: 100_000,
@@ -393,6 +414,7 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'cancelled',
       technicianId: 'u-budi',
       lines: [line('labour', 'Servis tombol power', 60_000)],
+      repairTypes: ['buttons'],
       hoursAgo: 120,
       extraPhotos: [photoRow('before:m7')],
       location: 'returned',
@@ -418,9 +440,29 @@ function seedTickets(): TicketDetailRow[] {
       outcome: 'repaired',
       technicianId: 'u-budi',
       lines: [line('part', 'Baterai A57', 180_000), line('labour', 'Ganti baterai', 50_000)],
+      repairTypes: ['battery'],
       hoursAgo: 75 * 24,
       readyHoursAgo: 72 * 24,
       extraPhotos: [photoRow('before:m8'), photoRow('after:m9')],
+    }),
+    // Went home with a new screen about ten days ago: still under warranty, so it can be claimed.
+    ticket({
+      id: 't-8',
+      number: 'K7Q-0005',
+      customer: 'Yakob Tabuni',
+      phone: '0812-7788-9900',
+      brand: 'Xiaomi',
+      model: 'Redmi Note 12',
+      color: 'Biru',
+      complaint: 'Layar pecah',
+      outcome: 'repaired',
+      technicianId: 'u-budi',
+      lines: [line('part', 'LCD Redmi Note 12', 550_000), line('labour', 'Pasang LCD', 75_000)],
+      repairTypes: ['screen'],
+      hoursAgo: 300,
+      extraPhotos: [photoRow('before:m10'), photoRow('after:m11')],
+      location: 'returned',
+      returnedBy: 'u-siti',
     }),
   ].map(withTotals);
 }
@@ -674,11 +716,44 @@ export function demoRepairRuntime(
     for (const listener of listeners) listener();
   };
 
+  // Recorded as the command does: the store's list now, a kept type keeps its terms.
+  const recordedTypes = (
+    ids: unknown,
+    kept: TicketDetailRow['repairTypes'],
+  ): TicketDetailRow['repairTypes'] => {
+    const recorded = recordRepairTypes(
+      (ids as string[] | undefined) ?? [],
+      storeIntakeOptions(options).repairTypes,
+      kept,
+    );
+    return 'types' in recorded ? recorded.types : kept;
+  };
+
   const find = (ticketId: string): TicketDetailRow => {
     const found = tickets.find((t) => t.id === ticketId);
     if (found === undefined)
       throw Object.assign(new Error('not found'), { code: 'ENTITY_NOT_FOUND' });
     return found;
+  };
+  // The links between a claim and its servisan, read as the device's query joins them.
+  const withClaims = (t: TicketDetailRow): TicketDetailRow => {
+    const claimed = tickets.find((other) => other.id === t.claimOfTicketId);
+    return {
+      ...t,
+      claimOf:
+        claimed === undefined
+          ? null
+          : {
+              id: claimed.id,
+              ticketNumber: claimed.ticketNumber,
+              repairTypes: claimed.repairTypes,
+              returnedAt: claimed.returnedAt,
+            },
+      claims: tickets
+        .filter((other) => other.claimOfTicketId === t.id)
+        .map(({ id, ticketNumber }) => ({ id, ticketNumber }))
+        .reverse(),
+    };
   };
   const update = (ticketId: string, kind: string, patch: Partial<TicketDetailRow>) => {
     // The one rule every step but the handover shares (repair rules.ts): a change that raced a
@@ -868,7 +943,7 @@ export function demoRepairRuntime(
         }),
       );
     },
-    getTicket: (input) => page([find(String(input['ticketId']))]),
+    getTicket: (input) => page([withClaims(find(String(input['ticketId'])))]),
     intakeOptionSettings: () => page([options]),
     cancelFees: () => page([cancelFees]),
     printSettings: () => page([printSettings]),
@@ -895,6 +970,25 @@ export function demoRepairRuntime(
         passcode?: string | null;
       };
       const photos = input['photos'] as { slot: string; label: string | null; ref: MediaRef }[];
+      const claimOf = typeof input['claimOf'] === 'string' ? input['claimOf'] : null;
+      const lines = input['quoteLines'] as {
+        kind: QuoteLineRow['kind'];
+        description: string;
+        amount: number;
+      }[];
+      if (claimOf !== null) {
+        // As the claim rule judges it.
+        const problem = claimProblem(find(claimOf), {
+          customerId: customer.customerId ?? '',
+          imei: (input['device'] as { imei?: string | null }).imei ?? null,
+          repairTypes: (input['repairTypes'] as string[] | undefined) ?? [],
+          total: lines.reduce((sum, l) => sum + l.amount, 0),
+          at: HARNESS_NOW,
+        });
+        if (problem !== null && !(problem.owner && permitted.has(P.warrantyException))) {
+          throw REPAIR_REFUSALS.refuse(problem.reason);
+        }
+      }
       const created = withTotals({
         ...seedTickets()[0]!,
         id,
@@ -923,18 +1017,16 @@ export function demoRepairRuntime(
         intakeNotes: String(input['intakeNotes'] ?? ''),
         checklist: input['checklist'] as TicketDetailRow['checklist'],
         peripherals: input['peripherals'] as TicketDetailRow['peripherals'],
+        repairTypes: recordedTypes(input['repairTypes'], []),
+        claimOfTicketId: claimOf,
         intakePhotos: photos.map(({ slot, label }) => ({ slot, label })),
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
         createdAt: HARNESS_NOW,
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
         slipPrints: { intake: 0, handover: 0 },
-        quoteLines: (
-          input['quoteLines'] as {
-            kind: QuoteLineRow['kind'];
-            description: string;
-            amount: number;
-          }[]
-        ).map((l) => line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW })),
+        quoteLines: lines.map((l) =>
+          line(l.kind, l.description, l.amount, { createdAt: HARNESS_NOW }),
+        ),
         photos: photos.map(({ slot, ref }) => photoRow(slot, ref)),
       });
       tickets = [created, ...tickets];
@@ -982,7 +1074,7 @@ export function demoRepairRuntime(
         outcome: 'cancelled',
         outcomeNote: String(input['reason']),
         cancelFee: Number(input['fee']),
-        cancelStandardFee: t.workStarted ? cancelFees.afterWork : cancelFees.beforeWork,
+        cancelStandardFee: standardCancelFee(t, cancelFees),
         cancelledBy: actor.userId,
         cancelledByName: actor.name,
         cancelledAt: HARNESS_NOW,
@@ -1004,20 +1096,31 @@ export function demoRepairRuntime(
     },
     proposeQuoteChange: (input) => priceLine(input, 'proposed', 'repair.quote_change_proposed'),
     // Not agreed yet: the change waits for the customer, like a proposal.
-    changeQuote: (input) =>
-      input['customerAgreed'] === true
+    changeQuote: (input) => {
+      chargeOnClaim(String(input['ticketId']), Number(input['amount']));
+      return input['customerAgreed'] === true
         ? priceLine(input, 'applied', 'repair.quote_changed')
-        : priceLine({ ...input, customerAgreed: undefined }, 'proposed', 'repair.quote_changed'),
-    applyProposal: (input) => decide(input, 'applied', 'repair.quote_changed'),
+        : priceLine({ ...input, customerAgreed: undefined }, 'proposed', 'repair.quote_changed');
+    },
+    applyProposal: (input) => {
+      const t = find(String(input['ticketId']));
+      chargeOnClaim(t.id, t.quoteLines.find((l) => l.id === input['lineId'])?.amount ?? 0);
+      return decide(input, 'applied', 'repair.quote_changed');
+    },
     declineProposal: (input) => decide(input, 'declined', 'repair.quote_proposal_declined'),
+    setRepairTypes: (input) => {
+      const t = find(String(input['ticketId']));
+      if (t.claimOfTicketId !== null) throw REPAIR_REFUSALS.refuse('claimWithTypes');
+      return update(t.id, 'repair.ticket_repair_types_changed', {
+        repairTypes: recordedTypes(input['repairTypes'], t.repairTypes),
+      });
+    },
     changeIntakeOptions: (input) => {
       const list = input['list'] as keyof IntakeOptionSettings['lists'];
-      const items = (input['items'] as { id: string | null; label: string | null }[]).map(
-        (item) => {
-          optionIds += 1;
-          return { id: item.id ?? `opt-${String(optionIds)}`, label: item.label };
-        },
-      );
+      const items = (input['items'] as (IntakeOption & { id: string | null })[]).map((item) => {
+        optionIds += 1;
+        return { ...item, id: item.id ?? `opt-${String(optionIds)}` };
+      });
       options = { ...options, lists: { ...options.lists, [list]: items } };
       notify();
       return { list };
@@ -1084,6 +1187,13 @@ export function demoRepairRuntime(
       });
     },
   };
+
+  /** A price rise on a warranty claim is the owner's, as the quote rule has it. */
+  function chargeOnClaim(ticketId: string, amount: number): void {
+    if (find(ticketId).claimOfTicketId === null || amount <= 0) return;
+    if (permitted.has(P.warrantyException)) return;
+    throw REPAIR_REFUSALS.refuse('claimChargeOwnerOnly');
+  }
 
   function priceLine(input: Input, status: QuoteLineRow['status'], kind: string) {
     const t = find(String(input['ticketId']));

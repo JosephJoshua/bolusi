@@ -39,6 +39,7 @@ import {
   uncollectedBefore,
   uncollectedDays,
   type BoardView,
+  type IntakeDraft,
   type RepairAbilities,
   type TicketStatus,
 } from '../flows.js';
@@ -85,6 +86,8 @@ export interface RepairBoardPageProps {
   readonly selectedTicketId: string | null;
   readonly onSelectTicket: (ticketId: string | null) => void;
   readonly onNewIntake: () => void;
+  /** Starts a warranty claim's intake from the open servisan. */
+  readonly onStartClaim?: ((draft: IntakeDraft) => void) | undefined;
   readonly onOpenSyncStatus?: (() => void) | undefined;
   /** The queue, search, filters, sort and page, owned by the app so they survive a trip to the
    * intake page. Null starts on the person's default queue. */
@@ -150,6 +153,7 @@ export function RepairBoardPage({
   selectedTicketId,
   onSelectTicket,
   onNewIntake,
+  onStartClaim,
   onOpenSyncStatus,
   filters,
   onFiltersChange,
@@ -585,6 +589,8 @@ export function RepairBoardPage({
                 now={clock}
                 onClose={closePane}
                 onOpenSyncStatus={onOpenSyncStatus}
+                onStartClaim={onStartClaim}
+                onOpenTicket={onSelectTicket}
               />
             </div>
           )}

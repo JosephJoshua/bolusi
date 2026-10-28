@@ -423,6 +423,7 @@ export interface RepairTickets {
   cancelledBy: string | null;
   cancelStandardFee: number | null;
   checklistJson: string;
+  claimOfTicketId: string | null;
   complaint: string;
   createdAt: number;
   createdBy: string;
@@ -445,6 +446,7 @@ export interface RepairTickets {
   peripheralsJson: string;
   quoteTotal: number;
   readyAt: number | null;
+  repairTypesJson: Generated<string>;
   returnedAt: number | null;
   returnedBy: string | null;
   storeId: string;

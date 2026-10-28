@@ -36,6 +36,7 @@ import {
   type RepairOutcome,
   type WorkPhotoStage,
 } from './constants.js';
+import type { RecordedRepairType } from './intake-options.js';
 import type { RepairDatabase } from './schema.js';
 
 type Db = Parameters<ProjectionApplier<RepairDatabase>>[0];
@@ -96,6 +97,8 @@ export const repairTicketsTable: ProjectionTableManifest = {
     down_payment_by: 'text',
     down_payment_at: 'integer',
     ready_at: 'integer',
+    repair_types_json: 'text',
+    claim_of_ticket_id: 'text',
   },
   primaryKey: ['id'],
   entityType: REPAIR_TICKET_ENTITY,
@@ -259,7 +262,10 @@ interface RecordedOption {
   readonly label: string | null;
 }
 
-/** `repair.ticket_opened` as v2 carries it; v1 differs only in the three fields named below. */
+/**
+ * `repair.ticket_opened` as v3 carries it; v2 has no repair types, and v1 differs besides only in the
+ * three fields named below.
+ */
 export interface TicketOpenedPayload {
   readonly ticketNumber: string;
   readonly customerId: string;
@@ -277,12 +283,14 @@ export interface TicketOpenedPayload {
   readonly estimatedReadyAt: number | null;
   readonly quoteLines: readonly QuoteLineDraft[];
   readonly photos: readonly { slot: string; label: string | null; ref: MediaRef }[];
+  readonly repairTypes: readonly RecordedRepairType[];
+  readonly claimOf: string | null;
 }
 
 /** v1: checks without labels, accessories as plain keys, exactly the six default photo angles. */
 interface TicketOpenedV1Payload extends Omit<
   TicketOpenedPayload,
-  'checklist' | 'peripherals' | 'photos'
+  'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
 > {
   readonly checklist: readonly { item: string; state: string; note: string }[];
   readonly peripherals: readonly string[];
@@ -453,11 +461,16 @@ export const customerDetailsCorrectedApplier: ProjectionApplier<RepairDatabase> 
  * editable need no rebuild and every device keeps converging on the same bytes.
  */
 function ticketOpenedRows(op: ProjectionOperation): {
-  payload: Omit<TicketOpenedPayload, 'checklist' | 'peripherals' | 'photos'>;
+  payload: Omit<
+    TicketOpenedPayload,
+    'checklist' | 'peripherals' | 'photos' | 'repairTypes' | 'claimOf'
+  >;
   checklist: readonly object[];
   peripherals: readonly unknown[];
   photos: readonly { slot: string; ref: MediaRef }[];
   intakePhotos: readonly { slot: string; label: string | null }[] | null;
+  repairTypes: readonly object[];
+  claimOf: string | null;
 } {
   switch (op.schemaVersion) {
     case 1: {
@@ -468,9 +481,12 @@ function ticketOpenedRows(op: ProjectionOperation): {
         peripherals: payload.peripherals,
         photos: INTAKE_PHOTO_SLOTS.map((slot) => ({ slot, ref: payload.photos[slot] })),
         intakePhotos: null,
+        repairTypes: [],
+        claimOf: null,
       };
     }
-    case 2: {
+    case 2:
+    case 3: {
       const payload = payloadOf<TicketOpenedPayload>(op);
       return {
         payload,
@@ -478,6 +494,9 @@ function ticketOpenedRows(op: ProjectionOperation): {
         peripherals: payload.peripherals,
         photos: payload.photos,
         intakePhotos: payload.photos.map(({ slot, label }) => ({ slot, label })),
+        // v2 tickets were opened before repair types.
+        repairTypes: op.schemaVersion === 3 ? payload.repairTypes : [],
+        claimOf: op.schemaVersion === 3 ? payload.claimOf : null,
       };
     }
     default:
@@ -489,7 +508,8 @@ function ticketOpenedRows(op: ProjectionOperation): {
 }
 
 export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
-  const { payload, checklist, peripherals, photos, intakePhotos } = ticketOpenedRows(op);
+  const { payload, checklist, peripherals, photos, intakePhotos, repairTypes, claimOf } =
+    ticketOpenedRows(op);
   const storeId = storeIdOf(op);
   await db
     .insertInto('repairTickets')
@@ -528,6 +548,8 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
       downPaymentBy: null,
       downPaymentAt: null,
       readyAt: null,
+      repairTypesJson: canonicalJson(repairTypes),
+      claimOfTicketId: claimOf,
     })
     .execute();
 
@@ -567,6 +589,20 @@ export const ticketOpenedApplier: ProjectionApplier<RepairDatabase> = async (db,
 export const ticketClaimedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
   await updateTicket(db, op, { technicianId: op.userId });
   await recordEvent(db, op, { technicianId: op.userId });
+};
+
+export const ticketRepairTypesChangedApplier: ProjectionApplier<RepairDatabase> = async (
+  db,
+  op,
+) => {
+  const { repairTypes } = payloadOf<{ repairTypes: readonly object[] }>(op);
+  await db
+    .updateTable('repairTickets')
+    .set({ repairTypesJson: canonicalJson(repairTypes), updatedAt: op.timestamp })
+    .where('id', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .execute();
+  await recordEvent(db, op, { repairTypes });
 };
 
 export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {

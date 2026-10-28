@@ -82,6 +82,7 @@ export const INTAKE_LIST_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
   photoAngles: 'repair.options.list.photoAngles',
   brands: 'repair.options.list.brands',
   readyBy: 'repair.options.list.readyBy',
+  repairTypes: 'repair.options.list.repairTypes',
 };
 
 const HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
@@ -90,6 +91,7 @@ const HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
   photoAngles: 'repair.options.hint.photoAngles',
   brands: 'repair.options.hint.brands',
   readyBy: 'repair.options.hint.readyBy',
+  repairTypes: 'repair.options.hint.repairTypes',
 };
 
 const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
@@ -97,6 +99,7 @@ const PROBLEM_KEY: Readonly<Record<RowProblem | ListProblem, RepairKey>> = {
   labelTooLong: 'repair.options.problem.labelTooLong',
   duplicate: 'repair.options.problem.duplicate',
   badReadyBy: 'repair.options.problem.badReadyBy',
+  badWarranty: 'repair.options.problem.badWarranty',
   empty: 'repair.options.problem.empty',
   tooMany: 'repair.options.problem.tooMany',
   hidesAll: 'repair.options.problem.hidesAll',
@@ -357,6 +360,12 @@ function ListEditor({
           <span className="min-w-0 flex-1">
             {tn(list === 'readyBy' ? 'repair.options.days' : 'repair.options.name')}
           </span>
+          {list === 'repairTypes' ? (
+            <>
+              <span className="w-28 shrink-0">{tn('repair.options.warrantyDays')}</span>
+              <span className="w-24 shrink-0">{tn('repair.options.videoShort')}</span>
+            </>
+          ) : null}
           {hide ? <span className="shrink-0">{tn('repair.options.showHere')}</span> : null}
           {manage ? <span className="w-8 shrink-0" /> : null}
         </div>
@@ -493,6 +502,39 @@ function OptionRow({
           </div>
         )}
       </div>
+      {list === 'repairTypes' ? (
+        // Each type's terms: the warranty from pickup, and whether intake needs the ownership video.
+        <>
+          <div className="w-28 shrink-0">
+            {manage ? (
+              <TextField
+                label={`${tn('repair.options.warrantyDays')}: ${name}`}
+                className="[&>div:first-child]:sr-only"
+                value={row.warranty}
+                onChange={(event) => onChange({ warranty: event.target.value.replace(/\D/g, '') })}
+                inputMode="numeric"
+                maxLength={3}
+                data-testid={`${testId}.warranty`}
+              />
+            ) : (
+              <p className="flex min-h-10 items-center text-body text-text">
+                {row.warranty === '' || row.warranty === '0'
+                  ? tn('repair.options.noWarranty')
+                  : tn('repair.options.warranty', { count: Number(row.warranty) })}
+              </p>
+            )}
+          </div>
+          <div className="flex h-10 w-24 shrink-0 items-center">
+            <SwitchOnly
+              label={`${tn('repair.options.needsVideo')}: ${name}`}
+              checked={row.needsVideo}
+              onChange={(needsVideo) => onChange({ needsVideo })}
+              disabled={!manage}
+              testId={`${testId}.needsVideo`}
+            />
+          </div>
+        </>
+      ) : null}
       {hide ? (
         <div className="flex h-10 shrink-0 items-center">
           {row.id === null ? (
@@ -531,11 +573,13 @@ function SwitchOnly({
   label,
   checked,
   onChange,
+  disabled = false,
   testId,
 }: {
   readonly label: string;
   readonly checked: boolean;
   readonly onChange: (checked: boolean) => void;
+  readonly disabled?: boolean;
   readonly testId: string;
 }): React.JSX.Element {
   return (
@@ -543,6 +587,7 @@ function SwitchOnly({
       label={label}
       checked={checked}
       onChange={onChange}
+      disabled={disabled}
       className="[&>label]:sr-only"
       testId={testId}
     />

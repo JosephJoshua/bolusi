@@ -21,7 +21,8 @@
     "downPaymentCorrected": "DP diubah",
     "slipPrinted": "Nota dicetak",
     "storePrintSettingsChanged": "Tampilan nota diubah",
-    "storeUncollectedDaysChanged": "Batas HP belum diambil diubah"
+    "storeUncollectedDaysChanged": "Batas HP belum diambil diubah",
+    "ticketRepairTypesChanged": "Jenis servisan diubah"
   },
   "action": {
     "applyPrice": "Pakai harga baru",
@@ -87,7 +88,8 @@
     "changeFeeLabel": "Ubah biaya pembatalan",
     "feeInput": "Biaya yang dibayar pelanggan",
     "storeFee": "Biaya biasa di toko ini: {amount}",
-    "feeChangedHint": "Tulis juga kenapa biayanya diubah."
+    "feeChangedHint": "Tulis juga kenapa biayanya diubah.",
+    "claimFree": "Klaim garansi, tanpa biaya"
   },
   "check": {
     "biometrics": "Sidik jari & wajah",
@@ -110,7 +112,8 @@
     "ok": "Normal",
     "peripherals": "Kelengkapan yang dititipkan",
     "restOk": "Sisanya normal",
-    "notesLabel": "Catatan"
+    "notesLabel": "Catatan",
+    "repairTypes": "Jenis servisan"
   },
   "customer": {
     "change": "Ganti pelanggan",
@@ -287,7 +290,8 @@
     "repaired": "Selesai! HP siap diambil pelanggan.",
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
-    "downPayment": "DP tersimpan."
+    "downPayment": "DP tersimpan.",
+    "repairTypes": "Jenis servisan disimpan."
   },
   "passcode": {
     "show": "Tampilkan",
@@ -313,7 +317,7 @@
   },
   "options": {
     "title": "Pilihan saat terima HP",
-    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi",
+    "summary": "Cek fungsi, kelengkapan, foto, merek, estimasi, jenis servisan",
     "intro": "Berlaku di semua toko. Servisan yang sudah masuk tidak ikut berubah.",
     "introStore": "Pilih yang tampil di toko ini.",
     "count": "{count} pilihan",
@@ -323,14 +327,16 @@
       "accessories": "Kelengkapan",
       "photoAngles": "Sisi HP yang difoto",
       "brands": "Merek pilihan cepat",
-      "readyBy": "Estimasi selesai"
+      "readyBy": "Estimasi selesai",
+      "repairTypes": "Jenis servisan"
     },
     "hint": {
       "checks": "Dicek kasir di depan pelanggan, urut dari atas.",
       "accessories": "Barang yang bisa dititipkan bersama HP.",
       "photoAngles": "Semua sisi di sini wajib difoto saat terima HP.",
       "brands": "Tampil sebagai pilihan cepat. Merek lain tetap bisa diketik.",
-      "readyBy": "Pilihan estimasi selesai saat terima HP."
+      "readyBy": "Pilihan estimasi selesai saat terima HP.",
+      "repairTypes": "Garansi dihitung sejak HP diambil."
     },
     "add": "Tambah",
     "addUnknown": "Tambah “Belum tahu”",
@@ -358,8 +364,15 @@
       "badReadyBy": "Isi 0 sampai 60 hari.",
       "empty": "Sisakan minimal satu pilihan.",
       "tooMany": "Maksimal 40 pilihan.",
-      "hidesAll": "Minimal satu pilihan harus tampil di toko ini."
-    }
+      "hidesAll": "Minimal satu pilihan harus tampil di toko ini.",
+      "badWarranty": "Isi garansi 0 sampai 365 hari."
+    },
+    "warrantyDays": "Garansi (hari)",
+    "needsVideo": "Perlu video kepemilikan",
+    "needsVideoCaption": "Pelanggan bilang di video bahwa HP ini miliknya.",
+    "warranty": "Garansi {count} hari",
+    "noWarranty": "Tanpa garansi",
+    "videoShort": "Perlu video"
   },
   "spec": {
     "battery": "Baterai",
@@ -424,7 +437,8 @@
       "accessories": "Kelengkapan",
       "technician": "Teknisi",
       "status": "Status",
-      "cancelReason": "Alasan batal"
+      "cancelReason": "Alasan batal",
+      "claimOf": "Klaim dari"
     },
     "section": {
       "complaint": "Keluhan",
@@ -622,7 +636,14 @@
     "partsNotYours": "Servisan ini dipegang teknisi lain.",
     "notPaid": "Servisan ini belum lunas.",
     "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas.",
-    "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah."
+    "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah.",
+    "repairTypesNotYours": "Hanya kasir atau teknisi yang bisa mengubah jenis servisan.",
+    "claimNotReturned": "Klaim garansi hanya untuk HP yang sudah selesai diservis dan diambil.",
+    "claimOfClaim": "Klaim garansi dibuat dari servisan aslinya, bukan dari klaim lain.",
+    "claimWithTypes": "Klaim garansi memakai jenis servisan dari servisan aslinya.",
+    "warrantyEnded": "Garansinya sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
+    "claimChargeOwnerOnly": "Klaim garansi gratis. Hanya pemilik yang bisa menagih biaya.",
+    "claimOtherPhone": "Klaim garansi hanya untuk pelanggan dan HP yang sama dengan servisan aslinya."
   },
   "paper": {
     "title": "Kertas nota",
@@ -673,5 +694,43 @@
     "none": "Belum ada printer di komputer ini. Pasang printernya di Windows dulu, lalu cari lagi.",
     "loadFailed": "Daftar printer belum bisa dibuka.",
     "gone": "{name} tidak terpasang lagi di komputer ini. Pilih printer lain."
+  },
+  "repairType": {
+    "screen": "Ganti layar",
+    "battery": "Ganti baterai",
+    "chargingPort": "Ganti konektor cas",
+    "camera": "Servis kamera",
+    "audio": "Servis speaker/mic",
+    "buttons": "Servis tombol",
+    "noPower": "Mati total",
+    "software": "Software / instal ulang",
+    "waterDamage": "Kena air",
+    "unlock": "Buka kunci / akun"
+  },
+  "warranty": {
+    "title": "Garansi",
+    "none": "tanpa garansi",
+    "days": "{count} hari",
+    "until": "s/d {date}",
+    "fromPickup": "Garansi dihitung sejak HP diambil.",
+    "line": "{name} · garansi {terms}",
+    "lineNone": "{name} · tanpa garansi"
+  },
+  "repairTypes": {
+    "none": "Belum dipilih",
+    "change": "Ubah",
+    "choose": "Pilih",
+    "title": "Jenis servisan",
+    "save": "Simpan"
+  },
+  "warrantyClaim": {
+    "action": "Klaim garansi",
+    "title": "Klaim garansi",
+    "line": "Klaim garansi",
+    "of": "Klaim garansi dari",
+    "claims": "Klaim garansi",
+    "open": "Buka",
+    "intakeNote": "Dari {number}. Jenis servisan dan garansinya ikut servisan itu.",
+    "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini."
   }
 }

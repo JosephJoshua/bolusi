@@ -16,6 +16,7 @@ import { INTAKE_STEP_KEY, optionLabel } from '../labels.js';
 import {
   INTAKE_STEPS,
   capturedThumbnailRef,
+  claimWarrantyEnded,
   emptyIntakeDraft,
   intakeDirty,
   nextMissingPhoto,
@@ -268,7 +269,7 @@ export function IntakeWizard({
   return (
     <FlowScreen
       chrome={chrome}
-      title={tn('repair.action.newIntake')}
+      title={tn(draft.claimOf === null ? 'repair.action.newIntake' : 'repair.warrantyClaim.title')}
       onBack={back}
       scrollKey={step}
       primaryLabel={
@@ -319,6 +320,19 @@ export function IntakeWizard({
           <Text style={[repairStyles.warning, styles.check]} testID={`${testID}.photosExpired`}>
             {tn('repair.photo.expired')}
           </Text>
+        ) : null}
+        {draft.claimOf !== null && (step === 'customer' || step === 'review') ? (
+          // Said where the intake starts and again before it opens, not on every step.
+          <View style={[repairStyles.gap, styles.check]} testID={`${testID}.claim`}>
+            <Text style={repairStyles.caption}>
+              {tn('repair.warrantyClaim.intakeNote', { number: draft.claimOf.ticketNumber })}
+            </Text>
+            {claimWarrantyEnded(draft.claimOf, now()) ? (
+              <Text style={repairStyles.warning} testID={`${testID}.claim.ended`}>
+                {tn('repair.warrantyClaim.ended')}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
         {settings.status === 'loading' ? null : renderStep()}
       </View>
