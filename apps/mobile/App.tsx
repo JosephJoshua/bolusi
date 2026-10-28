@@ -1150,7 +1150,6 @@ export default function App(props: AppProps): React.JSX.Element {
                     />
                   }
                   onClose={closeParts}
-                  onOpenSyncStatus={() => leaveHome(() => setRoute('syncStatus'))}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
