@@ -5,10 +5,11 @@
  */
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { ChipRow, TextInput, ToggleChip, color, space, type } from '@bolusi/ui';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useActionRunner } from '../../screen-kit/index.js';
+import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
 import { CASH_MOVE_KINDS, MAX_REASON, type CashMoveKind } from '../constants.js';
@@ -32,6 +33,28 @@ interface StepProps {
   readonly chrome: ScreenChrome;
   readonly onDone: () => void;
   readonly onCancel: () => void;
+  /** Hardware back asks through this while something typed would be lost. */
+  readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+}
+
+/** Leaving a step with something typed asks first, from the header back and hardware back alike. */
+function useStepLeave(
+  dirty: boolean,
+  { onCancel, onRegisterDiscardGuard }: StepProps,
+  testID: string,
+): { readonly onBack: () => void; readonly overlay: ReactNode } {
+  const discard = useDiscardConfirm({
+    dirty,
+    copy: {
+      title: tm('money.discard.title'),
+      message: tm('money.discard.message'),
+      confirm: tm('money.discard.confirm'),
+      keep: tm('money.discard.keep'),
+    },
+    onRegisterDiscardGuard,
+    testID,
+  });
+  return { onBack: () => discard.requestLeave(onCancel), overlay: discard.overlay };
 }
 
 function AmountField({
@@ -92,12 +115,18 @@ export function CountCashStep({
   onDone,
   onCancel,
   testID = 'money.count',
+  onRegisterDiscardGuard,
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
   const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
   const [counted, setCounted] = useState('');
   const [note, setNote] = useState('');
+  const leave = useStepLeave(
+    counted !== '' || note.trim() !== '',
+    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    testID,
+  );
   const amount = rupiah(counted);
   const expected = drawer.status === 'ready' ? drawer.data.expected : null;
 
@@ -114,7 +143,8 @@ export function CountCashStep({
     <FlowScreen
       chrome={chrome}
       title={tm('money.kas.count')}
-      onBack={onCancel}
+      onBack={leave.onBack}
+      overlay={leave.overlay}
       primaryLabel={tm('money.count.save')}
       onPrimary={submit}
       primaryDisabled={amount === null}
@@ -168,6 +198,7 @@ export function MoveCashStep({
   onDone,
   onCancel,
   testID = 'money.move',
+  onRegisterDiscardGuard,
 }: StepProps & { readonly testID?: string | undefined }): React.JSX.Element {
   const runtime = useMoneyRuntime();
   const runner = useActionRunner();
@@ -179,6 +210,11 @@ export function MoveCashStep({
   const [account, setAccount] = useState<string | null>(null);
   const [digits, setDigits] = useState('');
   const [reason, setReason] = useState('');
+  const leave = useStepLeave(
+    digits !== '' || reason.trim() !== '',
+    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    testID,
+  );
   const amount = rupiah(digits);
   // Cash is deposited into a bank account; QRIS and card machines settle there on their own.
   const banks: readonly PaymentAccountRow[] =
@@ -216,7 +252,8 @@ export function MoveCashStep({
     <FlowScreen
       chrome={chrome}
       title={tm('money.kas.move')}
-      onBack={onCancel}
+      onBack={leave.onBack}
+      overlay={leave.overlay}
       primaryLabel={tm('money.move.save')}
       onPrimary={submit}
       primaryDisabled={missing !== null}
@@ -285,6 +322,7 @@ export function SettleCountStep({
   onDone,
   onCancel,
   testID = 'money.settle',
+  onRegisterDiscardGuard,
 }: StepProps & {
   readonly count: CashCountRow;
   readonly testID?: string | undefined;
@@ -293,6 +331,11 @@ export function SettleCountStep({
   const runner = useActionRunner();
   const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
   const [reason, setReason] = useState('');
+  const leave = useStepLeave(
+    reason.trim() !== '',
+    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    testID,
+  );
   // The figures as they stand: a payment from before the count can sync while the owner reads.
   const counts = drawer.status === 'ready' ? drawer.data.counts : null;
   const live = counts?.find((row) => row.id === count.id) ?? count;
@@ -312,7 +355,8 @@ export function SettleCountStep({
     <FlowScreen
       chrome={chrome}
       title={tm('money.settle.title')}
-      onBack={onCancel}
+      onBack={leave.onBack}
+      overlay={leave.overlay}
       primaryLabel={tm('money.settle.save')}
       onPrimary={submit}
       primaryDisabled={reason.trim() === '' || !open}
@@ -365,6 +409,7 @@ export function ReceiveDebtStep({
   onDone,
   onCancel,
   testID = 'money.receive',
+  onRegisterDiscardGuard,
 }: StepProps & {
   readonly balance: NamedBalance;
   readonly testID?: string | undefined;
@@ -380,9 +425,15 @@ export function ReceiveDebtStep({
     keys.current += 1;
     return `line${String(keys.current)}`;
   };
-  const [lines, setLines] = useState<readonly PaymentLine[]>(() => [
+  const [initial] = useState<readonly PaymentLine[]>(() => [
     newPaymentLine('line0', balance.balance),
   ]);
+  const [lines, setLines] = useState<readonly PaymentLine[]>(initial);
+  const leave = useStepLeave(
+    lines !== initial,
+    { chrome, onDone, onCancel, onRegisterDiscardGuard },
+    testID,
+  );
   const accountRows: readonly PaymentAccountRow[] =
     accounts.status === 'ready' ? accounts.data : [];
   const entry = paymentEntry(balance.balance, lines, accountRows);
@@ -413,7 +464,8 @@ export function ReceiveDebtStep({
     <FlowScreen
       chrome={chrome}
       title={tm('money.receive.title')}
-      onBack={onCancel}
+      onBack={leave.onBack}
+      overlay={leave.overlay}
       primaryLabel={
         entry.paid > 0
           ? tm('money.receive.save', { amount: formatMoney(entry.paid) })

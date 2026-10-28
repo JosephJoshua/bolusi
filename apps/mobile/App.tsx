@@ -812,13 +812,19 @@ export default function App(props: AppProps): React.JSX.Element {
               return true;
             },
             requestLeave: (proceed) => {
-              const repair = repairNavRef.current;
-              if (repair === null) {
-                proceed();
-                return;
-              }
-              selectTabRef.current('repair');
-              repair.requestLeave(proceed);
+              const toServisan = (): void => {
+                const repair = repairNavRef.current;
+                if (repair === null) {
+                  proceed();
+                  return;
+                }
+                selectTabRef.current('repair');
+                repair.requestLeave(proceed);
+              };
+              // A half-typed Kas step asks first, then the intake behind it.
+              const kas = kasNavRef.current;
+              if (kas === null) toServisan();
+              else kas.requestLeave(toServisan);
             },
           },
     );

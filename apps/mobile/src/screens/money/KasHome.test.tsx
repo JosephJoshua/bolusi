@@ -219,6 +219,56 @@ describe('the drawer', () => {
     expect(screen.query('money.count')).toBeNull();
     expect(nav).toBeNull();
   });
+  test('back from a half-typed count asks before dropping it', async () => {
+    h = await openRepairScreenHarness(5410);
+    let nav: { handleBack: () => boolean } | null = null;
+    ensureRepairCatalog();
+    registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
+    const screen = render(
+      <KasHome
+        runtime={moneyRuntimeFor(h, h.cashierId)}
+        now={() => Date.now()}
+        syncChip={null}
+        avatar={null}
+        onRegisterSurfaceNav={(next) => {
+          nav = next;
+        }}
+      />,
+    );
+    await settle();
+    await press(screen, 'money.kas.count');
+    type(screen, 'money.count.counted', '95000');
+    await settle();
+
+    expect(nav!.handleBack()).toBe(true);
+    await settle();
+    expect(screen.query('money.count.discard')).not.toBeNull();
+    await press(screen, 'money.count.discard.cancel');
+    expect(text(screen, 'money.count.difference')).toBe('Lebih Rp 95.000');
+
+    await press(screen, 'money.count.back');
+    await press(screen, 'money.count.discard.confirm');
+    expect(screen.query('money.count')).toBeNull();
+    expect(screen.query('money.kas')).not.toBeNull();
+  });
+
+  test('an owner’s correction shows with today’s moves, so they explain the drawer', async () => {
+    h = await openRepairScreenHarness(5411);
+    await float(h, 100_000);
+    const { entryId: countId } = (await h.money('countCash', { counted: 95_000 }, h.cashierId)) as {
+      entryId: string;
+    };
+    await h.money(
+      'adjustCash',
+      { amount: -5_000, countId, reason: 'Salah kembalian' },
+      h.storeOwnerId,
+    );
+    const screen = await mount(h, h.cashierId);
+    expect(text(screen, 'money.kas.moves')).toContain('Selisih kas diselesaikan');
+    expect(text(screen, 'money.kas.moves')).toContain('Salah kembalian');
+    expect(text(screen, 'money.kas.moves')).toContain('−Rp 5.000');
+    expect(text(screen, 'money.kas.expected')).toBe('Rp 95.000');
+  });
 });
 
 describe('what customers owe', () => {

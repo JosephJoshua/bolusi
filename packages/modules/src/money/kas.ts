@@ -61,6 +61,35 @@ export const CASH_MOVE_LABEL: Readonly<Record<CashMoveKind, MoneyKey>> = {
   float: 'money.moveKind.float',
 };
 
+/** A change to the drawer the counter did not take at the counter: a move, or a settled difference. */
+export interface DrawerMove {
+  readonly entry: MoneyEntryRow;
+  readonly label: MoneyKey;
+  /** What it did to the drawer: positive in, negative out. */
+  readonly delta: number;
+}
+
+/**
+ * Today's cash moved in or out, with an owner's corrections, so the moves explain the drawer's
+ * figure next to what came in.
+ */
+export function drawerMoves(entries: readonly MoneyEntryRow[]): DrawerMove[] {
+  const moves: DrawerMove[] = [];
+  for (const entry of entries) {
+    if (entry.kind === 'cash_moved') {
+      const kind = (entry.subKind ?? 'expense') as CashMoveKind;
+      moves.push({
+        entry,
+        label: CASH_MOVE_LABEL[kind],
+        delta: movesOut(kind) ? -entry.amount : entry.amount,
+      });
+    } else if (entry.kind === 'cash_adjusted') {
+      moves.push({ entry, label: 'money.kas.adjusted', delta: entry.amount });
+    }
+  }
+  return moves;
+}
+
 /**
  * The difference an owner still has to settle: the latest count's, when it is off and not settled.
  * Only the latest one: an earlier difference left unsettled is still in the book, so the next count

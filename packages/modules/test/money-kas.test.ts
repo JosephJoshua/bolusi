@@ -7,6 +7,7 @@ import {
   dayStart,
   moneyInByMethod,
   differenceToSettle,
+  drawerMoves,
   splitOpenBalances,
 } from '../src/money/kas.js';
 import type { CashCountRow, MoneyEntryRow, OpenBalanceRow } from '../src/money/queries.js';
@@ -105,4 +106,18 @@ test('open balances split into what customers owe and what the store owes back',
   const { owed, owedBack } = splitOpenBalances([row('a', 250_000), row('b', -100_000)]);
   expect(owed.map((r) => r.documentId)).toEqual(['a']);
   expect(owedBack.map((r) => r.documentId)).toEqual(['b']);
+});
+
+test("the drawer's moves include an owner's correction, signed as it changed the drawer", () => {
+  const moves = drawerMoves([
+    entry({ id: 'out', kind: 'cash_moved', subKind: 'expense', account: null, amount: 20_000 }),
+    entry({ id: 'in', kind: 'cash_moved', subKind: 'float', account: null, amount: 50_000 }),
+    entry({ id: 'fix', kind: 'cash_adjusted', account: null, amount: -5_000 }),
+    entry({ id: 'paid', account: 'cash', amount: 100_000 }),
+  ]);
+  expect(moves.map((m) => [m.entry.id, m.label, m.delta])).toEqual([
+    ['out', 'money.moveKind.expense', -20_000],
+    ['in', 'money.moveKind.float', 50_000],
+    ['fix', 'money.kas.adjusted', -5_000],
+  ]);
 });

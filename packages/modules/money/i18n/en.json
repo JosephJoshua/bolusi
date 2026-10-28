@@ -71,7 +71,8 @@
     "exact": "Exact",
     "short": "Short {amount}",
     "over": "Over {amount}",
-    "difference": "Cash difference"
+    "difference": "Cash difference",
+    "adjusted": "Cash difference settled"
   },
   "moveKind": {
     "withdrawal": "To the owner",
@@ -109,5 +110,11 @@
     "save": "Take {amount}",
     "saveEmpty": "Take payment",
     "hint": "Enter what was paid, up to what is left."
+  },
+  "discard": {
+    "title": "Leave without saving?",
+    "message": "What you entered will be lost.",
+    "confirm": "Leave",
+    "keep": "Stay here"
   }
 }

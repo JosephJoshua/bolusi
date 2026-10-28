@@ -71,7 +71,8 @@
     "exact": "Pas",
     "short": "Kurang {amount}",
     "over": "Lebih {amount}",
-    "difference": "Selisih kas"
+    "difference": "Selisih kas",
+    "adjusted": "Selisih kas diselesaikan"
   },
   "moveKind": {
     "withdrawal": "Setor ke pemilik",
@@ -109,5 +110,11 @@
     "save": "Terima {amount}",
     "saveEmpty": "Terima pembayaran",
     "hint": "Isi jumlah yang dibayar, paling banyak sisa tagihannya."
+  },
+  "discard": {
+    "title": "Keluar tanpa menyimpan?",
+    "message": "Isian yang belum disimpan akan hilang.",
+    "confirm": "Keluar",
+    "keep": "Tetap di sini"
   }
 }

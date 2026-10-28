@@ -26,13 +26,12 @@ import type { QueryState } from '../../screen-kit/index.js';
 import { MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
 import {
-  CASH_MOVE_LABEL,
   accountLabel,
   countToday,
   differenceToSettle,
   dayStart,
+  drawerMoves,
   moneyInByMethod,
-  movesOut,
   nameBalances,
   splitOpenBalances,
   type NamedBalance,
@@ -107,7 +106,7 @@ export function KasBoard({
   const todayEntries = readyOr(entries) ?? [];
   const accountRows = readyOr(accounts) ?? [];
   const methods = moneyInByMethod(todayEntries);
-  const moves = todayEntries.filter((entry) => entry.kind === 'cash_moved');
+  const moves = drawerMoves(todayEntries);
   const open = splitOpenBalances(readyOr(balances) ?? []);
   const difference = drawerData === null ? null : differenceToSettle(drawerData.counts);
   const counted = drawerData === null ? null : countToday(drawerData.counts, now());
@@ -199,18 +198,15 @@ export function KasBoard({
 
       {moves.length === 0 ? null : (
         <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>
-          {moves.map((move) => {
-            const kind = move.subKind ?? 'expense';
-            return (
-              <Row
-                key={move.id}
-                label={tm(CASH_MOVE_LABEL[kind])}
-                detail={[formatTime(move.createdAt), move.reason].filter(Boolean).join(' · ')}
-                value={`${movesOut(kind) ? '−' : '+'}${formatMoney(move.amount)}`}
-                testID={`${testID}.moves.${move.id}`}
-              />
-            );
-          })}
+          {moves.map(({ entry, label, delta }) => (
+            <Row
+              key={entry.id}
+              label={tm(label)}
+              detail={[formatTime(entry.createdAt), entry.reason].filter(Boolean).join(' · ')}
+              value={`${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta))}`}
+              testID={`${testID}.moves.${entry.id}`}
+            />
+          ))}
         </Section>
       )}
 

@@ -14,8 +14,10 @@ import {
   type MoneyRuntime,
   type NamedBalance,
 } from '@bolusi/modules/money/screens';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+
+import type { DiscardGuard } from '@bolusi/modules/screen-kit';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
@@ -43,6 +45,10 @@ export function KasHome({
   onRegisterSurfaceNav,
 }: KasHomeProps): React.JSX.Element {
   const [view, setView] = useState<KasView>({ kind: 'board' });
+  const guardRef = useRef<DiscardGuard | null>(null);
+  const registerGuard = useCallback((guard: DiscardGuard | null): void => {
+    guardRef.current = guard;
+  }, []);
   const toBoard = (): void => setView({ kind: 'board' });
   // Inside a step the header keeps only the sync chip, as in repair's flows.
   const stepChrome = { syncChip, avatar: null };
@@ -52,12 +58,18 @@ export function KasHome({
       onRegisterSurfaceNav?.(null);
       return;
     }
+    // A step with something typed asks before it is dropped, on back and on leaving home alike.
+    const leave = (proceed: () => void): void => {
+      const guard = guardRef.current;
+      if (guard === null) proceed();
+      else guard(proceed);
+    };
     onRegisterSurfaceNav?.({
       handleBack: () => {
-        setView({ kind: 'board' });
+        leave(() => setView({ kind: 'board' }));
         return true;
       },
-      requestLeave: (proceed) => proceed(),
+      requestLeave: leave,
     });
     return () => onRegisterSurfaceNav?.(null);
   }, [view, onRegisterSurfaceNav]);
@@ -76,14 +88,29 @@ export function KasHome({
           />
         );
       case 'count':
-        return <CountCashStep chrome={stepChrome} onDone={toBoard} onCancel={toBoard} />;
+        return (
+          <CountCashStep
+            chrome={stepChrome}
+            onRegisterDiscardGuard={registerGuard}
+            onDone={toBoard}
+            onCancel={toBoard}
+          />
+        );
       case 'move':
-        return <MoveCashStep chrome={stepChrome} onDone={toBoard} onCancel={toBoard} />;
+        return (
+          <MoveCashStep
+            chrome={stepChrome}
+            onRegisterDiscardGuard={registerGuard}
+            onDone={toBoard}
+            onCancel={toBoard}
+          />
+        );
       case 'settle':
         return (
           <SettleCountStep
             chrome={stepChrome}
             count={view.count}
+            onRegisterDiscardGuard={registerGuard}
             onDone={toBoard}
             onCancel={toBoard}
           />
@@ -93,6 +120,7 @@ export function KasHome({
           <ReceiveDebtStep
             chrome={stepChrome}
             balance={view.balance}
+            onRegisterDiscardGuard={registerGuard}
             onDone={toBoard}
             onCancel={toBoard}
           />
