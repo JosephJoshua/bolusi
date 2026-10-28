@@ -185,7 +185,10 @@ export interface SheetEntrance {
   readonly sheet: Animated.WithAnimatedValue<object>;
 }
 
-/** A bottom sheet arriving: the scrim dims the screen as the sheet rises into its place. */
+/**
+ * A bottom sheet arriving: the scrim dims the screen as the sheet slides up into its place. The
+ * sheet itself never fades, so the screen behind never shows through its controls.
+ */
 export function useSheetEntrance(): SheetEntrance {
   const progress = useArrival(motion.duration.slow);
   return useMemo(
@@ -193,7 +196,16 @@ export function useSheetEntrance(): SheetEntrance {
       scrim: {
         opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0, overlayOpacity] }),
       },
-      sheet: arrivalStyle(progress, 'below', motion.distance.step),
+      sheet: {
+        transform: [
+          {
+            translateY: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [motion.distance.sheet, 0],
+            }),
+          },
+        ],
+      },
     }),
     [progress],
   );

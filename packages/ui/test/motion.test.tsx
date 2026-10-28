@@ -45,7 +45,8 @@ describe('entrances land on the still layout', () => {
     );
     expect(valueOf(r.styleOf('ui.confirmSheet.scrim')['opacity'])).toBeCloseTo(overlayOpacity);
     const sheet = r.styleOf('ui.confirmSheet.sheet');
-    expect(valueOf(sheet['opacity'])).toBe(1);
+    // Opaque from its first frame: the screen behind must never show through its buttons.
+    expect(sheet['opacity']).toBeUndefined();
     expect(transformOf(sheet, 'translateY')).toBe(0);
   });
 
@@ -57,7 +58,7 @@ describe('entrances land on the still layout', () => {
       </Sheet>,
     );
     const sheet = r.styleOf('ui.sheet.sheet');
-    expect(valueOf(sheet['opacity'])).toBe(1);
+    expect(sheet['opacity']).toBeUndefined();
     expect(transformOf(sheet, 'translateY')).toBe(0);
     fire(r.get('ui.sheet.scrim'), 'onPress');
     expect(onClose).toHaveBeenCalledOnce();

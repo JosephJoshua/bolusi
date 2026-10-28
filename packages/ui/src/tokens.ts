@@ -147,8 +147,8 @@ export const motion = Object.freeze({
     enter: Object.freeze([0.16, 1, 0.3, 1] as const),
     exit: Object.freeze([0.4, 0, 1, 1] as const),
   }),
-  /** How far something travels as it arrives: a step, a toast, a sheet's first frames. */
-  distance: Object.freeze({ step: 24, rise: 8 } as const),
+  /** How far something travels as it arrives: a flow step, a toast, a bottom sheet. */
+  distance: Object.freeze({ step: 24, rise: 8, sheet: 48 } as const),
   /** A pressed control shrinks this much, enough to feel without looking like a jump. */
   pressScale: 0.97,
 } as const);
