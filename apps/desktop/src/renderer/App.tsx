@@ -365,11 +365,10 @@ function LiveCounter({
             onSelect: () => void client.call('session.lock').catch(() => undefined),
           },
         ]}
-        sync={(compact) =>
+        sync={
           state.sync === null ? null : (
             <SyncStatusButton
               input={state.sync}
-              compact={compact}
               open={syncOpen}
               onOpenChange={setSyncOpen}
               onSyncNow={() => void client.call('sync.requestManual').catch(() => undefined)}

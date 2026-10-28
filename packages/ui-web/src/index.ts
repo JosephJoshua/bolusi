@@ -1,8 +1,9 @@
 // Desktop and web components on the shared tokens. Labels always come from the caller (translated),
 // never from here.
-export { applyTheme, desktopType, themeVariables } from './theme.js';
+export { applyTheme, chromeColor, desktopType, themeVariables } from './theme.js';
 export { Avatar } from './components/Avatar.js';
 export { Banner, type BannerTone } from './components/Banner.js';
+export { BrandMark } from './components/BrandMark.js';
 export {
   Button,
   type ButtonProps,
@@ -72,7 +73,14 @@ export { SectionNav, type SectionNavGroup, type SectionNavItem } from './compone
 export { SettingsPanel } from './components/SettingsPanel.js';
 export { SortableList } from './components/SortableList.js';
 export { Switch } from './components/Switch.js';
-export { AppShell, PageHeader, Sidebar, type NavItem } from './components/Shell.js';
+export {
+  AppShell,
+  PageHeader,
+  Sidebar,
+  SidebarToggle,
+  type NavItem,
+  type SidebarToggleLabels,
+} from './components/Shell.js';
 export { Spinner } from './components/Spinner.js';
 export { Skeleton, StatePanel } from './components/States.js';
 export { Tabs, type TabItem } from './components/Tabs.js';

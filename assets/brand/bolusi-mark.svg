@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="92 58 324 400" role="img" aria-label="Bolusi">
+  <g fill="none" stroke="#0B4A41" stroke-width="60" stroke-linecap="round">
+    <circle cx="290" cy="336" r="86"/>
+    <path d="M204 336V158C204 106 166 82 128 100"/>
+  </g>
+  <circle cx="372" cy="158" r="38" fill="#E8A21C"/>
+</svg>

@@ -26,7 +26,8 @@ export function Menu({
 }: {
   readonly trigger: ReactNode;
   /** Names a trigger that shows only an icon or a face. */
-  readonly tooltip?: { readonly label: string; readonly side: 'top' | 'right' } | undefined;
+  readonly tooltip?:
+    { readonly label: string; readonly side: 'top' | 'right' | 'bottom' } | undefined;
   readonly items: readonly MenuItem[];
   readonly header?: ReactNode;
   readonly align?: 'start' | 'end';
