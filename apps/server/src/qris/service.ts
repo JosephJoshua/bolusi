@@ -31,6 +31,7 @@ import {
   type MoneyDocument,
 } from '@bolusi/modules/money';
 import {
+  GENESIS_PREVIOUS_HASH,
   QRIS_TTL_MS,
   type QrisCharge,
   type QrisChargeBody,
@@ -54,7 +55,12 @@ import { announceChange, type AnnounceDeps } from '../realtime/announce.js';
 import { loadSystemIdentity, type SystemKeyStore } from '../sync/conflict-wiring.js';
 import type { TenantQueue } from '../sync/tenant-queue.js';
 import type { SecretSealer } from './seal.js';
-import { XenditRefusal, XenditUnavailable, type XenditPort } from './xendit.js';
+import {
+  XenditRefusal,
+  XenditUnavailable,
+  type XenditPort,
+  type XenditQrPayment,
+} from './xendit.js';
 
 /** How often a waiting charge may ask Xendit itself, when a device keeps asking about it. */
 const RECHECK_MS = 4_000;
@@ -427,13 +433,14 @@ export async function createCharge(
       return { existing };
     }
     // The rule a payment from this person's device must pass, against the server's records. The op
-    // is never signed or stored: only the rule reads it, and the rule reads the fields given here.
-    const op = {
+    // is never signed or stored: it is what the device would have written, for the rule to read.
+    const op: SignedOperation = {
       id: body.id,
       tenantId: acting.tenantId,
       storeId,
       userId: acting.userId,
       deviceId: device.deviceId,
+      seq: 1,
       type: MONEY_OP.paymentReceived,
       entityType: MONEY_ENTRY_ENTITY,
       entityId: body.id,
@@ -444,7 +451,14 @@ export async function createCharge(
         'xendit',
       ),
       timestamp: ready.now(),
-    } as unknown as SignedOperation;
+      location: null,
+      source: 'ui',
+      agentInitiated: false,
+      agentConversationId: null,
+      previousHash: GENESIS_PREVIOUS_HASH,
+      hash: GENESIS_PREVIOUS_HASH,
+      signature: '',
+    };
     const refused = await checkRules(
       db,
       op,
@@ -519,10 +533,11 @@ export async function createCharge(
       .execute();
     return loadCharge(db, charge.id);
   });
-  if (saved !== undefined && !sameRequest(saved, body, device)) {
+  // Not stored (the id is another tenant's charge) or stored by another request with this id.
+  if (saved === undefined || !sameRequest(saved, body, device)) {
     throw new ApiError('IDEMPOTENCY_CONFLICT');
   }
-  return chargeView(saved ?? charge, ready.now());
+  return chargeView(saved, ready.now());
 }
 
 /**
@@ -538,21 +553,28 @@ export async function chargeStatus(
   const ready = readyOrUnavailable(deps);
   const now = ready.now();
   const { charge, due } = await ready.forTenant(acting.tenantId, async (db) => {
-    const found = await loadCharge(db, id, { lock: true });
+    const found = await loadCharge(db, id);
     if (found === undefined) throw new ApiError('NOT_FOUND');
     requireSameStore(acting, found);
     await requireReceives(db, acting, found.storeId);
-    const ask =
-      found.paidAt === null &&
-      (found.checkedAt === null || now - found.checkedAt >= RECHECK_MS) &&
-      // A QR that expired a while ago can no longer be paid; one more look covers a late answer.
-      now <= found.expiresAt + QRIS_TTL_MS;
-    if (ask)
-      await db.updateTable('qrisCharges').set({ checkedAt: now }).where('id', '=', id).execute();
-    return { charge: found, due: ask };
+    // A QR that expired a while ago can no longer be paid; a callback still records a late one.
+    if (found.paidAt !== null || now > found.expiresAt + QRIS_TTL_MS) {
+      return { charge: found, due: false };
+    }
+    // One asker per few seconds: the update claims the check, so two devices asking at once (or a
+    // device asking fast) ask Xendit once.
+    const claimed = await db
+      .updateTable('qrisCharges')
+      .set({ checkedAt: now })
+      .where('id', '=', id)
+      .where((eb) =>
+        eb.or([eb('checkedAt', 'is', null), eb('checkedAt', '<=', String(now - RECHECK_MS))]),
+      )
+      .executeTakeFirst();
+    return { charge: found, due: claimed.numUpdatedRows > 0n };
   });
   if (!due) return chargeView(charge, now);
-  const settled = await reconcile(ready, acting.tenantId, charge.id).catch((error: unknown) => {
+  const settled = await reconcile(ready, acting.tenantId, charge).catch((error: unknown) => {
     // A device asking again is the retry; Xendit being slow is not this request's failure.
     if (error instanceof XenditUnavailable || error instanceof XenditRefusal) return null;
     throw error;
@@ -591,7 +613,7 @@ export async function simulateCharge(
       providerError(error);
     }
   }
-  const settled = await reconcile(ready, acting.tenantId, charge.id).catch(providerError);
+  const settled = await reconcile(ready, acting.tenantId, charge).catch(providerError);
   return chargeView(settled ?? charge, ready.now());
 }
 
@@ -621,25 +643,37 @@ export async function handleCallback(
   // nothing here to record, and nothing for Xendit to retry.
   if (event.event !== 'qr.payment' || typeof qrId !== 'string') return 'ignored';
 
-  const charge = await ready.forTenant(tenantId, (db) =>
-    db
+  const found = await ready.forTenant(tenantId, async (db) => {
+    const id = await db
       .selectFrom('qrisCharges')
-      .select(['id', 'callbackTokenHash'])
+      .select('id')
       .where('xenditQrId', '=', qrId)
-      .executeTakeFirst(),
-  );
-  if (charge === undefined) return 'ignored';
-  if (token === undefined || !timingSafeEqualHex(sha256Hex(token), charge.callbackTokenHash)) {
-    return 'unauthorized';
-  }
-  if (event.data?.reference_id !== charge.id) return 'ignored';
+      .executeTakeFirst();
+    if (id === undefined) return undefined;
+    const charge = await loadCharge(db, id.id);
+    if (charge === undefined) return undefined;
+    // The token the QR was made under, or the account's current one (an owner rotated the token in
+    // Xendit and reconnected while this QR was on screen).
+    const current = await db
+      .selectFrom('qrisConnections')
+      .select('callbackTokenHash')
+      .where('accountId', '=', charge.accountId)
+      .executeTakeFirst();
+    return { charge, hashes: [charge.callbackTokenHash, current?.callbackTokenHash] };
+  });
+  if (found === undefined) return 'ignored';
+  const presented = token === undefined ? null : sha256Hex(token);
+  const genuine =
+    presented !== null &&
+    found.hashes.some((hash) => hash !== undefined && timingSafeEqualHex(presented, hash));
+  if (!genuine) return 'unauthorized';
+  if (event.data?.reference_id !== found.charge.id) return 'ignored';
   try {
-    const settled = await reconcile(ready, tenantId, charge.id);
+    const settled = await reconcile(ready, tenantId, found.charge);
     if (settled === null) return 'ignored';
-    if (settled.paidAt !== null) return 'recorded';
-    // Xendit said it was paid but does not show it yet. While it could still be paid, have Xendit
-    // call again rather than leave it to a device that may no longer be asking.
-    return ready.now() <= settled.expiresAt + QRIS_TTL_MS ? 'retry' : 'ignored';
+    // Xendit says it was paid but does not list it yet: have Xendit call again, rather than leave
+    // the payment to a device that may no longer be asking.
+    return settled.paidAt !== null ? 'recorded' : 'retry';
   } catch (error) {
     if (error instanceof XenditUnavailable || error instanceof XenditRefusal) return 'retry';
     throw error;
@@ -652,9 +686,11 @@ export async function handleCallback(
  * Ask Xendit whether the charge's QR was paid, with the key it was made with, and record the
  * payment if so. Returns the charge as it now stands, or null if it no longer exists.
  */
-async function reconcile(ready: Ready, tenantId: string, chargeId: string) {
-  const charge = await ready.forTenant(tenantId, (db) => loadCharge(db, chargeId));
-  if (charge === undefined) return null;
+async function reconcile(
+  ready: Ready,
+  tenantId: string,
+  charge: ChargeRow,
+): Promise<ChargeRow | null> {
   if (charge.paidAt !== null) return charge;
   const payments = await ready.qris.xendit.listQrPayments(
     chargeKey(ready, tenantId, charge),
@@ -662,16 +698,16 @@ async function reconcile(ready: Ready, tenantId: string, chargeId: string) {
   );
   const payment = payments.find((p) => p.succeeded);
   if (payment === undefined) return charge;
-  return recordPayment(ready, tenantId, chargeId, payment.paymentId, payment.amount);
+  return recordPayment(ready, tenantId, charge.id, payment);
 }
 
 async function recordPayment(
   ready: Ready,
   tenantId: string,
   chargeId: string,
-  paymentId: string,
-  amount: number,
+  payment: XenditQrPayment,
 ): Promise<ChargeRow | null> {
+  const { paymentId, amount } = payment;
   const outcome = await ready.tenantPushQueue(tenantId, () =>
     ready.forTenant(tenantId, async (db) => {
       // The push pipeline's lock order: the tenant counter, then the system chain (system-op.ts).
@@ -680,7 +716,17 @@ async function recordPayment(
       if (charge === undefined) return null;
       if (charge.paidAt !== null) return { charge, recorded: false };
       const identity = await loadSystemIdentity(db, tenantId, ready.systemKeyStore);
+      // When the customer paid, so a late confirmation lands on the day (and the Tutup kas) it
+      // happened; never ahead of the server's clock.
       const now = ready.now();
+      const paidAt = Math.min(payment.paidAt ?? now, now);
+      // The charge id was free when the QR was made; if a device has since used it, the payment
+      // still lands, under an id of its own.
+      const taken = await db
+        .selectFrom('moneyEntries')
+        .select('id')
+        .where('id', '=', charge.id)
+        .executeTakeFirst();
       const { op } = await appendSystemOp(
         db,
         { crypto: ready.serverCrypto, now: ready.now, newId: ready.newOpLogId },
@@ -690,14 +736,14 @@ async function recordPayment(
           storeId: charge.storeId,
           type: MONEY_OP.paymentReceived,
           entityType: MONEY_ENTRY_ENTITY,
-          entityId: charge.id,
+          entityId: taken === undefined ? charge.id : ready.newOpLogId(),
           schemaVersion: 1,
           payload: paymentPayload(
             charge,
             amount,
             charge.environment === 'test' ? `test:${paymentId}` : paymentId,
           ),
-          timestamp: now,
+          timestamp: paidAt,
         },
       );
       const engine = createServerProjectionEngine<DB>(db, tenantId, ready.projections, {
@@ -707,10 +753,10 @@ async function recordPayment(
       await engine.advancePulledWatermarks();
       await db
         .updateTable('qrisCharges')
-        .set({ paymentId, paidAt: now })
+        .set({ paymentId, paidAt })
         .where('id', '=', chargeId)
         .execute();
-      return { charge: { ...charge, paymentId, paidAt: now }, recorded: true };
+      return { charge: { ...charge, paymentId, paidAt }, recorded: true };
     }),
   );
   if (outcome === null) return null;

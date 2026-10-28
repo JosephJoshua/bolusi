@@ -32,6 +32,7 @@ import { resolveActingUser, type ActingUser } from '../auth/acting-user.js';
 import type { ServerDeps } from '../deps.js';
 import type { AppEnv } from '../env.js';
 import { ApiError } from '../errors.js';
+import { InMemoryRateLimitStore, perIpRateLimit } from '../middleware/rate-limit.js';
 import { zJson } from '../middleware/validator-hook.js';
 import {
   chargeStatus,
@@ -105,9 +106,20 @@ export function createQrisRouter(deps: ServerDeps) {
 
 const zCallbackParams = z.object({ tenantId: zUuid });
 
+/** Xendit's own pace is far below this; a stranger posting at the callback is slowed down. */
+const CALLBACKS_PER_MINUTE_PER_IP = 300;
+
 export function createXenditCallbackRouter(deps: ServerDeps) {
+  // Its own buckets: callbacks must not spend the login limiter's.
+  const limiter = perIpRateLimit({
+    store: new InMemoryRateLimitStore(),
+    capacityPerMinute: CALLBACKS_PER_MINUTE_PER_IP,
+    now: deps.now,
+    clientIp: deps.clientIp,
+  });
   return new Hono<AppEnv>().post(
     '/qr/:tenantId',
+    limiter,
     bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.body(null, 413) }),
     async (c) => {
       const params = zCallbackParams.safeParse(c.req.param());

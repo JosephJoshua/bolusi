@@ -36,6 +36,8 @@ export interface XenditQrPayment {
   readonly paymentId: string;
   readonly amount: number;
   readonly succeeded: boolean;
+  /** When the customer paid, by Xendit's clock; null when Xendit's answer did not say. */
+  readonly paidAt: number | null;
 }
 
 export interface XenditPort {
@@ -56,6 +58,12 @@ export interface XenditPort {
 /** Test keys start `xnd_development_`; live keys `xnd_production_`. */
 export function environmentOfKey(secretKey: string): QrisEnvironment {
   return secretKey.startsWith('xnd_development_') ? 'test' : 'live';
+}
+
+function timeOf(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : at;
 }
 
 export function createXenditClient(
@@ -137,6 +145,7 @@ export function createXenditClient(
                 paymentId: payment['id'],
                 amount: payment['amount'],
                 succeeded: payment['status'] === 'SUCCEEDED',
+                paidAt: timeOf(payment['created']),
               },
             ]
           : [],

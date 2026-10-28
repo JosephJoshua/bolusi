@@ -5,6 +5,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 const VERSION = 'v1';
+const TAG_BYTES = 16;
 
 export interface SecretSealer {
   seal(plain: string, context: string): string;
@@ -19,7 +20,7 @@ export function createSecretSealer(keyBase64: string): SecretSealer {
   return {
     seal(plain, context) {
       const iv = randomBytes(12);
-      const cipher = createCipheriv('aes-256-gcm', key, iv);
+      const cipher = createCipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_BYTES });
       cipher.setAAD(Buffer.from(context, 'utf8'));
       const body = Buffer.concat([
         cipher.update(plain, 'utf8'),
@@ -34,11 +35,14 @@ export function createSecretSealer(keyBase64: string): SecretSealer {
         throw new Error('unreadable sealed secret');
       }
       const body = Buffer.from(bodyText, 'base64');
-      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivText, 'base64'));
+      if (body.length < TAG_BYTES) throw new Error('unreadable sealed secret');
+      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivText, 'base64'), {
+        authTagLength: TAG_BYTES,
+      });
       decipher.setAAD(Buffer.from(context, 'utf8'));
-      decipher.setAuthTag(body.subarray(body.length - 16));
+      decipher.setAuthTag(body.subarray(body.length - TAG_BYTES));
       return Buffer.concat([
-        decipher.update(body.subarray(0, body.length - 16)),
+        decipher.update(body.subarray(0, body.length - TAG_BYTES)),
         decipher.final(),
       ]).toString('utf8');
     },

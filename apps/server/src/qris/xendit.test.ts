@@ -51,14 +51,19 @@ describe('the Xendit client', () => {
   test('reads a QR payments list, keeping only what it understands', async () => {
     const { client } = recorder(200, {
       data: [
-        { id: 'qrpy_1', amount: 150_000, status: 'SUCCEEDED' },
+        { id: 'qrpy_1', amount: 150_000, status: 'SUCCEEDED', created: '2026-10-28T09:00:00.000Z' },
         { id: 'qrpy_2', amount: 10, status: 'REFUNDED' },
         { nonsense: true },
       ],
     });
     expect(await client.listQrPayments(KEY, 'qr_1')).toEqual([
-      { paymentId: 'qrpy_1', amount: 150_000, succeeded: true },
-      { paymentId: 'qrpy_2', amount: 10, succeeded: false },
+      {
+        paymentId: 'qrpy_1',
+        amount: 150_000,
+        succeeded: true,
+        paidAt: Date.UTC(2026, 9, 28, 9, 0),
+      },
+      { paymentId: 'qrpy_2', amount: 10, succeeded: false, paidAt: null },
     ]);
   });
 

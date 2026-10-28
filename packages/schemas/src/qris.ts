@@ -5,7 +5,7 @@
 // Defined once here for the server's validators and the devices' client.
 import { z } from 'zod';
 
-import { zUuid } from './primitives.js';
+import { zUuid, zUuidV7 } from './primitives.js';
 
 /** Xendit's test mode (a key starting `xnd_development_`) or real money. */
 export const QRIS_ENVIRONMENTS = ['test', 'live'] as const;
@@ -40,7 +40,8 @@ export type QrisConnectionsResponse = z.infer<typeof zQrisConnectionsResponse>;
  */
 export const zQrisChargeBody = z
   .object({
-    id: zUuid,
+    /** A UUIDv7, like every record id a device mints. */
+    id: zUuidV7,
     accountId: zUuid,
     document: z
       .object({

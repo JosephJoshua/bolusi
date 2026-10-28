@@ -36,12 +36,15 @@ class FakeXendit implements XenditPort {
   /** The key each payments read was made with. */
   readonly listKeys: string[] = [];
   down = false;
+  /** An owner regenerated the account's callback token in Xendit. */
+  rotated = '';
 
   setQrWebhook(secretKey: string, url: string) {
     if (!secretKey.startsWith('xnd_')) return Promise.reject(new XenditRefusal('keyInvalid'));
     this.webhooks.push({ key: secretKey, url });
-    // Each Xendit account has its own token; the test key's is CALLBACK_TOKEN.
-    const callbackToken = secretKey === TEST_KEY ? CALLBACK_TOKEN : `token-of-${secretKey}`;
+    // Each Xendit account has its own token; the test key's is CALLBACK_TOKEN until rotated.
+    const callbackToken =
+      secretKey === TEST_KEY ? `${CALLBACK_TOKEN}${this.rotated}` : `token-of-${secretKey}`;
     return Promise.resolve({ callbackToken, environment: 'test' as const });
   }
 
@@ -63,13 +66,14 @@ class FakeXendit implements XenditPort {
     return Promise.resolve();
   }
 
-  pay(qrId: string, amount?: number) {
+  pay(qrId: string, amount?: number, paidAt: number | null = null) {
     const qr = this.qrs.get(qrId);
     if (qr === undefined) throw new Error(`no ${qrId}`);
     qr.payments.push({
       paymentId: `qrpy_${qrId}`,
       amount: amount ?? qr.amount,
       succeeded: true,
+      paidAt,
     });
   }
 }
@@ -464,6 +468,34 @@ describe('recording the payment', () => {
     expect(await paymentOps()).toEqual([]);
     world.xendit.pay('qr_1');
     expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+    expect(await paymentOps()).toHaveLength(1);
+  });
+
+  test('the payment carries the time the customer paid, not the time it was confirmed', async () => {
+    const paidAt = world.h.clock.now() + 60_000;
+    world.xendit.pay('qr_1', undefined, paidAt);
+    world.h.clock.advance(3 * 60 * 60 * 1000);
+    expect((await callback(chargeId, 'qr_1')).status).toBe(200);
+    const [op] = (await paymentOps()) as [SignedOperation];
+    expect(op.timestamp).toBe(paidAt);
+  });
+
+  test('a callback and a device asking at the same moment still record one payment', async () => {
+    world.xendit.pay('qr_1');
+    const results = await Promise.all([
+      callback(chargeId, 'qr_1'),
+      call('GET', `/v1/money/qris/charges/${chargeId}`),
+      callback(chargeId, 'qr_1'),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(await paymentOps()).toHaveLength(1);
+  });
+
+  test('a callback token rotated in Xendit (and reconnected) is still accepted for a QR shown before', async () => {
+    world.xendit.rotated = '-new';
+    expect((await connect()).status).toBe(200);
+    world.xendit.pay('qr_1');
+    expect((await callback(chargeId, 'qr_1', `${CALLBACK_TOKEN}-new`)).status).toBe(200);
     expect(await paymentOps()).toHaveLength(1);
   });
 
