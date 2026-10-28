@@ -73,7 +73,7 @@ function useDocumentMoney(document: MoneyDocument) {
   };
 }
 
-export type RefundProblem = 'amount' | 'tooMuch' | 'reason';
+export type RefundProblem = 'method' | 'amount' | 'tooMuch' | 'reason';
 
 export interface RefundForm {
   /** The document's money and the store's methods have loaded. */
@@ -85,6 +85,7 @@ export interface RefundForm {
   /** What the customer paid that still counts. */
   readonly paid: number;
   readonly methods: readonly RefundMethod[];
+  /** The method picked; '' when none is. */
   readonly account: string;
   readonly setAccount: (account: string) => void;
   /** The amount as typed, digits only. */
@@ -117,21 +118,27 @@ export function useRefund(target: MoneyTarget): RefundForm {
   const [reason, setReason] = useState('');
   const [reference, setReference] = useState('');
 
-  const method = methods.find((m) => m.account === picked) ?? methods[0] ?? null;
+  // A method picked by hand stays picked: if a refund through it syncs in and uses it up, nothing
+  // else is chosen in its place, so the money never goes back some way the counter did not pick.
+  const method =
+    picked === null ? (methods[0] ?? null) : (methods.find((m) => m.account === picked) ?? null);
   const credit = money === null ? 0 : Math.max(0, -money.balance);
   const max = method?.limit ?? 0;
   // Until typed, the overpayment (all of it that this method can give back).
   const digits = typed ?? (credit > 0 ? String(Math.min(credit, max)) : '');
   const amount = rupiah(digits);
   const problem: RefundProblem | null =
-    amount === null || amount <= 0
-      ? 'amount'
-      : amount > max
-        ? 'tooMuch'
-        : reason.trim() === ''
-          ? 'reason'
-          : null;
-  const account = method?.account ?? CASH_ACCOUNT;
+    method === null
+      ? 'method'
+      : amount === null || amount <= 0
+        ? 'amount'
+        : amount > max
+          ? 'tooMuch'
+          : reason.trim() === ''
+            ? 'reason'
+            : null;
+  /** '' while no method is picked. */
+  const account = method?.account ?? '';
   const trimmed = reference.trim();
   return {
     ready: money !== null && accounts !== null,

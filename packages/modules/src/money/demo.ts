@@ -12,6 +12,7 @@ import {
 
 import { CASH_ACCOUNT, type CashMoveKind, type EntryKind } from './constants.js';
 import { movesOut } from './kas.js';
+import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDocument } from './documents.js';
 import { QrisError, type QrisPort } from './qris.js';
 import type {
@@ -31,6 +32,8 @@ export interface DemoMoneyOptions {
   readonly accounts: readonly PaymentAccountRow[];
   /** Who records the next entry. */
   readonly actor: () => string;
+  /** Whether they give back beyond an overpayment (an owner); the counter by default. */
+  readonly mayRefund?: (() => boolean) | undefined;
   /** A finished servisan the customer took home unpaid. */
   readonly debt?:
     { readonly id: string; readonly label: string; readonly amount: number } | undefined;
@@ -334,7 +337,14 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             documentId: doc.id,
             documentLabel: doc.label,
           };
-          if (amount > credit) add({ kind: 'charge_reduced', amount: amount - credit, ...fields });
+          if (amount > credit) {
+            if (options.mayRefund?.() !== true) {
+              return Promise.reject(
+                MONEY_REFUSALS.refuse('refundAboveCredit', { code: 'PERMISSION_DENIED' }),
+              );
+            }
+            add({ kind: 'charge_reduced', amount: amount - credit, ...fields });
+          }
           add({
             kind: 'refund_paid',
             account: String(input['account']),

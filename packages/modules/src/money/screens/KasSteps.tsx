@@ -577,7 +577,11 @@ export function RefundStep({
       }
       onPrimary={submit}
       primaryDisabled={form.input === null}
-      primaryHint={form.input === null ? tm('money.refund.hint') : undefined}
+      primaryHint={
+        form.input === null && form.ready && form.methods.length > 0
+          ? tm('money.refund.hint')
+          : undefined
+      }
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
@@ -638,7 +642,7 @@ export function RefundStep({
               </Text>
             ) : null}
           </View>
-          {form.account === CASH_ACCOUNT ? null : (
+          {form.account === CASH_ACCOUNT || form.account === '' ? null : (
             <View style={styles.gap}>
               <TextInput
                 label={tm('money.refund.reference')}

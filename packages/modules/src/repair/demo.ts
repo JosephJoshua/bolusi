@@ -1447,6 +1447,7 @@ export function demoRepairRuntime(
       now,
       accounts: DEMO_ACCOUNTS,
       actor: () => actor.userId,
+      mayRefund: () => permitted.has(MONEY_PERMISSION.refund),
       debt:
         unpaid === undefined
           ? undefined

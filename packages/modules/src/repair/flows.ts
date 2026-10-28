@@ -397,8 +397,9 @@ export function ticketMoneyActions(
   const owner = hasPermission(MONEY_PERMISSION.refund);
   const paid = ticket.downPayment ?? 0;
   const owed = amountOwed(ticket) - paid;
+  // Money going back is the counter's command, so even an owner needs `receive` (manifest.ts).
   return {
-    refund: (owner && paid > 0) || (hasPermission(MONEY_PERMISSION.receive) && owed < 0),
+    refund: hasPermission(MONEY_PERMISSION.receive) && ((owner && paid > 0) || owed < 0),
     reduce: owner && owed > 0,
   };
 }

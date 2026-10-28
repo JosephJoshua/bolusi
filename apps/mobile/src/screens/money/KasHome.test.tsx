@@ -416,7 +416,12 @@ describe('money back and lowered bills', () => {
 
     const screen = await mount(h, h.ownerId);
     await press(screen, `money.kas.owed.${ticketId}`);
+    // A payment half typed is not dropped without asking.
+    type(screen, 'money.receive.pay.line0.amount', '300000');
+    await settle();
     await press(screen, 'money.receive.reduce');
+    expect(screen.query('money.receive.discard')).not.toBeNull();
+    await press(screen, 'money.receive.discard.confirm');
     expect(text(screen, 'money.reduce.owed')).toContain('Rp 750.000');
     type(screen, 'money.reduce.amount', '100000');
     await settle();

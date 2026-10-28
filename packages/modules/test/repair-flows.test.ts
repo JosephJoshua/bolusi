@@ -425,7 +425,6 @@ describe('an open step after the ticket changed elsewhere', () => {
     location: 'in_store',
     technicianId: null,
     pendingProposals: 0,
-    reduced: 0,
     quoteLines: [],
     ...ticket,
   });

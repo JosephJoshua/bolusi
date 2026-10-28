@@ -439,7 +439,7 @@ export function RefundDialog({
       }
       onSubmit={submit}
       submitDisabled={form.input === null}
-      hint={form.input === null && !nothing ? tm('money.refund.hint') : null}
+      hint={form.input === null && form.ready && !nothing ? tm('money.refund.hint') : null}
       size="md"
       testId={testId}
     >
@@ -499,7 +499,7 @@ export function RefundDialog({
               }
               testId={`${testId}.amount`}
             />
-            {form.account === CASH_ACCOUNT ? null : (
+            {form.account === CASH_ACCOUNT || form.account === '' ? null : (
               <TextField
                 label={tm('money.refund.reference')}
                 value={form.reference}

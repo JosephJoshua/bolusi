@@ -11,6 +11,7 @@ import { DomainError, refusalKeyOf } from '@bolusi/core';
 import enMoney from '../money/i18n/en.json' with { type: 'json' };
 import idMoney from '../money/i18n/id.json' with { type: 'json' };
 import { registerMoneyCatalog } from '../src/money/i18n.js';
+import type { DocumentMoney } from '../src/money/queries.js';
 import { refundMethods } from '../src/money/refund.js';
 import {
   amountOwed,
@@ -370,6 +371,11 @@ describe('the DP once the phone went home', () => {
   });
 });
 
+/** The ledger's figures for a servisan, as the refund step reads them. */
+async function documentMoney(harness: RepairHarness, ticketId: string): Promise<DocumentMoney> {
+  return (await ledger(harness, ticketId)) as unknown as DocumentMoney;
+}
+
 describe('money after the phone went home', () => {
   beforeAll(() => {
     initI18n({ locale: 'id' });
@@ -402,7 +408,7 @@ describe('money after the phone went home', () => {
       refund: true,
       reduce: false,
     });
-    const methods = refundMethods(await ledger(h, ticketId), [], false);
+    const methods = refundMethods(await documentMoney(h, ticketId), [], false);
     expect(methods).toMatchObject([{ account: 'cash', limit: 100_000 }]);
 
     // Beyond the overpayment is the owner's to give back.
@@ -439,7 +445,11 @@ describe('money after the phone went home', () => {
     );
     const paid = await ticket(h, ticketId);
     expect(ticketMoneyActions(paid, may(h, h.ownerId))).toEqual({ refund: true, reduce: false });
-    expect(refundMethods(await ledger(h, ticketId), [], true)).toMatchObject([
+    // Money goes back through the counter's command, which an owner without it cannot run.
+    const without = (permission: string) =>
+      permission !== 'money.receive' && h!.hasPermission(h!.ownerId, permission);
+    expect(ticketMoneyActions(paid, without)).toEqual({ refund: false, reduce: false });
+    expect(refundMethods(await documentMoney(h, ticketId), [], true)).toMatchObject([
       { account: 'cash', limit: TOTAL },
     ]);
 

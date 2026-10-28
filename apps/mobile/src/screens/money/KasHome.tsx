@@ -63,6 +63,12 @@ export function KasHome({
     guardRef.current = guard;
   }, []);
   const toBoard = (): void => setView({ kind: 'board' });
+  // A step with something typed asks before it is dropped, on back and on leaving home alike.
+  const leave = useCallback((proceed: () => void): void => {
+    const guard = guardRef.current;
+    if (guard === null) proceed();
+    else guard(proceed);
+  }, []);
   const toHistory = (): void => setView({ kind: 'history' });
   // Inside a step the header keeps only the sync chip, as in repair's flows.
   const stepChrome = { syncChip, avatar: null };
@@ -72,12 +78,6 @@ export function KasHome({
       onRegisterSurfaceNav?.(null);
       return;
     }
-    // A step with something typed asks before it is dropped, on back and on leaving home alike.
-    const leave = (proceed: () => void): void => {
-      const guard = guardRef.current;
-      if (guard === null) proceed();
-      else guard(proceed);
-    };
     onRegisterSurfaceNav?.({
       handleBack: () => {
         leave(() => setView({ kind: view.kind === 'void' ? 'history' : 'board' }));
@@ -86,7 +86,7 @@ export function KasHome({
       requestLeave: leave,
     });
     return () => onRegisterSurfaceNav?.(null);
-  }, [view, onRegisterSurfaceNav]);
+  }, [view, onRegisterSurfaceNav, leave]);
 
   const screen = (() => {
     switch (view.kind) {
@@ -139,7 +139,9 @@ export function KasHome({
           <ReceiveDebtStep
             chrome={stepChrome}
             balance={view.balance}
-            onReduce={() => setView({ kind: 'reduce', target: targetOf(view.balance) })}
+            onReduce={() =>
+              leave(() => setView({ kind: 'reduce', target: targetOf(view.balance) }))
+            }
             onRegisterDiscardGuard={registerGuard}
             onDone={toBoard}
             onCancel={toBoard}
