@@ -100,8 +100,8 @@
     "discard": "Batalkan",
     "keepEditing": "Lanjut isi",
     "otherStore": "HP ini berisi data toko lain. Masuk pakai akun pemilik toko itu.",
-    "unsyncedTitle": "Perubahan yang belum terkirim",
-    "unsyncedBody": "Dikirim setelah HP ini terdaftar, tetap atas nama yang membuatnya.",
+    "unsyncedTitle": "Perubahan yang belum tersinkron",
+    "unsyncedBody": "Disinkronkan setelah HP ini terdaftar, tetap atas nama yang membuatnya.",
     "unsyncedCount": "{count} perubahan",
     "formerStaff": "Karyawan lama"
   },
@@ -167,7 +167,7 @@
     "makePin": "Buat PIN",
     "deactivate": "Nonaktifkan karyawan",
     "deactivateTitle": "Nonaktifkan {name}?",
-    "deactivateBody": "Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum terkirim akan ditolak. Riwayat kerjanya tetap ada.",
+    "deactivateBody": "Dia tidak bisa masuk lagi, dan perubahan dari HP-nya yang belum tersinkron akan ditolak. Riwayat kerjanya tetap ada.",
     "deactivateConfirm": "Nonaktifkan",
     "inactiveBody": "Dia tidak bisa masuk sampai diaktifkan lagi.",
     "reactivate": "Aktifkan lagi",
@@ -201,7 +201,7 @@
       "body": "Server tidak mengenali komputer ini lagi. Semua perubahan tetap aman di sini sampai pemilik mendaftarkannya ulang.",
       "action": "Daftarkan ulang komputer ini"
     },
-    "unsyncedBody": "Dikirim setelah komputer ini terdaftar, tetap atas nama yang membuatnya.",
+    "unsyncedBody": "Disinkronkan setelah komputer ini terdaftar, tetap atas nama yang membuatnya.",
     "settings": {
       "account": "Akun",
       "pinTitle": "PIN",

@@ -76,23 +76,23 @@ const MATRIX: readonly Row[] = [
   // Sync-status — healthy / saved-here / photos-pending / offline / actively-syncing / needs-attention.
   { screen: 'sync-status', state: 'allSent', testId: 'sync-reassurance' },
   { screen: 'sync-status', state: 'savedHere', testId: 'sync-counter-ops' },
-  // task 147: ops sent, 3 photos queued. The headline reads "Foto belum terkirim" (Photos not sent
-  // yet), NOT "Semua sudah terkirim" — the exact string the browser lane now witnesses over the counter.
+  // task 147: ops sent, 3 photos queued. The headline reads "Foto belum tersinkron" (Photos not synced
+  // yet), NOT "Semua sudah tersinkron" — the exact string the browser lane now witnesses over the counter.
   {
     screen: 'sync-status',
     state: 'photosPending',
     testId: 'sync-counter-media',
-    text: 'Foto belum terkirim',
+    text: 'Foto belum tersinkron',
   },
   { screen: 'sync-status', state: 'offline', testId: 'sync-reassurance' },
   // task 144 item 5: the loop actively pushing — the fifth chip state, previously never screenshotted.
-  // Keyed on the syncing-specific headline ("Sedang mengirim"), so a title regression (the 126/147
+  // Keyed on the syncing-specific headline ("Sedang menyinkronkan"), so a title regression (the 126/147
   // bug class) reds this row rather than passing on a bare testID.
   {
     screen: 'sync-status',
     state: 'syncing',
     testId: 'sync-reassurance',
-    text: 'Sedang mengirim',
+    text: 'Sedang menyinkronkan',
   },
   { screen: 'sync-status', state: 'attention', testId: 'sync-rejected-section' },
   {
@@ -120,7 +120,7 @@ const MATRIX: readonly Row[] = [
     screen: 'enrollment',
     state: 'reenrolWithChanges',
     testId: 'enroll-unsynced',
-    text: 'Perubahan yang belum terkirim',
+    text: 'Perubahan yang belum tersinkron',
   },
 
   // Capture (media) — camera is a labelled placeholder, never a faked photo.

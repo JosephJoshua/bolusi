@@ -1,29 +1,29 @@
 {
   "chip": {
-    "pending": "Belum terkirim",
+    "pending": "Belum tersinkron",
     "rejected": "Ditolak"
   },
   "status": {
     "upToDate": "Datanya aman di server.",
-    "syncing": "Sedang mengirim perubahan ke server.",
-    "pending": "{count} perubahan belum terkirim",
-    "pendingMedia": "{count} foto belum terkirim",
-    "photosPending": "Perubahan sudah terkirim. Fotonya menyusul.",
+    "syncing": "Sedang menyinkronkan perubahan.",
+    "pending": "{count} perubahan belum tersinkron",
+    "pendingMedia": "{count} foto belum tersinkron",
+    "photosPending": "Perubahan sudah tersinkron. Fotonya menyusul.",
     "attentionReassurance": "Cek daftarnya di bawah.",
-    "offline": "Perubahan tersimpan di HP ini dan dikirim saat ada koneksi.",
+    "offline": "Perubahan tersimpan di HP ini dan disinkronkan saat ada koneksi.",
     "reconnected": "Terhubung kembali",
     "lastSynced": "Terakhir terhubung {relative}",
-    "titleSynced": "Semua sudah terkirim",
-    "titlePending": "Ada yang belum terkirim",
-    "titleSyncing": "Sedang mengirim",
+    "titleSynced": "Semua sudah tersinkron",
+    "titlePending": "Ada yang belum tersinkron",
+    "titleSyncing": "Sedang menyinkronkan",
     "titleOffline": "Tidak ada koneksi",
     "titleAttention": "Ada yang perlu dicek",
-    "titlePhotosPending": "Foto belum terkirim",
+    "titlePhotosPending": "Foto belum tersinkron",
     "screenTitle": "Status data",
-    "savedHere": "{count} perubahan tersimpan di HP ini dan akan dikirim otomatis.",
+    "savedHere": "{count} perubahan tersimpan di HP ini dan akan disinkronkan otomatis.",
     "changesLabel": "Perubahan",
     "photosLabel": "Foto",
-    "waitingCount": "{count} belum terkirim"
+    "waitingCount": "{count} belum tersinkron"
   },
   "banner": {
     "warning": "Terakhir terhubung {relative}. Data mungkin bukan yang terbaru.",
@@ -44,7 +44,7 @@
     "body": "Beberapa perubahan dari HP lain gagal diperiksa, jadi belum tampil. Kabari pemilik toko."
   },
   "action": {
-    "syncNow": "Kirim sekarang",
+    "syncNow": "Sinkronkan sekarang",
     "pullToRefresh": "Tarik untuk memperbarui"
   },
   "firstSync": {
@@ -60,8 +60,8 @@
     "retry": "Kirim ulang foto"
   },
   "pc": {
-    "savedHere": "{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.",
-    "offline": "Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.",
+    "savedHere": "{count} perubahan tersimpan di komputer ini dan akan disinkronkan otomatis.",
+    "offline": "Perubahan tersimpan di komputer ini dan disinkronkan saat ada koneksi.",
     "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini.",
     "rejectedExplain": "Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.",
     "rejectedBanner": "{count} perubahan ditolak server."

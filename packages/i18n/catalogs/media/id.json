@@ -1,8 +1,8 @@
 {
   "status": {
-    "pending": "Menunggu dikirim",
+    "pending": "Belum tersinkron",
     "uploading": "Mengirim foto…",
-    "uploaded": "Foto terkirim",
+    "uploaded": "Foto tersinkron",
     "failed": "Gagal mengirim. Ketuk untuk coba lagi.",
     "waitingForConnection": "Menunggu koneksi"
   },
@@ -18,8 +18,8 @@
     "cameraDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera."
   },
   "storage": {
-    "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah terkirim akan dibersihkan.",
-    "lowCritical": "Penyimpanan hampir habis. Semua foto yang sudah terkirim dibersihkan sekarang. Foto yang belum terkirim tetap aman."
+    "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah tersinkron akan dibersihkan.",
+    "lowCritical": "Penyimpanan hampir habis. Semua foto yang sudah tersinkron dibersihkan sekarang. Foto yang belum tersinkron tetap aman."
   },
   "capture": {
     "refusedTitle": "Penyimpanan penuh",

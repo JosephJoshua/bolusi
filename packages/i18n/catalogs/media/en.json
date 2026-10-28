@@ -1,8 +1,8 @@
 {
   "status": {
-    "pending": "Waiting to send",
+    "pending": "Not synced yet",
     "uploading": "Sending photo…",
-    "uploaded": "Photo sent",
+    "uploaded": "Photo synced",
     "failed": "Sending failed. Tap to try again.",
     "waitingForConnection": "Waiting for connection"
   },
@@ -18,8 +18,8 @@
     "cameraDeniedBody": "Open your phone Settings, find this app, then turn on the Camera permission."
   },
   "storage": {
-    "lowWarning": "Storage is getting low. Old photos that have already been sent will be cleaned up.",
-    "lowCritical": "Storage is nearly full. Every photo that has been sent is being cleaned up now. Photos that haven’t been sent yet are kept."
+    "lowWarning": "Storage is getting low. Old photos that have already been synced will be cleaned up.",
+    "lowCritical": "Storage is nearly full. Every photo that has been synced is being cleaned up now. Photos that haven’t been synced yet are kept."
   },
   "capture": {
     "refusedTitle": "Storage full",

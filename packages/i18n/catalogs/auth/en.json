@@ -100,8 +100,8 @@
     "discard": "Cancel enrollment",
     "keepEditing": "Keep going",
     "otherStore": "This phone holds another store’s data. Sign in with that store’s owner account.",
-    "unsyncedTitle": "Changes not sent yet",
-    "unsyncedBody": "Sent once this phone is registered, still under the name of whoever made them.",
+    "unsyncedTitle": "Changes not synced yet",
+    "unsyncedBody": "Synced once this phone is registered, still under the name of whoever made them.",
     "unsyncedCount": "{count, plural, one {# change} other {# changes}}",
     "formerStaff": "Former employee"
   },
@@ -167,7 +167,7 @@
     "makePin": "Make PIN",
     "deactivate": "Deactivate",
     "deactivateTitle": "Deactivate {name}?",
-    "deactivateBody": "They can no longer sign in, and changes from their phone that haven’t been sent yet will be refused. Their work history stays.",
+    "deactivateBody": "They can no longer sign in, and changes from their phone that haven’t been synced yet will be refused. Their work history stays.",
     "deactivateConfirm": "Deactivate",
     "inactiveBody": "They can’t sign in until reactivated.",
     "reactivate": "Reactivate",
@@ -201,7 +201,7 @@
       "body": "The server no longer recognises this computer. Every change stays safe here until an owner registers it again.",
       "action": "Register this computer again"
     },
-    "unsyncedBody": "Sent once this computer is registered, still under the name of whoever made them.",
+    "unsyncedBody": "Synced once this computer is registered, still under the name of whoever made them.",
     "settings": {
       "account": "Account",
       "pinTitle": "PIN",
