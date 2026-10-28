@@ -86,14 +86,19 @@ describe('PC crypto', () => {
   });
 });
 
-/** Two ends of an in-memory port, delivering asynchronously like a real one. */
+/**
+ * Two ends of an in-memory port, delivering asynchronously like a real one. Like a real one, `send`
+ * clones at once and throws for a value that cannot be cloned.
+ */
 function pair(): [Channel, Channel] {
   const listeners: [Set<(m: unknown) => void>, Set<(m: unknown) => void>] = [new Set(), new Set()];
   const end = (mine: 0 | 1): Channel => ({
-    send: (message) =>
+    send: (message) => {
+      const copy = structuredClone(message);
       queueMicrotask(() => {
-        for (const listener of listeners[mine === 0 ? 1 : 0]) listener(structuredClone(message));
-      }),
+        for (const listener of listeners[mine === 0 ? 1 : 0]) listener(copy);
+      });
+    },
     listen(onMessage) {
       listeners[mine].add(onMessage);
       return () => listeners[mine].delete(onMessage);
@@ -115,6 +120,21 @@ describe('window to core calls', () => {
     server.emit('state', { phase: 'ready' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(seen).toEqual([{ phase: 'ready' }]);
+  });
+
+  it('still answers a call whose error or value cannot cross the port', async () => {
+    const [core, window] = pair();
+    serve(core, {
+      badError: () => {
+        throw Object.assign(new Error('save failed'), { details: { retry: () => undefined } });
+      },
+      badValue: () => ({ retry: () => undefined }),
+    });
+    const client = connect(window, reviveCoreError);
+
+    const failed = await client.call('badError').catch((error: unknown) => error);
+    expect((failed as Error).message).toBe('save failed');
+    await expect(client.call('badValue')).rejects.toThrow();
   });
 
   it('brings a domain error and a rule refusal back as their own classes', async () => {
