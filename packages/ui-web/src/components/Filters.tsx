@@ -412,7 +412,7 @@ export function FilterToggle({
     >
       {Icon === undefined ? null : <Icon size={14} aria-hidden />}
       {collapsible ? (
-        <span aria-hidden className="hidden whitespace-nowrap @min-[46rem]:inline">
+        <span aria-hidden className="hidden whitespace-nowrap @min-[54rem]:inline">
           {label}
         </span>
       ) : (
