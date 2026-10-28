@@ -510,7 +510,8 @@
       "intake": "Bawa nota ini saat ambil HP.\nBiaya masih perkiraan. Kalau bertambah, toko konfirmasi dulu.\nToko tidak bertanggung jawab atas data yang hilang.\nHP yang tidak diambil 30 hari setelah dikabari bukan tanggung jawab toko.",
       "handover": "Cek HP sebelum meninggalkan toko.\nGaransi hanya untuk kerusakan dan sparepart yang sama. Bawa nota ini.\nGaransi batal kalau segel rusak, HP kena air atau jatuh, atau dibongkar di tempat lain."
     },
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "link": "Cek status servisan"
   },
   "print": {
     "askTitle": "Notanya sudah tercetak?",
@@ -742,7 +743,11 @@
     "refund": "DP dikembalikan: {amount}",
     "newTotal": "Total jadi {amount}.",
     "askAgree": "Boleh kami lanjutkan, Kak?",
-    "thanks": "Terima kasih."
+    "thanks": "Terima kasih.",
+    "sendLink": "Kirim link status",
+    "received": "Halo Kak {name}, HP {device} sudah kami terima untuk diservis.",
+    "receivedAt": "Halo Kak {name}, HP {device} sudah kami terima untuk diservis di {store}.",
+    "track": "Pantau statusnya di sini: {link}"
   },
   "testPage": {
     "job": "Halaman uji",

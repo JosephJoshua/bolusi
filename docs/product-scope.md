@@ -518,14 +518,17 @@ governance notes in "Decision" where they differ.
   contact. No photos, customer details, notes or staff names.
 - The page closes 30 days after the longest warranty ends (or 30 days after
   pickup when there is none). Lookups are rate limited per IP and never indexed.
-- Slips: dot-matrix strikes both sheets, so the QR is not on one copy only. It
-  sits beside the signatures with the short link and code in bold underneath,
-  and must keep each slip on its form at every paper size. "Kirim link" on
-  WhatsApp at intake is the main way the link reaches the customer. (Slip QR and
-  sending the link follow in a second change.)
-- The site's address is a setting, so the domain can be chosen later. `apps/web`
-  is the start of the later back-office web app: customer pages need no sign-in,
-  staff screens join it with their own routes.
+- Slips: dot-matrix strikes both sheets, so the QR is on every copy. It sits at
+  the right of the signatures with "Cek status servisan" and the address in
+  bold beside it (on narrow paper the signatures move above it), and every paper
+  size keeps the same number of forms. Intake and handover slips both carry it.
+- "Kirim link status" on WhatsApp is the counter's message for a phone in the
+  store when nothing else is due, the main way the link reaches the customer;
+  the ready and price-change messages carry the link too.
+- The link is under the server the device syncs with, which also serves the
+  page, so a new domain needs no app change.
+- `apps/web` is the start of the later back-office web app: customer pages need
+  no sign-in, staff screens join it with their own routes.
 
 ## Open product choices
 

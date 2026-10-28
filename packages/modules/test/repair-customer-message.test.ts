@@ -158,3 +158,38 @@ describe('the words', () => {
     }
   });
 });
+
+describe('the status link', () => {
+  const SITE = 'https://bolusi.id';
+  const inRepair = { ...repaired, outcome: 'in_repair' as const };
+
+  it('is what the counter sends while the phone is in the store and nothing else is due', () => {
+    expect(customerMessageKind(inRepair, COUNTER, SITE)).toBe('statusLink');
+    // Ready or waiting for a yes: those messages come first, and carry the link too.
+    expect(customerMessageKind(repaired, COUNTER, SITE)).toBe('ready');
+    expect(customerMessageKind({ ...inRepair, pendingProposals: 1 }, COUNTER, SITE)).toBe(
+      'priceChange',
+    );
+    // Nothing to send without a site, a code, a number or the counter's job.
+    expect(customerMessageKind(inRepair, COUNTER, null)).toBeNull();
+    expect(customerMessageKind({ ...inRepair, statusCode: null }, COUNTER, SITE)).toBeNull();
+    expect(customerMessageKind({ ...inRepair, customerPhone: null }, COUNTER, SITE)).toBeNull();
+    expect(customerMessageKind(inRepair, TECHNICIAN, SITE)).toBeNull();
+    expect(customerMessageKind({ ...inRepair, location: 'returned' }, COUNTER, SITE)).toBeNull();
+  });
+
+  it('says the phone was received and where to follow it', () => {
+    expect(customerMessage('statusLink', inRepair, 'Bolusi Cell Sorong', SITE)).toBe(
+      [
+        'Halo Kak Yohanes Wanimbo, HP Samsung Galaxy A15 sudah kami terima untuk diservis di Bolusi Cell Sorong.',
+        'No. servisan: K7Q-0042',
+        'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4B',
+        'Terima kasih.',
+      ].join('\n'),
+    );
+    expect(customerMessage('ready', repaired, null, SITE)).toContain(
+      'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4B',
+    );
+    expect(customerMessage('ready', repaired, null)).not.toContain('/c/');
+  });
+});

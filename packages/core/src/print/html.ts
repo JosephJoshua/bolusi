@@ -1,7 +1,7 @@
 // A document as a self-contained HTML page for plain paper and PDF: what the phone hands to the
 // system print dialog or saves as a PDF, and what the desktop app prints to an ordinary printer.
 // No external fonts, scripts or images: everything is inline so it renders offline.
-import type { PrintBlock, PrintDocument, PrintField, PrintImage } from './document.js';
+import type { PrintBlock, PrintDocument, PrintField, PrintImage, PrintLink } from './document.js';
 import { isLandscape, type PaperSettings } from './paper.js';
 
 function esc(text: string): string {
@@ -81,8 +81,40 @@ function main(doc: PrintDocument, paper: PaperSettings): string {
   )}</aside></main>`;
 }
 
+/** A QR code as an inline SVG: one path, a rectangle per run of dark modules, a 4-module margin. */
+function qrSvg(modules: PrintLink['modules']): string {
+  const quiet = 4;
+  const size = modules.length + 2 * quiet;
+  const runs: string[] = [];
+  modules.forEach((row, y) => {
+    let start = -1;
+    row.forEach((dark, x) => {
+      if (dark && start < 0) start = x;
+      if (start >= 0 && (!dark || x === row.length - 1)) {
+        const end = dark ? x + 1 : x;
+        runs.push(
+          `M${String(start + quiet)} ${String(y + quiet)}h${String(end - start)}v1h-${String(end - start)}z`,
+        );
+        start = -1;
+      }
+    });
+  });
+  return `<svg class="qr" viewBox="0 0 ${String(size)} ${String(size)}" shape-rendering="crispEdges" aria-hidden="true"><path d="${runs.join('')}"/></svg>`;
+}
+
+function link(value: PrintLink): string {
+  return `<div class="link">${qrSvg(value.modules)}<div class="link-text"><div class="link-title">${esc(
+    value.title,
+  )}</div><div class="link-address">${esc(value.address)}</div></div></div>`;
+}
+
+/** The signatures, and the link beside them. */
 function closing(doc: PrintDocument): string {
-  return doc.closing.length === 0 ? '' : `<div class="closing">${blocks(doc.closing)}</div>`;
+  const linked = doc.link ?? null;
+  if (doc.closing.length === 0 && linked === null) return '';
+  return `<div class="closing${linked === null ? '' : ' with-link'}"><div class="closing-blocks">${blocks(
+    doc.closing,
+  )}</div>${linked === null ? '' : link(linked)}</div>`;
 }
 
 function copy(doc: PrintDocument, label: string | null, paper: PaperSettings): string {
@@ -162,6 +194,12 @@ main.columns h2:first-child, aside > h2:first-child { margin-top: ${v(4)}; }
 .amounts .strong td { font-weight: 700; color: #111; font-size: 10.5pt; }
 .end { break-inside: avoid; page-break-inside: avoid; }
 .closing { margin-top: ${v(4)}; }
+.closing.with-link { display: flex; align-items: flex-end; gap: 8mm; }
+.closing-blocks { flex: 1; min-width: 0; }
+.link { flex: none; display: flex; flex-direction: column; align-items: center; gap: 1mm; max-width: 42mm; text-align: center; }
+.qr { width: ${small ? 20 : 24}mm; height: ${small ? 20 : 24}mm; display: block; }
+.link-title { font-size: 7.5pt; color: #444; }
+.link-address { font-size: 8.5pt; font-weight: 700; overflow-wrap: anywhere; }
 .signatures { display: flex; gap: 12mm; padding-top: ${v(4)}; }
 .sig { flex: 1; min-width: 0; text-align: center; }
 .sig-role { font-size: 8pt; color: #444; overflow-wrap: anywhere; }

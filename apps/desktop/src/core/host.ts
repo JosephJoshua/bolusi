@@ -261,6 +261,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     setupFor: null,
     session: null,
     sync: null,
+    statusSite: deps.apiBaseUrl,
   };
 
   // Many changes land together (a pull applies ops one by one), so the window gets one state per
@@ -337,6 +338,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       setupFor,
       session: sessionView(),
       sync: shell.sync,
+      statusSite: deps.apiBaseUrl,
     };
   }
 
@@ -388,6 +390,7 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
         readBase64: (uri) => Promise.resolve(uri.slice(uri.indexOf(',') + 1)),
       },
       qris: qrisFor,
+      statusSite: deps.apiBaseUrl,
     });
   }
 

@@ -5,8 +5,8 @@
 // Every string can be as long as its field allows, so nothing is cut: labels, values, names and
 // amounts all wrap inside their own cell. On landscape paper the secondary sections sit in a column
 // beside the body; the layout that needs the fewest forms wins.
-import type { MonoBitmap } from './bitmap.js';
-import type { PrintBlock, PrintDocument, PrintField } from './document.js';
+import { BIT_IMAGE_DPI, qrBitmap, type MonoBitmap } from './bitmap.js';
+import type { PrintBlock, PrintDocument, PrintField, PrintLink } from './document.js';
 import {
   isLandscape,
   textGeometry,
@@ -25,8 +25,16 @@ export interface GridSpan {
 export type GridRow =
   /** `text` is the whole line; `spans` are the same characters split where bold starts or stops. */
   | { readonly kind: 'text'; readonly text: string; readonly spans: readonly GridSpan[] }
-  /** A picture printed `offset` characters in, in 8-dot bands. */
-  | { readonly kind: 'image'; readonly bitmap: MonoBitmap; readonly offset: number };
+  /**
+   * A picture printed `offset` characters in, in 8-dot bands, after `lead`: text printed on the
+   * same pass to its left (the signatures beside a QR code), at most `offset` characters long.
+   */
+  | {
+      readonly kind: 'image';
+      readonly bitmap: MonoBitmap;
+      readonly offset: number;
+      readonly lead: readonly GridSpan[];
+    };
 
 type TextRow = Extract<GridRow, { kind: 'text' }>;
 
@@ -61,6 +69,15 @@ const COLUMN_GAP = 3;
 const MIN_TWO_COLUMN_WIDTH = 76;
 /** The body's share of the width beside an aside. */
 const BODY_SHARE = 0.56;
+/**
+ * Beside a picture, text goes on every other 8-dot band: a draft character is 9 dots tall, so on
+ * the next band it would run into the line below.
+ */
+const BANDS_PER_TEXT_LINE = 2;
+/** Bands left blank between a signer's name above and the line they sign on: about half an inch. */
+const SIGNING_BANDS = 5;
+/** The narrowest signature slot beside a QR code; narrower and the signatures go above it. */
+const MIN_SIGNATURE_SLOT = 14;
 
 function text(value: string, bold = false): TextRow {
   const trimmed = value.replace(/\s+$/, '');
@@ -265,34 +282,112 @@ function centredCells(cells: readonly string[], slotWidth: number, gap: number):
   );
 }
 
-function signatureRows(
-  block: Extract<PrintBlock, { kind: 'signatures' }>,
+type SignaturesBlock = Extract<PrintBlock, { kind: 'signatures' }>;
+
+const SIGNATURE_GAP = 4;
+
+/** A signature block's three parts: who signs, the lines they sign on, and the names under them. */
+function signatureParts(
+  block: SignaturesBlock,
   width: number,
-  compact: boolean,
-): TextRow[] {
+): { roles: TextRow[]; rule: TextRow; names: TextRow[] } {
   const count = Math.max(1, block.slots.length);
-  const gap = 4;
-  const slotWidth = Math.max(1, Math.floor((width - (count - 1) * gap) / count));
+  const slotWidth = Math.max(1, Math.floor((width - (count - 1) * SIGNATURE_GAP) / count));
+  const cells = (values: readonly string[]): TextRow[] =>
+    centredCells(values, slotWidth, SIGNATURE_GAP);
+  const names = block.slots.map((slot) => slot.name ?? '');
+  return {
+    roles: cells(block.slots.map((slot) => slot.role)),
+    rule: cells(block.slots.map(() => '_'.repeat(Math.max(4, slotWidth - 4))))[0] as TextRow,
+    // No names at all leaves no empty line under the rules.
+    names: names.every((name) => name === '') ? [] : cells(names),
+  };
+}
+
+function signatureRows(block: SignaturesBlock, width: number, compact: boolean): TextRow[] {
+  const { roles, rule, names } = signatureParts(block, width);
   // Room to sign: three lines (half an inch), two when squeezing onto one form.
   const space = Array.from({ length: compact ? 2 : 3 }, blank);
-  return [
-    ...centredCells(
-      block.slots.map((slot) => slot.role),
-      slotWidth,
-      gap,
-    ),
-    ...space,
-    ...centredCells(
-      block.slots.map(() => '_'.repeat(Math.max(4, slotWidth - 4))),
-      slotWidth,
-      gap,
-    ),
-    ...centredCells(
-      block.slots.map((slot) => slot.name ?? ''),
-      slotWidth,
-      gap,
-    ),
+  return [...roles, ...space, rule, ...(names.length === 0 ? [blank()] : names)];
+}
+
+/** Rows of `bitmap` from 8-dot band `band`; a band past its foot is a blank sliver. */
+function bandOf(bitmap: MonoBitmap, band: number): MonoBitmap {
+  const top = band * 8;
+  if (top >= bitmap.height) return { width: 1, height: 8, dots: new Uint8Array(8) };
+  const height = Math.min(8, bitmap.height - top);
+  return {
+    width: bitmap.width,
+    height,
+    dots: bitmap.dots.slice(top * bitmap.width, (top + height) * bitmap.width),
+  };
+}
+
+/**
+ * The link's QR code at the right edge, its title and address beside it, and the signatures to
+ * their left when `signatures` is given and they fit; printed band by band, so the text and the
+ * code share the same lines of the form.
+ */
+function linkGroup(
+  link: PrintLink,
+  signatures: SignaturesBlock | null,
+  geometry: TextGeometry,
+): Group {
+  const width = geometry.columns;
+  const bitmap = qrBitmap(link.modules);
+  const cpi = geometry.pitch === 17 ? 17.14 : geometry.pitch;
+  const qrColumns = Math.ceil((bitmap.width / BIT_IMAGE_DPI.x) * cpi);
+  const offset = Math.max(0, width - qrColumns);
+  const captionWidth = Math.max(
+    1,
+    Math.min(Math.max(link.title.length, link.address.length), offset - COLUMN_GAP),
+  );
+  const signatureWidth = signatures === null ? 0 : offset - captionWidth - 2 * COLUMN_GAP;
+  const slots = signatures?.slots.length ?? 0;
+  const besideSignatures =
+    signatures !== null &&
+    signatureWidth >= slots * MIN_SIGNATURE_SLOT + (slots - 1) * SIGNATURE_GAP;
+
+  // What prints on each band, left of the code: the caption right-aligned against it.
+  const left: (TextRow | undefined)[] = [];
+  const caption: (TextRow | undefined)[] = [];
+  const captionCell = besideSignatures ? captionWidth : offset - COLUMN_GAP;
+  const captionRows = [
+    ...wrapText(link.title, captionWidth).map((line) => text(padLeft(line, captionCell))),
+    ...wrapText(link.address, captionWidth).map((line) => text(padLeft(line, captionCell), true)),
   ];
+  const qrBands = Math.ceil(bitmap.height / 8);
+  const captionSpan = (captionRows.length - 1) * BANDS_PER_TEXT_LINE + 1;
+  const captionStart = Math.max(0, Math.floor((qrBands - captionSpan) / 2));
+  captionRows.forEach((row, i) => {
+    caption[captionStart + i * BANDS_PER_TEXT_LINE] = row;
+  });
+  if (besideSignatures) {
+    const { roles, rule, names } = signatureParts(signatures, signatureWidth);
+    let band = 0;
+    for (const row of roles) {
+      left[band] = row;
+      band += BANDS_PER_TEXT_LINE;
+    }
+    band += SIGNING_BANDS - BANDS_PER_TEXT_LINE + 1;
+    for (const row of [rule, ...names]) {
+      left[band] = row;
+      band += BANDS_PER_TEXT_LINE;
+    }
+  }
+  const bands = Math.max(qrBands, left.length, caption.length);
+  const rows: GridRow[] = Array.from({ length: bands }, (_, band) => {
+    const lead = joinCells([
+      ...(besideSignatures ? [{ row: left[band], width: signatureWidth }] : []),
+      { row: caption[band], width: captionCell },
+    ]);
+    return { kind: 'image', bitmap: bandOf(bitmap, band), offset, lead: lead.spans };
+  });
+  const above =
+    signatures !== null && !besideSignatures
+      ? [...signatureRows(signatures, width, false), blank()]
+      : [];
+  return { rows: [...above, ...rows], keepTogether: true, keepWithNext: false };
 }
 
 /** Column numbers across the printable width: shows at a glance whether the paper is set right. */
@@ -409,6 +504,10 @@ function asciiDocument(doc: PrintDocument): PrintDocument {
     blocks: doc.blocks.map(asciiBlock),
     aside: doc.aside.map(asciiBlock),
     closing: doc.closing.map(asciiBlock),
+    link:
+      doc.link === undefined || doc.link === null
+        ? null
+        : { ...doc.link, title: a(doc.link.title), address: a(doc.link.address) },
   };
 }
 
@@ -419,7 +518,12 @@ function headerGroup(doc: PrintDocument, copy: string | null, geometry: TextGeom
   // A logo wider than the line is left out rather than wrapped onto the next band.
   const logoCols = logo === null ? 0 : Math.ceil((logo.width / 120) * geometry.pitch);
   if (logo !== null && logoCols <= width) {
-    rows.push({ kind: 'image', bitmap: logo, offset: Math.floor((width - logoCols) / 2) });
+    rows.push({
+      kind: 'image',
+      bitmap: logo,
+      offset: Math.floor((width - logoCols) / 2),
+      lead: [],
+    });
   }
   for (const line of wrapText(doc.header.name, width)) rows.push(text(center(line, width), true));
   // Short address and contact lines share one line, to leave the form's height for the slip.
@@ -516,11 +620,22 @@ interface CopyGroups {
   readonly foot: Group[];
 }
 
-/** The closing blocks full width, a blank line above them even when compact: room to sign. */
-function closingGroups(doc: PrintDocument, width: number, compact: boolean): Group[] {
-  return blockGroups(doc.closing, width, compact).map((group, i) =>
-    i > 0 ? group : { ...group, rows: [blank(), ...group.rows] },
-  );
+/**
+ * The closing blocks full width, a blank line above them even when compact: room to sign. A link
+ * goes beside the first signatures, or after the closing when there are none.
+ */
+function closingGroups(doc: PrintDocument, geometry: TextGeometry, compact: boolean): Group[] {
+  const width = geometry.columns;
+  const link = doc.link ?? null;
+  const signatureAt = doc.closing.findIndex((block) => block.kind === 'signatures');
+  const groups = blockGroups(doc.closing, width, compact);
+  if (link !== null) {
+    const signatures = (doc.closing[signatureAt] as SignaturesBlock | undefined) ?? null;
+    const group = linkGroup(link, signatures, geometry);
+    if (signatureAt >= 0) groups[signatureAt] = group;
+    else groups.push(group);
+  }
+  return groups.map((group, i) => (i > 0 ? group : { ...group, rows: [blank(), ...group.rows] }));
 }
 
 /**
@@ -532,10 +647,11 @@ function closingGroups(doc: PrintDocument, width: number, compact: boolean): Gro
  */
 function columnGroups(
   doc: PrintDocument,
-  width: number,
+  geometry: TextGeometry,
   compact: boolean,
   closingBeside: boolean,
 ): CopyGroups {
+  const width = geometry.columns;
   const bodyWidth = Math.floor((width - COLUMN_GAP) * BODY_SHARE);
   const asideWidth = width - COLUMN_GAP - bodyWidth;
   let best: { body: TextRow[]; aside: TextRow[] } | null = null;
@@ -554,15 +670,19 @@ function columnGroups(
     aside: [],
   };
   const beside = [blank(), ...columnRows(doc.closing, asideWidth, compact)];
+  // A link's QR code needs the full width beside the signatures.
   const fitsBeside =
-    closingBeside && doc.closing.length > 0 && aside.length + beside.length <= body.length;
+    closingBeside &&
+    (doc.link ?? null) === null &&
+    doc.closing.length > 0 &&
+    aside.length + beside.length <= body.length;
   const columns: Group = {
     rows: zipColumns(body, bodyWidth, fitsBeside ? [...aside, ...beside] : aside, asideWidth),
     keepTogether: false,
     keepWithNext: false,
   };
   if (fitsBeside) return { content: [columns], foot: [] };
-  return { content: [columns], foot: closingGroups(doc, width, compact) };
+  return { content: [columns], foot: closingGroups(doc, geometry, compact) };
 }
 
 /** Up to `MAX_STRETCH_LINES` blank lines above the foot, from what a one-form copy leaves spare. */
@@ -593,10 +713,10 @@ function layoutCopy(
   const header = headerGroup(doc, copy, geometry);
   // Stacked: the aside continues the body as more blocks, the closing under it.
   const body: CopyGroups = variant.sideBySide
-    ? columnGroups(doc, width, compact, variant.closingBeside)
+    ? columnGroups(doc, geometry, compact, variant.closingBeside)
     : {
         content: blockGroups([...doc.blocks, ...doc.aside], width, compact),
-        foot: closingGroups(doc, width, compact),
+        foot: closingGroups(doc, geometry, compact),
       };
   const footer = footerGroup(doc, paper.carbonless, width, compact);
   const groups: CopyGroups = {

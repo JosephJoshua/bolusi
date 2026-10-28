@@ -96,6 +96,7 @@ export async function outputSlip(
     signature: signatureUri === null ? null : { dataUri: signatureUri, mono: null },
     printedAt: Date.now(),
     printedByName: userName,
+    statusSite: runtime.statusSite,
   });
   const outcome = await send(printing, doc, sheet, how);
   if (outcome === 'done') await runtime.run('recordSlipPrinted', { ticketId: row.id, slip });

@@ -146,6 +146,7 @@ export function ready(over: Partial<CoreState> = {}): CoreState {
     setupFor: null,
     session: session(),
     sync: null,
+    statusSite: 'https://bolusi.example',
     ...over,
   };
 }

@@ -12,7 +12,9 @@ import type {
   PrintField,
   PrintHeader,
   PrintImage,
+  PrintLink,
 } from '@bolusi/core';
+import { encode } from 'uqr';
 
 import type { MediaRefMime, ThumbnailRef } from '@bolusi/schemas';
 
@@ -28,6 +30,7 @@ import {
   warrantyTerms,
 } from './labels.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow } from './queries.js';
+import { statusAddress, statusQrText } from './status-link.js';
 
 /** What a slip needs besides the ticket. */
 export interface SlipContext {
@@ -36,6 +39,8 @@ export interface SlipContext {
   readonly terms: string | null;
   readonly printedAt: number;
   readonly printedByName: string | null;
+  /** The customer's status page, printed beside the signatures; null leaves it off. */
+  readonly link: PrintLink | null;
 }
 
 export interface HandoverSlipContext extends SlipContext {
@@ -96,6 +101,7 @@ function common(
     copies: [tn('repair.slip.copy.store'), tn('repair.slip.copy.customer')],
     plyNote: tn('repair.slip.plyNote'),
     footer: printed,
+    link: ctx.link,
   };
 }
 
@@ -387,6 +393,21 @@ export function storeHeader(
   };
 }
 
+/**
+ * The customer's status page as a slip prints it: a QR code and the address to type. Null for a
+ * servisan without a link (taken in before links), or a device that does not know its site.
+ */
+export function slipLink(ticket: TicketDetailRow, site: string | null): PrintLink | null {
+  if (ticket.statusCode === null || site === null) return null;
+  // M recovers 15% of the code: room for a smudge on a carbon copy.
+  const { data } = encode(statusQrText(site, ticket.statusCode), { ecc: 'M', border: 0 });
+  return {
+    modules: data,
+    title: tn('repair.slip.link'),
+    address: statusAddress(site, ticket.statusCode),
+  };
+}
+
 /** Everything besides the ticket that goes on a slip, as the platform resolved it. */
 export interface SlipSources {
   readonly settings: PrintSettings;
@@ -397,6 +418,8 @@ export interface SlipSources {
   readonly signature: PrintImage | null;
   readonly printedAt: number;
   readonly printedByName: string | null;
+  /** The site that serves the customer's status page (`RepairRuntime.statusSite`). */
+  readonly statusSite: string | null;
 }
 
 /** A slip with this store's header and terms: what every platform prints. */
@@ -411,6 +434,7 @@ export function slipDocument(
     terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
     printedAt: sources.printedAt,
     printedByName: sources.printedByName,
+    link: slipLink(ticket, sources.statusSite),
   };
   return slip === 'intake'
     ? intakeSlip(ticket, ctx)

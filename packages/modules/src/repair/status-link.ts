@@ -87,3 +87,16 @@ export function displayStatusCode(code: string): string {
 export function statusLink(site: string, code: string): string {
   return `${site.replace(/\/+$/, '')}${STATUS_PATH_PREFIX}${code}`;
 }
+
+/**
+ * The link as its QR code carries it: in capitals, so it packs into the code's alphanumeric mode
+ * and makes a smaller code. The site and the page both read the path in any case.
+ */
+export function statusQrText(site: string, code: string): string {
+  return statusLink(site, code).toUpperCase();
+}
+
+/** The link without its scheme, to type from paper: `bolusi.id/c/K7M2Q9XA4B`. */
+export function statusAddress(site: string, code: string): string {
+  return statusLink(site, code).replace(/^https?:\/\//i, '');
+}

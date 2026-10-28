@@ -141,6 +141,12 @@ export interface RepairRuntime extends ModulePort<typeof repairModule>, LiveSour
    */
   readonly loadModelPhoto: (photo: DeviceModelPhoto) => Promise<string | null>;
   /**
+   * The site that serves customers' status pages: the server this device syncs with, which serves
+   * the web app too. Slips print the link under it and the counter sends it on WhatsApp; null where
+   * there is no server (a demo), and no link is offered.
+   */
+  readonly statusSite: string | null;
+  /**
    * Hand one photo to the platform to save or send (the share sheet on a phone, a download on the
    * web). Absent ⇒ this build cannot, and the photo viewer shows no share button.
    */

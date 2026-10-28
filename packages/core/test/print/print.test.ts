@@ -2,15 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PAPER_PRESETS,
+  QR_MODULE_DOTS,
   layoutGrid,
+  qrBitmap,
   renderEscp,
   renderHtml,
   textGeometry,
   toMonoBitmap,
   toPrinterAscii,
   wrapText,
+  type GridPage,
   type PaperSettings,
   type PrintDocument,
+  type PrintLink,
 } from '../../src/index.js';
 
 const LOGO_URI = 'data:image/png;base64,iVBORw0KGgo=';
@@ -261,6 +265,116 @@ describe('text-mode layout', () => {
   });
 });
 
+/** A 21 x 21 QR-sized pattern: a checkerboard, so every band carries ink. */
+const LINK: PrintLink = {
+  modules: Array.from({ length: 21 }, (_, y) =>
+    Array.from({ length: 21 }, (_, x) => (x + y) % 2 === 0),
+  ),
+  title: 'Cek status servisan',
+  address: 'bolusi.id/c/K7M2Q9XA4B',
+};
+
+/** A page's height in 1/216 inch: text lines at the layout's spacing, pictures by 8-dot band. */
+function pageUnits(page: GridPage, linesPerInch: number): number {
+  return page.reduce(
+    (sum, row) =>
+      sum + (row.kind === 'text' ? 216 / linesPerInch : Math.ceil(row.bitmap.height / 8) * 24),
+    0,
+  );
+}
+
+/** The text a band row prints left of its picture. */
+const leadText = (row: GridPage[number]): string =>
+  row.kind === 'image' ? row.lead.map((span) => span.text).join('') : '';
+
+describe('a link beside the signatures', () => {
+  const papers: PaperSettings[] = Object.values(PAPER_PRESETS);
+
+  it('prints the code band by band at the right edge, the signatures and its address beside it', () => {
+    const paper = PAPER_PRESETS.continuous_half;
+    const { geometry, pages } = layoutGrid(sampleDoc({ link: LINK }), paper);
+    expect(pages).toHaveLength(1);
+    const bands = (pages[0] ?? []).filter(
+      (row): row is Extract<GridPage[number], { kind: 'image' }> => row.kind === 'image',
+    );
+    const qr = qrBitmap(LINK.modules);
+    // Every dot of the code, in order, band after band.
+    const printed = bands.flatMap((band) =>
+      band.bitmap.width === qr.width ? [...band.bitmap.dots] : [],
+    );
+    expect(printed).toEqual([...qr.dots]);
+    for (const band of bands) {
+      expect(band.offset).toBe(geometry.columns - Math.ceil((qr.width / 120) * geometry.pitch));
+      expect(leadText(band).length).toBeLessThanOrEqual(band.offset);
+    }
+    const leads = bands.map(leadText);
+    expect(leads.some((lead) => lead.includes('Pelanggan') && lead.includes('Petugas toko'))).toBe(
+      true,
+    );
+    expect(leads.some((lead) => lead.includes('Yohanes Wanimbo'))).toBe(true);
+    // A 9-dot character overruns its band by a dot, so the next band leaves those columns blank.
+    for (let i = 1; i < leads.length; i += 1) {
+      const above = leads[i - 1] ?? '';
+      const below = leads[i] ?? '';
+      for (let col = 0; col < below.length; col += 1) {
+        if (below[col] !== ' ') expect(above[col] ?? ' ', `band ${String(i)}`).toBe(' ');
+      }
+    }
+    const address = bands.find((band) => leadText(band).includes(LINK.address));
+    expect(address?.lead.find((span) => span.text.includes(LINK.address))?.bold).toBe(true);
+  });
+
+  it.each(papers)('keeps the slip on as many forms as without it ($preset)', (paper) => {
+    const without = layoutGrid(sampleDoc(), paper);
+    const withLink = layoutGrid(sampleDoc({ link: LINK }), paper);
+    expect(withLink.pages).toHaveLength(without.pages.length);
+    for (const page of withLink.pages) {
+      expect(pageUnits(page, withLink.geometry.linesPerInch)).toBeLessThanOrEqual(
+        (withLink.geometry.pageLines - 1) * (216 / withLink.geometry.linesPerInch),
+      );
+      for (const row of page) {
+        if (row.kind === 'text')
+          expect(row.text.length).toBeLessThanOrEqual(withLink.geometry.columns);
+      }
+    }
+  });
+
+  it('puts the signatures above it where they would not fit beside', () => {
+    const paper: PaperSettings = { ...PAPER_PRESETS.a5, preset: 'custom', widthMm: 100 };
+    const { pages } = layoutGrid(sampleDoc({ link: LINK }), paper);
+    const rows = pages.flat();
+    const firstBand = rows.findIndex((row) => row.kind === 'image');
+    const roles = rows.findIndex((row) => row.kind === 'text' && row.text.includes('Pelanggan'));
+    expect(roles).toBeGreaterThan(-1);
+    expect(roles).toBeLessThan(firstBand);
+    expect(
+      rows
+        .filter((row) => row.kind === 'image')
+        .map(leadText)
+        .join(' '),
+    ).toContain(LINK.address);
+  });
+
+  it('is drawn with the address on plain paper', () => {
+    const html = renderHtml(sampleDoc({ link: LINK }), PAPER_PRESETS.a4);
+    expect(html).toContain('<svg class="qr"');
+    expect(html).toContain('bolusi.id/c/K7M2Q9XA4B');
+    expect(renderHtml(sampleDoc(), PAPER_PRESETS.a4)).not.toContain('<svg');
+  });
+
+  it('scales each module to a block of dots', () => {
+    const bitmap = qrBitmap([
+      [true, false],
+      [false, true],
+    ]);
+    expect(bitmap.width).toBe(2 * QR_MODULE_DOTS.x);
+    expect(bitmap.height).toBe(2 * QR_MODULE_DOTS.y);
+    expect(bitmap.dots[0]).toBe(1);
+    expect(bitmap.dots[QR_MODULE_DOTS.x]).toBe(0);
+    expect(bitmap.dots[bitmap.width * bitmap.height - 1]).toBe(1);
+  });
+});
+
 describe('ESC/P bytes', () => {
   it('sets up the printer, ends every page with a form feed, and sends only ASCII text', () => {
     const paper = PAPER_PRESETS.continuous_full;
@@ -294,6 +408,13 @@ describe('ESC/P bytes', () => {
     // The second band holds the ninth row: column 0 only.
     const second = bytes.indexOf(0x2a, at + 1);
     expect(bytes.slice(second + 1, second + 6)).toEqual([1, 2, 0, 0x80, 0x00]);
+  });
+
+  it('prints a band’s text before its picture, on the same pass', () => {
+    const bytes = renderEscp(sampleDoc({ link: LINK }), PAPER_PRESETS.continuous_half);
+    const text = new TextDecoder('latin1').decode(bytes);
+    // The address in bold, then spaces up to the code, then the code's bit image.
+    expect(text).toMatch(/\x1bEbolusi\.id\/c\/K7M2Q9XA4B\x1bF *\x1b\*\x01/);
   });
 });
 

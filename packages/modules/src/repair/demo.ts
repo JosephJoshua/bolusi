@@ -1818,6 +1818,8 @@ export function demoRepairRuntime(
     playVideo: () => Promise.resolve(),
     printing,
     loadModelPhoto: demoModelPhoto,
+    // An example site, so the demo's slips and servisan show a link as a store's would.
+    statusSite: 'https://bolusi.example',
     loadThumbnail: (ref: ThumbnailRef) =>
       Promise.resolve({ kind: 'ready', uri: placeholderUri(ref.mediaId) }),
     // The browser stand-in for the share sheet: a download of the same file.
