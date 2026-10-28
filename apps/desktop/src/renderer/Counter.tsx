@@ -105,10 +105,20 @@ export function Counter({
   const go = (next: Page): void => {
     if (next.kind !== page.kind) leave(() => setPage(next));
   };
-  // Switching person leaves Settings too; locking keeps everything as it is.
-  const personMenu = menuItems.map((item) =>
-    item.key === 'lock' ? item : { ...item, onSelect: () => leave(item.onSelect) },
-  );
+  // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
+  // as well; locking keeps everything as it is.
+  const personMenu: readonly MenuItem[] = [
+    ...menuItems.map((item) =>
+      item.key === 'lock' ? item : { ...item, onSelect: () => leave(item.onSelect) },
+    ),
+    {
+      key: 'settings',
+      label: t('core.settings.title'),
+      icon: Settings,
+      separated: true,
+      onSelect: () => go({ kind: 'settings' }),
+    },
+  ];
   const registerLeaveGuard = useCallback((guard: LeaveGuard | null) => {
     leaveGuard.current = guard;
   }, []);
