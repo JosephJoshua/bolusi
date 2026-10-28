@@ -288,19 +288,29 @@ export function handoverSlip(ticket: TicketDetailRow, ctx: HandoverSlipContext):
   );
 }
 
-/** The pictures a slip shows, to load before building it: the store logo, the handover signature. */
-export function slipPictures(
-  ticket: TicketDetailRow,
-  slip: SlipKind,
-  settings: PrintSettings,
-): { readonly logo: ThumbnailRef | null; readonly signature: ThumbnailRef | null } {
+/** The signature a slip shows, to load before building it: the customer's, on a handover slip. */
+export function slipSignature(ticket: TicketDetailRow, slip: SlipKind): ThumbnailRef | null {
   const signature = slip === 'handover' ? photoInSlot(ticket, 'signature') : null;
+  return signature === null ? null : photoThumbnailRef(signature);
+}
+
+/** The store's logo, to load before printing; null when it has none. */
+export function logoRef(settings: PrintSettings): ThumbnailRef | null {
+  return settings.logo === null
+    ? null
+    : { kind: 'signed', ...settings.logo, mime: settings.logo.mime as MediaRefMime };
+}
+
+/** The top of every page this store prints: its name (or the one set for slips), address, phone. */
+export function storeHeader(
+  settings: PrintSettings,
+  storeName: string,
+  logo: PrintImage | null,
+): PrintHeader {
   return {
-    logo:
-      settings.logo === null
-        ? null
-        : { kind: 'signed', ...settings.logo, mime: settings.logo.mime as MediaRefMime },
-    signature: signature === null ? null : photoThumbnailRef(signature),
+    name: settings.name ?? storeName,
+    lines: [settings.address, settings.phone].filter((line) => line.trim() !== ''),
+    logo,
   };
 }
 
@@ -309,7 +319,7 @@ export interface SlipSources {
   readonly settings: PrintSettings;
   /** The store's own name, printed when the owner has not set another. */
   readonly storeName: string;
-  /** The pictures `slipPictures` named, loaded; null leaves one out. */
+  /** The logo and signature (`logoRef`, `slipSignature`), loaded; null leaves one out. */
   readonly logo: PrintImage | null;
   readonly signature: PrintImage | null;
   readonly printedAt: number;
@@ -324,11 +334,7 @@ export function slipDocument(
 ): PrintDocument {
   const { settings } = sources;
   const ctx: SlipContext = {
-    header: {
-      name: settings.name ?? sources.storeName,
-      lines: [settings.address, settings.phone].filter((line) => line.trim() !== ''),
-      logo: sources.logo,
-    },
+    header: storeHeader(settings, sources.storeName, sources.logo),
     terms: slip === 'intake' ? settings.intakeTerms : settings.handoverTerms,
     printedAt: sources.printedAt,
     printedByName: sources.printedByName,
@@ -340,4 +346,32 @@ export function slipDocument(
         handedOverByName: ticket.returnedByName,
         signature: sources.signature,
       });
+}
+
+/**
+ * A test page for setting up a printer: the store's header, the paper it was printed for and a
+ * ruler across the printable width, so the counter can see the text fits and the form lines up
+ * before printing a real slip.
+ */
+export function testPageDocument(
+  header: PrintHeader,
+  paperLabel: string,
+  printedAt: number,
+): PrintDocument {
+  return {
+    jobName: tn('repair.testPage.job'),
+    header,
+    title: tn('repair.testPage.title'),
+    reference: paperLabel,
+    meta: [tn('repair.slip.printed', { date: formatDateTime(printedAt) })],
+    blocks: [
+      { kind: 'ruler', caption: tn('repair.testPage.ruler') },
+      { kind: 'paragraph', text: tn('repair.testPage.check') },
+    ],
+    aside: [],
+    closing: [],
+    copies: [],
+    plyNote: null,
+    footer: null,
+  };
 }

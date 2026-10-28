@@ -1,0 +1,41 @@
+# The Windows installer and its self-update feed. Built on a Windows runner by
+# .github/workflows/desktop-release.yml; see docs/development.md "Releasing the counter app".
+appId: id.bolusi.counter
+productName: Bolusi
+directories:
+  output: release
+  buildResources: build
+# Vite bundles the screens and their packages; only the main process's own runtime
+# dependencies (package.json "dependencies") are installed beside it.
+files:
+  - dist/**
+  - '!dist/**/*.map'
+  - package.json
+asar: true
+# Chromium's other UI translations are dead weight on a 4 GB counter PC's disk.
+electronLanguages:
+  - id
+  - en-US
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: Bolusi-Setup-${version}.${ext}
+  requestedExecutionLevel: asInvoker
+# One click, per user, no admin: the installer and every update run without a Windows
+# password prompt. Uninstalling keeps the app's data, which may hold unsynced work.
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Bolusi
+  deleteAppDataOnUninstall: false
+publish:
+  provider: github
+  owner: JosephJoshua
+  repo: bolusi
+  releaseType: release
+  tagNamePrefix: desktop-v

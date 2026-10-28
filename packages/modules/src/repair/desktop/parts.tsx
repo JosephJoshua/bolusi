@@ -27,7 +27,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 
 import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
 import {
@@ -37,12 +37,17 @@ import {
   type StaleStep,
   type TicketStatus,
 } from '../flows.js';
-import { tn } from '../i18n.js';
+import { tn, type RepairKey } from '../i18n.js';
 import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
 import { specFacts } from '../device-specs.js';
 import type { DeviceModelPhoto } from '../device-models.js';
 import { useCatalogModel } from '../model-picker.js';
-import { useModelPhoto, useRepairThumbnail } from '../runtime.js';
+import {
+  PrinterProblem,
+  useModelPhoto,
+  useRepairThumbnail,
+  type PrinterProblemReason,
+} from '../runtime.js';
 
 const STATUS_ICON: Readonly<Record<TicketStatus, LucideIcon>> = {
   received: Inbox,
@@ -86,6 +91,56 @@ export function ActionError({
       message={translateErrorCode(errorCode)}
       onDismiss={onDismiss}
       dismissLabel={t('core.action.close')}
+    />
+  );
+}
+
+/**
+ * Why the last print did not reach the printer, kept apart from other failures so the screen can
+ * say what to check. `catchProblem` wraps a print: a `PrinterProblem` becomes the reason here and
+ * the print reads as not done.
+ */
+export function usePrinterProblem(): readonly [
+  PrinterProblemReason | null,
+  <T>(print: Promise<T>) => Promise<T | 'cancelled'>,
+  () => void,
+] {
+  const [problem, setProblem] = useState<PrinterProblemReason | null>(null);
+  const catchProblem = useCallback(async <T,>(print: Promise<T>): Promise<T | 'cancelled'> => {
+    setProblem(null);
+    try {
+      return await print;
+    } catch (error) {
+      if (!(error instanceof PrinterProblem)) throw error;
+      setProblem(error.reason);
+      return 'cancelled';
+    }
+  }, []);
+  const clear = useCallback(() => setProblem(null), []);
+  return [problem, catchProblem, clear];
+}
+
+const PRINTER_PROBLEM_KEY: Readonly<Record<PrinterProblemReason, RepairKey>> = {
+  noPrinter: 'repair.print.problem.noPrinter',
+  printerMissing: 'repair.print.problem.printerMissing',
+  failed: 'repair.print.problem.failed',
+};
+
+export function PrinterProblemBanner({
+  problem,
+  onDismiss,
+}: {
+  readonly problem: PrinterProblemReason | null;
+  /** Absent for a problem that stays until it is fixed (no printer picked). */
+  readonly onDismiss?: (() => void) | undefined;
+}): React.JSX.Element | null {
+  if (problem === null) return null;
+  return (
+    <Banner
+      tone="danger"
+      message={tn(PRINTER_PROBLEM_KEY[problem])}
+      onDismiss={onDismiss}
+      dismissLabel={onDismiss === undefined ? undefined : t('core.action.close')}
     />
   );
 }

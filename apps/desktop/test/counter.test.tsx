@@ -7,9 +7,29 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
+import type * as CaptureDialogs from '../src/renderer/capture-dialogs.js';
+
+// jsdom has no webcam: a photo asked for is taken at once. The dialogs have their own tests.
+vi.mock('../src/renderer/capture-dialogs.js', async (importOriginal) => {
+  const real = await importOriginal<typeof CaptureDialogs>();
+  return {
+    ...real,
+    createCaptureDialogs: (): ReturnType<typeof real.createCaptureDialogs> => {
+      const dialogs = real.createCaptureDialogs();
+      return {
+        ...dialogs,
+        capture: {
+          ...dialogs.capture,
+          photo: () => Promise.resolve({ bytes: new Uint8Array([0xff, 0xd8]), mime: 'image/jpeg' }),
+        },
+      };
+    },
+  };
+});
 
 beforeEach(() => {
   window.localStorage.clear();
+  URL.createObjectURL = () => 'blob:photo';
   initI18n({ locale: 'id' });
   registerRepairCatalog({ id: idRepairCatalog, en: enRepairCatalog });
 });
@@ -23,6 +43,7 @@ function renderApp(): void {
   );
 }
 
+const RETAKE = 'Foto ulang';
 const byTestId = (id: string): HTMLElement => screen.getByTestId(id);
 
 async function openTicket(name: string): Promise<void> {
@@ -89,10 +110,13 @@ describe('counter app over demo data', () => {
     for (const key of ['1', '5', '9', '6', 'Enter']) fireEvent.keyDown(pad, { key });
     await waitFor(() => expect(pad.getAttribute('data-value')).toBe('1596'));
     fireEvent.click(byTestId('repair.desk.intake.restOk'));
-    for (const tile of screen.getAllByTestId(/^repair\.desk\.intake\.photo\./)) {
+    const tiles = screen.getAllByTestId(/^repair\.desk\.intake\.photo\./);
+    for (const [index, tile] of tiles.entries()) {
       await act(async () => {
         fireEvent.click(tile);
       });
+      // Stored one at a time, like a person shooting each angle.
+      await waitFor(() => expect(screen.queryAllByText(RETAKE)).toHaveLength(index + 1));
     }
     fireEvent.change(byTestId('repair.desk.intake.line.0.description'), {
       target: { value: 'LCD A54' },
@@ -257,11 +281,11 @@ describe('counter app over demo data', () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
     fireEvent.click(byTestId('nav.settings'));
-    const a4 = await screen.findByTestId('repair.desk.paper.choice.a4');
+    const a4 = await screen.findByTestId('repair.desk.printing.paper.a4');
     await waitFor(() =>
-      expect(byTestId('repair.desk.paper.choice.continuous_half').getAttribute('data-state')).toBe(
-        'on',
-      ),
+      expect(
+        byTestId('repair.desk.printing.paper.continuous_half').getAttribute('data-state'),
+      ).toBe('on'),
     );
     fireEvent.click(a4);
     await waitFor(() => expect(a4.getAttribute('data-state')).toBe('on'));
