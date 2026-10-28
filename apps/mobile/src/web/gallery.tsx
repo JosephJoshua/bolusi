@@ -184,25 +184,41 @@ function SettingsInteractive(): React.JSX.Element {
       onOpenStaff={noop}
       onOpenStaffPins={noop}
       lockedStaffCount={1}
-      repair={{
-        section: 'Servisan',
-        rows: [
-          {
-            icon: 'list',
-            title: 'Pilihan saat terima HP',
-            summary: 'Cek fungsi, kelengkapan, sisi HP yang difoto',
-            onOpen: noop,
-            testID: 'settings-intake-options',
-          },
-          {
-            icon: 'money',
-            title: 'Biaya pembatalan',
-            summary: 'Dibayar pelanggan kalau servisan dibatalkan',
-            onOpen: noop,
-            testID: 'settings-cancel-fees',
-          },
-        ],
-      }}
+      modules={[
+        {
+          section: 'Servisan',
+          testID: 'settings-section-repair',
+          rows: [
+            {
+              icon: 'list',
+              title: 'Pilihan saat terima HP',
+              summary: 'Cek fungsi, kelengkapan, sisi HP yang difoto',
+              onOpen: noop,
+              testID: 'settings-intake-options',
+            },
+            {
+              icon: 'money',
+              title: 'Biaya pembatalan',
+              summary: 'Dibayar pelanggan kalau servisan dibatalkan',
+              onOpen: noop,
+              testID: 'settings-cancel-fees',
+            },
+          ],
+        },
+        {
+          section: 'Kas',
+          testID: 'settings-section-money',
+          rows: [
+            {
+              icon: 'money',
+              title: 'Metode pembayaran',
+              summary: 'QRIS, EDC, dan rekening transfer',
+              onOpen: noop,
+              testID: 'settings-payment-methods',
+            },
+          ],
+        },
+      ]}
       syncChip="synced"
       pendingCount={0}
       onOpenSync={noop}

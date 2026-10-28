@@ -10,6 +10,7 @@ import {
   NAV_BAR_INSET,
   Sheet,
   SyncChip,
+  TabBar,
   color,
   size,
   space,
@@ -28,6 +29,8 @@ import {
 import { NotesHome } from './src/screens/notes/NotesHome.js';
 import { RepairSettingsRoute } from './src/screens/repair/RepairSettingsRoute.js';
 import { RepairHome } from './src/screens/repair/RepairHome.js';
+import { KasHome } from './src/screens/money/KasHome.js';
+import { PaymentMethodsRoute } from './src/screens/money/PaymentMethodsRoute.js';
 import { PartsRoute } from './src/screens/inventory/PartsRoute.js';
 import { systemClock } from '@bolusi/device/ports/clock';
 import { renderZone } from './src/navigation/RootNavigator.js';
@@ -100,7 +103,9 @@ import {
   parseIntakeDraft,
   type IntakeDraft,
 } from '@bolusi/modules/repair';
-import { tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { servisanCustomers, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { MONEY_PERMISSION } from '@bolusi/modules/money';
+import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
 import { ti } from '@bolusi/modules/inventory/screens';
 import { parseNoteDraft, type NoteDraft, type NotesRuntime } from '@bolusi/modules/notes/screens';
@@ -294,6 +299,11 @@ export default function App(props: AppProps): React.JSX.Element {
   const [switching, setSwitching] = useState(false);
   // The avatar's menu (switch user, settings), open over the home surface.
   const [accountMenu, setAccountMenu] = useState(false);
+  // The home tab (Servisan or Kas) is the person's own: whoever signs in next starts on Servisan.
+  const [homeTab, setHomeTab] = useState<{ readonly userId: string; readonly tab: HomeTab }>({
+    userId: '',
+    tab: 'repair',
+  });
   const { fontScale } = useWindowDimensions();
   /**
    * The user asked to RE-ENROL this device from the empty-roster switcher (task 168, D27). Feeds
@@ -741,10 +751,33 @@ export default function App(props: AppProps): React.JSX.Element {
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setUncollectedDays);
   const canSetPrintSettings =
     props.repair !== undefined && props.repair.hasPermission(REPAIR_PERMISSION.setPrintSettings);
-  const closeRepairSettings = useCallback(() => setRoute('settings'), []);
+  const backToSettings = useCallback(() => setRoute('settings'), []);
   const closeParts = useCallback(() => setRoute('home'), []);
   const setupPercent =
     props.sync.firstSync === null ? null : firstSyncPercent(props.sync.firstSync);
+  // The ledger as the Kas screens read it: repair's money port, live on the same tables.
+  const moneyRuntime = useMemo((): MoneyRuntime | null => {
+    if (props.repair === undefined) return null;
+    const repair = props.repair;
+    const users = props.users ?? [];
+    return {
+      ...repair.money,
+      subscribe: repair.subscribe,
+      nameOf: (userId) => users.find((user) => user.id === userId)?.name ?? null,
+      customersOf: (documents) => servisanCustomers(repair, documents),
+    };
+  }, [props.repair, props.users]);
+  // Kas is a tab for whoever counts the drawer or reads the store's money; others see no tabs.
+  const showsKas =
+    moneyRuntime !== null &&
+    (moneyRuntime.hasPermission(MONEY_PERMISSION.read) ||
+      moneyRuntime.hasPermission(MONEY_PERMISSION.countCash));
+  // The list reads the methods as the payment step does, so it also needs `receive`.
+  const canManageAccounts =
+    moneyRuntime !== null &&
+    moneyRuntime.hasPermission(MONEY_PERMISSION.receive) &&
+    (moneyRuntime.hasPermission(MONEY_PERMISSION.manageAccounts) ||
+      moneyRuntime.hasPermission(MONEY_PERMISSION.manageCentralAccounts));
   const currentUser = useMemo(() => {
     if (props.session === null) return null;
     const found = (props.users ?? []).find((user) => user.id === props.session?.userId);
@@ -757,6 +790,73 @@ export default function App(props: AppProps): React.JSX.Element {
           roleKeys: found.roleKeys,
         };
   }, [props.session, props.users]);
+
+  const tab: HomeTab =
+    showsKas && currentUser !== null && homeTab.userId === currentUser.id ? homeTab.tab : 'repair';
+  const selectTab = useCallback(
+    (next: HomeTab): void => setHomeTab({ userId: currentUser?.id ?? '', tab: next }),
+    [currentUser],
+  );
+  /**
+   * The home surface's back/leave with tabs. On Servisan it is repair's own. On Kas, back closes an
+   * open Kas step or returns to Servisan (never an app exit from the second tab), and leaving home
+   * still asks about a half-done intake on the hidden Servisan, after showing it.
+   */
+  const repairNavRef = useRef<SurfaceNav | null>(null);
+  const kasNavRef = useRef<SurfaceNav | null>(null);
+  const tabRef = useRef<HomeTab>(tab);
+  const selectTabRef = useRef(selectTab);
+  selectTabRef.current = selectTab;
+  const syncHomeNav = useCallback((): void => {
+    registerSurfaceNav(
+      tabRef.current === 'repair'
+        ? repairNavRef.current
+        : {
+            handleBack: () => {
+              const kas = kasNavRef.current;
+              if (kas !== null) return kas.handleBack();
+              selectTabRef.current('repair');
+              return true;
+            },
+            requestLeave: (proceed) => {
+              const toServisan = (): void => {
+                const repair = repairNavRef.current;
+                if (repair === null) {
+                  proceed();
+                  return;
+                }
+                selectTabRef.current('repair');
+                repair.requestLeave(proceed);
+              };
+              // A half-typed Kas step asks first, then the intake behind it.
+              const kas = kasNavRef.current;
+              if (kas === null) toServisan();
+              else kas.requestLeave(toServisan);
+            },
+          },
+    );
+  }, [registerSurfaceNav]);
+  const registerRepairNav = useCallback(
+    (nav: SurfaceNav | null): void => {
+      repairNavRef.current = nav;
+      syncHomeNav();
+    },
+    [syncHomeNav],
+  );
+  // A Kas step holds what was typed only while it shows, so the tabs give way to its own back.
+  const [kasStepOpen, setKasStepOpen] = useState(false);
+  const registerKasNav = useCallback(
+    (nav: SurfaceNav | null): void => {
+      kasNavRef.current = nav;
+      setKasStepOpen(nav !== null);
+      syncHomeNav();
+    },
+    [syncHomeNav],
+  );
+  useEffect(() => {
+    tabRef.current = tab;
+    syncHomeNav();
+  }, [tab, syncHomeNav]);
 
   // The shell's edge-to-edge insets, resolved once per render and applied at BOTH `bolusi-app-shell`
   // returns below — so the capture zone and the main zone can never drift on the top inset. The top
@@ -1052,6 +1152,17 @@ export default function App(props: AppProps): React.JSX.Element {
                 />
               ) : null;
             if (syncStatus !== null && syncReturn !== 'home') return syncStatus;
+            // The chip on a settings page or the parts list: tapping it leaves through the page's guard.
+            const routeSyncChip = (
+              <SyncChip
+                state={chip}
+                pendingCount={props.sync.pendingOperationCount}
+                accessibilityLabels={syncChipAccessibilityLabels({
+                  pendingCount: props.sync.pendingOperationCount,
+                })}
+                onPress={() => leaveHome(() => setRoute('syncStatus'))}
+              />
+            );
             if (shellZone.route === 'settings' && currentUser !== null) {
               return (
                 <SettingsScreen
@@ -1078,67 +1189,85 @@ export default function App(props: AppProps): React.JSX.Element {
                   }
                   // Each row for whoever may change it here: the store's settings for owners, the
                   // phone's paper for anyone who prints.
-                  repair={{
-                    section: tn('repair.board.title'),
-                    rows: [
-                      ...(canSetIntakeOptions
-                        ? [
-                            {
-                              icon: 'list' as const,
-                              title: tn('repair.options.title'),
-                              summary: tn('repair.options.summary'),
-                              onOpen: () => setRoute('intakeOptions'),
-                              testID: 'settings-intake-options',
-                            },
-                          ]
-                        : []),
-                      ...(canSetCancelFees
+                  modules={[
+                    {
+                      section: tn('repair.board.title'),
+                      testID: 'settings-section-repair',
+                      rows: [
+                        ...(canSetIntakeOptions
+                          ? [
+                              {
+                                icon: 'list' as const,
+                                title: tn('repair.options.title'),
+                                summary: tn('repair.options.summary'),
+                                onOpen: () => setRoute('intakeOptions'),
+                                testID: 'settings-intake-options',
+                              },
+                            ]
+                          : []),
+                        ...(canSetCancelFees
+                          ? [
+                              {
+                                icon: 'money' as const,
+                                title: tn('repair.fees.title'),
+                                summary: tn('repair.fees.summary'),
+                                onOpen: () => setRoute('cancelFees'),
+                                testID: 'settings-cancel-fees',
+                              },
+                            ]
+                          : []),
+                        ...(canSetUncollectedDays
+                          ? [
+                              {
+                                icon: 'clock' as const,
+                                title: tn('repair.uncollected.title'),
+                                summary: tn('repair.uncollected.summary'),
+                                onOpen: () => setRoute('uncollectedDays'),
+                                testID: 'settings-uncollected-days',
+                              },
+                            ]
+                          : []),
+                        ...(canSetPrintSettings
+                          ? [
+                              {
+                                icon: 'print' as const,
+                                title: tn('repair.printSettings.title'),
+                                summary: tn('repair.printSettings.summary'),
+                                onOpen: () => setRoute('printSettings'),
+                                testID: 'settings-print-settings',
+                              },
+                            ]
+                          : []),
+                        // The phone's own paper: anyone who prints here may set it.
+                        ...(props.repair?.printing !== undefined
+                          ? [
+                              {
+                                icon: 'paper' as const,
+                                title: tn('repair.paper.title'),
+                                summary: tn('repair.paper.phoneSummary'),
+                                onOpen: () => setRoute('printPaper'),
+                                testID: 'settings-print-paper',
+                              },
+                            ]
+                          : []),
+                      ],
+                    },
+                    {
+                      section: tm('money.kas.title'),
+                      testID: 'settings-section-money',
+                      rows: canManageAccounts
                         ? [
                             {
                               icon: 'money' as const,
-                              title: tn('repair.fees.title'),
-                              summary: tn('repair.fees.summary'),
-                              onOpen: () => setRoute('cancelFees'),
-                              testID: 'settings-cancel-fees',
+                              title: tm('money.methods.title'),
+                              summary: tm('money.methods.summary'),
+                              onOpen: () => setRoute('paymentMethods'),
+                              testID: 'settings-payment-methods',
                             },
                           ]
-                        : []),
-                      ...(canSetUncollectedDays
-                        ? [
-                            {
-                              icon: 'clock' as const,
-                              title: tn('repair.uncollected.title'),
-                              summary: tn('repair.uncollected.summary'),
-                              onOpen: () => setRoute('uncollectedDays'),
-                              testID: 'settings-uncollected-days',
-                            },
-                          ]
-                        : []),
-                      ...(canSetPrintSettings
-                        ? [
-                            {
-                              icon: 'print' as const,
-                              title: tn('repair.printSettings.title'),
-                              summary: tn('repair.printSettings.summary'),
-                              onOpen: () => setRoute('printSettings'),
-                              testID: 'settings-print-settings',
-                            },
-                          ]
-                        : []),
-                      // The phone's own paper: anyone who prints here may set it.
-                      ...(props.repair?.printing !== undefined
-                        ? [
-                            {
-                              icon: 'paper' as const,
-                              title: tn('repair.paper.title'),
-                              summary: tn('repair.paper.phoneSummary'),
-                              onOpen: () => setRoute('printPaper'),
-                              testID: 'settings-print-paper',
-                            },
-                          ]
-                        : []),
-                    ],
-                  }}
+                        : [],
+                    },
+                  ]}
                   syncChip={chip}
                   pendingCount={props.sync.pendingOperationCount}
                   onOpenSync={openSyncStatus}
@@ -1157,17 +1286,18 @@ export default function App(props: AppProps): React.JSX.Element {
                 <RepairSettingsRoute
                   page={shellZone.route}
                   runtime={props.repair}
-                  syncChip={
-                    <SyncChip
-                      state={chip}
-                      pendingCount={props.sync.pendingOperationCount}
-                      accessibilityLabels={syncChipAccessibilityLabels({
-                        pendingCount: props.sync.pendingOperationCount,
-                      })}
-                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
-                    />
-                  }
-                  onClose={closeRepairSettings}
+                  syncChip={routeSyncChip}
+                  onClose={backToSettings}
+                  onRegisterSurfaceNav={registerSurfaceNav}
+                />
+              );
+            }
+            if (shellZone.route === 'paymentMethods' && moneyRuntime !== null) {
+              return (
+                <PaymentMethodsRoute
+                  runtime={moneyRuntime}
+                  syncChip={routeSyncChip}
+                  onClose={backToSettings}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
               );
@@ -1176,16 +1306,7 @@ export default function App(props: AppProps): React.JSX.Element {
               return (
                 <PartsRoute
                   runtime={props.repair.inventory}
-                  syncChip={
-                    <SyncChip
-                      state={chip}
-                      pendingCount={props.sync.pendingOperationCount}
-                      accessibilityLabels={syncChipAccessibilityLabels({
-                        pendingCount: props.sync.pendingOperationCount,
-                      })}
-                      onPress={() => leaveHome(() => setRoute('syncStatus'))}
-                    />
-                  }
+                  syncChip={routeSyncChip}
                   onClose={closeParts}
                   onRegisterSurfaceNav={registerSurfaceNav}
                 />
@@ -1305,18 +1426,46 @@ export default function App(props: AppProps): React.JSX.Element {
                 );
               // Repair is the slice-1 home; notes stays the home on a build without it.
               if (props.repair !== undefined) {
-                return (
+                const repairHome = (
                   <RepairHome
                     runtime={props.repair}
                     // The clock itself, not this render's reading: an intake can sit open for hours.
                     now={props.clock ?? systemClock.now}
-                    onRegisterSurfaceNav={registerSurfaceNav}
+                    onRegisterSurfaceNav={registerRepairNav}
                     restoredDraft={restoredIntakeDraft}
                     onDraftChange={publishIntakeDraft}
                     onOpenSyncStatus={openSyncStatus}
                     syncChip={homeSyncChip}
                     avatar={homeAvatar}
                   />
+                );
+                if (!showsKas || moneyRuntime === null) return repairHome;
+                // Servisan stays mounted behind Kas, so a half-done intake survives a look at the
+                // drawer. Kas holds nothing worth keeping, so it is only there while it shows.
+                return (
+                  <View style={FILL}>
+                    <View style={tab === 'repair' ? FILL : HIDDEN}>{repairHome}</View>
+                    {tab === 'kas' ? (
+                      <KasHome
+                        runtime={moneyRuntime}
+                        now={props.clock ?? systemClock.now}
+                        syncChip={homeSyncChip}
+                        avatar={homeAvatar}
+                        onRegisterSurfaceNav={registerKasNav}
+                      />
+                    ) : null}
+                    {tab === 'kas' && kasStepOpen ? null : (
+                      <TabBar
+                        tabs={[
+                          { key: 'repair', label: tn('repair.board.title'), icon: 'repair' },
+                          { key: 'kas', label: tm('money.kas.title'), icon: 'money' },
+                        ]}
+                        selected={tab}
+                        onSelect={selectTab}
+                        testID="shell-tabs"
+                      />
+                    )}
+                  </View>
                 );
               }
               if (props.notes === undefined) return <View testID="shell-home" style={FILL} />;
@@ -1473,6 +1622,9 @@ function sameMediaRef(a: NoteDraft['mediaRef'], b: NoteDraft['mediaRef']): boole
   return a.mediaId === b.mediaId && a.sha256 === b.sha256;
 }
 
+/** The home surface's tabs, shown when the person may see Kas. */
+type HomeTab = 'repair' | 'kas';
+
 const FILL = { flex: 1 } as const;
 const HIDDEN = { display: 'none' } as const;
 
@@ -1490,6 +1642,7 @@ const MODULE_SURFACE_ROUTES: ReadonlySet<ShellRoute> = new Set([
   'printSettings',
   'printPaper',
   'parts',
+  'paymentMethods',
 ]);
 
 /**

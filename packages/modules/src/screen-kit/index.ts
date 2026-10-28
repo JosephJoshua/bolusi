@@ -14,7 +14,7 @@ export type { CaptureRequest, CapturedMedia, PhotoCapture, SignatureCapture } fr
 export { useLiveQuery, type LiveSource, type QueryState } from './live.js';
 export { TYPING_PAUSE_MS, useSettledValue } from './settled.js';
 export { useTick } from './tick.js';
-export { hasRejectedOp, statusesFor, type EntitySyncStatuses } from './sync-statuses.js';
+export { rejectedCount, statusesFor, type EntitySyncStatuses } from './sync-statuses.js';
 export {
   useThumbnailState,
   type ThumbnailLoader,

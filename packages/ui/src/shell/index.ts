@@ -5,3 +5,4 @@
 export { AppShell } from './AppShell.js';
 export { AvatarButton } from './AvatarButton.js';
 export { SyncChip } from './SyncChip.js';
+export { TabBar } from './TabBar.js';

@@ -62,6 +62,8 @@
   "pc": {
     "savedHere": "{count} perubahan tersimpan di komputer ini dan akan dikirim otomatis.",
     "offline": "Perubahan tersimpan di komputer ini dan dikirim saat ada koneksi.",
-    "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini."
+    "mediaFailed": "{count} foto belum bisa dikirim. Fotonya aman di komputer ini.",
+    "rejectedExplain": "Sudah dibatalkan juga di komputer ini. Ulangi kalau masih perlu.",
+    "rejectedBanner": "{count} perubahan ditolak server."
   }
 }

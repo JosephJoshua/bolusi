@@ -109,6 +109,13 @@ run's data away from a real install. On Linux without a keyring, development run
 secrets with Electron's fixed key; an installed app never does. The e2e suite starts its
 own server (`e2e/live.spec.ts`) and runs the screen tests over the demo.
 
+`apps/desktop/test/repair-journey.test.ts` (part of `pnpm test`) takes one servisan from intake to
+handover across a counter PC, a technician's device and a newly registered one, each running the
+real offline core against a real server, with the network cut and requests lost before and after
+the server saved them, and a power cut with unsent work. It checks that every device and the
+server end with the same servisan, each change once, and balanced books. Run it after changing
+sync, repair or money.
+
 Printing: the printer and paper are picked once in the app's Settings and kept in
 `device-settings.json` in the app's data folder. Dot-matrix paper (continuous) goes to
 the printer as a RAW ESC/P job through the Windows spooler (`src/main/raw-print.ts`,

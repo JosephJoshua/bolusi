@@ -94,6 +94,7 @@ export type { AppShellProps } from './shell/AppShell.js';
 export { useScrollLock, type ScrollLock } from './shell/scroll-lock.js';
 export type { AvatarButtonProps } from './shell/AvatarButton.js';
 export type { SyncChipProps, SyncChipState } from './shell/SyncChip.js';
+export type { TabBarProps, TabBarTab } from './shell/TabBar.js';
 
 // ---- Pure logic + constants --------------------------------------------------------------------
 // Deliberately NOT re-exported through the component barrels: those are mapped over by the Gallery

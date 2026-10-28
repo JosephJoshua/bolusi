@@ -1064,6 +1064,20 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     ),
   })),
 
+  TabBar: (['first', 'second'] as const).map((selected) => ({
+    id: selected,
+    render: (l) => (
+      <shellInventory.TabBar
+        tabs={[
+          { key: 'first', label: l.title, icon: 'repair' },
+          { key: 'second', label: l.action, icon: 'money' },
+        ]}
+        selected={selected}
+        onSelect={noop}
+      />
+    ),
+  })),
+
   AvatarButton: [
     {
       id: 'default',

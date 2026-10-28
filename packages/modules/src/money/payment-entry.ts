@@ -2,6 +2,8 @@
 // the same: one or more lines, each a method and an amount, against what is due. A cash line may
 // carry what the customer handed over, so the screen can show the change; an EDC line needs its
 // approval code (`referenceRequired`).
+import { formatNumber } from '@bolusi/i18n';
+
 import { CASH_ACCOUNT, referenceRequired, type PaymentAccountKind } from './constants.js';
 import type { PaymentInput } from './commands.js';
 import { tm } from './i18n.js';
@@ -36,8 +38,21 @@ export interface PaymentEntry {
   readonly complete: boolean;
 }
 
+const MAX_DIGITS = 13;
+
+/** The digits of what was typed into an amount field, or null when it is too long to be money. */
+export function digitsOf(text: string): string | null {
+  const digits = text.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  return digits.length > MAX_DIGITS ? null : digits;
+}
+
+/** "650.000" for typed digits, empty for none: the amount reads as the customer hears it. */
+export function digitsText(digits: string): string {
+  return digits === '' ? '' : formatNumber(Number(digits));
+}
+
 /** Whole rupiah from typed digits; null when empty. */
-function rupiah(text: string): number | null {
+export function rupiah(text: string): number | null {
   const digits = text.replace(/\D/g, '');
   return digits === '' ? null : Number(digits);
 }

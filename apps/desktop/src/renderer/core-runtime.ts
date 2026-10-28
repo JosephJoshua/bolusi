@@ -78,6 +78,7 @@ export function createCoreRepairRuntime(deps: {
       colleagueHasPermission: (colleague, permission) =>
         deps.session.colleaguePermissions[colleague]?.includes(permission) ?? false,
       newId,
+      stores: () => call('money.stores'),
     },
     subscribe: (listener) => client.on(CORE_EVENTS.repairChanged, listener),
     ticketSyncStatuses: (ticketIds) => call('repair.ticketSyncStatuses', ticketIds),

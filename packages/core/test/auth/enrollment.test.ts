@@ -37,6 +37,7 @@ import {
   runEnrollment,
   STORE_ID_META_KEY,
   STORE_NAME_META_KEY,
+  STORES_META_KEY,
   TENANT_NAME_META_KEY,
   type DeviceBundle,
   type DeviceIdentity,
@@ -461,7 +462,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
     expect(await readStoreId(restarted)).toBe(fx.params.storeId);
   });
 
-  it('after enrollment meta_kv holds EXACTLY {firstPinUserId, idleLockSeconds, storeName, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
+  it('after enrollment meta_kv holds EXACTLY {firstPinUserId, idleLockSeconds, storeName, stores, tenantName, deviceId, storeId, tenantId} — the draft is spent (T-14)', async () => {
     // A presence spot-check would pass on a row that also wrote keys nobody declared; assert the whole
     // set. deviceId/storeId are task 88's; tenantId, the store/tenant DISPLAY NAMES and (task 133) the
     // tenant's idleLockSeconds are applyBundle's — every one of them re-delivered on each refresh, so
@@ -473,6 +474,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
       FIRST_PIN_USER_META_KEY,
       IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
+      STORES_META_KEY,
       TENANT_NAME_META_KEY,
       DEVICE_ID_META_KEY,
       STORE_ID_META_KEY,
@@ -487,6 +489,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
       'auth.tenantName',
       'auth.idleLockSeconds',
     ]);
+    expect(STORES_META_KEY).toBe('auth.stores');
     // THE ENROLLED DEVICE HOLDS THE TENANT'S TIMEOUT FROM ITS FIRST MOMENT (§6.4). Before task 133
     // this key did not exist, so a device sat on the 300 s default until its first bundle refresh —
     // and `SessionManager` was constructed without the value at all, so it sat there forever.
@@ -510,6 +513,7 @@ describe('device identity persistence (task 88; 10-db §9; api/02-auth §4.1/§7
       FIRST_PIN_USER_META_KEY,
       IDLE_LOCK_SECONDS_META_KEY,
       STORE_NAME_META_KEY,
+      STORES_META_KEY,
       TENANT_NAME_META_KEY,
       DEVICE_ID_META_KEY,
       STORE_ID_META_KEY,
