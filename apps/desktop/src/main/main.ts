@@ -70,13 +70,29 @@ app.on('second-instance', () => {
 
 void app.whenReady().then(() => {
   if (!primary) return;
-  // Only copying (a phone number) is allowed. No camera, microphone or other device until the
-  // capture step asks for one deliberately.
-  const allowed = (permission: string): boolean => ALLOWED_PERMISSIONS.has(permission);
-  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
-    callback(allowed(permission)),
-  );
-  session.defaultSession.setPermissionCheckHandler((_contents, permission) => allowed(permission));
+  // Only copying (a phone number) and the webcam are allowed: no microphone, location or other
+  // device.
+  const counter = (contents: Electron.WebContents | null): boolean =>
+    contents !== null && [...counterWindows].some((window) => window.webContents === contents);
+  // The webcam for intake and handover photos, video only and only for the counter's own page.
+  const camera = (permission: string, kinds: readonly string[] | undefined): boolean =>
+    permission === 'media' &&
+    kinds !== undefined &&
+    kinds.length > 0 &&
+    kinds.every((kind) => kind === 'video');
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const kinds = 'mediaTypes' in details ? details.mediaTypes : undefined;
+    callback(
+      ALLOWED_PERMISSIONS.has(permission) || (counter(contents) && camera(permission, kinds)),
+    );
+  });
+  session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => {
+    const kind = details.mediaType;
+    return (
+      ALLOWED_PERMISSIONS.has(permission) ||
+      (counter(contents) && camera(permission, kind === undefined ? undefined : [kind]))
+    );
+  });
   registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
   registerUpdates(trusted, () => [...counterWindows].map((window) => window.webContents));
   createWindow();

@@ -113,6 +113,25 @@ const source = {
         later: 'Terpasang sendiri saat aplikasi ditutup.',
         install: 'Pasang sekarang',
       },
+      camera: {
+        shoot: 'Ambil foto',
+        retake: 'Ulangi',
+        use: 'Pakai foto',
+        switchCamera: 'Ganti kamera',
+        starting: 'Menyalakan kamera…',
+        none: 'Kamera tidak ditemukan. Pasang webcam, lalu coba lagi.',
+        denied:
+          'Kamera belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Kamera, lalu coba lagi.',
+        failed:
+          'Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.',
+        saveFailed: 'Fotonya belum bisa disimpan. Coba lagi.',
+      },
+      signature: {
+        hint: 'Minta pelanggan tanda tangan di kotak ini.',
+        clear: 'Hapus',
+        use: 'Simpan tanda tangan',
+        saveFailed: 'Tanda tangannya belum bisa disimpan. Coba lagi.',
+      },
     },
     auth: {
       switcher: {
@@ -545,6 +564,24 @@ export const resources = {
           ready: 'New version ready',
           later: 'Installs by itself when the app closes.',
           install: 'Install now',
+        },
+        camera: {
+          shoot: 'Take photo',
+          retake: 'Retake',
+          use: 'Use photo',
+          switchCamera: 'Switch camera',
+          starting: 'Starting the camera…',
+          none: 'No camera found. Connect a webcam, then try again.',
+          denied:
+            'The camera isn’t allowed. Allow it in Windows Settings › Privacy › Camera, then try again.',
+          failed: 'The camera won’t start. Close other apps using it, then try again.',
+          saveFailed: 'Couldn’t save the photo. Try again.',
+        },
+        signature: {
+          hint: 'Ask the customer to sign in this box.',
+          clear: 'Clear',
+          use: 'Save signature',
+          saveFailed: 'Couldn’t save the signature. Try again.',
         },
       },
       auth: {

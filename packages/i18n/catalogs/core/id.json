@@ -117,5 +117,22 @@
     "ready": "Versi baru siap",
     "later": "Terpasang sendiri saat aplikasi ditutup.",
     "install": "Pasang sekarang"
+  },
+  "camera": {
+    "shoot": "Ambil foto",
+    "retake": "Ulangi",
+    "use": "Pakai foto",
+    "switchCamera": "Ganti kamera",
+    "starting": "Menyalakan kamera…",
+    "none": "Kamera tidak ditemukan. Pasang webcam, lalu coba lagi.",
+    "denied": "Kamera belum diizinkan. Izinkan di Pengaturan Windows › Privasi › Kamera, lalu coba lagi.",
+    "failed": "Kamera belum bisa menyala. Tutup aplikasi lain yang memakai kamera, lalu coba lagi.",
+    "saveFailed": "Fotonya belum bisa disimpan. Coba lagi."
+  },
+  "signature": {
+    "hint": "Minta pelanggan tanda tangan di kotak ini.",
+    "clear": "Hapus",
+    "use": "Simpan tanda tangan",
+    "saveFailed": "Tanda tangannya belum bisa disimpan. Coba lagi."
   }
 }

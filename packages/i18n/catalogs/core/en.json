@@ -117,5 +117,22 @@
     "ready": "New version ready",
     "later": "Installs by itself when the app closes.",
     "install": "Install now"
+  },
+  "camera": {
+    "shoot": "Take photo",
+    "retake": "Retake",
+    "use": "Use photo",
+    "switchCamera": "Switch camera",
+    "starting": "Starting the camera…",
+    "none": "No camera found. Connect a webcam, then try again.",
+    "denied": "The camera isn’t allowed. Allow it in Windows Settings › Privacy › Camera, then try again.",
+    "failed": "The camera won’t start. Close other apps using it, then try again.",
+    "saveFailed": "Couldn’t save the photo. Try again."
+  },
+  "signature": {
+    "hint": "Ask the customer to sign in this box.",
+    "clear": "Clear",
+    "use": "Save signature",
+    "saveFailed": "Couldn’t save the signature. Try again."
   }
 }

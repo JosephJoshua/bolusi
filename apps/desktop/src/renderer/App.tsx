@@ -13,6 +13,7 @@ import { AppShell, Avatar, Menu, PageHeader, Sidebar, Tooltip } from '@bolusi/ui
 import { ChevronsUpDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { createCaptureDialogs } from './capture-dialogs.js';
 import { DEMO_PEOPLE, DEMO_STORE_NAME, demoRuntimeFor, type DemoPerson } from './demo.js';
 import { UpdateNotice, useAppVersion } from './updates.js';
 
@@ -57,10 +58,12 @@ function useSidebarCollapsed(): readonly [boolean, () => void] {
 
 export function App(): React.JSX.Element {
   const [person, setPerson] = useState<DemoPerson>(DEMO_PEOPLE[0]!);
-  const runtime = useMemo(() => demoRuntimeFor(person), [person]);
+  const [dialogs] = useState(createCaptureDialogs);
+  const runtime = useMemo(() => demoRuntimeFor(person, dialogs.capture), [person, dialogs]);
   return (
     <RepairRuntimeProvider runtime={runtime}>
       <Counter key={person.userId} person={person} onSwitchPerson={setPerson} />
+      <dialogs.Host />
     </RepairRuntimeProvider>
   );
 }

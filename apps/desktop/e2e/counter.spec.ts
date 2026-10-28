@@ -14,14 +14,17 @@ let page: Page;
 // The built app from the source tree, or an installed copy when BOLUSI_E2E_EXECUTABLE names its
 // exe (the Windows CI job installs the fresh installer and runs these tests against it).
 const INSTALLED = process.env['BOLUSI_E2E_EXECUTABLE'];
+// Chromium's built-in test pattern stands in for a webcam; the app's own permission rules still
+// decide whether the page may use it.
+const FLAGS = ['--no-sandbox', '--use-fake-device-for-media-stream'];
 
 async function launch(): Promise<void> {
   // No sandbox: CI runs as a user the Chromium sandbox helper refuses. The app's own window
   // settings are unchanged.
   app = await electron.launch(
     INSTALLED === undefined
-      ? { args: ['--no-sandbox', `${import.meta.dirname}/..`] }
-      : { executablePath: INSTALLED, args: ['--no-sandbox'] },
+      ? { args: [...FLAGS, `${import.meta.dirname}/..`] }
+      : { executablePath: INSTALLED, args: FLAGS },
   );
   page = await app.firstWindow();
   await page.getByTestId('repair.desk.board').waitFor();
@@ -161,4 +164,42 @@ test('the paper picked in Settings is kept by the main process across a restart'
   );
   // Back to the default for the next run on this machine.
   await page.getByTestId('repair.desk.printing.paper.continuous_half').click();
+});
+
+test('takes an intake photo with the webcam', async () => {
+  await page.getByTestId('repair.desk.board.newIntake').click();
+  await page.getByTestId('repair.desk.intake').waitFor();
+  const tile = page.locator('[data-testid^="repair.desk.intake.photo."]').first();
+  await tile.click();
+  const camera = page.getByTestId('desktop.camera');
+  await expect(camera.getByTestId('desktop.camera.shoot')).toBeEnabled();
+  await camera.getByTestId('desktop.camera.shoot').click();
+  await expect(camera.getByTestId('desktop.camera.shot')).toBeVisible();
+  await camera.getByTestId('desktop.camera.use').click();
+  await expect(camera).toBeHidden();
+  // The tile now shows the photo just taken.
+  await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/);
+});
+
+test('takes the customer signature at handover, over the handover dialog', async () => {
+  await page.getByTestId('repair.desk.board.views.pickup').click();
+  await page.getByText('Ester Mandowen').click();
+  await page.getByTestId('repair.desk.ticket.action.handover').click();
+  await page.getByTestId('repair.desk.handover').waitFor();
+  await page.getByTestId('repair.desk.handover.signature').click();
+  const pad = page.getByTestId('desktop.signature.pad');
+  await expect(page.getByTestId('desktop.signature.use')).toBeDisabled();
+  const box = (await pad.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.6);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3, { steps: 8 });
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  await page.getByTestId('desktop.signature.use').click();
+  await expect(page.getByTestId('desktop.signature')).toBeHidden();
+  await expect(page.getByTestId('repair.desk.handover')).toBeVisible();
+  await expect(page.getByTestId('repair.desk.handover.signature').locator('img')).toHaveAttribute(
+    'src',
+    /^blob:/,
+  );
 });
