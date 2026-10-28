@@ -241,6 +241,78 @@ describe('counter app over demo data', () => {
     await waitFor(() => expect(screen.queryByTestId('repair.desk.ticket.customer')).toBeNull());
   });
 
+  it('keeps a warranty claim being taken in, as any intake, across another section and a switch away', async () => {
+    renderApp();
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    await screen.findByTestId('repair.desk.intake.claim');
+    fireEvent.change(byTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Layar bergaris lagi' },
+    });
+    const reopened = async (): Promise<void> => {
+      expect((await screen.findByTestId('repair.desk.intake.claim')).textContent).toContain(
+        'Dari K7Q-0005',
+      );
+      expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe(
+        'Layar bergaris lagi',
+      );
+    };
+
+    fireEvent.click(byTestId('nav.settings'));
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
+    fireEvent.click(byTestId('nav.repair'));
+    fireEvent.keyDown(window, { key: 'F2' });
+    await reopened();
+
+    // Someone else and back: the page is gone, as after a lock, and the claim comes back.
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Andi Pratama' }));
+    await screen.findByTestId('repair.desk.board');
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Siti Rahayu' }));
+    await reopened();
+  });
+
+  it('asks before a warranty claim takes the place of an unsaved intake', async () => {
+    renderApp();
+    await screen.findByText('Yohanis Wenda');
+    fireEvent.keyDown(window, { key: 'F2' });
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.complaint'), {
+      target: { value: 'Mati total' },
+    });
+    fireEvent.click(byTestId('nav.repair'));
+    fireEvent.change(await screen.findByTestId('repair.desk.board.search'), {
+      target: { value: 'K7Q-0005' },
+    });
+    await openTicket('Yakob Tabuni');
+    fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
+    const ask = await screen.findByTestId('desktop.claimReplacesIntake');
+    expect(ask.textContent).toContain('Servisan yang belum selesai kamu isi akan dibuang.');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByTestId('desktop.claimReplacesIntake')).toBeNull());
+    expect(screen.queryByTestId('repair.desk.intake')).toBeNull();
+    // The intake that waits is untouched.
+    fireEvent.keyDown(window, { key: 'F2' });
+    await waitFor(() =>
+      expect((byTestId('repair.desk.intake.complaint') as HTMLTextAreaElement).value).toBe(
+        'Mati total',
+      ),
+    );
+    fireEvent.click(byTestId('nav.repair'));
+
+    // Back on the board, the servisan is still the one open.
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.action.warrantyClaim'));
+    fireEvent.click(
+      within(await screen.findByTestId('desktop.claimReplacesIntake')).getByRole('button', {
+        name: 'Mulai klaim',
+      }),
+    );
+    await screen.findByTestId('repair.desk.intake.claim');
+  });
+
   it('offers cancelling a servisan to owners only', async () => {
     renderApp();
     await openTicket('Benny Kambu');

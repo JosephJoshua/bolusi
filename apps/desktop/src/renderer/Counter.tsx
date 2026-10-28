@@ -13,7 +13,15 @@ import {
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
-import { AppShell, Avatar, Menu, Sidebar, SidebarToggle, type MenuItem } from '@bolusi/ui-web';
+import {
+  AppShell,
+  Avatar,
+  ConfirmDialog,
+  Menu,
+  Sidebar,
+  SidebarToggle,
+  type MenuItem,
+} from '@bolusi/ui-web';
 import { Banknote, ChevronDown, Settings, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -121,6 +129,12 @@ export function Counter({
         : { kind: 'intake' },
   );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // A claim asked for while another intake waits unsaved: it would take that intake's place.
+  const [claimAsked, setClaimAsked] = useState<IntakeDraft | null>(null);
+  const startClaim = (claim: IntakeDraft): void => {
+    if (restoredDraft === null) setPage({ kind: 'intake', claim });
+    else setClaimAsked(claim);
+  };
   // The queue and search the person was on are still there when they come back from an intake.
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
@@ -257,13 +271,14 @@ export function Counter({
         <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (
         <IntakePage
-          // A claim is its own intake: it starts from its servisan and leaves the other one be.
+          // A claim starts from its servisan; kept like any intake, it survives a lock or a visit to
+          // another section and reopens as the intake in progress.
           key={page.claim === undefined ? 'intake' : 'claim'}
           now={Date.now}
           restoredDraft={page.claim ?? restoredDraft}
-          onDraftChange={page.claim === undefined ? onDraftChange : undefined}
+          onDraftChange={onDraftChange}
           onOpened={(ticketId) => {
-            if (page.claim === undefined) onDraftChange(null);
+            onDraftChange(null);
             setSelectedTicketId(ticketId);
             setPage({ kind: 'board' });
           }}
@@ -276,10 +291,25 @@ export function Counter({
           filters={filters}
           onFiltersChange={setFilters}
           onNewIntake={() => setPage({ kind: 'intake' })}
-          onStartClaim={(claim) => setPage({ kind: 'intake', claim })}
+          onStartClaim={startClaim}
           onOpenSyncStatus={onOpenSyncStatus}
         />
       )}
+      <ConfirmDialog
+        open={claimAsked !== null}
+        title={tn('repair.warrantyClaim.replaceTitle')}
+        message={tn('repair.warrantyClaim.replaceMessage')}
+        confirmLabel={tn('repair.warrantyClaim.replaceConfirm')}
+        cancelLabel={t('core.action.cancel')}
+        closeLabel={t('core.action.close')}
+        destructive
+        onConfirm={() => {
+          if (claimAsked !== null) setPage({ kind: 'intake', claim: claimAsked });
+          setClaimAsked(null);
+        }}
+        onCancel={() => setClaimAsked(null)}
+        testId="desktop.claimReplacesIntake"
+      />
     </AppShell>
   );
   return <MoneyRuntimeProvider runtime={money}>{shell}</MoneyRuntimeProvider>;

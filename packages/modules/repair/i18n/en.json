@@ -745,7 +745,10 @@
     "claims": "Warranty claim",
     "open": "Open",
     "intakeNote": "From {number}. Its repair types and warranty carry over.",
-    "ended": "The warranty has ended. Only an owner can open this claim."
+    "ended": "The warranty has ended. Only an owner can open this claim.",
+    "replaceTitle": "Start a warranty claim?",
+    "replaceMessage": "The servisan you have not finished filling in will be discarded.",
+    "replaceConfirm": "Start claim"
   },
   "handoverCheck": {
     "customerTried": "Customer tried it",

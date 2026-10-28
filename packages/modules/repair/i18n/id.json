@@ -745,7 +745,10 @@
     "claims": "Klaim garansi",
     "open": "Buka",
     "intakeNote": "Dari {number}. Jenis servisan dan garansinya ikut servisan itu.",
-    "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini."
+    "ended": "Garansi sudah habis. Hanya pemilik yang bisa membuka klaim ini.",
+    "replaceTitle": "Mulai klaim garansi?",
+    "replaceMessage": "Servisan yang belum selesai kamu isi akan dibuang.",
+    "replaceConfirm": "Mulai klaim"
   },
   "handoverCheck": {
     "customerTried": "Sudah dicoba pelanggan",
