@@ -142,6 +142,13 @@ export class FakeTimer implements TimerPort {
     return this.pending.length;
   }
 
+  /** Fire only what was scheduled with `delayMs` (one timer among several armed ones). */
+  runDelay(delayMs: number): void {
+    const due = this.pending.filter((entry) => entry.delayMs === delayMs);
+    this.pending = this.pending.filter((entry) => entry.delayMs !== delayMs);
+    for (const entry of due) entry.fn();
+  }
+
   /** Fire everything currently pending, once. Re-armed timers are NOT fired (no runaway intervals). */
   runPending(): void {
     const due = this.pending;
