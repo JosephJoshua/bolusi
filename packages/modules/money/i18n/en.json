@@ -227,5 +227,34 @@
     "cancel": "Cancel",
     "unresolved": "The earlier QR for {amount} is not paid yet. If the customer paid, wait a moment.",
     "unresolvedMany": "{count} earlier QRs are not paid yet. If the customer paid, wait a moment."
+  },
+  "refund": {
+    "title": "Give money back",
+    "action": "Give back",
+    "credit": "Overpaid",
+    "paid": "Paid",
+    "method": "Give back through",
+    "amount": "Amount",
+    "reason": "Reason",
+    "reference": "Reference no. (optional)",
+    "save": "Give back {amount}",
+    "saveEmpty": "Give money back",
+    "tooMuch": "At most {amount} through this method.",
+    "lowersBill": "The bill also comes down {amount}.",
+    "hint": "Fill in the amount and the reason.",
+    "nothing": "No payment to give back yet."
+  },
+  "reduce": {
+    "title": "Lower the bill",
+    "action": "Lower the bill",
+    "owed": "Still owed",
+    "amount": "Taken off",
+    "after": "Owed after",
+    "becomesCredit": "That leaves {amount} overpaid. Give it back to the customer.",
+    "reason": "Reason",
+    "save": "Take off {amount}",
+    "saveEmpty": "Lower the bill",
+    "tooMuch": "At most {amount}.",
+    "hint": "Fill in the amount and the reason."
   }
 }

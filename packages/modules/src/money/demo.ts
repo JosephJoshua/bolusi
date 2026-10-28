@@ -39,12 +39,22 @@ export interface DemoMoneyOptions {
 export interface DemoMoneyLedger {
   query(name: string, input: Input): Promise<{ rows: unknown[]; nextCursor: null }>;
   run(name: string, input: Input): Promise<unknown>;
-  /** A payment the server would record (a paid QR), under the id it was made with. */
+  /**
+   * A payment the server would record (a paid QR), or one a servisan's handover took, under the id
+   * it was made with; `at` when it was not just now.
+   */
   recordPayment(payment: {
     readonly id: string;
     readonly document: MoneyDocument;
     readonly account: string;
     readonly amount: number;
+    readonly at?: number | undefined;
+  }): void;
+  /** What a document charges once it is settled (a servisan handed back). */
+  recordCharge(charge: {
+    readonly document: MoneyDocument;
+    readonly amount: number;
+    readonly at?: number | undefined;
   }): void;
   /** One document's money, as `documentMoney` reads it; null for a document it never saw. */
   documentMoney(documentId: string): DocumentMoney | null;
@@ -179,7 +189,9 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
             ? -1
             : e.kind === 'refund_paid'
               ? 1
-              : 0;
+              : e.kind === 'charge_reduced'
+                ? -1
+                : 0;
       const row = byDocument.get(e.documentId);
       const charged = e.kind === 'charge_recorded';
       byDocument.set(e.documentId, {
@@ -217,7 +229,7 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
   const page = (rows: unknown[]) => Promise.resolve({ rows, nextCursor: null });
   return {
     documentMoney,
-    recordPayment: ({ id, document: doc, account, amount }) => {
+    recordPayment: ({ id, document: doc, account, amount, at }) => {
       add({
         id,
         kind: 'payment_received',
@@ -226,6 +238,17 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
         documentKind: doc.kind,
         documentId: doc.id,
         documentLabel: doc.label,
+        ...(at === undefined ? {} : { createdAt: at }),
+      });
+    },
+    recordCharge: ({ document: doc, amount, at }) => {
+      add({
+        kind: 'charge_recorded',
+        amount,
+        documentKind: doc.kind,
+        documentId: doc.id,
+        documentLabel: doc.label,
+        ...(at === undefined ? {} : { createdAt: at }),
       });
     },
     query: (name, input) => {
@@ -298,6 +321,39 @@ export function demoMoneyLedger(options: DemoMoneyOptions, notify: () => void): 
               documentLabel: doc.label,
             });
           }
+          return Promise.resolve(null);
+        }
+        case 'refund': {
+          // As refundHandler: an owner giving back beyond the overpayment lowers the bill first.
+          const doc = input['document'] as MoneyDocument;
+          const amount = Number(input['amount']);
+          const credit = Math.max(0, -(documentMoney(doc.id)?.balance ?? 0));
+          const fields = {
+            reason: String(input['reason']),
+            documentKind: doc.kind,
+            documentId: doc.id,
+            documentLabel: doc.label,
+          };
+          if (amount > credit) add({ kind: 'charge_reduced', amount: amount - credit, ...fields });
+          add({
+            kind: 'refund_paid',
+            account: String(input['account']),
+            amount,
+            reference: (input['reference'] as string | null) ?? null,
+            ...fields,
+          });
+          return Promise.resolve(null);
+        }
+        case 'reduceCharge': {
+          const doc = input['document'] as MoneyDocument;
+          add({
+            kind: 'charge_reduced',
+            amount: Number(input['amount']),
+            reason: String(input['reason']),
+            documentKind: doc.kind,
+            documentId: doc.id,
+            documentLabel: doc.label,
+          });
           return Promise.resolve(null);
         }
         case 'saveAccount':

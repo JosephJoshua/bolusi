@@ -240,7 +240,9 @@
     "downPayment": "Down payment",
     "downPaymentInput": "Down payment (if any)",
     "balance": "Left to pay",
-    "refund": "Refunded"
+    "refund": "Refunded",
+    "reduced": "Taken off",
+    "owedBack": "Overpaid"
   },
   "problem": {
     "complaint": "Enter the complaint.",
@@ -297,7 +299,9 @@
     "printed": "Slip printed.",
     "shared": "Slip PDF sent.",
     "downPayment": "Down payment saved.",
-    "repairTypes": "Repair type saved."
+    "repairTypes": "Repair type saved.",
+    "refund": "Money given back.",
+    "reduce": "Bill lowered."
   },
   "passcode": {
     "show": "Show",

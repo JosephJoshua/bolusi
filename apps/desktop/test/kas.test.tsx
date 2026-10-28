@@ -170,6 +170,55 @@ describe('Kas on the PC', () => {
     await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp450.000'));
   });
 
+  it('offers lowering a debt to owners only', async () => {
+    await openKas();
+    await screen.findByTestId('money.desk.kas.owed.t-9.receive');
+    expect(screen.queryByTestId('money.desk.kas.owed.t-9.reduce')).toBeNull();
+  });
+
+  it('lets an owner lower a debt past what is left, then give back what is owed back', async () => {
+    await openKas('Andi Pratama');
+    fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));
+    await screen.findByTestId('money.desk.receive');
+    fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
+      target: { value: '200000' },
+    });
+    fireEvent.click(byTestId('money.desk.receive.submit'));
+    await waitFor(() => expect(text('money.desk.kas.owed.t-9.value')).toBe('Rp250.000'));
+
+    fireEvent.click(byTestId('money.desk.kas.owed.t-9.reduce'));
+    await screen.findByTestId('money.desk.reduce');
+    // The whole debt is filled in; the bill comes down at most by what was charged.
+    expect(byTestId('money.desk.reduce.amount')).toHaveProperty('value', '250.000');
+    expect(text('money.desk.reduce.after')).toBe('Rp0');
+    fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '500000' } });
+    expect(text('money.desk.reduce')).toContain('PalingbanyakRp450.000');
+    expect(byTestId('money.desk.reduce.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '300000' } });
+    expect(byTestId('money.desk.reduce.becomesCredit').textContent).toContain('50.000');
+    fireEvent.change(byTestId('money.desk.reduce.reason'), { target: { value: 'Pelanggan lama' } });
+    fireEvent.click(byTestId('money.desk.reduce.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.reduce')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owed.t-9')).toBeNull());
+    expect(text('money.desk.kas.owedBack.t-9.value')).toBe('Rp50.000');
+
+    // It goes back through how it came in, the overpayment filled in.
+    const drawer = Number(text('money.desk.kas.expected').replace(/\D/g, ''));
+    fireEvent.click(byTestId('money.desk.kas.owedBack.t-9.refund'));
+    await screen.findByTestId('money.desk.refund');
+    expect(text('money.desk.refund.credit')).toBe('Rp50.000');
+    expect(text('money.desk.refund.paid')).toBe('Rp200.000');
+    expect(byTestId('money.desk.refund.amount')).toHaveProperty('value', '50.000');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '250000' } });
+    expect(byTestId('money.desk.refund.submit')).toHaveProperty('disabled', true);
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Kelebihan' } });
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.refund')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('money.desk.kas.owedBack')).toBeNull());
+    expect(Number(text('money.desk.kas.expected').replace(/\D/g, ''))).toBe(drawer - 50_000);
+  });
+
   it('takes a whole debt by QRIS, recorded by the server, and the step just closes', async () => {
     await openKas('Andi Pratama');
     fireEvent.click(await screen.findByTestId('money.desk.kas.owed.t-9.receive'));

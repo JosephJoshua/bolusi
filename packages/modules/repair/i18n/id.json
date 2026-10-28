@@ -240,7 +240,9 @@
     "downPayment": "DP",
     "downPaymentInput": "DP (kalau ada)",
     "balance": "Sisa bayar",
-    "refund": "Dikembalikan"
+    "refund": "Dikembalikan",
+    "reduced": "Potongan",
+    "owedBack": "Lebih bayar"
   },
   "problem": {
     "complaint": "Keluhan belum diisi.",
@@ -297,7 +299,9 @@
     "printed": "Nota dicetak.",
     "shared": "PDF nota sudah dikirim.",
     "downPayment": "DP tersimpan.",
-    "repairTypes": "Jenis servisan disimpan."
+    "repairTypes": "Jenis servisan disimpan.",
+    "refund": "Uang sudah dikembalikan.",
+    "reduce": "Tagihan sudah dikurangi."
   },
   "passcode": {
     "show": "Tampilkan",

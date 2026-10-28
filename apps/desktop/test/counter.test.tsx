@@ -660,3 +660,36 @@ describe('counter app over demo data', () => {
     expect(byTestId('repair.desk.filter.status').textContent).toContain('Tunggu sparepart');
   });
 });
+
+describe('money after pickup on the servisan', () => {
+  async function switchTo(name: string): Promise<void> {
+    fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
+    fireEvent.click(await screen.findByRole('menuitem', { name }));
+    await screen.findByTestId('repair.desk.board');
+  }
+
+  it('lets an owner give part of a paid bill back, and the bill shows it came off', async () => {
+    renderApp();
+    await screen.findByTestId('repair.desk.board');
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    // The counter gives back only an overpayment; this bill was paid exactly.
+    expect(screen.queryByTestId('repair.desk.ticket.refund')).toBeNull();
+
+    await switchTo('Andi Pratama');
+    await showView('returned');
+    await openTicket('Yakob Tabuni');
+    expect(screen.queryByTestId('repair.desk.ticket.reduce')).toBeNull();
+    fireEvent.click(await screen.findByTestId('repair.desk.ticket.refund'));
+    await screen.findByTestId('money.desk.refund');
+    expect(text('money.desk.refund.paid')).toBe('Rp625.000');
+    fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '50000' } });
+    expect(byTestId('money.desk.refund.lowersBill').textContent).toContain('50.000');
+    fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Garansi kaca' } });
+    fireEvent.click(byTestId('money.desk.refund.submit'));
+    await waitFor(() => expect(screen.queryByTestId('money.desk.refund')).toBeNull());
+    await waitFor(() => expect(text('repair.desk.ticket.reduced')).toBe('-Rp50.000'));
+    expect(byTestId('repair.desk.ticket.balance').textContent).toContain('Sisa bayar');
+    expect(text('repair.desk.ticket.balance')).toContain('SisabayarRp0');
+  });
+});

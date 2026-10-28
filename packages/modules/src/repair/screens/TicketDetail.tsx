@@ -71,6 +71,8 @@ import {
   repairTypesStale,
   staleStep,
   ticketActions,
+  ticketMoneyActions,
+  ticketMoneyTarget,
   ticketStatus,
   flagsUncollected,
   uncollectedDays,
@@ -97,12 +99,16 @@ import {
 import { usePhotoBrowser, type BrowsablePhoto } from './photos.js';
 import { TicketVideoSection } from './video.js';
 import {
+  moneyRuntimeOf,
   useRepairQuery,
   useRepairRuntime,
   useStoreDisplayName,
   useUncollectedLimit,
 } from '../runtime.js';
 import { PrintStep } from './PrintStep.js';
+import { tm } from '../../money/i18n.js';
+import { MoneyRuntimeProvider } from '../../money/runtime.js';
+import { ReduceChargeStep, RefundStep } from '../../money/screens/KasSteps.js';
 import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
 import { ti } from '../../inventory/i18n.js';
 import type { UsedPartRow } from '../../inventory/queries.js';
@@ -146,7 +152,9 @@ type Step =
   | { readonly kind: 'repairTypes' }
   | { readonly kind: 'print' }
   | { readonly kind: 'takePart' }
-  | { readonly kind: 'putBackPart'; readonly part: UsedPartRow };
+  | { readonly kind: 'putBackPart'; readonly part: UsedPartRow }
+  | { readonly kind: 'refund' }
+  | { readonly kind: 'reduce' };
 
 export interface TicketDetailProps {
   readonly ticketId: string;
@@ -190,6 +198,8 @@ export function TicketDetail({
 }: TicketDetailProps): React.JSX.Element {
   const runtime = useRepairRuntime();
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
+  // Money back to the customer and a lowered bill are the ledger's steps, over repair's port.
+  const money = useMemo(() => moneyRuntimeOf(runtime, () => null), [runtime]);
   const runner = useActionRunner();
   const [step, setStep] = useState<Step>({ kind: 'none' });
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -266,6 +276,8 @@ export function TicketDetail({
     step.kind === 'print' ||
     step.kind === 'takePart' ||
     step.kind === 'putBackPart' ||
+    step.kind === 'refund' ||
+    step.kind === 'reduce' ||
     ticket === undefined
       ? null
       : step.kind === 'downPayment'
@@ -387,6 +399,29 @@ export function TicketDetail({
             />
           )}
         </InventoryRuntimeProvider>
+      );
+    }
+    case 'refund':
+    case 'reduce': {
+      if (ticket === undefined) break;
+      const moneyStep = {
+        chrome,
+        target: ticketMoneyTarget(ticket),
+        onCancel: leaveStep,
+        onRegisterDiscardGuard: registerStepGuard,
+        onDone: () => {
+          closeStep();
+          setDone(tn(step.kind === 'refund' ? 'repair.done.refund' : 'repair.done.reduce'));
+        },
+      };
+      return (
+        <MoneyRuntimeProvider runtime={money}>
+          {step.kind === 'refund' ? (
+            <RefundStep {...moneyStep} />
+          ) : (
+            <ReduceChargeStep {...moneyStep} />
+          )}
+        </MoneyRuntimeProvider>
       );
     }
     case 'none':
@@ -848,6 +883,7 @@ export function TicketDetail({
     const perLine = deciding && pending.length > 1;
     const cancelled = row.outcome === 'cancelled';
     const paymentAction = downPaymentAction(row, can);
+    const moneyActions = ticketMoneyActions(row, runtime.hasPermission);
     return (
       <Section title={tn('repair.ticket.price')} action={action} testID={`${testID}.price`}>
         {row.quoteLines.map((line) => {
@@ -932,6 +968,7 @@ export function TicketDetail({
         <DownPaymentRows
           total={amountOwed(row)}
           downPayment={row.downPayment}
+          reduced={row.reduced}
           paidLabel={paidLabelKey(row)}
           action={
             paymentAction === 'correct' ? (
@@ -955,6 +992,26 @@ export function TicketDetail({
               disabled={runner.busy}
               testID={`${testID}.downPayment.record`}
             />
+          </View>
+        ) : null}
+        {moneyActions.refund || moneyActions.reduce ? (
+          <View style={styles.moneyActions}>
+            {moneyActions.refund ? (
+              <TextButton
+                label={tm('money.refund.title')}
+                onPress={() => setStep({ kind: 'refund' })}
+                disabled={runner.busy}
+                testID={`${testID}.refund`}
+              />
+            ) : null}
+            {moneyActions.reduce ? (
+              <TextButton
+                label={tm('money.reduce.action')}
+                onPress={() => setStep({ kind: 'reduce' })}
+                disabled={runner.busy}
+                testID={`${testID}.reduce`}
+              />
+            ) : null}
           </View>
         ) : null}
       </Section>
@@ -1188,6 +1245,13 @@ const styles = StyleSheet.create({
   lineKind: { ...type.caption, color: color.textMuted },
   lineWarning: { ...type.caption, color: color.warning },
   lineAction: { alignItems: 'flex-start', marginLeft: -space.sm },
+  moneyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: space.md,
+    marginLeft: -space.sm,
+    marginTop: space.xs,
+  },
   total: {
     marginTop: space.sm,
     paddingTop: space.md,

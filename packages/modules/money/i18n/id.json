@@ -227,5 +227,34 @@
     "cancel": "Batal",
     "unresolved": "QR {amount} tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar.",
     "unresolvedMany": "{count} QR tadi belum dibayar. Kalau pelanggan sudah bayar, tunggu sebentar."
+  },
+  "refund": {
+    "title": "Kembalikan uang",
+    "action": "Kembalikan",
+    "credit": "Lebih bayar",
+    "paid": "Sudah dibayar",
+    "method": "Kembalikan lewat",
+    "amount": "Jumlah",
+    "reason": "Alasan",
+    "reference": "No. referensi (opsional)",
+    "save": "Kembalikan {amount}",
+    "saveEmpty": "Kembalikan uang",
+    "tooMuch": "Paling banyak {amount} lewat metode ini.",
+    "lowersBill": "Tagihan juga turun {amount}.",
+    "hint": "Isi jumlah dan alasannya.",
+    "nothing": "Belum ada pembayaran yang bisa dikembalikan."
+  },
+  "reduce": {
+    "title": "Kurangi tagihan",
+    "action": "Kurangi tagihan",
+    "owed": "Sisa tagihan",
+    "amount": "Potongan",
+    "after": "Sisa setelah dipotong",
+    "becomesCredit": "Jadi lebih bayar {amount}. Kembalikan ke pelanggan.",
+    "reason": "Alasan",
+    "save": "Kurangi {amount}",
+    "saveEmpty": "Kurangi tagihan",
+    "tooMuch": "Paling banyak {amount}.",
+    "hint": "Isi potongan dan alasannya."
   }
 }

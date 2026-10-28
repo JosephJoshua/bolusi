@@ -34,12 +34,15 @@ import {
 } from '../kas.js';
 import { useKasDay } from '../kas-day.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
+import { targetOf, type MoneyTarget } from '../refund.js';
 import { useMoneyRuntime } from '../runtime.js';
 
 import {
   CountCashDialog,
   MoveCashDialog,
   ReceiveDebtDialog,
+  ReduceChargeDialog,
+  RefundDialog,
   SettleCountDialog,
   VoidPaymentDialog,
 } from './KasDialogs.js';
@@ -51,6 +54,8 @@ type Task =
   | { readonly kind: 'move' }
   | { readonly kind: 'settle'; readonly count: CashCountRow }
   | { readonly kind: 'receive'; readonly balance: NamedBalance }
+  | { readonly kind: 'refund'; readonly target: MoneyTarget }
+  | { readonly kind: 'reduce'; readonly target: MoneyTarget }
   | {
       readonly kind: 'void';
       readonly entry: MoneyEntryRow;
@@ -121,6 +126,8 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           day={day}
           onSettle={(count) => setTask({ kind: 'settle', count })}
           onReceive={(balance) => setTask({ kind: 'receive', balance })}
+          onRefund={(balance) => setTask({ kind: 'refund', target: targetOf(balance) })}
+          onReduce={(balance) => setTask({ kind: 'reduce', target: targetOf(balance) })}
         />
       )}
 
@@ -131,6 +138,12 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
       ) : null}
       {task?.kind === 'receive' ? (
         <ReceiveDebtDialog balance={task.balance} onDone={close} onClose={close} />
+      ) : null}
+      {task?.kind === 'refund' ? (
+        <RefundDialog target={task.target} onDone={close} onClose={close} />
+      ) : null}
+      {task?.kind === 'reduce' ? (
+        <ReduceChargeDialog target={task.target} onDone={close} onClose={close} />
       ) : null}
       {task?.kind === 'void' ? (
         <VoidPaymentDialog
@@ -150,12 +163,17 @@ function Today({
   day,
   onSettle,
   onReceive,
+  onRefund,
+  onReduce,
 }: {
   readonly day: ReturnType<typeof useKasDay>;
   readonly onSettle: (count: CashCountRow) => void;
   readonly onReceive: (balance: NamedBalance) => void;
+  readonly onRefund: (balance: NamedBalance) => void;
+  readonly onReduce: (balance: NamedBalance) => void;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
+  const mayReduce = runtime.hasPermission(MONEY_PERMISSION.refund);
   const { drawerQuery, drawer, accounts, entriesReady, methods, moves, open, difference, counted } =
     day;
   const { may } = day;
@@ -293,13 +311,26 @@ function Today({
                       .join(' · ')}
                     value={formatMoney(row.balance)}
                     action={
-                      may.receive ? (
-                        <Button
-                          label={tm('money.kas.receive')}
-                          size="sm"
-                          onClick={() => onReceive(row)}
-                          data-testid={`${testId}.owed.${row.documentId}.receive`}
-                        />
+                      may.receive || mayReduce ? (
+                        <div className="flex gap-2">
+                          {mayReduce ? (
+                            <Button
+                              label={tm('money.reduce.action')}
+                              variant="text"
+                              size="sm"
+                              onClick={() => onReduce(row)}
+                              data-testid={`${testId}.owed.${row.documentId}.reduce`}
+                            />
+                          ) : null}
+                          {may.receive ? (
+                            <Button
+                              label={tm('money.kas.receive')}
+                              size="sm"
+                              onClick={() => onReceive(row)}
+                              data-testid={`${testId}.owed.${row.documentId}.receive`}
+                            />
+                          ) : null}
+                        </div>
                       ) : undefined
                     }
                     testId={`${testId}.owed.${row.documentId}`}
@@ -319,6 +350,16 @@ function Today({
                     label={row.customer ?? row.documentLabel}
                     detail={row.customer === null ? undefined : row.documentLabel}
                     value={formatMoney(-row.balance)}
+                    action={
+                      may.receive ? (
+                        <Button
+                          label={tm('money.refund.action')}
+                          size="sm"
+                          onClick={() => onRefund(row)}
+                          data-testid={`${testId}.owedBack.${row.documentId}.refund`}
+                        />
+                      ) : undefined
+                    }
                     testId={`${testId}.owedBack.${row.documentId}`}
                   />
                 ))}
