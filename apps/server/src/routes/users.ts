@@ -140,12 +140,15 @@ async function writeRoleGrants(
       await db
         .insertInto('userRoles')
         .values({ tenantId, userId, roleId: role.id, storeId: null })
+        .onConflict((oc) => oc.doNothing())
         .execute();
     } else {
       for (const storeId of storeIds) {
         await db
           .insertInto('userRoles')
           .values({ tenantId, userId, roleId: role.id, storeId })
+          // A grant left at a store the person is moved back to is the same grant: keep it.
+          .onConflict((oc) => oc.doNothing())
           .execute();
       }
     }

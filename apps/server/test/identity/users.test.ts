@@ -761,6 +761,32 @@ test('a grant left at a store the person no longer belongs to grants nothing the
   expect((await s.addCashierAt(token, s.storeA)).status).toBe(403);
 });
 
+test('moving someone back to a store where a stale grant remains keeps that one grant', async () => {
+  const s = await twoStores();
+  // Membership moved without its grant, as PATCH left it before grants followed store moves.
+  await h.idb.db
+    .updateTable('userStores')
+    .set({ storeId: s.storeB })
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  const mainOwner = await seedControlSession(h, { tenantId: s.tenantId, userId: s.ownerUserId });
+
+  const moved = await h.app.request(`http://srv.test/v1/users/${s.storeOwner}`, {
+    method: 'PATCH',
+    headers: bearer(mainOwner),
+    body: JSON.stringify({ storeIds: [s.storeA] }),
+  });
+  expect(moved.status).toBe(200);
+  const grants = await h.idb.db
+    .selectFrom('userRoles')
+    .select(['roleId', 'storeId'])
+    .where('userId', '=', s.storeOwner)
+    .execute();
+  expect(grants).toStrictEqual([
+    { roleId: await roleIdOf(h, s.tenantId, 'store_owner'), storeId: s.storeA },
+  ]);
+});
+
 test("a store owner cannot reset a peer owner's PIN; they can reset a cashier's, and the main owner a store owner's", async () => {
   const s = await storeWithOwners();
   const peer = await seedUser(h, {
