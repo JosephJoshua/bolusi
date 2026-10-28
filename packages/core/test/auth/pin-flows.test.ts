@@ -532,6 +532,35 @@ describe('verifier-POST queue (api/02-auth §5.4)', () => {
     expect(retry[0]).toMatchObject({ sent: true, result: { applied: true } });
     expect(await readPendingVerifiers(s.h.db)).toHaveLength(0);
   });
+
+  it('one queued upload that fails does not hold back the ones after it', async () => {
+    const s = await setup(14, { staff: '111111' });
+    const failing = await resetPin(s.flowDeps(), {
+      actorUserId: s.h.ownerId,
+      targetUserId: s.h.staffId,
+      newPin: '222222',
+    });
+    const later = await changePin(s.flowDeps(), {
+      userId: s.h.staffId,
+      currentPin: '222222',
+      newPin: '333333',
+    });
+
+    const server: PinVerifierUploadPort = {
+      upload: (userId, verifierRef) =>
+        verifierRef === failing.verifierRef
+          ? Promise.reject(new Error('HTTP 500'))
+          : Promise.resolve({ userId, applied: true }),
+    };
+    const outcomes = await drainPendingVerifiers(s.h.db, server);
+    expect(outcomes.map((o) => [o.verifierRef, o.sent])).toEqual([
+      [failing.verifierRef, false],
+      [later.verifierRef, true],
+    ]);
+    expect((await readPendingVerifiers(s.h.db)).map((p) => p.verifierRef)).toEqual([
+      failing.verifierRef,
+    ]);
+  });
 });
 
 /** Decode base64 to a byte count without pulling node Buffer into the assertion. */
