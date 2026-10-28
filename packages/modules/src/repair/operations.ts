@@ -437,6 +437,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
       2: ticketOpenedPayloadV2,
       3: ticketOpenedPayloadV3,
     },
+    // Before v4 the rule skips the ownership-video check.
+    minPushVersion: 4,
     reversal:
       'A ticket is never deleted; a mistaken ticket is cancelled (repair.ticket_cancelled).',
     apply: ticketOpenedApplier,
@@ -507,6 +509,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 2,
     payload: ticketCancelledPayload,
     payloadByVersion: { 1: ticketCancelledPayloadV1 },
+    // v1 names no fee, so it would skip the cancel-fee limit.
+    minPushVersion: 2,
     reversal: 'Not reversible in slice 1: open a new ticket if the customer changes their mind.',
     apply: ticketCancelledApplier,
     rule: ticketCancelledRule,
@@ -527,6 +531,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 2,
     payload: quoteChangedPayload,
     payloadByVersion: { 1: quoteChangedPayloadV1 },
+    // v1 skips the customer-agreement check.
+    minPushVersion: 2,
     reversal: 'Reversed by a further repair.quote_changed line with the opposite amount.',
     apply: quoteChangedApplier,
     rule: quoteChangedRule,
@@ -557,6 +563,8 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     schemaVersion: 3,
     payload: deviceReturnedPayload,
     payloadByVersion: { 1: deviceReturnedPayloadV1, 2: deviceReturnedPayloadV2 },
+    // Before v3 the rule skips the handover checklist.
+    minPushVersion: 3,
     reversal: 'Not reversible: the device physically left the store. Warranty opens a new ticket.',
     apply: deviceReturnedApplier,
     rule: deviceReturnedRule,

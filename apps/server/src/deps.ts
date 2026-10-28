@@ -169,6 +169,10 @@ function deriveOpRegistry(registry: ModuleRegistry<DB>): OpRegistry {
       if (!isFoldableSchemaVersion(currentVersion, schemaVersion)) {
         return { kind: 'known', validate: () => false };
       }
+      // A version the type's rule no longer fully judges is refused in a new push. Only push
+      // ingestion asks: stored history still folds at every version.
+      const minPushVersion = declaration.minPushVersion ?? 1;
+      if (schemaVersion < minPushVersion) return { kind: 'retired', minPushVersion };
 
       // THE PAYLOAD GATE (task 127; 05 §8, 04 §3). The version is foldable, so validate the payload
       // against the schema THAT VERSION declared — `payloadSchemaFor` returns `payload` for the

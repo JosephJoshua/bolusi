@@ -24,6 +24,12 @@ export function classifySchema(registry: OpRegistry, op: SignedOperation): Schem
       reason: `${op.type} writes ${String(entityType)}, not ${op.entityType}`,
     };
   }
+  if (resolution.kind === 'retired') {
+    return {
+      code: 'SCHEMA_INVALID',
+      reason: `${op.type} v${op.schemaVersion} is no longer accepted; the oldest accepted is v${resolution.minPushVersion}`,
+    };
+  }
   if (!resolution.validate(op.payload)) {
     return { code: 'SCHEMA_INVALID', reason: `payload fails the registry schema for ${op.type}` };
   }

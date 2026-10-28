@@ -120,6 +120,8 @@ fails a build, a boot or a test rather than waiting for review:
   a type nothing in the records constrains. A module with rules lists its refusal
   reasons with `defineRefusals`, and each reason needs id and en copy at
   `<module>.refusal.<reason>` (`apps/mobile/test/refusal-copy.test.ts`).
+- When a type's rule judges only newer versions, set `minPushVersion` on the type. The
+  server refuses a new push below it as `SCHEMA_INVALID`; stored ops still fold at every version.
 - A change that lowers what a customer owes (a price, a down payment, a fee) needs
   an owner-only permission, checked in the type's `permission` or its `rule` with
   `holdsPermission` (repair's `requireDiscountPermission`), so the server refuses it too.
