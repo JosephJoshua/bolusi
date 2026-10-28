@@ -73,7 +73,10 @@
     "short": "Kurang {amount}",
     "over": "Lebih {amount}",
     "difference": "Selisih kas",
-    "adjusted": "Selisih kas diselesaikan"
+    "adjusted": "Selisih kas diselesaikan",
+    "receive": "Terima",
+    "settle": "Selesaikan",
+    "nothingOwed": "Semua pelanggan sudah lunas."
   },
   "moveKind": {
     "withdrawal": "Setor ke pemilik",
@@ -126,7 +129,13 @@
     "nextDay": "Berikutnya",
     "none": "Belum ada catatan di hari ini.",
     "voided": "Dibatalkan: {reason}",
-    "more": "Muat lagi"
+    "more": "Muat lagi",
+    "void": "Batalkan",
+    "col": {
+      "time": "Waktu",
+      "record": "Catatan"
+    },
+    "voidLabel": "Batalkan pembayaran {amount} pukul {time}"
   },
   "void": {
     "title": "Batalkan pembayaran",
@@ -164,6 +173,7 @@
     "usedAt": "Dipakai di",
     "someStores": "Pilih toko",
     "storeCount": "{count} toko",
-    "storeRequired": "Pilih paling sedikit satu toko."
+    "storeRequired": "Pilih paling sedikit satu toko.",
+    "thisStore": "Toko ini"
   }
 }

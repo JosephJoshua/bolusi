@@ -26,7 +26,8 @@
     "dev": "tsx watch src/main.ts",
     "provision-tenant": "tsx src/cli/provision-tenant.ts",
     "typecheck": "tsc --noEmit",
-    "crawl-phone-catalog": "tsx src/cli/crawl-phone-catalog.ts"
+    "crawl-phone-catalog": "tsx src/cli/crawl-phone-catalog.ts",
+    "load-phone-catalog": "tsx src/cli/load-phone-catalog.ts"
   },
   "dependencies": {
     "@bolusi/core": "workspace:*",

@@ -150,7 +150,12 @@
     "payNow": "Pay now",
     "payLaterReason": "Why pay later",
     "payLaterNote": "The remaining {amount} is recorded as the customer’s debt.",
-    "refundReason": "Rest of the DP returned at handover"
+    "refundReason": "Rest of the DP returned at handover",
+    "checks": "Check with the customer",
+    "accessoryBack": "{name} returned",
+    "noteNeeded": "Note",
+    "checked": "Checked: {items}",
+    "unchecked": "Not done: {items}"
   },
   "intake": {
     "discard": "Discard intake",
@@ -308,7 +313,8 @@
     "downPaymentCorrect": "Enter the correct down payment first.",
     "downPaymentSame": "The amount has not changed.",
     "handoverPayment": "Complete the payment first.",
-    "discountLimit": "Your discount limit is {amount} per servisan."
+    "discountLimit": "Your discount limit is {amount} per servisan.",
+    "handoverChecks": "Tick everything, or write why not."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -317,8 +323,8 @@
     "keep": "Stay"
   },
   "options": {
-    "title": "Intake choices",
-    "summary": "Checks, accessories, photos, brands, ready-by, repair types",
+    "title": "Repair choices",
+    "summary": "Checks, accessories, photos, brands, ready-by, repair types, handover",
     "intro": "These apply to every store. Repairs already taken in stay as they were.",
     "introStore": "Choose what shows at this store.",
     "count": "{count, plural, one {# choice} other {# choices}}",
@@ -329,7 +335,8 @@
       "photoAngles": "Sides to photograph",
       "brands": "Quick brand choices",
       "readyBy": "Ready-by choices",
-      "repairTypes": "Repair types"
+      "repairTypes": "Repair types",
+      "handoverChecks": "Handover checks"
     },
     "hint": {
       "checks": "Checked at the counter in front of the customer, top to bottom.",
@@ -337,7 +344,8 @@
       "photoAngles": "Every side here must be photographed at intake.",
       "brands": "Shown as one-tap choices. Other brands can still be typed.",
       "readyBy": "When the repair can be ready, offered at intake.",
-      "repairTypes": "Warranty counts from pickup."
+      "repairTypes": "Warranty counts from pickup.",
+      "handoverChecks": "Checked with the customer before the phone goes home. Accessories left with it are checked too."
     },
     "add": "Add",
     "addUnknown": "Add “Not sure yet”",
@@ -645,7 +653,9 @@
     "warrantyEnded": "The warranty has ended. Only an owner can open this claim.",
     "claimChargeOwnerOnly": "Warranty claims are free. Only an owner can charge for one.",
     "claimOtherPhone": "A warranty claim is only for the same customer and phone as its servisan.",
-    "overLimit": "Over your limit. Ask a store owner."
+    "overLimit": "Over your limit. Ask a store owner.",
+    "handoverAccessories": "An accessory is missing from the handover list.",
+    "handoverNoteNeeded": "Something isn’t ticked. Write a note first."
   },
   "paper": {
     "title": "Slip paper",
@@ -734,5 +744,9 @@
     "open": "Open",
     "intakeNote": "From {number}. Its repair types and warranty carry over.",
     "ended": "The warranty has ended. Only an owner can open this claim."
+  },
+  "handoverCheck": {
+    "customerTried": "Customer tried it",
+    "repairWorks": "The repaired part works"
   }
 }

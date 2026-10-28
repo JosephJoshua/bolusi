@@ -1,13 +1,12 @@
 // Pieces every desktop repair screen shares: the status chip, a verified photo's state, the
-// banners for a refused action or a step overtaken by a change from elsewhere, and money entry.
-import { formatNumber, t, translateErrorCode, translateFailure } from '@bolusi/i18n';
+// banner for a step overtaken by a change from elsewhere, and money entry.
+import { formatNumber, t } from '@bolusi/i18n';
 import {
   Banner,
   Chip,
   Fact,
   FactGrid,
   Section,
-  StatePanel,
   TextField,
   type PhotoLabels,
   type PhotoState,
@@ -16,20 +15,17 @@ import {
 import {
   Ban,
   CircleCheck,
-  FileQuestion,
   Hourglass,
   Inbox,
-  LoaderCircle,
-  Lock,
   PackageCheck,
   Smartphone,
   TriangleAlert,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState } from 'react';
 
-import type { QueryState, ThumbnailRef } from '../../screen-kit/index.js';
+import type { ThumbnailRef } from '../../screen-kit/index.js';
 import {
   acceptsRupiahText,
   parseRupiah,
@@ -74,25 +70,6 @@ export function photoLabels(): PhotoLabels {
     unavailable: tn('repair.desk.photoUnavailable'),
     mismatch: tn('repair.desk.photoMismatch'),
   };
-}
-
-/** A refused action, in the dialog or pane it came from. */
-export function ActionError({
-  errorCode,
-  onDismiss,
-}: {
-  readonly errorCode: string | null;
-  readonly onDismiss: () => void;
-}): React.JSX.Element | null {
-  if (errorCode === null) return null;
-  return (
-    <Banner
-      tone="danger"
-      message={translateFailure(errorCode)}
-      onDismiss={onDismiss}
-      dismissLabel={t('core.action.close')}
-    />
-  );
 }
 
 /**
@@ -152,53 +129,6 @@ export function StaleNotice({
   readonly stale: StaleStep | null;
 }): React.JSX.Element | null {
   return stale === null ? null : <Banner tone="warning" message={staleStepMessage(stale)} />;
-}
-
-/** A read's loading, no-access, missing and error states; `ready` renders through `children`. */
-export function QueryPanel<TData>({
-  query,
-  onRetry,
-  children,
-}: {
-  readonly query: QueryState<TData>;
-  readonly onRetry: () => void;
-  readonly children: (data: TData) => ReactNode;
-}): React.JSX.Element {
-  switch (query.status) {
-    case 'loading':
-      return (
-        <div className="flex justify-center py-12 text-text-muted">
-          <LoaderCircle size={24} className="animate-spin" aria-label={t('core.status.loading')} />
-        </div>
-      );
-    case 'unauthorized':
-      return (
-        <StatePanel
-          icon={Lock}
-          title={t('core.errors.PERMISSION_DENIED')}
-          hint={t('core.unauthorized.askOwner')}
-        />
-      );
-    case 'error':
-      return (
-        <StatePanel
-          icon={FileQuestion}
-          tone="danger"
-          title={translateErrorCode(query.code)}
-          action={
-            <button
-              type="button"
-              onClick={onRetry}
-              className="cursor-pointer text-body font-semibold text-primary hover:underline"
-            >
-              {t('core.action.retry')}
-            </button>
-          }
-        />
-      );
-    case 'ready':
-      return <>{children(query.data)}</>;
-  }
 }
 
 /** "650.000" for 650000 and nothing for 0, so an amount reads as the customer hears it. */

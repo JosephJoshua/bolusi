@@ -27,7 +27,13 @@ import {
 } from './constants.js';
 import { MONEY_PERMISSION } from '../money/constants.js';
 import { documentBalance, documentTotal } from '../money/rules.js';
-import { intakeListProblems, warrantyUntil, type RecordedRepairType } from './intake-options.js';
+import {
+  handoverProblem,
+  intakeListProblems,
+  recordedOption,
+  warrantyUntil,
+  type RecordedRepairType,
+} from './intake-options.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
 import { NO_CANCEL_FEES, standardCancelFee } from './queries.js';
 import type {
@@ -98,6 +104,8 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'unpaidOwnerOnly',
   'downPaymentRefunded',
   'overLimit',
+  'handoverAccessories',
+  'handoverNoteNeeded',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -885,7 +893,29 @@ export const deviceReturnedRule: Rule = async (op, ctx) => {
   }
   // Every version: an older payload carries no reason, so it hands over only a paid phone.
   await requirePaid(op, ctx);
+  // Before v3 there was no checklist to judge.
+  if (op.schemaVersion >= 3) await requireHandoverChecks(db, op);
 };
+
+/** Every accessory left at intake is on the checklist, and whatever is not ticked has a note. */
+async function requireHandoverChecks(db: Db, op: SignedOperation): Promise<void> {
+  const { checklist, note } = payloadOf<Payload<typeof deviceReturnedPayload>>(op);
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('peripheralsJson')
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirstOrThrow();
+  const accessories = (JSON.parse(row.peripheralsJson) as unknown[]).map(recordedOption);
+  const problem = handoverProblem(checklist, accessories, note);
+  if (problem !== null) {
+    throw refuse(problem, {
+      code: 'VALIDATION_FAILED',
+      details: { field: problem === 'handoverAccessories' ? 'checklist' : 'note' },
+    });
+  }
+}
 
 /**
  * The phone leaves only once the servisan is charged what it costs and nothing is left to pay,

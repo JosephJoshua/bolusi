@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { DomainError, refusalKeyOf } from '@bolusi/core';
 
 import {
+  accessoriesBack,
   intake,
   MANAGER_LIMITS,
   openRepairHarness,
@@ -115,6 +116,7 @@ describe('Bayar nanti', () => {
     ticketId,
     handoverPhoto: harness.photo(7),
     signature: harness.photo(8),
+    checklist: accessoriesBack(),
     payments: cash > 0 ? [{ account: 'cash', amount: cash }] : [],
     unpaidReason: 'Bayar Jumat',
   });

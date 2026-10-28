@@ -21,25 +21,12 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Section, type ScreenChrome } from '../../screen-kit/screens/views.js';
-import type { QueryState } from '../../screen-kit/index.js';
 
-import { MONEY_PERMISSION } from '../constants.js';
 import { tm } from '../i18n.js';
-import {
-  accountLabel,
-  countToday,
-  differenceToSettle,
-  dayStart,
-  drawerMoves,
-  moneyInByMethod,
-  nameBalances,
-  splitOpenBalances,
-  type NamedBalance,
-} from '../kas.js';
-import type { CashCountRow, MoneyEntryRow } from '../queries.js';
-import { useMoneyQuery, useMoneyRuntime } from '../runtime.js';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { accountLabel, differenceText, type NamedBalance } from '../kas.js';
+import { useKasDay } from '../kas-day.js';
+import type { CashCountRow } from '../queries.js';
+import { useMoneyRuntime } from '../runtime.js';
 
 export interface KasBoardProps {
   readonly chrome: ScreenChrome;
@@ -54,11 +41,6 @@ export interface KasBoardProps {
   readonly testID?: string | undefined;
 }
 
-/** A read this person may not make shows nothing, rather than a locked section. */
-function readyOr<T>(query: QueryState<T>): T | null {
-  return query.status === 'ready' ? query.data : null;
-}
-
 export function KasBoard({
   chrome,
   now,
@@ -70,53 +52,19 @@ export function KasBoard({
   testID = 'money.kas',
 }: KasBoardProps): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const can = (permission: string) => runtime.hasPermission(permission);
-  // Read each render, so a board shown again the next morning reads the new day.
-  const today = dayStart(now());
-  const drawer = useMoneyQuery(async (rt) => (await rt.query('cashDrawer', {})).rows[0]!, 'drawer');
-  const entries = useMoneyQuery(
-    async (rt) => {
-      // Every record of the day, however busy it was: the totals are sums over all of them.
-      const rows: MoneyEntryRow[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await rt.query('moneyEntries', {
-          from: today,
-          to: today + DAY_MS,
-          limit: 500,
-          ...(cursor === undefined ? {} : { cursor }),
-        });
-        rows.push(...page.rows);
-        cursor = page.nextCursor ?? undefined;
-      } while (cursor !== undefined);
-      return rows;
-    },
-    `entries:${String(today)}`,
-  );
-  const accounts = useMoneyQuery(
-    async (rt) => (await rt.query('paymentAccounts', { includeInactive: true })).rows,
-    'accounts',
-  );
-  const balances = useMoneyQuery(async (rt) => {
-    const { rows } = await rt.query('openBalances', {});
-    return nameBalances(
-      rows,
-      await rt.customersOf(rows.map((row) => ({ kind: row.documentKind, id: row.documentId }))),
-    );
-  }, 'open');
-
-  const drawerData = readyOr(drawer);
-  const todayEntries = readyOr(entries) ?? [];
-  const accountRows = readyOr(accounts) ?? [];
-  const methods = moneyInByMethod(todayEntries);
-  const moves = drawerMoves(todayEntries);
-  const open = splitOpenBalances(readyOr(balances) ?? []);
-  const difference = drawerData === null ? null : differenceToSettle(drawerData.counts);
-  const counted = drawerData === null ? null : countToday(drawerData.counts, now());
-  const mayCount = can(MONEY_PERMISSION.countCash);
-  const maySettle = can(MONEY_PERMISSION.adjustCash);
-  const mayReceive = can(MONEY_PERMISSION.receive);
-  const mayRead = can(MONEY_PERMISSION.read);
+  const {
+    drawerQuery: drawer,
+    drawer: drawerData,
+    accounts: accountRows,
+    entriesReady,
+    methods,
+    moves,
+    open,
+    difference,
+    counted,
+    may,
+  } = useKasDay(now);
+  const { count: mayCount, settle: maySettle, receive: mayReceive, read: mayRead } = may;
 
   return (
     <AppShell
@@ -144,9 +92,9 @@ export function KasBoard({
               ? tm('money.kas.notCounted')
               : tm('money.kas.counted', { time: formatTime(counted.countedAt) })}
           </Text>
-          {can(MONEY_PERMISSION.moveCash) || (onHistory !== undefined && mayRead) ? (
+          {may.move || (onHistory !== undefined && mayRead) ? (
             <View style={styles.drawerAction}>
-              {can(MONEY_PERMISSION.moveCash) ? (
+              {may.move ? (
                 <Button
                   label={tm('money.kas.move')}
                   variant="secondary"
@@ -186,7 +134,7 @@ export function KasBoard({
         </Section>
       )}
 
-      {entries.status === 'ready' ? (
+      {entriesReady ? (
         <Section title={tm('money.kas.inToday')} testID={`${testID}.in`}>
           {methods.length === 0 ? (
             <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
@@ -261,14 +209,6 @@ export function KasBoard({
       )}
     </AppShell>
   );
-}
-
-/** "Kurang Rp 5.000" or "Lebih Rp 5.000": a count's difference as the counter says it. */
-export function differenceText(difference: number): string {
-  if (difference === 0) return tm('money.kas.exact');
-  return tm(difference < 0 ? 'money.kas.short' : 'money.kas.over', {
-    amount: formatMoney(Math.abs(difference)),
-  });
 }
 
 /** A label (and a line under it) left, its amount right; a chevron when it opens a step. */

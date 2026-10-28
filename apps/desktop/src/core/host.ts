@@ -61,7 +61,7 @@ import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
 import { moneyModule } from '@bolusi/modules';
-import { REPAIR_PERMISSION, repairModule } from '@bolusi/modules/repair';
+import { repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef } from '@bolusi/modules/screen-kit';
 import type { HandoffKind, HandoffPageLabels, MediaRef } from '@bolusi/schemas';
 
@@ -69,6 +69,7 @@ import type { Handlers } from '../main/rpc.js';
 import { actingSession, actingStaffAdmin } from './acting.js';
 import type { CoreState, HandoffEvent, SessionView } from './api.js';
 import { createHandoffClient } from './handoff.js';
+import { heldPermissions } from './permissions.js';
 import { initCoreI18n } from './i18n.js';
 import { nodeRealtimeSocket } from './websocket.js';
 
@@ -109,9 +110,6 @@ export interface CoreHost {
   onHandoff(listener: (event: HandoffEvent) => void): () => void;
   stop(): Promise<void>;
 }
-
-/** The repair permissions the window shows or hides actions by. Enforcement stays here. */
-const REPAIR_PERMISSIONS: readonly string[] = Object.values(REPAIR_PERMISSION);
 
 /** A counter PC has no GPS; every op and photo honestly records no location. */
 const NO_LOCATION: LocationPort = { getBestFix: () => null };
@@ -256,14 +254,14 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
     const permissions =
       repairRuntime === null
         ? []
-        : REPAIR_PERMISSIONS.filter((permission) => repairRuntime.hasPermission(permission));
+        : heldPermissions((permission) => repairRuntime.hasPermission(permission));
     const colleaguePermissions =
       repairRuntime === null
         ? {}
         : Object.fromEntries(
             users.map((user) => [
               user.id,
-              REPAIR_PERMISSIONS.filter((permission) =>
+              heldPermissions((permission) =>
                 repairRuntime.colleagueHasPermission(user.id, permission),
               ),
             ]),

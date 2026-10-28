@@ -375,6 +375,12 @@ describe('one servisan from intake to handover, offline in between', () => {
       handoverPhoto: await photo(counter),
       signature: await signature(counter),
       payments: [{ account: 'cash', amount: total - DP, tendered: 800_000 }],
+      // Checked with the customer, and the charger left at intake goes back.
+      checklist: [
+        { kind: 'check', item: 'customerTried', label: null, done: true },
+        { kind: 'check', item: 'repairWorks', label: null, done: true },
+        { kind: 'accessory', item: 'charger', label: null, done: true },
+      ],
     });
     const drawer = (await read(counter, 'money', 'cashDrawer', {}))[0]!;
     expect(drawer['expected']).toBe(total);

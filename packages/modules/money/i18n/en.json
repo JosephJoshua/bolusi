@@ -73,7 +73,10 @@
     "short": "Short {amount}",
     "over": "Over {amount}",
     "difference": "Cash difference",
-    "adjusted": "Cash difference settled"
+    "adjusted": "Cash difference settled",
+    "receive": "Take payment",
+    "settle": "Settle",
+    "nothingOwed": "Every customer has paid."
   },
   "moveKind": {
     "withdrawal": "To the owner",
@@ -126,7 +129,13 @@
     "nextDay": "Next",
     "none": "No records on this day.",
     "voided": "Cancelled: {reason}",
-    "more": "Load more"
+    "more": "Load more",
+    "void": "Cancel",
+    "col": {
+      "time": "Time",
+      "record": "Record"
+    },
+    "voidLabel": "Cancel the {amount} payment at {time}"
   },
   "void": {
     "title": "Cancel payment",
@@ -164,6 +173,7 @@
     "usedAt": "Used at",
     "someStores": "Pick stores",
     "storeCount": "{count} stores",
-    "storeRequired": "Pick at least one store."
+    "storeRequired": "Pick at least one store.",
+    "thisStore": "This store"
   }
 }

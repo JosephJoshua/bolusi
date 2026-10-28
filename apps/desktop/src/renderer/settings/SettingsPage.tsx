@@ -1,8 +1,15 @@
 // The PC's Settings, the phone's Settings in a desktop layout: the pages down the left, the chosen
 // one beside them. Each page shows only for someone allowed to use it (the core and the server
 // still decide every change), so a cashier sees their account and this computer, an owner the
-// store's people and repair settings too. A page with unsaved changes asks before it is left.
+// store's people, repair and payment settings too. A page with unsaved changes asks before it is
+// left.
 import { t } from '@bolusi/i18n';
+import {
+  PaymentMethodsSettings,
+  managesPaymentMethods,
+  tm,
+  useMoneyRuntime,
+} from '@bolusi/modules/money/desktop';
 import {
   CancelFeesSettings,
   DiscardChangesDialog,
@@ -45,6 +52,7 @@ type SettingsPageKey =
   | 'fees'
   | 'uncollected'
   | 'slip'
+  | 'paymentMethods'
   | `options.${IntakeOptionList}`
   | 'computer';
 
@@ -66,6 +74,8 @@ export function SettingsPage({
     () => repairSettingsAccess(repairAbilities(runtime.hasPermission)),
     [runtime],
   );
+  const money = useMoneyRuntime();
+  const methods = useMemo(() => managesPaymentMethods(money), [money]);
   const { staff, staffPins } = access;
   const groups = useMemo((): readonly SectionNavGroup<SettingsPageKey>[] => {
     return [
@@ -114,6 +124,13 @@ export function SettingsPage({
         ],
       },
       {
+        key: 'money',
+        title: tm('money.kas.title'),
+        items: methods
+          ? [{ value: 'paymentMethods' as const, label: tm('money.methods.title') }]
+          : [],
+      },
+      {
         key: 'intake',
         title: tn('repair.options.title'),
         items: repair.intakeOptions
@@ -129,7 +146,7 @@ export function SettingsPage({
         items: [{ value: 'computer', label: t('auth.pc.settings.thisPc') }],
       },
     ];
-  }, [staff, staffPins, repair]);
+  }, [staff, staffPins, repair, methods]);
 
   const [page, setPage] = useState<SettingsPageKey>('account');
   const [pending, setPending] = useState<(() => void) | null>(null);
@@ -229,6 +246,8 @@ function Page({
       return <UncollectedSettings onDirtyChange={onDirtyChange} />;
     case 'slip':
       return <SlipSettings onDirtyChange={onDirtyChange} />;
+    case 'paymentMethods':
+      return <PaymentMethodsSettings />;
     case 'computer':
       return <ComputerPanel device={access.device ?? null} />;
     default:

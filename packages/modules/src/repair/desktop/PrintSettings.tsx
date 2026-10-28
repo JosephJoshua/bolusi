@@ -20,7 +20,8 @@ import { tn } from '../i18n.js';
 import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { useRepairRuntime } from '../runtime.js';
 import { outputTestPage } from '../slip-output.js';
-import { ActionError, PrinterProblemBanner, usePrinterProblem } from './parts.js';
+import { ActionError } from '../../screen-kit/desktop/index.js';
+import { PrinterProblemBanner, usePrinterProblem } from './parts.js';
 
 export function PrintSettings(): React.JSX.Element | null {
   const runtime = useRepairRuntime();

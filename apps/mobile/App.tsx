@@ -104,7 +104,7 @@ import {
   parseIntakeDraft,
   type IntakeDraft,
 } from '@bolusi/modules/repair';
-import { servisanCustomers, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
+import { moneyRuntimeOf, tn, type RepairRuntime } from '@bolusi/modules/repair/screens';
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
 import { tm, type MoneyRuntime } from '@bolusi/modules/money/screens';
 import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
@@ -759,14 +759,11 @@ export default function App(props: AppProps): React.JSX.Element {
   // The ledger as the Kas screens read it: repair's money port, live on the same tables.
   const moneyRuntime = useMemo((): MoneyRuntime | null => {
     if (props.repair === undefined) return null;
-    const repair = props.repair;
     const users = props.users ?? [];
-    return {
-      ...repair.money,
-      subscribe: repair.subscribe,
-      nameOf: (userId) => users.find((user) => user.id === userId)?.name ?? null,
-      customersOf: (documents) => servisanCustomers(repair, documents),
-    };
+    return moneyRuntimeOf(
+      props.repair,
+      (userId) => users.find((user) => user.id === userId)?.name ?? null,
+    );
   }, [props.repair, props.users]);
   // Kas is a tab for whoever counts the drawer or reads the store's money; others see no tabs.
   const showsKas =
@@ -1262,7 +1259,7 @@ export default function App(props: AppProps): React.JSX.Element {
                       rows: canManageAccounts
                         ? [
                             {
-                              icon: 'money' as const,
+                              icon: 'paymentMethods' as const,
                               title: tm('money.methods.title'),
                               summary: tm('money.methods.summary'),
                               onOpen: () => setRoute('paymentMethods'),

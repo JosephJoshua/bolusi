@@ -407,6 +407,19 @@ export async function openRepairHarness(
   };
 }
 
+/**
+ * The handover checklist with every accessory `intake` leaves (charger and case) ticked as back,
+ * which is all the rule asks for; a test with other accessories passes its own.
+ */
+export function accessoriesBack(
+  peripherals: readonly { item: string; label: string | null }[] = [
+    { item: 'charger', label: null },
+    { item: 'case', label: null },
+  ],
+) {
+  return peripherals.map(({ item, label }) => ({ kind: 'accessory', item, label, done: true }));
+}
+
 /** A complete intake for `openTicket`, overridable per test. */
 export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}) {
   return {
@@ -450,6 +463,7 @@ export async function paidHandover(
     quoteTotal: number;
     cancelFee: number | null;
     downPayment: number | null;
+    peripherals: { item: string; label: string | null }[];
   };
   const cost = ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
   const due = cost - (ticket.downPayment ?? 0);
@@ -462,6 +476,7 @@ export async function paidHandover(
       finished && ticket.location === 'in_store' && due > 0
         ? [{ account: 'cash', amount: due }]
         : [],
+    checklist: accessoriesBack(ticket.peripherals),
     ...extra,
   };
 }
