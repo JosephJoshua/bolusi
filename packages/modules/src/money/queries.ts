@@ -1,6 +1,6 @@
 // The `money` queries. Every read is constrained to the caller's store; central accounts are read
 // only when this store uses them. Postgres hands `bigint` columns back as strings, hence `Number`.
-import { sql } from 'kysely';
+import { sql, type RawBuilder } from 'kysely';
 import { z } from 'zod';
 
 import {
@@ -83,6 +83,28 @@ export const paymentAccountsQuery = {
   input: paymentAccountsInput,
   handler: paymentAccountsHandler,
 } as const;
+
+// ── what a document's customer has paid, for other modules' lists ─────────────────────────────
+
+/**
+ * What the customer of each listed document has paid, less what went back: a correlated subquery
+ * for a module's own list (a servisan's DP on the board). `documentId` is the outer query's
+ * column holding the document's id, and `storeId` the column holding its store.
+ */
+export function paidOnDocumentSql(
+  documentKind: string,
+  documentId: string,
+  storeId: string,
+): RawBuilder<number | string | null> {
+  return sql<number | string | null>`(
+    SELECT SUM(CASE WHEN me.kind = 'refund_paid' THEN -me.amount ELSE me.amount END)
+    FROM money_entries me
+    WHERE me.document_kind = ${documentKind}
+      AND me.document_id = ${sql.ref(documentId)}
+      AND me.store_id = ${sql.ref(storeId)}
+      AND (me.kind = 'refund_paid' OR (me.kind = 'payment_received' AND me.voided_at IS NULL))
+  )`;
+}
 
 // ── documentMoney (one document's charges, payments and refunds) ───────────────────────────────
 

@@ -36,7 +36,12 @@ import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
 const OPTIONS = DEFAULT_INTAKE_OPTIONS;
-import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
+import {
+  openRepairHarness,
+  intake,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
 afterEach(async () => {
@@ -104,7 +109,7 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   if (state === 'returned') {
     await harness.run(
       'returnDevice',
-      { ticketId, handoverPhoto: harness.photo(9), signature: harness.photo(10) },
+      (await paidHandover(harness, ticketId, {}, [9, 10])) as never,
       harness.cashierId,
     );
   }
@@ -152,7 +157,7 @@ async function perform(
     case 'handover':
       return harness.run(
         'returnDevice',
-        { ticketId, handoverPhoto: harness.photo(13), signature: harness.photo(14) },
+        (await paidHandover(harness, ticketId, {}, [13, 14])) as never,
         userId,
       );
     case 'cancel':

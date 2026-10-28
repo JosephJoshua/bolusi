@@ -336,6 +336,8 @@ export const REPAIR_KEYS = [
   'repair.refusal.discountOwnerOnly',
   'repair.refusal.downPaymentAboveTotal',
   'repair.refusal.downPaymentRecorded',
+  'repair.refusal.notPaid',
+  'repair.refusal.unpaidOwnerOnly',
   'repair.refusal.inRepair',
   'repair.refusal.invalidOptions',
   'repair.refusal.needsAfterPhoto',

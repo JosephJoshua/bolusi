@@ -214,9 +214,6 @@ function ticket(spec: {
     returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
     returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
     downPayment: spec.downPayment ?? null,
-    downPaymentBy: spec.downPayment === undefined ? null : 'u-siti',
-    downPaymentByName: spec.downPayment === undefined ? null : 'Siti Rahayu',
-    downPaymentAt: spec.downPayment === undefined ? null : createdAt,
     slipPrints: { intake: 1, handover: 0 },
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
@@ -872,9 +869,6 @@ export function demoRepairRuntime(
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
         createdAt: HARNESS_NOW,
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
-        downPaymentBy: Number(input['downPayment'] ?? 0) > 0 ? actor.userId : null,
-        downPaymentByName: Number(input['downPayment'] ?? 0) > 0 ? actor.name : null,
-        downPaymentAt: Number(input['downPayment'] ?? 0) > 0 ? HARNESS_NOW : null,
         slipPrints: { intake: 0, handover: 0 },
         quoteLines: (
           input['quoteLines'] as {
@@ -979,16 +973,10 @@ export function demoRepairRuntime(
     recordDownPayment: (input) =>
       update(String(input['ticketId']), 'repair.down_payment_received', {
         downPayment: Number(input['amount']),
-        downPaymentBy: actor.userId,
-        downPaymentByName: actor.name,
-        downPaymentAt: HARNESS_NOW,
       }),
     correctDownPayment: (input) =>
       update(String(input['ticketId']), 'repair.down_payment_corrected', {
         downPayment: Number(input['amount']) > 0 ? Number(input['amount']) : null,
-        downPaymentBy: actor.userId,
-        downPaymentByName: actor.name,
-        downPaymentAt: HARNESS_NOW,
       }),
     recordSlipPrinted: (input) => {
       const t = find(String(input['ticketId']));

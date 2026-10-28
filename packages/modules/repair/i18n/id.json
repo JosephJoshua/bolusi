@@ -598,7 +598,9 @@
     "discountOwnerOnly": "Hanya pemilik toko yang bisa memberi diskon.",
     "customerAgreementMismatch": "Persetujuan pelanggan untuk perubahan harga ini tidak sesuai. Coba ubah lagi.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
-    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya."
+    "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
+    "notPaid": "Servisan ini belum lunas.",
+    "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas."
   },
   "paper": {
     "title": "Kertas nota",

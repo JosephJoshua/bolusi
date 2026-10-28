@@ -56,8 +56,20 @@ import {
   type CancelFees,
   type PrintSettings,
   type TicketDetailRow,
+  type TicketSummaryRow,
 } from './queries.js';
-import { requireProposal } from './rules.js';
+import {
+  CASH_ACCOUNT,
+  MONEY_ENTRY_ENTITY,
+  MONEY_OP,
+  SYSTEM_ACCOUNT,
+  type RevenueAccount,
+} from '../money/constants.js';
+import { chargeOp, paymentOp, refundOp, zPaymentInput } from '../money/commands.js';
+import { zAccountRef } from '../money/operations.js';
+import { documentMoneyQuery, type DocumentMoney } from '../money/queries.js';
+import { REPAIR_DOCUMENT_KIND } from './money-document.js';
+import { REPAIR_REFUSALS, checkDownPayment, requireProposal } from './rules.js';
 import { formatTicketNumber } from './ticket-number.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
@@ -70,6 +82,13 @@ const zPhone = z
   .max(40)
   .nullable()
   .transform((phone) => (phone === null || phone === '' ? null : phone));
+const zDpReference = z
+  .string()
+  .trim()
+  .max(100)
+  .nullable()
+  .default(null)
+  .transform((ref) => (ref === null || ref === '' ? null : ref));
 const zAmountInput = z.number().int().min(-MAX_LINE_AMOUNT).max(MAX_LINE_AMOUNT);
 
 const zLineInput = z
@@ -99,6 +118,16 @@ function ticketOp(ctx: CommandContext, ticketId: string, type: string, payload: 
     entityId: ticketId,
     payload: payload as Record<string, unknown>,
   });
+}
+
+/** A servisan as the money ledger names it. */
+function ticketDocument(ticketId: string, ticketNumber: string) {
+  return { kind: REPAIR_DOCUMENT_KIND, id: ticketId, label: ticketNumber };
+}
+
+async function ticketMoney(ctx: CommandContext, ticketId: string): Promise<DocumentMoney> {
+  return (await ctx.query(documentMoneyQuery, { kind: REPAIR_DOCUMENT_KIND, id: ticketId }))
+    .rows[0]!;
 }
 
 // ── customers ──────────────────────────────────────────────────────────────────────────────────
@@ -192,6 +221,10 @@ export const openTicketInput = z
     photos: zIntakePhotosV2,
     /** Integer IDR the customer paid up front; 0 when nothing was. */
     downPayment: z.number().int().min(0).max(MAX_LINE_AMOUNT).default(0),
+    /** How the DP was paid: the drawer or one of the store's accounts. */
+    downPaymentAccount: zAccountRef.default(CASH_ACCOUNT),
+    /** An EDC approval code, or a transfer's reference. */
+    downPaymentReference: zDpReference,
   })
   .strict();
 export type OpenTicketInput = z.input<typeof openTicketInput>;
@@ -271,7 +304,16 @@ export async function openTicketHandler(
     }),
   );
   if (input.downPayment > 0) {
-    ops.push(ticketOp(ctx, ticketId, REPAIR_OP.downPaymentReceived, { amount: input.downPayment }));
+    const total = input.quoteLines.reduce((sum, line) => sum + line.amount, 0);
+    checkDownPayment(input.downPayment, total);
+    ops.push(
+      paymentOp(ctx, ticketDocument(ticketId, ticketNumber), {
+        account: input.downPaymentAccount,
+        amount: input.downPayment,
+        reference: input.downPaymentReference,
+        tendered: null,
+      }),
+    );
   }
 
   return { ops, result: { ticketId, ticketNumber, customerId } };
@@ -647,46 +689,144 @@ export const returnDeviceInput = z
     handoverPhoto: zMediaRef,
     signature: zMediaRef,
     note: zText(2000).default(''),
+    /** What the customer pays now, in one or more methods. */
+    payments: z.array(zPaymentInput).max(10).default([]),
+    /** An owner lets the phone go before it is paid in full, and says why: a debt. */
+    unpaidReason: zText(2000)
+      .nullable()
+      .default(null)
+      .transform((reason) => (reason === null || reason === '' ? null : reason)),
+    /** Shown in the history next to money handed back (a cancelled servisan's DP less its fee). */
+    refundReason: zText(200).default(''),
   })
   .strict();
 export type ReturnDeviceInput = z.input<typeof returnDeviceInput>;
 
-/** Hand the device back, with a photo and the customer's signature (when: `deviceReturnedRule`). */
+/** What a finished servisan costs the customer, and the revenue it counts as. */
+export function handoverCharge(ticket: TicketSummaryRow): {
+  amount: number;
+  account: RevenueAccount;
+} {
+  return ticket.outcome === 'cancelled'
+    ? { amount: ticket.cancelFee ?? 0, account: SYSTEM_ACCOUNT.cancelFeeRevenue }
+    : { amount: ticket.quoteTotal, account: SYSTEM_ACCOUNT.serviceRevenue };
+}
+
+/**
+ * Money handed back at the counter, through the accounts the customer paid with: the drawer
+ * first, then each account in the order it was paid. Never more than went in through each one.
+ */
+export function refundsFor(
+  money: DocumentMoney,
+  credit: number,
+  extra: readonly { account: string; amount: number }[] = [],
+): { account: string; amount: number }[] {
+  const paidIn = new Map<string, number>();
+  const add = (account: string, amount: number) =>
+    paidIn.set(account, (paidIn.get(account) ?? 0) + amount);
+  paidIn.set(CASH_ACCOUNT, 0);
+  for (const entry of money.entries) {
+    if (entry.account === null) continue;
+    if (entry.kind === 'payment_received' && entry.voidedAt === null)
+      add(entry.account, entry.amount);
+    if (entry.kind === 'refund_paid') add(entry.account, -entry.amount);
+  }
+  for (const payment of extra) add(payment.account, payment.amount);
+  const refunds: { account: string; amount: number }[] = [];
+  let left = credit;
+  for (const [account, paid] of paidIn) {
+    if (left <= 0) break;
+    const amount = Math.min(left, paid);
+    if (amount <= 0) continue;
+    refunds.push({ account, amount });
+    left -= amount;
+  }
+  return refunds;
+}
+
+const HANDOVER_REFUND_REASON = 'Returned at handover';
+
+/**
+ * Hand the device back, with a photo and the customer's signature (when: `deviceReturnedRule`).
+ * The servisan is charged what it costs, the customer pays the rest, and what they paid beyond
+ * it goes back through the accounts it came in by. Only an owner lets it go unpaid.
+ */
 export async function returnDeviceHandler(
   input: z.output<typeof returnDeviceInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
-  return {
-    ops: [
-      ticketOp(ctx, ticket.id, REPAIR_OP.deviceReturned, {
-        handoverPhoto: input.handoverPhoto,
-        signature: input.signature,
-        note: input.note,
-      }),
-    ],
-    result: { ticketId: ticket.id },
-  };
+  const ops: OpDraft[] = [];
+  let balance = 0;
+  // A phone that cannot leave yet is left to `deviceReturnedRule` to refuse, in its own words.
+  const settles =
+    ticket.location === 'in_store' &&
+    (ticket.outcome === 'repaired' || ticket.outcome === 'cancelled');
+  if (settles) {
+    const document = ticketDocument(ticket.id, ticket.ticketNumber);
+    const money = await ticketMoney(ctx, ticket.id);
+    const charge = handoverCharge(ticket);
+    const toCharge = Math.max(0, charge.amount - money.charged);
+    if (toCharge > 0) ops.push(chargeOp(ctx, document, toCharge, charge.account));
+    for (const payment of input.payments) ops.push(paymentOp(ctx, document, payment));
+
+    const paidNow = input.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    balance = money.balance + toCharge - paidNow;
+    if (balance < 0) {
+      const reason = input.refundReason === '' ? HANDOVER_REFUND_REASON : input.refundReason;
+      for (const refund of refundsFor(money, -balance, input.payments)) {
+        ops.push(refundOp(ctx, document, { ...refund, reason, reference: null }));
+      }
+    }
+  }
+
+  ops.push(
+    ticketOp(ctx, ticket.id, REPAIR_OP.deviceReturned, {
+      handoverPhoto: input.handoverPhoto,
+      signature: input.signature,
+      note: input.note,
+      unpaidReason: balance > 0 ? input.unpaidReason : null,
+    }),
+  );
+  return { ops, result: { ticketId: ticket.id } };
 }
 
 // ── down payment, printing and the store's slip settings ──────────────────────────────────────
 
 export const recordDownPaymentInput = z
-  .object({ ticketId: z.string().min(1), amount: z.number().int().min(1).max(MAX_LINE_AMOUNT) })
+  .object({
+    ticketId: z.string().min(1),
+    amount: z.number().int().min(1).max(MAX_LINE_AMOUNT),
+    account: zAccountRef.default(CASH_ACCOUNT),
+    reference: zDpReference,
+  })
   .strict();
 export type RecordDownPaymentInput = z.input<typeof recordDownPaymentInput>;
 
 /**
- * Record a down payment taken after intake. Only while the servisan is open and only once: changing an amount already recorded is an owner's correction, since a lower figure is how
- * cash would go missing.
+ * A down payment taken after intake, while the servisan is open, into the money ledger. Lowering
+ * it afterwards is an owner's correction, since a lower figure is how cash would go missing.
  */
 export async function recordDownPaymentHandler(
   input: z.output<typeof recordDownPaymentInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
+  if (ticket.location === 'returned' || ticket.outcome === 'cancelled') {
+    throw REPAIR_REFUSALS.refuse(ticket.location === 'returned' ? 'returned' : 'cancelled', {
+      details: { entityType: REPAIR_TICKET_ENTITY, entityId: ticket.id },
+    });
+  }
+  checkDownPayment((ticket.downPayment ?? 0) + input.amount, ticket.quoteTotal);
   return {
-    ops: [ticketOp(ctx, ticket.id, REPAIR_OP.downPaymentReceived, { amount: input.amount })],
+    ops: [
+      paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
+        account: input.account,
+        amount: input.amount,
+        reference: input.reference,
+        tendered: null,
+      }),
+    ],
     result: { ticketId: ticket.id },
   };
 }
@@ -701,22 +841,40 @@ export const correctDownPaymentInput = z
   .strict();
 export type CorrectDownPaymentInput = z.input<typeof correctDownPaymentInput>;
 
-/** An owner corrects a recorded down payment, with a reason, at any time. */
+/**
+ * An owner corrects a down payment, with a reason: the payments taken so far are voided and, when
+ * the amount is not 0, one payment of the right amount is recorded through the same method.
+ */
 export async function correctDownPaymentHandler(
   input: z.output<typeof correctDownPaymentInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = await loadTicket(ctx, input.ticketId);
   if ((ticket.downPayment ?? 0) === input.amount) throw nothingChanged('amount');
-  return {
-    ops: [
-      ticketOp(ctx, ticket.id, REPAIR_OP.downPaymentCorrected, {
+  const money = await ticketMoney(ctx, ticket.id);
+  const live = money.entries.filter(
+    (entry) => entry.kind === 'payment_received' && entry.voidedAt === null,
+  );
+  const ops: OpDraft[] = live.map((entry) =>
+    ctx.op({
+      type: MONEY_OP.paymentVoided,
+      entityType: MONEY_ENTRY_ENTITY,
+      entityId: entry.id,
+      payload: { reason: input.reason },
+    }),
+  );
+  if (input.amount > 0) {
+    const first = live[0];
+    ops.push(
+      paymentOp(ctx, ticketDocument(ticket.id, ticket.ticketNumber), {
+        account: first?.account ?? CASH_ACCOUNT,
         amount: input.amount,
-        reason: input.reason,
+        reference: first?.reference ?? null,
+        tendered: null,
       }),
-    ],
-    result: { ticketId: ticket.id },
-  };
+    );
+  }
+  return { ops, result: { ticketId: ticket.id } };
 }
 
 export const recordSlipPrintedInput = z
