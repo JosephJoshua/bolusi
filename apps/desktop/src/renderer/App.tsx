@@ -41,6 +41,7 @@ import {
   type DemoPerson,
 } from './demo.js';
 import { SyncStatusButton } from './SyncStatus.js';
+import { useReportBusy } from './updates.js';
 import { useCore } from './use-core.js';
 
 /** How often typing and clicking count as "still here" for the idle lock. */
@@ -49,6 +50,7 @@ const ACTIVITY_EVERY_MS = 5_000;
 export function App(): React.JSX.Element {
   // The webcam, signature and phone dialogs, once for the window; leaving the counter backs out.
   const [dialogs] = useState(() => createCaptureDialogs(windowHandoff()));
+  useReportBusy();
   return (
     <>
       <Gate capture={dialogs.capture} />

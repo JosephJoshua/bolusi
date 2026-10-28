@@ -140,24 +140,28 @@ void app.whenReady().then(() => {
         camera(permission, kind === undefined ? undefined : [kind]))
     );
   });
-  registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
+  const printing = registerPrinting(new DeviceSettingsFile(app.getPath('userData')), trusted);
   const pages = (): Electron.WebContents[] =>
     [...counterWindows].map((window) => window.webContents);
-  registerUpdates(trusted, pages);
   registerWindowChrome(trusted);
   if (!DEMO && API_BASE_URL === '')
     console.error('BOLUSI_API_URL is not set: nothing to sync with');
-  quitAfter(
-    registerCore({
-      dataDir: app.getPath('userData'),
-      apiBaseUrl: API_BASE_URL,
-      appVersion: app.getVersion(),
-      demo: DEMO,
-      unsealedSecretsForDev: !app.isPackaged && process.platform === 'linux',
-      trusted,
-      windows: pages,
-    }),
-  );
+  const core = registerCore({
+    dataDir: app.getPath('userData'),
+    apiBaseUrl: API_BASE_URL,
+    appVersion: app.getVersion(),
+    demo: DEMO,
+    unsealedSecretsForDev: !app.isPackaged && process.platform === 'linux',
+    trusted,
+    windows: pages,
+  });
+  quitAfter(core);
+  registerUpdates({
+    trusted,
+    windows: pages,
+    printing: () => printing.busy(),
+    stopCore: () => core.stop(),
+  });
   createWindow();
 });
 

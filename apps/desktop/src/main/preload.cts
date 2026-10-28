@@ -35,6 +35,7 @@ const bridge: DesktopBridge = {
       return () => electron.ipcRenderer.removeListener('updates:changed', relay);
     },
     install: () => electron.ipcRenderer.invoke('updates:install'),
+    busy: (busy) => electron.ipcRenderer.send('updates:busy', busy),
   },
   window: {
     fullscreen: () => electron.ipcRenderer.invoke('window:fullscreen'),
