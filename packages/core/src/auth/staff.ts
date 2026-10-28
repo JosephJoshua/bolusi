@@ -13,6 +13,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import { parseLimitAmounts, type LimitAmounts } from '../authz/limits.js';
+import { STORE_ID_META_KEY } from '../authz/directory.js';
 import { AUTH_PERMISSION } from './operations.js';
 import { holdsMainOwnerRole } from './repo.js';
 
@@ -82,7 +83,11 @@ function isOwnerRole(role: Pick<RoleRow, 'scopeType' | 'permissionIds'>): boolea
   );
 }
 
-/** Whether this person holds an owner role in this device's directory. */
+/**
+ * Whether this person holds an owner role in this device's directory: tenant-wide, at this store,
+ * or at another store (the bundle carries owner-role grants at every store, since the server counts
+ * them all).
+ */
 export async function holdsOwnerRole<DB>(db: Kysely<DB>, userId: string): Promise<boolean> {
   const held = await sql<Pick<RoleRow, 'scopeType' | 'permissionIds'>>`
     SELECT rd.scope_type AS "scopeType", rd.permission_ids AS "permissionIds"
@@ -122,8 +127,13 @@ export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirec
       SELECT u.id, u.name, u.status, (v.user_id IS NOT NULL) AS "hasPin"
       FROM users_directory u LEFT JOIN user_pin_verifiers v ON v.user_id = u.id
     `.execute(db),
-    sql<{ userId: string; roleId: string }>`
-      SELECT DISTINCT user_id AS "userId", role_id AS "roleId" FROM user_roles_directory
+    // `here`: a grant at this store or tenant-wide. The bundle also carries owner-role grants at
+    // other stores, which make the person an owner but are not a role they hold here.
+    sql<{ userId: string; roleId: string; here: number }>`
+      SELECT user_id AS "userId", role_id AS "roleId",
+        MAX(store_id IS NULL
+          OR store_id = COALESCE((SELECT value FROM meta_kv WHERE key = ${STORE_ID_META_KEY}), store_id)) AS "here"
+      FROM user_roles_directory GROUP BY user_id, role_id
     `.execute(db),
   ]);
   const roleById = new Map(roleRows.rows.map((role) => [role.id, role]));
@@ -136,9 +146,11 @@ export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirec
   });
 
   const members = userRows.rows.map((user): StaffMember => {
-    const held = grantRows.rows
-      .filter((grant) => grant.userId === user.id)
-      .map((grant) => roleById.get(grant.roleId))
+    const roleOf = (grant: { roleId: string }) => roleById.get(grant.roleId);
+    const grants = grantRows.rows.filter((grant) => grant.userId === user.id);
+    const held = grants
+      .filter((grant) => Boolean(grant.here))
+      .map(roleOf)
       .filter((role): role is RoleRow => role !== undefined)
       .sort((a, b) => roleRank(a.name) - roleRank(b.name));
     return {
@@ -147,7 +159,11 @@ export async function readStaffDirectory<DB>(db: Kysely<DB>): Promise<StaffDirec
       active: user.status === 'active',
       roleKeys: held.map((role) => role.name),
       roleIds: held.map((role) => role.id),
-      owner: held.some(isOwnerRole),
+      // An owner at any store is an owner here too, as the server judges it.
+      owner: grants.some((grant) => {
+        const role = roleOf(grant);
+        return role !== undefined && isOwnerRole(role);
+      }),
       hasPin: Boolean(user.hasPin),
     };
   });

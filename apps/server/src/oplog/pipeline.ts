@@ -334,7 +334,7 @@ export async function processPushBatch(
       // 5. scope (05 §9): tenant/store/user membership + per-type rules.
       const scope = await checkScope(scopeLookup, op, device, deps.registry);
       if (scope !== null) {
-        await anomaly(op, 'SCOPE_VIOLATION', scope.reason);
+        if (scope.tamper !== false) await anomaly(op, 'SCOPE_VIOLATION', scope.reason);
         await refuse(op, 'SCOPE_VIOLATION', scope.reason);
         continue;
       }

@@ -513,8 +513,10 @@ function permissionBreadth(value: string | readonly unknown[]): number {
  * ALL returned — the owner ruling's "parallel at the top rank ⇒ list all"; two distinct roles of
  * equal breadth are genuinely co-equal, which a hardcoded key ranking could not express.
  *
- * `DISTINCT`: a store_owner holding grants in three stores is one role, shown once. Returns `[]` when
- * the user holds no grant, so the card renders no role line rather than an empty label.
+ * `DISTINCT`: a store_owner holding grants in three stores is one role, shown once. Only roles held
+ * here count (this store or tenant-wide): the bundle also carries owner-role grants at other stores.
+ * Returns `[]` when the user holds no grant, so the card renders no role line rather than an empty
+ * label.
  */
 export async function resolveDisplayRoleKeys<DB>(
   db: Kysely<DB>,
@@ -525,6 +527,8 @@ export async function resolveDisplayRoleKeys<DB>(
     FROM user_roles_directory urd
     JOIN roles_directory rd ON rd.id = urd.role_id
     WHERE urd.user_id = ${userId}
+      AND (urd.store_id IS NULL
+        OR urd.store_id = COALESCE((SELECT value FROM meta_kv WHERE key = ${STORE_ID_META_KEY}), urd.store_id))
   `.execute(db);
   if (rows.rows.length === 0) return [];
   const ranked = rows.rows.map((r) => ({

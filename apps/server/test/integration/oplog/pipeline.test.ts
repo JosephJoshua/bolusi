@@ -641,6 +641,8 @@ describe('per-type rules (05 §9.5, api/02-auth §6.3)', () => {
 
     // Blocks store_owner → main_owner impersonation (api/02-auth §6.6).
     expect(result.results[1]).toMatchObject({ status: 'rejected', code: 'SCOPE_VIOLATION' });
+    // Not tamper: a device whose bundle predates the target becoming an owner sends this honestly.
+    expect(await readAnomalies(testDb.db, world.deviceId)).toEqual([]);
   });
 
   test.each([

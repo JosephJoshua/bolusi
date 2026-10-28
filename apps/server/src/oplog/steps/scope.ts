@@ -23,7 +23,9 @@ export const AUTH_PIN_LOCKOUT_CLEARED = 'auth.pin_lockout_cleared';
 export const PLATFORM_CONFLICT_DETECTED = 'platform.conflict_detected';
 export const PLATFORM_CONFLICT_ACKNOWLEDGED = 'platform.conflict_acknowledged';
 
-export type ScopeOutcome = null | { readonly reason: string };
+/** A refusal; `tamper: false` marks one an honest device can meet (a stale directory), which is
+ *  refused without recording a device anomaly. */
+export type ScopeOutcome = null | { readonly reason: string; readonly tamper?: false };
 
 type MediaRefLike = { readonly userId?: unknown; readonly deviceId?: unknown };
 
@@ -236,8 +238,13 @@ export async function checkScope(
       // An owner's PIN is the main owner's to manage (owner powers): blocks a store owner taking
       // over the main owner or a peer owner, api/02-auth §6.6; unlocking an owner's PIN is the
       // same takeover's first step. The permission itself is the authorization step's.
+      // Not tamper: the device judged from its bundle, and someone made an owner since it last
+      // synced is an owner here too.
       if (!(await lookup.mayManageOwnerPin(op.userId, op.entityId))) {
-        return { reason: `${op.type} on an owner requires the actor to be the main owner` };
+        return {
+          reason: `${op.type} on an owner requires the actor to be the main owner`,
+          tamper: false,
+        };
       }
       return null;
     }
