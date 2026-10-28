@@ -74,6 +74,43 @@ async function repaired(harness: RepairHarness, overrides: Record<string, unknow
   );
   return ticketId;
 }
+async function payments(
+  harness: RepairHarness,
+  document: { kind: string; id: string; label: string },
+  amounts: number[],
+): Promise<string[]> {
+  const { entryIds } = (await harness.money(
+    'receivePayments',
+    { document, payments: amounts.map((amount) => ({ account: 'cash', amount })) },
+    harness.cashierId,
+  )) as { entryIds: string[] };
+  return entryIds;
+}
+
+/** A Rp 750.000 servisan handed back paid in cash as `cash`; `small` is the last payment. */
+async function paidInFull(harness: RepairHarness, cash: number[]) {
+  const ticketId = await repaired(harness, {});
+  await harness.run(
+    'returnDevice',
+    {
+      ticketId,
+      handoverPhoto: harness.photo(7),
+      signature: harness.photo(8),
+      checklist: accessoriesBack(),
+      payments: cash.map((amount) => ({ account: 'cash', amount })),
+    },
+    harness.cashierId,
+  );
+  const small = await harness.db
+    .selectFrom('moneyEntries')
+    .select('id')
+    .where('documentId', '=', ticketId)
+    .where('kind', '=', 'payment_received')
+    .where('amount', '=', cash.at(-1)!)
+    .executeTakeFirstOrThrow();
+  return { ticketId, small: small.id! };
+}
+
 const unpaid = (harness: RepairHarness, ticketId: string, cash: number) => ({
   ticketId,
   handoverPhoto: harness.photo(7),
@@ -231,6 +268,91 @@ describe('refunds and voids', () => {
       h.run('correctDownPayment', { ticketId: other, amount: 60_000, reason: 'x' }, h.managerId),
       'money',
     );
+  });
+
+  test('refunds, voids and charge reductions on one servisan count together', async () => {
+    h = await openRepairHarness(9405);
+    // Refund, then void: the DP refund fills the limit, so a void on top is refused.
+    const first = await openTicket(h, { downPayment: 100_000 });
+    const doc1 = { kind: 'repair.ticket', id: first, label: 'x' };
+    await h.money(
+      'refund',
+      { document: doc1, account: 'cash', amount: MANAGER_LIMITS.refund, reason: 'Batal' },
+      h.managerId,
+    );
+    const later = await payments(h, doc1, [20_000]);
+    await expectOverLimit(
+      h.money('voidPayment', { entryId: later[0]!, reason: 'Dobel' }, h.managerId),
+      'money',
+    );
+    await h.money('voidPayment', { entryId: later[0]!, reason: 'Dobel' }, h.storeOwnerId);
+
+    // Void, then refund, on a paid bill: a void of the whole limit leaves nothing to refund.
+    const second = await paidInFull(h, [750_000 - MANAGER_LIMITS.refund, MANAGER_LIMITS.refund]);
+    const doc2 = { kind: 'repair.ticket', id: second.ticketId, label: 'y' };
+    await h.money('voidPayment', { entryId: second.small, reason: 'Salah' }, h.managerId);
+    const refund = (amount: number, userId: string) =>
+      h!.money('refund', { document: doc2, account: 'cash', amount, reason: 'Kembali' }, userId);
+    await expectOverLimit(refund(1, h.managerId), 'money');
+    await refund(50_000, h.storeOwnerId);
+
+    // Void, then reduce: the reduction counts on top of the void.
+    const third = await paidInFull(h, [730_000, 20_000]);
+    const doc3 = { kind: 'repair.ticket', id: third.ticketId, label: 'z' };
+    await h.money('voidPayment', { entryId: third.small, reason: 'Salah' }, h.managerId);
+    const reduce = (amount: number, userId: string) =>
+      h!.money('reduceCharge', { document: doc3, amount, reason: 'Diskon' }, userId);
+    await expectOverLimit(reduce(10_001, h.managerId), 'money');
+    await reduce(10_000, h.managerId);
+    await reduce(50_000, h.storeOwnerId);
+  });
+
+  test('a refund beyond an overpayment counts once, as the lower bill; giving back an overpayment never', async () => {
+    h = await openRepairHarness(9406);
+    const { ticketId } = await paidInFull(h, [750_000]);
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    const refund = (amount: number, userId: string) =>
+      h!.money('refund', { document, account: 'cash', amount, reason: 'Kembali' }, userId);
+    // The customer paid Rp 50.000 too much, and the counter gives it back: no limit asked.
+    await payments(h, document, [50_000]);
+    await refund(50_000, h.cashierId);
+    // Rp 20.000 back beyond that lowers the bill first, then the refund is the customer's credit:
+    // Rp 20.000 off the servisan, not Rp 40.000 (nor Rp 70.000 with the overpayment).
+    await refund(20_000, h.managerId);
+    await h.money('reduceCharge', { document, amount: 10_000, reason: 'Diskon' }, h.managerId);
+    await expectOverLimit(
+      h.money('reduceCharge', { document, amount: 1, reason: 'Diskon' }, h.managerId),
+      'money',
+    );
+    // The Rp 10.000 the customer is now owed goes back at the counter.
+    await refund(10_000, h.cashierId);
+
+    // A refund from an older phone that did not lower the bill counts while the customer owes it.
+    const last = (await h.ownOps()).filter((op) => op.type === 'money.refund_paid').at(-1)!;
+    const judged: number[] = [];
+    await expectOverLimit(
+      h.checkRule(
+        { ...last, entityId: '0191e000-0000-7000-8000-00000000f1f1', userId: h.managerId },
+        managerLimit('refund', judged),
+      ),
+      'money',
+    );
+    expect(judged).toEqual([40_000]);
+  });
+
+  test('a DP correction counts only its decrease alongside a refund', async () => {
+    h = await openRepairHarness(9407);
+    const ticketId = await openTicket(h, { downPayment: 100_000 });
+    const document = { kind: 'repair.ticket', id: ticketId, label: 'x' };
+    await h.run(
+      'correctDownPayment',
+      { ticketId, amount: 80_000, reason: 'Salah ketik' },
+      h.managerId,
+    );
+    const refund = (amount: number) =>
+      h!.money('refund', { document, account: 'cash', amount, reason: 'Batal' }, h!.managerId);
+    await expectOverLimit(refund(10_001), 'money');
+    await refund(10_000);
   });
 
   test('a payment recorded in place of a DP lowers what its void counts, until the bill', async () => {

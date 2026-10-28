@@ -265,6 +265,52 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     return { source, lookup };
   }
 
+  /**
+   * Everything taken off a document that its refund limit counts, `change` (the op being judged)
+   * included: charge reductions, voided payments (`voidedOffDocument`) and refunds beyond what the
+   * customer overpaid. A refund leaves the customer owing what went back beyond their credit, so it
+   * counts only as far as that is still owed: the refund command lowers the bill by it first, and
+   * the two then count once, as the reduction. Before the document is charged in full, every
+   * refund counts.
+   */
+  async function takenOffDocument(
+    db: Db,
+    op: SignedOperation,
+    document: { readonly kind: string; readonly id: string },
+    change: {
+      readonly reduced?: number;
+      readonly refunded?: number;
+      readonly voiding?: { readonly id: string; readonly amount: number };
+    },
+  ): Promise<number> {
+    const store = storeOf(op);
+    const reduced = change.reduced ?? 0;
+    const refunded = change.refunded ?? 0;
+    const voided = change.voiding?.amount ?? 0;
+    const source = sources[document.kind];
+    const expected =
+      source === undefined
+        ? null
+        : await source.charge(db as unknown as Kysely<never>, {
+            tenantId: op.tenantId,
+            storeId: store,
+            documentId: document.id,
+          });
+    const charged = await documentTotal(db, store, document, 'charge_recorded');
+    const refunds = (await documentTotal(db, store, document, 'refund_paid')) + refunded;
+    const balance = (await documentBalance(db, store, document)) - reduced + refunded + voided;
+    const beyondOverpayment =
+      expected !== null && charged >= expected.amount
+        ? Math.max(0, Math.min(refunds, balance))
+        : refunds;
+    return (
+      (await documentTotal(db, store, document, 'charge_reduced')) +
+      reduced +
+      (await voidedOffDocument(db, store, { ...document, voiding: change.voiding ?? null })) +
+      beyondOverpayment
+    );
+  }
+
   /** Exactly what is left to charge for the document, to the revenue account it names. */
   const chargeRecordedRule: Rule = async (op, { db }) => {
     const { document, amount, account } = payloadOf<{
@@ -307,7 +353,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         details: { field: 'amount', issue: `at most ${charged - reduced}` },
       });
     }
-    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, reduced + amount);
+    const takenOff = await takenOffDocument(db, op, document, { reduced: amount });
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
   const paymentReceivedRule: Rule = async (op, { db }) => {
@@ -339,7 +386,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
 
   /**
    * An owner cancels a payment of this store that still counts. A limited role (a manager) may
-   * only while the money voids took off its document stays within its store's refund limit: a void
+   * only while everything taken off its document stays within its store's refund limit: a void
    * takes money off the book like a refund does.
    */
   const paymentVoidedRule: Rule = async (op, ctx) => {
@@ -362,11 +409,12 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     const takenOff =
       entry.documentKind === null || entry.documentId === null
         ? Number(entry.amount)
-        : await voidedOffDocument(db, storeOf(op), {
-            kind: entry.documentKind,
-            id: entry.documentId,
-            voiding: { id: entry.id, amount: Number(entry.amount) },
-          });
+        : await takenOffDocument(
+            db,
+            op,
+            { kind: entry.documentKind, id: entry.documentId },
+            { voiding: { id: entry.id, amount: Number(entry.amount) } },
+          );
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
 
@@ -413,9 +461,9 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     })();
     if (counterRefusal === null) return;
     if (!(await holdsPermission(op.userId, MONEY_PERMISSION.refund))) throw counterRefusal;
-    // A limited role (a manager): every refund on the document, this one with them, within limit.
-    const earlier = await documentTotal(db, store, document, 'refund_paid');
-    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, earlier + amount);
+    // A limited role (a manager): everything taken off the document, this with it, within limit.
+    const takenOff = await takenOffDocument(db, op, document, { refunded: amount });
+    await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
   /** A deposit goes into one of the store's accounts; other moves touch only the drawer. */
@@ -557,9 +605,9 @@ async function requireReplaceable(
 }
 
 /**
- * The money voids took off a document, the void being judged included. A payment voided after one
- * was recorded in its place counts only beyond what that one holds, and only while the document is
- * not charged: once billed, every void counts in full.
+ * The money voids took off a document, the void being judged (if any) included. A payment voided
+ * after one was recorded in its place counts only beyond what that one holds, and only while the
+ * document is not charged: once billed, every void counts in full.
  */
 async function voidedOffDocument(
   db: Db,
@@ -567,7 +615,7 @@ async function voidedOffDocument(
   document: {
     readonly kind: string;
     readonly id: string;
-    readonly voiding: { readonly id: string; readonly amount: number };
+    readonly voiding: { readonly id: string; readonly amount: number } | null;
   },
 ): Promise<number> {
   const payments = await db
@@ -582,7 +630,7 @@ async function voidedOffDocument(
     ...payments
       .filter((row) => row.voidedBy !== null)
       .map((row) => ({ id: row.id, amount: Number(row.amount) })),
-    document.voiding,
+    ...(document.voiding === null ? [] : [document.voiding]),
   ];
   const total = voided.reduce((sum, { amount }) => sum + amount, 0);
   if ((await documentTotal(db, storeId, document, 'charge_recorded')) > 0) return total;
