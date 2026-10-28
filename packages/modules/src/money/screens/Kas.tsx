@@ -4,7 +4,7 @@
  * The board is one screen; each task on it (Tutup kas, cash out or in, settling a difference,
  * a customer paying a debt) is its own step, which the app's Kas surface opens and closes.
  */
-import { formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
+import { formatDate, formatDateTime, formatMoney, formatTime } from '@bolusi/i18n';
 import {
   AppShell,
   Button,
@@ -222,7 +222,7 @@ export function KasBoard({
               label={row.customer ?? row.documentLabel}
               detail={[
                 row.customer === null ? null : row.documentLabel,
-                tm('money.kas.since', { date: formatDateTime(row.since) }),
+                tm('money.kas.since', { date: formatDate(row.since) }),
               ]
                 .filter(Boolean)
                 .join(' · ')}
