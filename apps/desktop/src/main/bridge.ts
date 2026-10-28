@@ -57,10 +57,18 @@ export interface WindowBridge {
   onFullscreenChange(listener: (fullscreen: boolean) => void): () => void;
 }
 
+/** Whether the app opens by itself when someone signs in to Windows. */
+export interface StartupBridge {
+  /** Null where the system has no such setting (a build run from source, not on Windows). */
+  get(): Promise<boolean | null>;
+  set(open: boolean): Promise<void>;
+}
+
 export interface DesktopBridge {
   readonly printers: PrintersBridge;
   readonly updates: UpdatesBridge;
   readonly window: WindowBridge;
+  readonly startup: StartupBridge;
   readonly core: CoreBridge;
 }
 

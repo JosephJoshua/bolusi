@@ -39,6 +39,7 @@ import { Compass } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CounterPerson } from '../Counter.js';
+import { StartWithWindows } from '../startup.js';
 import { useAppVersion } from '../updates.js';
 import type { SettingsAccess } from './access.js';
 import { AccountPanel } from './AccountPanel.js';
@@ -302,6 +303,7 @@ function ComputerPanel({
       testId="desktop.settings.computer"
     >
       <PrintSettings />
+      <StartWithWindows />
       <Card testId="desktop.settings.device">
         <FactGrid>
           {device === null || device === undefined ? null : (

@@ -44,6 +44,10 @@ const bridge: DesktopBridge = {
       return () => electron.ipcRenderer.removeListener('window:fullscreen-changed', relay);
     },
   },
+  startup: {
+    get: () => electron.ipcRenderer.invoke('startup:get'),
+    set: (open) => electron.ipcRenderer.invoke('startup:set', open),
+  },
   core: {
     connect: () => electron.ipcRenderer.send('core:connect'),
   },

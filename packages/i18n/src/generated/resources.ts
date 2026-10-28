@@ -425,6 +425,10 @@ const source = {
           printerGone: 'Printer tidak ditemukan',
           printerReminderHint: 'Nota belum bisa dicetak dari komputer ini.',
         },
+        startup: {
+          label: 'Buka saat Windows menyala',
+          caption: 'Bolusi langsung terbuka begitu komputer dinyalakan.',
+        },
       },
       limits: {
         title: 'Batas wewenang',
@@ -1070,6 +1074,10 @@ export const resources = {
             printerReminder: 'No printer chosen',
             printerGone: 'Printer not found',
             printerReminderHint: 'Slips cannot be printed from this computer yet.',
+          },
+          startup: {
+            label: 'Open when Windows starts',
+            caption: 'Bolusi opens as soon as the computer is switched on.',
           },
         },
         limits: {

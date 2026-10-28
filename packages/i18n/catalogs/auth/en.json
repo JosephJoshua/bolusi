@@ -246,6 +246,10 @@
       "printerReminder": "No printer chosen",
       "printerGone": "Printer not found",
       "printerReminderHint": "Slips cannot be printed from this computer yet."
+    },
+    "startup": {
+      "label": "Open when Windows starts",
+      "caption": "Bolusi opens as soon as the computer is switched on."
     }
   },
   "limits": {

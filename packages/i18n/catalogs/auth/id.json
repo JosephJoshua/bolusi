@@ -246,6 +246,10 @@
       "printerReminder": "Printer belum dipilih",
       "printerGone": "Printer tidak ditemukan",
       "printerReminderHint": "Nota belum bisa dicetak dari komputer ini."
+    },
+    "startup": {
+      "label": "Buka saat Windows menyala",
+      "caption": "Bolusi langsung terbuka begitu komputer dinyalakan."
     }
   },
   "limits": {

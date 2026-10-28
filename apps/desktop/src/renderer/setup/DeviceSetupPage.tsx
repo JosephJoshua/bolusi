@@ -29,6 +29,7 @@ import { ChevronRight, CircleCheck, PenLine, Smartphone } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { hasTouch, hasWebcam } from '../capture-dialogs.js';
+import { StartWithWindows } from '../startup.js';
 
 const STEPS = ['printer', 'capture'] as const;
 type Step = (typeof STEPS)[number] | 'done';
@@ -229,6 +230,7 @@ function Ready({
             />
           </FactGrid>
         </Card>
+        <StartWithWindows />
         {unpicked ? (
           <p className="text-body text-text-muted">{t('auth.pc.setup.laterHint')}</p>
         ) : null}

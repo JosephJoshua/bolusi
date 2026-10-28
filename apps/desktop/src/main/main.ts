@@ -18,6 +18,7 @@ import { quitAfter, registerCore } from './core-process.js';
 import { DeviceSettingsFile } from './device-settings.js';
 import { opensExternally } from './external-links.js';
 import { registerPrinting } from './printing.js';
+import { registerStartup } from './startup.js';
 import { registerUpdates } from './updater.js';
 import { frameOptions, registerWindowChrome, reportFullscreen } from './window-chrome.js';
 
@@ -145,6 +146,7 @@ void app.whenReady().then(() => {
     [...counterWindows].map((window) => window.webContents);
   registerUpdates(trusted, pages);
   registerWindowChrome(trusted);
+  registerStartup(trusted);
   if (!DEMO && API_BASE_URL === '')
     console.error('BOLUSI_API_URL is not set: nothing to sync with');
   quitAfter(
