@@ -738,6 +738,8 @@ export const REPAIR_KEYS = [
   'repair.customerPage.lookup.invalid',
   'repair.refusal.ownershipVideoNeeded',
   'repair.refusal.cancelFeeChanged',
+  'repair.refusal.repairTypeTerms',
+  'repair.refusal.intakePhotoMissing',
   'repair.problem.ownershipVideo',
   'repair.video.title',
   'repair.video.hint',

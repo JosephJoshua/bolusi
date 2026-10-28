@@ -261,6 +261,9 @@ Agreed with the owner after reviewing what the repair release still lacks.
   picks them at intake; the counter or a technician can change them until the phone
   goes home or the servisan is cancelled. A servisan keeps the warranty its types
   had when picked, so editing the list later never changes a promise already made.
+  The server checks a newly picked type against the owner's list as it is when the
+  change arrives: terms no more generous than the list's stand (the owner raised a
+  warranty meanwhile), more generous ones are refused and the counter picks again.
   The warranty counts from pickup (owner decision) and is
   printed per type on the handover slip.
 - **Warranty claims:** a claim opens a new servisan linked to the old one, at Rp 0.

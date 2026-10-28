@@ -35,12 +35,19 @@ import {
   intakeListProblems,
   needsOwnershipVideo,
   recordedOption,
+  storeIntakeOptions,
   warrantyUntil,
+  type IntakeOption,
   type RecordedRepairType,
 } from './intake-options.js';
 import { sameModelAnySpelling } from './device-models.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './money-document.js';
-import { cancelDrop, NO_CANCEL_FEES, standardCancelFee } from './queries.js';
+import {
+  cancelDrop,
+  NO_CANCEL_FEES,
+  readIntakeOptionSettings,
+  standardCancelFee,
+} from './queries.js';
 import type {
   deviceReturnedPayload,
   downPaymentCorrectedPayload,
@@ -127,6 +134,8 @@ export const REPAIR_REFUSALS = defineRefusals('repair', [
   'customerShared',
   'customerMismatch',
   'cancelFeeChanged',
+  'repairTypeTerms',
+  'intakePhotoMissing',
 ] as const);
 type RepairRefusal = (typeof REPAIR_REFUSALS.reasons)[number];
 const { refuse } = REPAIR_REFUSALS;
@@ -604,6 +613,47 @@ async function requireRenamable(db: Db, op: SignedOperation, customerId: string)
 }
 
 /**
+ * Whether a repair type newly put on a servisan carries the owner's terms: it is on the franchise's
+ * list with no more warranty days, and no less need for the ownership video, than the list gives now.
+ * The list may have changed while the device was offline: terms stricter than the list's now are
+ * what the counter promised and stand; more generous ones (the owner cut the warranty since) are
+ * refused, and the counter picks the type again. A store hiding the type since does not matter.
+ */
+function hasListTerms(type: RecordedRepairType, offered: readonly IntakeOption[]): boolean {
+  const option = offered.find((item) => item.id === type.item);
+  return (
+    option !== undefined &&
+    type.warrantyDays <= (option.warrantyDays ?? 0) &&
+    (type.needsVideo || option.needsVideo !== true)
+  );
+}
+
+/**
+ * The repair types an op records take their terms from the owner's list, never from the device that
+ * signed it: one already on the servisan (`kept`) keeps exactly the terms it was given, so a promise
+ * already made never changes, and a new one has the list's terms (see `hasListTerms`).
+ */
+function requireRepairTypeTerms(
+  types: readonly RecordedRepairType[],
+  offered: readonly IntakeOption[],
+  kept: readonly RecordedRepairType[] = [],
+): void {
+  for (const type of types) {
+    const recorded = kept.find((other) => other.item === type.item);
+    const ok =
+      recorded === undefined
+        ? hasListTerms(type, offered)
+        : type.warrantyDays === recorded.warrantyDays && type.needsVideo === recorded.needsVideo;
+    if (!ok) {
+      throw refuse('repairTypeTerms', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'repairTypes', issue: `${type.item} does not carry the list's terms` },
+      });
+    }
+  }
+}
+
+/**
  * The repair types of an open servisan, set after the diagnosis: by the counter, who took it in, or
  * a technician, who found what is wrong. Not once the phone left or the servisan was cancelled,
  * since the warranty the customer took home must not change, and never on a warranty claim.
@@ -619,16 +669,27 @@ export const ticketRepairTypesChangedRule: Rule = async (op, { db, holdsPermissi
     });
   }
   if (
-    (await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) ||
-    (await holdsPermission(op.userId, REPAIR_PERMISSION.work))
+    !(await holdsPermission(op.userId, REPAIR_PERMISSION.intake)) &&
+    !(await holdsPermission(op.userId, REPAIR_PERMISSION.work))
   ) {
-    return;
+    throw refuse('repairTypesNotYours', {
+      code: 'PERMISSION_DENIED',
+      details: { permissionId: REPAIR_PERMISSION.work },
+      message: `user ${op.userId} neither takes in nor works on phones`,
+    });
   }
-  throw refuse('repairTypesNotYours', {
-    code: 'PERMISSION_DENIED',
-    details: { permissionId: REPAIR_PERMISSION.work },
-    message: `user ${op.userId} neither takes in nor works on phones`,
-  });
+  const { repairTypes } = payloadOf<{ repairTypes: RecordedRepairType[] }>(op);
+  const row = await db
+    .selectFrom('repairTickets')
+    .select('repairTypesJson')
+    .where('id', '=', ticket.id)
+    .executeTakeFirstOrThrow();
+  const { lists } = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
+  requireRepairTypeTerms(
+    repairTypes,
+    lists.repairTypes,
+    JSON.parse(row.repairTypesJson) as RecordedRepairType[],
+  );
 };
 
 /** The servisan a claim names, as far as the claim rule needs it. */
@@ -783,6 +844,24 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
   );
   const total = payload.quoteLines.reduce((sum, line) => sum + line.amount, 0);
   checkTotal(0, total);
+  // From v2 a ticket names its photo angles and from v3 its repair types; both as the store's
+  // lists have them now, as the command checked (v1 had the six fixed angles and no types).
+  if (op.schemaVersion >= 2) {
+    const settings = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
+    const taken = new Set(payload.photos.map((photo) => photo.slot));
+    const missing = storeIntakeOptions(settings).photoAngles.filter(
+      (angle) => !taken.has(angle.id),
+    );
+    if (missing.length > 0) {
+      throw refuse('intakePhotoMissing', {
+        code: 'VALIDATION_FAILED',
+        details: { field: 'photos', issue: missing.map((angle) => angle.id).join(', ') },
+      });
+    }
+    if (op.schemaVersion >= 3) {
+      requireRepairTypeTerms(payload.repairTypes, settings.lists.repairTypes);
+    }
+  }
   // From v4 the customer's ownership video comes with the intake that needs one.
   if (
     op.schemaVersion >= 4 &&

@@ -717,7 +717,9 @@
     "handedOverBefore": "Servisan ini sudah pernah diserahkan. Pelanggan dan HP-nya tidak bisa diubah, dan servisannya tidak bisa dibatalkan.",
     "customerShared": "Pelanggan ini punya servisan lain. Coba ubah lagi.",
     "customerMismatch": "Data pelanggan tidak cocok. Coba lagi.",
-    "cancelFeeChanged": "Biaya pembatalan toko sudah berubah. Batalkan lagi dengan biaya yang baru."
+    "cancelFeeChanged": "Biaya pembatalan toko sudah berubah. Batalkan lagi dengan biaya yang baru.",
+    "repairTypeTerms": "Jenis servisan ini sudah diubah pemilik. Pilih lagi jenis servisannya.",
+    "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko dulu."
   },
   "paper": {
     "title": "Kertas nota",
