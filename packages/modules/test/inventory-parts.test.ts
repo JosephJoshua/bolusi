@@ -348,6 +348,25 @@ describe('the parts list and counts', () => {
     expect(await both()).toStrictEqual([4, 4]);
   });
 
+  test('a part taken offline before an owner archived it is still accepted; one taken after is not', async () => {
+    const { early, late, lcd, s } = await twoPhones(6309);
+    await early.runInventory('takePart', { itemId: lcd, qty: 1, use: s.use }, early.technicianId);
+    await late.runInventory(
+      'editItem',
+      { itemId: lcd, name: 'LCD', code: null, fits: [], archived: true },
+      late.storeOwnerId,
+    );
+    const [before] = (await early.ownOps()).slice(-1);
+    // Judged where the archive already landed, as the server would.
+    await expect(late.checkRule(before!)).resolves.toBeUndefined();
+    // The same take, had the phone's clock put it after the archive.
+    await expectRefused(
+      late.checkRule({ ...before!, timestamp: Number.MAX_SAFE_INTEGER }),
+      'INVALID_TRANSITION',
+      'inventory.refusal.itemArchived',
+    );
+  });
+
   test('of two counts made offline, the later one stands', async () => {
     const { early, late, lcd, sync, both } = await twoPhones(6307);
     await early.runInventory(
@@ -422,6 +441,19 @@ describe('searching the parts list', () => {
 });
 
 describe('the phones a part fits', () => {
+  test('any name a servisan or the catalog can hold fits, and the take step can look it up', async () => {
+    const h = await harness(6603);
+    const brand = 'B'.repeat(100);
+    const model = 'M'.repeat(200);
+    await h.runInventory(
+      'addItem',
+      { name: 'LCD', code: null, fits: [{ brand, model }] },
+      h.storeOwnerId,
+    );
+    const found = await h.queryInventory('itemsFitting', { brand, model }, h.technicianId);
+    expect(found.rows.map((row) => row['name'])).toStrictEqual(['LCD']);
+  });
+
   test('models are kept in order, once each, and an edit replaces them', async () => {
     const h = await harness(6601);
     const { itemId } = (await h.runInventory(

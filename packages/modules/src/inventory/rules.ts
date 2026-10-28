@@ -41,7 +41,7 @@ function payloadOf<T>(op: SignedOperation): T {
 async function findPart(db: Db, op: SignedOperation, itemId: string) {
   return db
     .selectFrom('inventoryItems')
-    .select(['id', 'archived'])
+    .select(['id', 'archived', 'updatedAt'])
     .where('id', '=', itemId)
     .where('tenantId', '=', op.tenantId)
     .executeTakeFirst();
@@ -144,7 +144,9 @@ export function itemTakenRule(targets: PartUseTargets): Rule {
     await requireFreshMovement(ctx.db, op);
     const payload = payloadOf<UsePayload>(op);
     const part = await requirePart(ctx.db, op, payload.itemId);
-    if (Number(part.archived) === 1) {
+    // A take the phone recorded before the part was archived (by phone time) still counts: the
+    // part left the shelf, so refusing it would only leave the stock wrong.
+    if (Number(part.archived) === 1 && Number(part.updatedAt) <= op.timestamp) {
       throw refuse('itemArchived', { details: { entityId: payload.itemId } });
     }
     await checkUse(targets, op, ctx, 'take');

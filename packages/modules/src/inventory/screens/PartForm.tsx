@@ -60,7 +60,7 @@ export function PartForm({
     testID,
   });
   const nameMissing = name.trim() === '';
-  const addedRef = useRef<string | null>(null);
+  const addedRef = useRef<{ readonly itemId: string; readonly saved: string } | null>(null);
 
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
@@ -75,9 +75,21 @@ export function PartForm({
         if (part !== undefined) {
           return runtime.run('editItem', { itemId: part.id, archived: part.archived, ...details });
         }
-        // Kept, so a retry after the count failed saves the count, not a second copy of the part.
-        addedRef.current ??= (await runtime.run('addItem', details)).itemId;
-        const itemId = addedRef.current;
+        // Kept, so a retry after the count failed saves the count, not a second copy of the part;
+        // details changed before the retry go on as an edit.
+        const saved = JSON.stringify(details);
+        if (addedRef.current === null) {
+          const { itemId } = await runtime.run('addItem', details);
+          addedRef.current = { itemId, saved };
+        } else if (addedRef.current.saved !== saved) {
+          await runtime.run('editItem', {
+            itemId: addedRef.current.itemId,
+            archived: false,
+            ...details,
+          });
+          addedRef.current = { itemId: addedRef.current.itemId, saved };
+        }
+        const { itemId } = addedRef.current;
         if (stock > 0) await runtime.run('countStock', { counts: [{ itemId, counted: stock }] });
         return { itemId };
       })

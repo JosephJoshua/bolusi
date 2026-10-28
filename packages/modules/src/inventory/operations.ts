@@ -39,9 +39,10 @@ export const MAX_NOTE = 500;
 const zName = z.string().trim().min(1).max(MAX_PART_NAME);
 const zOptional = (max: number) => z.string().trim().min(1).max(max).nullable();
 
-/** A phone model a part fits: the catalog's brand and model, or a model typed with no brand. */
+/** A phone model a part fits: the catalog's brand and model, or a model typed with no brand.
+ * Limits match the catalog's (repair/device-models.ts), so any catalog model can be picked. */
 export const zPartFit = z
-  .object({ brand: z.string().trim().max(60), model: z.string().trim().min(1).max(100) })
+  .object({ brand: z.string().trim().max(100), model: z.string().trim().min(1).max(200) })
   .strict();
 
 export const partDetailsPayload = z

@@ -374,8 +374,8 @@ export const partsForUseQuery = {
 
 export const itemsFittingInput = z
   .object({
-    brand: z.string().trim().max(60),
-    model: z.string().trim().min(1).max(100),
+    brand: z.string().trim().max(100),
+    model: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(50).default(20),
   })
   .strict();
