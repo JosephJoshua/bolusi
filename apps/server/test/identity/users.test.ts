@@ -446,6 +446,7 @@ async function storeWithOwners() {
     ownerId,
     storeOwner,
     as,
+    deviceId: device.deviceId,
     cashier: await roleIdOf(h, tenantId, 'cashier'),
     technician: await roleIdOf(h, tenantId, 'technician'),
     storeOwnerRole: await roleIdOf(h, tenantId, 'store_owner'),
@@ -778,7 +779,7 @@ test("a store owner cannot reset a peer owner's PIN; they can reset a cashier's,
     h.app.request(`http://srv.test/v1/users/${target}/pin-verifier`, {
       method: 'POST',
       headers: s.as(actor),
-      body: verifierBody(),
+      body: verifierBody(s.deviceId),
     });
 
   expect((await reset(s.storeOwner, peer)).status).toBe(403);
