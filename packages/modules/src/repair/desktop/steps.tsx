@@ -56,7 +56,7 @@ import {
   type RepairPrinting,
 } from '../runtime.js';
 import { DESK_PAPERS, PAPER_KEY, useDevicePaper, useDevicePrinters } from '../paper.js';
-import { outputSlip } from '../slip-output.js';
+import { logSlipPrinted, outputSlip } from '../slip-output.js';
 
 import { ActionError, QueryPanel } from '../../screen-kit/desktop/index.js';
 import {
@@ -1336,7 +1336,7 @@ export function PrintDialog({
   const confirmPrinted = (): void => {
     setAsking(false);
     void runner
-      .run(() => runtime.run('recordSlipPrinted', { ticketId: ticket.id, slip }))
+      .run(() => logSlipPrinted(runtime, ticket.id, slip))
       .then((result) => {
         if (result !== undefined) onDone();
       });

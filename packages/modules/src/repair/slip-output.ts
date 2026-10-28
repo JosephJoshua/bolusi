@@ -65,6 +65,47 @@ function send(
 
 export type SlipOutcome = 'done' | 'cancelled' | 'unconfirmed';
 
+/**
+ * Prints that landed but could not be logged (a refused or failed save), per ticket and slip, so the
+ * next slip from this app still says "Cetak ulang" until the log catches up.
+ */
+const unlogged = new Map<string, number>();
+
+function unloggedKey(ticketId: string, slip: SlipKind): string {
+  return `${ticketId}:${slip}`;
+}
+
+/**
+ * Log a slip that landed. The paper is out either way, so a failed save is remembered here instead
+ * of failing the print and having the counter print it again as if it were the first.
+ */
+export async function logSlipPrinted(
+  runtime: RepairRuntime,
+  ticketId: string,
+  slip: SlipKind,
+): Promise<'done'> {
+  try {
+    await runtime.run('recordSlipPrinted', { ticketId, slip });
+  } catch {
+    const key = unloggedKey(ticketId, slip);
+    unlogged.set(key, (unlogged.get(key) ?? 0) + 1);
+  }
+  return 'done';
+}
+
+/** The ticket with the prints this app made but could not log counted in. */
+function withUnloggedPrints(ticket: TicketDetailRow): TicketDetailRow {
+  const extra = (slip: SlipKind) => unlogged.get(unloggedKey(ticket.id, slip)) ?? 0;
+  if (extra('intake') === 0 && extra('handover') === 0) return ticket;
+  return {
+    ...ticket,
+    slipPrints: {
+      intake: ticket.slipPrints.intake + extra('intake'),
+      handover: ticket.slipPrints.handover + extra('handover'),
+    },
+  };
+}
+
 export async function outputSlip(
   runtime: RepairRuntime,
   printing: RepairPrinting,
@@ -82,7 +123,7 @@ export async function outputSlip(
     printing.userName(),
     readDevicePaper(printing, papers),
   ]);
-  const row = fresh.rows[0] ?? ticket;
+  const row = withUnloggedPrints(fresh.rows[0] ?? ticket);
   // Reopened since the screen opened: there is no bill to print yet, so print nothing.
   if (!printableSlips(row).includes(slip)) return 'cancelled';
   const sources = settings.rows[0]!;
@@ -100,7 +141,7 @@ export async function outputSlip(
     printedByName: userName,
   });
   const outcome = await send(printing, doc, sheet, how);
-  if (outcome === 'done') await runtime.run('recordSlipPrinted', { ticketId: row.id, slip });
+  if (outcome === 'done') await logSlipPrinted(runtime, row.id, slip);
   return outcome;
 }
 
