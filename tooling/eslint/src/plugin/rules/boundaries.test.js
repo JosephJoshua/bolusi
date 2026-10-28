@@ -81,6 +81,11 @@ tester.run('boundaries', rule, {
       code: `import { NotesScreen } from '@bolusi/modules/notes/screens';`,
       filename: '/repo/apps/mobile/src/navigation.tsx',
     },
+    // one module's phone screen reuses another module's screen
+    {
+      code: `import { PaymentLines } from '../../money/screens/PaymentLines.js';`,
+      filename: '/repo/packages/modules/src/repair/screens/Handover.tsx',
+    },
     // the counter PC app imports the React DOM screens
     {
       code: `import { RepairBoardPage } from '@bolusi/modules/repair/desktop';`,
@@ -336,6 +341,12 @@ tester.run('boundaries', rule, {
     {
       code: `import { FlowScreen } from '../screen-kit/screens/views.js';`,
       filename: '/repo/packages/modules/src/inventory/manifest.ts',
+      errors: [{ messageId: 'screensOutsideMobile' }],
+    },
+    // a platform-free module file still may not reach a screen
+    {
+      code: `import { PaymentLines } from '../money/screens/PaymentLines.js';`,
+      filename: '/repo/packages/modules/src/repair/commands.ts',
       errors: [{ messageId: 'screensOutsideMobile' }],
     },
     // React DOM screens outside the desktop app → error (the phone bundle must not pull react-dom)

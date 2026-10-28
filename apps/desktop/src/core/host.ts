@@ -59,6 +59,7 @@ import {
 import { systemTimer } from '@bolusi/device/ports/timer';
 import { createIdleTicker, type IdleTicker } from '@bolusi/device/session/idle-ticker';
 import type { UserWorkspace } from '@bolusi/device/state/user-workspaces';
+import { moneyModule } from '@bolusi/modules';
 import { REPAIR_PERMISSION, repairModule } from '@bolusi/modules/repair';
 import type { ThumbnailRef } from '@bolusi/modules/screen-kit';
 import type { HandoffKind, HandoffPageLabels, MediaRef } from '@bolusi/schemas';
@@ -757,6 +758,11 @@ export function createCoreHost(deps: CoreHostDeps): CoreHost {
       untyped(repairFor(userId).query)(knownName(repairModule.queries, name), input),
     'repair.run': (userId: string, name: string, input: unknown) =>
       untyped(repairFor(userId).run)(knownName(repairModule.commands, name), input),
+    // The money a servisan takes (payment methods, a DP, the handover payment), for the same person.
+    'money.query': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).money.query)(knownName(moneyModule.queries, name), input),
+    'money.run': (userId: string, name: string, input: unknown) =>
+      untyped(repairFor(userId).money.run)(knownName(moneyModule.commands, name), input),
     'repair.ticketSyncStatuses': (userId: string, ticketIds: readonly string[]) =>
       repairFor(userId).ticketSyncStatuses(ticketIds),
     'repair.technicians': (userId: string) => repairFor(userId).technicians(),

@@ -7,6 +7,20 @@ import {
 } from '../screen-kit/i18n.js';
 
 export const MONEY_KEYS = [
+  'money.method.cash',
+  'money.pay.addMethod',
+  'money.pay.amount',
+  'money.pay.approvalCode',
+  'money.pay.change',
+  'money.pay.currency',
+  'money.pay.method',
+  'money.pay.overpaid',
+  'money.pay.problem.tendered',
+  'money.pay.reference',
+  'money.pay.remaining',
+  'money.pay.remove',
+  'money.pay.removeLabel',
+  'money.pay.tendered',
   'money.opType.accountSaved',
   'money.opType.cashAdjusted',
   'money.opType.cashCounted',

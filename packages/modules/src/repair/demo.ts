@@ -12,6 +12,7 @@ import type { MediaRef, ThumbnailRef } from '@bolusi/schemas';
 
 import { demoInventoryRuntime } from '../inventory/demo.js';
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+import { MONEY_PERMISSION } from '../money/constants.js';
 import {
   DEFAULT_UNCOLLECTED_DAYS,
   IN_PROGRESS_OUTCOMES,
@@ -27,6 +28,7 @@ import {
 } from './intake-options.js';
 import type { PrintSettings, QuoteLineRow, TicketDetailRow, TicketPhotoRow } from './queries.js';
 import type { RepairPrinting, RepairRuntime } from './runtime.js';
+import { amountOwed } from './flows.js';
 import { REPAIR_REFUSALS } from './rules.js';
 import {
   demoFindDeviceModel,
@@ -50,19 +52,30 @@ const browser = globalThis as unknown as {
 const HOUR = 3_600_000;
 const P = REPAIR_PERMISSION;
 const I = INVENTORY_PERMISSION;
+const M = MONEY_PERMISSION;
 
 /** Who the harness can act as: the owner (everything), the counter and a technician. */
 export const DEMO_REPAIR_ROLES = {
   owner: {
     userId: 'u-andi',
     name: 'Andi Pratama',
-    permissions: [...Object.values(P), ...Object.values(I)],
+    permissions: [...Object.values(P), ...Object.values(I), ...Object.values(M)],
   },
   counter: {
     userId: 'u-siti',
     name: 'Siti Rahayu',
     // No cancel or discount: only owners lower what a customer pays (how counter staff kept cash).
-    permissions: [P.read, P.intake, P.assign, P.quoteChange, P.handover, I.read, I.useParts],
+    permissions: [
+      P.read,
+      P.intake,
+      P.assign,
+      P.quoteChange,
+      P.handover,
+      I.read,
+      I.useParts,
+      M.read,
+      M.receive,
+    ],
   },
   technician: {
     userId: 'u-budi',
@@ -86,9 +99,38 @@ export const DEMO_REPAIR_ROLES = {
       P.setUncollectedDays,
       // Categories are the business owner's alone.
       ...Object.values(I).filter((id) => id !== I.manageCategories),
+      ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
     ],
   },
 } as const;
+
+/** The demo store's payment methods besides cash. */
+const DEMO_ACCOUNTS = [
+  {
+    id: '01920000-0000-7000-8000-00000000a001',
+    kind: 'qris',
+    name: 'QRIS BCA',
+    active: true,
+    central: false,
+    storeIds: [],
+  },
+  {
+    id: '01920000-0000-7000-8000-00000000a002',
+    kind: 'edc',
+    name: 'EDC Mandiri',
+    active: true,
+    central: false,
+    storeIds: [],
+  },
+  {
+    id: '01920000-0000-7000-8000-00000000a003',
+    kind: 'transfer',
+    name: 'Transfer BRI',
+    active: true,
+    central: true,
+    storeIds: [],
+  },
+] as const;
 export type DemoRepairRole = keyof typeof DEMO_REPAIR_ROLES;
 
 /** The `window` key of the colleague hook `demoRepairRuntime` installs (browser tests only). */
@@ -229,9 +271,6 @@ function ticket(spec: {
     returnedByName: spec.returnedBy === undefined ? null : (NAMES.get(spec.returnedBy) ?? null),
     returnedAt: spec.returnedBy === undefined ? null : createdAt + 40 * HOUR,
     downPayment: spec.downPayment ?? null,
-    downPaymentBy: spec.downPayment === undefined ? null : 'u-siti',
-    downPaymentByName: spec.downPayment === undefined ? null : 'Siti Rahayu',
-    downPaymentAt: spec.downPayment === undefined ? null : createdAt,
     slipPrints: { intake: 1, handover: 0 },
     quoteLines: spec.lines,
     photos: [...INTAKE_SLOTS.map((slot) => photoRow(slot)), ...(spec.extraPhotos ?? [])],
@@ -333,6 +372,7 @@ function seedTickets(): TicketDetailRow[] {
       lines: [line('part', 'Kamera C55', 220_000), line('labour', 'Pasang kamera', 50_000)],
       hoursAgo: 90,
       extraPhotos: [photoRow('before:m6')],
+      downPayment: 100_000,
       cancel: {
         fee: 50_000,
         standardFee: 50_000,
@@ -887,9 +927,6 @@ export function demoRepairRuntime(
         estimatedReadyAt: input['estimatedReadyAt'] as number | null,
         createdAt: HARNESS_NOW,
         downPayment: Number(input['downPayment'] ?? 0) > 0 ? Number(input['downPayment']) : null,
-        downPaymentBy: Number(input['downPayment'] ?? 0) > 0 ? actor.userId : null,
-        downPaymentByName: Number(input['downPayment'] ?? 0) > 0 ? actor.name : null,
-        downPaymentAt: Number(input['downPayment'] ?? 0) > 0 ? HARNESS_NOW : null,
         slipPrints: { intake: 0, handover: 0 },
         quoteLines: (
           input['quoteLines'] as {
@@ -994,16 +1031,10 @@ export function demoRepairRuntime(
     recordDownPayment: (input) =>
       update(String(input['ticketId']), 'repair.down_payment_received', {
         downPayment: Number(input['amount']),
-        downPaymentBy: actor.userId,
-        downPaymentByName: actor.name,
-        downPaymentAt: HARNESS_NOW,
       }),
     correctDownPayment: (input) =>
       update(String(input['ticketId']), 'repair.down_payment_corrected', {
         downPayment: Number(input['amount']) > 0 ? Number(input['amount']) : null,
-        downPaymentBy: actor.userId,
-        downPaymentByName: actor.name,
-        downPaymentAt: HARNESS_NOW,
       }),
     recordSlipPrinted: (input) => {
       const t = find(String(input['ticketId']));
@@ -1034,7 +1065,13 @@ export function demoRepairRuntime(
     },
     returnDevice: (input) => {
       const t = find(String(input['ticketId']));
+      const paidNow = ((input['payments'] as { amount: number }[] | undefined) ?? []).reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      );
+      const paid = Math.min((t.downPayment ?? 0) + paidNow, amountOwed(t));
       return update(t.id, 'repair.device_returned', {
+        downPayment: paid === 0 ? null : paid,
         location: 'returned',
         returnedBy: actor.userId,
         returnedByName: actor.name,
@@ -1181,6 +1218,29 @@ export function demoRepairRuntime(
       return () => listeners.delete(listener);
     },
     ticketSyncStatuses: () => Promise.resolve({ 't-1': ['local'] }),
+    // The ledger as far as the screens read it: the store's methods and a servisan's payments.
+    money: {
+      query: (name: string, input: Input) => {
+        if (name === 'paymentAccounts')
+          return Promise.resolve({ rows: DEMO_ACCOUNTS, nextCursor: null });
+        if (name === 'documentMoney') {
+          const t = find(String(input['id']));
+          const paid = t.downPayment ?? 0;
+          return Promise.resolve({
+            rows: [{ balance: -paid, charged: 0, reduced: 0, paid, entries: [] }],
+            nextCursor: null,
+          });
+        }
+        return Promise.resolve({ rows: [], nextCursor: null });
+      },
+      run: () => Promise.resolve(null),
+      hasPermission: (id: string) => permitted.has(id),
+      colleagueHasPermission: () => false,
+      newId: () => `m-new-${String(Math.random()).slice(2, 10)}`,
+      get userId() {
+        return actor.userId;
+      },
+    },
     technicians: () =>
       Promise.resolve(TECHNICIANS.map((id) => ({ id, name: NAMES.get(id) ?? id }))),
     capturePhoto: () => Promise.resolve({ mediaRef: demoMedia() }),

@@ -6,7 +6,11 @@ import { zMediaRef } from '@bolusi/schemas';
 import { z } from 'zod';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
+import { CASH_ACCOUNT } from '../money/constants.js';
+import { chosenMethod, referenceMissing } from '../money/payment-entry.js';
+import type { PaymentAccountRow } from '../money/queries.js';
 import type { OpenTicketInput } from './commands.js';
+import type { RepairKey } from './i18n.js';
 import {
   CHECKLIST_STATES,
   IN_PROGRESS_OUTCOMES,
@@ -348,8 +352,10 @@ export function downPaymentAction(
   ticket: Pick<TicketSummaryRow, 'location' | 'outcome' | 'downPayment'>,
   can: RepairAbilities,
 ): 'record' | 'correct' | null {
+  // Once the phone is back with its owner the DP is part of the bill it paid, not a figure to edit.
+  if (ticket.location === 'returned') return null;
   if (ticket.downPayment !== null) return can.correctDownPayment ? 'correct' : null;
-  const open = ticket.location === 'in_store' && ticket.outcome !== 'cancelled';
+  const open = ticket.outcome !== 'cancelled';
   return can.intake && open ? 'record' : null;
 }
 
@@ -358,6 +364,14 @@ export function amountOwed(
   row: Pick<TicketSummaryRow, 'outcome' | 'cancelFee' | 'quoteTotal'>,
 ): number {
   return row.outcome === 'cancelled' ? (row.cancelFee ?? 0) : row.quoteTotal;
+}
+
+/**
+ * What the money already paid on a servisan is called: its DP while the phone is in the store,
+ * what was paid in all (DP and the rest) once it went home.
+ */
+export function paidLabelKey(ticket: Pick<TicketSummaryRow, 'location'>): RepairKey {
+  return ticket.location === 'returned' ? 'repair.price.paid' : 'repair.price.downPayment';
 }
 
 /** Why an open down payment step can no longer finish: what it would do is no longer offered. */
@@ -371,7 +385,8 @@ export function downPaymentStale(
 }
 
 /** What still stands between a typed down payment and saving it; null when it can be saved. */
-export type DownPaymentGap = 'aboveTotal' | 'amount' | 'correctAmount' | 'same' | 'reason';
+export type DownPaymentGap =
+  'aboveTotal' | 'amount' | 'reference' | 'correctAmount' | 'same' | 'reason';
 
 /**
  * A down payment being recorded or corrected, as typed. A new one is at least Rp 1; a correction
@@ -384,6 +399,8 @@ export function downPaymentEntry(input: {
   readonly reason: string;
   readonly current: number | null;
   readonly total: number;
+  /** A new DP's method still lacks the reference it takes (an EDC's approval code). */
+  readonly referenceMissing?: boolean;
 }): {
   readonly amount: number | null;
   readonly aboveTotal: boolean;
@@ -397,14 +414,18 @@ export function downPaymentEntry(input: {
     : !correcting
       ? amount === null || amount <= 0
         ? 'amount'
-        : null
+        : input.referenceMissing === true
+          ? 'reference'
+          : null
       : amount === null
         ? 'correctAmount'
         : amount === input.current
           ? 'same'
           : input.reason.trim() === ''
             ? 'reason'
-            : null;
+            : amount > 0 && input.referenceMissing === true
+              ? 'reference'
+              : null;
   return { amount, aboveTotal, gap };
 }
 
@@ -657,6 +678,10 @@ const zIntakeDraft = z.strictObject({
   lines: z.array(zLineDraft),
   /** Rupiah the customer paid up front, as typed; '' when nothing was paid. */
   downPayment: z.string().default(''),
+  /** How the DP came in: `cash` or `account:<id>`. */
+  downPaymentAccount: z.string().default(CASH_ACCOUNT),
+  /** The DP's reference, as an EDC's approval code; '' when none. */
+  downPaymentReference: z.string().default(''),
   /** The ready-by option id picked, or '' while the store's default stands. */
   ready: z.string().transform((ready) => LEGACY_READY[ready] ?? ready),
   /** The id the ticket will get, taken when the intake starts so it can only be opened once. */
@@ -684,6 +709,8 @@ export function emptyIntakeDraft(): IntakeDraft {
     photos: {},
     lines: [],
     downPayment: '',
+    downPaymentAccount: CASH_ACCOUNT,
+    downPaymentReference: '',
     ready: '',
   };
 }
@@ -727,12 +754,15 @@ export type IntakeProblem =
   | 'quoteLines'
   | 'incompleteLine'
   | 'negativeTotal'
-  | 'downPaymentAboveTotal';
+  | 'downPaymentAboveTotal'
+  | 'downPaymentReference';
 
 export function stepProblems(
   draft: IntakeDraft,
   step: IntakeStep,
   options: IntakeOptionLists,
+  /** The store's payment methods besides cash, for the DP's reference. */
+  accounts: readonly PaymentAccountRow[] = [],
 ): IntakeProblem[] {
   const problems: IntakeProblem[] = [];
   switch (step) {
@@ -772,10 +802,16 @@ export function stepProblems(
       ) {
         problems.push('downPaymentAboveTotal');
       }
+      if (
+        intakeDownPayment(draft) > 0 &&
+        referenceMissing(draft.downPaymentAccount, draft.downPaymentReference, accounts)
+      ) {
+        problems.push('downPaymentReference');
+      }
       break;
     case 'review':
       for (const earlier of INTAKE_STEPS.slice(0, -1)) {
-        problems.push(...stepProblems(draft, earlier, options));
+        problems.push(...stepProblems(draft, earlier, options, accounts));
       }
       break;
   }
@@ -844,7 +880,13 @@ export function toOpenTicketInput(
   draft: IntakeDraft,
   options: IntakeOptionLists,
   now: number,
+  accounts: readonly PaymentAccountRow[] = [],
 ): OpenTicketInput {
+  const downPayment = intakeDownPayment(draft);
+  const method =
+    downPayment > 0
+      ? chosenMethod(draft.downPaymentAccount, draft.downPaymentReference, accounts)
+      : { account: CASH_ACCOUNT, reference: null };
   const checklist = options.checks.flatMap(({ id, label }) => {
     const state: ChecklistState | undefined = draft.checks[id];
     return state === undefined ? [] : [{ item: id, label, state, note: '' }];
@@ -883,6 +925,8 @@ export function toOpenTicketInput(
       label,
       ref: draft.photos[id]!,
     })),
-    downPayment: intakeDownPayment(draft),
+    downPayment,
+    downPaymentAccount: method.account,
+    downPaymentReference: method.reference,
   };
 }

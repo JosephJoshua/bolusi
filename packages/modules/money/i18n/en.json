@@ -29,5 +29,25 @@
     "accountKindChanged": "A payment method’s type can’t be changed.",
     "countNotFound": "This cash count wasn’t found.",
     "countSettled": "This cash count is already settled."
+  },
+  "method": {
+    "cash": "Cash"
+  },
+  "pay": {
+    "amount": "Amount",
+    "tendered": "Cash received",
+    "change": "Change",
+    "approvalCode": "Approval code",
+    "reference": "Reference no. (optional)",
+    "addMethod": "Add another method",
+    "remove": "Remove this method",
+    "removeLabel": "Remove the {method} payment",
+    "remaining": "{amount} still to pay",
+    "overpaid": "{amount} too much. Lower the amount first.",
+    "problem": {
+      "tendered": "Cash received is less than the amount."
+    },
+    "method": "Payment method",
+    "currency": "Rp"
   }
 }

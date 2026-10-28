@@ -31,12 +31,18 @@ import {
   type RepairAbilities,
   type TicketAction,
 } from '../src/repair/flows.js';
+import type { PaymentAccountRow } from '../src/money/queries.js';
 import { INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
 const OPTIONS = DEFAULT_INTAKE_OPTIONS;
-import { openRepairHarness, intake, type RepairHarness } from './support/repair-harness.js';
+import {
+  openRepairHarness,
+  intake,
+  paidHandover,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 let h: RepairHarness | null = null;
 afterEach(async () => {
@@ -104,7 +110,7 @@ async function ticketIn(harness: RepairHarness, state: State): Promise<string> {
   if (state === 'returned') {
     await harness.run(
       'returnDevice',
-      { ticketId, handoverPhoto: harness.photo(9), signature: harness.photo(10) },
+      (await paidHandover(harness, ticketId, {}, [9, 10])) as never,
       harness.cashierId,
     );
   }
@@ -152,7 +158,7 @@ async function perform(
     case 'handover':
       return harness.run(
         'returnDevice',
-        { ticketId, handoverPhoto: harness.photo(13), signature: harness.photo(14) },
+        (await paidHandover(harness, ticketId, {}, [13, 14])) as never,
         userId,
       );
     case 'cancel':
@@ -746,6 +752,46 @@ describe('intake draft', () => {
     expect(downPaymentAction(ticket, abilitiesOf(h, h.ownerId))).toBe('correct');
   });
 
+  test('a DP through EDC needs its approval code, and goes through that account', async () => {
+    h = await openRepairHarness(4109);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'edc', name: 'EDC Mandiri' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const accounts = (await h.moneyQuery('paymentAccounts', {}, h.cashierId))
+      .rows as PaymentAccountRow[];
+    const edc = `account:${accountId}`;
+    const draft = { ...complete(h), downPayment: '100.000', downPaymentAccount: edc };
+    expect(stepProblems(draft, 'price', OPTIONS, accounts)).toEqual(['downPaymentReference']);
+    // No DP, nothing to ask; and an account the store no longer offers falls back to the drawer.
+    expect(stepProblems({ ...draft, downPayment: '' }, 'price', OPTIONS, accounts)).toEqual([]);
+    expect(stepProblems(draft, 'price', OPTIONS, [])).toEqual([]);
+    expect(toOpenTicketInput(draft, OPTIONS, 0, [])).toMatchObject({
+      downPaymentAccount: 'cash',
+      downPaymentReference: null,
+    });
+
+    const coded = { ...draft, downPaymentReference: ' 004512 ' };
+    expect(stepProblems(coded, 'review', OPTIONS, accounts)).toEqual([]);
+    const { ticketId } = (await h.run(
+      'openTicket',
+      toOpenTicketInput(coded, OPTIONS, Date.now(), accounts),
+      h.storeOwnerId,
+    )) as { ticketId: string };
+    const money = (
+      await h.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h.storeOwnerId)
+    ).rows[0] as { entries: { account: string | null; reference: string | null }[] };
+    expect(money.entries).toMatchObject([{ account: edc, reference: '004512' }]);
+  });
+
+  test('a draft saved before DP methods restores with the drawer', () => {
+    const old: Record<string, unknown> = { ...emptyIntakeDraft() };
+    delete old['downPaymentAccount'];
+    delete old['downPaymentReference'];
+    expect(parseIntakeDraft(old)).toEqual(emptyIntakeDraft());
+  });
+
   test('a draft opens against the lists the store offers, and records their names', async () => {
     h = await openRepairHarness(4106);
     const options = {
@@ -838,6 +884,15 @@ describe('downPaymentEntry', () => {
     reason = '',
     current: number | null = null,
   ) => downPaymentEntry({ mode, typed, reason, current, total: 100_000 });
+
+  test('a new down payment through EDC waits for its approval code', () => {
+    const base = { mode: 'record' as const, reason: '', current: null, total: 100_000 };
+    expect(downPaymentEntry({ ...base, typed: 50_000, referenceMissing: true }).gap).toBe(
+      'reference',
+    );
+    expect(downPaymentEntry({ ...base, typed: null, referenceMissing: true }).gap).toBe('amount');
+    expect(downPaymentEntry({ ...base, typed: 50_000, referenceMissing: false }).gap).toBeNull();
+  });
 
   test('a new down payment is at least Rp 1 and never above the total', () => {
     expect(entry('record', null).gap).toBe('amount');

@@ -366,16 +366,18 @@ export default {
         context.report({ node, messageId: 'uiSchemasTypeOnly', data: { source } });
         return;
       }
-      // 3. */screens subpaths only from apps/mobile. Inside a package, one screens file may import
-      // another relatively (shared screen pieces): both are already Hermes-only UI. packages/device
-      // binds the runtimes those screens take, so it may name their types, never pull a screen into
-      // its emit.
-      const screensToScreens = source.startsWith('.') && /\/screens\//.test(filename);
+      // 3. */screens subpaths only from apps/mobile. packages/device binds the runtimes those screens
+      // take, so it may name their types, never pull a screen into its emit. One module's screen may
+      // reuse another's (repair's handover taking money's payment lines): both are Hermes-only.
       if (
         /\/screens(\/|$)/.test(source) &&
         workspace !== 'apps/mobile' &&
-        !screensToScreens &&
-        !(workspace === 'packages/device' && importKind === 'type')
+        !(workspace === 'packages/device' && importKind === 'type') &&
+        !(
+          workspace === 'packages/modules' &&
+          source.startsWith('.') &&
+          /\/src\/[^/]+\/screens\//.test(filename)
+        )
       ) {
         context.report({ node, messageId: 'screensOutsideMobile', data: { source } });
         return;

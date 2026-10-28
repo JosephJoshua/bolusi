@@ -55,6 +55,7 @@ import {
   canUseParts,
   downPaymentAction,
   downPaymentStale,
+  paidLabelKey,
   photoInSlot,
   photoThumbnailRef,
   repairAbilities,
@@ -861,6 +862,7 @@ export function TicketDetail({
         <DownPaymentRows
           total={amountOwed(row)}
           downPayment={row.downPayment}
+          paidLabel={paidLabelKey(row)}
           action={
             paymentAction === 'correct' ? (
               <TextButton

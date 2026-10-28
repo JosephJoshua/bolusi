@@ -28,7 +28,7 @@ import {
   type ScreenChrome,
 } from '../../screen-kit/screens/views.js';
 
-import { tn } from '../i18n.js';
+import { tn, type RepairKey } from '../i18n.js';
 import { SPEC_FACT_KEY, staleStepMessage, statusLabel } from '../labels.js';
 import {
   balanceAfterDownPayment,
@@ -256,11 +256,14 @@ export { Fact, FactGrid };
 export function DownPaymentRows({
   total,
   downPayment,
+  paidLabel = 'repair.price.downPayment',
   action,
   testID,
 }: {
   readonly total: number;
   readonly downPayment: number | null;
+  /** What the amount paid is called: the DP, or once the phone went home, all that was paid. */
+  readonly paidLabel?: RepairKey;
   readonly action?: ReactNode;
   readonly testID: string;
 }): React.JSX.Element | null {
@@ -270,7 +273,7 @@ export function DownPaymentRows({
     <View style={styles.paidRows} testID={`${testID}.downPaymentRows`}>
       <View style={[repairStyles.row, styles.paidRow]}>
         <View style={styles.paidLabel}>
-          <Text style={styles.paidText}>{tn('repair.price.downPayment')}</Text>
+          <Text style={styles.paidText}>{tn(paidLabel)}</Text>
           {action}
         </View>
         <Text style={[styles.paidText, styles.amount]} testID={`${testID}.downPayment`}>

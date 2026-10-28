@@ -380,3 +380,35 @@ export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}
     ...overrides,
   };
 }
+
+/**
+ * A handover the way the counter takes it: photo, signature and the rest of the bill in cash.
+ * `extra` overrides any field (a note, other payments).
+ */
+export async function paidHandover(
+  harness: RepairHarness,
+  ticketId: string,
+  extra: Record<string, unknown> = {},
+  photos: readonly [number, number] = [7, 8],
+): Promise<Record<string, unknown>> {
+  const ticket = (await harness.query('getTicket', { ticketId }, harness.cashierId)).rows[0] as {
+    outcome: string;
+    location: string;
+    quoteTotal: number;
+    cancelFee: number | null;
+    downPayment: number | null;
+  };
+  const cost = ticket.outcome === 'cancelled' ? (ticket.cancelFee ?? 0) : ticket.quoteTotal;
+  const due = cost - (ticket.downPayment ?? 0);
+  const finished = ticket.outcome === 'repaired' || ticket.outcome === 'cancelled';
+  return {
+    ticketId,
+    handoverPhoto: harness.photo(photos[0]),
+    signature: harness.photo(photos[1]),
+    payments:
+      finished && ticket.location === 'in_store' && due > 0
+        ? [{ account: 'cash', amount: due }]
+        : [],
+    ...extra,
+  };
+}

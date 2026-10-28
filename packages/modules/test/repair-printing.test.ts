@@ -5,8 +5,6 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import { DomainError } from '@bolusi/core';
 
-import { REPAIR_OP } from '../src/repair/constants.js';
-
 import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
 
 const open: RepairHarness[] = [];
@@ -56,13 +54,46 @@ async function ticket(h: RepairHarness, ticketId: string) {
 }
 
 describe('down payment', () => {
-  test('taken at intake, it is recorded with who took it and survives sync', async () => {
+  async function ledger(h: RepairHarness, ticketId: string) {
+    return (
+      await h.moneyQuery('documentMoney', { kind: 'repair.ticket', id: ticketId }, h.cashierId)
+    ).rows[0] as {
+      balance: number;
+      entries: {
+        kind: string;
+        account: string;
+        amount: number;
+        createdBy: string;
+        reference: string | null;
+        voidedAt: number | null;
+      }[];
+    };
+  }
+
+  test('taken at intake, it is a payment in the money ledger, by its method, and survives sync', async () => {
     const h = await harness(6101);
-    const ticketId = await openTicket(h, { downPayment: 200_000 });
-    const t = await ticket(h, ticketId);
-    expect(t.downPayment).toBe(200_000);
-    expect(t.downPaymentBy).toBe(h.cashierId);
-    expect(t.events.map((e: { kind: string }) => e.kind)).toContain(REPAIR_OP.downPaymentReceived);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'edc', name: 'EDC BRI' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    const ticketId = await openTicket(h, {
+      downPayment: 200_000,
+      downPaymentAccount: `account:${accountId}`,
+      downPaymentReference: '004512',
+    });
+    expect((await ticket(h, ticketId)).downPayment).toBe(200_000);
+    expect((await ledger(h, ticketId)).entries).toMatchObject([
+      {
+        kind: 'payment_received',
+        account: `account:${accountId}`,
+        amount: 200_000,
+        reference: '004512',
+        createdBy: h.cashierId,
+      },
+    ]);
+    // Paid ahead: nothing is owed yet.
+    expect((await ledger(h, ticketId)).balance).toBe(-200_000);
 
     const b = await peer(h, 6102);
     await sync(h, b);
@@ -78,15 +109,32 @@ describe('down payment', () => {
       h.run('openTicket', intake(h, { downPayment: 7_500_000 }), h.cashierId),
       'VALIDATION_FAILED',
     );
+    // An EDC payment needs its approval code.
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'edc', name: 'EDC BRI' },
+      h.storeOwnerId,
+    )) as { accountId: string };
+    await expectCode(
+      h.run(
+        'openTicket',
+        intake(h, { downPayment: 100_000, downPaymentAccount: `account:${accountId}` }),
+        h.cashierId,
+      ),
+      'VALIDATION_FAILED',
+    );
   });
 
-  test('the counter records one later, once; changing it is an owner correction with a reason', async () => {
+  test('the counter adds to it later; lowering it is an owner correction with a reason', async () => {
     const h = await harness(6104);
     const ticketId = await openTicket(h);
     await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
+    await h.run('recordDownPayment', { ticketId, amount: 50_000 }, h.cashierId);
+    expect((await ticket(h, ticketId)).downPayment).toBe(150_000);
+    // Never above the price, together.
     await expectCode(
-      h.run('recordDownPayment', { ticketId, amount: 50_000 }, h.cashierId),
-      'INVALID_TRANSITION',
+      h.run('recordDownPayment', { ticketId, amount: 650_000 }, h.cashierId),
+      'VALIDATION_FAILED',
     );
     await expectCode(
       h.run('correctDownPayment', { ticketId, amount: 50_000, reason: 'Salah ketik' }, h.cashierId),
@@ -102,37 +150,21 @@ describe('down payment', () => {
       h.run('correctDownPayment', { ticketId, amount: 50_000, reason: 'Lagi' }, h.storeOwnerId),
       'VALIDATION_FAILED',
     );
-    await h.run(
-      'correctDownPayment',
-      { ticketId, amount: 0, reason: 'Uang dikembalikan' },
-      h.ownerId,
-    );
-    const t = await ticket(h, ticketId);
-    expect(t.downPayment).toBeNull();
+    await h.run('correctDownPayment', { ticketId, amount: 0, reason: 'Salah catat' }, h.ownerId);
+    expect((await ticket(h, ticketId)).downPayment).toBeNull();
+    // The mistaken payments stay in the history, voided with the owner's reason.
+    const entries = (await ledger(h, ticketId)).entries;
+    expect(entries.every((entry) => entry.voidedAt !== null)).toBe(true);
+    expect(entries).toHaveLength(3);
   });
 
-  test('a cancelled servisan takes none, but an owner can still correct one taken before', async () => {
+  test('a cancelled servisan takes no new down payment', async () => {
     const h = await harness(6106);
     const ticketId = await openTicket(h);
-    await h.run('recordDownPayment', { ticketId, amount: 100_000 }, h.cashierId);
-    const other = await openTicket(h);
-    for (const id of [ticketId, other]) {
-      await h.run(
-        'cancelTicket',
-        { ticketId: id, reason: 'Pelanggan batal', fee: 0 },
-        h.storeOwnerId,
-      );
-    }
+    await h.run('cancelTicket', { ticketId, reason: 'Pelanggan batal', fee: 0 }, h.storeOwnerId);
     await expectCode(
-      h.run('recordDownPayment', { ticketId: other, amount: 50_000 }, h.storeOwnerId),
+      h.run('recordDownPayment', { ticketId, amount: 50_000 }, h.storeOwnerId),
       'INVALID_TRANSITION',
-    );
-    expect((await ticket(h, other)).downPayment).toBeNull();
-    // The refund of a deposit taken before the cancel stays an owner's correction.
-    await h.run(
-      'correctDownPayment',
-      { ticketId, amount: 0, reason: 'Uang dikembalikan' },
-      h.storeOwnerId,
     );
     expect((await ticket(h, ticketId)).downPayment).toBeNull();
   });

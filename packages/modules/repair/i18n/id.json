@@ -141,7 +141,13 @@
     "signAgain": "Ulangi tanda tangan",
     "signature": "Tanda tangan pelanggan",
     "signatureTitle": "Tanda tangan pelanggan",
-    "cancelled": "Biaya perbaikan tidak ditagih."
+    "cancelled": "Biaya perbaikan tidak ditagih.",
+    "payment": "Pembayaran",
+    "payLater": "Bayar nanti",
+    "payNow": "Bayar sekarang",
+    "payLaterReason": "Alasan bayar nanti",
+    "payLaterNote": "Sisa {amount} dicatat sebagai utang pelanggan.",
+    "refundReason": "Sisa DP dikembalikan saat serah terima"
   },
   "intake": {
     "discard": "Buang",
@@ -197,6 +203,7 @@
   },
   "price": {
     "amount": "Harga (Rp)",
+    "paid": "Sudah dibayar",
     "decisionNote": "Catatan (opsional)",
     "description": "Keterangan",
     "kind": {
@@ -237,6 +244,7 @@
     "incompleteLine": "Biaya ini belum ada keterangannya.",
     "negativeTotal": "Diskonnya lebih besar dari total biaya.",
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
+    "downPaymentReference": "Isi kode approval dari mesin EDC.",
     "screenLock": "Isi kunci layarnya, atau pilih Tidak ada."
   },
   "ready": {
@@ -294,7 +302,8 @@
     "discountOwner": "Diskon hanya bisa disetujui pemilik.",
     "downPayment": "Isi jumlah DP dulu.",
     "downPaymentCorrect": "Isi DP yang benar dulu.",
-    "downPaymentSame": "Jumlahnya masih sama."
+    "downPaymentSame": "Jumlahnya masih sama.",
+    "handoverPayment": "Lengkapi pembayarannya dulu."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -428,6 +437,7 @@
     "estimateTotal": "Estimasi total",
     "total": "Total",
     "downPayment": "DP",
+    "paid": "Sudah dibayar",
     "balance": "Sisa bayar",
     "sign": {
       "customer": "Pelanggan",
@@ -609,7 +619,10 @@
     "downPaymentAboveTotal": "DP-nya lebih besar dari total biaya.",
     "downPaymentRecorded": "DP sudah tercatat. Hanya pemilik toko yang bisa mengubahnya.",
     "partsNotInWork": "Sparepart hanya bisa diambil atau dikembalikan saat servisan sedang dikerjakan.",
-    "partsNotYours": "Servisan ini dipegang teknisi lain."
+    "partsNotYours": "Servisan ini dipegang teknisi lain.",
+    "notPaid": "Servisan ini belum lunas.",
+    "unpaidOwnerOnly": "Hanya pemilik yang bisa menyerahkan HP yang belum lunas.",
+    "downPaymentRefunded": "Sebagian DP ini sudah dikembalikan, jadi tidak bisa diubah."
   },
   "paper": {
     "title": "Kertas nota",

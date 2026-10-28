@@ -27,7 +27,8 @@ import { MONEY_REFUSALS } from './rules.js';
 
 type OpDraft = ReturnType<CommandContext['op']>;
 
-const zReference = z
+/** A payment's reference (an EDC approval code, a transfer note): blank means none. */
+export const zReference = z
   .string()
   .trim()
   .max(MAX_REFERENCE)
@@ -71,6 +72,11 @@ export function paymentOp(ctx: CommandContext, document: MoneyDocument, payment:
     reference: payment.reference,
     tendered: payment.tendered,
   });
+}
+
+/** A payment taken back, by an owner: the entry stays, its lines are reversed. */
+export function voidOp(ctx: CommandContext, entryId: string, reason: string): OpDraft {
+  return entryOp(ctx, MONEY_OP.paymentVoided, { reason }, entryId);
 }
 
 export function refundOp(
@@ -175,7 +181,7 @@ export function voidPaymentHandler(
   ctx: CommandContext,
 ): CommandHandlerResult<null> {
   return {
-    ops: [entryOp(ctx, MONEY_OP.paymentVoided, { reason: input.reason }, input.entryId)],
+    ops: [voidOp(ctx, input.entryId, input.reason)],
     result: null,
   };
 }
