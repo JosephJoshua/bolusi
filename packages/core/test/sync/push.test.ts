@@ -203,7 +203,8 @@ describe('every rejection code in 05 §8 is surfaced — the closed set, never a
     // The DENOMINATOR is the exported registry, not a hand-typed list: a code added to 05 §8 and
     // to `REJECTION_CODES` lands in this test automatically. A hardcoded list here would be the
     // exact "guard that silently checks less than it claims" failure (T-14).
-    const codes = [...REJECTION_CODES].filter((c) => c !== 'CHAIN_GAP'); // GAP is not a rejection (03 §3)
+    // GAP is not a rejection (03 §3); HALTED is an op the server never examined, which stays local.
+    const codes = [...REJECTION_CODES].filter((c) => c !== 'CHAIN_GAP' && c !== 'CHAIN_HALTED');
     const ops: SignedOperation[] = [];
     for (let i = 0; i < codes.length; i += 1) ops.push(await seedLocalOp(i + 1));
 
@@ -311,6 +312,39 @@ describe('a refused op is rolled out of this device`s projection', () => {
     expect(await noteBody(noteId)).toBe('awal');
   });
 
+  it('an op the server never examined (CHAIN_HALTED) stays local and stays in the record', async () => {
+    // The server answers CHAIN_HALTED for the rest of a batch after a CHAIN_BROKEN and records no
+    // verdict for them. Marking them rejected rolled them out of the record, and re-enrolment
+    // carries over `local` ops only, so the user's later changes were lost for good.
+    const brokenId = uuidV7(prngFor(8300), clockAt);
+    const broken = await appendLocal(1, brokenId, 'notes.note_created', {
+      title: 'Rusak',
+      body: 'putus',
+      mediaRef: null,
+    });
+    const laterId = uuidV7(prngFor(8301), clockAt);
+    const later = await appendLocal(2, laterId, 'notes.note_created', {
+      title: 'Stok LCD',
+      body: 'sesudah',
+      mediaRef: null,
+    });
+
+    harness.transport.scriptPush({
+      results: [
+        { id: broken.id, status: 'rejected', code: 'CHAIN_BROKEN', reason: 'mismatch' },
+        { id: later.id, status: 'rejected', code: 'CHAIN_HALTED', reason: 'earlier op broke' },
+      ],
+      serverTime: clockAt,
+    });
+    const result = await runPushPhase(deps());
+
+    expect(result.halted).toBe(true);
+    expect(result.rejected).toBe(1);
+    expect(await statusOf(later.id)).toEqual({ status: 'local', code: null });
+    expect(await noteBody(laterId)).toBe('sesudah');
+    expect(harness.surface.ofKind('op_rejected').map((e) => e.opId)).toEqual([broken.id]);
+  });
+
   it('a refused create removes the record entirely', async () => {
     const noteId = uuidV7(prngFor(8200), clockAt);
     const created = await appendLocal(1, noteId, 'notes.note_created', {
@@ -410,10 +444,10 @@ describe('CHAIN_BROKEN halts push (03 §3 / §10)', () => {
     expect(result.halted).toBe(true);
     expect((await statusOf(a.id)).status).toBe('synced'); // ops before the break still landed
     expect((await statusOf(b.id)).code).toBe('CHAIN_BROKEN');
-    expect((await statusOf(c.id)).code).toBe('CHAIN_HALTED');
-    // The remainder is marked `rejected` but must NOT set the flag a second time (03 §3) — the
-    // triggering CHAIN_BROKEN already did. Counting the calls is the only way to see the
-    // difference between "set once" and "set twice with the same value".
+    // The remainder was never examined: it stays `local` and must NOT set the flag a second time
+    // (03 §3) — the triggering CHAIN_BROKEN already did. Counting the calls is the only way to see
+    // the difference between "set once" and "set twice with the same value".
+    expect(await statusOf(c.id)).toEqual({ status: 'local', code: null });
     expect(chainBrokenCalls).toBe(1);
     expect(harness.surface.ofKind('push_halted')).toHaveLength(1);
   });

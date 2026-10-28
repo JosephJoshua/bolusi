@@ -150,20 +150,16 @@ export async function runPushPhase<DB>(deps: PushPhaseDeps<DB>): Promise<PushPha
     const byId = new Map(ops.map((op) => [op.id, op]));
     let halted = false;
     let gapped = false;
-    let chainBrokenSeen = false;
     const syncedBefore = synced;
     const rejectedBefore = rejected;
 
     for (const result of response.results) {
       if (!byId.has(result.id)) continue; // A result for an op we did not send: not ours to mark.
-      const outcome = await applyPushResult(deps, result, byId.get(result.id)!, {
-        chainBrokenSeen,
-      });
+      const outcome = await applyPushResult(deps, result, byId.get(result.id)!);
       if (outcome === 'synced') synced += 1;
       if (outcome === 'rejected') rejected += 1;
       if (outcome === 'chain_broken') {
         rejected += 1;
-        chainBrokenSeen = true;
         halted = true;
       }
       if (outcome === 'gap') gapped = true;
@@ -210,7 +206,6 @@ async function applyPushResult<DB>(
   deps: PushPhaseDeps<DB>,
   result: PushResult,
   op: SignedOperation,
-  state: { chainBrokenSeen: boolean },
 ): Promise<PushOutcome> {
   if (result.status === 'accepted' || result.status === 'duplicate') {
     // Idempotent for an already-`synced` op: `resolveSyncTransition` returns a no-op rather than a
@@ -231,6 +226,15 @@ async function applyPushResult<DB>(
     // branch's: a future table change lands here automatically instead of silently disagreeing.
     const marked = await markOp(deps, result.id, { kind: 'chain_gap' });
     return marked ? 'gap' : 'ignored';
+  }
+
+  if (code === 'CHAIN_HALTED') {
+    // The server never examined this op: an earlier op in the batch broke the chain, and the server
+    // records no verdict for the rest (apps/server oplog/pipeline.ts). It is not refused, so it
+    // stays `local` and in this device's records, and is carried over when the phone is enrolled
+    // again (auth/carry-over.ts takes `local` ops only). The CHAIN_BROKEN op already halted push
+    // and told the user, so nothing more is surfaced for it.
+    return 'ignored';
   }
 
   // A rejected op is not in the server's log and never will be, so it comes out of this device's
@@ -266,13 +270,6 @@ async function applyPushResult<DB>(
     reason,
     labelKey: rejectionLabelKey(code),
   });
-
-  // `CHAIN_HALTED` marks `rejected` but must NOT set `pushHalted` again — the triggering
-  // `CHAIN_BROKEN` already did (03 §3). Asserting the invariant here rather than trusting call
-  // order: if a server ever sent `CHAIN_HALTED` with no preceding `CHAIN_BROKEN`, silently
-  // halting would be wrong and silently not-halting would be worse, so we do neither and the
-  // batch remainder is simply marked.
-  void state.chainBrokenSeen;
   return 'rejected';
 }
 
